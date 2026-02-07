@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSettingsStore, type PinnedIcon } from '../../stores/settingsStore';
+import { useSettingsStore, type PinnedIcon, type WorktreeAction } from '../../stores/settingsStore';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -9,6 +9,7 @@ const tabLabels: Record<SettingsTab, string> = {
   general: 'General',
   repositories: 'Repositories',
   'pinned-icons': 'Pinned Icons',
+  'worktree-actions': 'Worktree Actions',
 };
 
 export function SettingsPanel() {
@@ -21,11 +22,13 @@ export function SettingsPanel() {
   const [basePath, setBasePath] = useState('');
   const [repoPatterns, setRepoPatterns] = useState('');
   const [pinnedIcons, setPinnedIcons] = useState<PinnedIcon[]>([]);
+  const [worktreeActions, setWorktreeActions] = useState<WorktreeAction[]>([]);
 
   useEffect(() => {
     setBasePath(settings.basePath);
     setRepoPatterns(settings.repositories.join('\n'));
     setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
+    setWorktreeActions((settings.worktreeActions ?? []).map((a) => ({ ...a })));
   }, [settings]);
 
   const handleSave = async () => {
@@ -38,6 +41,7 @@ export function SettingsPanel() {
       basePath,
       repositories: repos,
       pinnedIcons,
+      worktreeActions,
     });
   };
 
@@ -73,6 +77,30 @@ export function SettingsPanel() {
     setPinnedIcons((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const addWorktreeAction = () => {
+    setWorktreeActions([
+      ...worktreeActions,
+      {
+        id: crypto.randomUUID(),
+        icon: '',
+        iconType: 'svg',
+        label: '',
+        actionType: 'url',
+        actionValue: '',
+      },
+    ]);
+  };
+
+  const updateWorktreeAction = (index: number, patch: Partial<WorktreeAction>) => {
+    setWorktreeActions((prev) =>
+      prev.map((action, i) => (i === index ? { ...action, ...patch } : action))
+    );
+  };
+
+  const removeWorktreeAction = (index: number) => {
+    setWorktreeActions((prev) => prev.filter((_, i) => i !== index));
+  };
+
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-zinc-950">
       {/* Breadcrumb header */}
@@ -104,6 +132,14 @@ export function SettingsPanel() {
               onAdd={addPinnedIcon}
               onUpdate={updatePinnedIcon}
               onRemove={removePinnedIcon}
+            />
+          )}
+          {settingsTab === 'worktree-actions' && (
+            <WorktreeActionsTab
+              worktreeActions={worktreeActions}
+              onAdd={addWorktreeAction}
+              onUpdate={updateWorktreeAction}
+              onRemove={removeWorktreeAction}
             />
           )}
 
@@ -251,6 +287,226 @@ function PinnedIconsTab({
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function WorktreeActionsTab({
+  worktreeActions,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  worktreeActions: WorktreeAction[];
+  onAdd: () => void;
+  onUpdate: (index: number, patch: Partial<WorktreeAction>) => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-medium text-zinc-400">
+          Worktree Actions ({worktreeActions.length})
+        </label>
+        <Button variant="secondary" size="sm" onClick={onAdd}>
+          + Add Action
+        </Button>
+      </div>
+
+      <p className="text-xs text-zinc-500">
+        Actions appear as icon buttons under each worktree header. Template variables are resolved per worktree.
+      </p>
+
+      {worktreeActions.length === 0 && (
+        <p className="py-6 text-center text-sm text-zinc-500">
+          No worktree actions configured. Add one to show action buttons per worktree.
+        </p>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {worktreeActions.map((action, i) => (
+          <WorktreeActionEditor
+            key={action.id}
+            action={action}
+            onUpdate={(patch) => onUpdate(i, patch)}
+            onRemove={() => onRemove(i)}
+          />
+        ))}
+      </div>
+
+      {/* Template variables reference */}
+      <div className="rounded-md border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+        <p className="mb-2 text-xs font-medium text-zinc-400">Template Variables</p>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+          {[
+            ['{{org}}', 'Repository organization'],
+            ['{{repo}}', 'Repository name'],
+            ['{{branch}}', 'Branch name'],
+            ['{{worktree_path}}', 'Worktree absolute path'],
+            ['{{branch_slug}}', 'Branch with / replaced by -'],
+            ['{{branch_prefix}}', 'Before first /'],
+            ['{{branch_suffix}}', 'After first /'],
+            ['{{issue_number}}', 'First number in branch'],
+          ].map(([variable, description]) => (
+            <div key={variable} className="flex items-baseline gap-2">
+              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-300">{variable}</code>
+              <span className="text-zinc-500">{description}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WorktreeActionEditor({
+  action,
+  onUpdate,
+  onRemove,
+}: {
+  action: WorktreeAction;
+  onUpdate: (patch: Partial<WorktreeAction>) => void;
+  onRemove: () => void;
+}) {
+  const [expanded, setExpanded] = useState(!action.label);
+
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-900/50">
+      {/* Header row */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button
+          className="text-zinc-500 hover:text-zinc-300"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="currentColor"
+            className={cn(
+              'transition-transform',
+              expanded ? 'rotate-90' : 'rotate-0'
+            )}
+          >
+            <path d="M3 1l5 4-5 4V1z" />
+          </svg>
+        </button>
+        <span className="flex-1 truncate text-xs text-zinc-300">
+          {action.label || 'Untitled'}
+        </span>
+        <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">
+          {action.actionType}
+        </span>
+        <button
+          className="text-zinc-600 transition-colors hover:text-red-400"
+          onClick={onRemove}
+          title="Remove"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="4" y1="4" x2="12" y2="12" />
+            <line x1="12" y1="4" x2="4" y2="12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Expanded editor */}
+      {expanded && (
+        <div className="flex flex-col gap-4 border-t border-zinc-800 px-4 py-4">
+          <Input
+            label="Label"
+            placeholder="Open Branch on GitHub"
+            value={action.label}
+            onChange={(e) => onUpdate({ label: e.target.value })}
+          />
+
+          <div className="flex gap-2">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <label className="text-sm font-medium text-zinc-400">Icon Type</label>
+              <div className="flex gap-0.5 rounded-md bg-zinc-800 p-0.5">
+                {(['svg', 'base64', 'url', 'path'] as const).map((type) => (
+                  <button
+                    key={type}
+                    className={cn(
+                      'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
+                      action.iconType === type
+                        ? 'bg-zinc-700 text-zinc-200'
+                        : 'text-zinc-500 hover:text-zinc-400'
+                    )}
+                    onClick={() => onUpdate({ iconType: type })}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Icon Value</label>
+            <textarea
+              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+              rows={3}
+              placeholder={
+                action.iconType === 'svg'
+                  ? '<svg>...</svg>'
+                  : action.iconType === 'base64'
+                    ? 'iVBORw0KGgo...'
+                    : action.iconType === 'url'
+                      ? 'https://example.com/icon.svg'
+                      : '/path/to/icon.svg'
+              }
+              value={action.icon}
+              onChange={(e) => onUpdate({ icon: e.target.value })}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Action Type</label>
+            <div className="flex gap-0.5 rounded-md bg-zinc-800 p-0.5">
+              <button
+                className={cn(
+                  'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                  action.actionType === 'url'
+                    ? 'bg-zinc-700 text-zinc-200'
+                    : 'text-zinc-500 hover:text-zinc-400'
+                )}
+                onClick={() => onUpdate({ actionType: 'url' })}
+              >
+                Open URL
+              </button>
+              <button
+                className={cn(
+                  'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                  action.actionType === 'shell'
+                    ? 'bg-zinc-700 text-zinc-200'
+                    : 'text-zinc-500 hover:text-zinc-400'
+                )}
+                onClick={() => onUpdate({ actionType: 'shell' })}
+              >
+                Shell Command
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Action Value</label>
+            <textarea
+              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+              rows={action.actionType === 'shell' ? 4 : 2}
+              placeholder={
+                action.actionType === 'url'
+                  ? 'https://github.com/{{org}}/{{repo}}/tree/{{branch}}'
+                  : 'open -a "PhpStorm" "{{worktree_path}}"'
+              }
+              value={action.actionValue}
+              onChange={(e) => onUpdate({ actionValue: e.target.value })}
+            />
+            <p className="text-xs text-zinc-500">
+              Use {'{{template}}'} variables above. They resolve per worktree at click time.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

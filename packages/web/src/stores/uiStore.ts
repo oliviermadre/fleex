@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 type ActivePanel = 'sessions' | 'settings';
-export type SettingsTab = 'general' | 'repositories' | 'pinned-icons';
+export type SettingsTab = 'general' | 'repositories' | 'pinned-icons' | 'worktree-actions';
 
 interface UIState {
   // Nav sidebar (left icon bar)
