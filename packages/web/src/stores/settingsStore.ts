@@ -1,7 +1,17 @@
 import { create } from 'zustand';
 import { API_URL } from '../lib/constants';
+import { resolveTemplate, type WorktreeContext } from '../lib/templateUtils';
 
 export interface PinnedIcon {
+  id: string;
+  icon: string;
+  iconType: 'svg' | 'base64' | 'path' | 'url';
+  label: string;
+  actionType: 'url' | 'shell';
+  actionValue: string;
+}
+
+export interface WorktreeAction {
   id: string;
   icon: string;
   iconType: 'svg' | 'base64' | 'path' | 'url';
@@ -16,6 +26,7 @@ export interface AppSettings {
   resolvedRepositories: string[];
   resolvedAt: string | null;
   pinnedIcons: PinnedIcon[];
+  worktreeActions: WorktreeAction[];
   sessionDisplayNames: Record<string, string>;
   repoOrder: string[];
   worktreeOrder: Record<string, string[]>;
@@ -35,6 +46,7 @@ interface SettingsState {
   setSessionOrder: (worktreeGroupId: string, order: string[]) => void;
   resolveRepositories: () => Promise<void>;
   executePinnedAction: (icon: PinnedIcon) => void;
+  executeWorktreeAction: (action: WorktreeAction, context: WorktreeContext) => void;
 }
 
 const STORAGE_KEY = 'asm-settings';
@@ -45,6 +57,7 @@ const defaultSettings: AppSettings = {
   resolvedRepositories: [],
   resolvedAt: null,
   pinnedIcons: [],
+  worktreeActions: [],
   sessionDisplayNames: {},
   repoOrder: [],
   worktreeOrder: {},
@@ -76,7 +89,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const res = await fetch(`${API_URL}/config`);
       if (res.ok) {
         const data = await res.json();
-        if (data && typeof data === 'object' && (data.basePath || data.repositories || data.pinnedIcons)) {
+        if (data && typeof data === 'object' && (data.basePath || data.repositories || data.pinnedIcons || data.worktreeActions)) {
           const merged = { ...defaultSettings, ...data };
           set({ settings: merged, loaded: true });
           saveToStorage(merged);
@@ -213,6 +226,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: icon.actionValue }),
+      }).catch(() => { /* ignore */ });
+    }
+  },
+
+  executeWorktreeAction: (action: WorktreeAction, context: WorktreeContext) => {
+    const resolved = resolveTemplate(action.actionValue, context);
+    if (action.actionType === 'url') {
+      window.open(resolved, '_blank');
+    } else if (action.actionType === 'shell') {
+      fetch(`${API_URL}/exec`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: resolved }),
       }).catch(() => { /* ignore */ });
     }
   },
