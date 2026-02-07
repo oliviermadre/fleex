@@ -7,7 +7,7 @@ interface PinnedIconButtonProps {
   collapsed?: boolean;
 }
 
-function renderIcon(icon: PinnedIcon, size: number) {
+export function renderIcon(icon: Pick<PinnedIcon, 'icon' | 'iconType' | 'label'>, size: number) {
   if (icon.iconType === 'svg') {
     return (
       <span

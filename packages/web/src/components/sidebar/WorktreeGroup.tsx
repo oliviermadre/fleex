@@ -5,15 +5,18 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { SessionItem } from './SessionItem';
 import { GitForkIcon, PlusIcon } from './icons';
+import { WorktreeActionsBar } from './WorktreeActionsBar';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
 
 interface Props {
   worktree: WorktreeSessionGroup;
   repoGroupId: string;
+  repositoryOrg: string;
+  repositoryName: string;
 }
 
-export function WorktreeGroup({ worktree, repoGroupId }: Props) {
+export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repositoryName }: Props) {
   const groupId = `${repoGroupId}:${worktree.branch}`;
   const collapsedGroups = useUIStore((s) => s.collapsedGroups);
   const toggleGroup = useUIStore((s) => s.toggleGroup);
@@ -110,7 +113,7 @@ export function WorktreeGroup({ worktree, repoGroupId }: Props) {
 
   return (
     <div className="ml-3">
-      <div className="flex items-center">
+      <div className="group/wt relative flex items-center">
         <button
           className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left hover:bg-zinc-800/30"
           onClick={() => toggleGroup(groupId)}
@@ -138,6 +141,12 @@ export function WorktreeGroup({ worktree, repoGroupId }: Props) {
         >
           <PlusIcon size={12} />
         </button>
+        <WorktreeActionsBar
+          repositoryOrg={repositoryOrg}
+          repositoryName={repositoryName}
+          branch={worktree.branch}
+          worktreePath={worktree.path}
+        />
       </div>
       {!collapsed &&
         sortedSessions.map((session: Session) => {

@@ -167,6 +167,8 @@ export function RepositoryGroup({ group }: Props) {
               <WorktreeGroup
                 worktree={wt}
                 repoGroupId={groupId}
+                repositoryOrg={group.repositoryOrg}
+                repositoryName={group.repositoryName}
               />
               {isOver && dropEdge === 'bottom' && (
                 <div className="absolute bottom-0 left-5 right-2 z-10 h-0.5 rounded bg-[#D77655]" />
