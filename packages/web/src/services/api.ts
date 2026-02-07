@@ -6,6 +6,8 @@ import type {
   Worktree,
   CreateWorktreeRequest,
   PullRequest,
+  GitHubIssue,
+  DiffStats,
 } from '@asm/shared';
 import { API_URL } from '../lib/constants';
 
@@ -69,6 +71,23 @@ export async function createWorktree(
 export async function fetchPullRequests(org: string, name: string): Promise<PullRequest[]> {
   return request<PullRequest[]>(
     `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/pulls`
+  );
+}
+
+export async function fetchIssues(org: string, name: string): Promise<GitHubIssue[]> {
+  return request<GitHubIssue[]>(
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/issues`
+  );
+}
+
+export async function fetchDiffStats(
+  org: string,
+  name: string,
+  branches: string[]
+): Promise<Record<string, DiffStats>> {
+  const query = branches.map(encodeURIComponent).join(',');
+  return request<Record<string, DiffStats>>(
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/diff-stats?branches=${query}`
   );
 }
 

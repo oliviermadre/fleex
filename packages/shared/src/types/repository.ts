@@ -26,10 +26,32 @@ export interface CreateWorktreeRequest {
   readonly branch: string;
   readonly createNewBranch: boolean;
   readonly baseBranch?: string;
+  readonly prNumber?: number;
+  readonly issueNumber?: number;
 }
 
 export interface PullRequest {
   readonly number: number;
   readonly title: string;
   readonly headRefName: string;
+  readonly author: string;
+  readonly assignees: string[];
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface DiffStats {
+  readonly commitsAhead: number;
+  readonly commitsBehind: number;
+  readonly filesChanged: number;
+  readonly additions: number;
+  readonly deletions: number;
+}
+
+export interface GitHubIssue {
+  readonly number: number;
+  readonly title: string;
+  readonly author: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 }

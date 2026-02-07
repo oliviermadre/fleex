@@ -1,4 +1,4 @@
-import type { GitRemoteInfo, Worktree } from '@asm/shared';
+import type { DiffStats, GitRemoteInfo, Worktree } from '@asm/shared';
 
 export interface GitPort {
   getInfo(cwd: string): Promise<GitRemoteInfo>;
@@ -14,4 +14,5 @@ export interface GitPort {
   removeWorktree(repoPath: string, wtPath: string): Promise<void>;
   getDefaultBranch(repoPath: string): Promise<string>;
   fetch(repoPath: string): Promise<void>;
+  getDiffStats(repoPath: string, branch: string, baseBranch?: string): Promise<DiffStats>;
 }
