@@ -17,6 +17,8 @@ export interface AppSettings {
   resolvedAt: string | null;
   pinnedIcons: PinnedIcon[];
   sessionDisplayNames: Record<string, string>;
+  repoOrder: string[];
+  worktreeOrder: Record<string, string[]>;
 }
 
 interface SettingsState {
@@ -27,6 +29,8 @@ interface SettingsState {
   saveSettings: (partial: Partial<AppSettings>) => Promise<void>;
   setSessionDisplayName: (sessionId: string, name: string) => void;
   getSessionDisplayName: (sessionId: string) => string | undefined;
+  setRepoOrder: (order: string[]) => void;
+  setWorktreeOrder: (repoGroupId: string, order: string[]) => void;
   resolveRepositories: () => Promise<void>;
   executePinnedAction: (icon: PinnedIcon) => void;
 }
@@ -40,6 +44,8 @@ const defaultSettings: AppSettings = {
   resolvedAt: null,
   pinnedIcons: [],
   sessionDisplayNames: {},
+  repoOrder: [],
+  worktreeOrder: {},
 };
 
 function loadFromStorage(): AppSettings {
@@ -113,6 +119,31 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   getSessionDisplayName: (sessionId) => {
     return get().settings.sessionDisplayNames[sessionId];
+  },
+
+  setRepoOrder: (order) => {
+    const current = get().settings;
+    const updated = { ...current, repoOrder: order };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
+  },
+
+  setWorktreeOrder: (repoGroupId, order) => {
+    const current = get().settings;
+    const worktreeOrder = { ...current.worktreeOrder, [repoGroupId]: order };
+    const updated = { ...current, worktreeOrder };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
   },
 
   resolveRepositories: async () => {
