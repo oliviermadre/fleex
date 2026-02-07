@@ -16,6 +16,7 @@ export interface AppSettings {
   resolvedRepositories: string[];
   resolvedAt: string | null;
   pinnedIcons: PinnedIcon[];
+  sessionDisplayNames: Record<string, string>;
 }
 
 interface SettingsState {
@@ -24,6 +25,8 @@ interface SettingsState {
   resolving: boolean;
   loadSettings: () => Promise<void>;
   saveSettings: (partial: Partial<AppSettings>) => Promise<void>;
+  setSessionDisplayName: (sessionId: string, name: string) => void;
+  getSessionDisplayName: (sessionId: string) => string | undefined;
   resolveRepositories: () => Promise<void>;
   executePinnedAction: (icon: PinnedIcon) => void;
 }
@@ -36,6 +39,7 @@ const defaultSettings: AppSettings = {
   resolvedRepositories: [],
   resolvedAt: null,
   pinnedIcons: [],
+  sessionDisplayNames: {},
 };
 
 function loadFromStorage(): AppSettings {
@@ -86,6 +90,29 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         body: JSON.stringify(updated),
       });
     } catch { /* ignore */ }
+  },
+
+  setSessionDisplayName: (sessionId, name) => {
+    const current = get().settings;
+    const sessionDisplayNames = { ...current.sessionDisplayNames };
+    const trimmed = name.trim();
+    if (trimmed) {
+      sessionDisplayNames[sessionId] = trimmed;
+    } else {
+      delete sessionDisplayNames[sessionId];
+    }
+    const updated = { ...current, sessionDisplayNames };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
+  },
+
+  getSessionDisplayName: (sessionId) => {
+    return get().settings.sessionDisplayNames[sessionId];
   },
 
   resolveRepositories: async () => {
