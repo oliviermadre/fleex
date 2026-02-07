@@ -82,10 +82,10 @@ export function SessionGroups() {
           <p className="text-xs text-zinc-500">No sessions</p>
         </div>
         <button
-          className="flex items-center justify-center gap-2 border-t border-zinc-800/50 px-4 py-2.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-800/50 hover:text-zinc-300"
+          className="flex items-center justify-center gap-2 border-t border-zinc-800/50 px-4 py-2.5 text-sm font-medium text-white bg-[#D77655]/10 rounded-lg transition-all hover:bg-[#D77655] hover:shadow-[0_0_12px_rgba(215,118,85,0.5)]"
           onClick={openCreateModal}
         >
-          <PlusIcon size={14} />
+          <PlusIcon size={16} />
           New Session
         </button>
       </div>
@@ -119,10 +119,10 @@ export function SessionGroups() {
         );
       })}
       <button
-        className="mx-1.5 my-1 flex w-[calc(100%-12px)] items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs text-zinc-500 transition-colors hover:bg-zinc-800/50 hover:text-zinc-300"
+        className="mx-1.5 mt-3 mb-1 flex w-[calc(100%-12px)] items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white bg-[#D77655]/10 transition-all hover:bg-[#D77655] hover:shadow-[0_0_12px_rgba(215,118,85,0.5)]"
         onClick={openCreateModal}
       >
-        <PlusIcon size={14} />
+        <PlusIcon size={16} />
         New Session
       </button>
     </div>
