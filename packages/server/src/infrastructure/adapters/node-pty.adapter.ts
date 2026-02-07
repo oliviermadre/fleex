@@ -19,12 +19,15 @@ export class NodePtyAdapter implements PtyPort {
 
   spawnAttach(tmuxSessionName: string, dims: TerminalDimensions): PtyHandle {
     this.logger.debug('Using tmux at', { path: TMUX_PATH });
+    // Strip TMUX/TMUX_PANE so tmux attach works even when
+    // the server itself is running inside a tmux session.
+    const { TMUX, TMUX_PANE, ...cleanEnv } = process.env;
     const proc = pty.spawn(TMUX_PATH, ['attach', '-t', tmuxSessionName], {
       name: 'xterm-256color',
       cols: dims.cols,
       rows: dims.rows,
       cwd: process.cwd(),
-      env: process.env as Record<string, string>,
+      env: cleanEnv as Record<string, string>,
     });
 
     this.logger.debug('PTY spawned for tmux attach', { tmuxSessionName, pid: proc.pid });

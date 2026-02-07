@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { DashboardMessage } from '@asm/shared';
+import type { DashboardMessage, SessionGroup, WorktreeSessionGroup } from '@asm/shared';
 import { useSessionStore } from '../stores/sessionStore';
 import { dashboardWs } from '../services/websocket';
 import * as api from '../services/api';
@@ -39,8 +39,8 @@ export function useSessions() {
             setSessionGroups(msg.data);
             // Flatten sessions from groups
             {
-              const allSessions = msg.data.flatMap((g) =>
-                g.worktrees.flatMap((w) => w.sessions)
+              const allSessions = msg.data.flatMap((g: SessionGroup) =>
+                g.worktrees.flatMap((w: WorktreeSessionGroup) => w.sessions)
               );
               setSessions(allSessions);
             }

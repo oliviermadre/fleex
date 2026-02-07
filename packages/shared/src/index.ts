@@ -14,6 +14,7 @@ export type {
   Worktree,
   GitRemoteInfo,
   CreateWorktreeRequest,
+  PullRequest,
 } from './types/repository.js';
 
 export type {

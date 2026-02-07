@@ -12,7 +12,7 @@ export function Badge({ type, className }: BadgeProps) {
       className={cn(
         'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
         type === 'shell' && 'bg-emerald-500/15 text-emerald-400',
-        type === 'claude' && 'bg-violet-500/15 text-violet-400',
+        type === 'claude' && 'bg-[#D77655]/15 text-[#D77655]',
         className
       )}
     >

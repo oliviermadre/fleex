@@ -50,17 +50,23 @@ export function terminalWsPlugin(container: Container) {
               container.sessionStore.save(session);
 
               container.logger.info('Spawning PTY for tmux attach', { tmuxName: session.tmuxName });
-              ptyHandle = container.pty.spawnAttach(session.tmuxName, { cols, rows });
+              const handle = container.pty.spawnAttach(session.tmuxName, { cols, rows });
+              ptyHandle = handle;
 
-              ptyHandle.onData((chunk: Buffer) => {
+              handle.onData((chunk: Buffer) => {
+                // Guard: only the active PTY sends data
+                if (ptyHandle !== handle) return;
                 const msg = Buffer.allocUnsafe(1 + chunk.length);
                 msg[0] = SERVER_OUTPUT;
                 chunk.copy(msg, 1);
                 socket.send(msg);
               });
 
-              ptyHandle.onExit((exitCode: number) => {
+              handle.onExit((exitCode: number) => {
                 container.logger.info('PTY exited', { exitCode, tmuxName: session.tmuxName });
+                // Guard: only the active PTY triggers exit notification.
+                // A replaced PTY's onExit must NOT clobber the new ptyHandle.
+                if (ptyHandle !== handle) return;
                 const msg = Buffer.allocUnsafe(2);
                 msg[0] = SERVER_EXIT;
                 msg[1] = exitCode & 0xff;

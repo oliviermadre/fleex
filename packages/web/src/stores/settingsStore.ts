@@ -1,0 +1,219 @@
+import { create } from 'zustand';
+import { API_URL } from '../lib/constants';
+
+export interface PinnedIcon {
+  id: string;
+  icon: string;
+  iconType: 'svg' | 'base64' | 'path' | 'url';
+  label: string;
+  actionType: 'url' | 'shell';
+  actionValue: string;
+}
+
+export interface AppSettings {
+  basePath: string;
+  repositories: string[];
+  resolvedRepositories: string[];
+  resolvedAt: string | null;
+  pinnedIcons: PinnedIcon[];
+  sessionDisplayNames: Record<string, string>;
+  repoOrder: string[];
+  worktreeOrder: Record<string, string[]>;
+  sessionOrder: Record<string, string[]>;
+}
+
+interface SettingsState {
+  settings: AppSettings;
+  loaded: boolean;
+  resolving: boolean;
+  loadSettings: () => Promise<void>;
+  saveSettings: (partial: Partial<AppSettings>) => Promise<void>;
+  setSessionDisplayName: (sessionId: string, name: string) => void;
+  getSessionDisplayName: (sessionId: string) => string | undefined;
+  setRepoOrder: (order: string[]) => void;
+  setWorktreeOrder: (repoGroupId: string, order: string[]) => void;
+  setSessionOrder: (worktreeGroupId: string, order: string[]) => void;
+  resolveRepositories: () => Promise<void>;
+  executePinnedAction: (icon: PinnedIcon) => void;
+}
+
+const STORAGE_KEY = 'asm-settings';
+
+const defaultSettings: AppSettings = {
+  basePath: '',
+  repositories: [],
+  resolvedRepositories: [],
+  resolvedAt: null,
+  pinnedIcons: [],
+  sessionDisplayNames: {},
+  repoOrder: [],
+  worktreeOrder: {},
+  sessionOrder: {},
+};
+
+function loadFromStorage(): AppSettings {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...defaultSettings, ...parsed };
+    }
+  } catch { /* ignore */ }
+  return defaultSettings;
+}
+
+function saveToStorage(settings: AppSettings) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings, null, 2));
+}
+
+export const useSettingsStore = create<SettingsState>((set, get) => ({
+  settings: loadFromStorage(),
+  loaded: false,
+  resolving: false,
+
+  loadSettings: async () => {
+    try {
+      const res = await fetch(`${API_URL}/config`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object' && (data.basePath || data.repositories || data.pinnedIcons)) {
+          const merged = { ...defaultSettings, ...data };
+          set({ settings: merged, loaded: true });
+          saveToStorage(merged);
+          return;
+        }
+      }
+    } catch { /* ignore */ }
+    set({ settings: loadFromStorage(), loaded: true });
+  },
+
+  saveSettings: async (partial) => {
+    const current = get().settings;
+    const updated = { ...current, ...partial };
+    set({ settings: updated });
+    saveToStorage(updated);
+    try {
+      await fetch(`${API_URL}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch { /* ignore */ }
+  },
+
+  setSessionDisplayName: (sessionId, name) => {
+    const current = get().settings;
+    const sessionDisplayNames = { ...current.sessionDisplayNames };
+    const trimmed = name.trim();
+    if (trimmed) {
+      sessionDisplayNames[sessionId] = trimmed;
+    } else {
+      delete sessionDisplayNames[sessionId];
+    }
+    const updated = { ...current, sessionDisplayNames };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
+  },
+
+  getSessionDisplayName: (sessionId) => {
+    return get().settings.sessionDisplayNames[sessionId];
+  },
+
+  setRepoOrder: (order) => {
+    const current = get().settings;
+    const updated = { ...current, repoOrder: order };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
+  },
+
+  setWorktreeOrder: (repoGroupId, order) => {
+    const current = get().settings;
+    const worktreeOrder = { ...current.worktreeOrder, [repoGroupId]: order };
+    const updated = { ...current, worktreeOrder };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
+  },
+
+  setSessionOrder: (worktreeGroupId, order) => {
+    const current = get().settings;
+    const sessionOrder = { ...current.sessionOrder, [worktreeGroupId]: order };
+    const updated = { ...current, sessionOrder };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
+  },
+
+  resolveRepositories: async () => {
+    const { settings } = get();
+    if (settings.repositories.length === 0) return;
+
+    set({ resolving: true });
+    const resolved: string[] = [];
+
+    for (const pattern of settings.repositories) {
+      if (pattern.includes('*')) {
+        // Wildcard pattern: org/* -> resolve via API
+        const org = pattern.replace('/*', '').replace('*', '');
+        try {
+          const res = await fetch(`${API_URL}/repositories/resolve?org=${encodeURIComponent(org)}`);
+          if (res.ok) {
+            const repos: string[] = await res.json();
+            resolved.push(...repos);
+          } else {
+            resolved.push(pattern);
+          }
+        } catch {
+          resolved.push(pattern);
+        }
+      } else {
+        resolved.push(pattern);
+      }
+    }
+
+    const updated = {
+      ...settings,
+      resolvedRepositories: [...new Set(resolved)],
+      resolvedAt: new Date().toISOString(),
+    };
+    set({ settings: updated, resolving: false });
+    saveToStorage(updated);
+    try {
+      await fetch(`${API_URL}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch { /* ignore */ }
+  },
+
+  executePinnedAction: (icon: PinnedIcon) => {
+    if (icon.actionType === 'url') {
+      window.open(icon.actionValue, '_blank');
+    } else if (icon.actionType === 'shell') {
+      fetch(`${API_URL}/exec`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: icon.actionValue }),
+      }).catch(() => { /* ignore */ });
+    }
+  },
+}));

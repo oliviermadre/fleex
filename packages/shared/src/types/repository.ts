@@ -27,3 +27,9 @@ export interface CreateWorktreeRequest {
   readonly createNewBranch: boolean;
   readonly baseBranch?: string;
 }
+
+export interface PullRequest {
+  readonly number: number;
+  readonly title: string;
+  readonly headRefName: string;
+}

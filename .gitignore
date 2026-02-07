@@ -8,3 +8,5 @@ dist/
 coverage/
 *.tsbuildinfo
 .asm/
+*.tsbuildinfo
+.claude/settings.local.json
