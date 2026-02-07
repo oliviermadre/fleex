@@ -49,8 +49,10 @@ export function SessionItem({ session }: Props) {
   const isClaude = session.type !== 'shell';
 
   const iconColor = isRunning
-    ? isClaude ? 'text-[#D77655]' : 'text-emerald-400'
-    : 'text-zinc-600';
+    ? isClaude
+      ? 'text-[#D77655]'
+      : isSelected ? 'text-emerald-400' : 'text-emerald-400/60'
+    : isSelected ? 'text-zinc-400' : 'text-zinc-600';
 
   const startEditing = useCallback(() => {
     setEditValue(displayName);
@@ -94,10 +96,10 @@ export function SessionItem({ session }: Props) {
   return (
     <button
       className={cn(
-        'group/session flex w-full items-center gap-2.5 px-4 py-1.5 text-left transition-colors',
+        'group/session flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors border-l-2',
         isSelected
-          ? 'bg-zinc-800 text-zinc-100'
-          : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300'
+          ? 'border-[#D77655] bg-zinc-800/80 text-zinc-50'
+          : 'border-transparent text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
       )}
       onClick={() => selectSession(session.id)}
       onDoubleClick={(e) => {
@@ -105,10 +107,10 @@ export function SessionItem({ session }: Props) {
         startEditing();
       }}
     >
-      <span className="relative h-5 w-5 shrink-0">
+      <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
         {isClaude
-          ? <ClaudeIcon size={20} className={iconColor} />
-          : <TerminalIcon size={20} className={iconColor} />
+          ? <ClaudeIcon size={14} className={iconColor} />
+          : <TerminalIcon size={14} className={iconColor} />
         }
         {isClaude && isRunning && session.claudeActivity && (
           <ActivityDot status={session.claudeActivity} />
@@ -125,7 +127,7 @@ export function SessionItem({ session }: Props) {
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <span className="min-w-0 flex-1 truncate text-xs">
+        <span className="min-w-0 flex-1 truncate text-[11px] leading-4">
           {displayName}
         </span>
       )}

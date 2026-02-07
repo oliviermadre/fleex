@@ -124,14 +124,14 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
             viewBox="0 0 10 10"
             fill="currentColor"
             className={cn(
-              'shrink-0 text-zinc-600 transition-transform',
+              'shrink-0 text-zinc-500 transition-transform',
               collapsed ? 'rotate-0' : 'rotate-90'
             )}
           >
             <path d="M3 1l5 4-5 4V1z" />
           </svg>
-          <GitForkIcon size={12} className="shrink-0 text-zinc-500" />
-          <span className="truncate text-xs text-zinc-400">{worktree.branch}</span>
+          <GitForkIcon size={12} className="shrink-0 text-zinc-400" />
+          <span className="truncate text-xs font-medium text-zinc-300">{worktree.branch}</span>
           <span className="ml-auto shrink-0 text-[10px] text-zinc-600">{worktree.sessions.length}</span>
         </button>
         <button

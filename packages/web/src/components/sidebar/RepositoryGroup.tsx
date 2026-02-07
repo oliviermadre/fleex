@@ -134,7 +134,7 @@ export function RepositoryGroup({ group }: Props) {
         >
           <path d="M3 1l5 4-5 4V1z" />
         </svg>
-        <span className="truncate text-sm font-semibold text-zinc-300">
+        <span className="truncate text-sm font-semibold text-zinc-200">
           {group.repositoryOrg}/{group.repositoryName}
         </span>
         <a
