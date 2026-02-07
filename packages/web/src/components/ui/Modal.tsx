@@ -7,9 +7,10 @@ interface ModalProps {
   onClose: () => void;
   children: React.ReactNode;
   className?: string;
+  maxWidth?: string;
 }
 
-export function Modal({ open, onClose, children, className }: ModalProps) {
+export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg' }: ModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export function Modal({ open, onClose, children, className }: ModalProps) {
     >
       <div
         className={cn(
-          'w-full max-w-lg rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl',
+          `w-full ${maxWidth} rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl`,
           className
         )}
       >

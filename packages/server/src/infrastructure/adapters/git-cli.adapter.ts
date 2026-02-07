@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { basename, dirname } from 'node:path';
-import type { GitRemoteInfo, Worktree } from '@asm/shared';
+import type { DiffStats, GitRemoteInfo, Worktree } from '@asm/shared';
 import type { GitPort } from '../../application/ports/git.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 
@@ -158,6 +158,48 @@ export class GitCliAdapter implements GitPort {
   async fetch(repoPath: string): Promise<void> {
     await execFileAsync('git', ['fetch', '--prune'], { cwd: repoPath });
     this.logger.debug('Git fetch completed', { repoPath });
+  }
+
+  async getDiffStats(repoPath: string, branch: string, baseBranch?: string): Promise<DiffStats> {
+    const base = baseBranch ?? `origin/${await this.getDefaultBranch(repoPath)}`;
+    const timeout = 10_000;
+
+    let commitsAhead = 0;
+    let commitsBehind = 0;
+    try {
+      const { stdout } = await execFileAsync(
+        'git',
+        ['rev-list', '--left-right', '--count', `${base}...${branch}`],
+        { cwd: repoPath, timeout },
+      );
+      const parts = stdout.trim().split(/\s+/);
+      commitsBehind = parseInt(parts[0] ?? '0', 10) || 0;
+      commitsAhead = parseInt(parts[1] ?? '0', 10) || 0;
+    } catch {
+      this.logger.debug('Failed to get rev-list counts', { repoPath, branch, base });
+    }
+
+    let filesChanged = 0;
+    let additions = 0;
+    let deletions = 0;
+    try {
+      const { stdout } = await execFileAsync(
+        'git',
+        ['diff', '--shortstat', `${base}...${branch}`],
+        { cwd: repoPath, timeout },
+      );
+      const stat = stdout.trim();
+      const filesMatch = /(\d+)\s+file/.exec(stat);
+      const insertMatch = /(\d+)\s+insertion/.exec(stat);
+      const deleteMatch = /(\d+)\s+deletion/.exec(stat);
+      filesChanged = parseInt(filesMatch?.[1] ?? '0', 10) || 0;
+      additions = parseInt(insertMatch?.[1] ?? '0', 10) || 0;
+      deletions = parseInt(deleteMatch?.[1] ?? '0', 10) || 0;
+    } catch {
+      this.logger.debug('Failed to get diff shortstat', { repoPath, branch, base });
+    }
+
+    return { commitsAhead, commitsBehind, filesChanged, additions, deletions };
   }
 
   private parseRemoteUrl(url: string): { org: string; name: string } {

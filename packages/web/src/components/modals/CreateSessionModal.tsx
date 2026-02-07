@@ -1,17 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { PullRequest, Worktree } from '@asm/shared';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { DiffStats, GitHubIssue, PullRequest, Worktree } from '@asm/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { Select } from '../ui/Select';
+import { DataTable } from '../ui/DataTable';
+import type { Column } from '../ui/DataTable';
+import { DiffStatsBadge } from '../ui/DiffStatsBadge';
 import { Autocomplete } from '../ui/Autocomplete';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
+import { formatAge } from '../../lib/formatAge';
 
-type WorktreeMode = 'main' | 'existing' | 'pr' | 'new';
+type WorktreeMode = 'main' | 'existing' | 'pr' | 'issue' | 'new';
 
 interface DefaultBranchInfo {
   defaultBranch: string;
@@ -34,8 +37,9 @@ export function CreateSessionModal() {
 
   const [selectedRepo, setSelectedRepo] = useState('');
   const [worktreeMode, setWorktreeMode] = useState<WorktreeMode>('main');
-  const [selectedWorktree, setSelectedWorktree] = useState('');
-  const [selectedPR, setSelectedPR] = useState('');
+  const [selectedWorktreeIndex, setSelectedWorktreeIndex] = useState<number | null>(null);
+  const [selectedPRIndex, setSelectedPRIndex] = useState<number | null>(null);
+  const [selectedIssueIndex, setSelectedIssueIndex] = useState<number | null>(null);
   const [newBranchName, setNewBranchName] = useState('');
   const [claudePrompt, setClaudePrompt] = useState('');
   const [creating, setCreating] = useState(false);
@@ -43,9 +47,14 @@ export function CreateSessionModal() {
 
   const [pullRequests, setPullRequests] = useState<PullRequest[]>([]);
   const [loadingPRs, setLoadingPRs] = useState(false);
+  const [issues, setIssues] = useState<GitHubIssue[]>([]);
+  const [loadingIssues, setLoadingIssues] = useState(false);
   const [defaultBranchInfo, setDefaultBranchInfo] = useState<DefaultBranchInfo | null>(null);
+  const [diffStatsByBranch, setDiffStatsByBranch] = useState<Record<string, DiffStats>>({});
+  const [loadingDiffStats, setLoadingDiffStats] = useState(false);
 
   const worktrees: Worktree[] = selectedRepo ? (worktreesByRepo[selectedRepo] ?? []) : [];
+  const filteredWorktrees = useMemo(() => worktrees.filter((w) => !w.isBare), [worktrees]);
 
   // Fetch worktrees + default branch info when repo changes
   useEffect(() => {
@@ -54,11 +63,14 @@ export function CreateSessionModal() {
     if (!org || !name) return;
 
     setWorktreeMode('main');
-    setSelectedWorktree('');
-    setSelectedPR('');
+    setSelectedWorktreeIndex(null);
+    setSelectedPRIndex(null);
+    setSelectedIssueIndex(null);
     setNewBranchName('');
     setPullRequests([]);
+    setIssues([]);
     setDefaultBranchInfo(null);
+    setDiffStatsByBranch({});
     setError('');
 
     fetchWorktrees(org, name).catch(() => {});
@@ -67,7 +79,7 @@ export function CreateSessionModal() {
       .catch(() => setDefaultBranchInfo(null));
   }, [selectedRepo, fetchWorktrees]);
 
-  // Fetch PRs when switching to PR mode
+  // Fetch PRs when switching to PR or existing mode (for linking)
   const loadPRs = useCallback(() => {
     if (!selectedRepo || pullRequests.length > 0) return;
     const [org, name] = selectedRepo.split('/');
@@ -81,26 +93,214 @@ export function CreateSessionModal() {
   }, [selectedRepo, pullRequests.length]);
 
   useEffect(() => {
-    if (worktreeMode === 'pr') loadPRs();
+    if (worktreeMode === 'pr' || worktreeMode === 'existing') loadPRs();
   }, [worktreeMode, loadPRs]);
+
+  // Fetch issues when switching to issue mode
+  const loadIssues = useCallback(() => {
+    if (!selectedRepo || issues.length > 0) return;
+    const [org, name] = selectedRepo.split('/');
+    if (!org || !name) return;
+
+    setLoadingIssues(true);
+    api.fetchIssues(org, name)
+      .then(setIssues)
+      .catch(() => setIssues([]))
+      .finally(() => setLoadingIssues(false));
+  }, [selectedRepo, issues.length]);
+
+  useEffect(() => {
+    if (worktreeMode === 'issue') loadIssues();
+  }, [worktreeMode, loadIssues]);
+
+  // Lazy-load diff stats for worktree branches
+  useEffect(() => {
+    if (worktreeMode !== 'existing' || !selectedRepo || filteredWorktrees.length === 0) return;
+    const [org, name] = selectedRepo.split('/');
+    if (!org || !name) return;
+
+    const branches = filteredWorktrees
+      .filter((w) => !w.isMain)
+      .map((w) => w.branch)
+      .filter((b) => !diffStatsByBranch[b]);
+    if (branches.length === 0) return;
+
+    setLoadingDiffStats(true);
+    api.fetchDiffStats(org, name, branches)
+      .then((stats) => setDiffStatsByBranch((prev) => ({ ...prev, ...stats })))
+      .catch(() => {})
+      .finally(() => setLoadingDiffStats(false));
+  }, [worktreeMode, selectedRepo, filteredWorktrees, diffStatsByBranch]);
+
+  // Lazy-load diff stats for PR branches
+  useEffect(() => {
+    if (worktreeMode !== 'pr' || !selectedRepo || pullRequests.length === 0) return;
+    const [org, name] = selectedRepo.split('/');
+    if (!org || !name) return;
+
+    const branches = pullRequests
+      .map((pr) => pr.headRefName)
+      .filter((b) => !diffStatsByBranch[b]);
+    if (branches.length === 0) return;
+
+    setLoadingDiffStats(true);
+    api.fetchDiffStats(org, name, branches)
+      .then((stats) => setDiffStatsByBranch((prev) => ({ ...prev, ...stats })))
+      .catch(() => {})
+      .finally(() => setLoadingDiffStats(false));
+  }, [worktreeMode, selectedRepo, pullRequests, diffStatsByBranch]);
 
   const repoOptions = resolvedRepositories.map((r) => ({ value: r, label: r }));
 
-  const existingWorktreeOptions = [
-    { value: '', label: 'Select worktree...' },
-    ...worktrees.filter((w) => !w.isBare).map((w) => ({
-      value: w.path,
-      label: `${w.branch} (${w.path})`,
-    })),
-  ];
+  // Find linked PR for a worktree branch
+  const linkedPR = useCallback(
+    (branch: string) => pullRequests.find((pr) => pr.headRefName === branch),
+    [pullRequests],
+  );
 
-  const prOptions = [
-    { value: '', label: loadingPRs ? 'Loading PRs...' : 'Select pull request...' },
-    ...pullRequests.map((pr) => ({
-      value: pr.headRefName,
-      label: `#${pr.number} ${pr.title}`,
-    })),
-  ];
+  // Column definitions
+  const worktreeColumns: Column<Worktree>[] = useMemo(
+    () => [
+      {
+        key: 'branch',
+        header: 'Branch',
+        width: '25%',
+        render: (w) => <span className="block truncate font-mono text-xs" title={w.branch}>{w.branch}</span>,
+      },
+      {
+        key: 'path',
+        header: 'Path',
+        width: '20%',
+        render: (w) => {
+          const short = w.path.split('/').slice(-2).join('/');
+          return <span className="block truncate text-xs text-zinc-400" title={w.path}>{short}</span>;
+        },
+      },
+      {
+        key: 'linkedPR',
+        header: 'Linked PR',
+        render: (w) => {
+          const pr = linkedPR(w.branch);
+          if (!pr) return <span className="text-zinc-500">&mdash;</span>;
+          return (
+            <span className="block truncate text-xs" title={`#${pr.number} ${pr.title}`}>
+              <span className="text-zinc-400">#{pr.number}</span>{' '}
+              {pr.title}
+            </span>
+          );
+        },
+      },
+      {
+        key: 'diffStats',
+        header: 'Diff',
+        width: '150px',
+        align: 'right' as const,
+        render: (w) => (
+          <DiffStatsBadge
+            stats={diffStatsByBranch[w.branch]}
+            loading={loadingDiffStats && !diffStatsByBranch[w.branch]}
+          />
+        ),
+      },
+    ],
+    [linkedPR, diffStatsByBranch, loadingDiffStats],
+  );
+
+  const prColumns: Column<PullRequest>[] = useMemo(
+    () => [
+      {
+        key: 'number',
+        header: '#',
+        width: '60px',
+        render: (pr) => <span className="font-mono text-xs text-zinc-400">#{pr.number}</span>,
+      },
+      {
+        key: 'title',
+        header: 'Title',
+        render: (pr) => <span className="text-xs truncate block" title={pr.title}>{pr.title}</span>,
+      },
+      {
+        key: 'author',
+        header: 'Author',
+        width: '100px',
+        render: (pr) => <span className="text-xs text-zinc-400">{pr.author}</span>,
+      },
+      {
+        key: 'assignees',
+        header: 'Assignee',
+        width: '100px',
+        render: (pr) => (
+          <span className="text-xs text-zinc-400">
+            {pr.assignees.length > 0 ? pr.assignees.join(', ') : '\u2014'}
+          </span>
+        ),
+      },
+      {
+        key: 'created',
+        header: 'Created',
+        width: '70px',
+        align: 'right' as const,
+        render: (pr) => <span className="text-xs text-zinc-500">{formatAge(pr.createdAt)}</span>,
+      },
+      {
+        key: 'updated',
+        header: 'Updated',
+        width: '70px',
+        align: 'right' as const,
+        render: (pr) => <span className="text-xs text-zinc-500">{formatAge(pr.updatedAt)}</span>,
+      },
+      {
+        key: 'diffStats',
+        header: 'Diff',
+        width: '130px',
+        align: 'right' as const,
+        render: (pr) => (
+          <DiffStatsBadge
+            stats={diffStatsByBranch[pr.headRefName]}
+            loading={loadingDiffStats && !diffStatsByBranch[pr.headRefName]}
+          />
+        ),
+      },
+    ],
+    [diffStatsByBranch, loadingDiffStats],
+  );
+
+  const issueColumns: Column<GitHubIssue>[] = useMemo(
+    () => [
+      {
+        key: 'number',
+        header: '#',
+        width: '60px',
+        render: (issue) => <span className="font-mono text-xs text-zinc-400">#{issue.number}</span>,
+      },
+      {
+        key: 'title',
+        header: 'Title',
+        render: (issue) => <span className="text-xs truncate block" title={issue.title}>{issue.title}</span>,
+      },
+      {
+        key: 'author',
+        header: 'Author',
+        width: '100px',
+        render: (issue) => <span className="text-xs text-zinc-400">{issue.author}</span>,
+      },
+      {
+        key: 'created',
+        header: 'Created',
+        width: '80px',
+        align: 'right' as const,
+        render: (issue) => <span className="text-xs text-zinc-500">{formatAge(issue.createdAt)}</span>,
+      },
+      {
+        key: 'updated',
+        header: 'Updated',
+        width: '80px',
+        align: 'right' as const,
+        render: (issue) => <span className="text-xs text-zinc-500">{formatAge(issue.updatedAt)}</span>,
+      },
+    ],
+    [],
+  );
 
   const isCreateDisabled = (): boolean => {
     if (!selectedRepo || creating) return true;
@@ -108,9 +308,11 @@ export function CreateSessionModal() {
       case 'main':
         return defaultBranchInfo !== null && !defaultBranchInfo.isOnDefault;
       case 'existing':
-        return !selectedWorktree;
+        return selectedWorktreeIndex === null;
       case 'pr':
-        return !selectedPR;
+        return selectedPRIndex === null;
+      case 'issue':
+        return selectedIssueIndex === null;
       case 'new':
         return !newBranchName.trim();
     }
@@ -137,13 +339,38 @@ export function CreateSessionModal() {
           break;
         }
         case 'existing': {
-          cwd = selectedWorktree;
+          if (selectedWorktreeIndex === null) return;
+          const wt = filteredWorktrees[selectedWorktreeIndex];
+          if (!wt) return;
+          cwd = wt.path;
           break;
         }
         case 'pr': {
+          if (selectedPRIndex === null) return;
+          const pr = pullRequests[selectedPRIndex];
+          if (!pr) return;
           const result = await api.createWorktree(org, name, {
-            branch: selectedPR,
+            branch: pr.headRefName,
             createNewBranch: false,
+            prNumber: pr.number,
+          });
+          cwd = result.path;
+          break;
+        }
+        case 'issue': {
+          if (selectedIssueIndex === null) return;
+          const issue = issues[selectedIssueIndex];
+          if (!issue) return;
+          const sanitizedTitle = issue.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 40);
+          const branchName = `issue-${issue.number}/${sanitizedTitle}`;
+          const result = await api.createWorktree(org, name, {
+            branch: branchName,
+            createNewBranch: true,
+            issueNumber: issue.number,
           });
           cwd = result.path;
           break;
@@ -188,13 +415,16 @@ export function CreateSessionModal() {
   const resetForm = () => {
     setSelectedRepo('');
     setWorktreeMode('main');
-    setSelectedWorktree('');
-    setSelectedPR('');
+    setSelectedWorktreeIndex(null);
+    setSelectedPRIndex(null);
+    setSelectedIssueIndex(null);
     setNewBranchName('');
     setClaudePrompt('');
     setError('');
     setPullRequests([]);
+    setIssues([]);
     setDefaultBranchInfo(null);
+    setDiffStatsByBranch({});
   };
 
   const handleClose = () => {
@@ -206,11 +436,12 @@ export function CreateSessionModal() {
     { value: 'main', label: 'Main' },
     { value: 'existing', label: 'Existing' },
     { value: 'pr', label: 'From PR' },
+    { value: 'issue', label: 'From Issue' },
     { value: 'new', label: 'New' },
   ];
 
   return (
-    <Modal open={open} onClose={handleClose}>
+    <Modal open={open} onClose={handleClose} maxWidth="max-w-5xl">
       <h2 className="mb-4 text-lg font-semibold text-zinc-100">New Sessions</h2>
 
       <div className="flex flex-col gap-4">
@@ -264,22 +495,34 @@ export function CreateSessionModal() {
         )}
 
         {selectedRepo && worktreeMode === 'existing' && (
-          <Select
-            id="worktree"
-            label="Existing worktree"
-            options={existingWorktreeOptions}
-            value={selectedWorktree}
-            onChange={(e) => setSelectedWorktree(e.target.value)}
+          <DataTable
+            columns={worktreeColumns}
+            data={filteredWorktrees}
+            selectedIndex={selectedWorktreeIndex}
+            onSelect={setSelectedWorktreeIndex}
+            emptyMessage="No worktrees found"
           />
         )}
 
         {selectedRepo && worktreeMode === 'pr' && (
-          <Select
-            id="pr"
-            label="Pull Request"
-            options={prOptions}
-            value={selectedPR}
-            onChange={(e) => setSelectedPR(e.target.value)}
+          <DataTable
+            columns={prColumns}
+            data={pullRequests}
+            selectedIndex={selectedPRIndex}
+            onSelect={setSelectedPRIndex}
+            loading={loadingPRs}
+            emptyMessage="No open pull requests"
+          />
+        )}
+
+        {selectedRepo && worktreeMode === 'issue' && (
+          <DataTable
+            columns={issueColumns}
+            data={issues}
+            selectedIndex={selectedIssueIndex}
+            onSelect={setSelectedIssueIndex}
+            loading={loadingIssues}
+            emptyMessage="No open issues assigned to you"
           />
         )}
 
