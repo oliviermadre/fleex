@@ -1,8 +1,11 @@
 import { useCallback, useRef } from 'react';
 import { useUIStore } from '../../stores/uiStore';
 
+const NAV_COLLAPSED_WIDTH = 48;
+const NAV_EXPANDED_WIDTH = 180;
+
 export function ResizeHandle() {
-  const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
+  const setContentPanelWidth = useUIStore((s) => s.setContentPanelWidth);
   const isDragging = useRef(false);
 
   const handleMouseDown = useCallback(
@@ -10,10 +13,13 @@ export function ResizeHandle() {
       e.preventDefault();
       isDragging.current = true;
 
+      const navCollapsed = useUIStore.getState().navCollapsed;
+      const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
+
       const handleMouseMove = (moveEvent: MouseEvent) => {
         if (!isDragging.current) return;
-        const width = Math.min(Math.max(moveEvent.clientX, 240), 520);
-        setSidebarWidth(width);
+        const width = Math.min(Math.max(moveEvent.clientX - navWidth, 240), 520);
+        setContentPanelWidth(width);
       };
 
       const handleMouseUp = () => {
@@ -29,7 +35,7 @@ export function ResizeHandle() {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [setSidebarWidth]
+    [setContentPanelWidth]
   );
 
   return (

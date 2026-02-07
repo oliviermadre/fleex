@@ -3,8 +3,6 @@ import { Button } from '../ui/Button';
 
 export function EmptyState() {
   const openCreateModal = useUIStore((s) => s.openCreateModal);
-  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
-  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 text-zinc-500">
@@ -18,16 +16,9 @@ export function EmptyState() {
         <line x1="12" y1="32" x2="28" y2="32" />
       </svg>
       <p className="text-sm">Select a session or create a new one</p>
-      <div className="flex gap-2">
-        <Button variant="primary" size="sm" onClick={openCreateModal}>
-          New Session
-        </Button>
-        {sidebarCollapsed && (
-          <Button variant="secondary" size="sm" onClick={toggleSidebar}>
-            Show Sidebar
-          </Button>
-        )}
-      </div>
+      <Button variant="primary" size="sm" onClick={openCreateModal}>
+        New Session
+      </Button>
     </div>
   );
 }

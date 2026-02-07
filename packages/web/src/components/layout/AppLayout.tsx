@@ -4,41 +4,46 @@ import { useSessions } from '../../hooks/useSessions';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { Sidebar } from '../sidebar/Sidebar';
+import { NavSidebar } from '../sidebar/NavSidebar';
+import { ContentPanel } from '../sidebar/ContentPanel';
 import { MainPanel } from '../main-panel/MainPanel';
 import { ResizeHandle } from './ResizeHandle';
 
-const COLLAPSED_WIDTH = 48;
+const NAV_COLLAPSED_WIDTH = 48;
+const NAV_EXPANDED_WIDTH = 180;
 
 export function AppLayout() {
   useWebSocket();
   useSessions();
   useKeyboardShortcuts();
 
-  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
-  const sidebarWidth = useUIStore((s) => s.sidebarWidth);
+  const navCollapsed = useUIStore((s) => s.navCollapsed);
+  const contentPanelWidth = useUIStore((s) => s.contentPanelWidth);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
 
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
+  const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
+
   return (
     <div
       className="flex h-screen w-screen overflow-hidden bg-zinc-950"
       style={{
         display: 'grid',
-        gridTemplateColumns: sidebarCollapsed
-          ? `${COLLAPSED_WIDTH}px 1fr`
-          : `${sidebarWidth}px 1fr`,
+        gridTemplateColumns: `${navWidth}px ${contentPanelWidth}px 1fr`,
         transition: 'grid-template-columns 150ms ease',
       }}
     >
       <div className="overflow-hidden">
-        <Sidebar />
+        <NavSidebar />
+      </div>
+      <div className="overflow-hidden">
+        <ContentPanel />
       </div>
       <div className="relative flex" style={{ minWidth: 0 }}>
-        {!sidebarCollapsed && <ResizeHandle />}
+        <ResizeHandle />
         <MainPanel />
       </div>
     </div>

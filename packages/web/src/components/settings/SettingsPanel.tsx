@@ -1,33 +1,32 @@
 import { useState, useEffect } from 'react';
-import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore, type PinnedIcon } from '../../stores/settingsStore';
-import { Modal } from '../ui/Modal';
+import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { cn } from '../../lib/cn';
 
-type SettingsTab = 'general' | 'repositories' | 'pinned-icons';
+const tabLabels: Record<SettingsTab, string> = {
+  general: 'General',
+  repositories: 'Repositories',
+  'pinned-icons': 'Pinned Icons',
+};
 
-export function SettingsModal() {
-  const open = useUIStore((s) => s.settingsModalOpen);
-  const closeModal = useUIStore((s) => s.closeSettingsModal);
+export function SettingsPanel() {
   const settings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.saveSettings);
   const resolveRepositories = useSettingsStore((s) => s.resolveRepositories);
   const resolving = useSettingsStore((s) => s.resolving);
+  const settingsTab = useUIStore((s) => s.settingsTab);
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [basePath, setBasePath] = useState('');
   const [repoPatterns, setRepoPatterns] = useState('');
   const [pinnedIcons, setPinnedIcons] = useState<PinnedIcon[]>([]);
 
   useEffect(() => {
-    if (open) {
-      setBasePath(settings.basePath);
-      setRepoPatterns(settings.repositories.join('\n'));
-      setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
-    }
-  }, [open, settings]);
+    setBasePath(settings.basePath);
+    setRepoPatterns(settings.repositories.join('\n'));
+    setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
+  }, [settings]);
 
   const handleSave = async () => {
     const repos = repoPatterns
@@ -40,7 +39,6 @@ export function SettingsModal() {
       repositories: repos,
       pinnedIcons,
     });
-    closeModal();
   };
 
   const handleResolve = () => {
@@ -75,69 +73,49 @@ export function SettingsModal() {
     setPinnedIcons((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const tabs: { key: SettingsTab; label: string }[] = [
-    { key: 'general', label: 'General' },
-    { key: 'repositories', label: 'Repositories' },
-    { key: 'pinned-icons', label: 'Pinned Icons' },
-  ];
-
   return (
-    <Modal open={open} onClose={closeModal} className="max-w-2xl">
-      <h2 className="mb-4 text-lg font-semibold text-zinc-100">Settings</h2>
-
-      {/* Tabs */}
-      <div className="mb-4 flex gap-1 rounded-md bg-zinc-800 p-0.5">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            className={cn(
-              'flex-1 rounded px-3 py-1 text-sm font-medium transition-colors',
-              activeTab === tab.key
-                ? 'bg-zinc-700 text-zinc-100'
-                : 'text-zinc-400 hover:text-zinc-300'
-            )}
-            onClick={() => setActiveTab(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-zinc-950">
+      {/* Breadcrumb header */}
+      <div className="flex w-full items-center border-b border-zinc-800 px-8" style={{ height: 'var(--header-height)' }}>
+        <span className="text-sm text-zinc-500">Settings</span>
+        <span className="mx-2 text-sm text-zinc-600">/</span>
+        <span className="text-sm font-medium text-zinc-200">{tabLabels[settingsTab]}</span>
       </div>
 
-      {/* Tab content */}
-      <div className="min-h-[300px]">
-        {activeTab === 'general' && (
-          <GeneralTab basePath={basePath} setBasePath={setBasePath} />
-        )}
-        {activeTab === 'repositories' && (
-          <RepositoriesTab
-            repoPatterns={repoPatterns}
-            setRepoPatterns={setRepoPatterns}
-            resolvedRepositories={settings.resolvedRepositories}
-            resolvedAt={settings.resolvedAt}
-            resolving={resolving}
-            onResolve={handleResolve}
-          />
-        )}
-        {activeTab === 'pinned-icons' && (
-          <PinnedIconsTab
-            pinnedIcons={pinnedIcons}
-            onAdd={addPinnedIcon}
-            onUpdate={updatePinnedIcon}
-            onRemove={removePinnedIcon}
-          />
-        )}
-      </div>
+      {/* Form content */}
+      <div className="flex-1 overflow-y-auto p-8">
+        <div className="max-w-4xl">
+          {settingsTab === 'general' && (
+            <GeneralTab basePath={basePath} setBasePath={setBasePath} />
+          )}
+          {settingsTab === 'repositories' && (
+            <RepositoriesTab
+              repoPatterns={repoPatterns}
+              setRepoPatterns={setRepoPatterns}
+              resolvedRepositories={settings.resolvedRepositories}
+              resolvedAt={settings.resolvedAt}
+              resolving={resolving}
+              onResolve={handleResolve}
+            />
+          )}
+          {settingsTab === 'pinned-icons' && (
+            <PinnedIconsTab
+              pinnedIcons={pinnedIcons}
+              onAdd={addPinnedIcon}
+              onUpdate={updatePinnedIcon}
+              onRemove={removePinnedIcon}
+            />
+          )}
 
-      {/* Actions */}
-      <div className="mt-6 flex justify-end gap-2">
-        <Button variant="ghost" onClick={closeModal}>
-          Cancel
-        </Button>
-        <Button variant="primary" onClick={handleSave}>
-          Save Settings
-        </Button>
+          {/* Save button */}
+          <div className="mt-8 flex justify-end">
+            <Button variant="primary" onClick={handleSave}>
+              Save Settings
+            </Button>
+          </div>
+        </div>
       </div>
-    </Modal>
+    </div>
   );
 }
 
@@ -149,7 +127,7 @@ function GeneralTab({
   setBasePath: (v: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <Input
         id="basePath"
         label="Base Path"
@@ -157,7 +135,7 @@ function GeneralTab({
         value={basePath}
         onChange={(e) => setBasePath(e.target.value)}
       />
-      <p className="text-[11px] text-zinc-500">
+      <p className="text-xs text-zinc-500">
         Base directory for repositories. Repos are stored as{' '}
         <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">
           basePath/orgName/repoName
@@ -183,25 +161,25 @@ function RepositoriesTab({
   onResolve: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium text-zinc-400">
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium text-zinc-400">
           Repository Patterns
         </label>
         <textarea
-          className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
-          rows={5}
+          className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+          rows={8}
           placeholder={"odys-travel/*\nmyorg/specific-repo\nanother-org/*"}
           value={repoPatterns}
           onChange={(e) => setRepoPatterns(e.target.value)}
         />
-        <p className="text-[11px] text-zinc-500">
+        <p className="text-xs text-zinc-500">
           One pattern per line. Use <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">org/*</code> to
           include all repos from an organization.
         </p>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <Button
           variant="secondary"
           size="sm"
@@ -211,20 +189,20 @@ function RepositoriesTab({
           {resolving ? 'Resolving...' : 'Resolve Patterns'}
         </Button>
         {resolvedAt && (
-          <span className="text-[11px] text-zinc-500">
+          <span className="text-xs text-zinc-500">
             Last resolved: {new Date(resolvedAt).toLocaleString()}
           </span>
         )}
       </div>
 
       {resolvedRepositories.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-zinc-400">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-zinc-400">
             Resolved Repositories ({resolvedRepositories.length})
           </label>
-          <div className="max-h-32 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950 p-2">
+          <div className="max-h-64 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950 p-3">
             {resolvedRepositories.map((repo) => (
-              <div key={repo} className="text-[11px] text-zinc-400 py-0.5">
+              <div key={repo} className="text-xs text-zinc-400 py-0.5">
                 {repo}
               </div>
             ))}
@@ -247,9 +225,9 @@ function PinnedIconsTab({
   onRemove: (index: number) => void;
 }) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-medium text-zinc-400">
+        <label className="text-sm font-medium text-zinc-400">
           Pinned Icons ({pinnedIcons.length})
         </label>
         <Button variant="secondary" size="sm" onClick={onAdd}>
@@ -258,12 +236,12 @@ function PinnedIconsTab({
       </div>
 
       {pinnedIcons.length === 0 && (
-        <p className="py-4 text-center text-xs text-zinc-500">
+        <p className="py-6 text-center text-sm text-zinc-500">
           No pinned icons configured. Add one to pin it to the top of the sidebar.
         </p>
       )}
 
-      <div className="flex max-h-[300px] flex-col gap-2 overflow-y-auto">
+      <div className="flex flex-col gap-3">
         {pinnedIcons.map((icon, i) => (
           <PinnedIconEditor
             key={icon.id}
@@ -329,7 +307,7 @@ function PinnedIconEditor({
 
       {/* Expanded editor */}
       {expanded && (
-        <div className="flex flex-col gap-3 border-t border-zinc-800 px-3 py-3">
+        <div className="flex flex-col gap-4 border-t border-zinc-800 px-4 py-4">
           <Input
             label="Label"
             placeholder="My Shortcut"
@@ -338,14 +316,14 @@ function PinnedIconEditor({
           />
 
           <div className="flex gap-2">
-            <div className="flex flex-1 flex-col gap-1">
-              <label className="text-xs font-medium text-zinc-400">Icon Type</label>
+            <div className="flex flex-1 flex-col gap-1.5">
+              <label className="text-sm font-medium text-zinc-400">Icon Type</label>
               <div className="flex gap-0.5 rounded-md bg-zinc-800 p-0.5">
                 {(['svg', 'base64', 'url', 'path'] as const).map((type) => (
                   <button
                     key={type}
                     className={cn(
-                      'flex-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors',
+                      'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
                       icon.iconType === type
                         ? 'bg-zinc-700 text-zinc-200'
                         : 'text-zinc-500 hover:text-zinc-400'
@@ -359,11 +337,11 @@ function PinnedIconEditor({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-zinc-400">Icon Value</label>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Icon Value</label>
             <textarea
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
-              rows={2}
+              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+              rows={3}
               placeholder={
                 icon.iconType === 'svg'
                   ? '<svg>...</svg>'
@@ -378,12 +356,12 @@ function PinnedIconEditor({
             />
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-zinc-400">Action Type</label>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Action Type</label>
             <div className="flex gap-0.5 rounded-md bg-zinc-800 p-0.5">
               <button
                 className={cn(
-                  'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
+                  'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                   icon.actionType === 'url'
                     ? 'bg-zinc-700 text-zinc-200'
                     : 'text-zinc-500 hover:text-zinc-400'
@@ -394,7 +372,7 @@ function PinnedIconEditor({
               </button>
               <button
                 className={cn(
-                  'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
+                  'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                   icon.actionType === 'shell'
                     ? 'bg-zinc-700 text-zinc-200'
                     : 'text-zinc-500 hover:text-zinc-400'
@@ -406,11 +384,11 @@ function PinnedIconEditor({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-zinc-400">Action Value</label>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-zinc-400">Action Value</label>
             <textarea
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
-              rows={icon.actionType === 'shell' ? 3 : 1}
+              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+              rows={icon.actionType === 'shell' ? 4 : 2}
               placeholder={
                 icon.actionType === 'url'
                   ? 'https://example.com'
