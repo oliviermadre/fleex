@@ -1,45 +1,55 @@
 import { create } from 'zustand';
 
+type ActivePanel = 'sessions' | 'settings';
+export type SettingsTab = 'general' | 'repositories' | 'pinned-icons';
+
 interface UIState {
-  sidebarCollapsed: boolean;
-  sidebarWidth: number;
+  // Nav sidebar (left icon bar)
+  navCollapsed: boolean;
+  toggleNav: () => void;
+
+  // Active panel selection
+  activePanel: ActivePanel;
+  setActivePanel: (panel: ActivePanel) => void;
+
+  // Content panel (sessions list / settings)
+  contentPanelWidth: number;
+  setContentPanelWidth: (width: number) => void;
+
+  // Settings tab selection
+  settingsTab: SettingsTab;
+  setSettingsTab: (tab: SettingsTab) => void;
+
+  // Create session modal
   createModalOpen: boolean;
-  settingsModalOpen: boolean;
-  collapsedGroups: Set<string>;
-  toggleSidebar: () => void;
-  expandSidebar: () => void;
-  collapseSidebar: () => void;
-  setSidebarWidth: (width: number) => void;
   openCreateModal: () => void;
   closeCreateModal: () => void;
-  openSettingsModal: () => void;
-  closeSettingsModal: () => void;
+
+  // Group collapse state
+  collapsedGroups: Set<string>;
   toggleGroup: (groupId: string) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  sidebarCollapsed: false,
-  sidebarWidth: 320,
+  navCollapsed: true,
+  contentPanelWidth: 320,
+  activePanel: 'sessions',
+  settingsTab: 'general',
   createModalOpen: false,
-  settingsModalOpen: false,
   collapsedGroups: new Set<string>(),
 
-  toggleSidebar: () =>
-    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  toggleNav: () =>
+    set((state) => ({ navCollapsed: !state.navCollapsed })),
 
-  expandSidebar: () => set({ sidebarCollapsed: false }),
+  setActivePanel: (panel) => set({ activePanel: panel }),
 
-  collapseSidebar: () => set({ sidebarCollapsed: true }),
+  setSettingsTab: (tab) => set({ settingsTab: tab }),
 
-  setSidebarWidth: (width) => set({ sidebarWidth: width }),
+  setContentPanelWidth: (width) => set({ contentPanelWidth: width }),
 
   openCreateModal: () => set({ createModalOpen: true }),
 
   closeCreateModal: () => set({ createModalOpen: false }),
-
-  openSettingsModal: () => set({ settingsModalOpen: true }),
-
-  closeSettingsModal: () => set({ settingsModalOpen: false }),
 
   toggleGroup: (groupId) =>
     set((state) => {

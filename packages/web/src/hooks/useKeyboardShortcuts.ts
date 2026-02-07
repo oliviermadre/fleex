@@ -4,7 +4,7 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 export function useKeyboardShortcuts() {
-  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const toggleNav = useUIStore((s) => s.toggleNav);
   const openCreateModal = useUIStore((s) => s.openCreateModal);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
@@ -57,10 +57,10 @@ export function useKeyboardShortcuts() {
     function handleKeyDown(e: KeyboardEvent) {
       const meta = e.metaKey || e.ctrlKey;
 
-      // Cmd+B: toggle sidebar
+      // Cmd+B: toggle nav sidebar
       if (meta && e.key === 'b') {
         e.preventDefault();
-        toggleSidebar();
+        toggleNav();
         return;
       }
 
@@ -96,5 +96,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleSidebar, openCreateModal, orderedSessionIds, selectedSessionId, selectSession]);
+  }, [toggleNav, openCreateModal, orderedSessionIds, selectedSessionId, selectSession]);
 }
