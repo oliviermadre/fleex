@@ -7,3 +7,5 @@ dist/
 .vite/
 coverage/
 .asm/
+*.tsbuildinfo
+.claude/settings.local.json
