@@ -9,6 +9,7 @@ html, body {
 
 :root {
   --sidebar-width: 280px;
+  --sidebar-collapsed-width: 48px;
   --sidebar-min-width: 200px;
   --sidebar-max-width: 480px;
   --header-height: 40px;
