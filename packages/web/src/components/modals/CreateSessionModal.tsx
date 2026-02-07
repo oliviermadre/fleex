@@ -1,24 +1,30 @@
-import { useState, useEffect } from 'react';
-import type { SessionType } from '@asm/shared';
+import { useState, useEffect, useCallback } from 'react';
+import type { PullRequest, Worktree } from '@asm/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
+
+type WorktreeMode = 'main' | 'existing' | 'pr' | 'new';
+
+interface DefaultBranchInfo {
+  defaultBranch: string;
+  currentBranch: string;
+  isOnDefault: boolean;
+}
 
 export function CreateSessionModal() {
   const open = useUIStore((s) => s.createModalOpen);
   const closeModal = useUIStore((s) => s.closeCreateModal);
 
-  const repositories = useRepositoryStore((s) => s.repositories);
-  const branchesByRepo = useRepositoryStore((s) => s.branchesByRepo);
+  const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
+  const basePath = useSettingsStore((s) => s.settings.basePath);
   const worktreesByRepo = useRepositoryStore((s) => s.worktreesByRepo);
-  const fetchRepositories = useRepositoryStore((s) => s.fetchRepositories);
-  const fetchBranches = useRepositoryStore((s) => s.fetchBranches);
   const fetchWorktrees = useRepositoryStore((s) => s.fetchWorktrees);
 
   const selectSession = useSessionStore((s) => s.selectSession);
@@ -26,112 +32,156 @@ export function CreateSessionModal() {
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
 
   const [selectedRepo, setSelectedRepo] = useState('');
-  const [sessionType, setSessionType] = useState<SessionType>('shell');
-  const [selectedBranch, setSelectedBranch] = useState('');
-  const [worktreeStrategy, setWorktreeStrategy] = useState<'auto' | 'new' | 'reuse'>('auto');
+  const [worktreeMode, setWorktreeMode] = useState<WorktreeMode>('main');
+  const [selectedWorktree, setSelectedWorktree] = useState('');
+  const [selectedPR, setSelectedPR] = useState('');
+  const [newBranchName, setNewBranchName] = useState('');
   const [claudePrompt, setClaudePrompt] = useState('');
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
 
-  // Fetch repos when modal opens
-  useEffect(() => {
-    if (open) {
-      fetchRepositories().catch(() => {});
-    }
-  }, [open, fetchRepositories]);
+  const [pullRequests, setPullRequests] = useState<PullRequest[]>([]);
+  const [loadingPRs, setLoadingPRs] = useState(false);
+  const [defaultBranchInfo, setDefaultBranchInfo] = useState<DefaultBranchInfo | null>(null);
 
-  // Fetch branches and worktrees when repo selected
+  const worktrees: Worktree[] = selectedRepo ? (worktreesByRepo[selectedRepo] ?? []) : [];
+
+  // Fetch worktrees + default branch info when repo changes
   useEffect(() => {
     if (!selectedRepo) return;
-    const repo = repositories.find((r) => `${r.org}/${r.name}` === selectedRepo);
-    if (!repo) return;
-    fetchBranches(repo.org, repo.name).catch(() => {});
-    fetchWorktrees(repo.org, repo.name).catch(() => {});
-  }, [selectedRepo, repositories, fetchBranches, fetchWorktrees]);
+    const [org, name] = selectedRepo.split('/');
+    if (!org || !name) return;
+
+    setWorktreeMode('main');
+    setSelectedWorktree('');
+    setSelectedPR('');
+    setNewBranchName('');
+    setPullRequests([]);
+    setDefaultBranchInfo(null);
+    setError('');
+
+    fetchWorktrees(org, name).catch(() => {});
+    api.fetchDefaultBranch(org, name)
+      .then(setDefaultBranchInfo)
+      .catch(() => setDefaultBranchInfo(null));
+  }, [selectedRepo, fetchWorktrees]);
+
+  // Fetch PRs when switching to PR mode
+  const loadPRs = useCallback(() => {
+    if (!selectedRepo || pullRequests.length > 0) return;
+    const [org, name] = selectedRepo.split('/');
+    if (!org || !name) return;
+
+    setLoadingPRs(true);
+    api.fetchPullRequests(org, name)
+      .then(setPullRequests)
+      .catch(() => setPullRequests([]))
+      .finally(() => setLoadingPRs(false));
+  }, [selectedRepo, pullRequests.length]);
+
+  useEffect(() => {
+    if (worktreeMode === 'pr') loadPRs();
+  }, [worktreeMode, loadPRs]);
 
   const repoOptions = [
     { value: '', label: 'Select repository...' },
-    ...repositories.map((r) => ({
-      value: `${r.org}/${r.name}`,
-      label: `${r.org}/${r.name}`,
-    })),
+    ...resolvedRepositories.map((r) => ({ value: r, label: r })),
   ];
 
-  const branches = selectedRepo ? (branchesByRepo[selectedRepo] ?? []) : [];
-  const branchOptions = [
-    { value: '', label: 'Select branch...' },
-    ...branches.map((b) => ({ value: b, label: b })),
-  ];
-
-  const worktrees = selectedRepo ? (worktreesByRepo[selectedRepo] ?? []) : [];
-  const worktreeOptions = [
-    { value: 'auto', label: 'Auto (use existing or create)' },
-    { value: 'new', label: 'Create new worktree' },
-    ...worktrees.map((w) => ({
+  const existingWorktreeOptions = [
+    { value: '', label: 'Select worktree...' },
+    ...worktrees.filter((w) => !w.isBare).map((w) => ({
       value: w.path,
-      label: `Reuse: ${w.branch} (${w.path})`,
+      label: `${w.branch} (${w.path})`,
     })),
   ];
+
+  const prOptions = [
+    { value: '', label: loadingPRs ? 'Loading PRs...' : 'Select pull request...' },
+    ...pullRequests.map((pr) => ({
+      value: pr.headRefName,
+      label: `#${pr.number} ${pr.title}`,
+    })),
+  ];
+
+  const isCreateDisabled = (): boolean => {
+    if (!selectedRepo || creating) return true;
+    switch (worktreeMode) {
+      case 'main':
+        return defaultBranchInfo !== null && !defaultBranchInfo.isOnDefault;
+      case 'existing':
+        return !selectedWorktree;
+      case 'pr':
+        return !selectedPR;
+      case 'new':
+        return !newBranchName.trim();
+    }
+  };
 
   const handleCreate = async () => {
     if (!selectedRepo) return;
+    const [org, name] = selectedRepo.split('/');
+    if (!org || !name) return;
 
     setCreating(true);
+    setError('');
+
     try {
-      const repo = repositories.find((r) => `${r.org}/${r.name}` === selectedRepo);
-      if (!repo) return;
+      let cwd: string;
 
-      // Determine CWD based on worktree strategy
-      let cwd = repo.path;
-
-      if (worktreeStrategy === 'reuse') {
-        // Selected an existing worktree path
-        const wt = worktrees.find((w) => w.path === selectedBranch || w.branch === selectedBranch);
-        if (wt) cwd = wt.path;
-      } else if (worktreeStrategy === 'new' && selectedBranch) {
-        // Create new worktree for branch
-        try {
-          const newWt = await api.createWorktree(repo.org, repo.name, {
-            branch: selectedBranch,
+      switch (worktreeMode) {
+        case 'main': {
+          if (defaultBranchInfo && !defaultBranchInfo.isOnDefault) {
+            setError(`Repository is on branch "${defaultBranchInfo.currentBranch}", not the default branch "${defaultBranchInfo.defaultBranch}".`);
+            return;
+          }
+          cwd = `${basePath}/${org}/${name}`;
+          break;
+        }
+        case 'existing': {
+          cwd = selectedWorktree;
+          break;
+        }
+        case 'pr': {
+          const result = await api.createWorktree(org, name, {
+            branch: selectedPR,
             createNewBranch: false,
           });
-          cwd = newWt.path;
-        } catch {
-          // Fall back to repo path
+          cwd = result.path;
+          break;
         }
-      } else if (worktreeStrategy === 'auto' && selectedBranch) {
-        // Check if worktree exists for branch
-        const existing = worktrees.find((w) => w.branch === selectedBranch);
-        if (existing) {
-          cwd = existing.path;
-        } else {
-          try {
-            const newWt = await api.createWorktree(repo.org, repo.name, {
-              branch: selectedBranch,
-              createNewBranch: false,
-            });
-            cwd = newWt.path;
-          } catch {
-            // Fall back to repo path
-          }
+        case 'new': {
+          const result = await api.createWorktree(org, name, {
+            branch: newBranchName.trim(),
+            createNewBranch: true,
+          });
+          cwd = result.path;
+          break;
         }
       }
 
-      const session = await api.createSession({
+      // Create shell session
+      const shellSession = await api.createSession({ cwd, type: 'shell' });
+      addSession(shellSession);
+
+      // Create claude session
+      const claudeSession = await api.createSession({
         cwd,
-        type: sessionType,
-        claudePrompt: sessionType === 'claude' && claudePrompt ? claudePrompt : undefined,
+        type: 'claude',
+        claudePrompt: claudePrompt.trim() || undefined,
       });
+      addSession(claudeSession);
 
-      addSession(session);
-      selectSession(session.id);
+      // Select the claude session by default
+      selectSession(claudeSession.id);
 
-      // Refresh session groups so the sidebar updates immediately
+      // Refresh session groups
       api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
 
       closeModal();
       resetForm();
-    } catch {
-      // Error creating session
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create sessions');
     } finally {
       setCreating(false);
     }
@@ -139,10 +189,14 @@ export function CreateSessionModal() {
 
   const resetForm = () => {
     setSelectedRepo('');
-    setSessionType('shell');
-    setSelectedBranch('');
-    setWorktreeStrategy('auto');
+    setWorktreeMode('main');
+    setSelectedWorktree('');
+    setSelectedPR('');
+    setNewBranchName('');
     setClaudePrompt('');
+    setError('');
+    setPullRequests([]);
+    setDefaultBranchInfo(null);
   };
 
   const handleClose = () => {
@@ -150,9 +204,16 @@ export function CreateSessionModal() {
     resetForm();
   };
 
+  const modes: { value: WorktreeMode; label: string }[] = [
+    { value: 'main', label: 'Main' },
+    { value: 'existing', label: 'Existing' },
+    { value: 'pr', label: 'From PR' },
+    { value: 'new', label: 'New' },
+  ];
+
   return (
     <Modal open={open} onClose={handleClose}>
-      <h2 className="mb-4 text-lg font-semibold text-zinc-100">New Session</h2>
+      <h2 className="mb-4 text-lg font-semibold text-zinc-100">New Sessions</h2>
 
       <div className="flex flex-col gap-4">
         {/* Repository */}
@@ -164,71 +225,99 @@ export function CreateSessionModal() {
           onChange={(e) => setSelectedRepo(e.target.value)}
         />
 
-        {/* Session type toggle */}
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-zinc-400">Type</span>
-          <div className="flex gap-1 rounded-md bg-zinc-800 p-0.5">
-            <button
-              className={cn(
-                'flex-1 rounded px-3 py-1 text-sm font-medium transition-colors',
-                sessionType === 'shell'
-                  ? 'bg-emerald-500/20 text-emerald-400'
-                  : 'text-zinc-400 hover:text-zinc-300'
-              )}
-              onClick={() => setSessionType('shell')}
-            >
-              Shell
-            </button>
-            <button
-              className={cn(
-                'flex-1 rounded px-3 py-1 text-sm font-medium transition-colors',
-                sessionType === 'claude'
-                  ? 'bg-violet-500/20 text-violet-400'
-                  : 'text-zinc-400 hover:text-zinc-300'
-              )}
-              onClick={() => setSessionType('claude')}
-            >
-              Claude Code
-            </button>
-          </div>
-        </div>
-
-        {/* Branch */}
+        {/* Worktree mode segmented control */}
         {selectedRepo && (
-          <Select
-            id="branch"
-            label="Branch"
-            options={branchOptions}
-            value={selectedBranch}
-            onChange={(e) => setSelectedBranch(e.target.value)}
-          />
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-zinc-400">Worktree</span>
+            <div className="flex gap-1 rounded-md bg-zinc-800 p-0.5">
+              {modes.map((mode) => (
+                <button
+                  key={mode.value}
+                  className={cn(
+                    'flex-1 rounded px-3 py-1 text-sm font-medium transition-colors',
+                    worktreeMode === mode.value
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : 'text-zinc-400 hover:text-zinc-300'
+                  )}
+                  onClick={() => setWorktreeMode(mode.value)}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
-        {/* Worktree strategy */}
-        {selectedRepo && selectedBranch && (
+        {/* Mode-specific content */}
+        {selectedRepo && worktreeMode === 'main' && defaultBranchInfo && (
+          <div className={cn(
+            'rounded-md border px-3 py-2 text-sm',
+            defaultBranchInfo.isOnDefault
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+              : 'border-red-500/30 bg-red-500/10 text-red-400'
+          )}>
+            {defaultBranchInfo.isOnDefault
+              ? `On default branch "${defaultBranchInfo.defaultBranch}"`
+              : `Not on default branch. Currently on "${defaultBranchInfo.currentBranch}" (default: "${defaultBranchInfo.defaultBranch}")`
+            }
+          </div>
+        )}
+
+        {selectedRepo && worktreeMode === 'existing' && (
           <Select
             id="worktree"
-            label="Worktree Strategy"
-            options={worktreeOptions}
-            value={worktreeStrategy}
-            onChange={(e) => setWorktreeStrategy(e.target.value as 'auto' | 'new' | 'reuse')}
+            label="Existing worktree"
+            options={existingWorktreeOptions}
+            value={selectedWorktree}
+            onChange={(e) => setSelectedWorktree(e.target.value)}
           />
         )}
 
-        {/* Claude prompt */}
-        {sessionType === 'claude' && (
+        {selectedRepo && worktreeMode === 'pr' && (
+          <Select
+            id="pr"
+            label="Pull Request"
+            options={prOptions}
+            value={selectedPR}
+            onChange={(e) => setSelectedPR(e.target.value)}
+          />
+        )}
+
+        {selectedRepo && worktreeMode === 'new' && (
           <div className="flex flex-col gap-1">
-            <label htmlFor="prompt" className="text-xs font-medium text-zinc-400">
-              Prompt (optional)
+            <label htmlFor="branch-name" className="text-xs font-medium text-zinc-400">
+              Branch name
             </label>
-            <textarea
-              id="prompt"
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              rows={3}
-              placeholder="Enter a prompt for Claude..."
-              value={claudePrompt}
-              onChange={(e) => setClaudePrompt(e.target.value)}
+            <input
+              id="branch-name"
+              type="text"
+              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              placeholder="feature/my-branch"
+              value={newBranchName}
+              onChange={(e) => setNewBranchName(e.target.value)}
             />
+          </div>
+        )}
+
+        {/* Claude prompt — always visible */}
+        <div className="flex flex-col gap-1">
+          <label htmlFor="prompt" className="text-xs font-medium text-zinc-400">
+            Claude prompt (optional)
+          </label>
+          <textarea
+            id="prompt"
+            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            rows={3}
+            placeholder="Enter a prompt for Claude..."
+            value={claudePrompt}
+            onChange={(e) => setClaudePrompt(e.target.value)}
+          />
+        </div>
+
+        {/* Error display */}
+        {error && (
+          <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            {error}
           </div>
         )}
       </div>
@@ -241,9 +330,9 @@ export function CreateSessionModal() {
         <Button
           variant="primary"
           onClick={handleCreate}
-          disabled={!selectedRepo || creating}
+          disabled={isCreateDisabled()}
         >
-          {creating ? 'Creating...' : 'Create Session'}
+          {creating ? 'Creating...' : 'Create Sessions'}
         </Button>
       </div>
     </Modal>

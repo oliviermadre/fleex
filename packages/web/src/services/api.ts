@@ -5,6 +5,7 @@ import type {
   Repository,
   Worktree,
   CreateWorktreeRequest,
+  PullRequest,
 } from '@asm/shared';
 import { API_URL } from '../lib/constants';
 
@@ -57,10 +58,25 @@ export async function createWorktree(
   org: string,
   name: string,
   req: CreateWorktreeRequest
-): Promise<Worktree> {
-  return request<Worktree>(
+): Promise<{ path: string }> {
+  return request<{ path: string }>(
     `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`,
     { method: 'POST', body: JSON.stringify(req) }
+  );
+}
+
+export async function fetchPullRequests(org: string, name: string): Promise<PullRequest[]> {
+  return request<PullRequest[]>(
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/pulls`
+  );
+}
+
+export async function fetchDefaultBranch(
+  org: string,
+  name: string
+): Promise<{ defaultBranch: string; currentBranch: string; isOnDefault: boolean }> {
+  return request<{ defaultBranch: string; currentBranch: string; isOnDefault: boolean }>(
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/default-branch`
   );
 }
 
