@@ -1,4 +1,4 @@
-import type { Session, SessionType, SessionStatus } from '@asm/shared';
+import type { Session, SessionType, SessionStatus, ClaudeActivityStatus } from '@asm/shared';
 
 export class SessionEntity {
   constructor(
@@ -15,6 +15,9 @@ export class SessionEntity {
     public readonly gitRemote: string | null,
     public readonly claudePrompt?: string,
   ) {}
+
+  /** Mutable, not persisted — set each broadcast cycle by enrichment. */
+  public claudeActivity?: ClaudeActivityStatus;
 
   markAttached(): void {
     this.lastAttachedAt = new Date();
@@ -42,6 +45,7 @@ export class SessionEntity {
       worktreeBranch: this.worktreeBranch,
       gitRemote: this.gitRemote,
       claudePrompt: this.claudePrompt,
+      claudeActivity: this.claudeActivity,
     };
   }
 }

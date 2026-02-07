@@ -9,6 +9,8 @@ export type {
   WorktreeSessionGroup,
 } from './types/session.js';
 
+export type { ClaudeActivityStatus } from './types/claude-activity.js';
+
 export type {
   Repository,
   Worktree,

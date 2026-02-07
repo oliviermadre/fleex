@@ -8,12 +8,14 @@ import { DiscoverExistingSessionsUseCase } from '../application/use-cases/discov
 import { ListRepositoriesUseCase } from '../application/use-cases/list-repositories.js';
 import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js';
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
+import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { NodePtyAdapter } from './adapters/node-pty.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { JsonSessionStore } from './adapters/json-session-store.adapter.js';
 import { JsonConfigAdapter } from './adapters/json-config.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
+import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 
 export function createContainer() {
   const logger = new PinoLoggerAdapter();
@@ -24,6 +26,9 @@ export function createContainer() {
   const sessionStore = new JsonSessionStore(logger);
   const namingService = new SessionNamingService();
   const groupingService = new SessionGroupingService();
+  const claudeState = new ClaudeStateAdapter(logger);
+
+  const enrichClaudeActivity = new EnrichClaudeActivityUseCase(claudeState, logger);
 
   return {
     logger,
@@ -35,7 +40,7 @@ export function createContainer() {
     createSession: new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger),
     listSessions: new ListSessionsUseCase(sessionStore, tmux, logger),
     killSession: new KillSessionUseCase(tmux, sessionStore, logger),
-    getSessionGroups: new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger),
+    getSessionGroups: new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity),
     discoverSessions: new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger),
     listRepositories: new ListRepositoriesUseCase(git, config, logger),
     listWorktrees: new ListWorktreesUseCase(git, logger),
