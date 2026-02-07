@@ -1,0 +1,95 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { CreateSessionUseCase } from '../../src/application/use-cases/create-session.js';
+import { SessionNamingService } from '../../src/domain/services/session-naming.js';
+import {
+  FakeTmuxPort,
+  FakeSessionStore,
+  FakeGitPort,
+  FakeConfigPort,
+  FakeLoggerPort,
+} from '../helpers/fakes.js';
+
+describe('CreateSessionUseCase', () => {
+  let tmux: FakeTmuxPort;
+  let store: FakeSessionStore;
+  let git: FakeGitPort;
+  let config: FakeConfigPort;
+  let logger: FakeLoggerPort;
+  let useCase: CreateSessionUseCase;
+
+  beforeEach(() => {
+    tmux = new FakeTmuxPort();
+    store = new FakeSessionStore();
+    git = new FakeGitPort();
+    config = new FakeConfigPort();
+    logger = new FakeLoggerPort();
+    useCase = new CreateSessionUseCase(
+      tmux, store, new SessionNamingService(), git, config, logger,
+    );
+  });
+
+  it('should create a shell session', async () => {
+    git.setInfo('/tmp/project', {
+      org: 'myorg',
+      name: 'myrepo',
+      remote: 'https://github.com/myorg/myrepo.git',
+      branch: 'main',
+      isWorktree: false,
+      mainWorktreePath: '/tmp/project',
+    });
+
+    const session = await useCase.execute({
+      cwd: '/tmp/project',
+      type: 'shell',
+    });
+
+    expect(session.type).toBe('shell');
+    expect(session.tmuxName).toMatch(/^asm_shell_/);
+    expect(session.cwd).toBe('/tmp/project');
+    expect(session.repositoryOrg).toBe('myorg');
+    expect(session.repositoryName).toBe('myrepo');
+    expect(session.status).toBe('running');
+
+    // Verify tmux session was created
+    expect(tmux.sessions.has(session.tmuxName)).toBe(true);
+
+    // Verify session was persisted
+    expect(store.getById(session.id)).not.toBeNull();
+  });
+
+  it('should create a claude session with command', async () => {
+    const session = await useCase.execute({
+      cwd: '/tmp/project',
+      type: 'claude',
+    });
+
+    expect(session.type).toBe('claude');
+    expect(session.tmuxName).toMatch(/^asm_claude_/);
+
+    // Should have sent the claude command
+    expect(tmux.sentKeys).toHaveLength(1);
+    expect(tmux.sentKeys[0]!.keys).toBe('claude');
+  });
+
+  it('should create a claude session with custom prompt', async () => {
+    const session = await useCase.execute({
+      cwd: '/tmp/project',
+      type: 'claude',
+      claudePrompt: 'Fix the bug',
+    });
+
+    expect(tmux.sentKeys[0]!.keys).toBe('claude "Fix the bug"');
+    expect(session.claudePrompt).toBe('Fix the bug');
+  });
+
+  it('should handle missing git info gracefully', async () => {
+    // No git info set -> getInfo will throw
+    const session = await useCase.execute({
+      cwd: '/tmp/no-git',
+      type: 'shell',
+    });
+
+    expect(session.repositoryOrg).toBeNull();
+    expect(session.repositoryName).toBeNull();
+  });
+});
