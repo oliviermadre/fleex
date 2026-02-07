@@ -15,7 +15,7 @@
     "start": "NODE_ENV=production node packages/server/dist/main.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc -b packages/shared && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
