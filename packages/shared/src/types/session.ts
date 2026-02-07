@@ -23,6 +23,7 @@ export interface Session {
   readonly worktreeBranch: string | null;
   readonly gitRemote: string | null;
   readonly claudePrompt?: string;
+  readonly claudeActivity?: import('./claude-activity.js').ClaudeActivityStatus;
 }
 
 export interface CreateSessionRequest {

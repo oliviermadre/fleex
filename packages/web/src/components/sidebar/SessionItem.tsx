@@ -3,6 +3,7 @@ import type { Session } from '@asm/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ClaudeIcon, TerminalIcon } from './icons';
+import { ActivityDot } from './ActivityDot';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
 
@@ -109,6 +110,9 @@ export function SessionItem({ session }: Props) {
           ? <ClaudeIcon size={20} className={iconColor} />
           : <TerminalIcon size={20} className={iconColor} />
         }
+        {isClaude && isRunning && session.claudeActivity && (
+          <ActivityDot status={session.claudeActivity} />
+        )}
       </span>
       {editing ? (
         <input

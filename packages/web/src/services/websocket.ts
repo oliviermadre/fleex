@@ -47,9 +47,15 @@ export class WebSocketManager {
     };
 
     ws.onmessage = (event: MessageEvent) => {
+      let buf: ArrayBuffer;
       if (event.data instanceof ArrayBuffer) {
-        this.messageHandlers.forEach((h) => h(event.data as ArrayBuffer));
+        buf = event.data;
+      } else if (typeof event.data === 'string') {
+        buf = new TextEncoder().encode(event.data).buffer as ArrayBuffer;
+      } else {
+        return;
       }
+      this.messageHandlers.forEach((h) => h(buf));
     };
 
     ws.onclose = () => {
