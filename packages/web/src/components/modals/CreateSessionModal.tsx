@@ -7,6 +7,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
+import { Autocomplete } from '../ui/Autocomplete';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
 
@@ -83,10 +84,7 @@ export function CreateSessionModal() {
     if (worktreeMode === 'pr') loadPRs();
   }, [worktreeMode, loadPRs]);
 
-  const repoOptions = [
-    { value: '', label: 'Select repository...' },
-    ...resolvedRepositories.map((r) => ({ value: r, label: r })),
-  ];
+  const repoOptions = resolvedRepositories.map((r) => ({ value: r, label: r }));
 
   const existingWorktreeOptions = [
     { value: '', label: 'Select worktree...' },
@@ -217,12 +215,14 @@ export function CreateSessionModal() {
 
       <div className="flex flex-col gap-4">
         {/* Repository */}
-        <Select
+        <Autocomplete
           id="repo"
           label="Repository"
           options={repoOptions}
           value={selectedRepo}
-          onChange={(e) => setSelectedRepo(e.target.value)}
+          onChange={setSelectedRepo}
+          placeholder="Search repository..."
+          autoFocus={open}
         />
 
         {/* Worktree mode segmented control */}
@@ -299,20 +299,22 @@ export function CreateSessionModal() {
           </div>
         )}
 
-        {/* Claude prompt — always visible */}
-        <div className="flex flex-col gap-1">
-          <label htmlFor="prompt" className="text-xs font-medium text-zinc-400">
-            Claude prompt (optional)
-          </label>
-          <textarea
-            id="prompt"
-            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
-            rows={3}
-            placeholder="Enter a prompt for Claude..."
-            value={claudePrompt}
-            onChange={(e) => setClaudePrompt(e.target.value)}
-          />
-        </div>
+        {/* Claude prompt — visible after repo selection */}
+        {selectedRepo && (
+          <div className="flex flex-col gap-1">
+            <label htmlFor="prompt" className="text-xs font-medium text-zinc-400">
+              Claude prompt (optional)
+            </label>
+            <textarea
+              id="prompt"
+              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+              rows={3}
+              placeholder="Enter a prompt for Claude..."
+              value={claudePrompt}
+              onChange={(e) => setClaudePrompt(e.target.value)}
+            />
+          </div>
+        )}
 
         {/* Error display */}
         {error && (
