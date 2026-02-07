@@ -3,6 +3,7 @@ import type { SessionGroup, WorktreeSessionGroup } from '@asm/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { WorktreeGroup } from './WorktreeGroup';
+import { ExternalLinkIcon } from './icons';
 import { cn } from '../../lib/cn';
 
 interface Props {
@@ -136,6 +137,15 @@ export function RepositoryGroup({ group }: Props) {
         <span className="truncate text-sm font-semibold text-zinc-300">
           {group.repositoryOrg}/{group.repositoryName}
         </span>
+        <a
+          href={`https://github.com/${group.repositoryOrg}/${group.repositoryName}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto text-zinc-500 hover:text-zinc-300"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ExternalLinkIcon size={14} />
+        </a>
       </button>
       {!collapsed &&
         sortedWorktrees.map((wt) => {

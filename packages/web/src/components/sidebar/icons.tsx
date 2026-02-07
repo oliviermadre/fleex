@@ -62,6 +62,26 @@ export function TerminalIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function ExternalLinkIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M12 8.5v4a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 2 12.5v-7A1.5 1.5 0 0 1 3.5 4H8" />
+      <path d="M10 2h4v4" />
+      <path d="M7 9L14 2" />
+    </svg>
+  );
+}
+
 export function PlusIcon({ size = 16, className }: IconProps) {
   return (
     <svg
