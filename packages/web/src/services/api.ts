@@ -11,13 +11,14 @@ import { API_URL } from '../lib/constants';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: options?.body ? { 'Content-Type': 'application/json', ...options?.headers } : options?.headers,
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`API error ${res.status}: ${body || res.statusText}`);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 

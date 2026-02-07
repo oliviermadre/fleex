@@ -1,12 +1,15 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useUIStore } from '../../stores/uiStore';
 import { RepositoryGroup } from './RepositoryGroup';
+import { PlusIcon } from './icons';
 
 export function SessionGroups() {
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
   const setRepoOrder = useSettingsStore((s) => s.setRepoOrder);
+  const openCreateModal = useUIStore((s) => s.openCreateModal);
 
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dropEdge, setDropEdge] = useState<'top' | 'bottom'>('bottom');
@@ -74,8 +77,17 @@ export function SessionGroups() {
 
   if (sessionGroups.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center p-4">
-        <p className="text-xs text-zinc-500">No sessions</p>
+      <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 items-center justify-center p-4">
+          <p className="text-xs text-zinc-500">No sessions</p>
+        </div>
+        <button
+          className="flex items-center justify-center gap-2 border-t border-zinc-800/50 px-4 py-2.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-800/50 hover:text-zinc-300"
+          onClick={openCreateModal}
+        >
+          <PlusIcon size={14} />
+          New Session
+        </button>
       </div>
     );
   }
@@ -97,15 +109,22 @@ export function SessionGroups() {
             className="relative"
           >
             {isOver && dropEdge === 'top' && (
-              <div className="absolute left-2 right-2 top-0 z-10 h-0.5 rounded bg-violet-500" />
+              <div className="absolute left-1.5 right-1.5 top-0 z-10 h-0.5 rounded bg-[#D77655]" />
             )}
             <RepositoryGroup group={group} />
             {isOver && dropEdge === 'bottom' && (
-              <div className="absolute bottom-0 left-2 right-2 z-10 h-0.5 rounded bg-violet-500" />
+              <div className="absolute bottom-0 left-1.5 right-1.5 z-10 h-0.5 rounded bg-[#D77655]" />
             )}
           </div>
         );
       })}
+      <button
+        className="mx-1.5 my-1 flex w-[calc(100%-12px)] items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs text-zinc-500 transition-colors hover:bg-zinc-800/50 hover:text-zinc-300"
+        onClick={openCreateModal}
+      >
+        <PlusIcon size={14} />
+        New Session
+      </button>
     </div>
   );
 }

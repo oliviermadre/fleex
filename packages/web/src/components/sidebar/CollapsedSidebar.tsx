@@ -45,7 +45,7 @@ export function CollapsedSidebar() {
           <line x1="7.5" y1="10.5" x2="11" y2="10.5" />
         </svg>
         {sessions.length > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-violet-600 text-[8px] font-bold text-white">
+          <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#b85a3a] text-[8px] font-bold text-white">
             {sessions.length > 9 ? '9+' : sessions.length}
           </span>
         )}

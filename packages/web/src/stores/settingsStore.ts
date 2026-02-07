@@ -19,6 +19,7 @@ export interface AppSettings {
   sessionDisplayNames: Record<string, string>;
   repoOrder: string[];
   worktreeOrder: Record<string, string[]>;
+  sessionOrder: Record<string, string[]>;
 }
 
 interface SettingsState {
@@ -31,6 +32,7 @@ interface SettingsState {
   getSessionDisplayName: (sessionId: string) => string | undefined;
   setRepoOrder: (order: string[]) => void;
   setWorktreeOrder: (repoGroupId: string, order: string[]) => void;
+  setSessionOrder: (worktreeGroupId: string, order: string[]) => void;
   resolveRepositories: () => Promise<void>;
   executePinnedAction: (icon: PinnedIcon) => void;
 }
@@ -46,6 +48,7 @@ const defaultSettings: AppSettings = {
   sessionDisplayNames: {},
   repoOrder: [],
   worktreeOrder: {},
+  sessionOrder: {},
 };
 
 function loadFromStorage(): AppSettings {
@@ -137,6 +140,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const current = get().settings;
     const worktreeOrder = { ...current.worktreeOrder, [repoGroupId]: order };
     const updated = { ...current, worktreeOrder };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
+  },
+
+  setSessionOrder: (worktreeGroupId, order) => {
+    const current = get().settings;
+    const sessionOrder = { ...current.sessionOrder, [worktreeGroupId]: order };
+    const updated = { ...current, sessionOrder };
     set({ settings: updated });
     saveToStorage(updated);
     fetch(`${API_URL}/config`, {

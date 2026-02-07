@@ -39,8 +39,8 @@ export function useSessions() {
             setSessionGroups(msg.data);
             // Flatten sessions from groups
             {
-              const allSessions = msg.data.flatMap((g) =>
-                g.worktrees.flatMap((w) => w.sessions)
+              const allSessions = msg.data.flatMap((g: { worktrees: { sessions: unknown[] }[] }) =>
+                g.worktrees.flatMap((w: { sessions: unknown[] }) => w.sessions)
               );
               setSessions(allSessions);
             }

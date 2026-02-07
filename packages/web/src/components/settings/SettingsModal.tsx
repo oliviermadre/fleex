@@ -189,7 +189,7 @@ function RepositoriesTab({
           Repository Patterns
         </label>
         <textarea
-          className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
           rows={5}
           placeholder={"odys-travel/*\nmyorg/specific-repo\nanother-org/*"}
           value={repoPatterns}
@@ -362,7 +362,7 @@ function PinnedIconEditor({
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-zinc-400">Icon Value</label>
             <textarea
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
               rows={2}
               placeholder={
                 icon.iconType === 'svg'
@@ -409,7 +409,7 @@ function PinnedIconEditor({
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-zinc-400">Action Value</label>
             <textarea
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
               rows={icon.actionType === 'shell' ? 3 : 1}
               placeholder={
                 icon.actionType === 'url'

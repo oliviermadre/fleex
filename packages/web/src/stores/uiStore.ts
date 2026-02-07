@@ -19,7 +19,7 @@ interface UIState {
 
 export const useUIStore = create<UIState>((set) => ({
   sidebarCollapsed: false,
-  sidebarWidth: 280,
+  sidebarWidth: 320,
   createModalOpen: false,
   settingsModalOpen: false,
   collapsedGroups: new Set<string>(),

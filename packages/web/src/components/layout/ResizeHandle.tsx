@@ -12,7 +12,7 @@ export function ResizeHandle() {
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         if (!isDragging.current) return;
-        const width = Math.min(Math.max(moveEvent.clientX, 200), 480);
+        const width = Math.min(Math.max(moveEvent.clientX, 240), 520);
         setSidebarWidth(width);
       };
 
@@ -34,7 +34,7 @@ export function ResizeHandle() {
 
   return (
     <div
-      className="absolute left-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-violet-500/40 active:bg-violet-500/60"
+      className="absolute left-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-[#D77655]/40 active:bg-[#D77655]/60"
       onMouseDown={handleMouseDown}
     />
   );

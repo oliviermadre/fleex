@@ -1,13 +1,57 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useUIStore } from '../stores/uiStore';
 import { useSessionStore } from '../stores/sessionStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 export function useKeyboardShortcuts() {
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const openCreateModal = useUIStore((s) => s.openCreateModal);
-  const sessions = useSessionStore((s) => s.sessions);
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const selectSession = useSessionStore((s) => s.selectSession);
+  const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
+  const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
+  const sessionOrder = useSettingsStore((s) => s.settings.sessionOrder);
+
+  // Build a flat list of session IDs in visual (sidebar) order,
+  // respecting repo order, worktree order, and session order.
+  const orderedSessionIds = useMemo(() => {
+    const sortedGroups = [...sessionGroups].sort((a, b) => {
+      if (repoOrder.length === 0) return 0;
+      const aId = `${a.repositoryOrg}/${a.repositoryName}`;
+      const bId = `${b.repositoryOrg}/${b.repositoryName}`;
+      const orderMap = new Map(repoOrder.map((id, i) => [id, i]));
+      return (orderMap.get(aId) ?? Infinity) - (orderMap.get(bId) ?? Infinity);
+    });
+
+    const ids: string[] = [];
+    for (const group of sortedGroups) {
+      const repoId = `${group.repositoryOrg}/${group.repositoryName}`;
+      const wtOrder = worktreeOrder[repoId];
+      const sortedWts = wtOrder && wtOrder.length > 0
+        ? [...group.worktrees].sort((a, b) => {
+            const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
+            return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
+          })
+        : group.worktrees;
+
+      for (const wt of sortedWts) {
+        const wtGroupId = `${repoId}:${wt.branch}`;
+        const sessOrder = sessionOrder[wtGroupId];
+        const sortedSessions = sessOrder && sessOrder.length > 0
+          ? [...wt.sessions].sort((a, b) => {
+              const orderMap = new Map(sessOrder.map((id, i) => [id, i]));
+              return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
+            })
+          : wt.sessions;
+
+        for (const s of sortedSessions) {
+          ids.push(s.id);
+        }
+      }
+    }
+    return ids;
+  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -30,27 +74,27 @@ export function useKeyboardShortcuts() {
       // Cmd+Shift+Up/Down: navigate sessions
       if (meta && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
-        if (sessions.length === 0) return;
+        if (orderedSessionIds.length === 0) return;
 
         const currentIndex = selectedSessionId
-          ? sessions.findIndex((s) => s.id === selectedSessionId)
+          ? orderedSessionIds.indexOf(selectedSessionId)
           : -1;
 
         let nextIndex: number;
         if (e.key === 'ArrowUp') {
-          nextIndex = currentIndex <= 0 ? sessions.length - 1 : currentIndex - 1;
+          nextIndex = currentIndex <= 0 ? orderedSessionIds.length - 1 : currentIndex - 1;
         } else {
-          nextIndex = currentIndex >= sessions.length - 1 ? 0 : currentIndex + 1;
+          nextIndex = currentIndex >= orderedSessionIds.length - 1 ? 0 : currentIndex + 1;
         }
 
-        const nextSession = sessions[nextIndex];
-        if (nextSession) {
-          selectSession(nextSession.id);
+        const nextId = orderedSessionIds[nextIndex];
+        if (nextId) {
+          selectSession(nextId);
         }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleSidebar, openCreateModal, sessions, selectedSessionId, selectSession]);
+  }, [toggleSidebar, openCreateModal, orderedSessionIds, selectedSessionId, selectSession]);
 }

@@ -35,13 +35,13 @@ export function PinnedIconButton({ icon, collapsed }: PinnedIconButtonProps) {
   return (
     <button
       className={cn(
-        'flex items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200',
-        collapsed ? 'h-8 w-8' : 'h-7 w-7'
+        'flex items-center justify-center text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200',
+        collapsed ? 'h-9 w-9 rounded-md' : 'h-10 w-10 rounded-lg'
       )}
       onClick={() => executePinnedAction(icon)}
       title={icon.label}
     >
-      {renderIcon(icon, collapsed ? 18 : 16)}
+      {renderIcon(icon, collapsed ? 20 : 22)}
     </button>
   );
 }
@@ -52,7 +52,7 @@ export function PinnedIconsBar() {
   if (pinnedIcons.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-0.5 border-b border-zinc-800/50 px-2 py-1.5">
+    <div className="flex items-center gap-1.5 border-b border-zinc-800/50 px-3 py-2.5">
       {pinnedIcons.map((icon) => (
         <PinnedIconButton key={icon.id} icon={icon} />
       ))}
