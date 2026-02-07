@@ -35,8 +35,8 @@ export function PinnedIconButton({ icon, collapsed }: PinnedIconButtonProps) {
   return (
     <button
       className={cn(
-        'flex items-center justify-center text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200',
-        collapsed ? 'h-9 w-9 rounded-md' : 'h-10 w-10 rounded-lg'
+        'flex items-center justify-center cursor-pointer text-zinc-200 transition-all bg-[#D77655]/15 hover:bg-[#D77655] hover:shadow-[0_0_12px_rgba(215,118,85,0.3)] active:bg-[#D77655] active:shadow-[0_0_16px_rgba(215,118,85,0.6)]',
+        collapsed ? 'h-9 px-3 rounded-md' : 'h-10 px-4 rounded-lg'
       )}
       onClick={() => executePinnedAction(icon)}
       title={icon.label}

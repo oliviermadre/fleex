@@ -27,13 +27,15 @@ export function NavSidebar() {
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
           onClick={() => setActivePanel('sessions')}
         />
+      </div>
 
-        {/* Settings */}
+      {/* Settings - bottom of sidebar */}
+      <div className="flex flex-col gap-0.5">
         <NavItem
           icon={
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6.86 1.45h2.28l.34 1.7a5.2 5.2 0 0 1 1.16.67l1.62-.54 1.14 1.97-1.28 1.08c.04.22.06.44.06.67s-.02.45-.06.67l1.28 1.08-1.14 1.97-1.62-.54c-.35.27-.74.5-1.16.67l-.34 1.7H6.86l-.34-1.7a5.2 5.2 0 0 1-1.16-.67l-1.62.54-1.14-1.97 1.28-1.08A4.3 4.3 0 0 1 3.82 8c0-.23.02-.45.06-.67L2.6 6.25l1.14-1.97 1.62.54c.35-.27.74-.5 1.16-.67l.34-1.7z" />
               <circle cx="8" cy="8" r="2" />
-              <path d="M6.5 1h3l.3 1.5c.4.2.8.4 1.1.7l1.5-.5 1.5 2.6-1.2 1c0 .2.05.45.05.7s-.02.5-.05.7l1.2 1-1.5 2.6-1.5-.5c-.3.3-.7.5-1.1.7L9.5 15h-3l-.3-1.5c-.4-.2-.8-.4-1.1-.7l-1.5.5-1.5-2.6 1.2-1c-.03-.2-.05-.45-.05-.7s.02-.5.05-.7l-1.2-1 1.5-2.6 1.5.5c.3-.3.7-.5 1.1-.7L6.5 1z" />
             </svg>
           }
           label="Settings"
