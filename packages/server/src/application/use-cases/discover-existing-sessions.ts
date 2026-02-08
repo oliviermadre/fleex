@@ -37,7 +37,7 @@ export class DiscoverExistingSessionsUseCase {
         null,
       );
 
-      this.sessionStore.save(session);
+      await this.sessionStore.save(session);
       this.logger.info('Discovered existing session', {
         id: session.id,
         tmuxName: tmuxSession.name,

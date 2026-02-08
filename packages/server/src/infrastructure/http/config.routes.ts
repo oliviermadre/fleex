@@ -9,7 +9,7 @@ export function configRoutes(container: Container) {
     });
 
     app.put<{ Body: Partial<AppConfig> }>('/api/config', async (request) => {
-      container.config.update(request.body);
+      await container.config.update(request.body);
       return container.config.get();
     });
   };

@@ -1,11 +1,7 @@
 FROM node:20-bookworm-slim
 
-# System deps for node-pty native build + tmux for session management
+# System deps (node-pty + tmux no longer needed — delegated to host gateway)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-    tmux \
     git \
     curl \
     unzip \
@@ -30,8 +26,8 @@ COPY packages/shared/tsconfig.json ./packages/shared/
 COPY packages/server/tsconfig.json ./packages/server/
 COPY packages/web/tsconfig.json ./packages/web/
 
-# Install dependencies
-RUN bun install
+# Install dependencies (node-pty is optional — only needed on host for PTY, not in container)
+RUN bun install || true
 
 # Copy all source code
 COPY . .

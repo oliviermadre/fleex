@@ -52,9 +52,21 @@ _worktree_name = _sanitize_k8s_name(_basename(_self_dir))
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-NAMESPACE  = 'asm-dev'
-APP_NAME   = 'asm-' + _worktree_name
-HOSTNAME   = _worktree_name + '.127.0.0.1.nip.io'
+NAMESPACE    = 'asm-dev'
+APP_NAME     = 'asm-' + _worktree_name
+HOSTNAME     = _worktree_name + '.127.0.0.1.nip.io'
+HOST_HOMEDIR = str(local('echo $HOME', quiet=True)).strip()
+
+# Resolve the host IP reachable from inside the Kind cluster.
+# OrbStack maps host.docker.internal inside the node — query its IP.
+_kind_cluster_name = str(local(
+    "kubectl config current-context | sed 's/^kind-//'",
+    quiet=True,
+)).strip()
+HOST_IP = str(local(
+    "docker exec %s-control-plane getent hosts host.docker.internal | awk '{print $1}'" % _kind_cluster_name,
+    quiet=True,
+)).strip()
 
 # ---------------------------------------------------------------------------
 # Namespace (idempotent — safe to call from multiple Tiltfiles)
@@ -147,6 +159,10 @@ spec:
           env:
             - name: PORT
               value: "3000"
+            - name: HOST_GATEWAY_URL
+              value: "http://{hostip}:3001"
+            - name: HOST_HOMEDIR
+              value: "{homedir}"
           resources:
             requests:
               memory: "512Mi"
@@ -197,7 +213,7 @@ spec:
                 name: {app}
                 port:
                   number: 80
-""".format(app=APP_NAME, ns=NAMESPACE, host=HOSTNAME)))
+""".format(app=APP_NAME, ns=NAMESPACE, host=HOSTNAME, homedir=HOST_HOMEDIR, hostip=HOST_IP)))
 
 k8s_resource(
     APP_NAME,

@@ -71,7 +71,7 @@ export class CreateSessionUseCase {
       request.claudePrompt,
     );
 
-    this.sessionStore.save(session);
+    await this.sessionStore.save(session);
     this.logger.info('Session created', { id: session.id, type: request.type, tmuxName });
 
     return session;

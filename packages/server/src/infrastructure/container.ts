@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import { SessionNamingService } from '../domain/services/session-naming.js';
 import { SessionGroupingService } from '../domain/services/session-grouping.js';
 import { RepositoryCache } from '../domain/services/repository-cache.js';
@@ -12,34 +13,67 @@ import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
-import { NodePtyAdapter } from './adapters/node-pty.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
 import { JsonSessionStore } from './adapters/json-session-store.adapter.js';
 import { JsonConfigAdapter } from './adapters/json-config.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
+import { localExec, localShellExec, LocalHostFs } from './host/local.js';
+import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
+import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
+import type { ExecFn, ShellExecFn, HostFs } from './host/types.js';
+import type { PtyPort } from '../application/ports/pty.port.js';
 
-export function createContainer() {
+export async function createContainer() {
   const logger = new PinoLoggerAdapter();
-  const config = new JsonConfigAdapter();
-  const tmux = new TmuxCliAdapter(logger);
-  const ptyAdapter = new NodePtyAdapter(logger);
-  const git = new GitCliAdapter(logger);
-  const sessionStore = new JsonSessionStore(logger);
+
+  const gatewayUrl = process.env['HOST_GATEWAY_URL'];
+  const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
+
+  let execFn: ExecFn;
+  let shellExecFn: ShellExecFn;
+  let hostFs: HostFs;
+  let ptyAdapter: PtyPort;
+
+  if (gatewayUrl) {
+    execFn = remoteExec(gatewayUrl);
+    shellExecFn = remoteShellExec(gatewayUrl);
+    hostFs = new RemoteHostFs(gatewayUrl);
+    ptyAdapter = new RemotePtyAdapter(gatewayUrl, logger);
+  } else {
+    execFn = localExec;
+    shellExecFn = localShellExec;
+    hostFs = new LocalHostFs();
+    // Dynamic import: node-pty is only installed on the host, not in containers
+    const { NodePtyAdapter } = await import('./adapters/node-pty.adapter.js');
+    const nodePty = new NodePtyAdapter(execFn, logger);
+    await nodePty.init();
+    ptyAdapter = nodePty;
+  }
+
+  const config = new JsonConfigAdapter(execFn, hostFs, hostHomedir);
+  await config.init();
+
+  const tmux = new TmuxCliAdapter(execFn, logger);
+  const git = new GitCliAdapter(execFn, logger);
+  const sessionStore = new JsonSessionStore(hostFs, hostHomedir, logger);
+  await sessionStore.init();
+
   const namingService = new SessionNamingService();
   const groupingService = new SessionGroupingService();
-  const claudeState = new ClaudeStateAdapter(logger);
+  const claudeState = new ClaudeStateAdapter(shellExecFn, hostFs, hostHomedir, logger);
 
   const enrichClaudeActivity = new EnrichClaudeActivityUseCase(claudeState, logger);
 
   // Repository dashboard services
   const repositoryCache = new RepositoryCache();
-  const githubGraphql = new GitHubGraphQLAdapter(logger);
+  const githubGraphql = new GitHubGraphQLAdapter(execFn, logger);
   const repositoryRefreshScheduler = new RepositoryRefreshScheduler(githubGraphql, repositoryCache, logger);
 
   return {
     logger,
+    shellExecFn,
     config,
     tmux,
     pty: ptyAdapter,
@@ -59,4 +93,4 @@ export function createContainer() {
   };
 }
 
-export type Container = ReturnType<typeof createContainer>;
+export type Container = Awaited<ReturnType<typeof createContainer>>;

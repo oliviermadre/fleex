@@ -1,4 +1,3 @@
-import { exec } from 'node:child_process';
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
 
@@ -12,15 +11,12 @@ export function execRoutes(container: Container) {
 
       container.logger.info('Executing pinned action', { command });
 
-      return new Promise((resolve) => {
-        exec(command, { timeout: 10_000 }, (error, stdout, stderr) => {
-          if (error) {
-            resolve(reply.code(500).send({ error: error.message, stderr }));
-          } else {
-            resolve(reply.send({ stdout, stderr }));
-          }
-        });
-      });
+      try {
+        const { stdout, stderr } = await container.shellExecFn(command, { timeout: 10_000 });
+        return reply.send({ stdout, stderr });
+      } catch (err: any) {
+        return reply.code(500).send({ error: err.message, stderr: err.stderr ?? '' });
+      }
     });
   };
 }

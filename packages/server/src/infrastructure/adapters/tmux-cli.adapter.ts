@@ -1,17 +1,17 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { ASM_PREFIX, DEFAULT_COLS, DEFAULT_ROWS } from '@asm/shared';
 import type { TmuxPort, TmuxSessionInfo } from '../../application/ports/tmux.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-
-const execFileAsync = promisify(execFile);
+import type { ExecFn } from '../host/types.js';
 
 export class TmuxCliAdapter implements TmuxPort {
-  constructor(private readonly logger: LoggerPort) {}
+  constructor(
+    private readonly execFn: ExecFn,
+    private readonly logger: LoggerPort,
+  ) {}
 
   async isAvailable(): Promise<boolean> {
     try {
-      await execFileAsync('tmux', ['-V']);
+      await this.execFn('tmux', ['-V']);
       return true;
     } catch {
       return false;
@@ -36,11 +36,11 @@ export class TmuxCliAdapter implements TmuxPort {
       args.push(opts.command);
     }
 
-    await execFileAsync('tmux', args);
-    await execFileAsync('tmux', ['set-option', '-t', opts.name, 'mouse', 'on']);
+    await this.execFn('tmux', args);
+    await this.execFn('tmux', ['set-option', '-t', opts.name, 'mouse', 'on']);
     // Override WheelUpPane to always enter copy-mode on scroll
     // (bypasses shell mouse tracking that would otherwise cycle command history)
-    await execFileAsync('tmux', [
+    await this.execFn('tmux', [
       'bind-key', '-T', 'root', 'WheelUpPane',
       'if-shell', '-F', '#{pane_in_mode}', 'send-keys -M', 'copy-mode -e',
     ]);
@@ -48,13 +48,13 @@ export class TmuxCliAdapter implements TmuxPort {
   }
 
   async killSession(name: string): Promise<void> {
-    await execFileAsync('tmux', ['kill-session', '-t', name]);
+    await this.execFn('tmux', ['kill-session', '-t', name]);
     this.logger.debug('tmux session killed', { name });
   }
 
   async hasSession(name: string): Promise<boolean> {
     try {
-      await execFileAsync('tmux', ['has-session', '-t', name]);
+      await this.execFn('tmux', ['has-session', '-t', name]);
       return true;
     } catch {
       return false;
@@ -63,7 +63,7 @@ export class TmuxCliAdapter implements TmuxPort {
 
   async listSessions(): Promise<TmuxSessionInfo[]> {
     try {
-      const { stdout } = await execFileAsync('tmux', [
+      const { stdout } = await this.execFn('tmux', [
         'list-sessions',
         '-F',
         '#{session_name},#{session_created},#{session_attached},#{session_width},#{session_height}',
@@ -95,7 +95,7 @@ export class TmuxCliAdapter implements TmuxPort {
   }
 
   async sendKeys(name: string, keys: string): Promise<void> {
-    await execFileAsync('tmux', ['send-keys', '-t', name, keys, 'Enter']);
+    await this.execFn('tmux', ['send-keys', '-t', name, keys, 'Enter']);
     this.logger.debug('tmux send-keys', { name });
   }
 }
