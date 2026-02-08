@@ -1,19 +1,20 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { DEFAULT_COLS, DEFAULT_ROWS, RESIZE_DEBOUNCE_MS, ServerMessageType } from '@asm/shared';
+import { DEFAULT_COLS, DEFAULT_ROWS, RESIZE_DEBOUNCE_MS, ServerMessageType, WS_TERMINAL_PATH } from '@asm/shared';
 import { terminalManager } from '../services/terminalManager';
-import { terminalWs } from '../services/websocket';
+import { WebSocketManager } from '../services/websocket';
 import { useTerminalStore } from '../stores/terminalStore';
+import { WS_BASE_URL } from '../lib/constants';
 
 export function useTerminal(sessionId: string | null, containerRef: React.RefObject<HTMLElement | null>) {
-  const prevSessionRef = useRef<string | null>(null);
   const setConnectionStatus = useTerminalStore((s) => s.setConnectionStatus);
+  const wsRef = useRef<WebSocketManager | null>(null);
 
   const handleResize = useCallback(() => {
     if (!sessionId) return;
     terminalManager.resize(sessionId);
     const instance = terminalManager.get(sessionId);
-    if (instance) {
-      terminalWs.sendResize(instance.terminal.cols, instance.terminal.rows);
+    if (instance && wsRef.current) {
+      wsRef.current.sendResize(instance.terminal.cols, instance.terminal.rows);
     }
   }, [sessionId]);
 
@@ -22,27 +23,21 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
 
     const container = containerRef.current;
 
-    // Set container on terminal manager
-    terminalManager.setContainer(container);
+    // Create per-instance WebSocket connection
+    const ws = new WebSocketManager();
+    wsRef.current = ws;
 
-    // Detach previous session if different
-    if (prevSessionRef.current && prevSessionRef.current !== sessionId) {
-      terminalWs.sendDetach();
-      terminalManager.detach(prevSessionRef.current);
-    }
-    prevSessionRef.current = sessionId;
-
-    // Create terminal if not exists, then attach
+    // Create terminal if not exists, then attach to this container
     terminalManager.create(sessionId);
-    terminalManager.attach(sessionId);
+    terminalManager.attach(sessionId, container);
 
     // Get dimensions
     const instance = terminalManager.get(sessionId);
     const cols = instance?.terminal.cols ?? DEFAULT_COLS;
     const rows = instance?.terminal.rows ?? DEFAULT_ROWS;
 
-    // Register message handler BEFORE sending attach (avoid race condition)
-    const unsubMessage = terminalWs.onMessage((data: ArrayBuffer) => {
+    // Register message handler BEFORE connecting (avoid race condition)
+    const unsubMessage = ws.onMessage((data: ArrayBuffer) => {
       const view = new Uint8Array(data);
       if (view.length === 0) return;
 
@@ -60,45 +55,42 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
       }
     });
 
-    // Intercept wheel events and send SGR mouse wheel sequences directly to tmux.
-    // tmux uses alternate screen so xterm.js has no scrollback to scroll through;
-    // this sends wheel events that tmux (with mouse on) interprets as copy-mode scroll.
+    // Intercept wheel events for tmux scroll
     if (instance) {
       instance.terminal.attachCustomWheelEventHandler((e: WheelEvent) => {
         e.preventDefault();
         e.stopPropagation();
         const lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 25));
-        // SGR extended mouse: button 64 = wheel up, 65 = wheel down
         const button = e.deltaY < 0 ? 64 : 65;
         const seq = `\x1b[<${button};1;1M`;
         for (let i = 0; i < lines; i++) {
-          terminalWs.sendInput(seq);
+          ws.sendInput(seq);
         }
         return true;
       });
     }
 
-    // Pipe terminal input to WebSocket
+    // Pipe terminal input to this pane's WebSocket
     const onDataDisposable = instance?.terminal.onData((data: string) => {
-      terminalWs.sendInput(data);
+      ws.sendInput(data);
     });
 
     // Handle connection status
-    const unsubOpen = terminalWs.onOpen(() => {
+    const unsubOpen = ws.onOpen(() => {
       setConnectionStatus(sessionId, 'connecting');
       const inst = terminalManager.get(sessionId);
       if (inst) {
-        terminalWs.sendAttach(sessionId, inst.terminal.cols, inst.terminal.rows);
+        ws.sendAttach(sessionId, inst.terminal.cols, inst.terminal.rows);
       }
     });
 
-    const unsubClose = terminalWs.onClose(() => {
+    const unsubClose = ws.onClose(() => {
       setConnectionStatus(sessionId, 'disconnected');
     });
 
-    // Now send attach (handlers already registered)
+    // Connect WebSocket and send attach
+    ws.connect(`${WS_BASE_URL}${WS_TERMINAL_PATH}`);
     setConnectionStatus(sessionId, 'connecting');
-    terminalWs.sendAttach(sessionId, cols, rows);
 
     // Resize with debounce using ResizeObserver
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -115,15 +107,10 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
       unsubOpen();
       unsubClose();
       onDataDisposable?.dispose();
+      ws.sendDetach();
+      ws.disconnect();
+      wsRef.current = null;
+      terminalManager.detach(sessionId);
     };
   }, [sessionId, containerRef, handleResize, setConnectionStatus]);
-
-  // Cleanup on full unmount
-  useEffect(() => {
-    return () => {
-      if (prevSessionRef.current) {
-        terminalWs.sendDetach();
-      }
-    };
-  }, []);
 }

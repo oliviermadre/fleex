@@ -4,9 +4,10 @@ import { cn } from '../../lib/cn';
 
 interface Props {
   session: Session;
+  splitFocused?: boolean;
 }
 
-export function StatusBar({ session }: Props) {
+export function StatusBar({ session, splitFocused }: Props) {
   const connectionStatus = useTerminalStore(
     (s) => s.connectionStatus[session.id] ?? 'disconnected'
   );
@@ -27,7 +28,12 @@ export function StatusBar({ session }: Props) {
 
   return (
     <div
-      className="flex items-center border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 text-[11px] text-[var(--theme-text-muted)]"
+      className={cn(
+        'flex items-center border-t px-3 text-[11px] text-[var(--theme-text-muted)]',
+        splitFocused
+          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
+          : 'border-[var(--theme-border)] bg-[var(--theme-bg-surface)]'
+      )}
       style={{ height: 'var(--statusbar-height)' }}
     >
       <span className="truncate">{cwdDisplay}</span>

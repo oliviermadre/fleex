@@ -4,10 +4,15 @@ import type { Session, SessionGroup, SessionStatus, WorktreeSessionGroup } from 
 interface SessionState {
   sessions: Session[];
   selectedSessionId: string | null;
+  splitSessionId: string | null;
+  focusedPane: 'primary' | 'split';
   sessionGroups: SessionGroup[];
   setSessions: (sessions: Session[]) => void;
   setSessionGroups: (groups: SessionGroup[]) => void;
   selectSession: (id: string | null) => void;
+  openSplit: (id: string) => void;
+  closeSplit: () => void;
+  setFocusedPane: (pane: 'primary' | 'split') => void;
   addSession: (session: Session) => void;
   removeSession: (id: string) => void;
   updateSessionStatus: (id: string, status: SessionStatus) => void;
@@ -16,13 +21,26 @@ interface SessionState {
 export const useSessionStore = create<SessionState>((set) => ({
   sessions: [],
   selectedSessionId: null,
+  splitSessionId: null,
+  focusedPane: 'primary',
   sessionGroups: [],
 
   setSessions: (sessions) => set({ sessions }),
 
   setSessionGroups: (groups) => set({ sessionGroups: groups }),
 
-  selectSession: (id) => set({ selectedSessionId: id }),
+  selectSession: (id) => set({ selectedSessionId: id, splitSessionId: null, focusedPane: 'primary' }),
+
+  openSplit: (id) =>
+    set((state) => {
+      // No-op if same as primary or no primary selected
+      if (!state.selectedSessionId || id === state.selectedSessionId) return state;
+      return { splitSessionId: id, focusedPane: 'split' };
+    }),
+
+  closeSplit: () => set({ splitSessionId: null, focusedPane: 'primary' }),
+
+  setFocusedPane: (pane) => set({ focusedPane: pane }),
 
   addSession: (session) =>
     set((state) => ({ sessions: [...state.sessions, session] })),
@@ -44,18 +62,33 @@ export const useSessionStore = create<SessionState>((set) => ({
         }))
         .filter((group: SessionGroup) => group.worktrees.length > 0);
 
+      // Handle split session removal
+      let splitSessionId = state.splitSessionId;
+      let focusedPane = state.focusedPane;
+      if (splitSessionId === id) {
+        splitSessionId = null;
+        focusedPane = 'primary';
+      }
+
       // Auto-select next session if the killed one was selected
       let selectedSessionId = state.selectedSessionId;
       if (selectedSessionId === id) {
-        // Try to find a session in the same worktree first
-        const killedWorktree = state.sessionGroups
-          .flatMap((g: SessionGroup) => g.worktrees)
-          .find((wt: WorktreeSessionGroup) => wt.sessions.some((s: Session) => s.id === id));
-        const siblingSession = killedWorktree?.sessions.find((s: Session) => s.id !== id);
-        selectedSessionId = siblingSession?.id ?? sessions[0]?.id ?? null;
+        // If we had a split, promote the split session to primary
+        if (splitSessionId) {
+          selectedSessionId = splitSessionId;
+          splitSessionId = null;
+          focusedPane = 'primary';
+        } else {
+          // Try to find a session in the same worktree first
+          const killedWorktree = state.sessionGroups
+            .flatMap((g: SessionGroup) => g.worktrees)
+            .find((wt: WorktreeSessionGroup) => wt.sessions.some((s: Session) => s.id === id));
+          const siblingSession = killedWorktree?.sessions.find((s: Session) => s.id !== id);
+          selectedSessionId = siblingSession?.id ?? sessions[0]?.id ?? null;
+        }
       }
 
-      return { sessions, sessionGroups, selectedSessionId };
+      return { sessions, sessionGroups, selectedSessionId, splitSessionId, focusedPane };
     }),
 
   updateSessionStatus: (id, status) =>
