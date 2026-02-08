@@ -38,11 +38,8 @@ cluster-create: check-prereqs
 	kind create cluster --name $(CLUSTER_NAME) --config $(KIND_CONFIG)
 	@printf "Installing NGINX Ingress Controller…\n"
 	kubectl apply -f $(INGRESS_MANIFEST)
-	@printf "Waiting for Ingress Controller to be ready…\n"
-	kubectl wait --namespace ingress-nginx \
-		--for=condition=ready pod \
-		--selector=app.kubernetes.io/component=controller \
-		--timeout=120s
+	@printf "Waiting for Ingress Controller deployment to roll out…\n"
+	kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=120s
 	kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	@printf "\nCluster ready. Run 'make dev' from any worktree.\n"
 
