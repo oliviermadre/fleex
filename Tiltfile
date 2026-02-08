@@ -11,15 +11,34 @@
 #   http://<worktree-name>.127.0.0.1.nip.io
 #
 
-import os
-import re
+# ---------------------------------------------------------------------------
+# Worktree detection (pure Starlark — no import os/re)
+# ---------------------------------------------------------------------------
+# config.main_dir is a Tilt built-in: absolute path of the Tiltfile directory
+_parts = str(config.main_dir).split('/')
+_raw   = _parts[-1] if _parts[-1] != '' else _parts[-2]
 
-# ---------------------------------------------------------------------------
-# Worktree detection
-# ---------------------------------------------------------------------------
-worktree_dir = os.path.basename(os.getcwd())
-# Sanitise for k8s naming: lowercase, only [a-z0-9-], max 63 chars
-worktree_name = re.sub(r'[^a-z0-9-]', '-', worktree_dir.lower()).strip('-')[:63]
+def _sanitize_k8s_name(s):
+    """Lowercase, replace non-[a-z0-9-] with '-', trim leading/trailing '-'."""
+    allowed = 'abcdefghijklmnopqrstuvwxyz0123456789-'
+    out = []
+    for i in range(len(s)):
+        c = s[i]
+        # manual lowercase
+        if c >= 'A' and c <= 'Z':
+            c = chr(ord(c) + 32)
+        if c in allowed:
+            out.append(c)
+        else:
+            out.append('-')
+    name = ''.join(out)
+    # strip leading/trailing dashes
+    name = name.strip('-')
+    if len(name) > 63:
+        name = name[:63]
+    return name
+
+worktree_name = _sanitize_k8s_name(_raw)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -174,7 +193,7 @@ k8s_resource(
 # ---------------------------------------------------------------------------
 # Banner
 # ---------------------------------------------------------------------------
-print('=' * 60)
+print('============================================================')
 print('  Worktree : ' + worktree_name)
 print('  URL      : http://' + HOSTNAME)
-print('=' * 60)
+print('============================================================')
