@@ -1,23 +1,21 @@
 # -*- mode: Python -*-
 #
-# Tiltfile — auto-discovers ALL git worktrees and deploys each one
-# into the local Kind cluster with live-reload.
+# Tiltfile — deploy THIS worktree into a local Kind cluster
+# with live-reload (no image rebuild on source changes).
 #
-# Usage:
-#   tilt up      # from ANY worktree — deploys all of them
-#   tilt down    # tear down everything
+# Designed to be include()'d by a central Tiltfile, but also works
+# standalone: tilt up
 #
-# Each worktree gets its own Deployment/Service/Ingress, accessible at:
-#   http://<worktree-name>.127.0.0.1.nip.io
+# The central Tiltfile sets `worktree_context` before include().
+# In standalone mode, we fall back to config.main_dir.
 #
-# To pick up a newly created worktree, restart Tilt (ctrl-c + tilt up).
+# Access URL: http://<worktree-name>.127.0.0.1.nip.io
 #
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 def _sanitize_k8s_name(s):
-    """Lowercase, replace non-[a-z0-9-] with '-', trim leading/trailing '-'."""
     allowed = 'abcdefghijklmnopqrstuvwxyz0123456789-'
     out = []
     for i in range(len(s)):
@@ -28,33 +26,34 @@ def _sanitize_k8s_name(s):
             out.append(c)
         else:
             out.append('-')
-    name = ''.join(out)
-    name = name.strip('-')
+    name = ''.join(out).strip('-')
     if len(name) > 63:
         name = name[:63]
     return name
 
 def _basename(path):
     parts = path.split('/')
-    if parts[-1] != '':
-        return parts[-1]
-    return parts[-2]
+    return parts[-1] if parts[-1] != '' else parts[-2]
 
 # ---------------------------------------------------------------------------
-# Discover all git worktrees
+# Context detection
 # ---------------------------------------------------------------------------
-_wt_raw = str(local('git worktree list --porcelain', quiet=True))
-_worktree_paths = []
-
-for _line in _wt_raw.split('\n'):
-    if _line.startswith('worktree '):
-        _worktree_paths.append(_line[len('worktree '):])
+# When include()'d from the central Tiltfile, `worktree_context` is set
+# to the absolute path of this worktree BEFORE the include() call.
+# When running standalone (tilt up), it won't exist — detect via main_dir.
+_self_dir = str(config.main_dir)
+_worktree_name = _sanitize_k8s_name(_basename(_self_dir))
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-NAMESPACE = 'asm-dev'
+NAMESPACE  = 'asm-dev'
+APP_NAME   = 'asm-' + _worktree_name
+HOSTNAME   = _worktree_name + '.127.0.0.1.nip.io'
 
+# ---------------------------------------------------------------------------
+# Namespace (idempotent — safe to call from multiple Tiltfiles)
+# ---------------------------------------------------------------------------
 k8s_yaml(blob("""
 apiVersion: v1
 kind: Namespace
@@ -63,73 +62,58 @@ metadata:
 """.format(ns=NAMESPACE)))
 
 # ---------------------------------------------------------------------------
-# Deploy each worktree that has the infra files
+# Docker image + live_update
 # ---------------------------------------------------------------------------
-_deployed = []
+docker_build(
+    APP_NAME,
+    _self_dir,
+    dockerfile=_self_dir + '/Dockerfile.dev',
+    only=[
+        './packages/shared/src',
+        './packages/server/src',
+        './packages/web/src',
+        './packages/web/index.html',
+        './packages/web/vite.config.ts',
+        './package.json',
+        './bun.lock',
+        './packages/shared/package.json',
+        './packages/server/package.json',
+        './packages/web/package.json',
+        './tsconfig.base.json',
+        './packages/shared/tsconfig.json',
+        './packages/server/tsconfig.json',
+        './packages/web/tsconfig.json',
+        './Dockerfile.dev',
+    ],
+    live_update=[
+        fall_back_on([
+            _self_dir + '/packages/web/vite.config.ts',
+            _self_dir + '/tsconfig.base.json',
+            _self_dir + '/packages/shared/tsconfig.json',
+            _self_dir + '/packages/server/tsconfig.json',
+            _self_dir + '/packages/web/tsconfig.json',
+        ]),
+        sync(_self_dir + '/packages/shared/src', '/app/packages/shared/src'),
+        sync(_self_dir + '/packages/server/src', '/app/packages/server/src'),
+        sync(_self_dir + '/packages/web/src',    '/app/packages/web/src'),
+        sync(_self_dir + '/packages/web/index.html', '/app/packages/web/index.html'),
+        run(
+            'cd /app && bun install',
+            trigger=[
+                _self_dir + '/package.json',
+                _self_dir + '/bun.lock',
+                _self_dir + '/packages/shared/package.json',
+                _self_dir + '/packages/server/package.json',
+                _self_dir + '/packages/web/package.json',
+            ],
+        ),
+    ],
+)
 
-for _wt_path in _worktree_paths:
-    # Skip worktrees that don't have the Dockerfile yet
-    _check = str(local(
-        'test -f "' + _wt_path + '/Dockerfile.dev" && echo yes || echo no',
-        quiet=True,
-    )).strip()
-    if _check != 'yes':
-        print('  SKIP ' + _basename(_wt_path) + ' (no Dockerfile.dev)')
-        continue
-
-    _wt_name = _sanitize_k8s_name(_basename(_wt_path))
-    _app     = 'asm-' + _wt_name
-    _host    = _wt_name + '.127.0.0.1.nip.io'
-
-    # -- Docker image + live_update ----------------------------------------
-    docker_build(
-        _app,
-        _wt_path,
-        dockerfile=_wt_path + '/Dockerfile.dev',
-        only=[
-            './packages/shared/src',
-            './packages/server/src',
-            './packages/web/src',
-            './packages/web/index.html',
-            './packages/web/vite.config.ts',
-            './package.json',
-            './bun.lock',
-            './packages/shared/package.json',
-            './packages/server/package.json',
-            './packages/web/package.json',
-            './tsconfig.base.json',
-            './packages/shared/tsconfig.json',
-            './packages/server/tsconfig.json',
-            './packages/web/tsconfig.json',
-            './Dockerfile.dev',
-        ],
-        live_update=[
-            fall_back_on([
-                _wt_path + '/packages/web/vite.config.ts',
-                _wt_path + '/tsconfig.base.json',
-                _wt_path + '/packages/shared/tsconfig.json',
-                _wt_path + '/packages/server/tsconfig.json',
-                _wt_path + '/packages/web/tsconfig.json',
-            ]),
-            sync(_wt_path + '/packages/shared/src', '/app/packages/shared/src'),
-            sync(_wt_path + '/packages/server/src', '/app/packages/server/src'),
-            sync(_wt_path + '/packages/web/src',    '/app/packages/web/src'),
-            sync(_wt_path + '/packages/web/index.html', '/app/packages/web/index.html'),
-            run(
-                'cd /app && bun install',
-                trigger=[
-                    _wt_path + '/package.json',
-                    _wt_path + '/bun.lock',
-                    _wt_path + '/packages/shared/package.json',
-                    _wt_path + '/packages/server/package.json',
-                    _wt_path + '/packages/web/package.json',
-                ],
-            ),
-        ],
-    )
-
-    # -- K8s manifests -----------------------------------------------------
-    k8s_yaml(blob("""
+# ---------------------------------------------------------------------------
+# Kubernetes resources
+# ---------------------------------------------------------------------------
+k8s_yaml(blob("""
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -203,21 +187,12 @@ spec:
                 name: {app}
                 port:
                   number: 80
-""".format(app=_app, ns=NAMESPACE, host=_host)))
+""".format(app=APP_NAME, ns=NAMESPACE, host=HOSTNAME)))
 
-    k8s_resource(
-        _app,
-        port_forwards=[],
-        labels=['asm'],
-    )
+k8s_resource(
+    APP_NAME,
+    port_forwards=[],
+    labels=['asm'],
+)
 
-    _deployed.append((_wt_name, _host))
-
-# ---------------------------------------------------------------------------
-# Banner
-# ---------------------------------------------------------------------------
-print('============================================================')
-print('  Deployed worktrees:')
-for _d in _deployed:
-    print('    ' + _d[0] + '  ->  http://' + _d[1])
-print('============================================================')
+print('  ASM: ' + _worktree_name + '  ->  http://' + HOSTNAME)
