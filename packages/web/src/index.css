@@ -57,3 +57,15 @@ html, body {
 .animate-blink {
   animation: blink 1.5s ease-in-out infinite;
 }
+
+/* Split panel: focused pane glow */
+.session-pane-focused {
+  box-shadow:
+    inset 0 0 0 1px var(--theme-accent),
+    inset 0 0 20px var(--theme-accent-muted);
+}
+
+/* Split panel: dim the unfocused pane */
+.session-pane-unfocused {
+  opacity: 0.5;
+}

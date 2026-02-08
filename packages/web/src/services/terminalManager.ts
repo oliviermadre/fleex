@@ -15,13 +15,7 @@ interface TerminalInstance {
 
 class TerminalManager {
   private terminals = new Map<string, TerminalInstance>();
-  private activeSessionId: string | null = null;
-  private containerEl: HTMLElement | null = null;
   private currentTerminalTheme = TERMINAL_THEME;
-
-  setContainer(el: HTMLElement | null): void {
-    this.containerEl = el;
-  }
 
   create(sessionId: string): Terminal {
     const existing = this.terminals.get(sessionId);
@@ -56,24 +50,17 @@ class TerminalManager {
     return terminal;
   }
 
-  attach(sessionId: string): void {
-    if (!this.containerEl) return;
+  attach(sessionId: string, container: HTMLElement): void {
     const instance = this.terminals.get(sessionId);
     if (!instance) return;
 
-    // Detach current if different
-    if (this.activeSessionId && this.activeSessionId !== sessionId) {
-      this.detach(this.activeSessionId);
-    }
-
-    this.activeSessionId = sessionId;
     instance.lastActiveAt = Date.now();
 
     // Open terminal in container if not already opened
     if (!instance.terminal.element) {
-      instance.terminal.open(this.containerEl);
+      instance.terminal.open(container);
     } else {
-      this.containerEl.appendChild(instance.terminal.element);
+      container.appendChild(instance.terminal.element);
     }
 
     // Restore serialized buffer if available
@@ -88,8 +75,6 @@ class TerminalManager {
     } catch {
       // Container may not be visible yet
     }
-
-    instance.terminal.focus();
   }
 
   detach(sessionId: string): void {
@@ -106,10 +91,6 @@ class TerminalManager {
     // Remove terminal DOM element from container
     if (instance.terminal.element?.parentElement) {
       instance.terminal.element.parentElement.removeChild(instance.terminal.element);
-    }
-
-    if (this.activeSessionId === sessionId) {
-      this.activeSessionId = null;
     }
   }
 
@@ -133,10 +114,6 @@ class TerminalManager {
     const instance = this.terminals.get(sessionId);
     if (!instance) return;
 
-    if (this.activeSessionId === sessionId) {
-      this.activeSessionId = null;
-    }
-
     instance.terminal.dispose();
     this.terminals.delete(sessionId);
   }
@@ -145,11 +122,6 @@ class TerminalManager {
     for (const [id] of this.terminals) {
       this.dispose(id);
     }
-  }
-
-  getActive(): TerminalInstance | null {
-    if (!this.activeSessionId) return null;
-    return this.terminals.get(this.activeSessionId) ?? null;
   }
 
   get(sessionId: string): TerminalInstance | null {

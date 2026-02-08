@@ -8,7 +8,11 @@ export function useKeyboardShortcuts() {
   const openCreateModal = useUIStore((s) => s.openCreateModal);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
+  const splitSessionId = useSessionStore((s) => s.splitSessionId);
+  const focusedPane = useSessionStore((s) => s.focusedPane);
   const selectSession = useSessionStore((s) => s.selectSession);
+  const closeSplit = useSessionStore((s) => s.closeSplit);
+  const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
   const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
   const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
   const sessionOrder = useSettingsStore((s) => s.settings.sessionOrder);
@@ -71,7 +75,26 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Cmd+Shift+Up/Down: navigate sessions
+      // Escape: close split view, keep focused pane's session
+      if (e.key === 'Escape' && splitSessionId) {
+        e.preventDefault();
+        if (focusedPane === 'split' && splitSessionId) {
+          // Promote split session to primary before closing
+          selectSession(splitSessionId);
+        } else {
+          closeSplit();
+        }
+        return;
+      }
+
+      // Cmd+Shift+Left/Right: toggle focus between split panes
+      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && splitSessionId) {
+        e.preventDefault();
+        setFocusedPane(focusedPane === 'primary' ? 'split' : 'primary');
+        return;
+      }
+
+      // Cmd+Shift+Up/Down: navigate sessions (selectSession exits split)
       if (meta && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
         if (orderedSessionIds.length === 0) return;
@@ -96,5 +119,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, orderedSessionIds, selectedSessionId, selectSession]);
+  }, [toggleNav, openCreateModal, orderedSessionIds, selectedSessionId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane]);
 }

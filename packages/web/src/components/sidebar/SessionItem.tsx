@@ -13,10 +13,20 @@ interface Props {
 
 export function SessionItem({ session }: Props) {
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
+  const splitSessionId = useSessionStore((s) => s.splitSessionId);
   const selectSession = useSessionStore((s) => s.selectSession);
+  const openSplit = useSessionStore((s) => s.openSplit);
+  const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
   const displayNames = useSettingsStore((s) => s.settings.sessionDisplayNames);
   const setSessionDisplayName = useSettingsStore((s) => s.setSessionDisplayName);
+  const focusedPane = useSessionStore((s) => s.focusedPane);
   const isSelected = selectedSessionId === session.id;
+  const isSplit = splitSessionId === session.id;
+  const inSplitMode = splitSessionId !== null;
+  const isFocusedInSplit = inSplitMode && (
+    (isSelected && focusedPane === 'primary') ||
+    (isSplit && focusedPane === 'split')
+  );
 
   const removeSession = useSessionStore((s) => s.removeSession);
 
@@ -48,11 +58,13 @@ export function SessionItem({ session }: Props) {
   const isRunning = session.status === 'running';
   const isClaude = session.type !== 'shell';
 
+  const isHighlighted = isSelected || isSplit;
+
   const iconColor = isRunning
     ? isClaude
       ? 'text-[var(--theme-accent)]'
-      : isSelected ? 'text-emerald-400' : 'text-emerald-400/60'
-    : isSelected ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-faint)]';
+      : isHighlighted ? 'text-emerald-400' : 'text-emerald-400/60'
+    : isHighlighted ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-faint)]';
 
   const startEditing = useCallback(() => {
     setEditValue(displayName);
@@ -96,12 +108,33 @@ export function SessionItem({ session }: Props) {
   return (
     <button
       className={cn(
-        'group/session flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors border-l-2',
-        isSelected
-          ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
+        'group/session flex w-full items-center gap-2 px-3 py-1.5 text-left transition-all duration-200 border-l-2',
+        (isSelected || isSplit)
+          ? isFocusedInSplit
+            ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-text-primary)]'
+            : inSplitMode
+              ? 'border-[var(--theme-border)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)] opacity-60'
+              : 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
           : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]'
       )}
-      onClick={() => selectSession(session.id)}
+      onClick={(e) => {
+        // Shift+click: open in split pane
+        if (e.shiftKey && selectedSessionId && selectedSessionId !== session.id) {
+          openSplit(session.id);
+          return;
+        }
+        // If clicking on a session already visible in split, just focus that pane
+        if (isSelected) {
+          setFocusedPane('primary');
+          return;
+        }
+        if (isSplit) {
+          setFocusedPane('split');
+          return;
+        }
+        // Normal click: select session (exits split mode)
+        selectSession(session.id);
+      }}
       onDoubleClick={(e) => {
         e.preventDefault();
         startEditing();
