@@ -70,6 +70,7 @@ docker_build(
         './packages/server/src',
         './packages/web/src',
         './packages/web/index.html',
+        './packages/web/vite.config.ts',
         './package.json',
         './bun.lock',
         './packages/shared/package.json',
@@ -82,6 +83,14 @@ docker_build(
         './Dockerfile.dev',
     ],
     live_update=[
+        # Config changes require a full image rebuild (Vite must restart)
+        fall_back_on([
+            './packages/web/vite.config.ts',
+            './tsconfig.base.json',
+            './packages/shared/tsconfig.json',
+            './packages/server/tsconfig.json',
+            './packages/web/tsconfig.json',
+        ]),
         # Sync source trees — tsx watch + Vite HMR pick changes up instantly
         sync('./packages/shared/src', '/app/packages/shared/src'),
         sync('./packages/server/src', '/app/packages/server/src'),
