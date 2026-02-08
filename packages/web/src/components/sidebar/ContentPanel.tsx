@@ -8,7 +8,7 @@ export function ContentPanel() {
   const activePanel = useUIStore((s) => s.activePanel);
 
   return (
-    <div className="flex h-full flex-col border-r border-zinc-800 bg-zinc-900/50">
+    <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
       {activePanel === 'sessions' && <SessionsContent />}
       {activePanel === 'settings' && <SettingsNav />}
     </div>

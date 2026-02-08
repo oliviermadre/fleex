@@ -29,7 +29,7 @@ export function AppLayout() {
 
   return (
     <div
-      className="flex h-screen w-screen overflow-hidden bg-zinc-950"
+      className="flex h-screen w-screen overflow-hidden bg-[var(--theme-bg-base)]"
       style={{
         display: 'grid',
         gridTemplateColumns: `${navWidth}px ${contentPanelWidth}px 1fr`,

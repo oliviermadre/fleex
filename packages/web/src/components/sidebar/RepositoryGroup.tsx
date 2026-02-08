@@ -119,7 +119,7 @@ export function RepositoryGroup({ group }: Props) {
       style={{ backgroundColor: getGroupColor(groupId) }}
     >
       <button
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-left hover:bg-zinc-800/30"
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left hover:bg-[var(--theme-bg-hover)]"
         onClick={() => toggleGroup(groupId)}
       >
         <svg
@@ -128,20 +128,20 @@ export function RepositoryGroup({ group }: Props) {
           viewBox="0 0 10 10"
           fill="currentColor"
           className={cn(
-            'text-zinc-500 transition-transform',
+            'text-[var(--theme-text-muted)] transition-transform',
             collapsed ? 'rotate-0' : 'rotate-90'
           )}
         >
           <path d="M3 1l5 4-5 4V1z" />
         </svg>
-        <span className="truncate text-sm font-semibold text-zinc-200">
+        <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
           {group.repositoryOrg}/{group.repositoryName}
         </span>
         <a
           href={`https://github.com/${group.repositoryOrg}/${group.repositoryName}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="ml-auto text-zinc-500 hover:text-zinc-300"
+          className="ml-auto text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
           onClick={(e) => e.stopPropagation()}
         >
           <ExternalLinkIcon size={14} />
@@ -162,7 +162,7 @@ export function RepositoryGroup({ group }: Props) {
               className="relative"
             >
               {isOver && dropEdge === 'top' && (
-                <div className="absolute left-5 right-2 top-0 z-10 h-0.5 rounded bg-[#D77655]" />
+                <div className="absolute left-5 right-2 top-0 z-10 h-0.5 rounded bg-[var(--theme-accent)]" />
               )}
               <WorktreeGroup
                 worktree={wt}
@@ -171,7 +171,7 @@ export function RepositoryGroup({ group }: Props) {
                 repositoryName={group.repositoryName}
               />
               {isOver && dropEdge === 'bottom' && (
-                <div className="absolute bottom-0 left-5 right-2 z-10 h-0.5 rounded bg-[#D77655]" />
+                <div className="absolute bottom-0 left-5 right-2 z-10 h-0.5 rounded bg-[var(--theme-accent)]" />
               )}
             </div>
           );

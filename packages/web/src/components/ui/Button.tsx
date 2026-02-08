@@ -9,10 +9,10 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-[#D77655] text-white hover:bg-[#e08868] active:bg-[#b85a3a]',
-  secondary: 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700 active:bg-zinc-800 border border-zinc-700',
-  danger: 'bg-red-600 text-white hover:bg-red-500 active:bg-red-700',
-  ghost: 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700',
+  primary: 'bg-[var(--theme-accent)] text-white hover:bg-[var(--theme-accent-hover)] active:bg-[var(--theme-accent-active)]',
+  secondary: 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-border-input)] active:bg-[var(--theme-bg-overlay)] border border-[var(--theme-border-input)]',
+  danger: 'bg-[var(--theme-danger)] text-white hover:bg-red-500 active:bg-red-700',
+  ghost: 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)] active:bg-[var(--theme-border-input)]',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -31,7 +31,7 @@ export function Button({
     <button
       className={cn(
         'inline-flex items-center justify-center rounded-md font-medium transition-colors',
-        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#D77655]',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--theme-accent)]',
         'disabled:opacity-50 disabled:pointer-events-none',
         variantClasses[variant],
         sizeClasses[size],

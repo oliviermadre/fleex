@@ -10,7 +10,7 @@ export function NavSidebar() {
   const sessions = useSessionStore((s) => s.sessions);
 
   return (
-    <div className="flex h-full flex-col border-r border-zinc-800 bg-zinc-950">
+    <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <div className="flex flex-1 flex-col gap-0.5 pt-2">
         {/* Sessions */}
         <NavItem
@@ -47,7 +47,7 @@ export function NavSidebar() {
 
       {/* Collapse/expand toggle */}
       <button
-        className="flex items-center justify-center border-t border-zinc-800 py-2.5 text-zinc-500 transition-colors hover:bg-zinc-800/50 hover:text-zinc-300"
+        className="flex items-center justify-center border-t border-[var(--theme-border)] py-2.5 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
         onClick={toggleNav}
         title={navCollapsed ? 'Expand navigation (Cmd+B)' : 'Collapse navigation (Cmd+B)'}
       >
@@ -89,8 +89,8 @@ function NavItem({
       className={cn(
         'relative flex items-center gap-2.5 border-l-2 px-3 py-2 text-sm transition-colors',
         active
-          ? 'border-[#D77655] bg-zinc-800/60 text-zinc-100'
-          : 'border-transparent text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-300',
+          ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
+          : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
         collapsed ? 'justify-center' : ''
       )}
       onClick={onClick}
@@ -99,7 +99,7 @@ function NavItem({
       <span className="relative flex-shrink-0">
         {icon}
         {badge && collapsed && (
-          <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#b85a3a] text-[8px] font-bold text-white">
+          <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--theme-accent-active)] text-[8px] font-bold text-white">
             {badge}
           </span>
         )}
@@ -108,7 +108,7 @@ function NavItem({
         <>
           <span className="truncate">{label}</span>
           {badge && (
-            <span className="ml-auto rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
+            <span className="ml-auto rounded-full bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-secondary)]">
               {badge}
             </span>
           )}

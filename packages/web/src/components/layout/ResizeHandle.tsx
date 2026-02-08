@@ -40,7 +40,7 @@ export function ResizeHandle() {
 
   return (
     <div
-      className="absolute left-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-[#D77655]/40 active:bg-[#D77655]/60"
+      className="absolute left-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-[var(--theme-accent-muted)] active:bg-[var(--theme-accent-muted)]"
       onMouseDown={handleMouseDown}
     />
   );

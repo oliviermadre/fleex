@@ -25,10 +25,10 @@ export function ActivityDot({ status }: Props) {
   return (
     <span
       className={cn(
-        'absolute -bottom-0.5 -right-0.5 block h-2 w-2 rounded-full border border-zinc-900',
+        'absolute -bottom-0.5 -right-0.5 block h-2 w-2 rounded-full border border-[var(--theme-bg-surface)]',
         isActive && 'bg-emerald-400 animate-pulse',
         isWaiting && 'bg-amber-400 animate-blink',
-        !isActive && !isWaiting && 'bg-zinc-500',
+        !isActive && !isWaiting && 'bg-[var(--theme-text-muted)]',
       )}
       title={LABELS[status]}
     />

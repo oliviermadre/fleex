@@ -39,7 +39,7 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
     >
       <div
         className={cn(
-          `w-full ${maxWidth} rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl`,
+          `w-full ${maxWidth} rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-6 shadow-2xl`,
           className
         )}
       >

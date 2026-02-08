@@ -28,9 +28,9 @@ export function WorktreeActionsBar({ repositoryOrg, repositoryName, branch, work
     >
       <div
         className={
-          'flex items-center gap-1 rounded-lg border border-[#D77655]/25 px-1.5 py-1 ' +
-          'bg-[#D77655]/10 backdrop-blur-xl ' +
-          'shadow-lg shadow-[#D77655]/10'
+          'flex items-center gap-1 rounded-lg border border-[var(--theme-accent-muted)] px-1.5 py-1 ' +
+          'bg-[var(--theme-accent-muted)] backdrop-blur-xl ' +
+          'shadow-lg shadow-[var(--theme-accent-muted)]'
         }
       >
         {worktreeActions.map((action) => (
@@ -38,9 +38,9 @@ export function WorktreeActionsBar({ repositoryOrg, repositoryName, branch, work
             key={action.id}
             className={
               'flex h-7 w-7 cursor-pointer items-center justify-center rounded-md ' +
-              'bg-[#D77655]/20 text-zinc-300 ' +
+              'bg-[var(--theme-accent-muted)] text-[var(--theme-text-secondary)] ' +
               'transition-all duration-150 ' +
-              'hover:bg-[#D77655] hover:text-white hover:shadow-[0_0_10px_rgba(215,118,85,0.6)]'
+              'hover:bg-[var(--theme-accent)] hover:text-white hover:shadow-[0_0_10px_var(--theme-accent-muted)]'
             }
             onClick={(e) => {
               e.stopPropagation();

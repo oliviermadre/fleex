@@ -121,7 +121,7 @@ export function Autocomplete({
   return (
     <div ref={containerRef} className="relative flex flex-col gap-1">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-zinc-400">
+        <label htmlFor={id} className="text-xs font-medium text-[var(--theme-text-secondary)]">
           {label}
         </label>
       )}
@@ -130,9 +130,9 @@ export function Autocomplete({
         id={id}
         type="text"
         className={cn(
-          'rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-100',
-          'placeholder:text-zinc-500',
-          'focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]'
+          'rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-1.5 text-sm text-[var(--theme-text-primary)]',
+          'placeholder:text-[var(--theme-text-muted)]',
+          'focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]'
         )}
         placeholder={placeholder}
         value={displayValue}
@@ -147,7 +147,7 @@ export function Autocomplete({
       {isOpen && filtered.length > 0 && (
         <ul
           ref={listRef}
-          className="absolute top-full left-0 z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-zinc-700 bg-zinc-900 py-1 shadow-lg"
+          className="absolute top-full left-0 z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
         >
           {filtered.map((option, index) => (
             <li
@@ -155,8 +155,8 @@ export function Autocomplete({
               className={cn(
                 'cursor-pointer px-3 py-1.5 text-sm',
                 index === highlightedIndex
-                  ? 'bg-[#D77655]/20 text-[#D77655]'
-                  : 'text-zinc-300 hover:bg-zinc-800'
+                  ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]'
+                  : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-overlay)]'
               )}
               onMouseEnter={() => setHighlightedIndex(index)}
               onMouseDown={(e) => {
@@ -170,7 +170,7 @@ export function Autocomplete({
         </ul>
       )}
       {isOpen && filtered.length === 0 && query && (
-        <div className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-500">
+        <div className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-muted)]">
           No matches
         </div>
       )}

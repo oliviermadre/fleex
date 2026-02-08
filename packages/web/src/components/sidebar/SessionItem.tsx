@@ -50,9 +50,9 @@ export function SessionItem({ session }: Props) {
 
   const iconColor = isRunning
     ? isClaude
-      ? 'text-[#D77655]'
+      ? 'text-[var(--theme-accent)]'
       : isSelected ? 'text-emerald-400' : 'text-emerald-400/60'
-    : isSelected ? 'text-zinc-400' : 'text-zinc-600';
+    : isSelected ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-faint)]';
 
   const startEditing = useCallback(() => {
     setEditValue(displayName);
@@ -98,8 +98,8 @@ export function SessionItem({ session }: Props) {
       className={cn(
         'group/session flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors border-l-2',
         isSelected
-          ? 'border-[#D77655] bg-zinc-800/80 text-zinc-50'
-          : 'border-transparent text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
+          ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
+          : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]'
       )}
       onClick={() => selectSession(session.id)}
       onDoubleClick={(e) => {
@@ -119,7 +119,7 @@ export function SessionItem({ session }: Props) {
       {editing ? (
         <input
           ref={inputRef}
-          className="min-w-0 flex-1 rounded border border-[#D77655]/50 bg-zinc-900 px-1 py-0 text-xs text-zinc-100 outline-none"
+          className="min-w-0 flex-1 rounded border border-[var(--theme-accent)] bg-[var(--theme-bg-surface)] px-1 py-0 text-xs text-[var(--theme-text-primary)] outline-none"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -138,7 +138,7 @@ export function SessionItem({ session }: Props) {
           'hidden shrink-0 items-center justify-center rounded transition-colors group-hover/session:flex',
           confirmKill
             ? 'text-red-400 hover:text-red-300'
-            : 'text-zinc-500 hover:text-zinc-200'
+            : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]'
         )}
         onClick={handleKill}
         title={confirmKill ? 'Click again to confirm kill' : 'Kill session'}

@@ -115,7 +115,7 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
     <div className="ml-3">
       <div className="group/wt relative flex items-center">
         <button
-          className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left hover:bg-zinc-800/30"
+          className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left hover:bg-[var(--theme-bg-hover)]"
           onClick={() => toggleGroup(groupId)}
         >
           <svg
@@ -124,18 +124,18 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
             viewBox="0 0 10 10"
             fill="currentColor"
             className={cn(
-              'shrink-0 text-zinc-500 transition-transform',
+              'shrink-0 text-[var(--theme-text-muted)] transition-transform',
               collapsed ? 'rotate-0' : 'rotate-90'
             )}
           >
             <path d="M3 1l5 4-5 4V1z" />
           </svg>
-          <GitForkIcon size={12} className="shrink-0 text-zinc-400" />
-          <span className="truncate text-xs font-medium text-zinc-300">{worktree.branch}</span>
-          <span className="ml-auto shrink-0 text-[10px] text-zinc-600">{worktree.sessions.length}</span>
+          <GitForkIcon size={12} className="shrink-0 text-[var(--theme-text-secondary)]" />
+          <span className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">{worktree.branch}</span>
+          <span className="ml-auto shrink-0 text-[10px] text-[var(--theme-text-faint)]">{worktree.sessions.length}</span>
         </button>
         <button
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-600 transition-colors hover:bg-zinc-700/50 hover:text-zinc-300"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
           onClick={handleAddShell}
           title="New shell in this worktree"
         >
@@ -163,11 +163,11 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
               className="relative"
             >
               {isOver && dropEdge === 'top' && (
-                <div className="absolute left-5 right-2 top-0 z-10 h-0.5 rounded bg-[#D77655]" />
+                <div className="absolute left-5 right-2 top-0 z-10 h-0.5 rounded bg-[var(--theme-accent)]" />
               )}
               <SessionItem session={session} />
               {isOver && dropEdge === 'bottom' && (
-                <div className="absolute bottom-0 left-5 right-2 z-10 h-0.5 rounded bg-[#D77655]" />
+                <div className="absolute bottom-0 left-5 right-2 z-10 h-0.5 rounded bg-[var(--theme-accent)]" />
               )}
             </div>
           );

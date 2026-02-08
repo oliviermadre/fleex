@@ -16,7 +16,7 @@ export function StatusBar({ session }: Props) {
   const statusColor = {
     connecting: 'bg-yellow-500',
     connected: 'bg-emerald-500',
-    disconnected: 'bg-zinc-600',
+    disconnected: 'bg-[var(--theme-text-faint)]',
   }[connectionStatus];
 
   const statusLabel = {
@@ -27,13 +27,13 @@ export function StatusBar({ session }: Props) {
 
   return (
     <div
-      className="flex items-center border-t border-zinc-800 bg-zinc-900/80 px-3 text-[11px] text-zinc-500"
+      className="flex items-center border-t border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 text-[11px] text-[var(--theme-text-muted)]"
       style={{ height: 'var(--statusbar-height)' }}
     >
       <span className="truncate">{cwdDisplay}</span>
       {session.worktreeBranch && (
         <span className="mx-2 flex items-center gap-1">
-          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-600">
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
             <path d="M6 3v10M2 6l4-3 4 3" />
           </svg>
           {session.worktreeBranch}

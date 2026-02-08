@@ -173,7 +173,7 @@ export function CreateSessionModal() {
         width: '20%',
         render: (w) => {
           const short = w.path.split('/').slice(-2).join('/');
-          return <span className="block truncate text-xs text-zinc-400" title={w.path}>{short}</span>;
+          return <span className="block truncate text-xs text-[var(--theme-text-secondary)]" title={w.path}>{short}</span>;
         },
       },
       {
@@ -181,10 +181,10 @@ export function CreateSessionModal() {
         header: 'Linked PR',
         render: (w) => {
           const pr = linkedPR(w.branch);
-          if (!pr) return <span className="text-zinc-500">&mdash;</span>;
+          if (!pr) return <span className="text-[var(--theme-text-muted)]">&mdash;</span>;
           return (
             <span className="block truncate text-xs" title={`#${pr.number} ${pr.title}`}>
-              <span className="text-zinc-400">#{pr.number}</span>{' '}
+              <span className="text-[var(--theme-text-secondary)]">#{pr.number}</span>{' '}
               {pr.title}
             </span>
           );
@@ -212,7 +212,7 @@ export function CreateSessionModal() {
         key: 'number',
         header: '#',
         width: '60px',
-        render: (pr) => <span className="font-mono text-xs text-zinc-400">#{pr.number}</span>,
+        render: (pr) => <span className="font-mono text-xs text-[var(--theme-text-secondary)]">#{pr.number}</span>,
       },
       {
         key: 'title',
@@ -223,14 +223,14 @@ export function CreateSessionModal() {
         key: 'author',
         header: 'Author',
         width: '100px',
-        render: (pr) => <span className="text-xs text-zinc-400">{pr.author}</span>,
+        render: (pr) => <span className="text-xs text-[var(--theme-text-secondary)]">{pr.author}</span>,
       },
       {
         key: 'assignees',
         header: 'Assignee',
         width: '100px',
         render: (pr) => (
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-[var(--theme-text-secondary)]">
             {pr.assignees.length > 0 ? pr.assignees.join(', ') : '\u2014'}
           </span>
         ),
@@ -240,14 +240,14 @@ export function CreateSessionModal() {
         header: 'Created',
         width: '70px',
         align: 'right' as const,
-        render: (pr) => <span className="text-xs text-zinc-500">{formatAge(pr.createdAt)}</span>,
+        render: (pr) => <span className="text-xs text-[var(--theme-text-muted)]">{formatAge(pr.createdAt)}</span>,
       },
       {
         key: 'updated',
         header: 'Updated',
         width: '70px',
         align: 'right' as const,
-        render: (pr) => <span className="text-xs text-zinc-500">{formatAge(pr.updatedAt)}</span>,
+        render: (pr) => <span className="text-xs text-[var(--theme-text-muted)]">{formatAge(pr.updatedAt)}</span>,
       },
       {
         key: 'diffStats',
@@ -271,7 +271,7 @@ export function CreateSessionModal() {
         key: 'number',
         header: '#',
         width: '60px',
-        render: (issue) => <span className="font-mono text-xs text-zinc-400">#{issue.number}</span>,
+        render: (issue) => <span className="font-mono text-xs text-[var(--theme-text-secondary)]">#{issue.number}</span>,
       },
       {
         key: 'title',
@@ -282,21 +282,21 @@ export function CreateSessionModal() {
         key: 'author',
         header: 'Author',
         width: '100px',
-        render: (issue) => <span className="text-xs text-zinc-400">{issue.author}</span>,
+        render: (issue) => <span className="text-xs text-[var(--theme-text-secondary)]">{issue.author}</span>,
       },
       {
         key: 'created',
         header: 'Created',
         width: '80px',
         align: 'right' as const,
-        render: (issue) => <span className="text-xs text-zinc-500">{formatAge(issue.createdAt)}</span>,
+        render: (issue) => <span className="text-xs text-[var(--theme-text-muted)]">{formatAge(issue.createdAt)}</span>,
       },
       {
         key: 'updated',
         header: 'Updated',
         width: '80px',
         align: 'right' as const,
-        render: (issue) => <span className="text-xs text-zinc-500">{formatAge(issue.updatedAt)}</span>,
+        render: (issue) => <span className="text-xs text-[var(--theme-text-muted)]">{formatAge(issue.updatedAt)}</span>,
       },
     ],
     [],
@@ -442,7 +442,7 @@ export function CreateSessionModal() {
 
   return (
     <Modal open={open} onClose={handleClose} maxWidth="max-w-5xl">
-      <h2 className="mb-4 text-lg font-semibold text-zinc-100">New Sessions</h2>
+      <h2 className="mb-4 text-lg font-semibold text-[var(--theme-text-primary)]">New Sessions</h2>
 
       <div className="flex flex-col gap-4">
         {/* Repository */}
@@ -459,8 +459,8 @@ export function CreateSessionModal() {
         {/* Worktree mode segmented control */}
         {selectedRepo && (
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-zinc-400">Worktree</span>
-            <div className="flex gap-1 rounded-md bg-zinc-800 p-0.5">
+            <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Worktree</span>
+            <div className="flex gap-1 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
               {modes.map((mode) => (
                 <button
                   key={mode.value}
@@ -468,7 +468,7 @@ export function CreateSessionModal() {
                     'flex-1 rounded px-3 py-1 text-sm font-medium transition-colors',
                     worktreeMode === mode.value
                       ? 'bg-emerald-500/20 text-emerald-400'
-                      : 'text-zinc-400 hover:text-zinc-300'
+                      : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
                   )}
                   onClick={() => setWorktreeMode(mode.value)}
                 >
@@ -528,13 +528,13 @@ export function CreateSessionModal() {
 
         {selectedRepo && worktreeMode === 'new' && (
           <div className="flex flex-col gap-1">
-            <label htmlFor="branch-name" className="text-xs font-medium text-zinc-400">
+            <label htmlFor="branch-name" className="text-xs font-medium text-[var(--theme-text-secondary)]">
               Branch name
             </label>
             <input
               id="branch-name"
               type="text"
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               placeholder="feature/my-branch"
               value={newBranchName}
               onChange={(e) => setNewBranchName(e.target.value)}
@@ -545,12 +545,12 @@ export function CreateSessionModal() {
         {/* Claude prompt — visible after repo selection */}
         {selectedRepo && (
           <div className="flex flex-col gap-1">
-            <label htmlFor="prompt" className="text-xs font-medium text-zinc-400">
+            <label htmlFor="prompt" className="text-xs font-medium text-[var(--theme-text-secondary)]">
               Claude prompt (optional)
             </label>
             <textarea
               id="prompt"
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+              className="rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={3}
               placeholder="Enter a prompt for Claude..."
               value={claudePrompt}

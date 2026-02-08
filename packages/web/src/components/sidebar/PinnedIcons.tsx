@@ -35,7 +35,7 @@ export function PinnedIconButton({ icon, collapsed }: PinnedIconButtonProps) {
   return (
     <button
       className={cn(
-        'flex items-center justify-center cursor-pointer text-zinc-200 transition-all bg-[#D77655]/15 hover:bg-[#D77655] hover:shadow-[0_0_12px_rgba(215,118,85,0.3)] active:bg-[#D77655] active:shadow-[0_0_16px_rgba(215,118,85,0.6)]',
+        'flex items-center justify-center cursor-pointer text-[var(--theme-text-primary)] transition-all bg-[var(--theme-accent-muted)] hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)] active:bg-[var(--theme-accent)] active:shadow-[0_0_16px_var(--theme-accent-muted)]',
         collapsed ? 'h-9 px-3 rounded-md' : 'h-10 px-4 rounded-lg'
       )}
       onClick={() => executePinnedAction(icon)}
@@ -52,7 +52,7 @@ export function PinnedIconsBar() {
   if (pinnedIcons.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-1.5 border-b border-zinc-800/50 px-3 py-2.5">
+    <div className="flex items-center gap-1.5 border-b border-[var(--theme-border-subtle)] px-3 py-2.5">
       {pinnedIcons.map((icon) => (
         <PinnedIconButton key={icon.id} icon={icon} />
       ))}

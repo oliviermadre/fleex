@@ -11,14 +11,14 @@ export function SessionHeader({ session }: Props) {
 
   return (
     <div
-      className="flex items-center gap-3 border-b border-zinc-800 px-3"
+      className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3"
       style={{ height: 'var(--header-height)' }}
     >
-      <span className="text-sm font-medium text-zinc-200 truncate">
+      <span className="text-sm font-medium text-[var(--theme-text-primary)] truncate">
         {session.tmuxName}
       </span>
       <Badge type={session.type} />
-      <span className="truncate text-xs text-zinc-500" title={session.cwd}>
+      <span className="truncate text-xs text-[var(--theme-text-muted)]" title={session.cwd}>
         {cwdDisplay}
       </span>
     </div>

@@ -79,10 +79,10 @@ export function SessionGroups() {
     return (
       <div className="flex flex-1 flex-col">
         <div className="flex flex-1 items-center justify-center p-4">
-          <p className="text-xs text-zinc-500">No sessions</p>
+          <p className="text-xs text-[var(--theme-text-muted)]">No sessions</p>
         </div>
         <button
-          className="flex cursor-pointer items-center justify-center gap-2 border-t border-zinc-800/50 px-4 py-2.5 text-sm font-medium text-white bg-[#D77655]/10 rounded-lg transition-all hover:bg-[#D77655] hover:shadow-[0_0_12px_rgba(215,118,85,0.5)]"
+          className="flex cursor-pointer items-center justify-center gap-2 border-t border-[var(--theme-border-subtle)] px-4 py-2.5 text-sm font-medium text-white bg-[var(--theme-accent-muted)] rounded-lg transition-all hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)]"
           onClick={openCreateModal}
         >
           <PlusIcon size={16} />
@@ -109,17 +109,17 @@ export function SessionGroups() {
             className="relative"
           >
             {isOver && dropEdge === 'top' && (
-              <div className="absolute left-1.5 right-1.5 top-0 z-10 h-0.5 rounded bg-[#D77655]" />
+              <div className="absolute left-1.5 right-1.5 top-0 z-10 h-0.5 rounded bg-[var(--theme-accent)]" />
             )}
             <RepositoryGroup group={group} />
             {isOver && dropEdge === 'bottom' && (
-              <div className="absolute bottom-0 left-1.5 right-1.5 z-10 h-0.5 rounded bg-[#D77655]" />
+              <div className="absolute bottom-0 left-1.5 right-1.5 z-10 h-0.5 rounded bg-[var(--theme-accent)]" />
             )}
           </div>
         );
       })}
       <button
-        className="mx-1.5 mt-3 mb-1 flex w-[calc(100%-12px)] cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white bg-[#D77655]/10 transition-all hover:bg-[#D77655] hover:shadow-[0_0_12px_rgba(215,118,85,0.5)]"
+        className="mx-1.5 mt-3 mb-1 flex w-[calc(100%-12px)] cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white bg-[var(--theme-accent-muted)] transition-all hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)]"
         onClick={openCreateModal}
       >
         <PlusIcon size={16} />
