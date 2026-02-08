@@ -1,0 +1,155 @@
+import type { RepositorySummary } from '@asm/shared';
+import { useUIStore } from '../../stores/uiStore';
+import { cn } from '../../lib/cn';
+
+interface Props {
+  summary: RepositorySummary;
+}
+
+export function RepoItem({ summary }: Props) {
+  const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
+  const selectRepo = useUIStore((s) => s.selectRepo);
+  const key = `${summary.org}/${summary.name}`;
+  const isSelected = selectedRepoKey === key;
+  const loading = summary.lastFetchedAt === null;
+
+  return (
+    <button
+      className={cn(
+        'flex w-full flex-col gap-1 px-3 py-1.5 text-left transition-colors',
+        isSelected
+          ? 'border-l-2 border-[#D77655] bg-zinc-800/40'
+          : 'border-l-2 border-transparent hover:bg-zinc-800/20',
+      )}
+      onClick={() => selectRepo(key)}
+    >
+      <span className="truncate text-sm text-zinc-200">{summary.name}</span>
+      {loading ? (
+        <div className="flex gap-2">
+          {Array.from({ length: 5 }, (_, i) => (
+            <span key={i} className="h-3 w-6 animate-pulse rounded bg-zinc-700/50" />
+          ))}
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          {/* Issues - amber */}
+          <BadgeIcon
+            color="text-amber-400"
+            dimColor="text-zinc-600"
+            count={summary.openIssuesCount}
+            icon={<CircleDotIcon />}
+            title="Open issues"
+          />
+          {/* My PRs - coral */}
+          <BadgeIcon
+            color="text-[#D77655]"
+            dimColor="text-zinc-600"
+            count={summary.myPRsCount}
+            icon={<GitPullRequestArrowIcon />}
+            title="My PRs"
+          />
+          {/* Assigned PRs - blue */}
+          <BadgeIcon
+            color="text-blue-400"
+            dimColor="text-zinc-600"
+            count={summary.assignedPRsCount}
+            icon={<UserCheckIcon />}
+            title="Assigned to me"
+          />
+          {/* All open PRs - zinc */}
+          <BadgeIcon
+            color="text-zinc-400"
+            dimColor="text-zinc-600"
+            count={summary.openPRsCount}
+            icon={<GitPullRequestIcon />}
+            title="Open PRs"
+          />
+          {/* Merged 7d - emerald */}
+          <BadgeIcon
+            color="text-emerald-400"
+            dimColor="text-zinc-600"
+            count={summary.recentlyMergedPRsCount}
+            icon={<GitMergeIcon />}
+            title="Merged (7d)"
+          />
+        </div>
+      )}
+    </button>
+  );
+}
+
+function BadgeIcon({
+  color,
+  dimColor,
+  count,
+  icon,
+  title,
+}: {
+  color: string;
+  dimColor: string;
+  count: number;
+  icon: React.ReactNode;
+  title: string;
+}) {
+  const isDim = count === 0;
+  return (
+    <span className={cn('flex items-center gap-0.5', isDim ? dimColor : color)} title={title}>
+      {icon}
+      <span className="text-[10px]">{count}</span>
+    </span>
+  );
+}
+
+function CircleDotIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="8" cy="8" r="6" />
+      <circle cx="8" cy="8" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
+function GitPullRequestArrowIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="5" cy="3.5" r="1.5" />
+      <circle cx="11" cy="12.5" r="1.5" />
+      <line x1="5" y1="5" x2="5" y2="14" />
+      <line x1="11" y1="11" x2="11" y2="6" />
+      <polyline points="8.5,8 11,5.5 13.5,8" />
+    </svg>
+  );
+}
+
+function UserCheckIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="5" r="2.5" />
+      <path d="M2 14c0-2.5 2-4 4-4s4 1.5 4 4" />
+      <polyline points="11,8 12.5,9.5 15,7" />
+    </svg>
+  );
+}
+
+function GitPullRequestIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="5" cy="3.5" r="1.5" />
+      <circle cx="5" cy="12.5" r="1.5" />
+      <circle cx="11" cy="12.5" r="1.5" />
+      <line x1="5" y1="5" x2="5" y2="11" />
+      <line x1="11" y1="5" x2="11" y2="11" />
+    </svg>
+  );
+}
+
+function GitMergeIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="5" cy="3.5" r="1.5" />
+      <circle cx="5" cy="12.5" r="1.5" />
+      <line x1="5" y1="5" x2="5" y2="11" />
+      <path d="M5 7c2 0 4 1 6 4" />
+    </svg>
+  );
+}

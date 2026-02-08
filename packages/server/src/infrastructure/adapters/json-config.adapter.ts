@@ -31,6 +31,7 @@ export class JsonConfigAdapter implements ConfigPort {
       repositoriesBasePath: '~/projects',
       defaultShell: process.env['SHELL'] ?? '/bin/zsh',
       claudeCommand: resolveClaudePath(),
+      repositoryRefreshIntervalMs: 0,
     };
 
     this.loadFromDisk();

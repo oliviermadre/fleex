@@ -5,15 +5,25 @@ import { TerminalView } from './TerminalView';
 import { StatusBar } from './StatusBar';
 import { EmptyState } from './EmptyState';
 import { SettingsPanel } from '../settings/SettingsPanel';
+import { RepositoryDashboard } from '../repository-dashboard/RepositoryDashboard';
+import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
 
 export function MainPanel() {
   const activePanel = useUIStore((s) => s.activePanel);
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const sessions = useSessionStore((s) => s.sessions);
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
+  const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
 
   if (activePanel === 'settings') {
     return <SettingsPanel />;
+  }
+
+  if (activePanel === 'repositories') {
+    if (!selectedRepoKey) {
+      return <RepositoryEmptyState />;
+    }
+    return <RepositoryDashboard repoKey={selectedRepoKey} />;
   }
 
   if (!selectedSession) {

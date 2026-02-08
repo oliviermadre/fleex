@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useSessions } from '../../hooks/useSessions';
+import { useRepositoryDashboard } from '../../hooks/useRepositoryDashboard';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -15,6 +16,7 @@ const NAV_EXPANDED_WIDTH = 180;
 export function AppLayout() {
   useWebSocket();
   useSessions();
+  useRepositoryDashboard();
   useKeyboardShortcuts();
 
   const navCollapsed = useUIStore((s) => s.navCollapsed);

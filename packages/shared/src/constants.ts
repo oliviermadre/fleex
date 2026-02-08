@@ -23,3 +23,17 @@ export const SESSION_HASH_LENGTH = 8;
 export const ASM_DIR = '.asm';
 export const SESSIONS_FILE = 'sessions.json';
 export const CONFIG_FILE = 'config.json';
+
+// Repository dashboard
+export const WS_REPOSITORY_PATH = '/ws/repositories';
+export const REPO_REFRESH_INTERVALS = [60000, 120000, 300000, 600000, 1800000, 3600000, 0] as const;
+export const REPO_REFRESH_LABELS: Record<number, string> = {
+  60000: '1 min',
+  120000: '2 min',
+  300000: '5 min',
+  600000: '10 min',
+  1800000: '30 min',
+  3600000: '1 hour',
+  0: 'Disabled',
+};
+export const DEFAULT_REPO_REFRESH_INTERVAL = 0;

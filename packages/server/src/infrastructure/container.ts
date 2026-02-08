@@ -1,5 +1,7 @@
 import { SessionNamingService } from '../domain/services/session-naming.js';
 import { SessionGroupingService } from '../domain/services/session-grouping.js';
+import { RepositoryCache } from '../domain/services/repository-cache.js';
+import { RepositoryRefreshScheduler } from '../domain/services/repository-refresh-scheduler.js';
 import { CreateSessionUseCase } from '../application/use-cases/create-session.js';
 import { ListSessionsUseCase } from '../application/use-cases/list-sessions.js';
 import { KillSessionUseCase } from '../application/use-cases/kill-session.js';
@@ -12,6 +14,7 @@ import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-cla
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { NodePtyAdapter } from './adapters/node-pty.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
+import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
 import { JsonSessionStore } from './adapters/json-session-store.adapter.js';
 import { JsonConfigAdapter } from './adapters/json-config.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
@@ -30,6 +33,11 @@ export function createContainer() {
 
   const enrichClaudeActivity = new EnrichClaudeActivityUseCase(claudeState, logger);
 
+  // Repository dashboard services
+  const repositoryCache = new RepositoryCache();
+  const githubGraphql = new GitHubGraphQLAdapter(logger);
+  const repositoryRefreshScheduler = new RepositoryRefreshScheduler(githubGraphql, repositoryCache, logger);
+
   return {
     logger,
     config,
@@ -37,6 +45,9 @@ export function createContainer() {
     pty: ptyAdapter,
     git,
     sessionStore,
+    repositoryCache,
+    githubGraphql,
+    repositoryRefreshScheduler,
     createSession: new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger),
     listSessions: new ListSessionsUseCase(sessionStore, tmux, logger),
     killSession: new KillSessionUseCase(tmux, sessionStore, logger),
