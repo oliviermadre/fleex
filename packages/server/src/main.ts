@@ -14,6 +14,7 @@ import { execRoutes } from './infrastructure/http/exec.routes.js';
 import { registerErrorHandler } from './infrastructure/http/error-handler.js';
 import { terminalWsPlugin } from './infrastructure/ws/terminal-ws.js';
 import { dashboardWsPlugin } from './infrastructure/ws/dashboard-ws.js';
+import { repositoryWsPlugin } from './infrastructure/ws/repository-ws.js';
 
 async function main() {
   const container = createContainer();
@@ -37,6 +38,24 @@ async function main() {
   // Register WebSocket handlers
   await app.register(terminalWsPlugin(container));
   await app.register(dashboardWsPlugin(container));
+  await app.register(repositoryWsPlugin(container));
+
+  // Start repository refresh scheduler if configured
+  const config = container.config.get() as unknown as Record<string, unknown>;
+  const refreshInterval = container.config.get().repositoryRefreshIntervalMs;
+  if (refreshInterval > 0) {
+    const resolved = config['resolvedRepositories'];
+    if (Array.isArray(resolved)) {
+      const repos = resolved
+        .filter((entry): entry is string => typeof entry === 'string' && entry.includes('/'))
+        .map((entry) => {
+          const [org, name] = entry.split('/');
+          return { org: org!, name: name! };
+        });
+      container.repositoryRefreshScheduler.setRepos(repos);
+      container.repositoryRefreshScheduler.start(refreshInterval);
+    }
+  }
 
   // Serve frontend static files in production
   const __dirname = dirname(fileURLToPath(import.meta.url));

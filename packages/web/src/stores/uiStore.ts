@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type ActivePanel = 'sessions' | 'settings';
+type ActivePanel = 'sessions' | 'repositories' | 'settings';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions';
 
 interface UIState {
@@ -28,6 +28,10 @@ interface UIState {
   // Group collapse state
   collapsedGroups: Set<string>;
   toggleGroup: (groupId: string) => void;
+
+  // Repository dashboard selection
+  selectedRepoKey: string | null;
+  selectRepo: (key: string | null) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -37,6 +41,7 @@ export const useUIStore = create<UIState>((set) => ({
   settingsTab: 'general',
   createModalOpen: false,
   collapsedGroups: new Set<string>(),
+  selectedRepoKey: null,
 
   toggleNav: () =>
     set((state) => ({ navCollapsed: !state.navCollapsed })),
@@ -61,4 +66,6 @@ export const useUIStore = create<UIState>((set) => ({
       }
       return { collapsedGroups: next };
     }),
+
+  selectRepo: (key) => set({ selectedRepoKey: key }),
 }));

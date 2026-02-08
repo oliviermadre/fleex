@@ -22,6 +22,14 @@ export type {
 } from './types/repository.js';
 
 export type {
+  RepositorySummary,
+  RepositoryDashboardData,
+  RefreshInterval,
+  RepositoryWsMessage,
+  RepositoryWsMessageType,
+} from './types/repository-dashboard.js';
+
+export type {
   PtyHandle,
   TerminalConfig,
   TerminalTheme,
@@ -58,4 +66,8 @@ export {
   ASM_DIR,
   SESSIONS_FILE,
   CONFIG_FILE,
+  WS_REPOSITORY_PATH,
+  REPO_REFRESH_INTERVALS,
+  REPO_REFRESH_LABELS,
+  DEFAULT_REPO_REFRESH_INTERVAL,
 } from './constants.js';

@@ -2,6 +2,7 @@ export interface AppConfig {
   repositoriesBasePath: string;
   defaultShell: string;
   claudeCommand: string;
+  repositoryRefreshIntervalMs: number;
 }
 
 export interface ConfigPort {

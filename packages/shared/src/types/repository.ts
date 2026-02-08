@@ -38,6 +38,7 @@ export interface PullRequest {
   readonly assignees: string[];
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly mergedAt?: string;
 }
 
 export interface DiffStats {

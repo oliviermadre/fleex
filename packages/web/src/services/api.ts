@@ -8,6 +8,8 @@ import type {
   PullRequest,
   GitHubIssue,
   DiffStats,
+  RepositorySummary,
+  RepositoryDashboardData,
 } from '@asm/shared';
 import { API_URL } from '../lib/constants';
 
@@ -109,4 +111,40 @@ export async function updateConfig(config: Record<string, unknown>): Promise<voi
     method: 'PUT',
     body: JSON.stringify(config),
   });
+}
+
+// Repository Dashboard API
+
+export async function fetchRepositorySummaries(): Promise<RepositorySummary[]> {
+  return request<RepositorySummary[]>('/repositories/summaries');
+}
+
+export async function fetchRepositoryDashboard(
+  org: string,
+  name: string,
+): Promise<RepositoryDashboardData> {
+  return request<RepositoryDashboardData>(
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/dashboard`,
+  );
+}
+
+export async function fetchMergedPulls(org: string, name: string): Promise<PullRequest[]> {
+  return request<PullRequest[]>(
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/merged-pulls`,
+  );
+}
+
+export async function requestRepositoryRefresh(
+  scope: 'all' | 'repo',
+  org?: string,
+  name?: string,
+): Promise<void> {
+  await request<void>('/repositories/refresh', {
+    method: 'POST',
+    body: JSON.stringify({ scope, org, name }),
+  });
+}
+
+export async function fetchGitHubUser(): Promise<{ login: string }> {
+  return request<{ login: string }>('/github/user');
 }

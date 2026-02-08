@@ -1,5 +1,6 @@
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { cn } from '../../lib/cn';
 
 export function NavSidebar() {
@@ -8,6 +9,8 @@ export function NavSidebar() {
   const activePanel = useUIStore((s) => s.activePanel);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const sessions = useSessionStore((s) => s.sessions);
+  const summaries = useRepositoryDashboardStore((s) => s.summaries);
+  const repoCount = Object.keys(summaries).length;
 
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
@@ -26,6 +29,25 @@ export function NavSidebar() {
           collapsed={navCollapsed}
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
           onClick={() => setActivePanel('sessions')}
+        />
+
+        {/* Repositories */}
+        <NavItem
+          icon={
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="5" cy="3.5" r="1.5" />
+              <circle cx="11" cy="3.5" r="1.5" />
+              <circle cx="8" cy="12.5" r="1.5" />
+              <line x1="5" y1="5" x2="5" y2="7" />
+              <line x1="11" y1="5" x2="11" y2="7" />
+              <path d="M5 7c0 1.5 1.5 2.5 3 4M11 7c0 1.5-1.5 2.5-3 4" />
+            </svg>
+          }
+          label="Repositories"
+          active={activePanel === 'repositories'}
+          collapsed={navCollapsed}
+          badge={repoCount > 0 ? (repoCount > 9 ? '9+' : String(repoCount)) : undefined}
+          onClick={() => setActivePanel('repositories')}
         />
       </div>
 
