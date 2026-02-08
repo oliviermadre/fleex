@@ -9,7 +9,7 @@
 # The central Tiltfile sets `worktree_context` before include().
 # In standalone mode, we fall back to config.main_dir.
 #
-# Access URL: http://<worktree-name>.127.0.0.1.nip.io
+# Access URL: https://<worktree-name>.127.0.0.1.nip.io
 #
 
 # ---------------------------------------------------------------------------
@@ -41,7 +41,12 @@ def _basename(path):
 # When include()'d from the central Tiltfile, `worktree_context` is set
 # to the absolute path of this worktree BEFORE the include() call.
 # When running standalone (tilt up), it won't exist — detect via main_dir.
-_self_dir = str(config.main_dir)
+_main_dir = str(config.main_dir)
+_standalone = str(local(
+    'test -f "%s/Dockerfile.dev" && echo 1 || echo 0' % _main_dir,
+    quiet=True,
+)).strip() == '1'
+_self_dir = _main_dir if _standalone else str(local('cat /tmp/.tilt_worktree_context', quiet=True)).strip()
 _worktree_name = _sanitize_k8s_name(_basename(_self_dir))
 
 # ---------------------------------------------------------------------------
@@ -59,7 +64,7 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: {ns}
-""".format(ns=NAMESPACE)))
+""".format(ns=NAMESPACE)), allow_duplicates=True)
 
 # ---------------------------------------------------------------------------
 # Docker image + live_update
@@ -174,8 +179,13 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    cert-manager.io/cluster-issuer: "mkcert-ca"
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - {host}
+      secretName: {app}-tls
   rules:
     - host: {host}
       http:
@@ -195,4 +205,4 @@ k8s_resource(
     labels=['asm'],
 )
 
-print('  ASM: ' + _worktree_name + '  ->  http://' + HOSTNAME)
+print('  ASM: ' + _worktree_name + '  ->  https://' + HOSTNAME)
