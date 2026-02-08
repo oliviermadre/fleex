@@ -3,10 +3,12 @@ import { useSettingsStore, type PinnedIcon, type WorktreeAction } from '../../st
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { AppearanceTab } from './AppearanceTab';
 import { cn } from '../../lib/cn';
 
 const tabLabels: Record<SettingsTab, string> = {
   general: 'General',
+  appearance: 'Appearance',
   repositories: 'Repositories',
   'pinned-icons': 'Pinned Icons',
   'worktree-actions': 'Worktree Actions',
@@ -102,12 +104,12 @@ export function SettingsPanel() {
   };
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-zinc-950">
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       {/* Breadcrumb header */}
-      <div className="flex w-full items-center border-b border-zinc-800 px-8" style={{ height: 'var(--header-height)' }}>
-        <span className="text-sm text-zinc-500">Settings</span>
-        <span className="mx-2 text-sm text-zinc-600">/</span>
-        <span className="text-sm font-medium text-zinc-200">{tabLabels[settingsTab]}</span>
+      <div className="flex w-full items-center border-b border-[var(--theme-border)] px-8" style={{ height: 'var(--header-height)' }}>
+        <span className="text-sm text-[var(--theme-text-muted)]">Settings</span>
+        <span className="mx-2 text-sm text-[var(--theme-text-faint)]">/</span>
+        <span className="text-sm font-medium text-[var(--theme-text-primary)]">{tabLabels[settingsTab]}</span>
       </div>
 
       {/* Form content */}
@@ -116,6 +118,7 @@ export function SettingsPanel() {
           {settingsTab === 'general' && (
             <GeneralTab basePath={basePath} setBasePath={setBasePath} />
           )}
+          {settingsTab === 'appearance' && <AppearanceTab />}
           {settingsTab === 'repositories' && (
             <RepositoriesTab
               repoPatterns={repoPatterns}
@@ -171,9 +174,9 @@ function GeneralTab({
         value={basePath}
         onChange={(e) => setBasePath(e.target.value)}
       />
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-[var(--theme-text-muted)]">
         Base directory for repositories. Repos are stored as{' '}
-        <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">
+        <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
           basePath/orgName/repoName
         </code>
       </p>
@@ -199,18 +202,18 @@ function RepositoriesTab({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-zinc-400">
+        <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
           Repository Patterns
         </label>
         <textarea
-          className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+          className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
           rows={8}
           placeholder={"odys-travel/*\nmyorg/specific-repo\nanother-org/*"}
           value={repoPatterns}
           onChange={(e) => setRepoPatterns(e.target.value)}
         />
-        <p className="text-xs text-zinc-500">
-          One pattern per line. Use <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">org/*</code> to
+        <p className="text-xs text-[var(--theme-text-muted)]">
+          One pattern per line. Use <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">org/*</code> to
           include all repos from an organization.
         </p>
       </div>
@@ -225,7 +228,7 @@ function RepositoriesTab({
           {resolving ? 'Resolving...' : 'Resolve Patterns'}
         </Button>
         {resolvedAt && (
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-[var(--theme-text-muted)]">
             Last resolved: {new Date(resolvedAt).toLocaleString()}
           </span>
         )}
@@ -233,12 +236,12 @@ function RepositoriesTab({
 
       {resolvedRepositories.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-zinc-400">
+          <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
             Resolved Repositories ({resolvedRepositories.length})
           </label>
-          <div className="max-h-64 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950 p-3">
+          <div className="max-h-64 overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-3">
             {resolvedRepositories.map((repo) => (
-              <div key={repo} className="text-xs text-zinc-400 py-0.5">
+              <div key={repo} className="text-xs text-[var(--theme-text-secondary)] py-0.5">
                 {repo}
               </div>
             ))}
@@ -263,7 +266,7 @@ function PinnedIconsTab({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-zinc-400">
+        <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
           Pinned Icons ({pinnedIcons.length})
         </label>
         <Button variant="secondary" size="sm" onClick={onAdd}>
@@ -272,7 +275,7 @@ function PinnedIconsTab({
       </div>
 
       {pinnedIcons.length === 0 && (
-        <p className="py-6 text-center text-sm text-zinc-500">
+        <p className="py-6 text-center text-sm text-[var(--theme-text-muted)]">
           No pinned icons configured. Add one to pin it to the top of the sidebar.
         </p>
       )}
@@ -305,7 +308,7 @@ function WorktreeActionsTab({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-zinc-400">
+        <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
           Worktree Actions ({worktreeActions.length})
         </label>
         <Button variant="secondary" size="sm" onClick={onAdd}>
@@ -313,12 +316,12 @@ function WorktreeActionsTab({
         </Button>
       </div>
 
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-[var(--theme-text-muted)]">
         Actions appear as icon buttons under each worktree header. Template variables are resolved per worktree.
       </p>
 
       {worktreeActions.length === 0 && (
-        <p className="py-6 text-center text-sm text-zinc-500">
+        <p className="py-6 text-center text-sm text-[var(--theme-text-muted)]">
           No worktree actions configured. Add one to show action buttons per worktree.
         </p>
       )}
@@ -335,8 +338,8 @@ function WorktreeActionsTab({
       </div>
 
       {/* Template variables reference */}
-      <div className="rounded-md border border-zinc-800 bg-zinc-900/50 px-4 py-3">
-        <p className="mb-2 text-xs font-medium text-zinc-400">Template Variables</p>
+      <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
+        <p className="mb-2 text-xs font-medium text-[var(--theme-text-secondary)]">Template Variables</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
           {[
             ['{{org}}', 'Repository organization'],
@@ -349,8 +352,8 @@ function WorktreeActionsTab({
             ['{{issue_number}}', 'First number in branch'],
           ].map(([variable, description]) => (
             <div key={variable} className="flex items-baseline gap-2">
-              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-300">{variable}</code>
-              <span className="text-zinc-500">{description}</span>
+              <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">{variable}</code>
+              <span className="text-[var(--theme-text-muted)]">{description}</span>
             </div>
           ))}
         </div>
@@ -371,11 +374,11 @@ function WorktreeActionEditor({
   const [expanded, setExpanded] = useState(!action.label);
 
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-900/50">
+    <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
       {/* Header row */}
       <div className="flex items-center gap-2 px-3 py-2">
         <button
-          className="text-zinc-500 hover:text-zinc-300"
+          className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
           onClick={() => setExpanded(!expanded)}
         >
           <svg
@@ -391,14 +394,14 @@ function WorktreeActionEditor({
             <path d="M3 1l5 4-5 4V1z" />
           </svg>
         </button>
-        <span className="flex-1 truncate text-xs text-zinc-300">
+        <span className="flex-1 truncate text-xs text-[var(--theme-text-secondary)]">
           {action.label || 'Untitled'}
         </span>
-        <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">
+        <span className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
           {action.actionType}
         </span>
         <button
-          className="text-zinc-600 transition-colors hover:text-red-400"
+          className="text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-danger)]"
           onClick={onRemove}
           title="Remove"
         >
@@ -411,7 +414,7 @@ function WorktreeActionEditor({
 
       {/* Expanded editor */}
       {expanded && (
-        <div className="flex flex-col gap-4 border-t border-zinc-800 px-4 py-4">
+        <div className="flex flex-col gap-4 border-t border-[var(--theme-border)] px-4 py-4">
           <Input
             label="Label"
             placeholder="Open Branch on GitHub"
@@ -421,16 +424,16 @@ function WorktreeActionEditor({
 
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-400">Icon Type</label>
-              <div className="flex gap-0.5 rounded-md bg-zinc-800 p-0.5">
+              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Type</label>
+              <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
                 {(['svg', 'base64', 'url', 'path'] as const).map((type) => (
                   <button
                     key={type}
                     className={cn(
                       'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
                       action.iconType === type
-                        ? 'bg-zinc-700 text-zinc-200'
-                        : 'text-zinc-500 hover:text-zinc-400'
+                        ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
+                        : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                     )}
                     onClick={() => onUpdate({ iconType: type })}
                   >
@@ -442,9 +445,9 @@ function WorktreeActionEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Icon Value</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Value</label>
             <textarea
-              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={3}
               placeholder={
                 action.iconType === 'svg'
@@ -461,14 +464,14 @@ function WorktreeActionEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Action Type</label>
-            <div className="flex gap-0.5 rounded-md bg-zinc-800 p-0.5">
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Type</label>
+            <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
               <button
                 className={cn(
                   'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                   action.actionType === 'url'
-                    ? 'bg-zinc-700 text-zinc-200'
-                    : 'text-zinc-500 hover:text-zinc-400'
+                    ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                 )}
                 onClick={() => onUpdate({ actionType: 'url' })}
               >
@@ -478,8 +481,8 @@ function WorktreeActionEditor({
                 className={cn(
                   'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                   action.actionType === 'shell'
-                    ? 'bg-zinc-700 text-zinc-200'
-                    : 'text-zinc-500 hover:text-zinc-400'
+                    ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                 )}
                 onClick={() => onUpdate({ actionType: 'shell' })}
               >
@@ -489,9 +492,9 @@ function WorktreeActionEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Action Value</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Value</label>
             <textarea
-              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={action.actionType === 'shell' ? 4 : 2}
               placeholder={
                 action.actionType === 'url'
@@ -501,7 +504,7 @@ function WorktreeActionEditor({
               value={action.actionValue}
               onChange={(e) => onUpdate({ actionValue: e.target.value })}
             />
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-[var(--theme-text-muted)]">
               Use {'{{template}}'} variables above. They resolve per worktree at click time.
             </p>
           </div>
@@ -523,11 +526,11 @@ function PinnedIconEditor({
   const [expanded, setExpanded] = useState(!icon.label);
 
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-900/50">
+    <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
       {/* Header row */}
       <div className="flex items-center gap-2 px-3 py-2">
         <button
-          className="text-zinc-500 hover:text-zinc-300"
+          className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
           onClick={() => setExpanded(!expanded)}
         >
           <svg
@@ -543,14 +546,14 @@ function PinnedIconEditor({
             <path d="M3 1l5 4-5 4V1z" />
           </svg>
         </button>
-        <span className="flex-1 truncate text-xs text-zinc-300">
+        <span className="flex-1 truncate text-xs text-[var(--theme-text-secondary)]">
           {icon.label || 'Untitled'}
         </span>
-        <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">
+        <span className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
           {icon.actionType}
         </span>
         <button
-          className="text-zinc-600 transition-colors hover:text-red-400"
+          className="text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-danger)]"
           onClick={onRemove}
           title="Remove"
         >
@@ -563,7 +566,7 @@ function PinnedIconEditor({
 
       {/* Expanded editor */}
       {expanded && (
-        <div className="flex flex-col gap-4 border-t border-zinc-800 px-4 py-4">
+        <div className="flex flex-col gap-4 border-t border-[var(--theme-border)] px-4 py-4">
           <Input
             label="Label"
             placeholder="My Shortcut"
@@ -573,16 +576,16 @@ function PinnedIconEditor({
 
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-400">Icon Type</label>
-              <div className="flex gap-0.5 rounded-md bg-zinc-800 p-0.5">
+              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Type</label>
+              <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
                 {(['svg', 'base64', 'url', 'path'] as const).map((type) => (
                   <button
                     key={type}
                     className={cn(
                       'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
                       icon.iconType === type
-                        ? 'bg-zinc-700 text-zinc-200'
-                        : 'text-zinc-500 hover:text-zinc-400'
+                        ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
+                        : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                     )}
                     onClick={() => onUpdate({ iconType: type })}
                   >
@@ -594,9 +597,9 @@ function PinnedIconEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Icon Value</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Value</label>
             <textarea
-              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={3}
               placeholder={
                 icon.iconType === 'svg'
@@ -613,14 +616,14 @@ function PinnedIconEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Action Type</label>
-            <div className="flex gap-0.5 rounded-md bg-zinc-800 p-0.5">
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Type</label>
+            <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
               <button
                 className={cn(
                   'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                   icon.actionType === 'url'
-                    ? 'bg-zinc-700 text-zinc-200'
-                    : 'text-zinc-500 hover:text-zinc-400'
+                    ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                 )}
                 onClick={() => onUpdate({ actionType: 'url' })}
               >
@@ -630,8 +633,8 @@ function PinnedIconEditor({
                 className={cn(
                   'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                   icon.actionType === 'shell'
-                    ? 'bg-zinc-700 text-zinc-200'
-                    : 'text-zinc-500 hover:text-zinc-400'
+                    ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                 )}
                 onClick={() => onUpdate({ actionType: 'shell' })}
               >
@@ -641,9 +644,9 @@ function PinnedIconEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-400">Action Value</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Value</label>
             <textarea
-              className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-[#D77655] focus:outline-none focus:ring-1 focus:ring-[#D77655]"
+              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={icon.actionType === 'shell' ? 4 : 2}
               placeholder={
                 icon.actionType === 'url'
