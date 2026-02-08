@@ -2,6 +2,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { TERMINAL_THEME, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, TERMINAL_SCROLLBACK } from '../lib/constants';
+import type { Theme } from '../lib/themes';
 
 interface TerminalInstance {
   terminal: Terminal;
@@ -16,6 +17,7 @@ class TerminalManager {
   private terminals = new Map<string, TerminalInstance>();
   private activeSessionId: string | null = null;
   private containerEl: HTMLElement | null = null;
+  private currentTerminalTheme = TERMINAL_THEME;
 
   setContainer(el: HTMLElement | null): void {
     this.containerEl = el;
@@ -26,7 +28,7 @@ class TerminalManager {
     if (existing) return existing.terminal;
 
     const terminal = new Terminal({
-      theme: TERMINAL_THEME,
+      theme: this.currentTerminalTheme,
       fontFamily: TERMINAL_FONT_FAMILY,
       fontSize: TERMINAL_FONT_SIZE,
       scrollback: TERMINAL_SCROLLBACK,
@@ -152,6 +154,21 @@ class TerminalManager {
 
   get(sessionId: string): TerminalInstance | null {
     return this.terminals.get(sessionId) ?? null;
+  }
+
+  updateTheme(theme: Theme): void {
+    const termTheme = {
+      ...TERMINAL_THEME,
+      background: theme.terminal.background,
+      foreground: theme.terminal.foreground,
+      cursor: theme.terminal.cursor,
+      cursorAccent: theme.terminal.cursorAccent,
+      selectionBackground: theme.terminal.selectionBackground,
+    };
+    this.currentTerminalTheme = termTheme;
+    for (const [, instance] of this.terminals) {
+      instance.terminal.options.theme = termTheme;
+    }
   }
 
   private async loadWebGL(terminal: Terminal): Promise<void> {

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { API_URL } from '../lib/constants';
 import { resolveTemplate, type WorktreeContext } from '../lib/templateUtils';
+import type { Theme } from '../lib/themes';
 
 export interface PinnedIcon {
   id: string;
@@ -31,6 +32,8 @@ export interface AppSettings {
   repoOrder: string[];
   worktreeOrder: Record<string, string[]>;
   sessionOrder: Record<string, string[]>;
+  activeThemeId: string;
+  customThemes: Theme[];
 }
 
 interface SettingsState {
@@ -62,6 +65,8 @@ const defaultSettings: AppSettings = {
   repoOrder: [],
   worktreeOrder: {},
   sessionOrder: {},
+  activeThemeId: 'ember',
+  customThemes: [],
 };
 
 function loadFromStorage(): AppSettings {

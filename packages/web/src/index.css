@@ -15,6 +15,26 @@ html, body {
   --content-panel-max-width: 520px;
   --header-height: 40px;
   --statusbar-height: 28px;
+
+  /* Theme colors — Ember defaults (overridden by JS on mount) */
+  --theme-accent: #D77655;
+  --theme-accent-hover: #e08868;
+  --theme-accent-active: #b85a3a;
+  --theme-accent-muted: rgba(215, 118, 85, 0.15);
+  --theme-bg-base: #09090b;
+  --theme-bg-surface: #18181b;
+  --theme-bg-overlay: #27272a;
+  --theme-bg-hover: rgba(39, 39, 42, 0.5);
+  --theme-border: #27272a;
+  --theme-border-subtle: rgba(39, 39, 42, 0.5);
+  --theme-border-input: #3f3f46;
+  --theme-text-primary: #fafafa;
+  --theme-text-secondary: #a1a1aa;
+  --theme-text-muted: #71717a;
+  --theme-text-faint: #52525b;
+  --theme-success: #22c55e;
+  --theme-warning: #eab308;
+  --theme-danger: #ef4444;
 }
 
 /* xterm.js container - must fill available space */
