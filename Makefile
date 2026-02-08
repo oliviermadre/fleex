@@ -55,7 +55,7 @@ cluster-status:
 
 .PHONY: dev
 dev:
-	tilt up --port 0
+	tilt up
 
 .PHONY: dev-down
 dev-down:
