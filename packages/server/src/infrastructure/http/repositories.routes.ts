@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { FastifyInstance } from 'fastify';
@@ -372,8 +371,7 @@ export function repositoryRoutes(container: Container) {
 }
 
 function resolveRepoPath(container: Container, org: string, name: string): string {
-  const basePath = container.config.get().repositoriesBasePath.replace(/^~/, homedir());
-  return join(basePath, org, name);
+  return join(container.config.get().basePath, org, name);
 }
 
 function getConfiguredRepos(container: Container): { org: string; name: string }[] {

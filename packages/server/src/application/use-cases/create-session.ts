@@ -51,8 +51,8 @@ export class CreateSessionUseCase {
 
     if (request.type === 'claude') {
       const claudeCmd = request.claudePrompt
-        ? `${this.config.get().claudeCommand} "${request.claudePrompt.replace(/"/g, '\\"')}"`
-        : this.config.get().claudeCommand;
+        ? `${this.config.getClaudeCommand()} "${request.claudePrompt.replace(/"/g, '\\"')}"`
+        : this.config.getClaudeCommand();
       await this.tmux.sendKeys(tmuxName, claudeCmd);
     }
 

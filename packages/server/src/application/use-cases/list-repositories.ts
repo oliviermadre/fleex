@@ -1,6 +1,5 @@
 import { readdir, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { homedir } from 'node:os';
 import type { Repository } from '@asm/shared';
 import type { GitPort } from '../ports/git.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
@@ -14,7 +13,7 @@ export class ListRepositoriesUseCase {
   ) {}
 
   async execute(): Promise<Repository[]> {
-    const basePath = this.config.get().repositoriesBasePath.replace(/^~/, homedir());
+    const basePath = this.config.get().basePath;
     const repositories: Repository[] = [];
 
     let orgs: string[];

@@ -27,7 +27,8 @@ export class CreateWorktreeUseCase {
       this.logger.info('Worktree created', { repoPath, wtPath, branch: request.branch });
       return null;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const stderr = (err as { stderr?: string }).stderr?.trim();
+      const message = stderr || (err instanceof Error ? err.message : String(err));
       const match = message.match(/is already used by worktree at '([^']+)'/);
       if (match) {
         const existingPath = match[1]!;

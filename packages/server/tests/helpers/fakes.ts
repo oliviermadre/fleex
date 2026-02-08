@@ -107,13 +107,17 @@ export class FakeGitPort implements GitPort {
 
 export class FakeConfigPort implements ConfigPort {
   private config: AppConfig = {
-    repositoriesBasePath: '/tmp/repos',
+    basePath: '/tmp/repos',
     defaultShell: '/bin/zsh',
-    claudeCommand: 'claude',
+    repositoryRefreshIntervalMs: 0,
   };
 
   get(): AppConfig {
     return this.config;
+  }
+
+  getClaudeCommand(): string {
+    return 'claude';
   }
 
   update(partial: Partial<AppConfig>): void {

@@ -1,8 +1,7 @@
-import { execFile, exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const execAsync = promisify(exec);
 
 interface ExecRequest {
   command: string;
@@ -25,8 +24,6 @@ export async function handleExec(body: ExecRequest): Promise<ExecResponse> {
   console.log('[exec]', shell ? 'shell' : 'exec', command, shell ? '' : JSON.stringify(args), cwd ?? '');
 
   if (shell) {
-    // Shell mode: command is the full shell string, args is ignored
-    // Use zsh so the user's full PATH and environment are available
     try {
       const { stdout, stderr } = await execFileAsync('/bin/zsh', ['-l', '-c', command], {
         cwd,

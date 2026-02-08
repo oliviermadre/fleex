@@ -7,6 +7,7 @@ export class JsonConfigAdapter implements ConfigPort {
   private config: AppConfig;
   private readonly filePath: string;
   private initialized = false;
+  private claudeCommand = 'claude';
 
   constructor(
     private readonly execFn: ExecFn,
@@ -17,9 +18,8 @@ export class JsonConfigAdapter implements ConfigPort {
     this.filePath = join(dir, CONFIG_FILE);
 
     this.config = {
-      repositoriesBasePath: '~/projects',
+      basePath: '~/projects',
       defaultShell: process.env['SHELL'] ?? '/bin/zsh',
-      claudeCommand: 'claude',
       repositoryRefreshIntervalMs: 0,
     };
   }
@@ -30,7 +30,7 @@ export class JsonConfigAdapter implements ConfigPort {
     if (!(await this.hostFs.exists(dir))) {
       await this.hostFs.mkdir(dir);
     }
-    this.config.claudeCommand = await this.resolveClaudePath();
+    this.claudeCommand = await this.resolveClaudePath();
     await this.loadFromDisk();
     this.initialized = true;
   }
@@ -39,8 +39,13 @@ export class JsonConfigAdapter implements ConfigPort {
     return { ...this.config };
   }
 
+  getClaudeCommand(): string {
+    return this.claudeCommand;
+  }
+
   async update(partial: Partial<AppConfig>): Promise<void> {
     this.config = { ...this.config, ...partial };
+    this.resolveTilde();
     await this.syncToDisk();
   }
 
@@ -56,14 +61,35 @@ export class JsonConfigAdapter implements ConfigPort {
   }
 
   private async loadFromDisk(): Promise<void> {
-    if (!(await this.hostFs.exists(this.filePath))) return;
+    if (!(await this.hostFs.exists(this.filePath))) {
+      this.resolveTilde();
+      return;
+    }
 
     try {
       const raw = await this.hostFs.readFile(this.filePath);
-      const data = JSON.parse(raw) as Partial<AppConfig>;
-      this.config = { ...this.config, ...data };
+      const data = JSON.parse(raw) as Record<string, unknown>;
+
+      // Migrate old key
+      if ('repositoriesBasePath' in data && !('basePath' in data)) {
+        data['basePath'] = data['repositoriesBasePath'];
+      }
+      delete data['repositoriesBasePath'];
+      // Don't load claudeCommand from disk
+      delete data['claudeCommand'];
+
+      this.config = { ...this.config, ...(data as Partial<AppConfig>) };
     } catch {
       // Use defaults
+    }
+
+    this.resolveTilde();
+  }
+
+  /** Replace leading ~ with the real homedir so callers always get an absolute path. */
+  private resolveTilde(): void {
+    if (this.config.basePath.startsWith('~')) {
+      this.config.basePath = this.config.basePath.replace(/^~/, this.homedir);
     }
   }
 

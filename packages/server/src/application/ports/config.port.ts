@@ -1,11 +1,11 @@
 export interface AppConfig {
-  repositoriesBasePath: string;
+  basePath: string;
   defaultShell: string;
-  claudeCommand: string;
   repositoryRefreshIntervalMs: number;
 }
 
 export interface ConfigPort {
   get(): AppConfig;
   update(partial: Partial<AppConfig>): void | Promise<void>;
+  getClaudeCommand(): string;
 }
