@@ -20,7 +20,7 @@ export function terminalWsPlugin(container: Container) {
       let ptyHandle: PtyHandle | null = null;
       container.logger.info('Terminal WebSocket connected');
 
-      socket.on('message', (raw: Buffer) => {
+      socket.on('message', async (raw: Buffer) => {
         const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer);
 
         if (data.length === 0) return;
@@ -47,7 +47,7 @@ export function terminalWsPlugin(container: Container) {
               }
 
               session.markAttached();
-              container.sessionStore.save(session);
+              await container.sessionStore.save(session);
 
               container.logger.info('Spawning PTY for tmux attach', { tmuxName: session.tmuxName });
               const handle = container.pty.spawnAttach(session.tmuxName, { cols, rows });

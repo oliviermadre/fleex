@@ -1,11 +1,10 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { ASM_DIR, SESSIONS_FILE } from '@asm/shared';
 import { SessionEntity } from '../../domain/entities.js';
 import type { SessionStorePort } from '../../application/ports/session-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { SessionType, SessionStatus } from '@asm/shared';
+import type { HostFs } from '../host/types.js';
 
 interface SerializedSession {
   id: string;
@@ -25,26 +24,37 @@ interface SerializedSession {
 export class JsonSessionStore implements SessionStorePort {
   private readonly sessions = new Map<string, SessionEntity>();
   private readonly filePath: string;
+  private initialized = false;
 
-  constructor(private readonly logger: LoggerPort) {
-    const dir = join(homedir(), ASM_DIR);
+  constructor(
+    private readonly hostFs: HostFs,
+    private readonly homedir: string,
+    private readonly logger: LoggerPort,
+  ) {
+    const dir = join(this.homedir, ASM_DIR);
     this.filePath = join(dir, SESSIONS_FILE);
+  }
 
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
+  async init(): Promise<void> {
+    if (this.initialized) return;
+    const dir = join(this.homedir, ASM_DIR);
+    if (!(await this.hostFs.exists(dir))) {
+      await this.hostFs.mkdir(dir);
     }
-
-    this.loadFromDisk();
+    await this.loadFromDisk();
+    this.initialized = true;
   }
 
-  save(session: SessionEntity): void {
+  async save(session: SessionEntity): Promise<void> {
+    await this.init();
     this.sessions.set(session.id, session);
-    this.syncToDisk();
+    await this.syncToDisk();
   }
 
-  remove(sessionId: string): void {
+  async remove(sessionId: string): Promise<void> {
+    await this.init();
     this.sessions.delete(sessionId);
-    this.syncToDisk();
+    await this.syncToDisk();
   }
 
   getAll(): SessionEntity[] {
@@ -66,11 +76,11 @@ export class JsonSessionStore implements SessionStorePort {
     return this.getAll().filter((s) => s.cwd === cwd);
   }
 
-  private loadFromDisk(): void {
-    if (!existsSync(this.filePath)) return;
+  private async loadFromDisk(): Promise<void> {
+    if (!(await this.hostFs.exists(this.filePath))) return;
 
     try {
-      const raw = readFileSync(this.filePath, 'utf-8');
+      const raw = await this.hostFs.readFile(this.filePath);
       const data = JSON.parse(raw) as SerializedSession[];
 
       for (const s of data) {
@@ -99,7 +109,7 @@ export class JsonSessionStore implements SessionStorePort {
     }
   }
 
-  private syncToDisk(): void {
+  private async syncToDisk(): Promise<void> {
     try {
       const data: SerializedSession[] = this.getAll().map((s) => ({
         id: s.id,
@@ -116,7 +126,7 @@ export class JsonSessionStore implements SessionStorePort {
         claudePrompt: s.claudePrompt,
       }));
 
-      writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8');
+      await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));
     } catch (err) {
       this.logger.error('Failed to sync session store to disk', {
         error: err instanceof Error ? err.message : String(err),

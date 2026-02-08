@@ -1,27 +1,26 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-import * as fs from 'node:fs';
-import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import type {
   ClaudeStatePort,
   ClaudeProcessInfo,
   ClaudeSessionFileInfo,
 } from '../../application/ports/claude-state.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-
-const execAsync = promisify(exec);
+import type { ShellExecFn, HostFs } from '../host/types.js';
 
 /** CWD never changes for a running PID — cache it. */
 const cwdCache = new Map<number, string>();
 
 export class ClaudeStateAdapter implements ClaudeStatePort {
-  constructor(private readonly logger: LoggerPort) {}
+  constructor(
+    private readonly shellExecFn: ShellExecFn,
+    private readonly hostFs: HostFs,
+    private readonly homedir: string,
+    private readonly logger: LoggerPort,
+  ) {}
 
   async discoverClaudeProcesses(): Promise<ClaudeProcessInfo[]> {
     try {
-      const { stdout } = await execAsync('ps -eo pid,pcpu,comm', { timeout: 5000 });
+      const { stdout } = await this.shellExecFn('ps -eo pid,pcpu,comm', { timeout: 5000 });
       const lines = stdout.trim().split('\n').slice(1); // skip header
       const claudePids: Array<{ pid: number; cpuPercent: number }> = [];
 
@@ -55,11 +54,11 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
   async findSessionFile(cwd: string): Promise<ClaudeSessionFileInfo | null> {
     try {
       const encoded = encodePath(cwd);
-      const projectDir = path.join(os.homedir(), '.claude', 'projects', encoded);
+      const projectDir = path.join(this.homedir, '.claude', 'projects', encoded);
 
-      let entries: fs.Dirent[];
+      let entries: { name: string; isFile: boolean; isDirectory: boolean }[];
       try {
-        entries = await fsp.readdir(projectDir, { withFileTypes: true });
+        entries = await this.hostFs.readdir(projectDir);
       } catch {
         return null;
       }
@@ -67,12 +66,12 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
       // Find most recent .jsonl not starting with "agent-"
       let newest: { name: string; mtimeMs: number } | null = null;
       for (const entry of entries) {
-        if (!entry.isFile()) continue;
+        if (!entry.isFile) continue;
         if (!entry.name.endsWith('.jsonl')) continue;
         if (entry.name.startsWith('agent-')) continue;
         try {
-          const stat = await fsp.stat(path.join(projectDir, entry.name));
-          if (!newest || stat.mtimeMs > newest.mtimeMs) {
+          const stat = await this.hostFs.stat(path.join(projectDir, entry.name));
+          if (stat && (!newest || stat.mtimeMs > newest.mtimeMs)) {
             newest = { name: entry.name, mtimeMs: stat.mtimeMs };
           }
         } catch {
@@ -96,23 +95,11 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
   async readLastMessages(filePath: string, count: number): Promise<string[]> {
     try {
       const CHUNK_SIZE = 64 * 1024; // 64KB
-      const handle = await fsp.open(filePath, 'r');
-      try {
-        const stat = await handle.stat();
-        const fileSize = stat.size;
-        if (fileSize === 0) return [];
+      const chunk = await this.hostFs.readTail(filePath, CHUNK_SIZE);
+      if (!chunk) return [];
 
-        const readStart = Math.max(0, fileSize - CHUNK_SIZE);
-        const readLength = fileSize - readStart;
-        const buffer = Buffer.alloc(readLength);
-        await handle.read(buffer, 0, readLength, readStart);
-        const chunk = buffer.toString('utf-8');
-
-        const lines = chunk.split('\n').filter((l) => l.trim().length > 0);
-        return lines.slice(-count);
-      } finally {
-        await handle.close();
-      }
+      const lines = chunk.split('\n').filter((l) => l.trim().length > 0);
+      return lines.slice(-count);
     } catch (err) {
       this.logger.debug('Failed to read session file', { filePath, error: String(err) });
       return [];
@@ -126,16 +113,16 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
       const sessionId = path.basename(sessionFilePath, '.jsonl');
       const subagentsDir = path.join(path.dirname(sessionFilePath), sessionId, 'subagents');
 
-      let entries: fs.Dirent[];
+      let entries: { name: string; isFile: boolean; isDirectory: boolean }[];
       try {
-        entries = await fsp.readdir(subagentsDir, { withFileTypes: true });
+        entries = await this.hostFs.readdir(subagentsDir);
       } catch {
         return false;
       }
 
       // Find most recent agent-*.jsonl
       const agentFiles = entries
-        .filter((e) => e.isFile() && e.name.startsWith('agent-') && e.name.endsWith('.jsonl'))
+        .filter((e) => e.isFile && e.name.startsWith('agent-') && e.name.endsWith('.jsonl'))
         .map((e) => e.name);
 
       if (agentFiles.length === 0) return false;
@@ -182,7 +169,7 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
     if (cached) return cached;
 
     try {
-      const { stdout } = await execAsync(`lsof -p ${pid} -Fn 2>/dev/null | grep '^n' | head -1`, {
+      const { stdout } = await this.shellExecFn(`lsof -p ${pid} -Fn 2>/dev/null | grep '^n' | head -1`, {
         timeout: 3000,
       });
       const line = stdout.trim();

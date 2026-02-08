@@ -7,5 +7,5 @@ export interface AppConfig {
 
 export interface ConfigPort {
   get(): AppConfig;
-  update(partial: Partial<AppConfig>): void;
+  update(partial: Partial<AppConfig>): void | Promise<void>;
 }

@@ -15,17 +15,21 @@ export class ListSessionsUseCase {
     const tmuxSessions = await this.tmux.listManagedSessions();
     const tmuxNames = new Set(tmuxSessions.map((s) => s.name));
 
+    const alive: SessionEntity[] = [];
+
     for (const session of sessions) {
-      if (session.status === 'running' && !tmuxNames.has(session.tmuxName)) {
-        session.markDead();
-        this.sessionStore.save(session);
-        this.logger.debug('Session marked dead (tmux session gone)', {
+      if (!tmuxNames.has(session.tmuxName)) {
+        // Tmux session is gone — remove from store
+        await this.sessionStore.remove(session.id);
+        this.logger.debug('Removed dead session (tmux session gone)', {
           id: session.id,
           tmuxName: session.tmuxName,
         });
+      } else {
+        alive.push(session);
       }
     }
 
-    return sessions;
+    return alive;
   }
 }

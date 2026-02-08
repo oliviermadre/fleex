@@ -17,7 +17,7 @@ import { dashboardWsPlugin } from './infrastructure/ws/dashboard-ws.js';
 import { repositoryWsPlugin } from './infrastructure/ws/repository-ws.js';
 
 async function main() {
-  const container = createContainer();
+  const container = await createContainer();
 
   // Discover existing asm_ tmux sessions
   await container.discoverSessions.execute();

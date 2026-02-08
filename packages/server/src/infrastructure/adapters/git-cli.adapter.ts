@@ -1,23 +1,23 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { basename, dirname } from 'node:path';
 import type { DiffStats, GitRemoteInfo, Worktree } from '@asm/shared';
 import type { GitPort } from '../../application/ports/git.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-
-const execFileAsync = promisify(execFile);
+import type { ExecFn } from '../host/types.js';
 
 export class GitCliAdapter implements GitPort {
-  constructor(private readonly logger: LoggerPort) {}
+  constructor(
+    private readonly execFn: ExecFn,
+    private readonly logger: LoggerPort,
+  ) {}
 
   async getInfo(cwd: string): Promise<GitRemoteInfo> {
-    const { stdout: remoteUrl } = await execFileAsync(
+    const { stdout: remoteUrl } = await this.execFn(
       'git',
       ['remote', 'get-url', 'origin'],
       { cwd },
     );
 
-    const { stdout: branchOut } = await execFileAsync(
+    const { stdout: branchOut } = await this.execFn(
       'git',
       ['branch', '--show-current'],
       { cwd },
@@ -32,12 +32,12 @@ export class GitCliAdapter implements GitPort {
     let isWorktree = false;
     let mainWorktreePath = cwd;
     try {
-      const { stdout: topLevel } = await execFileAsync(
+      const { stdout: topLevel } = await this.execFn(
         'git',
         ['rev-parse', '--show-toplevel'],
         { cwd },
       );
-      const { stdout: commonDir } = await execFileAsync(
+      const { stdout: commonDir } = await this.execFn(
         'git',
         ['rev-parse', '--git-common-dir'],
         { cwd },
@@ -59,7 +59,7 @@ export class GitCliAdapter implements GitPort {
   }
 
   async listBranches(repoPath: string): Promise<string[]> {
-    const { stdout } = await execFileAsync(
+    const { stdout } = await this.execFn(
       'git',
       ['branch', '-a', '--format=%(refname:short)'],
       { cwd: repoPath },
@@ -72,7 +72,7 @@ export class GitCliAdapter implements GitPort {
   }
 
   async listWorktrees(repoPath: string): Promise<Worktree[]> {
-    const { stdout } = await execFileAsync(
+    const { stdout } = await this.execFn(
       'git',
       ['worktree', 'list', '--porcelain'],
       { cwd: repoPath },
@@ -127,12 +127,12 @@ export class GitCliAdapter implements GitPort {
       args.push(wtPath, branch);
     }
 
-    await execFileAsync('git', args, { cwd: repoPath });
+    await this.execFn('git', args, { cwd: repoPath });
     this.logger.debug('Worktree created', { repoPath, wtPath, branch });
   }
 
   async removeWorktree(repoPath: string, wtPath: string): Promise<void> {
-    await execFileAsync('git', ['worktree', 'remove', wtPath], {
+    await this.execFn('git', ['worktree', 'remove', wtPath], {
       cwd: repoPath,
     });
     this.logger.debug('Worktree removed', { repoPath, wtPath });
@@ -140,7 +140,7 @@ export class GitCliAdapter implements GitPort {
 
   async getDefaultBranch(repoPath: string): Promise<string> {
     try {
-      const { stdout } = await execFileAsync(
+      const { stdout } = await this.execFn(
         'git',
         ['symbolic-ref', 'refs/remotes/origin/HEAD'],
         { cwd: repoPath },
@@ -156,7 +156,7 @@ export class GitCliAdapter implements GitPort {
   }
 
   async fetch(repoPath: string): Promise<void> {
-    await execFileAsync('git', ['fetch', '--prune'], { cwd: repoPath });
+    await this.execFn('git', ['fetch', '--prune'], { cwd: repoPath });
     this.logger.debug('Git fetch completed', { repoPath });
   }
 
@@ -167,7 +167,7 @@ export class GitCliAdapter implements GitPort {
     let commitsAhead = 0;
     let commitsBehind = 0;
     try {
-      const { stdout } = await execFileAsync(
+      const { stdout } = await this.execFn(
         'git',
         ['rev-list', '--left-right', '--count', `${base}...${branch}`],
         { cwd: repoPath, timeout },
@@ -183,7 +183,7 @@ export class GitCliAdapter implements GitPort {
     let additions = 0;
     let deletions = 0;
     try {
-      const { stdout } = await execFileAsync(
+      const { stdout } = await this.execFn(
         'git',
         ['diff', '--shortstat', `${base}...${branch}`],
         { cwd: repoPath, timeout },

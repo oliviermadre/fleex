@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
+    allowedHosts: ['.nip.io'],
     proxy: {
       '/api': {
         target: 'http://localhost:3000',

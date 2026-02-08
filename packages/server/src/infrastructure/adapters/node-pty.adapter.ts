@@ -1,28 +1,32 @@
-import { execFileSync } from 'node:child_process';
 import pty from 'node-pty';
 import type { PtyHandle, TerminalDimensions } from '@asm/shared';
 import type { PtyPort } from '../../application/ports/pty.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-
-function resolveTmuxPath(): string {
-  try {
-    return execFileSync('which', ['tmux'], { encoding: 'utf-8' }).trim();
-  } catch {
-    return 'tmux'; // fallback to PATH lookup
-  }
-}
-
-const TMUX_PATH = resolveTmuxPath();
+import type { ExecFn } from '../host/types.js';
 
 export class NodePtyAdapter implements PtyPort {
-  constructor(private readonly logger: LoggerPort) {}
+  private tmuxPath = 'tmux';
+
+  constructor(
+    private readonly execFn: ExecFn,
+    private readonly logger: LoggerPort,
+  ) {}
+
+  async init(): Promise<void> {
+    try {
+      const { stdout } = await this.execFn('which', ['tmux']);
+      this.tmuxPath = stdout.trim();
+    } catch {
+      this.tmuxPath = 'tmux';
+    }
+  }
 
   spawnAttach(tmuxSessionName: string, dims: TerminalDimensions): PtyHandle {
-    this.logger.debug('Using tmux at', { path: TMUX_PATH });
+    this.logger.debug('Using tmux at', { path: this.tmuxPath });
     // Strip TMUX/TMUX_PANE so tmux attach works even when
     // the server itself is running inside a tmux session.
     const { TMUX, TMUX_PANE, ...cleanEnv } = process.env;
-    const proc = pty.spawn(TMUX_PATH, ['attach', '-t', tmuxSessionName], {
+    const proc = pty.spawn(this.tmuxPath, ['attach', '-t', tmuxSessionName], {
       name: 'xterm-256color',
       cols: dims.cols,
       rows: dims.rows,

@@ -1,0 +1,7 @@
+{
+  "name": "@asm/host-gateway",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/main.ts"
+  }
+}

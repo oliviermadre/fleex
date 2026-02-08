@@ -1,9 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { PullRequest, GitHubIssue } from '@asm/shared';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-
-const execFileAsync = promisify(execFile);
+import type { ExecFn } from '../host/types.js';
 
 interface GraphQLPRNode {
   number: number;
@@ -48,12 +45,15 @@ const BATCH_SIZE = 8;
 export class GitHubGraphQLAdapter {
   private cachedUser: string | null = null;
 
-  constructor(private readonly logger: LoggerPort) {}
+  constructor(
+    private readonly execFn: ExecFn,
+    private readonly logger: LoggerPort,
+  ) {}
 
   async getCurrentUser(): Promise<string> {
     if (this.cachedUser) return this.cachedUser;
     try {
-      const { stdout } = await execFileAsync('gh', ['api', 'user', '--jq', '.login'], {
+      const { stdout } = await this.execFn('gh', ['api', 'user', '--jq', '.login'], {
         timeout: 10_000,
       });
       this.cachedUser = stdout.trim();
@@ -83,7 +83,7 @@ export class GitHubGraphQLAdapter {
 
   async getRateLimit(): Promise<RateLimitInfo> {
     try {
-      const { stdout } = await execFileAsync('gh', [
+      const { stdout } = await this.execFn('gh', [
         'api', 'graphql',
         '-f', 'query={ rateLimit { remaining resetAt } }',
         '--jq', '.data.rateLimit',
@@ -151,7 +151,7 @@ export class GitHubGraphQLAdapter {
     const query = `{ ${repoQueries.join('\n')} }`;
 
     try {
-      const { stdout } = await execFileAsync('gh', [
+      const { stdout } = await this.execFn('gh', [
         'api', 'graphql',
         '-f', `query=${query}`,
         '--jq', '.data',
@@ -231,7 +231,7 @@ export class GitHubGraphQLAdapter {
     const repoSlug = `${org}/${name}`;
 
     // Fetch open PRs
-    const { stdout: prOut } = await execFileAsync('gh', [
+    const { stdout: prOut } = await this.execFn('gh', [
       'pr', 'list', '--repo', repoSlug,
       '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt',
       '--limit', '50', '--state', 'open',
@@ -256,7 +256,7 @@ export class GitHubGraphQLAdapter {
     // Fetch merged PRs
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const dateStr = sevenDaysAgo.toISOString().split('T')[0];
-    const { stdout: mergedOut } = await execFileAsync('gh', [
+    const { stdout: mergedOut } = await this.execFn('gh', [
       'pr', 'list', '--repo', repoSlug,
       '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt,mergedAt',
       '--limit', '20', '--state', 'merged', '--search', `merged:>${dateStr}`,
@@ -280,7 +280,7 @@ export class GitHubGraphQLAdapter {
     }));
 
     // Fetch issues
-    const { stdout: issueOut } = await execFileAsync('gh', [
+    const { stdout: issueOut } = await this.execFn('gh', [
       'issue', 'list', '--repo', repoSlug,
       '--json', 'number,title,author,createdAt,updatedAt',
       '--state', 'open', '--limit', '50',

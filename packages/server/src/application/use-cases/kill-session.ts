@@ -24,7 +24,7 @@ export class KillSessionUseCase {
       });
     }
 
-    this.sessionStore.remove(sessionId);
+    await this.sessionStore.remove(sessionId);
     this.logger.info('Session killed', { id: sessionId, tmuxName: session.tmuxName });
   }
 }
