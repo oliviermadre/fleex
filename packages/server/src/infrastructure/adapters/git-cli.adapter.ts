@@ -202,6 +202,28 @@ export class GitCliAdapter implements GitPort {
     return { commitsAhead, commitsBehind, filesChanged, additions, deletions };
   }
 
+  async copyIgnoredFiles(sourceRepo: string, targetPath: string): Promise<void> {
+    const { stdout } = await this.execFn(
+      'git',
+      ['status', '--ignored', '--short'],
+      { cwd: sourceRepo },
+    );
+
+    const paths = stdout
+      .split('\n')
+      .filter(line => line.startsWith('!! '))
+      .map(line => line.slice(3).replace(/\/$/, ''));
+
+    if (paths.length === 0) return;
+
+    await this.execFn('sh', [
+      '-c',
+      `tar cf - ${paths.map(p => `'${p}'`).join(' ')} | tar xf - -C '${targetPath}'`,
+    ], { cwd: sourceRepo });
+
+    this.logger.debug('Copied gitignored files', { sourceRepo, targetPath, count: paths.length });
+  }
+
   private parseRemoteUrl(url: string): { org: string; name: string } {
     // Handle SSH: git@github.com:org/name.git
     const sshMatch = /[:/]([^/]+)\/([^/]+?)(?:\.git)?$/.exec(url);

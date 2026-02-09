@@ -25,6 +25,7 @@ export class CreateWorktreeUseCase {
         request.baseBranch,
       );
       this.logger.info('Worktree created', { repoPath, wtPath, branch: request.branch });
+      await this.copyIgnoredFiles(repoPath, wtPath);
       return null;
     } catch (err) {
       const stderr = (err as { stderr?: string }).stderr?.trim();
@@ -52,9 +53,19 @@ export class CreateWorktreeUseCase {
           request.baseBranch,
         );
         this.logger.info('Worktree replaced', { repoPath, wtPath, branch: request.branch });
+        await this.copyIgnoredFiles(repoPath, wtPath);
         return null;
       }
       throw new WorktreeError(`Failed to create worktree: ${message}`);
+    }
+  }
+
+  private async copyIgnoredFiles(repoPath: string, wtPath: string): Promise<void> {
+    try {
+      await this.git.copyIgnoredFiles(repoPath, wtPath);
+      this.logger.info('Copied gitignored files to worktree', { repoPath, wtPath });
+    } catch {
+      this.logger.warn('Failed to copy gitignored files to worktree', { repoPath, wtPath });
     }
   }
 }

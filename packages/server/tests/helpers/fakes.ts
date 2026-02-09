@@ -3,7 +3,7 @@ import type { SessionStorePort } from '../../src/application/ports/session-store
 import type { GitPort } from '../../src/application/ports/git.port.js';
 import type { ConfigPort, AppConfig } from '../../src/application/ports/config.port.js';
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
-import type { GitRemoteInfo, Worktree } from '@asm/shared';
+import type { DiffStats, GitRemoteInfo, Worktree } from '@asm/shared';
 import { SessionEntity } from '../../src/domain/entities.js';
 
 export class FakeTmuxPort implements TmuxPort {
@@ -103,6 +103,10 @@ export class FakeGitPort implements GitPort {
     return 'main';
   }
   async fetch(): Promise<void> {}
+  async getDiffStats(): Promise<DiffStats> {
+    return { commitsAhead: 0, commitsBehind: 0, filesChanged: 0, additions: 0, deletions: 0 };
+  }
+  async copyIgnoredFiles(): Promise<void> {}
 }
 
 export class FakeConfigPort implements ConfigPort {
