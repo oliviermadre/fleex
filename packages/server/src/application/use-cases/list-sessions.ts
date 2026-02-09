@@ -1,5 +1,5 @@
 import type { SessionEntity } from '../../domain/entities.js';
-import type { TmuxPort } from '../ports/tmux.port.js';
+import type { TmuxPort, TmuxSessionInfo } from '../ports/tmux.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 
@@ -12,7 +12,17 @@ export class ListSessionsUseCase {
 
   async execute(): Promise<SessionEntity[]> {
     const sessions = this.sessionStore.getAll();
-    const tmuxSessions = await this.tmux.listManagedSessions();
+
+    let tmuxSessions: TmuxSessionInfo[];
+    try {
+      tmuxSessions = await this.tmux.listManagedSessions();
+    } catch (err) {
+      this.logger.warn('Failed to list tmux sessions, skipping cleanup', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return sessions;
+    }
+
     const tmuxNames = new Set(tmuxSessions.map((s) => s.name));
 
     const alive: SessionEntity[] = [];

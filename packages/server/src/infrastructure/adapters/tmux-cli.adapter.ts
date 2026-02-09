@@ -84,9 +84,12 @@ export class TmuxCliAdapter implements TmuxPort {
             height: parseInt(parts[4] ?? '0', 10),
           };
         });
-    } catch {
-      // No tmux server running
-      return [];
+    } catch (err: any) {
+      // tmux exits with code 1 and "no server running" when there are genuinely no sessions
+      if (err.code === 1 || (err.message && err.message.includes('no server running'))) {
+        return [];
+      }
+      throw err;
     }
   }
 
@@ -98,5 +101,17 @@ export class TmuxCliAdapter implements TmuxPort {
   async sendKeys(name: string, keys: string): Promise<void> {
     await this.execFn('tmux', ['send-keys', '-t', name, keys, 'Enter']);
     this.logger.debug('tmux send-keys', { name });
+  }
+
+  async getSessionCwd(name: string): Promise<string | null> {
+    try {
+      const { stdout } = await this.execFn('tmux', [
+        'display-message', '-p', '-t', name, '#{pane_current_path}',
+      ]);
+      const cwd = stdout.trim();
+      return cwd || null;
+    } catch {
+      return null;
+    }
   }
 }

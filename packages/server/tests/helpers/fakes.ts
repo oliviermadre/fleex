@@ -9,6 +9,7 @@ import { SessionEntity } from '../../src/domain/entities.js';
 export class FakeTmuxPort implements TmuxPort {
   sessions = new Map<string, { cwd: string; command?: string }>();
   sentKeys: Array<{ name: string; keys: string }> = [];
+  listSessionsError: Error | null = null;
 
   async isAvailable(): Promise<boolean> {
     return true;
@@ -27,6 +28,7 @@ export class FakeTmuxPort implements TmuxPort {
   }
 
   async listSessions(): Promise<TmuxSessionInfo[]> {
+    if (this.listSessionsError) throw this.listSessionsError;
     return Array.from(this.sessions.entries()).map(([name]) => ({
       name,
       created: new Date().toISOString(),
@@ -42,6 +44,10 @@ export class FakeTmuxPort implements TmuxPort {
 
   async sendKeys(name: string, keys: string): Promise<void> {
     this.sentKeys.push({ name, keys });
+  }
+
+  async getSessionCwd(name: string): Promise<string | null> {
+    return this.sessions.get(name)?.cwd ?? null;
   }
 }
 

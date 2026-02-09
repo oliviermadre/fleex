@@ -14,4 +14,5 @@ export interface TmuxPort {
   listSessions(): Promise<TmuxSessionInfo[]>;
   listManagedSessions(): Promise<TmuxSessionInfo[]>;
   sendKeys(name: string, keys: string): Promise<void>;
+  getSessionCwd(name: string): Promise<string | null>;
 }
