@@ -132,7 +132,7 @@ export class GitCliAdapter implements GitPort {
   }
 
   async removeWorktree(repoPath: string, wtPath: string): Promise<void> {
-    await this.execFn('git', ['worktree', 'remove', wtPath], {
+    await this.execFn('git', ['worktree', 'remove', '--force', wtPath], {
       cwd: repoPath,
     });
     this.logger.debug('Worktree removed', { repoPath, wtPath });
