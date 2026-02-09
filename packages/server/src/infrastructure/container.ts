@@ -87,7 +87,7 @@ export async function createContainer() {
     listSessions: new ListSessionsUseCase(sessionStore, tmux, logger),
     killSession: new KillSessionUseCase(tmux, sessionStore, logger),
     getSessionGroups: new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity),
-    discoverSessions: new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger),
+    discoverSessions: new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git),
     listRepositories: new ListRepositoriesUseCase(git, config, logger),
     listWorktrees: new ListWorktreesUseCase(git, logger),
     createWorktree: new CreateWorktreeUseCase(git, logger),
