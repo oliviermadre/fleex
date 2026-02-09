@@ -29,7 +29,7 @@ export class DiscoverExistingSessionsUseCase {
         type,
         'running',
         '',
-        new Date(tmuxSession.created),
+        new Date(Number(tmuxSession.created) * 1000),
         null,
         null,
         null,
