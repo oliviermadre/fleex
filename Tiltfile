@@ -89,6 +89,7 @@ docker_build(
         './packages/shared/src',
         './packages/server/src',
         './packages/web/src',
+        './packages/web/public',
         './packages/web/index.html',
         './packages/web/vite.config.ts',
         './package.json',
@@ -114,6 +115,7 @@ docker_build(
         sync(_self_dir + '/packages/server/src', '/app/packages/server/src'),
         sync(_self_dir + '/packages/web/src',    '/app/packages/web/src'),
         sync(_self_dir + '/packages/web/index.html', '/app/packages/web/index.html'),
+        sync(_self_dir + '/packages/web/public', '/app/packages/web/public'),
         run(
             'cd /app && bun install',
             trigger=[
