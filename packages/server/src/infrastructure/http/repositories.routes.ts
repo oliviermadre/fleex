@@ -1,12 +1,8 @@
 import { join } from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { FastifyInstance } from 'fastify';
 import type { CreateWorktreeRequest, DiffStats, GitHubIssue, PullRequest, RepositorySummary } from '@asm/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
 import type { Container } from '../container.js';
-
-const execFileAsync = promisify(execFile);
 
 function sanitizeBranchForPath(branch: string): string {
   return branch.toLowerCase()
@@ -30,7 +26,7 @@ export function repositoryRoutes(container: Container) {
           return reply.code(400).send({ error: 'org query parameter is required' });
         }
         try {
-          const { stdout } = await execFileAsync('gh', [
+          const { stdout } = await container.execFn('gh', [
             'repo', 'list', org,
             '--json', 'nameWithOwner',
             '--limit', '200',
@@ -85,7 +81,7 @@ export function repositoryRoutes(container: Container) {
       async (request, reply) => {
         const { org, name } = request.params;
         try {
-          const { stdout } = await execFileAsync('gh', [
+          const { stdout } = await container.execFn('gh', [
             'pr', 'list',
             '--repo', `${org}/${name}`,
             '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt',
@@ -122,7 +118,7 @@ export function repositoryRoutes(container: Container) {
       async (request, reply) => {
         const { org, name } = request.params;
         try {
-          const { stdout } = await execFileAsync('gh', [
+          const { stdout } = await container.execFn('gh', [
             'issue', 'list',
             '--repo', `${org}/${name}`,
             '--assignee', '@me',
@@ -312,7 +308,7 @@ export function repositoryRoutes(container: Container) {
         try {
           const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
           const dateStr = sevenDaysAgo.toISOString().split('T')[0];
-          const { stdout } = await execFileAsync('gh', [
+          const { stdout } = await container.execFn('gh', [
             'pr', 'list', '--repo', `${org}/${name}`,
             '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt,mergedAt',
             '--limit', '20', '--state', 'merged', '--search', `merged:>${dateStr}`,

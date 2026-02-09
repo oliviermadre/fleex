@@ -73,6 +73,7 @@ export async function createContainer() {
 
   return {
     logger,
+    execFn,
     shellExecFn,
     config,
     tmux,
