@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSettingsStore, type PinnedIcon, type WorktreeAction } from '../../stores/settingsStore';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
@@ -135,6 +135,7 @@ export function SettingsPanel() {
               onAdd={addPinnedIcon}
               onUpdate={updatePinnedIcon}
               onRemove={removePinnedIcon}
+              onReorder={setPinnedIcons}
             />
           )}
           {settingsTab === 'worktree-actions' && (
@@ -143,6 +144,7 @@ export function SettingsPanel() {
               onAdd={addWorktreeAction}
               onUpdate={updateWorktreeAction}
               onRemove={removeWorktreeAction}
+              onReorder={setWorktreeActions}
             />
           )}
 
@@ -257,12 +259,64 @@ function PinnedIconsTab({
   onAdd,
   onUpdate,
   onRemove,
+  onReorder,
 }: {
   pinnedIcons: PinnedIcon[];
   onAdd: () => void;
   onUpdate: (index: number, patch: Partial<PinnedIcon>) => void;
   onRemove: (index: number) => void;
+  onReorder: (icons: PinnedIcon[]) => void;
 }) {
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dropEdge, setDropEdge] = useState<'top' | 'bottom'>('bottom');
+  const draggedIdRef = useRef<string | null>(null);
+
+  const handleDragStart = useCallback((id: string) => (e: React.DragEvent) => {
+    draggedIdRef.current = id;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-pinned-icon', id);
+    (e.currentTarget as HTMLElement).style.opacity = '0.4';
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    draggedIdRef.current = null;
+    setDragOverId(null);
+    (e.currentTarget as HTMLElement).style.opacity = '';
+  }, []);
+
+  const handleDragOver = useCallback((id: string) => (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('application/x-pinned-icon')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    setDropEdge(e.clientY < midY ? 'top' : 'bottom');
+    setDragOverId(id);
+  }, []);
+
+  const handleDragLeave = useCallback((id: string) => (e: React.DragEvent) => {
+    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+    if (dragOverId === id) setDragOverId(null);
+  }, [dragOverId]);
+
+  const handleDrop = useCallback((targetId: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('application/x-pinned-icon');
+    setDragOverId(null);
+    if (!draggedId || draggedId === targetId) return;
+
+    const items = [...pinnedIcons];
+    const fromIdx = items.findIndex((a) => a.id === draggedId);
+    if (fromIdx === -1) return;
+    const moved = items.splice(fromIdx, 1)[0];
+    if (!moved) return;
+    let toIdx = items.findIndex((a) => a.id === targetId);
+    if (toIdx === -1) return;
+    if (dropEdge === 'bottom') toIdx += 1;
+    items.splice(toIdx, 0, moved);
+    onReorder(items);
+  }, [pinnedIcons, dropEdge, onReorder]);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -282,12 +336,28 @@ function PinnedIconsTab({
 
       <div className="flex flex-col gap-3">
         {pinnedIcons.map((icon, i) => (
-          <PinnedIconEditor
+          <div
             key={icon.id}
-            icon={icon}
-            onUpdate={(patch) => onUpdate(i, patch)}
-            onRemove={() => onRemove(i)}
-          />
+            draggable
+            onDragStart={handleDragStart(icon.id)}
+            onDragEnd={handleDragEnd}
+            onDragOver={handleDragOver(icon.id)}
+            onDragLeave={handleDragLeave(icon.id)}
+            onDrop={handleDrop(icon.id)}
+            className="relative"
+          >
+            {dragOverId === icon.id && dropEdge === 'top' && (
+              <div className="absolute -top-1.5 left-0 right-0 h-0.5 rounded bg-[var(--theme-accent)]" />
+            )}
+            <PinnedIconEditor
+              icon={icon}
+              onUpdate={(patch) => onUpdate(i, patch)}
+              onRemove={() => onRemove(i)}
+            />
+            {dragOverId === icon.id && dropEdge === 'bottom' && (
+              <div className="absolute -bottom-1.5 left-0 right-0 h-0.5 rounded bg-[var(--theme-accent)]" />
+            )}
+          </div>
         ))}
       </div>
     </div>
@@ -299,12 +369,64 @@ function WorktreeActionsTab({
   onAdd,
   onUpdate,
   onRemove,
+  onReorder,
 }: {
   worktreeActions: WorktreeAction[];
   onAdd: () => void;
   onUpdate: (index: number, patch: Partial<WorktreeAction>) => void;
   onRemove: (index: number) => void;
+  onReorder: (actions: WorktreeAction[]) => void;
 }) {
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dropEdge, setDropEdge] = useState<'top' | 'bottom'>('bottom');
+  const draggedIdRef = useRef<string | null>(null);
+
+  const handleDragStart = useCallback((id: string) => (e: React.DragEvent) => {
+    draggedIdRef.current = id;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-worktree-action', id);
+    (e.currentTarget as HTMLElement).style.opacity = '0.4';
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    draggedIdRef.current = null;
+    setDragOverId(null);
+    (e.currentTarget as HTMLElement).style.opacity = '';
+  }, []);
+
+  const handleDragOver = useCallback((id: string) => (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('application/x-worktree-action')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    setDropEdge(e.clientY < midY ? 'top' : 'bottom');
+    setDragOverId(id);
+  }, []);
+
+  const handleDragLeave = useCallback((id: string) => (e: React.DragEvent) => {
+    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+    if (dragOverId === id) setDragOverId(null);
+  }, [dragOverId]);
+
+  const handleDrop = useCallback((targetId: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('application/x-worktree-action');
+    setDragOverId(null);
+    if (!draggedId || draggedId === targetId) return;
+
+    const items = [...worktreeActions];
+    const fromIdx = items.findIndex((a) => a.id === draggedId);
+    if (fromIdx === -1) return;
+    const moved = items.splice(fromIdx, 1)[0];
+    if (!moved) return;
+    let toIdx = items.findIndex((a) => a.id === targetId);
+    if (toIdx === -1) return;
+    if (dropEdge === 'bottom') toIdx += 1;
+    items.splice(toIdx, 0, moved);
+    onReorder(items);
+  }, [worktreeActions, dropEdge, onReorder]);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -318,6 +440,7 @@ function WorktreeActionsTab({
 
       <p className="text-xs text-[var(--theme-text-muted)]">
         Actions appear as icon buttons under each worktree header. Template variables are resolved per worktree.
+        {worktreeActions.length > 1 && ' Drag to reorder.'}
       </p>
 
       {worktreeActions.length === 0 && (
@@ -328,12 +451,28 @@ function WorktreeActionsTab({
 
       <div className="flex flex-col gap-3">
         {worktreeActions.map((action, i) => (
-          <WorktreeActionEditor
+          <div
             key={action.id}
-            action={action}
-            onUpdate={(patch) => onUpdate(i, patch)}
-            onRemove={() => onRemove(i)}
-          />
+            draggable
+            onDragStart={handleDragStart(action.id)}
+            onDragEnd={handleDragEnd}
+            onDragOver={handleDragOver(action.id)}
+            onDragLeave={handleDragLeave(action.id)}
+            onDrop={handleDrop(action.id)}
+            className="relative"
+          >
+            {dragOverId === action.id && dropEdge === 'top' && (
+              <div className="absolute -top-1.5 left-0 right-0 h-0.5 rounded bg-[var(--theme-accent)]" />
+            )}
+            <WorktreeActionEditor
+              action={action}
+              onUpdate={(patch) => onUpdate(i, patch)}
+              onRemove={() => onRemove(i)}
+            />
+            {dragOverId === action.id && dropEdge === 'bottom' && (
+              <div className="absolute -bottom-1.5 left-0 right-0 h-0.5 rounded bg-[var(--theme-accent)]" />
+            )}
+          </div>
         ))}
       </div>
 
