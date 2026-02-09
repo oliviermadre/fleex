@@ -1,13 +1,16 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
+import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { TERMINAL_THEME, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, TERMINAL_SCROLLBACK } from '../lib/constants';
 import type { Theme } from '../lib/themes';
+import { AsmClipboardProvider } from './clipboardProvider';
 
 interface TerminalInstance {
   terminal: Terminal;
   fitAddon: FitAddon;
   serializeAddon: SerializeAddon;
+  clipboardProvider: AsmClipboardProvider;
   serializedBuffer: string | null;
   sessionId: string;
   lastActiveAt: number;
@@ -28,18 +31,59 @@ class TerminalManager {
       scrollback: TERMINAL_SCROLLBACK,
       cursorBlink: true,
       allowProposedApi: true,
+      macOptionClickForcesSelection: true,
     });
 
     const fitAddon = new FitAddon();
     const serializeAddon = new SerializeAddon();
+    const clipboardProvider = new AsmClipboardProvider();
 
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(serializeAddon);
+    terminal.loadAddon(new ClipboardAddon(undefined, clipboardProvider));
+
+    // Diagnostic: log OSC 52 sequences from tmux
+    terminal.parser.registerOscHandler(52, (data) => {
+      console.debug('[ASM:OSC52] received', { len: data.length });
+      return false; // let ClipboardAddon handle it too
+    });
+
+    // Cmd+C (macOS) / Ctrl+Shift+C (Linux): copy from xterm selection or pending OSC 52 text
+    terminal.attachCustomKeyEventHandler((ev) => {
+      if (ev.type !== 'keydown' || ev.key !== 'c') return true;
+
+      const isMacCopy = ev.metaKey && !ev.shiftKey && !ev.ctrlKey;
+      const isLinuxCopy = ev.ctrlKey && ev.shiftKey && !ev.metaKey;
+      if (!isMacCopy && !isLinuxCopy) return true;
+
+      // Priority 1: xterm.js native selection (user gesture → clipboard works)
+      if (terminal.hasSelection()) {
+        navigator.clipboard.writeText(terminal.getSelection()).then(
+          () => console.debug('[ASM:Clipboard] copied xterm selection'),
+          (err) => console.warn('[ASM:Clipboard] failed to copy xterm selection', err),
+        );
+        return false;
+      }
+
+      // Priority 2: pending OSC 52 text that failed auto-write
+      const pending = clipboardProvider.consumePendingText();
+      if (pending) {
+        navigator.clipboard.writeText(pending).then(
+          () => console.debug('[ASM:Clipboard] copied pending OSC52 text'),
+          (err) => console.warn('[ASM:Clipboard] failed to copy pending OSC52 text', err),
+        );
+        return false;
+      }
+
+      // No selection, no pending → let event through (Ctrl+C = SIGINT, etc.)
+      return true;
+    });
 
     this.terminals.set(sessionId, {
       terminal,
       fitAddon,
       serializeAddon,
+      clipboardProvider,
       serializedBuffer: null,
       sessionId,
       lastActiveAt: Date.now(),
