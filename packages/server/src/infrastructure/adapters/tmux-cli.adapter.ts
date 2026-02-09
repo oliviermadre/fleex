@@ -38,6 +38,7 @@ export class TmuxCliAdapter implements TmuxPort {
 
     await this.execFn('tmux', args);
     await this.execFn('tmux', ['set-option', '-t', opts.name, 'mouse', 'on']);
+    await this.execFn('tmux', ['set-option', '-t', opts.name, 'set-clipboard', 'on']);
     // Override WheelUpPane to always enter copy-mode on scroll
     // (bypasses shell mouse tracking that would otherwise cycle command history)
     await this.execFn('tmux', [

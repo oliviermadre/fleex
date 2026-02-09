@@ -71,7 +71,7 @@ export class RemotePtyAdapter implements PtyPort {
     return {
       write(data: string) {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(Buffer.from(data, 'binary'));
+          ws.send(Buffer.from(data, 'utf-8'));
         }
       },
       resize(d: TerminalDimensions) {
