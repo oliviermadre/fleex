@@ -44,7 +44,7 @@ export function AppLayout() {
       <div className="overflow-hidden">
         <ContentPanel />
       </div>
-      <div className="relative flex" style={{ minWidth: 0 }}>
+      <div className="relative flex overflow-hidden" style={{ minWidth: 0 }}>
         <ResizeHandle />
         <MainPanel />
       </div>
