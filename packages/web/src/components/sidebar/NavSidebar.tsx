@@ -1,6 +1,7 @@
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
+import { HotkeyBadge } from '../ui/HotkeyBadge';
 import { cn } from '../../lib/cn';
 
 export function NavSidebar() {
@@ -28,6 +29,7 @@ export function NavSidebar() {
           active={activePanel === 'sessions'}
           collapsed={navCollapsed}
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
+          hotkey="⌥1"
           onClick={() => setActivePanel('sessions')}
         />
 
@@ -47,6 +49,7 @@ export function NavSidebar() {
           active={activePanel === 'repositories'}
           collapsed={navCollapsed}
           badge={repoCount > 0 ? (repoCount > 9 ? '9+' : String(repoCount)) : undefined}
+          hotkey="⌥2"
           onClick={() => setActivePanel('repositories')}
         />
       </div>
@@ -63,6 +66,7 @@ export function NavSidebar() {
           label="Settings"
           active={activePanel === 'settings'}
           collapsed={navCollapsed}
+          hotkey="⌥3"
           onClick={() => setActivePanel('settings')}
         />
       </div>
@@ -97,6 +101,7 @@ function NavItem({
   active,
   collapsed,
   badge,
+  hotkey,
   onClick,
 }: {
   icon: React.ReactNode;
@@ -104,6 +109,7 @@ function NavItem({
   active: boolean;
   collapsed: boolean;
   badge?: string;
+  hotkey?: string;
   onClick: () => void;
 }) {
   return (
@@ -125,6 +131,7 @@ function NavItem({
             {badge}
           </span>
         )}
+        {hotkey && <HotkeyBadge hotkey={hotkey} position="top-left" />}
       </span>
       {!collapsed && (
         <>

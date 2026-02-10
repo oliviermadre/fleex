@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { cn } from '../../lib/cn';
 
 export interface Column<T> {
@@ -19,6 +20,9 @@ interface DataTableProps<T> {
   loading?: boolean;
   emptyMessage?: string;
   maxHeight?: string;
+  keyboardNav?: boolean;
+  onConfirm?: (index: number) => void;
+  autoFocus?: boolean;
 }
 
 /** Flexible columns (no width, no shrink) get width:100% to fill remaining space. */
@@ -56,7 +60,48 @@ export function DataTable<T>({
   loading = false,
   emptyMessage = 'No data',
   maxHeight = 'max-h-64',
+  keyboardNav = false,
+  onConfirm,
+  autoFocus = false,
 }: DataTableProps<T>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
+
+  // Reset highlighted index when data changes
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [data]);
+
+  // Auto-focus container on mount
+  useEffect(() => {
+    if (autoFocus && keyboardNav && containerRef.current) {
+      containerRef.current.focus();
+    }
+  }, [autoFocus, keyboardNav]);
+
+  // Scroll highlighted row into view
+  useEffect(() => {
+    if (!keyboardNav || data.length === 0) return;
+    const row = containerRef.current?.querySelector(`[data-row-index="${highlightedIndex}"]`);
+    row?.scrollIntoView({ block: 'nearest' });
+  }, [highlightedIndex, keyboardNav, data.length]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!keyboardNav || data.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev >= data.length - 1 ? 0 : prev + 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev <= 0 ? data.length - 1 : prev - 1));
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      onSelect(highlightedIndex);
+      onConfirm?.(highlightedIndex);
+    }
+  };
+
   const alignClass = (align?: 'left' | 'center' | 'right') => {
     if (align === 'center') return 'text-center';
     if (align === 'right') return 'text-right';
@@ -66,7 +111,16 @@ export function DataTable<T>({
   const isFlex = (col: Column<T>) => !col.width && !col.shrink;
 
   return (
-    <div className={cn('overflow-auto rounded-md border border-[var(--theme-border)]', maxHeight)}>
+    <div
+      ref={containerRef}
+      className={cn(
+        'overflow-auto rounded-md border border-[var(--theme-border)]',
+        maxHeight,
+        keyboardNav && 'focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]',
+      )}
+      tabIndex={keyboardNav ? 0 : undefined}
+      onKeyDown={keyboardNav ? handleKeyDown : undefined}
+    >
       <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
         <thead className="sticky top-0 z-10 bg-[var(--theme-bg-overlay)]">
           <tr>
@@ -101,11 +155,14 @@ export function DataTable<T>({
             data.map((row, i) => (
               <tr
                 key={i}
+                data-row-index={i}
                 className={cn(
                   'cursor-pointer border-b border-[var(--theme-border-subtle)] transition-colors',
                   selectedIndex === i
                     ? 'bg-emerald-500/15 text-emerald-300'
-                    : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
+                    : keyboardNav && highlightedIndex === i
+                      ? 'bg-[var(--theme-bg-hover)] ring-1 ring-inset ring-[var(--theme-border-input)]'
+                      : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
                 )}
                 onClick={() => onSelect(i)}
               >

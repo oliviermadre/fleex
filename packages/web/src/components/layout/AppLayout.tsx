@@ -3,6 +3,7 @@ import { useWebSocket } from '../../hooks/useWebSocket';
 import { useSessions } from '../../hooks/useSessions';
 import { useRepositoryDashboard } from '../../hooks/useRepositoryDashboard';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { useHotkeyReveal } from '../../hooks/useHotkeyReveal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { NavSidebar } from '../sidebar/NavSidebar';
@@ -18,6 +19,7 @@ export function AppLayout() {
   useSessions();
   useRepositoryDashboard();
   useKeyboardShortcuts();
+  useHotkeyReveal();
 
   const navCollapsed = useUIStore((s) => s.navCollapsed);
   const contentPanelWidth = useUIStore((s) => s.contentPanelWidth);

@@ -20,6 +20,10 @@ interface UIState {
   settingsTab: SettingsTab;
   setSettingsTab: (tab: SettingsTab) => void;
 
+  // Alt key held state (for hotkey badge reveal)
+  altHeld: boolean;
+  setAltHeld: (held: boolean) => void;
+
   // Create session modal
   createModalOpen: boolean;
   openCreateModal: () => void;
@@ -39,6 +43,7 @@ export const useUIStore = create<UIState>((set) => ({
   contentPanelWidth: 320,
   activePanel: 'sessions',
   settingsTab: 'general',
+  altHeld: false,
   createModalOpen: false,
   collapsedGroups: new Set<string>(),
   selectedRepoKey: null,
@@ -47,6 +52,8 @@ export const useUIStore = create<UIState>((set) => ({
     set((state) => ({ navCollapsed: !state.navCollapsed })),
 
   setActivePanel: (panel) => set({ activePanel: panel }),
+
+  setAltHeld: (held) => set({ altHeld: held }),
 
   setSettingsTab: (tab) => set({ settingsTab: tab }),
 
