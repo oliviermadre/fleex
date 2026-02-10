@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useUIStore } from '../stores/uiStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useClaudeConfigStore } from '../stores/claudeConfigStore';
 
 export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
@@ -14,6 +15,8 @@ export function useKeyboardShortcuts() {
   const selectSession = useSessionStore((s) => s.selectSession);
   const closeSplit = useSessionStore((s) => s.closeSplit);
   const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
+  const activePanel = useUIStore((s) => s.activePanel);
+  const claudeConfigSaveFile = useClaudeConfigStore((s) => s.saveFile);
   const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
   const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
   const sessionOrder = useSettingsStore((s) => s.settings.sessionOrder);
@@ -74,12 +77,26 @@ export function useKeyboardShortcuts() {
         }
         if (e.code === 'Digit3') {
           e.preventDefault();
+          setActivePanel('claude-config');
+          return;
+        }
+        if (e.code === 'Digit4') {
+          e.preventDefault();
           setActivePanel('settings');
           return;
         }
       }
 
       const meta = e.metaKey || e.ctrlKey;
+
+      // Cmd+S: save file in claude-config panel
+      if (meta && e.key === 's') {
+        if (activePanel === 'claude-config') {
+          e.preventDefault();
+          claudeConfigSaveFile();
+          return;
+        }
+      }
 
       // Cmd+B: toggle nav sidebar
       if (meta && e.key === 'b') {
@@ -139,5 +156,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, setActivePanel, orderedSessionIds, selectedSessionId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane]);
+  }, [toggleNav, openCreateModal, setActivePanel, activePanel, claudeConfigSaveFile, orderedSessionIds, selectedSessionId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane]);
 }

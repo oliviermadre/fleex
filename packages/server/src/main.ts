@@ -11,6 +11,7 @@ import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
 import { healthRoutes } from './infrastructure/http/health.routes.js';
 import { configRoutes } from './infrastructure/http/config.routes.js';
 import { execRoutes } from './infrastructure/http/exec.routes.js';
+import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { registerErrorHandler } from './infrastructure/http/error-handler.js';
 import { terminalWsPlugin } from './infrastructure/ws/terminal-ws.js';
 import { dashboardWsPlugin } from './infrastructure/ws/dashboard-ws.js';
@@ -34,6 +35,7 @@ async function main() {
   await app.register(healthRoutes(container));
   await app.register(configRoutes(container));
   await app.register(execRoutes(container));
+  await app.register(claudeConfigRoutes(container));
 
   // Register WebSocket handlers
   await app.register(terminalWsPlugin(container));

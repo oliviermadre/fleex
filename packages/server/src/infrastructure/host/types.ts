@@ -18,5 +18,6 @@ export interface HostFs {
   stat(path: string): Promise<{ size: number; mtimeMs: number } | null>;
   exists(path: string): Promise<boolean>;
   mkdir(path: string): Promise<void>;
+  rm(path: string, options?: { recursive?: boolean }): Promise<void>;
   readTail(path: string, bytes: number): Promise<string>;
 }

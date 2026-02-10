@@ -75,6 +75,8 @@ export async function createContainer() {
     logger,
     execFn,
     shellExecFn,
+    hostFs,
+    hostHomedir,
     config,
     tmux,
     pty: ptyAdapter,

@@ -10,6 +10,7 @@ import type {
   DiffStats,
   RepositorySummary,
   RepositoryDashboardData,
+  ClaudeConfigTreeEntry,
 } from '@asm/shared';
 import { API_URL } from '../lib/constants';
 
@@ -147,4 +148,35 @@ export async function requestRepositoryRefresh(
 
 export async function fetchGitHubUser(): Promise<{ login: string }> {
   return request<{ login: string }>('/github/user');
+}
+
+// Claude Config API
+
+export async function fetchClaudeConfigTree(): Promise<ClaudeConfigTreeEntry[]> {
+  return request<ClaudeConfigTreeEntry[]>('/claude-config/tree');
+}
+
+export async function fetchClaudeConfigFile(path: string): Promise<{ content: string }> {
+  return request<{ content: string }>(`/claude-config/file?path=${encodeURIComponent(path)}`);
+}
+
+export async function saveClaudeConfigFile(path: string, content: string): Promise<void> {
+  await request<{ ok: boolean }>('/claude-config/file', {
+    method: 'PUT',
+    body: JSON.stringify({ path, content }),
+  });
+}
+
+export async function createClaudeConfigEntry(path: string, type: 'file' | 'directory'): Promise<void> {
+  await request<{ ok: boolean }>('/claude-config/create', {
+    method: 'POST',
+    body: JSON.stringify({ path, type }),
+  });
+}
+
+export async function deleteClaudeConfigEntry(path: string): Promise<void> {
+  await request<{ ok: boolean }>('/claude-config/file', {
+    method: 'DELETE',
+    body: JSON.stringify({ path }),
+  });
 }

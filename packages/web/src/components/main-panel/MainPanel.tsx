@@ -5,6 +5,7 @@ import { EmptyState } from './EmptyState';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { RepositoryDashboard } from '../repository-dashboard/RepositoryDashboard';
 import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
+import { ClaudeConfigEditor } from '../claude-config/ClaudeConfigEditor';
 
 export function MainPanel() {
   const activePanel = useUIStore((s) => s.activePanel);
@@ -22,6 +23,10 @@ export function MainPanel() {
 
   if (activePanel === 'settings') {
     return <SettingsPanel />;
+  }
+
+  if (activePanel === 'claude-config') {
+    return <ClaudeConfigEditor />;
   }
 
   if (activePanel === 'repositories') {

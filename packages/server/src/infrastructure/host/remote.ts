@@ -89,6 +89,10 @@ export class RemoteHostFs implements HostFs {
     await this.call({ op: 'mkdir', path });
   }
 
+  async rm(path: string, options?: { recursive?: boolean }): Promise<void> {
+    await this.call({ op: 'rm', path, recursive: options?.recursive ?? false });
+  }
+
   async readTail(path: string, bytes: number): Promise<string> {
     const data = await this.call({ op: 'readTail', path, bytes });
     return data.content;

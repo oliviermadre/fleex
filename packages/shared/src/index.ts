@@ -35,6 +35,8 @@ export type {
   TerminalTheme,
 } from './types/terminal.js';
 
+export type { ClaudeConfigTreeEntry } from './types/claude-config.js';
+
 export {
   ClientMessageType,
   ServerMessageType,
