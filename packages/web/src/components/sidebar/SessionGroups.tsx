@@ -77,12 +77,10 @@ export function SessionGroups() {
 
   if (sessionGroups.length === 0) {
     return (
-      <div className="flex flex-1 flex-col">
-        <div className="flex flex-1 items-center justify-center p-4">
-          <p className="text-xs text-[var(--theme-text-muted)]">No sessions</p>
-        </div>
+      <div className="flex flex-1 flex-col p-4 gap-3">
+        <p className="text-xs text-[var(--theme-text-muted)]">No sessions</p>
         <button
-          className="flex cursor-pointer items-center justify-center gap-2 border-t border-[var(--theme-border-subtle)] px-4 py-2.5 text-sm font-medium text-white bg-[var(--theme-accent-muted)] rounded-lg transition-all hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)]"
+          className="flex cursor-pointer items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[var(--theme-accent-muted)] rounded-lg transition-all hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)]"
           onClick={openCreateModal}
         >
           <PlusIcon size={16} />
