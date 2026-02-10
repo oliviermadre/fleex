@@ -174,6 +174,7 @@ export function SessionItem({ session }: Props) {
             : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]'
         )}
         onClick={handleKill}
+        onDoubleClick={(e) => e.stopPropagation()}
         title={confirmKill ? 'Click again to confirm kill' : 'Kill session'}
       >
         {confirmKill ? (
