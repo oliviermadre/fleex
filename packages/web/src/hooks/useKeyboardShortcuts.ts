@@ -6,6 +6,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
   const openCreateModal = useUIStore((s) => s.openCreateModal);
+  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
@@ -59,6 +60,30 @@ export function useKeyboardShortcuts() {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Alt-only combos (uses e.code for macOS Option key compatibility)
+      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        if (e.code === 'Digit1') {
+          e.preventDefault();
+          setActivePanel('sessions');
+          return;
+        }
+        if (e.code === 'Digit2') {
+          e.preventDefault();
+          setActivePanel('repositories');
+          return;
+        }
+        if (e.code === 'Digit3') {
+          e.preventDefault();
+          setActivePanel('settings');
+          return;
+        }
+        if (e.code === 'KeyN') {
+          e.preventDefault();
+          openCreateModal();
+          return;
+        }
+      }
+
       const meta = e.metaKey || e.ctrlKey;
 
       // Cmd+B: toggle nav sidebar
@@ -119,5 +144,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, orderedSessionIds, selectedSessionId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane]);
+  }, [toggleNav, openCreateModal, setActivePanel, orderedSessionIds, selectedSessionId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane]);
 }

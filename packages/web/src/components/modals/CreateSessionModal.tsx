@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { DiffStats, GitHubIssue, PullRequest, Worktree } from '@asm/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
@@ -9,6 +9,7 @@ import { Button } from '../ui/Button';
 import { DataTable } from '../ui/DataTable';
 import type { Column } from '../ui/DataTable';
 import { DiffStatsBadge } from '../ui/DiffStatsBadge';
+import { HotkeyBadge } from '../ui/HotkeyBadge';
 import { Autocomplete } from '../ui/Autocomplete';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
@@ -21,6 +22,8 @@ interface DefaultBranchInfo {
   currentBranch: string;
   isOnDefault: boolean;
 }
+
+const MODE_ORDER: WorktreeMode[] = ['main', 'existing', 'pr', 'issue', 'new'];
 
 export function CreateSessionModal() {
   const open = useUIStore((s) => s.createModalOpen);
@@ -36,7 +39,7 @@ export function CreateSessionModal() {
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
 
   const [selectedRepo, setSelectedRepo] = useState('');
-  const [worktreeMode, setWorktreeMode] = useState<WorktreeMode>('main');
+  const [worktreeMode, setWorktreeMode] = useState<WorktreeMode | null>(null);
   const [selectedWorktreeIndex, setSelectedWorktreeIndex] = useState<number | null>(null);
   const [selectedPRIndex, setSelectedPRIndex] = useState<number | null>(null);
   const [selectedIssueIndex, setSelectedIssueIndex] = useState<number | null>(null);
@@ -53,6 +56,11 @@ export function CreateSessionModal() {
   const [diffStatsByBranch, setDiffStatsByBranch] = useState<Record<string, DiffStats>>({});
   const [loadingDiffStats, setLoadingDiffStats] = useState(false);
 
+  // Refs for focus management
+  const modeContainerRef = useRef<HTMLDivElement>(null);
+  const branchInputRef = useRef<HTMLInputElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+
   const worktrees: Worktree[] = selectedRepo ? (worktreesByRepo[selectedRepo] ?? []) : [];
   const filteredWorktrees = useMemo(() => worktrees.filter((w) => !w.isBare), [worktrees]);
 
@@ -62,7 +70,7 @@ export function CreateSessionModal() {
     const [org, name] = selectedRepo.split('/');
     if (!org || !name) return;
 
-    setWorktreeMode('main');
+    setWorktreeMode(null);
     setSelectedWorktreeIndex(null);
     setSelectedPRIndex(null);
     setSelectedIssueIndex(null);
@@ -77,7 +85,21 @@ export function CreateSessionModal() {
     api.fetchDefaultBranch(org, name)
       .then(setDefaultBranchInfo)
       .catch(() => setDefaultBranchInfo(null));
+
+    // Auto-focus mode selector after repo selection
+    setTimeout(() => modeContainerRef.current?.focus(), 50);
   }, [selectedRepo, fetchWorktrees]);
+
+  // Auto-focus progression when mode changes
+  useEffect(() => {
+    if (!selectedRepo || !worktreeMode) return;
+    if (worktreeMode === 'new') {
+      setTimeout(() => branchInputRef.current?.focus(), 50);
+    } else if (worktreeMode === 'main') {
+      setTimeout(() => promptRef.current?.focus(), 50);
+    }
+    // For 'existing', 'pr', 'issue' — DataTable auto-focuses itself via autoFocus prop
+  }, [worktreeMode, selectedRepo]);
 
   // Fetch PRs when switching to PR or existing mode (for linking)
   const loadPRs = useCallback(() => {
@@ -302,8 +324,8 @@ export function CreateSessionModal() {
     [],
   );
 
-  const isCreateDisabled = (): boolean => {
-    if (!selectedRepo || creating) return true;
+  const isCreateDisabled = useCallback((): boolean => {
+    if (!selectedRepo || !worktreeMode || creating) return true;
     switch (worktreeMode) {
       case 'main':
         return defaultBranchInfo !== null && !defaultBranchInfo.isOnDefault;
@@ -316,10 +338,10 @@ export function CreateSessionModal() {
       case 'new':
         return !newBranchName.trim();
     }
-  };
+  }, [selectedRepo, creating, worktreeMode, defaultBranchInfo, selectedWorktreeIndex, selectedPRIndex, selectedIssueIndex, newBranchName]);
 
-  const handleCreate = async () => {
-    if (!selectedRepo) return;
+  const handleCreate = useCallback(async () => {
+    if (!selectedRepo || !worktreeMode) return;
     const [org, name] = selectedRepo.split('/');
     if (!org || !name) return;
 
@@ -410,11 +432,11 @@ export function CreateSessionModal() {
     } finally {
       setCreating(false);
     }
-  };
+  }, [selectedRepo, worktreeMode, defaultBranchInfo, basePath, selectedWorktreeIndex, filteredWorktrees, selectedPRIndex, pullRequests, selectedIssueIndex, issues, newBranchName, claudePrompt, addSession, selectSession, setSessionGroups, closeModal]);
 
   const resetForm = () => {
     setSelectedRepo('');
-    setWorktreeMode('main');
+    setWorktreeMode(null);
     setSelectedWorktreeIndex(null);
     setSelectedPRIndex(null);
     setSelectedIssueIndex(null);
@@ -431,6 +453,52 @@ export function CreateSessionModal() {
     closeModal();
     resetForm();
   };
+
+  // Number keys 1-5 for mode selection (scoped to open && selectedRepo)
+  useEffect(() => {
+    if (!open || !selectedRepo) return;
+
+    function handleModeKey(e: KeyboardEvent) {
+      // Skip when typing in inputs
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      const codeToIndex: Record<string, number> = {
+        Digit1: 0,
+        Digit2: 1,
+        Digit3: 2,
+        Digit4: 3,
+        Digit5: 4,
+      };
+
+      const index = codeToIndex[e.code];
+      const mode = index !== undefined ? MODE_ORDER[index] : undefined;
+      if (mode && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setWorktreeMode(mode);
+      }
+    }
+
+    window.addEventListener('keydown', handleModeKey);
+    return () => window.removeEventListener('keydown', handleModeKey);
+  }, [open, selectedRepo]);
+
+  // Cmd+Enter to submit (window-level for the modal)
+  useEffect(() => {
+    if (!open) return;
+
+    function handleCmdEnter(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!isCreateDisabled()) {
+          handleCreate();
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleCmdEnter);
+    return () => window.removeEventListener('keydown', handleCmdEnter);
+  }, [open, isCreateDisabled, handleCreate]);
 
   const modes: { value: WorktreeMode; label: string }[] = [
     { value: 'main', label: 'Main' },
@@ -460,12 +528,16 @@ export function CreateSessionModal() {
         {selectedRepo && (
           <div className="flex flex-col gap-1">
             <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Worktree</span>
-            <div className="flex gap-1 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
-              {modes.map((mode) => (
+            <div
+              ref={modeContainerRef}
+              className="flex gap-1 rounded-md bg-[var(--theme-bg-overlay)] p-0.5"
+              tabIndex={-1}
+            >
+              {modes.map((mode, index) => (
                 <button
                   key={mode.value}
                   className={cn(
-                    'flex-1 rounded px-3 py-1 text-sm font-medium transition-colors',
+                    'relative flex-1 rounded px-3 py-1 text-sm font-medium transition-colors',
                     worktreeMode === mode.value
                       ? 'bg-emerald-500/20 text-emerald-400'
                       : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
@@ -473,6 +545,7 @@ export function CreateSessionModal() {
                   onClick={() => setWorktreeMode(mode.value)}
                 >
                   {mode.label}
+                  <HotkeyBadge hotkey={String(index + 1)} visible={true} position="top-right" />
                 </button>
               ))}
             </div>
@@ -501,6 +574,12 @@ export function CreateSessionModal() {
             selectedIndex={selectedWorktreeIndex}
             onSelect={setSelectedWorktreeIndex}
             emptyMessage="No worktrees found"
+            keyboardNav
+            autoFocus
+            onConfirm={(index) => {
+              setSelectedWorktreeIndex(index);
+              setTimeout(() => promptRef.current?.focus(), 50);
+            }}
           />
         )}
 
@@ -512,6 +591,12 @@ export function CreateSessionModal() {
             onSelect={setSelectedPRIndex}
             loading={loadingPRs}
             emptyMessage="No open pull requests"
+            keyboardNav
+            autoFocus
+            onConfirm={(index) => {
+              setSelectedPRIndex(index);
+              setTimeout(() => promptRef.current?.focus(), 50);
+            }}
           />
         )}
 
@@ -523,6 +608,12 @@ export function CreateSessionModal() {
             onSelect={setSelectedIssueIndex}
             loading={loadingIssues}
             emptyMessage="No open issues assigned to you"
+            keyboardNav
+            autoFocus
+            onConfirm={(index) => {
+              setSelectedIssueIndex(index);
+              setTimeout(() => promptRef.current?.focus(), 50);
+            }}
           />
         )}
 
@@ -532,29 +623,45 @@ export function CreateSessionModal() {
               Branch name
             </label>
             <input
+              ref={branchInputRef}
               id="branch-name"
               type="text"
               className="rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               placeholder="feature/my-branch"
               value={newBranchName}
               onChange={(e) => setNewBranchName(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === 'Tab') && newBranchName.trim()) {
+                  e.preventDefault();
+                  promptRef.current?.focus();
+                }
+              }}
             />
           </div>
         )}
 
-        {/* Claude prompt — visible after repo selection */}
-        {selectedRepo && (
+        {/* Claude prompt — visible after mode selection */}
+        {selectedRepo && worktreeMode && (
           <div className="flex flex-col gap-1">
             <label htmlFor="prompt" className="text-xs font-medium text-[var(--theme-text-secondary)]">
               Claude prompt (optional)
             </label>
             <textarea
+              ref={promptRef}
               id="prompt"
               className="rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
               rows={3}
               placeholder="Enter a prompt for Claude..."
               value={claudePrompt}
               onChange={(e) => setClaudePrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  if (!isCreateDisabled()) {
+                    handleCreate();
+                  }
+                }
+              }}
             />
           </div>
         )}
@@ -578,6 +685,7 @@ export function CreateSessionModal() {
           disabled={isCreateDisabled()}
         >
           {creating ? 'Creating...' : 'Create Sessions'}
+          <HotkeyBadge hotkey="⌘↵" position="inline" visible={!isCreateDisabled()} />
         </Button>
       </div>
     </Modal>
