@@ -115,7 +115,7 @@ export function RepositoryGroup({ group }: Props) {
 
   return (
     <div
-      className="mx-1.5 my-1 overflow-hidden rounded-lg"
+      className="mx-1.5 my-1 rounded-lg"
       style={{ backgroundColor: getGroupColor(groupId) }}
     >
       <button
