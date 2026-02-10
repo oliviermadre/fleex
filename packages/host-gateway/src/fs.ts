@@ -8,6 +8,7 @@ type FsRequest =
   | { op: 'stat'; path: string }
   | { op: 'exists'; path: string }
   | { op: 'mkdir'; path: string }
+  | { op: 'rm'; path: string; recursive?: boolean }
   | { op: 'readTail'; path: string; bytes: number };
 
 export async function handleFs(body: FsRequest): Promise<unknown> {
@@ -52,6 +53,11 @@ export async function handleFs(body: FsRequest): Promise<unknown> {
 
     case 'mkdir': {
       await fsp.mkdir(body.path, { recursive: true });
+      return { ok: true };
+    }
+
+    case 'rm': {
+      await fsp.rm(body.path, { recursive: body.recursive ?? false });
       return { ok: true };
     }
 

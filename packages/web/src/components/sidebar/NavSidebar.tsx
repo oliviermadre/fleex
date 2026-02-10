@@ -52,6 +52,22 @@ export function NavSidebar() {
           hotkey="⌥2"
           onClick={() => setActivePanel('repositories')}
         />
+        {/* Claude Config */}
+        <NavItem
+          icon={
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 1.5H4.5A1.5 1.5 0 0 0 3 3v10a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V5.5L9 1.5z" />
+              <polyline points="9,1.5 9,5.5 13,5.5" />
+              <line x1="5.5" y1="8.5" x2="10.5" y2="8.5" />
+              <line x1="5.5" y1="11" x2="8.5" y2="11" />
+            </svg>
+          }
+          label="Claude Config"
+          active={activePanel === 'claude-config'}
+          collapsed={navCollapsed}
+          hotkey="⌥3"
+          onClick={() => setActivePanel('claude-config')}
+        />
       </div>
 
       {/* Settings - bottom of sidebar */}
@@ -66,7 +82,7 @@ export function NavSidebar() {
           label="Settings"
           active={activePanel === 'settings'}
           collapsed={navCollapsed}
-          hotkey="⌥3"
+          hotkey="⌥4"
           onClick={() => setActivePanel('settings')}
         />
       </div>

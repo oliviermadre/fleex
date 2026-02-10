@@ -63,6 +63,10 @@ export class LocalHostFs implements HostFs {
     await fsp.mkdir(path, { recursive: true });
   }
 
+  async rm(path: string, options?: { recursive?: boolean }): Promise<void> {
+    await fsp.rm(path, { recursive: options?.recursive ?? false });
+  }
+
   async readTail(path: string, bytes: number): Promise<string> {
     const handle = await fsp.open(path, 'r');
     try {
