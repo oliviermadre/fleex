@@ -4,6 +4,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { RepositoryGroup } from './RepositoryGroup';
 import { PlusIcon } from './icons';
+import { HotkeyBadge } from '../ui/HotkeyBadge';
 
 export function SessionGroups() {
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
@@ -80,11 +81,12 @@ export function SessionGroups() {
       <div className="flex flex-1 flex-col p-4 gap-3">
         <p className="text-xs text-[var(--theme-text-muted)]">No sessions</p>
         <button
-          className="flex cursor-pointer items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[var(--theme-accent-muted)] rounded-lg transition-all hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)]"
+          className="relative flex cursor-pointer items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[var(--theme-accent-muted)] rounded-lg transition-all hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)]"
           onClick={openCreateModal}
         >
           <PlusIcon size={16} />
           New Session
+          <HotkeyBadge hotkey="⌥⌘N" position="top-right" />
         </button>
       </div>
     );
@@ -117,11 +119,12 @@ export function SessionGroups() {
         );
       })}
       <button
-        className="mx-1.5 mt-3 mb-1 flex w-[calc(100%-12px)] cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white bg-[var(--theme-accent-muted)] transition-all hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)]"
+        className="relative mx-1.5 mt-3 mb-1 flex w-[calc(100%-12px)] cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white bg-[var(--theme-accent-muted)] transition-all hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)]"
         onClick={openCreateModal}
       >
         <PlusIcon size={16} />
         New Session
+        <HotkeyBadge hotkey="⌥⌘N" position="top-right" />
       </button>
     </div>
   );

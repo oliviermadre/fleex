@@ -1,5 +1,6 @@
 import { useUIStore } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
+import { HotkeyBadge } from '../ui/HotkeyBadge';
 
 export function EmptyState() {
   const openCreateModal = useUIStore((s) => s.openCreateModal);
@@ -16,9 +17,12 @@ export function EmptyState() {
         <line x1="12" y1="32" x2="28" y2="32" />
       </svg>
       <p className="text-sm">Select a session or create a new one</p>
-      <Button variant="primary" size="sm" onClick={openCreateModal}>
-        New Session
-      </Button>
+      <div className="relative">
+        <Button variant="primary" size="sm" onClick={openCreateModal}>
+          New Session
+        </Button>
+        <HotkeyBadge hotkey="⌥⌘N" position="top-right" />
+      </div>
     </div>
   );
 }
