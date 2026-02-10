@@ -77,11 +77,6 @@ export function useKeyboardShortcuts() {
           setActivePanel('settings');
           return;
         }
-        if (e.code === 'KeyN') {
-          e.preventDefault();
-          openCreateModal();
-          return;
-        }
       }
 
       const meta = e.metaKey || e.ctrlKey;
@@ -93,8 +88,8 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Cmd+N: new session
-      if (meta && e.key === 'n') {
+      // Cmd+N / Option+Cmd+N: new session (use e.code so Option dead-key doesn't mask the key)
+      if (meta && e.code === 'KeyN') {
         e.preventDefault();
         openCreateModal();
         return;
