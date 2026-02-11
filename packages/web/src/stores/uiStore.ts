@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type ActivePanel = 'sessions' | 'repositories' | 'claude-config' | 'settings';
+type ActivePanel = 'sessions' | 'repositories' | 'claude-config' | 'cluster' | 'settings';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions';
 
 interface UIState {

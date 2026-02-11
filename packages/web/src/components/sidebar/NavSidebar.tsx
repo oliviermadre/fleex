@@ -68,6 +68,24 @@ export function NavSidebar() {
           hotkey="⌥3"
           onClick={() => setActivePanel('claude-config')}
         />
+
+        {/* Cluster */}
+        <NavItem
+          icon={
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="8" cy="4" r="2" />
+              <circle cx="4" cy="12" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <line x1="8" y1="6" x2="4" y2="10" />
+              <line x1="8" y1="6" x2="12" y2="10" />
+            </svg>
+          }
+          label="Cluster"
+          active={activePanel === 'cluster'}
+          collapsed={navCollapsed}
+          hotkey="⌥4"
+          onClick={() => setActivePanel('cluster')}
+        />
       </div>
 
       {/* Settings - bottom of sidebar */}
@@ -82,7 +100,7 @@ export function NavSidebar() {
           label="Settings"
           active={activePanel === 'settings'}
           collapsed={navCollapsed}
-          hotkey="⌥4"
+          hotkey="⌥5"
           onClick={() => setActivePanel('settings')}
         />
       </div>

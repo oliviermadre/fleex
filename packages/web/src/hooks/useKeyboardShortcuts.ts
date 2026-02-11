@@ -82,6 +82,11 @@ export function useKeyboardShortcuts() {
         }
         if (e.code === 'Digit4') {
           e.preventDefault();
+          setActivePanel('cluster');
+          return;
+        }
+        if (e.code === 'Digit5') {
+          e.preventDefault();
           setActivePanel('settings');
           return;
         }
