@@ -24,6 +24,7 @@ export function AppLayout() {
   useHotkeyReveal();
 
   const navCollapsed = useUIStore((s) => s.navCollapsed);
+  const activePanel = useUIStore((s) => s.activePanel);
   const contentPanelWidth = useUIStore((s) => s.contentPanelWidth);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
 
@@ -32,13 +33,15 @@ export function AppLayout() {
   }, [loadSettings]);
 
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
+  const hideContentPanel = activePanel === 'cluster';
+  const effectiveContentWidth = hideContentPanel ? 0 : contentPanelWidth;
 
   return (
     <div
       className="flex h-screen w-screen overflow-hidden bg-[var(--theme-bg-base)]"
       style={{
         display: 'grid',
-        gridTemplateColumns: `${navWidth}px ${contentPanelWidth}px 1fr`,
+        gridTemplateColumns: `${navWidth}px ${effectiveContentWidth}px 1fr`,
         transition: 'grid-template-columns 150ms ease',
       }}
     >
@@ -48,8 +51,8 @@ export function AppLayout() {
       <div className="overflow-hidden">
         <ContentPanel />
       </div>
-      <div className="relative flex overflow-hidden" style={{ minWidth: 0 }}>
-        <ResizeHandle />
+      <div className="relative flex flex-1 overflow-hidden" style={{ minWidth: 0 }}>
+        {!hideContentPanel && <ResizeHandle />}
         <MainPanel />
       </div>
       <ScratchpadPanel />
