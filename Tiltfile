@@ -221,6 +221,9 @@ k8s_resource(
     APP_NAME,
     port_forwards=[],
     labels=['asm'],
+    links=[
+       link('https://' + HOSTNAME, 'Open'),
+    ]
 )
 
 print('  ASM: ' + _worktree_name + '  ->  https://' + HOSTNAME)
