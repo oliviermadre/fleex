@@ -46,7 +46,7 @@ export function AppLayout() {
       <div className="overflow-hidden">
         <NavSidebar />
       </div>
-      <div className="overflow-hidden" style={{ display: hideContentPanel ? 'none' : undefined }}>
+      <div className="overflow-hidden">
         <ContentPanel />
       </div>
       <div className="relative flex flex-1 overflow-hidden" style={{ minWidth: 0 }}>
