@@ -7,6 +7,14 @@ import { ActivityDot } from './ActivityDot';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
 
+function GroupBindIndicator() {
+  return (
+    <span className="ml-auto shrink-0 text-[8px] text-[var(--theme-accent)] font-bold uppercase tracking-wider">
+      bind
+    </span>
+  );
+}
+
 interface Props {
   session: Session;
 }
@@ -29,6 +37,11 @@ export function SessionItem({ session }: Props) {
   );
 
   const removeSession = useSessionStore((s) => s.removeSession);
+  const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
+  const activeGroupCellIndex = useSessionStore((s) => s.activeGroupCellIndex);
+  const bindLayoutGroupCell = useSettingsStore((s) => s.bindLayoutGroupCell);
+  const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
+  const hasActiveGroupCell = selectedGroupId !== null && activeGroupCellIndex !== null;
 
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -118,6 +131,12 @@ export function SessionItem({ session }: Props) {
           : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]'
       )}
       onClick={(e) => {
+        // Shift+click while a group cell is active: bind session to that cell
+        if (e.shiftKey && hasActiveGroupCell) {
+          bindLayoutGroupCell(selectedGroupId, activeGroupCellIndex, session.id);
+          setActiveGroupCellIndex(null);
+          return;
+        }
         // Shift+click: open in split pane
         if (e.shiftKey && selectedSessionId && selectedSessionId !== session.id) {
           openSplit(session.id);
@@ -163,6 +182,9 @@ export function SessionItem({ session }: Props) {
         <span className="min-w-0 flex-1 truncate text-[11px] leading-4">
           {displayName}
         </span>
+      )}
+      {hasActiveGroupCell && (
+        <GroupBindIndicator />
       )}
       <span
         role="button"

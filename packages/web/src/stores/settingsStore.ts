@@ -21,6 +21,14 @@ export interface WorktreeAction {
   actionValue: string;
 }
 
+export type SessionLayoutType = '1x2' | '2x2';
+
+export interface SessionLayoutGroup {
+  id: string;
+  type: SessionLayoutType;
+  cells: (string | null)[]; // session IDs bound to each cell, length 2 for 1x2, length 4 for 2x2
+}
+
 export interface AppSettings {
   basePath: string;
   repositories: string[];
@@ -34,6 +42,7 @@ export interface AppSettings {
   sessionOrder: Record<string, string[]>;
   activeThemeId: string;
   customThemes: Theme[];
+  sessionLayoutGroups: SessionLayoutGroup[];
 }
 
 interface SettingsState {
@@ -50,6 +59,9 @@ interface SettingsState {
   resolveRepositories: () => Promise<void>;
   executePinnedAction: (icon: PinnedIcon) => void;
   executeWorktreeAction: (action: WorktreeAction, context: WorktreeContext) => void;
+  addLayoutGroup: (type: SessionLayoutType) => string;
+  removeLayoutGroup: (id: string) => void;
+  bindLayoutGroupCell: (groupId: string, cellIndex: number, sessionId: string | null) => void;
 }
 
 const STORAGE_KEY = 'asm-settings';
@@ -67,6 +79,7 @@ const defaultSettings: AppSettings = {
   sessionOrder: {},
   activeThemeId: 'ember',
   customThemes: [],
+  sessionLayoutGroups: [],
 };
 
 function loadFromStorage(): AppSettings {
@@ -246,5 +259,53 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         body: JSON.stringify({ command: resolved }),
       }).catch(() => { /* ignore */ });
     }
+  },
+
+  addLayoutGroup: (type) => {
+    const current = get().settings;
+    const id = `group_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const cellCount = type === '2x2' ? 4 : 2;
+    const group: SessionLayoutGroup = { id, type, cells: Array(cellCount).fill(null) };
+    const sessionLayoutGroups = [...current.sessionLayoutGroups, group];
+    const updated = { ...current, sessionLayoutGroups };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
+    return id;
+  },
+
+  removeLayoutGroup: (id) => {
+    const current = get().settings;
+    const sessionLayoutGroups = current.sessionLayoutGroups.filter((g) => g.id !== id);
+    const updated = { ...current, sessionLayoutGroups };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
+  },
+
+  bindLayoutGroupCell: (groupId, cellIndex, sessionId) => {
+    const current = get().settings;
+    const sessionLayoutGroups = current.sessionLayoutGroups.map((g) => {
+      if (g.id !== groupId) return g;
+      const cells = [...g.cells];
+      cells[cellIndex] = sessionId;
+      return { ...g, cells };
+    });
+    const updated = { ...current, sessionLayoutGroups };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
   },
 }));
