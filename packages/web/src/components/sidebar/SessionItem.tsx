@@ -108,13 +108,13 @@ export function SessionItem({ session }: Props) {
   return (
     <button
       className={cn(
-        'group/session flex w-full items-center gap-2 px-3 py-1.5 text-left transition-all duration-200 border-l-2',
+        'group/session flex w-full items-center gap-2 px-3 py-1.5 text-left transition-all duration-200 border-l-3',
         (isSelected || isSplit)
           ? isFocusedInSplit
             ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-text-primary)]'
             : inSplitMode
               ? 'border-[var(--theme-border)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)] opacity-60'
-              : 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
+              : 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-text-primary)]'
           : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]'
       )}
       onClick={(e) => {
