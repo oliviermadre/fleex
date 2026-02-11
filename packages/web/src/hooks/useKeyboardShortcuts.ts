@@ -3,6 +3,8 @@ import { useUIStore } from '../stores/uiStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useClaudeConfigStore } from '../stores/claudeConfigStore';
+import * as api from '../services/api';
+import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
 
 export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
@@ -16,16 +18,44 @@ export function useKeyboardShortcuts() {
   const selectSession = useSessionStore((s) => s.selectSession);
   const closeSplit = useSessionStore((s) => s.closeSplit);
   const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
+  const addSession = useSessionStore((s) => s.addSession);
+  const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
   const activePanel = useUIStore((s) => s.activePanel);
   const claudeConfigSaveFile = useClaudeConfigStore((s) => s.saveFile);
+  const basePath = useSettingsStore((s) => s.settings.basePath);
   const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
   const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
   const sessionOrder = useSettingsStore((s) => s.settings.sessionOrder);
 
   // Build a flat list of session IDs in visual (sidebar) order,
-  // respecting repo order, worktree order, and session order.
+  // respecting system group first, then repo order, worktree order, and session order.
   const orderedSessionIds = useMemo(() => {
-    const sortedGroups = [...sessionGroups].sort((a, b) => {
+    const ids: string[] = [];
+
+    // System sessions first (ungrouped)
+    const systemGroup = sessionGroups.find(
+      (g) => g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped'
+    );
+    if (systemGroup) {
+      const sysSessOrder = sessionOrder[SYSTEM_GROUP_ID];
+      const allSystemSessions = systemGroup.worktrees.flatMap((wt) => wt.sessions);
+      const sortedSystemSessions = sysSessOrder && sysSessOrder.length > 0
+        ? [...allSystemSessions].sort((a, b) => {
+            const orderMap = new Map(sysSessOrder.map((id, i) => [id, i]));
+            return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
+          })
+        : allSystemSessions;
+      for (const s of sortedSystemSessions) {
+        ids.push(s.id);
+      }
+    }
+
+    // Repo groups
+    const repoSessionGroups = sessionGroups.filter(
+      (g) => !(g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped')
+    );
+
+    const sortedGroups = [...repoSessionGroups].sort((a, b) => {
       if (repoOrder.length === 0) return 0;
       const aId = `${a.repositoryOrg}/${a.repositoryName}`;
       const bId = `${b.repositoryOrg}/${b.repositoryName}`;
@@ -33,7 +63,6 @@ export function useKeyboardShortcuts() {
       return (orderMap.get(aId) ?? Infinity) - (orderMap.get(bId) ?? Infinity);
     });
 
-    const ids: string[] = [];
     for (const group of sortedGroups) {
       const repoId = `${group.repositoryOrg}/${group.repositoryName}`;
       const wtOrder = worktreeOrder[repoId];
@@ -96,6 +125,18 @@ export function useKeyboardShortcuts() {
         if (e.code === 'Digit5') {
           e.preventDefault();
           setActivePanel('settings');
+          return;
+        }
+
+        // Alt+T: new system shell session
+        if (e.code === 'KeyT') {
+          e.preventDefault();
+          const cwd = basePath || '~';
+          api.createSession({ cwd, type: 'shell' }).then((session) => {
+            addSession(session);
+            selectSession(session.id);
+            api.fetchSessionGroups().then((groups) => setSessionGroups(groups));
+          }).catch(() => { /* silently fail */ });
           return;
         }
       }
@@ -169,5 +210,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, setActivePanel, toggleScratchpad, activePanel, claudeConfigSaveFile, orderedSessionIds, selectedSessionId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane]);
+  }, [toggleNav, openCreateModal, setActivePanel, toggleScratchpad, activePanel, claudeConfigSaveFile, orderedSessionIds, selectedSessionId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, basePath, addSession, setSessionGroups]);
 }
