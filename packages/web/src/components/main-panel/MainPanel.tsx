@@ -25,6 +25,8 @@ export function MainPanel() {
   const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
   const sessions = useSessionStore((s) => s.sessions);
   const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
+  const activeGroupCellIndex = useSessionStore((s) => s.activeGroupCellIndex);
+  const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
   const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
@@ -66,9 +68,9 @@ export function MainPanel() {
             {cellSessions[0] ? (
               <SessionPane
                 session={cellSessions[0]}
-                focused={true}
+                focused={activeGroupCellIndex === null ? true : activeGroupCellIndex === 0}
                 isSplit={true}
-                onFocus={() => {}}
+                onFocus={() => setActiveGroupCellIndex(0)}
               />
             ) : (
               <GroupEmptyCell />
@@ -77,9 +79,9 @@ export function MainPanel() {
             {cellSessions[1] ? (
               <SessionPane
                 session={cellSessions[1]}
-                focused={false}
+                focused={activeGroupCellIndex === null ? false : activeGroupCellIndex === 1}
                 isSplit={true}
-                onFocus={() => {}}
+                onFocus={() => setActiveGroupCellIndex(1)}
               />
             ) : (
               <GroupEmptyCell />
@@ -95,9 +97,9 @@ export function MainPanel() {
             {cellSessions[0] ? (
               <SessionPane
                 session={cellSessions[0]}
-                focused={false}
+                focused={activeGroupCellIndex === null ? false : activeGroupCellIndex === 0}
                 isSplit={true}
-                onFocus={() => {}}
+                onFocus={() => setActiveGroupCellIndex(0)}
               />
             ) : (
               <GroupEmptyCell />
@@ -106,9 +108,9 @@ export function MainPanel() {
             {cellSessions[1] ? (
               <SessionPane
                 session={cellSessions[1]}
-                focused={false}
+                focused={activeGroupCellIndex === null ? false : activeGroupCellIndex === 1}
                 isSplit={true}
-                onFocus={() => {}}
+                onFocus={() => setActiveGroupCellIndex(1)}
               />
             ) : (
               <GroupEmptyCell />
@@ -119,9 +121,9 @@ export function MainPanel() {
             {cellSessions[2] ? (
               <SessionPane
                 session={cellSessions[2]}
-                focused={false}
+                focused={activeGroupCellIndex === null ? false : activeGroupCellIndex === 2}
                 isSplit={true}
-                onFocus={() => {}}
+                onFocus={() => setActiveGroupCellIndex(2)}
               />
             ) : (
               <GroupEmptyCell />
@@ -130,9 +132,9 @@ export function MainPanel() {
             {cellSessions[3] ? (
               <SessionPane
                 session={cellSessions[3]}
-                focused={false}
+                focused={activeGroupCellIndex === null ? false : activeGroupCellIndex === 3}
                 isSplit={true}
-                onFocus={() => {}}
+                onFocus={() => setActiveGroupCellIndex(3)}
               />
             ) : (
               <GroupEmptyCell />

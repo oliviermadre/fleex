@@ -24,6 +24,8 @@ export function useKeyboardShortcuts() {
   const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
   const addSession = useSessionStore((s) => s.addSession);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
+  const activeGroupCellIndex = useSessionStore((s) => s.activeGroupCellIndex);
+  const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
   const activePanel = useUIStore((s) => s.activePanel);
   const claudeConfigSaveFile = useClaudeConfigStore((s) => s.saveFile);
   const basePath = useSettingsStore((s) => s.settings.basePath);
@@ -190,6 +192,23 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Cmd+Shift+Left/Right: cycle focus in grouped panes
+      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedGroupId) {
+        e.preventDefault();
+        const group = layoutGroups.find((g) => g.id === selectedGroupId);
+        if (group) {
+          const cellCount = group.type === '1x2' ? 2 : 4;
+          if (e.key === 'ArrowRight') {
+            const next = activeGroupCellIndex === null ? 0 : (activeGroupCellIndex + 1) % cellCount;
+            setActiveGroupCellIndex(next);
+          } else {
+            const prev = activeGroupCellIndex === null ? cellCount - 1 : (activeGroupCellIndex - 1 + cellCount) % cellCount;
+            setActiveGroupCellIndex(prev);
+          }
+        }
+        return;
+      }
+
       // Cmd+Shift+Left/Right: toggle focus between split panes
       if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && splitSessionId) {
         e.preventDefault();
@@ -232,5 +251,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, setActivePanel, toggleScratchpad, activePanel, claudeConfigSaveFile, orderedNavIds, selectedSessionId, selectedGroupId, splitSessionId, focusedPane, selectSession, selectGroup, closeSplit, setFocusedPane, basePath, addSession, setSessionGroups]);
+  }, [toggleNav, openCreateModal, setActivePanel, toggleScratchpad, activePanel, claudeConfigSaveFile, orderedNavIds, selectedSessionId, selectedGroupId, splitSessionId, focusedPane, selectSession, selectGroup, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
 }
