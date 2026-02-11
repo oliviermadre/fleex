@@ -29,6 +29,11 @@ interface UIState {
   openCreateModal: () => void;
   closeCreateModal: () => void;
 
+  // Command palette
+  commandPaletteOpen: boolean;
+  openCommandPalette: () => void;
+  closeCommandPalette: () => void;
+
   // Group collapse state
   collapsedGroups: Set<string>;
   toggleGroup: (groupId: string) => void;
@@ -50,6 +55,7 @@ export const useUIStore = create<UIState>((set) => ({
   settingsTab: 'general',
   altHeld: false,
   createModalOpen: false,
+  commandPaletteOpen: false,
   collapsedGroups: new Set<string>(),
   scratchpadOpen: false,
 
@@ -74,6 +80,10 @@ export const useUIStore = create<UIState>((set) => ({
   openCreateModal: () => set({ createModalOpen: true }),
 
   closeCreateModal: () => set({ createModalOpen: false }),
+
+  openCommandPalette: () => set({ commandPaletteOpen: true }),
+
+  closeCommandPalette: () => set({ commandPaletteOpen: false }),
 
   toggleGroup: (groupId) =>
     set((state) => {

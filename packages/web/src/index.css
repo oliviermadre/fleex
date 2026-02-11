@@ -195,6 +195,94 @@ html, body {
   }
 }
 
+/* ── Command Palette ── */
+
+.command-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  justify-content: center;
+  padding-top: 20vh;
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: command-palette-fade-in 100ms ease-out forwards;
+}
+
+@keyframes command-palette-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.command-palette-container {
+  width: 560px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(80vh - 20vh);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  /* Liquid glass effect */
+  background:
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.02) 40%,
+      rgba(0, 0, 0, 0.12) 100%
+    ),
+    rgba(24, 24, 27, 0.82);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.5),
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  animation: command-palette-scale-in 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.command-palette-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  pointer-events: none;
+}
+
+@keyframes command-palette-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Results scrollbar */
+.command-palette-results::-webkit-scrollbar {
+  width: 6px;
+}
+.command-palette-results::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+.command-palette-results::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* Split panel: focused pane glow */
 .session-pane-focused {
   box-shadow:
