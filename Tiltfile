@@ -53,7 +53,7 @@ _worktree_name = _sanitize_k8s_name(_basename(_self_dir))
 # Constants
 # ---------------------------------------------------------------------------
 NAMESPACE    = 'asm-dev'
-APP_NAME     = 'asm-' + _worktree_name
+APP_NAME     = _sanitize_k8s_name('asm-' + _basename(_self_dir))
 HOSTNAME     = _worktree_name + '.127.0.0.1.nip.io'
 HOST_HOMEDIR = str(local('echo $HOME', quiet=True)).strip()
 

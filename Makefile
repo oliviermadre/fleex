@@ -3,7 +3,7 @@ INGRESS_MANIFEST := https://raw.githubusercontent.com/kubernetes/ingress-nginx/c
 
 # Derive worktree name from current directory
 WORKTREE_NAME  := $(shell basename "$$(pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
-APP_NAME       := asm-$(WORKTREE_NAME)
+APP_NAME       := $(shell printf 'asm-%s' '$(WORKTREE_NAME)' | cut -c1-63 | sed 's/-$$//')
 HOSTNAME       := $(WORKTREE_NAME).127.0.0.1.nip.io
 
 # ---- Status / info ---------------------------------------------------------
