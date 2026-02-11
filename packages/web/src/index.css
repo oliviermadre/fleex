@@ -58,6 +58,90 @@ html, body {
   animation: blink 1.5s ease-in-out infinite;
 }
 
+/* ── Scratchpad floating panel ── */
+
+.scratchpad-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.scratchpad-panel {
+  width: 50%;
+  max-width: 50vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+
+  /* Liquid glass effect */
+  background:
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.01) 40%,
+      rgba(0, 0, 0, 0.15) 100%
+    ),
+    rgba(24, 24, 27, 0.72);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    -20px 0 60px rgba(0, 0, 0, 0.4),
+    inset 1px 0 0 rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* Slide-in animation */
+  animation: scratchpad-slide-in 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes scratchpad-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Glass highlight shimmer on the left edge */
+.scratchpad-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  pointer-events: none;
+}
+
+/* Textarea scrollbar inside scratchpad */
+.scratchpad-panel textarea::-webkit-scrollbar {
+  width: 6px;
+}
+.scratchpad-panel textarea::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+/* Preview scrollbar */
+.scratchpad-panel .overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+.scratchpad-panel .overflow-y-auto::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
 /* Split panel: focused pane glow */
 .session-pane-focused {
   box-shadow:

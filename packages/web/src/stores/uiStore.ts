@@ -33,6 +33,11 @@ interface UIState {
   collapsedGroups: Set<string>;
   toggleGroup: (groupId: string) => void;
 
+  // Scratchpad panel
+  scratchpadOpen: boolean;
+  toggleScratchpad: () => void;
+  setScratchpadOpen: (open: boolean) => void;
+
   // Repository dashboard selection
   selectedRepoKey: string | null;
   selectRepo: (key: string | null) => void;
@@ -46,6 +51,13 @@ export const useUIStore = create<UIState>((set) => ({
   altHeld: false,
   createModalOpen: false,
   collapsedGroups: new Set<string>(),
+  scratchpadOpen: false,
+
+  toggleScratchpad: () =>
+    set((state) => ({ scratchpadOpen: !state.scratchpadOpen })),
+
+  setScratchpadOpen: (open) => set({ scratchpadOpen: open }),
+
   selectedRepoKey: null,
 
   toggleNav: () =>
