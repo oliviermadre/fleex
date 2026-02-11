@@ -180,3 +180,16 @@ export async function deleteClaudeConfigEntry(path: string): Promise<void> {
     body: JSON.stringify({ path }),
   });
 }
+
+// Scratchpad API
+
+export async function fetchScratchpad(): Promise<{ content: string }> {
+  return request<{ content: string }>('/scratchpad');
+}
+
+export async function saveScratchpad(content: string): Promise<void> {
+  await request<{ ok: boolean }>('/scratchpad', {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  });
+}

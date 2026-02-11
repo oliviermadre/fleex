@@ -8,6 +8,7 @@ export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
   const openCreateModal = useUIStore((s) => s.openCreateModal);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
+  const toggleScratchpad = useUIStore((s) => s.toggleScratchpad);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
@@ -63,6 +64,13 @@ export function useKeyboardShortcuts() {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Alt+Shift+P: toggle scratchpad panel
+      if (e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey && e.code === 'KeyP') {
+        e.preventDefault();
+        toggleScratchpad();
+        return;
+      }
+
       // Alt-only combos (uses e.code for macOS Option key compatibility)
       if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
         if (e.code === 'Digit1') {
@@ -156,5 +164,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, setActivePanel, activePanel, claudeConfigSaveFile, orderedSessionIds, selectedSessionId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane]);
+  }, [toggleNav, openCreateModal, setActivePanel, toggleScratchpad, activePanel, claudeConfigSaveFile, orderedSessionIds, selectedSessionId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane]);
 }

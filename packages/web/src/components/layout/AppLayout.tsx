@@ -10,6 +10,8 @@ import { NavSidebar } from '../sidebar/NavSidebar';
 import { ContentPanel } from '../sidebar/ContentPanel';
 import { MainPanel } from '../main-panel/MainPanel';
 import { ResizeHandle } from './ResizeHandle';
+import { ScratchpadPanel } from '../scratchpad/ScratchpadPanel';
+import { ScratchpadHint } from '../scratchpad/ScratchpadHint';
 
 const NAV_COLLAPSED_WIDTH = 48;
 const NAV_EXPANDED_WIDTH = 180;
@@ -50,6 +52,8 @@ export function AppLayout() {
         <ResizeHandle />
         <MainPanel />
       </div>
+      <ScratchpadPanel />
+      <ScratchpadHint />
     </div>
   );
 }
