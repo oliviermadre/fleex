@@ -11,6 +11,7 @@ const GROUP_PREFIX = 'group:';
 export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
   const openCreateModal = useUIStore((s) => s.openCreateModal);
+  const openCommandPalette = useUIStore((s) => s.openCommandPalette);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const toggleScratchpad = useUIStore((s) => s.toggleScratchpad);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
@@ -157,6 +158,13 @@ export function useKeyboardShortcuts() {
 
       const meta = e.metaKey || e.ctrlKey;
 
+      // Cmd+K: open command palette
+      if (meta && e.key === 'k') {
+        e.preventDefault();
+        openCommandPalette();
+        return;
+      }
+
       // Cmd+S: save file in claude-config panel
       if (meta && e.key === 's') {
         if (activePanel === 'claude-config') {
@@ -251,5 +259,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, setActivePanel, toggleScratchpad, activePanel, claudeConfigSaveFile, orderedNavIds, selectedSessionId, selectedGroupId, splitSessionId, focusedPane, selectSession, selectGroup, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
+  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, activePanel, claudeConfigSaveFile, orderedNavIds, selectedSessionId, selectedGroupId, splitSessionId, focusedPane, selectSession, selectGroup, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
 }
