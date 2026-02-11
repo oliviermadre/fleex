@@ -6,6 +6,8 @@ import { useClaudeConfigStore } from '../stores/claudeConfigStore';
 import * as api from '../services/api';
 import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
 
+const GROUP_PREFIX = 'group:';
+
 export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
   const openCreateModal = useUIStore((s) => s.openCreateModal);
@@ -16,20 +18,26 @@ export function useKeyboardShortcuts() {
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
   const focusedPane = useSessionStore((s) => s.focusedPane);
   const selectSession = useSessionStore((s) => s.selectSession);
+  const selectGroup = useSessionStore((s) => s.selectGroup);
+  const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
   const closeSplit = useSessionStore((s) => s.closeSplit);
   const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
   const addSession = useSessionStore((s) => s.addSession);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
+  const activeGroupCellIndex = useSessionStore((s) => s.activeGroupCellIndex);
+  const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
   const activePanel = useUIStore((s) => s.activePanel);
   const claudeConfigSaveFile = useClaudeConfigStore((s) => s.saveFile);
   const basePath = useSettingsStore((s) => s.settings.basePath);
   const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
   const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
   const sessionOrder = useSettingsStore((s) => s.settings.sessionOrder);
+  const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
 
   // Build a flat list of session IDs in visual (sidebar) order,
   // respecting system group first, then repo order, worktree order, and session order.
-  const orderedSessionIds = useMemo(() => {
+  // Layout groups are appended at the end with a 'group:' prefix.
+  const orderedNavIds = useMemo(() => {
     const ids: string[] = [];
 
     // System sessions first (ungrouped)
@@ -88,8 +96,14 @@ export function useKeyboardShortcuts() {
         }
       }
     }
+
+    // Append layout groups
+    for (const lg of layoutGroups) {
+      ids.push(`${GROUP_PREFIX}${lg.id}`);
+    }
+
     return ids;
-  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder]);
+  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder, layoutGroups]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -178,6 +192,23 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Cmd+Shift+Left/Right: cycle focus in grouped panes
+      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedGroupId) {
+        e.preventDefault();
+        const group = layoutGroups.find((g) => g.id === selectedGroupId);
+        if (group) {
+          const cellCount = group.type === '1x2' ? 2 : 4;
+          if (e.key === 'ArrowRight') {
+            const next = activeGroupCellIndex === null ? 0 : (activeGroupCellIndex + 1) % cellCount;
+            setActiveGroupCellIndex(next);
+          } else {
+            const prev = activeGroupCellIndex === null ? cellCount - 1 : (activeGroupCellIndex - 1 + cellCount) % cellCount;
+            setActiveGroupCellIndex(prev);
+          }
+        }
+        return;
+      }
+
       // Cmd+Shift+Left/Right: toggle focus between split panes
       if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && splitSessionId) {
         e.preventDefault();
@@ -185,30 +216,40 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Cmd+Shift+Up/Down: navigate sessions (selectSession exits split)
+      // Cmd+Shift+Up/Down: navigate sessions and groups (selectSession exits split)
       if (meta && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
-        if (orderedSessionIds.length === 0) return;
+        if (orderedNavIds.length === 0) return;
 
-        const currentIndex = selectedSessionId
-          ? orderedSessionIds.indexOf(selectedSessionId)
-          : -1;
+        // Determine current position in the navigation list
+        let currentIndex: number;
+        if (selectedGroupId) {
+          currentIndex = orderedNavIds.indexOf(`${GROUP_PREFIX}${selectedGroupId}`);
+        } else if (selectedSessionId) {
+          currentIndex = orderedNavIds.indexOf(selectedSessionId);
+        } else {
+          currentIndex = -1;
+        }
 
         let nextIndex: number;
         if (e.key === 'ArrowUp') {
-          nextIndex = currentIndex <= 0 ? orderedSessionIds.length - 1 : currentIndex - 1;
+          nextIndex = currentIndex <= 0 ? orderedNavIds.length - 1 : currentIndex - 1;
         } else {
-          nextIndex = currentIndex >= orderedSessionIds.length - 1 ? 0 : currentIndex + 1;
+          nextIndex = currentIndex >= orderedNavIds.length - 1 ? 0 : currentIndex + 1;
         }
 
-        const nextId = orderedSessionIds[nextIndex];
+        const nextId = orderedNavIds[nextIndex];
         if (nextId) {
-          selectSession(nextId);
+          if (nextId.startsWith(GROUP_PREFIX)) {
+            selectGroup(nextId.slice(GROUP_PREFIX.length));
+          } else {
+            selectSession(nextId);
+          }
         }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, setActivePanel, toggleScratchpad, activePanel, claudeConfigSaveFile, orderedSessionIds, selectedSessionId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, basePath, addSession, setSessionGroups]);
+  }, [toggleNav, openCreateModal, setActivePanel, toggleScratchpad, activePanel, claudeConfigSaveFile, orderedNavIds, selectedSessionId, selectedGroupId, splitSessionId, focusedPane, selectSession, selectGroup, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
 }

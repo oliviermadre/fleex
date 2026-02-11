@@ -7,6 +7,8 @@ interface SessionState {
   splitSessionId: string | null;
   focusedPane: 'primary' | 'split';
   sessionGroups: SessionGroup[];
+  selectedGroupId: string | null;
+  activeGroupCellIndex: number | null;
   setSessions: (sessions: Session[]) => void;
   setSessionGroups: (groups: SessionGroup[]) => void;
   selectSession: (id: string | null) => void;
@@ -16,6 +18,8 @@ interface SessionState {
   addSession: (session: Session) => void;
   removeSession: (id: string) => void;
   updateSessionStatus: (id: string, status: SessionStatus) => void;
+  selectGroup: (id: string | null) => void;
+  setActiveGroupCellIndex: (index: number | null) => void;
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -24,12 +28,14 @@ export const useSessionStore = create<SessionState>((set) => ({
   splitSessionId: null,
   focusedPane: 'primary',
   sessionGroups: [],
+  selectedGroupId: null,
+  activeGroupCellIndex: null,
 
   setSessions: (sessions) => set({ sessions }),
 
   setSessionGroups: (groups) => set({ sessionGroups: groups }),
 
-  selectSession: (id) => set({ selectedSessionId: id, splitSessionId: null, focusedPane: 'primary' }),
+  selectSession: (id) => set({ selectedSessionId: id, splitSessionId: null, focusedPane: 'primary', selectedGroupId: null, activeGroupCellIndex: null }),
 
   openSplit: (id) =>
     set((state) => {
@@ -97,4 +103,14 @@ export const useSessionStore = create<SessionState>((set) => ({
         s.id === id ? { ...s, status } : s
       ),
     })),
+
+  selectGroup: (id) => set({
+    selectedGroupId: id,
+    selectedSessionId: null,
+    splitSessionId: null,
+    focusedPane: 'primary',
+    activeGroupCellIndex: null,
+  }),
+
+  setActiveGroupCellIndex: (index) => set({ activeGroupCellIndex: index }),
 }));
