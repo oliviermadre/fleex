@@ -137,7 +137,7 @@ export function useKeyboardShortcuts() {
           setActivePanel('cluster');
           return;
         }
-        if (e.code === 'Digit5') {
+        if (e.code === 'Digit0') {
           e.preventDefault();
           setActivePanel('settings');
           return;
