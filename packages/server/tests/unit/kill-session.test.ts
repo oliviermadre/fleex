@@ -21,12 +21,12 @@ describe('KillSessionUseCase', () => {
       'test-id', 'asm_shell_abc12345', 'shell', 'running',
       '/tmp/test', new Date(), null, null, null, null, null,
     );
-    store.save(session);
+    await store.save(session);
     tmux.sessions.set('asm_shell_abc12345', { cwd: '/tmp/test' });
 
     await useCase.execute('test-id');
 
-    expect(store.getById('test-id')).toBeNull();
+    expect(await store.getById('test-id')).toBeNull();
     expect(tmux.sessions.has('asm_shell_abc12345')).toBe(false);
   });
 

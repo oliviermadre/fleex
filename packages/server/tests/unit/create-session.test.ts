@@ -54,7 +54,7 @@ describe('CreateSessionUseCase', () => {
     expect(tmux.sessions.has(session.tmuxName)).toBe(true);
 
     // Verify session was persisted
-    expect(store.getById(session.id)).not.toBeNull();
+    expect(await store.getById(session.id)).not.toBeNull();
   });
 
   it('should create a claude session with command', async () => {

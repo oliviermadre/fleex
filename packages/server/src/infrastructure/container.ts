@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { SessionNamingService } from '../domain/services/session-naming.js';
 import { SessionGroupingService } from '../domain/services/session-grouping.js';
+import { SessionReconciler } from '../domain/services/session-reconciler.js';
 import { RepositoryCache } from '../domain/services/repository-cache.js';
 import { RepositoryRefreshScheduler } from '../domain/services/repository-refresh-scheduler.js';
 import { CreateSessionUseCase } from '../application/use-cases/create-session.js';
@@ -72,6 +73,9 @@ export async function createContainer() {
   const claudeUsageAdapter = new TmuxClaudeUsageAdapter(execFn, config, logger);
   const getClaudeUsage = new GetClaudeUsageUseCase(claudeUsageAdapter, logger);
 
+  // Session reconciler
+  const reconciler = new SessionReconciler(sessionStore, tmux, config, logger);
+
   // Repository dashboard services
   const repositoryCache = new RepositoryCache();
   const githubGraphql = new GitHubGraphQLAdapter(execFn, logger);
@@ -88,6 +92,7 @@ export async function createContainer() {
     pty: ptyAdapter,
     git,
     sessionStore,
+    reconciler,
     repositoryCache,
     githubGraphql,
     repositoryRefreshScheduler,

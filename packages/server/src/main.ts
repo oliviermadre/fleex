@@ -25,6 +25,9 @@ async function main() {
   // Discover existing asm_ tmux sessions
   await container.discoverSessions.execute();
 
+  // Start the session reconciler (recreates missing tmux sessions every 5s)
+  container.reconciler.start();
+
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true });
   await app.register(websocket);
@@ -75,6 +78,11 @@ async function main() {
       return reply.code(404).send({ error: 'Not found' });
     });
   }
+
+  // Stop reconciler on server close
+  app.addHook('onClose', () => {
+    container.reconciler.stop();
+  });
 
   const port = parseInt(process.env['PORT'] ?? '3000', 10);
   await app.listen({ port, host: '0.0.0.0' });

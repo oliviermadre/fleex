@@ -54,31 +54,31 @@ export class FakeTmuxPort implements TmuxPort {
 export class FakeSessionStore implements SessionStorePort {
   private sessions = new Map<string, SessionEntity>();
 
-  save(session: SessionEntity): void {
+  async save(session: SessionEntity): Promise<void> {
     this.sessions.set(session.id, session);
   }
 
-  remove(sessionId: string): void {
+  async remove(sessionId: string): Promise<void> {
     this.sessions.delete(sessionId);
   }
 
-  getAll(): SessionEntity[] {
+  async getAll(): Promise<SessionEntity[]> {
     return Array.from(this.sessions.values());
   }
 
-  getById(id: string): SessionEntity | null {
+  async getById(id: string): Promise<SessionEntity | null> {
     return this.sessions.get(id) ?? null;
   }
 
-  getByTmuxName(name: string): SessionEntity | null {
+  async getByTmuxName(name: string): Promise<SessionEntity | null> {
     for (const session of this.sessions.values()) {
       if (session.tmuxName === name) return session;
     }
     return null;
   }
 
-  getByCwd(cwd: string): SessionEntity[] {
-    return this.getAll().filter((s) => s.cwd === cwd);
+  async getByCwd(cwd: string): Promise<SessionEntity[]> {
+    return (await this.getAll()).filter((s) => s.cwd === cwd);
   }
 }
 

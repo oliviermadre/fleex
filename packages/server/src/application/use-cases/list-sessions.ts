@@ -11,13 +11,13 @@ export class ListSessionsUseCase {
   ) {}
 
   async execute(): Promise<SessionEntity[]> {
-    const sessions = this.sessionStore.getAll();
+    const sessions = await this.sessionStore.getAll();
 
     let tmuxSessions: TmuxSessionInfo[];
     try {
       tmuxSessions = await this.tmux.listManagedSessions();
     } catch (err) {
-      this.logger.warn('Failed to list tmux sessions, skipping cleanup', {
+      this.logger.warn('Failed to list tmux sessions, skipping reconciliation marking', {
         error: err instanceof Error ? err.message : String(err),
       });
       return sessions;
@@ -25,21 +25,27 @@ export class ListSessionsUseCase {
 
     const tmuxNames = new Set(tmuxSessions.map((s) => s.name));
 
-    const alive: SessionEntity[] = [];
-
     for (const session of sessions) {
       if (!tmuxNames.has(session.tmuxName)) {
-        // Tmux session is gone — remove from store
-        await this.sessionStore.remove(session.id);
-        this.logger.debug('Removed dead session (tmux session gone)', {
+        if (session.status !== 'pending_reconciliation') {
+          session.markPendingReconciliation();
+          await this.sessionStore.save(session);
+          this.logger.debug('Marked session as pending_reconciliation (tmux session gone)', {
+            id: session.id,
+            tmuxName: session.tmuxName,
+          });
+        }
+      } else if (session.status === 'pending_reconciliation') {
+        // Tmux session is back (reconciler recreated it) — mark running again
+        session.status = 'running';
+        await this.sessionStore.save(session);
+        this.logger.debug('Session reconciled, marked as running', {
           id: session.id,
           tmuxName: session.tmuxName,
         });
-      } else {
-        alive.push(session);
       }
     }
 
-    return alive;
+    return sessions;
   }
 }

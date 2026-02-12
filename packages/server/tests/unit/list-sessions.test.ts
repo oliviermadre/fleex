@@ -16,7 +16,7 @@ describe('ListSessionsUseCase', () => {
     useCase = new ListSessionsUseCase(store, tmux, logger);
   });
 
-  it('should return alive sessions and remove dead ones', async () => {
+  it('should return alive sessions and mark dead ones as pending_reconciliation', async () => {
     const alive = new SessionEntity(
       'alive-id', 'asm_shell_alive123', 'shell', 'running',
       '/tmp/a', new Date(), null, null, null, null, null,
@@ -25,17 +25,22 @@ describe('ListSessionsUseCase', () => {
       'dead-id', 'asm_shell_dead1234', 'shell', 'running',
       '/tmp/b', new Date(), null, null, null, null, null,
     );
-    store.save(alive);
-    store.save(dead);
+    await store.save(alive);
+    await store.save(dead);
 
     // Only the alive session exists in tmux
     tmux.sessions.set('asm_shell_alive123', { cwd: '/tmp/a' });
 
     const result = await useCase.execute();
 
-    expect(result).toHaveLength(1);
-    expect(result[0]!.id).toBe('alive-id');
-    expect(store.getById('dead-id')).toBeNull();
+    // All sessions returned (alive + pending)
+    expect(result).toHaveLength(2);
+    const aliveResult = result.find((s) => s.id === 'alive-id');
+    const deadResult = result.find((s) => s.id === 'dead-id');
+    expect(aliveResult!.status).toBe('running');
+    expect(deadResult!.status).toBe('pending_reconciliation');
+    // Session is still in store, just marked
+    expect(await store.getById('dead-id')).not.toBeNull();
   });
 
   it('should return all stored sessions when tmux listing fails', async () => {
@@ -47,8 +52,8 @@ describe('ListSessionsUseCase', () => {
       'id-2', 'asm_claude_def1234', 'claude', 'running',
       '/tmp/b', new Date(), null, 'myorg', 'other', 'feat', 'https://github.com/myorg/other.git',
     );
-    store.save(session1);
-    store.save(session2);
+    await store.save(session1);
+    await store.save(session2);
 
     // Simulate a network/gateway error
     tmux.listSessionsError = new Error('connect ECONNREFUSED 192.168.1.100:9876');
@@ -60,24 +65,26 @@ describe('ListSessionsUseCase', () => {
     expect(result.map((s) => s.id).sort()).toEqual(['id-1', 'id-2']);
 
     // Sessions should still be in the store
-    expect(store.getById('id-1')).not.toBeNull();
-    expect(store.getById('id-2')).not.toBeNull();
+    expect(await store.getById('id-1')).not.toBeNull();
+    expect(await store.getById('id-2')).not.toBeNull();
 
     // Should have logged a warning
     expect(logger.logs.some((l) => l.level === 'warn' && l.msg.includes('Failed to list tmux sessions'))).toBe(true);
   });
 
-  it('should remove all sessions when tmux genuinely has none', async () => {
+  it('should mark all sessions as pending when tmux genuinely has none', async () => {
     const session = new SessionEntity(
       'id-1', 'asm_shell_abc12345', 'shell', 'running',
       '/tmp/a', new Date(), null, null, null, null, null,
     );
-    store.save(session);
+    await store.save(session);
 
     // tmux has no sessions (empty map) — no error, just empty
     const result = await useCase.execute();
 
-    expect(result).toHaveLength(0);
-    expect(store.getById('id-1')).toBeNull();
+    expect(result).toHaveLength(1);
+    expect(result[0]!.status).toBe('pending_reconciliation');
+    // Session still in store
+    expect(await store.getById('id-1')).not.toBeNull();
   });
 });

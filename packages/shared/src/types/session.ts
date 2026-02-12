@@ -1,5 +1,5 @@
 export type SessionType = 'shell' | 'claude';
-export type SessionStatus = 'running' | 'dead' | 'unknown';
+export type SessionStatus = 'running' | 'dead' | 'unknown' | 'pending_reconciliation';
 
 export interface SessionId {
   readonly value: string;

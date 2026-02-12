@@ -27,6 +27,10 @@ export class SessionEntity {
     this.status = 'dead';
   }
 
+  markPendingReconciliation(): void {
+    this.status = 'pending_reconciliation';
+  }
+
   isManaged(): boolean {
     return this.tmuxName.startsWith('asm_');
   }

@@ -19,7 +19,7 @@ export class DiscoverExistingSessionsUseCase {
     const managed = await this.tmux.listManagedSessions();
 
     for (const tmuxSession of managed) {
-      const existing = this.sessionStore.getByTmuxName(tmuxSession.name);
+      const existing = await this.sessionStore.getByTmuxName(tmuxSession.name);
       if (existing) continue;
 
       const type = this.namingService.parseType(tmuxSession.name);
@@ -53,7 +53,7 @@ export class DiscoverExistingSessionsUseCase {
     }
 
     // Re-enrich existing sessions that are missing metadata (e.g. discovered before a bug fix)
-    for (const session of this.sessionStore.getAll()) {
+    for (const session of await this.sessionStore.getAll()) {
       if (session.repositoryOrg || session.status === 'dead') continue;
 
       const metadata = await this.resolveMetadata(session.tmuxName);
