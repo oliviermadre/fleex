@@ -7,6 +7,7 @@ import type {
   CreateWorktreeRequest,
   PullRequest,
   GitHubIssue,
+  GitHubIssueDetail,
   DiffStats,
   RepositorySummary,
   RepositoryDashboardData,
@@ -134,6 +135,23 @@ export async function fetchRepositoryDashboard(
 export async function fetchMergedPulls(org: string, name: string): Promise<PullRequest[]> {
   return request<PullRequest[]>(
     `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/merged-pulls`,
+  );
+}
+
+export async function deleteWorktree(org: string, name: string, wtPath: string): Promise<void> {
+  await request<void>(
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`,
+    { method: 'DELETE', body: JSON.stringify({ path: wtPath }) },
+  );
+}
+
+export async function fetchIssueDetail(
+  org: string,
+  name: string,
+  issueNumber: number,
+): Promise<GitHubIssueDetail> {
+  return request<GitHubIssueDetail>(
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/issues/${issueNumber}`,
   );
 }
 

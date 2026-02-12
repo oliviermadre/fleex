@@ -31,18 +31,26 @@ export function MergedPRsSection({ org, name, mergedPRs, loading }: Props) {
       key: 'number',
       header: '#',
       shrink: true,
-      render: (row) => <span className="text-[11px] text-zinc-500">#{row.number}</span>,
+      render: (row) => <span className="text-zinc-500">#{row.number}</span>,
     },
     {
       key: 'title',
       header: 'Title',
-      render: (row) => <span className="truncate text-[11px]">{row.title}</span>,
+      render: (row) => <span className="truncate">{row.title}</span>,
+    },
+    {
+      key: 'branch',
+      header: 'Branch',
+      shrink: true,
+      render: (row) => (
+        <span className="font-mono text-xs text-zinc-500">{row.headRefName}</span>
+      ),
     },
     {
       key: 'author',
       header: 'Author',
       shrink: true,
-      render: (row) => <span className="text-[11px] text-zinc-400">{row.author}</span>,
+      render: (row) => <span className="text-zinc-400">{row.author}</span>,
     },
     {
       key: 'merged',
@@ -52,7 +60,7 @@ export function MergedPRsSection({ org, name, mergedPRs, loading }: Props) {
       render: (row) => {
         const date = row.mergedAt ?? row.updatedAt;
         return (
-          <span className="text-[11px] text-emerald-400/70" title={new Date(date).toLocaleString()}>
+          <span className="text-emerald-400/70" title={new Date(date).toLocaleString()}>
             {formatRelativeTime(date)}
           </span>
         );
@@ -61,31 +69,19 @@ export function MergedPRsSection({ org, name, mergedPRs, loading }: Props) {
   ];
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50">
-      <div className="flex items-center gap-2 px-4 py-2.5">
-        <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-          Recently Merged (7d)
-        </span>
-        <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
-          {mergedPRs.length}
-        </span>
-      </div>
-      <div className="px-4 pb-4">
-        <DataTable
-          columns={columns}
-          data={sorted}
-          selectedIndex={null}
-          onSelect={(i) => {
-            const pr = sorted[i];
-            if (pr) {
-              window.open(`https://github.com/${org}/${name}/pull/${pr.number}`, '_blank');
-            }
-          }}
-          loading={loading}
-          emptyMessage="No recently merged pull requests"
-          maxHeight="max-h-48"
-        />
-      </div>
-    </div>
+    <DataTable
+      columns={columns}
+      data={sorted}
+      selectedIndex={null}
+      onSelect={(i) => {
+        const pr = sorted[i];
+        if (pr) {
+          window.open(`https://github.com/${org}/${name}/pull/${pr.number}`, '_blank');
+        }
+      }}
+      loading={loading}
+      emptyMessage="No recently merged pull requests"
+      maxHeight="max-h-[calc(100vh-14rem)]"
+    />
   );
 }

@@ -56,3 +56,16 @@ export interface GitHubIssue {
   readonly createdAt: string;
   readonly updatedAt: string;
 }
+
+export interface GitHubIssueDetail {
+  readonly number: number;
+  readonly title: string;
+  readonly body: string;
+  readonly url: string;
+  readonly state: string;
+  readonly author: string;
+  readonly assignees: string[];
+  readonly labels: string[];
+  readonly milestone: string | null;
+  readonly comments: Array<{ author: string; body: string; createdAt: string }>;
+}

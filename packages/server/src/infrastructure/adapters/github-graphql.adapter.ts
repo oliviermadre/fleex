@@ -1,4 +1,4 @@
-import type { PullRequest, GitHubIssue } from '@asm/shared';
+import type { PullRequest, GitHubIssue, GitHubIssueDetail } from '@asm/shared';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn } from '../host/types.js';
 
@@ -79,6 +79,55 @@ export class GitHubGraphQLAdapter {
     }
 
     return results;
+  }
+
+  async fetchIssueDetail(org: string, name: string, number: number): Promise<GitHubIssueDetail> {
+    const query = `{
+      repository(owner: "${org}", name: "${name}") {
+        issue(number: ${number}) {
+          number title body url state
+          author { login }
+          assignees(first: 10) { nodes { login } }
+          labels(first: 20) { nodes { name } }
+          milestone { title }
+          comments(first: 100) {
+            nodes { author { login } body createdAt }
+          }
+        }
+      }
+    }`;
+
+    const { stdout } = await this.execFn('gh', [
+      'api', 'graphql',
+      '-f', `query=${query}`,
+      '--jq', '.data.repository.issue',
+    ], { timeout: 15_000 });
+
+    const raw = JSON.parse(stdout) as {
+      number: number; title: string; body: string; url: string; state: string;
+      author: { login: string } | null;
+      assignees: { nodes: { login: string }[] };
+      labels: { nodes: { name: string }[] };
+      milestone: { title: string } | null;
+      comments: { nodes: { author: { login: string } | null; body: string; createdAt: string }[] };
+    };
+
+    return {
+      number: raw.number,
+      title: raw.title,
+      body: raw.body ?? '',
+      url: raw.url,
+      state: raw.state,
+      author: raw.author?.login ?? 'unknown',
+      assignees: raw.assignees.nodes.map((a) => a.login),
+      labels: raw.labels.nodes.map((l) => l.name),
+      milestone: raw.milestone?.title ?? null,
+      comments: raw.comments.nodes.map((c) => ({
+        author: c.author?.login ?? 'unknown',
+        body: c.body,
+        createdAt: c.createdAt,
+      })),
+    };
   }
 
   async getRateLimit(): Promise<RateLimitInfo> {

@@ -1,8 +1,12 @@
-import { useState, useMemo } from 'react';
-import type { PullRequest, DiffStats } from '@asm/shared';
+import { useState, useMemo, useCallback } from 'react';
+import type { PullRequest, DiffStats, Worktree } from '@asm/shared';
+import { useUIStore } from '../../stores/uiStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { DataTable, type Column } from '../ui/DataTable';
 import { DiffStatsBadge } from '../ui/DiffStatsBadge';
 import { cn } from '../../lib/cn';
+import * as api from '../../services/api';
 
 interface Props {
   org: string;
@@ -10,6 +14,7 @@ interface Props {
   pullRequests: PullRequest[];
   diffStats: Record<string, DiffStats>;
   githubUser: string | null;
+  worktrees: Worktree[];
   loading: boolean;
 }
 
@@ -30,8 +35,12 @@ function isStale(dateStr: string): boolean {
   return Date.now() - new Date(dateStr).getTime() > 7 * 86400000;
 }
 
-export function PullRequestsSection({ org, name, pullRequests, diffStats, githubUser, loading }: Props) {
+export function PullRequestsSection({ org, name, pullRequests, diffStats, githubUser, worktrees, loading }: Props) {
   const [filter, setFilter] = useState<TabFilter>('all');
+  const [creating, setCreating] = useState<Set<number>>(new Set());
+  const setActivePanel = useUIStore((s) => s.setActivePanel);
+  const selectSession = useSessionStore((s) => s.selectSession);
+  const fetchDashboard = useRepositoryDashboardStore((s) => s.fetchDashboard);
 
   const filtered = useMemo(() => {
     if (filter === 'mine' && githubUser) {
@@ -42,6 +51,37 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
     }
     return pullRequests;
   }, [pullRequests, filter, githubUser]);
+
+  const handleCreateSession = useCallback(async (pr: PullRequest, type: 'shell' | 'claude') => {
+    if (creating.has(pr.number)) return;
+    setCreating((prev) => new Set(prev).add(pr.number));
+    try {
+      const existingWt = worktrees.find((wt) => wt.branch === pr.headRefName);
+      let cwd: string;
+      if (existingWt) {
+        cwd = existingWt.path;
+      } else {
+        const { path } = await api.createWorktree(org, name, {
+          branch: pr.headRefName,
+          createNewBranch: false,
+          prNumber: pr.number,
+        });
+        cwd = path;
+      }
+      const session = await api.createSession({ type, cwd });
+      selectSession(session.id);
+      setActivePanel('sessions');
+      fetchDashboard(org, name);
+    } catch {
+      // ignore
+    } finally {
+      setCreating((prev) => {
+        const next = new Set(prev);
+        next.delete(pr.number);
+        return next;
+      });
+    }
+  }, [creating, worktrees, org, name, selectSession, setActivePanel, fetchDashboard]);
 
   const columns: Column<PullRequest>[] = [
     {
@@ -70,7 +110,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
       header: 'Branch',
       shrink: true,
       render: (row) => (
-        <span className="font-mono text-[11px] text-zinc-500">{row.headRefName}</span>
+        <span className="font-mono text-xs text-zinc-500">{row.headRefName}</span>
       ),
     },
     {
@@ -93,50 +133,90 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
         </span>
       ),
     },
+    {
+      key: 'actions',
+      header: '',
+      shrink: true,
+      align: 'right',
+      render: (row) => {
+        const busy = creating.has(row.number);
+        return (
+          <span className="flex items-center justify-end gap-1.5">
+            <button
+              className={cn(
+                'rounded p-1.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300',
+                busy && 'pointer-events-none opacity-40',
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCreateSession(row, 'shell');
+              }}
+              title="New Shell Session"
+              disabled={busy}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
+                <polyline points="4.5,6.5 7,9 4.5,11.5" />
+                <line x1="9" y1="11.5" x2="11.5" y2="11.5" />
+              </svg>
+            </button>
+            <button
+              className={cn(
+                'rounded p-1.5 text-zinc-500 hover:bg-zinc-700 hover:text-[#D77655]',
+                busy && 'pointer-events-none opacity-40',
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCreateSession(row, 'claude');
+              }}
+              title="New Claude Session"
+              disabled={busy}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <circle cx="4" cy="8" r="1.5" />
+                <circle cx="8" cy="4" r="1.5" />
+                <circle cx="12" cy="8" r="1.5" />
+                <circle cx="8" cy="12" r="1.5" />
+              </svg>
+            </button>
+          </span>
+        );
+      },
+    },
   ];
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50">
-      <div className="flex items-center gap-2 px-4 py-2.5">
-        <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-          Open Pull Requests
-        </span>
-        <span className="rounded-full bg-zinc-700 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
-          {pullRequests.length}
-        </span>
-        <div className="ml-auto flex gap-1">
-          {(['all', 'mine', 'assigned'] as const).map((tab) => (
-            <button
-              key={tab}
-              className={cn(
-                'rounded px-2 py-0.5 text-[11px] transition-colors',
-                filter === tab
-                  ? 'bg-zinc-700 text-zinc-200'
-                  : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300',
-              )}
-              onClick={() => setFilter(tab)}
-            >
-              {tab === 'all' ? 'All' : tab === 'mine' ? 'Mine' : 'Assigned'}
-            </button>
-          ))}
-        </div>
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-1">
+        {(['all', 'mine', 'assigned'] as const).map((tab) => (
+          <button
+            key={tab}
+            className={cn(
+              'rounded px-2.5 py-1 text-xs transition-colors',
+              filter === tab
+                ? 'bg-zinc-700 text-zinc-200'
+                : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300',
+            )}
+            onClick={() => setFilter(tab)}
+          >
+            {tab === 'all' ? 'All' : tab === 'mine' ? 'Mine' : 'Assigned'}
+          </button>
+        ))}
       </div>
-      <div className="px-4 pb-4">
-        <DataTable
-          columns={columns}
-          data={filtered}
-          selectedIndex={null}
-          onSelect={(i) => {
-            const pr = filtered[i];
-            if (pr) {
-              window.open(`https://github.com/${org}/${name}/pull/${pr.number}`, '_blank');
-            }
-          }}
-          loading={loading}
-          emptyMessage="No open pull requests"
-          maxHeight="max-h-80"
-        />
-      </div>
+      <DataTable
+        columns={columns}
+        data={filtered}
+        selectedIndex={null}
+        onSelect={(i) => {
+          const pr = filtered[i];
+          if (pr) {
+            window.open(`https://github.com/${org}/${name}/pull/${pr.number}`, '_blank');
+          }
+        }}
+        loading={loading}
+        emptyMessage="No open pull requests"
+        maxHeight="max-h-[calc(100vh-14rem)]"
+      />
     </div>
   );
 }

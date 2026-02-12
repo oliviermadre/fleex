@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { CreateWorktreeRequest, DiffStats, GitHubIssue, PullRequest, RepositorySummary } from '@asm/shared';
+import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary } from '@asm/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
 import type { Container } from '../container.js';
 
@@ -65,6 +65,15 @@ export function repositoryRoutes(container: Container) {
         const wtPath = join(repoPath, '..', dirName);
         const existingPath = await container.createWorktree.execute(repoPath, wtPath, request.body);
         return reply.code(201).send({ path: existingPath ?? wtPath });
+      },
+    );
+
+    app.delete<{ Params: { org: string; name: string }; Body: { path: string } }>(
+      '/api/repositories/:org/:name/worktrees',
+      async (request, reply) => {
+        const repoPath = resolveRepoPath(container, request.params.org, request.params.name);
+        await container.git.removeWorktree(repoPath, request.body.path);
+        return reply.code(204).send();
       },
     );
 
@@ -152,6 +161,23 @@ export function repositoryRoutes(container: Container) {
         } catch (err) {
           container.logger.warn('Failed to list issues via gh CLI', { org, name, error: String(err) });
           return reply.code(502).send({ error: 'Failed to list issues from GitHub' });
+        }
+      },
+    );
+
+    app.get<{ Params: { org: string; name: string; number: string } }>(
+      '/api/repositories/:org/:name/issues/:number',
+      async (request, reply) => {
+        const { org, name } = request.params;
+        const issueNumber = parseInt(request.params.number, 10);
+        if (isNaN(issueNumber)) {
+          return reply.code(400).send({ error: 'Invalid issue number' });
+        }
+        try {
+          return await container.githubGraphql.fetchIssueDetail(org, name, issueNumber);
+        } catch (err) {
+          container.logger.warn('Failed to fetch issue detail', { org, name, number: issueNumber, error: String(err) });
+          return reply.code(502).send({ error: 'Failed to fetch issue detail from GitHub' });
         }
       },
     );
