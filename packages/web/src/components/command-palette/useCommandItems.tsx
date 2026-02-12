@@ -36,9 +36,12 @@ export function useCommandItems(query: string): CommandItem[] {
     // ── Sessions ──
     for (const session of sessions) {
       const displayName = sessionDisplayNames[session.id];
+      const descParts = [session.repositoryName, session.worktreeBranch].filter(Boolean);
+      const description = descParts.length > 0 ? descParts.join(' · ') : undefined;
       items.push({
         id: `session:${session.id}`,
         label: displayName || session.tmuxName,
+        description,
         category: 'session',
         categoryLabel: 'Sessions',
         icon: session.type === 'claude'

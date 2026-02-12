@@ -153,7 +153,12 @@ export function CommandPalette() {
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--theme-text-muted)]">
                     {item.icon}
                   </span>
-                  <span className="truncate">{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {item.description && (
+                    <span className="shrink-0 max-w-[45%] truncate text-[11px] text-[var(--theme-text-faint)]">
+                      {item.description}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
