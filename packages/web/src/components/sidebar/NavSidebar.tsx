@@ -98,7 +98,7 @@ export function NavSidebar() {
           label="Settings"
           active={activePanel === 'settings'}
           collapsed={navCollapsed}
-          hotkey="⌥5"
+          hotkey="⌥0"
           onClick={() => setActivePanel('settings')}
         />
       </div>
