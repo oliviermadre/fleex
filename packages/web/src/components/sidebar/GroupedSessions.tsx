@@ -35,8 +35,8 @@ function CellGrid({ group, selectedGroupId, activeGroupCellIndex, onCellClick }:
                 isActiveCell
                   ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
                   : cellSessionId
-                    ? 'border-[var(--theme-border)] bg-[var(--theme-bg-hover)]'
-                    : 'border-[var(--theme-border)] border-dashed bg-transparent'
+                    ? `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] bg-[var(--theme-bg-hover)]`
+                    : `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] border-dashed bg-transparent`
               )}
               title={label ?? 'Empty — click then shift-click a session to bind'}
               onClick={(e) => {
@@ -68,8 +68,8 @@ function CellGrid({ group, selectedGroupId, activeGroupCellIndex, onCellClick }:
               isActiveCell
                 ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
                 : cellSessionId
-                  ? 'border-[var(--theme-border)] bg-[var(--theme-bg-hover)]'
-                  : 'border-[var(--theme-border)] border-dashed bg-transparent'
+                  ? `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] bg-[var(--theme-bg-hover)]`
+                  : `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] border-dashed bg-transparent`
             )}
             title={label ?? 'Empty — click then shift-click a session to bind'}
             onClick={(e) => {
