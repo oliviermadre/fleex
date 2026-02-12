@@ -12,6 +12,7 @@ import { ListRepositoriesUseCase } from '../application/use-cases/list-repositor
 import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js';
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
+import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
@@ -19,6 +20,7 @@ import { JsonSessionStore } from './adapters/json-session-store.adapter.js';
 import { JsonConfigAdapter } from './adapters/json-config.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
+import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
 import { localExec, localShellExec, LocalHostFs } from './host/local.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
@@ -66,6 +68,10 @@ export async function createContainer() {
 
   const enrichClaudeActivity = new EnrichClaudeActivityUseCase(claudeState, logger);
 
+  // Claude usage
+  const claudeUsageAdapter = new TmuxClaudeUsageAdapter(execFn, config, logger);
+  const getClaudeUsage = new GetClaudeUsageUseCase(claudeUsageAdapter, logger);
+
   // Repository dashboard services
   const repositoryCache = new RepositoryCache();
   const githubGraphql = new GitHubGraphQLAdapter(execFn, logger);
@@ -93,6 +99,7 @@ export async function createContainer() {
     listRepositories: new ListRepositoriesUseCase(git, config, logger),
     listWorktrees: new ListWorktreesUseCase(git, logger),
     createWorktree: new CreateWorktreeUseCase(git, logger),
+    getClaudeUsage,
   };
 }
 

@@ -11,6 +11,7 @@ import type {
   RepositorySummary,
   RepositoryDashboardData,
   ClaudeConfigTreeEntry,
+  ClaudeUsage,
 } from '@asm/shared';
 import { API_URL } from '../lib/constants';
 
@@ -192,4 +193,14 @@ export async function saveScratchpad(content: string): Promise<void> {
     method: 'PUT',
     body: JSON.stringify({ content }),
   });
+}
+
+// Claude Usage API
+
+export async function fetchClaudeUsage(): Promise<ClaudeUsage | null> {
+  try {
+    return await request<ClaudeUsage>('/claude-usage');
+  } catch {
+    return null;
+  }
 }

@@ -37,3 +37,6 @@ export const REPO_REFRESH_LABELS: Record<number, string> = {
   0: 'Disabled',
 };
 export const DEFAULT_REPO_REFRESH_INTERVAL = 0;
+
+// Claude usage
+export const CLAUDE_USAGE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes

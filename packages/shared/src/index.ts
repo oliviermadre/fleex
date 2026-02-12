@@ -11,6 +11,8 @@ export type {
 
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
 
+export type { ClaudeUsageMetric, ClaudeUsage } from './types/claude-usage.js';
+
 export type {
   Repository,
   Worktree,
@@ -72,4 +74,5 @@ export {
   REPO_REFRESH_INTERVALS,
   REPO_REFRESH_LABELS,
   DEFAULT_REPO_REFRESH_INTERVAL,
+  CLAUDE_USAGE_CACHE_TTL_MS,
 } from './constants.js';
