@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import type { ClaudeUsageMetric } from '@asm/shared';
-import { useClaudeUsage } from '../../hooks/useClaudeUsage';
+import type { ClaudeUsage, ClaudeUsageMetric } from '@asm/shared';
 
 function parseTimeLeft(resetStr: string): string {
   // Formats: "Resets 12:59pm (Europe/Paris)", "Resets Feb 18 at 9am (Europe/Paris)"
@@ -213,9 +212,12 @@ function Gauge({ metric, label }: GaugeProps) {
   );
 }
 
-export function UsageGauges() {
-  const { usage, loading } = useClaudeUsage();
+interface UsageGaugesProps {
+  usage: ClaudeUsage | null;
+  loading: boolean;
+}
 
+export function UsageGauges({ usage, loading }: UsageGaugesProps) {
   if (loading || !usage) return null;
 
   const gauges: Array<{ metric: ClaudeUsageMetric; label: string }> = [];

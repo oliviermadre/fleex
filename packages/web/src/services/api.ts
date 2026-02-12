@@ -72,9 +72,10 @@ export async function createWorktree(
   );
 }
 
-export async function fetchPullRequests(org: string, name: string): Promise<PullRequest[]> {
+export async function fetchPullRequests(org: string, name: string, force = false): Promise<PullRequest[]> {
+  const qs = force ? '?force=true' : '';
   return request<PullRequest[]>(
-    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/pulls`
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/pulls${qs}`
   );
 }
 
@@ -197,9 +198,10 @@ export async function saveScratchpad(content: string): Promise<void> {
 
 // Claude Usage API
 
-export async function fetchClaudeUsage(): Promise<ClaudeUsage | null> {
+export async function fetchClaudeUsage(force = false): Promise<ClaudeUsage | null> {
   try {
-    return await request<ClaudeUsage>('/claude-usage');
+    const qs = force ? '?force=true' : '';
+    return await request<ClaudeUsage>(`/claude-usage${qs}`);
   } catch {
     return null;
   }

@@ -76,11 +76,14 @@ export function repositoryRoutes(container: Container) {
       },
     );
 
-    app.get<{ Params: { org: string; name: string } }>(
+    app.get<{ Params: { org: string; name: string }; Querystring: { force?: string } }>(
       '/api/repositories/:org/:name/pulls',
       async (request, reply) => {
         const { org, name } = request.params;
         const cacheKey = `pulls:${org}/${name}`;
+        if (request.query.force === 'true') {
+          container.repositoryCache.invalidate(cacheKey);
+        }
         const cached = container.repositoryCache.get<PullRequest[]>(cacheKey);
         if (cached) return cached.data;
 

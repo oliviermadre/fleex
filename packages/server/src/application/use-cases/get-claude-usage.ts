@@ -13,11 +13,11 @@ export class GetClaudeUsageUseCase {
     private readonly logger: LoggerPort,
   ) {}
 
-  async execute(): Promise<ClaudeUsage | null> {
+  async execute(force = false): Promise<ClaudeUsage | null> {
     const now = Date.now();
 
-    // Return cached if fresh
-    if (this.cached && now - this.cachedAt < CLAUDE_USAGE_CACHE_TTL_MS) {
+    // Return cached if fresh (unless forced)
+    if (!force && this.cached && now - this.cachedAt < CLAUDE_USAGE_CACHE_TTL_MS) {
       return this.cached;
     }
 

@@ -82,6 +82,27 @@ export function ExternalLinkIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function RefreshCwIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M13.5 2.5v3.5h-3.5" />
+      <path d="M2.5 13.5v-3.5h3.5" />
+      <path d="M3.5 5.5a5 5 0 0 1 8.3-1.5l1.7 2" />
+      <path d="M12.5 10.5a5 5 0 0 1-8.3 1.5l-1.7-2" />
+    </svg>
+  );
+}
+
 export function PlusIcon({ size = 16, className }: IconProps) {
   return (
     <svg
