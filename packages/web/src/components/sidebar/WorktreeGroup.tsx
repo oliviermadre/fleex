@@ -8,6 +8,7 @@ import { GitForkIcon, PlusIcon } from './icons';
 import { WorktreeActionsBar } from './WorktreeActionsBar';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
+import { usePullRequestStore } from '../../stores/pullRequestStore';
 
 interface Props {
   worktree: WorktreeSessionGroup;
@@ -24,6 +25,8 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
   const selectSession = useSessionStore((s) => s.selectSession);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
   const collapsed = collapsedGroups.has(groupId);
+  const repoKey = `${repositoryOrg}/${repositoryName}`;
+  const pr = usePullRequestStore((s) => s.pullsByRepo[repoKey]?.[worktree.branch]);
 
   const sessOrder = useSettingsStore((s) => s.settings.sessionOrder[groupId]);
   const setSessionOrder = useSettingsStore((s) => s.setSessionOrder);
@@ -132,6 +135,18 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
           </svg>
           <GitForkIcon size={12} className="shrink-0 text-[var(--theme-text-secondary)]" />
           <span className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">{worktree.branch}</span>
+          {pr && (
+            <a
+              href={`https://github.com/${repositoryOrg}/${repositoryName}/pull/${pr.number}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-1 shrink-0 rounded bg-[var(--theme-accent-muted)] px-1 py-0.5 text-[10px] font-medium text-[var(--theme-accent)] hover:bg-[var(--theme-accent)] hover:text-white"
+              onClick={(e) => e.stopPropagation()}
+              title={pr.title}
+            >
+              #{pr.number}
+            </a>
+          )}
           <span className="ml-auto shrink-0 text-[10px] text-[var(--theme-text-faint)]">{worktree.sessions.length}</span>
         </button>
         <button

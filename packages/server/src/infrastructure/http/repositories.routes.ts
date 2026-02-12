@@ -80,6 +80,10 @@ export function repositoryRoutes(container: Container) {
       '/api/repositories/:org/:name/pulls',
       async (request, reply) => {
         const { org, name } = request.params;
+        const cacheKey = `pulls:${org}/${name}`;
+        const cached = container.repositoryCache.get<PullRequest[]>(cacheKey);
+        if (cached) return cached.data;
+
         try {
           const { stdout } = await container.execFn('gh', [
             'pr', 'list',
@@ -97,7 +101,7 @@ export function repositoryRoutes(container: Container) {
             createdAt: string;
             updatedAt: string;
           }[];
-          return raw.map((pr): PullRequest => ({
+          const result = raw.map((pr): PullRequest => ({
             number: pr.number,
             title: pr.title,
             headRefName: pr.headRefName,
@@ -106,6 +110,8 @@ export function repositoryRoutes(container: Container) {
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
+          container.repositoryCache.set(cacheKey, result, RepositoryCache.TTL_PULLS);
+          return result;
         } catch (err) {
           container.logger.warn('Failed to list PRs via gh CLI', { org, name, error: String(err) });
           return reply.code(502).send({ error: 'Failed to list pull requests from GitHub' });
