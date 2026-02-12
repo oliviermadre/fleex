@@ -1,10 +1,9 @@
-import { useState, useCallback } from 'react';
-import type { Worktree, DiffStats } from '@asm/shared';
+import { useCallback } from 'react';
+import type { Worktree, DiffStats, PullRequest } from '@asm/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { DataTable, type Column } from '../ui/DataTable';
 import { DiffStatsBadge } from '../ui/DiffStatsBadge';
-import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
 
 interface Props {
@@ -12,15 +11,21 @@ interface Props {
   name: string;
   worktrees: Worktree[];
   diffStats: Record<string, DiffStats>;
+  openPullRequests: PullRequest[];
   loading: boolean;
 }
 
-export function WorktreesSection({ org, name, worktrees, diffStats, loading }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
+export function WorktreesSection({ org, name, worktrees, diffStats, openPullRequests, loading }: Props) {
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const selectSession = useSessionStore((s) => s.selectSession);
 
   const nonBareWorktrees = worktrees.filter((wt) => !wt.isBare);
+
+  // Build a map of branch name -> PR number for badge display
+  const branchToPR = new Map<string, number>();
+  for (const pr of openPullRequests) {
+    branchToPR.set(pr.headRefName, pr.number);
+  }
 
   const handleCreateSession = useCallback(async (wt: Worktree, type: 'shell' | 'claude') => {
     try {
@@ -48,9 +53,19 @@ export function WorktreesSection({ org, name, worktrees, diffStats, loading }: P
     {
       key: 'branch',
       header: 'Branch',
-      render: (row) => (
-        <span className="truncate font-mono text-[11px] text-zinc-200">{row.branch}</span>
-      ),
+      render: (row) => {
+        const prNumber = branchToPR.get(row.branch);
+        return (
+          <span className="flex items-center gap-1.5 truncate">
+            <span className="truncate font-mono text-[11px] text-zinc-200">{row.branch}</span>
+            {prNumber != null && (
+              <span className="shrink-0 rounded bg-blue-500/15 px-1 py-0.5 text-[10px] font-medium text-blue-400">
+                PR #{prNumber}
+              </span>
+            )}
+          </span>
+        );
+      },
     },
     {
       key: 'path',
@@ -111,37 +126,25 @@ export function WorktreesSection({ org, name, worktrees, diffStats, loading }: P
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/50">
-      <button
-        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-zinc-800/30"
-        onClick={() => setCollapsed(!collapsed)}
-      >
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 10 10"
-          fill="currentColor"
-          className={cn('text-zinc-500 transition-transform', collapsed ? 'rotate-0' : 'rotate-90')}
-        >
-          <path d="M3 1l5 4-5 4V1z" />
-        </svg>
-        <span className="text-sm font-medium text-zinc-200">Local Worktrees</span>
+      <div className="flex items-center gap-2 px-4 py-2.5">
+        <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+          Local Worktrees
+        </span>
         <span className="rounded-full bg-zinc-700 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
           {nonBareWorktrees.length}
         </span>
-      </button>
-      {!collapsed && (
-        <div className="px-4 pb-4">
-          <DataTable
-            columns={columns}
-            data={nonBareWorktrees}
-            selectedIndex={null}
-            onSelect={() => {}}
-            loading={loading}
-            emptyMessage="No local worktrees. Create one from a PR or branch."
-            maxHeight="max-h-48"
-          />
-        </div>
-      )}
+      </div>
+      <div className="px-4 pb-4">
+        <DataTable
+          columns={columns}
+          data={nonBareWorktrees}
+          selectedIndex={null}
+          onSelect={() => {}}
+          loading={loading}
+          emptyMessage="No local worktrees. Create one from a PR or branch."
+          maxHeight="max-h-48"
+        />
+      </div>
     </div>
   );
 }

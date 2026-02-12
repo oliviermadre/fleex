@@ -31,7 +31,6 @@ function isStale(dateStr: string): boolean {
 }
 
 export function PullRequestsSection({ org, name, pullRequests, diffStats, githubUser, loading }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
   const [filter, setFilter] = useState<TabFilter>('all');
 
   const filtered = useMemo(() => {
@@ -98,59 +97,46 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/50">
-      <button
-        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-zinc-800/30"
-        onClick={() => setCollapsed(!collapsed)}
-      >
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 10 10"
-          fill="currentColor"
-          className={cn('text-zinc-500 transition-transform', collapsed ? 'rotate-0' : 'rotate-90')}
-        >
-          <path d="M3 1l5 4-5 4V1z" />
-        </svg>
-        <span className="text-sm font-medium text-zinc-200">Open Pull Requests</span>
+      <div className="flex items-center gap-2 px-4 py-2.5">
+        <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+          Open Pull Requests
+        </span>
         <span className="rounded-full bg-zinc-700 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
           {pullRequests.length}
         </span>
-      </button>
-      {!collapsed && (
-        <div className="px-4 pb-4">
-          {/* Tab filters */}
-          <div className="mb-2 flex gap-1">
-            {(['all', 'mine', 'assigned'] as const).map((tab) => (
-              <button
-                key={tab}
-                className={cn(
-                  'rounded px-2 py-1 text-[11px] transition-colors',
-                  filter === tab
-                    ? 'bg-zinc-700 text-zinc-200'
-                    : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300',
-                )}
-                onClick={() => setFilter(tab)}
-              >
-                {tab === 'all' ? 'All' : tab === 'mine' ? 'Opened by me' : 'Assigned to me'}
-              </button>
-            ))}
-          </div>
-          <DataTable
-            columns={columns}
-            data={filtered}
-            selectedIndex={null}
-            onSelect={(i) => {
-              const pr = filtered[i];
-              if (pr) {
-                window.open(`https://github.com/${org}/${name}/pull/${pr.number}`, '_blank');
-              }
-            }}
-            loading={loading}
-            emptyMessage="No open pull requests"
-            maxHeight="max-h-64"
-          />
+        <div className="ml-auto flex gap-1">
+          {(['all', 'mine', 'assigned'] as const).map((tab) => (
+            <button
+              key={tab}
+              className={cn(
+                'rounded px-2 py-0.5 text-[11px] transition-colors',
+                filter === tab
+                  ? 'bg-zinc-700 text-zinc-200'
+                  : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300',
+              )}
+              onClick={() => setFilter(tab)}
+            >
+              {tab === 'all' ? 'All' : tab === 'mine' ? 'Mine' : 'Assigned'}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
+      <div className="px-4 pb-4">
+        <DataTable
+          columns={columns}
+          data={filtered}
+          selectedIndex={null}
+          onSelect={(i) => {
+            const pr = filtered[i];
+            if (pr) {
+              window.open(`https://github.com/${org}/${name}/pull/${pr.number}`, '_blank');
+            }
+          }}
+          loading={loading}
+          emptyMessage="No open pull requests"
+          maxHeight="max-h-80"
+        />
+      </div>
     </div>
   );
 }
