@@ -21,6 +21,7 @@ export type {
   PullRequest,
   DiffStats,
   GitHubIssue,
+  GitHubIssueDetail,
 } from './types/repository.js';
 
 export type {

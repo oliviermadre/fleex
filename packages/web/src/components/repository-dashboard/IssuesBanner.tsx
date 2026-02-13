@@ -1,24 +1,18 @@
-import { useState, useMemo, useCallback } from 'react';
-import type { PullRequest, DiffStats, Worktree } from '@asm/shared';
+import { useState, useCallback } from 'react';
+import type { GitHubIssue, GitHubIssueDetail } from '@asm/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { DataTable, type Column } from '../ui/DataTable';
-import { DiffStatsBadge } from '../ui/DiffStatsBadge';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
 
 interface Props {
   org: string;
   name: string;
-  pullRequests: PullRequest[];
-  diffStats: Record<string, DiffStats>;
-  githubUser: string | null;
-  worktrees: Worktree[];
+  issues: GitHubIssue[];
   loading: boolean;
 }
-
-type TabFilter = 'all' | 'mine' | 'assigned';
 
 function formatRelativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -31,45 +25,75 @@ function formatRelativeTime(dateStr: string): string {
   return `${minutes}m`;
 }
 
-function isStale(dateStr: string): boolean {
-  return Date.now() - new Date(dateStr).getTime() > 7 * 86400000;
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .split(/\s+/)
+    .slice(0, 5)
+    .join('-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50);
 }
 
-export function PullRequestsSection({ org, name, pullRequests, diffStats, githubUser, worktrees, loading }: Props) {
-  const [filter, setFilter] = useState<TabFilter>('all');
+function formatClaudePrompt(detail: GitHubIssueDetail): string {
+  const lines: string[] = [
+    'Read carefully the following GitHub issue and plan a fix for it.',
+    '',
+    `# Issue #${detail.number}: ${detail.title}`,
+    `URL: ${detail.url}`,
+    `Author: ${detail.author} | State: ${detail.state}`,
+    `Labels: ${detail.labels.length > 0 ? detail.labels.join(', ') : 'none'}`,
+    `Assignees: ${detail.assignees.length > 0 ? detail.assignees.join(', ') : 'none'}`,
+    `Milestone: ${detail.milestone ?? 'none'}`,
+    '',
+    '## Description',
+    detail.body || '_No description provided._',
+  ];
+
+  if (detail.comments.length > 0) {
+    lines.push('', `## Comments (${detail.comments.length})`);
+    for (const c of detail.comments) {
+      lines.push(`### ${c.author} — ${new Date(c.createdAt).toLocaleDateString()}`, c.body, '---');
+    }
+  }
+
+  lines.push(
+    '',
+    'Please analyze this issue thoroughly, understand the root cause, explore the codebase to identify the relevant files, and propose a detailed implementation plan to fix it.',
+  );
+
+  return lines.join('\n');
+}
+
+export function IssuesBanner({ org, name, issues, loading }: Props) {
   const [creating, setCreating] = useState<Set<number>>(new Set());
   const setActivePanel = useUIStore((s) => s.setActivePanel);
   const selectSession = useSessionStore((s) => s.selectSession);
   const fetchDashboard = useRepositoryDashboardStore((s) => s.fetchDashboard);
 
-  const filtered = useMemo(() => {
-    if (filter === 'mine' && githubUser) {
-      return pullRequests.filter((pr) => pr.author === githubUser);
-    }
-    if (filter === 'assigned' && githubUser) {
-      return pullRequests.filter((pr) => pr.assignees.includes(githubUser));
-    }
-    return pullRequests;
-  }, [pullRequests, filter, githubUser]);
-
-  const handleCreateSession = useCallback(async (pr: PullRequest, type: 'shell' | 'claude') => {
-    if (creating.has(pr.number)) return;
-    setCreating((prev) => new Set(prev).add(pr.number));
+  const handleCreateSession = useCallback(async (issue: GitHubIssue, type: 'shell' | 'claude') => {
+    if (creating.has(issue.number)) return;
+    setCreating((prev) => new Set(prev).add(issue.number));
     try {
-      const existingWt = worktrees.find((wt) => wt.branch === pr.headRefName);
-      let cwd: string;
-      if (existingWt) {
-        cwd = existingWt.path;
+      const branch = `issue-${issue.number}-${slugify(issue.title)}`;
+      const { path: cwd } = await api.createWorktree(org, name, {
+        branch,
+        createNewBranch: true,
+        issueNumber: issue.number,
+      });
+
+      if (type === 'claude') {
+        const detail = await api.fetchIssueDetail(org, name, issue.number);
+        const claudePrompt = formatClaudePrompt(detail);
+        const session = await api.createSession({ type: 'claude', cwd, claudePrompt });
+        selectSession(session.id);
       } else {
-        const { path } = await api.createWorktree(org, name, {
-          branch: pr.headRefName,
-          createNewBranch: false,
-          prNumber: pr.number,
-        });
-        cwd = path;
+        const session = await api.createSession({ type: 'shell', cwd });
+        selectSession(session.id);
       }
-      const session = await api.createSession({ type, cwd });
-      selectSession(session.id);
+
       setActivePanel('sessions');
       fetchDashboard(org, name);
     } catch {
@@ -77,13 +101,13 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
     } finally {
       setCreating((prev) => {
         const next = new Set(prev);
-        next.delete(pr.number);
+        next.delete(issue.number);
         return next;
       });
     }
-  }, [creating, worktrees, org, name, selectSession, setActivePanel, fetchDashboard]);
+  }, [creating, org, name, selectSession, setActivePanel, fetchDashboard]);
 
-  const columns: Column<PullRequest>[] = [
+  const columns: Column<GitHubIssue>[] = [
     {
       key: 'number',
       header: '#',
@@ -93,11 +117,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
     {
       key: 'title',
       header: 'Title',
-      render: (row) => (
-        <span className={cn('truncate', isStale(row.updatedAt) && 'text-amber-300/80')}>
-          {row.title}
-        </span>
-      ),
+      render: (row) => <span className="truncate text-zinc-300">{row.title}</span>,
     },
     {
       key: 'author',
@@ -106,30 +126,13 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
       render: (row) => <span className="text-zinc-400">{row.author}</span>,
     },
     {
-      key: 'branch',
-      header: 'Branch',
-      shrink: true,
-      render: (row) => (
-        <span className="font-mono text-xs text-zinc-500">{row.headRefName}</span>
-      ),
-    },
-    {
-      key: 'diff',
-      header: 'Diff',
-      shrink: true,
-      render: (row) => <DiffStatsBadge stats={diffStats[row.headRefName]} />,
-    },
-    {
-      key: 'updated',
-      header: 'Updated',
+      key: 'created',
+      header: 'Created',
       shrink: true,
       align: 'right',
       render: (row) => (
-        <span
-          className={cn('text-zinc-500', isStale(row.updatedAt) && 'text-amber-400/60')}
-          title={new Date(row.updatedAt).toLocaleString()}
-        >
-          {formatRelativeTime(row.updatedAt)}
+        <span className="text-zinc-500" title={new Date(row.createdAt).toLocaleString()}>
+          {formatRelativeTime(row.createdAt)}
         </span>
       ),
     },
@@ -186,37 +189,19 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
   ];
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex gap-1">
-        {(['all', 'mine', 'assigned'] as const).map((tab) => (
-          <button
-            key={tab}
-            className={cn(
-              'rounded px-2.5 py-1 text-xs transition-colors',
-              filter === tab
-                ? 'bg-zinc-700 text-zinc-200'
-                : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300',
-            )}
-            onClick={() => setFilter(tab)}
-          >
-            {tab === 'all' ? 'All' : tab === 'mine' ? 'Mine' : 'Assigned'}
-          </button>
-        ))}
-      </div>
-      <DataTable
-        columns={columns}
-        data={filtered}
-        selectedIndex={null}
-        onSelect={(i) => {
-          const pr = filtered[i];
-          if (pr) {
-            window.open(`https://github.com/${org}/${name}/pull/${pr.number}`, '_blank');
-          }
-        }}
-        loading={loading}
-        emptyMessage="No open pull requests"
-        maxHeight="max-h-[calc(100vh-14rem)]"
-      />
-    </div>
+    <DataTable
+      columns={columns}
+      data={issues}
+      selectedIndex={null}
+      onSelect={(i) => {
+        const issue = issues[i];
+        if (issue) {
+          window.open(`https://github.com/${org}/${name}/issues/${issue.number}`, '_blank');
+        }
+      }}
+      loading={loading}
+      emptyMessage="No issues assigned to you"
+      maxHeight="max-h-[calc(100vh-14rem)]"
+    />
   );
 }
