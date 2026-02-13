@@ -485,6 +485,7 @@ function WorktreeActionsTab({
             ['{{repo}}', 'Repository name'],
             ['{{branch}}', 'Branch name'],
             ['{{worktree_path}}', 'Worktree absolute path'],
+            ['{{worktree_name}}', 'Worktree directory name'],
             ['{{branch_slug}}', 'Branch with / replaced by -'],
             ['{{branch_prefix}}', 'Before first /'],
             ['{{branch_suffix}}', 'After first /'],
@@ -492,6 +493,33 @@ function WorktreeActionsTab({
           ].map(([variable, description]) => (
             <div key={variable} className="flex items-baseline gap-2">
               <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">{variable}</code>
+              <span className="text-[var(--theme-text-muted)]">{description}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Pipe functions reference */}
+      <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
+        <p className="mb-1 text-xs font-medium text-[var(--theme-text-secondary)]">Pipe Functions</p>
+        <p className="mb-2 text-xs text-[var(--theme-text-muted)]">
+          Transform variables with pipes:{' '}
+          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+            {'{{variable | fn | fn(arg)}}'}
+          </code>
+        </p>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+          {[
+            ['slug', 'Replace non-alphanumeric with -'],
+            ['lower', 'Lowercase'],
+            ['upper', 'Uppercase'],
+            ['trim', 'Trim whitespace'],
+            ['substr(start, len?)', 'Extract substring'],
+            ['replace(search, repl)', 'Replace all occurrences'],
+            ['default(fallback)', 'Fallback if empty'],
+          ].map(([fn, description]) => (
+            <div key={fn} className="flex items-baseline gap-2">
+              <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">{fn}</code>
               <span className="text-[var(--theme-text-muted)]">{description}</span>
             </div>
           ))}
