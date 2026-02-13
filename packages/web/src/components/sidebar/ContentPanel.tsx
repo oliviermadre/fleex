@@ -15,6 +15,7 @@ export function ContentPanel() {
       {activePanel === 'repositories' && <RepositoriesContent />}
       {activePanel === 'claude-config' && <ClaudeConfigTree />}
       {activePanel === 'cluster' && null}
+      {activePanel === 'rts' && null}
       {activePanel === 'settings' && <SettingsNav />}
     </div>
   );

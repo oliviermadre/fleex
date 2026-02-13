@@ -35,7 +35,7 @@ export function AppLayout() {
   }, [loadSettings]);
 
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
-  const hideContentPanel = activePanel === 'cluster';
+  const hideContentPanel = activePanel === 'cluster' || activePanel === 'rts';
   const effectiveContentWidth = hideContentPanel ? 0 : contentPanelWidth;
 
   return (

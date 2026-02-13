@@ -84,6 +84,20 @@ export function NavSidebar() {
           hotkey="⌥4"
           onClick={() => setActivePanel('cluster')}
         />
+
+        {/* RTS View */}
+        <NavItem
+          icon={
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 2C6.5 2 5 3.5 5 5c0 1 .5 1.8 1.2 2.5L4 10l-1.5 1.5M8 2c1.5 0 3 1.5 3 3 0 1-.5 1.8-1.2 2.5L12 10l1.5 1.5M8 2v3M6 12c-.5 1-1 2-1 2M10 12c.5 1 1 2 1 2M8 7v5" />
+            </svg>
+          }
+          label="RTS View"
+          active={activePanel === 'rts'}
+          collapsed={navCollapsed}
+          hotkey="⌥5"
+          onClick={() => setActivePanel('rts')}
+        />
       </div>
 
       {/* Settings - bottom of sidebar */}

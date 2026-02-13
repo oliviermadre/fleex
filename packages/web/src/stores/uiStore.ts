@@ -1,7 +1,14 @@
 import { create } from 'zustand';
 
-type ActivePanel = 'sessions' | 'repositories' | 'claude-config' | 'cluster' | 'settings';
+type ActivePanel = 'sessions' | 'repositories' | 'claude-config' | 'cluster' | 'rts' | 'settings';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions';
+
+export type RtsSelection =
+  | { type: 'session'; sessionId: string }
+  | { type: 'worktree'; repoKey: string; branch: string }
+  | { type: 'hatchery'; repoKey: string }
+  | { type: 'nydus' }
+  | null;
 
 interface UIState {
   // Nav sidebar (left icon bar)
@@ -46,6 +53,10 @@ interface UIState {
   // Repository dashboard selection
   selectedRepoKey: string | null;
   selectRepo: (key: string | null) => void;
+
+  // RTS view selection
+  rtsSelection: RtsSelection;
+  setRtsSelection: (selection: RtsSelection) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -58,6 +69,7 @@ export const useUIStore = create<UIState>((set) => ({
   commandPaletteOpen: false,
   collapsedGroups: new Set<string>(),
   scratchpadOpen: false,
+  rtsSelection: null,
 
   toggleScratchpad: () =>
     set((state) => ({ scratchpadOpen: !state.scratchpadOpen })),
@@ -97,4 +109,6 @@ export const useUIStore = create<UIState>((set) => ({
     }),
 
   selectRepo: (key) => set({ selectedRepoKey: key }),
+
+  setRtsSelection: (selection) => set({ rtsSelection: selection }),
 }));
