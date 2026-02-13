@@ -20,6 +20,8 @@ export interface ActivityInput {
  * A "user" message containing tool_result is NOT human input — it's automated
  * tool feedback. We must distinguish this from actual human messages.
  */
+const CPU_ACTIVE_THRESHOLD = 3;
+
 export function determineClaudeActivity(input: ActivityInput): ClaudeActivityStatus {
   const { messages, fileAgeSeconds, cpuPercent, hasPendingToolApproval } = input;
 
@@ -38,10 +40,14 @@ export function determineClaudeActivity(input: ActivityInput): ClaudeActivitySta
   if (last.type === 'user') {
     if (hasToolResult(last)) {
       // Tool result sent back to Claude → Claude is processing the result
-      return fileAgeSeconds <= 10 ? 'working' : 'idle';
+      if (fileAgeSeconds <= 10) return 'working';
+      if (cpuPercent > CPU_ACTIVE_THRESHOLD) return 'working';
+      return 'idle';
     }
     // Actual human message
-    return fileAgeSeconds <= 5 ? 'working' : 'idle';
+    if (fileAgeSeconds <= 5) return 'working';
+    if (cpuPercent > CPU_ACTIVE_THRESHOLD) return 'working';
+    return 'idle';
   }
 
   // last.type === 'assistant'
@@ -61,7 +67,8 @@ export function determineClaudeActivity(input: ActivityInput): ClaudeActivitySta
 
   // Assistant message with no tool_use blocks (pure text response)
   // If preceded by a tool_result, Claude just finished processing tools
-  return fileAgeSeconds <= 5 ? 'working' : 'idle';
+  if (fileAgeSeconds <= 2) return 'working';
+  return 'idle';
 }
 
 function hasToolResult(msg: ClaudeMessage): boolean {

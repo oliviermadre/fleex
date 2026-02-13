@@ -81,9 +81,25 @@ describe('determineClaudeActivity', () => {
       ).toBe('working');
     });
 
-    it('returns idle when file is stale', () => {
+    it('returns idle when file is stale and CPU is low', () => {
       expect(
         determineClaudeActivity(makeInput({ messages: [userMsg()], fileAgeSeconds: 10 })),
+      ).toBe('idle');
+    });
+
+    it('returns working when file is stale but CPU is high', () => {
+      expect(
+        determineClaudeActivity(
+          makeInput({ messages: [userMsg()], fileAgeSeconds: 10, cpuPercent: 25 }),
+        ),
+      ).toBe('working');
+    });
+
+    it('returns idle when file is stale and CPU is below threshold', () => {
+      expect(
+        determineClaudeActivity(
+          makeInput({ messages: [userMsg()], fileAgeSeconds: 10, cpuPercent: 2 }),
+        ),
       ).toBe('idle');
     });
   });
@@ -111,7 +127,7 @@ describe('determineClaudeActivity', () => {
       ).toBe('working');
     });
 
-    it('returns idle when tool result is stale (>10s)', () => {
+    it('returns idle when tool result is stale (>10s) and CPU is low', () => {
       expect(
         determineClaudeActivity(
           makeInput({
@@ -121,10 +137,30 @@ describe('determineClaudeActivity', () => {
         ),
       ).toBe('idle');
     });
+
+    it('returns working when tool result is stale but CPU is high', () => {
+      expect(
+        determineClaudeActivity(
+          makeInput({
+            messages: [assistantWithTools('Bash'), userToolResultMsg()],
+            fileAgeSeconds: 15,
+            cpuPercent: 20,
+          }),
+        ),
+      ).toBe('working');
+    });
   });
 
   describe('assistant text response (no tools)', () => {
     it('returns working when file recently modified', () => {
+      expect(
+        determineClaudeActivity(
+          makeInput({ messages: [userMsg(), assistantTextMsg()], fileAgeSeconds: 1 }),
+        ),
+      ).toBe('working');
+    });
+
+    it('returns working at 2s boundary', () => {
       expect(
         determineClaudeActivity(
           makeInput({ messages: [userMsg(), assistantTextMsg()], fileAgeSeconds: 2 }),
@@ -135,7 +171,7 @@ describe('determineClaudeActivity', () => {
     it('returns idle when file is stale', () => {
       expect(
         determineClaudeActivity(
-          makeInput({ messages: [userMsg(), assistantTextMsg()], fileAgeSeconds: 10 }),
+          makeInput({ messages: [userMsg(), assistantTextMsg()], fileAgeSeconds: 3 }),
         ),
       ).toBe('idle');
     });
