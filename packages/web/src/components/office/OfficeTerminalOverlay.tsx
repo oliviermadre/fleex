@@ -4,9 +4,9 @@ import { useTerminal } from '../../hooks/useTerminal';
 import { useTerminalStore } from '../../stores/terminalStore';
 import { terminalManager } from '../../services/terminalManager';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { ZERG } from './rtsTheme';
+import { OFFICE, getStatusColor } from './officeTheme';
 
-interface RtsTerminalOverlayProps {
+interface OfficeTerminalOverlayProps {
   session: Session;
   onClose: () => void;
 }
@@ -16,22 +16,22 @@ const MIN_HEIGHT = 300;
 const DEFAULT_WIDTH = 800;
 const DEFAULT_HEIGHT = 500;
 
-export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
+export const OfficeTerminalOverlay = memo(function OfficeTerminalOverlay({
   session,
   onClose,
-}: RtsTerminalOverlayProps) {
+}: OfficeTerminalOverlayProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   useTerminal(session.id, containerRef);
 
   const connectionStatus = useTerminalStore(
-    (s) => s.connectionStatus[session.id] ?? 'disconnected'
+    (s) => s.connectionStatus[session.id] ?? 'disconnected',
   );
   const displayName = useSettingsStore(
-    (s) => s.settings.sessionDisplayNames[session.id]
+    (s) => s.settings.sessionDisplayNames[session.id],
   );
 
-  // Focus the terminal when the overlay opens
+  // Focus terminal when overlay opens
   useEffect(() => {
     const inst = terminalManager.get(session.id);
     if (inst) {
@@ -39,7 +39,7 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
     }
   }, [session.id]);
 
-  // Escape closes the overlay (only when terminal isn't capturing it)
+  // Escape closes overlay
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey) {
@@ -113,52 +113,38 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
       const newW = Math.max(MIN_WIDTH, resizeRef.current.startW + (me.clientX - resizeRef.current.startX));
       const newH = Math.max(MIN_HEIGHT, resizeRef.current.startH + (me.clientY - resizeRef.current.startY));
       setSize({ width: newW, height: newH });
-      // Trigger xterm fit
       terminalManager.resize(session.id);
     };
     const handleUp = () => {
       resizeRef.current.resizing = false;
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
-      // Final fit
       terminalManager.resize(session.id);
     };
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
   }, [size, session.id]);
 
-  const isDrone = session.type === 'claude';
+  const isRobot = session.type === 'claude';
   const activity = session.claudeActivity ?? 'idle';
-  const activityColor =
-    activity === 'working' || activity === 'executing'
-      ? ZERG.activeGreen
-      : activity.startsWith('waiting_')
-        ? ZERG.waitingAmber
-        : ZERG.textMuted;
+  const activityColor = getStatusColor(activity);
 
   const statusDotColor = {
-    connecting: ZERG.waitingAmber,
-    connected: ZERG.activeGreen,
-    disconnected: ZERG.textFaint,
+    connecting: OFFICE.thinkingAmber,
+    connected: OFFICE.activeGreen,
+    disconnected: OFFICE.textFaint,
   }[connectionStatus];
 
   const cwdDisplay = session.cwd.replace(/^\/Users\/[^/]+/, '~');
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 50,
-        pointerEvents: 'none',
-      }}
-    >
-      {/* Semi-transparent backdrop — click to close */}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, pointerEvents: 'none' }}>
+      {/* Backdrop */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          background: 'rgba(5, 2, 10, 0.5)',
+          background: 'rgba(18, 20, 26, 0.5)',
           pointerEvents: 'auto',
         }}
         onClick={onClose}
@@ -178,17 +164,17 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
           borderRadius: 8,
           overflow: 'hidden',
           pointerEvents: 'auto',
-          border: `1px solid ${ZERG.carapaceBorder}`,
+          border: `1px solid ${OFFICE.panelBorder}`,
           boxShadow: `
-            0 0 0 1px ${ZERG.carapaceBorderDim},
+            0 0 0 1px ${OFFICE.panelBorderDim},
             0 24px 80px rgba(0, 0, 0, 0.6),
-            0 0 40px rgba(138, 43, 226, 0.1),
-            inset 0 1px 0 rgba(180, 100, 255, 0.1)
+            0 0 40px rgba(59, 130, 246, 0.05),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05)
           `,
-          background: ZERG.carapaceBg,
+          background: OFFICE.panelBg,
         }}
       >
-        {/* Title bar — draggable */}
+        {/* Title bar */}
         <div
           style={{
             height: 36,
@@ -197,14 +183,13 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
             gap: 8,
             padding: '0 12px',
             cursor: 'grab',
-            borderBottom: `1px solid ${ZERG.carapaceBorderDim}`,
-            background: 'linear-gradient(180deg, rgba(40, 20, 65, 0.6) 0%, rgba(20, 10, 35, 0.8) 100%)',
+            borderBottom: `1px solid ${OFFICE.panelBorderDim}`,
+            background: 'linear-gradient(180deg, rgba(55, 65, 81, 0.6) 0%, rgba(26, 29, 35, 0.8) 100%)',
             flexShrink: 0,
             userSelect: 'none',
           }}
           onMouseDown={handleTitleMouseDown}
         >
-          {/* Unit type indicator */}
           <div
             style={{
               width: 8,
@@ -216,10 +201,9 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
             }}
           />
 
-          {/* Session name */}
           <span
             style={{
-              color: ZERG.textPrimary,
+              color: OFFICE.textPrimary,
               fontSize: 12,
               fontWeight: 600,
               overflow: 'hidden',
@@ -230,23 +214,21 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
             {displayName || session.tmuxName}
           </span>
 
-          {/* Type badge */}
           <span
             style={{
               fontSize: 9,
               padding: '1px 6px',
               borderRadius: 3,
-              backgroundColor: isDrone ? `${ZERG.droneBody}22` : `${ZERG.overlordBody}44`,
-              color: isDrone ? ZERG.droneBody : ZERG.textSecondary,
+              backgroundColor: isRobot ? `${OFFICE.robotBody}22` : `${OFFICE.shellBody}44`,
+              color: isRobot ? OFFICE.robotBody : OFFICE.textSecondary,
               fontWeight: 600,
               textTransform: 'uppercase',
             }}
           >
-            {isDrone ? 'Drone' : 'Overlord'}
+            {isRobot ? 'Robot' : 'Computer'}
           </span>
 
-          {/* Activity badge */}
-          {isDrone && activity !== 'idle' && (
+          {isRobot && activity !== 'idle' && (
             <span
               style={{
                 fontSize: 9,
@@ -264,10 +246,9 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
 
           <div style={{ flex: 1 }} />
 
-          {/* CWD */}
           <span
             style={{
-              color: ZERG.textMuted,
+              color: OFFICE.textMuted,
               fontSize: 10,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -279,12 +260,8 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
             {cwdDisplay}
           </span>
 
-          {/* Close button */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onClose();
-            }}
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
             style={{
               width: 20,
               height: 20,
@@ -294,35 +271,55 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
               borderRadius: 4,
               border: 'none',
               background: 'transparent',
-              color: ZERG.textMuted,
+              color: OFFICE.textMuted,
               cursor: 'pointer',
               flexShrink: 0,
               fontSize: 14,
               lineHeight: 1,
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = ZERG.dangerRed;
-              (e.currentTarget as HTMLElement).style.background = `${ZERG.dangerRed}22`;
+              (e.currentTarget as HTMLElement).style.color = OFFICE.errorRed;
+              (e.currentTarget as HTMLElement).style.background = `${OFFICE.errorRed}22`;
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = ZERG.textMuted;
+              (e.currentTarget as HTMLElement).style.color = OFFICE.textMuted;
               (e.currentTarget as HTMLElement).style.background = 'transparent';
             }}
             title="Close (Esc)"
           >
-            ×
+            &times;
           </button>
         </div>
+
+        {/* Disconnected bar */}
+        {connectionStatus === 'disconnected' && (
+          <div
+            style={{
+              padding: '6px 12px',
+              background: `${OFFICE.thinkingAmber}22`,
+              borderBottom: `1px solid ${OFFICE.thinkingAmber}44`,
+              color: OFFICE.thinkingAmber,
+              fontSize: 11,
+              fontWeight: 600,
+              textAlign: 'center',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+            onClick={() => {
+              // Re-attach to trigger reconnection
+              const el = containerRef.current;
+              if (el) terminalManager.attach(session.id, el);
+            }}
+          >
+            Disconnected — click to reconnect
+          </div>
+        )}
 
         {/* Terminal area */}
         <div
           ref={containerRef}
           className="xterm-container"
-          style={{
-            flex: 1,
-            minHeight: 0,
-            background: '#0a0514',
-          }}
+          style={{ flex: 1, minHeight: 0, background: '#1a1d23' }}
         />
 
         {/* Status bar */}
@@ -333,10 +330,10 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
             alignItems: 'center',
             gap: 8,
             padding: '0 12px',
-            borderTop: `1px solid ${ZERG.carapaceBorderDim}`,
-            background: 'rgba(20, 10, 35, 0.8)',
+            borderTop: `1px solid ${OFFICE.panelBorderDim}`,
+            background: 'rgba(26, 29, 35, 0.8)',
             fontSize: 10,
-            color: ZERG.textMuted,
+            color: OFFICE.textMuted,
             flexShrink: 0,
           }}
         >
@@ -352,25 +349,18 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
           <span>{connectionStatus}</span>
 
           {session.worktreeBranch && (
-            <span style={{ color: ZERG.textFaint }}>
-              {session.repositoryOrg}/{session.repositoryName} → {session.worktreeBranch}
+            <span style={{ color: OFFICE.textFaint }}>
+              {session.repositoryOrg}/{session.repositoryName} &rarr; {session.worktreeBranch}
             </span>
           )}
 
           <div style={{ flex: 1 }} />
-          <span style={{ color: ZERG.textFaint, fontSize: 9 }}>Esc to close</span>
+          <span style={{ color: OFFICE.textFaint, fontSize: 9 }}>Esc to close</span>
         </div>
 
-        {/* Resize handle (bottom-right corner) */}
+        {/* Resize handle */}
         <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            right: 0,
-            width: 16,
-            height: 16,
-            cursor: 'se-resize',
-          }}
+          style={{ position: 'absolute', bottom: 0, right: 0, width: 16, height: 16, cursor: 'se-resize' }}
           onMouseDown={handleResizeMouseDown}
         >
           <svg
@@ -380,7 +370,7 @@ export const RtsTerminalOverlay = memo(function RtsTerminalOverlay({
             fill="none"
             style={{ position: 'absolute', bottom: 3, right: 3 }}
           >
-            <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke={ZERG.carapaceBorderDim} strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke={OFFICE.panelBorderDim} strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </div>
       </div>

@@ -295,105 +295,120 @@ html, body {
   opacity: 0.5;
 }
 
-/* ── RTS Zerg Theme ── */
+/* ── Office Theme ── */
 
-.rts-view {
-  --rts-creep-dark: #1a0a2e;
-  --rts-creep-mid: #2d1452;
-  --rts-creep-light: #4a2080;
-  --rts-creep-glow: rgba(138, 43, 226, 0.25);
-  --rts-carapace-bg: rgba(12, 6, 22, 0.92);
-  --rts-carapace-border: #5a2d82;
-  --rts-carapace-border-dim: #3a1a55;
-  --rts-active-green: #39ff14;
-  --rts-waiting-amber: #ffb300;
-  --rts-text-primary: #e8d5ff;
-  --rts-text-secondary: #b094d0;
-  --rts-text-muted: #7a5fa0;
-  --rts-terrain-bg: #0a0514;
-  --rts-terrain-grid: rgba(90, 45, 130, 0.12);
-  --rts-selection-ring: #a855f7;
+.office-view {
+  --office-exterior: #1a1d23;
+  --office-panel-bg: rgba(26, 29, 35, 0.95);
+  --office-panel-border: #3e4451;
+  --office-panel-border-dim: #2c313a;
+  --office-active-green: #22c55e;
+  --office-working-blue: #3b82f6;
+  --office-thinking-amber: #f59e0b;
+  --office-error-red: #ef4444;
+  --office-text-primary: #e5e7eb;
+  --office-text-secondary: #9ca3af;
+  --office-text-muted: #6b7280;
+  --office-selection-blue: #3b82f6;
 }
 
-.rts-panel {
+.office-panel {
   background:
     linear-gradient(
       180deg,
-      rgba(30, 15, 50, 0.95) 0%,
-      rgba(12, 6, 22, 0.98) 100%
+      rgba(55, 65, 81, 0.6) 0%,
+      rgba(26, 29, 35, 0.95) 100%
     );
-  border: 1px solid var(--rts-carapace-border-dim);
+  border: 1px solid var(--office-panel-border-dim);
   box-shadow:
-    inset 0 1px 0 rgba(180, 100, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
     inset 0 -1px 0 rgba(0, 0, 0, 0.4),
     0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
-.rts-map-terrain {
-  background: var(--rts-terrain-bg);
+.office-map-terrain {
+  background: var(--office-exterior);
 }
 
-.rts-map-world {
-  background:
-    url('/rts-terrain.png');
-  background-size: 512px 512px;
-  background-repeat: repeat;
-  image-rendering: auto;
+.office-map-world {
+  image-rendering: pixelated;
 }
 
-/* Drone idle: gentle vertical bob */
-@keyframes rts-drone-idle {
+/* Robot idle: gentle bob */
+.office-robot-idle {
+  animation: office-robot-idle 3s ease-in-out infinite;
+}
+@keyframes office-robot-idle {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-2px); }
 }
 
-/* Drone working: oscillation + slight scale */
-@keyframes rts-drone-working {
+/* Robot working: typing oscillation */
+.office-robot-working {
+  animation: office-robot-working 1.5s ease-in-out infinite;
+}
+@keyframes office-robot-working {
   0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(2px, -1px) scale(1.05); }
+  25% { transform: translate(1px, -1px) scale(1.03); }
   50% { transform: translate(0, -2px) scale(1); }
-  75% { transform: translate(-2px, -1px) scale(1.05); }
+  75% { transform: translate(-1px, -1px) scale(1.03); }
 }
 
-/* Drone executing: rapid pulse */
-@keyframes rts-drone-executing {
-  0%, 100% { transform: scale(1); filter: brightness(1); }
-  50% { transform: scale(1.15); filter: brightness(1.4); }
+/* Robot thinking: slow pulse */
+.office-robot-thinking {
+  animation: office-robot-thinking 2s ease-in-out infinite;
+}
+@keyframes office-robot-thinking {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.7; }
 }
 
-/* Waiting state blink */
-@keyframes rts-waiting-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+/* Robot error: red flash */
+.office-robot-error {
+  animation: office-robot-error 0.8s ease-in-out infinite;
+}
+@keyframes office-robot-error {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.4) hue-rotate(-10deg); }
 }
 
-/* Overlord float */
-@keyframes rts-overlord-float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  33% { transform: translateY(-3px) rotate(1deg); }
-  66% { transform: translateY(-1px) rotate(-1deg); }
+/* Selection ring glow */
+.office-selection-pulse {
+  animation: office-selection-pulse 2s ease-in-out infinite;
+}
+@keyframes office-selection-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.7), 0 0 12px rgba(59, 130, 246, 0.3); }
+  50% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.9), 0 0 20px rgba(59, 130, 246, 0.5); }
 }
 
-/* Creep pulse */
-@keyframes rts-creep-pulse {
-  0%, 100% { opacity: 0.6; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.02); }
-}
-
-/* Hatchery glow */
-@keyframes rts-hatchery-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(107, 63, 160, 0.3), 0 0 40px rgba(107, 63, 160, 0.1); }
-  50% { box-shadow: 0 0 30px rgba(107, 63, 160, 0.5), 0 0 60px rgba(107, 63, 160, 0.2); }
-}
-
-/* Selection ring pulse */
-@keyframes rts-selection-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.7), 0 0 12px rgba(168, 85, 247, 0.3); }
-  50% { box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.9), 0 0 20px rgba(168, 85, 247, 0.5); }
-}
-
-/* Resource bar pulse for server health */
-@keyframes rts-health-pulse {
+/* Health pulse for resource bar */
+@keyframes office-health-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* Activity transition flash — green (idle → working) */
+.office-flash-green {
+  animation: office-flash-green 0.6s ease-out forwards;
+}
+@keyframes office-flash-green {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+  50% { box-shadow: 0 0 16px 4px rgba(34, 197, 94, 0.5); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+/* Activity transition flash — amber (→ waiting) */
+.office-flash-amber {
+  animation: office-flash-amber 0.6s ease-out forwards;
+}
+@keyframes office-flash-amber {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+  50% { box-shadow: 0 0 16px 4px rgba(245, 158, 11, 0.5); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+/* Toast slide-in */
+@keyframes office-toast-in {
+  0% { opacity: 0; transform: translateX(20px); }
+  100% { opacity: 1; transform: translateX(0); }
 }

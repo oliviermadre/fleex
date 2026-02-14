@@ -3,11 +3,12 @@ import { create } from 'zustand';
 type ActivePanel = 'sessions' | 'repositories' | 'claude-config' | 'cluster' | 'rts' | 'settings';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions';
 
-export type RtsSelection =
+/** Persisted office selection (subset of the full OfficeSelection in office/types.ts) */
+type OfficeSelection =
   | { type: 'session'; sessionId: string }
   | { type: 'worktree'; repoKey: string; branch: string }
-  | { type: 'hatchery'; repoKey: string }
-  | { type: 'nydus' }
+  | { type: 'repo'; repoKey: string }
+  | { type: 'lobby' }
   | null;
 
 interface UIState {
@@ -54,9 +55,9 @@ interface UIState {
   selectedRepoKey: string | null;
   selectRepo: (key: string | null) => void;
 
-  // RTS view selection
-  rtsSelection: RtsSelection;
-  setRtsSelection: (selection: RtsSelection) => void;
+  // Office view selection
+  officeSelection: OfficeSelection;
+  setOfficeSelection: (selection: OfficeSelection) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -69,7 +70,7 @@ export const useUIStore = create<UIState>((set) => ({
   commandPaletteOpen: false,
   collapsedGroups: new Set<string>(),
   scratchpadOpen: false,
-  rtsSelection: null,
+  officeSelection: null,
 
   toggleScratchpad: () =>
     set((state) => ({ scratchpadOpen: !state.scratchpadOpen })),
@@ -110,5 +111,5 @@ export const useUIStore = create<UIState>((set) => ({
 
   selectRepo: (key) => set({ selectedRepoKey: key }),
 
-  setRtsSelection: (selection) => set({ rtsSelection: selection }),
+  setOfficeSelection: (selection) => set({ officeSelection: selection }),
 }));

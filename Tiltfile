@@ -13,70 +13,39 @@
 #
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Shared helpers (loaded from localenv-saas via ~/.localenv-saas/lib symlink)
 # ---------------------------------------------------------------------------
-def _sanitize_k8s_name(s):
-    allowed = 'abcdefghijklmnopqrstuvwxyz0123456789-'
-    out = []
-    for i in range(len(s)):
-        c = s[i]
-        if c >= 'A' and c <= 'Z':
-            c = chr(ord(c) + 32)
-        if c in allowed:
-            out.append(c)
-        else:
-            out.append('-')
-    name = ''.join(out).strip('-')
-    if len(name) > 63:
-        name = name[:63]
-    return name
+_helpers_path = os.path.join(os.getenv('HOME'), '.localenv-saas/lib/tilt_helpers.star')
+if not os.path.exists(_helpers_path):
+    fail('localenv-saas helpers not found at %s. Run: ln -s /path/to/localenv-saas/lib ~/.localenv-saas/lib' % _helpers_path)
 
-def _basename(path):
-    parts = path.split('/')
-    return parts[-1] if parts[-1] != '' else parts[-2]
+_helpers = load_dynamic(_helpers_path)
+sanitize_k8s_name = _helpers['sanitize_k8s_name']
+basename = _helpers['basename']
+get_worktree_context = _helpers['get_worktree_context']
+create_namespace = _helpers['create_namespace']
+get_host_ip = _helpers['get_host_ip']
 
 # ---------------------------------------------------------------------------
 # Context detection
 # ---------------------------------------------------------------------------
-# When include()'d from the central Tiltfile, `worktree_context` is set
-# to the absolute path of this worktree BEFORE the include() call.
-# When running standalone (tilt up), it won't exist — detect via main_dir.
-_main_dir = str(config.main_dir)
-_standalone = str(local(
-    'test -f "%s/Dockerfile.dev" && echo 1 || echo 0' % _main_dir,
-    quiet=True,
-)).strip() == '1'
-_self_dir = _main_dir if _standalone else str(local('cat /tmp/.tilt_worktree_context', quiet=True)).strip()
-_worktree_name = _sanitize_k8s_name(_basename(_self_dir))
+_ctx = get_worktree_context()
+_self_dir = _ctx.self_dir
+_worktree_name = _ctx.worktree_name
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 NAMESPACE    = 'asm-dev'
-APP_NAME     = _sanitize_k8s_name('asm-' + _basename(_self_dir))
+APP_NAME     = sanitize_k8s_name('asm-' + basename(_self_dir))
 HOSTNAME     = _worktree_name + '.127.0.0.1.nip.io'
 HOST_HOMEDIR = str(local('echo $HOME', quiet=True)).strip()
-
-# Resolve the host IP reachable from inside the Kind cluster.
-# OrbStack maps host.docker.internal inside the node — query its IP.
-_kind_cluster_name = str(local(
-    "kubectl config current-context | sed 's/^kind-//'",
-    quiet=True,
-)).strip()
-HOST_IP = str(local(
-    "docker exec %s-control-plane getent hosts host.docker.internal | awk '{print $1}'" % _kind_cluster_name,
-    quiet=True,
-)).strip()
+HOST_IP      = get_host_ip()
 
 # ---------------------------------------------------------------------------
 # Namespace (idempotent — safe to call from multiple Tiltfiles)
 # ---------------------------------------------------------------------------
-k8s_yaml(blob("""
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {ns}
-""".format(ns=NAMESPACE)), allow_duplicates=True)
+create_namespace(NAMESPACE)
 
 # ---------------------------------------------------------------------------
 # Docker image + live_update

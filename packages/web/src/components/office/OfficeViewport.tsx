@@ -1,39 +1,70 @@
-import { memo, useRef, useState, useCallback, useEffect } from 'react';
-import type { PullRequest } from '@asm/shared';
-import type { RtsMapModel } from './useRtsMapLayout';
-import type { RtsSelection } from '../../stores/uiStore';
-import { BaseCluster } from './BaseCluster';
-import { NydusNetwork } from './NydusNetwork';
+import { memo, useRef, useState, useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
+import type { OfficeMapModel, OfficeSelection, MapObject, DataOverlayTarget } from './types';
+import type { Session } from '@asm/shared';
+import { TileCanvas } from './TileCanvas';
+import { ObjectLayer } from './ObjectLayer';
+import { RoomLabels } from './RoomLabels';
 
-interface MapViewportProps {
-  mapModel: RtsMapModel;
-  rtsSelection: RtsSelection;
-  pullsByRepo: Record<string, Record<string, PullRequest>>;
-  displayNames: Record<string, string>;
-  unitOverrides: Record<string, { x: number; y: number }>;
-  onSelect: (selection: RtsSelection) => void;
-  onFocusSession: (sessionId: string) => void;
-  onMoveUnit: (sessionId: string, x: number, y: number) => void;
-  viewportRef: React.RefObject<{ offset: { x: number; y: number }; zoom: number } | null>;
+/** Pixel-art-friendly zoom levels */
+export const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.5, 2.0, 3.0];
+
+function snapToZoomLevel(target: number): number {
+  let closest = ZOOM_LEVELS[0]!;
+  let minDist = Math.abs(target - closest);
+  for (const level of ZOOM_LEVELS) {
+    const dist = Math.abs(target - level);
+    if (dist < minDist) {
+      closest = level;
+      minDist = dist;
+    }
+  }
+  return closest;
 }
 
-export const MapViewport = memo(function MapViewport({
+export interface OfficeViewportHandle {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetView: () => void;
+  getZoom: () => number;
+}
+
+interface OfficeViewportProps {
+  mapModel: OfficeMapModel;
+  selection: OfficeSelection;
+  sessions: Session[];
+  displayNames: Record<string, string>;
+  onSelect: (selection: OfficeSelection) => void;
+  onFocusSession: (sessionId: string) => void;
+  onContextMenu?: (e: React.MouseEvent, object: MapObject) => void;
+  onOpenDataOverlay?: (target: DataOverlayTarget) => void;
+  viewportRef: React.RefObject<{ offset: { x: number; y: number }; zoom: number } | null>;
+  onZoomChange?: (zoom: number) => void;
+}
+
+export const OfficeViewport = memo(forwardRef<OfficeViewportHandle, OfficeViewportProps>(function OfficeViewport({
   mapModel,
-  rtsSelection,
-  pullsByRepo,
+  selection,
+  sessions,
   displayNames,
-  unitOverrides,
   onSelect,
   onFocusSession,
-  onMoveUnit,
+  onContextMenu,
+  onOpenDataOverlay,
   viewportRef,
-}: MapViewportProps) {
+  onZoomChange,
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState<{ x: number; y: number } | null>(null);
-  const [zoom, setZoom] = useState(0.85);
+  const [zoom, setZoom] = useState(1.0);
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
   const hasCentered = useRef(false);
+
+  // Refs for synchronous reads in wheel handler (avoids nested updater issues)
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const offsetRef = useRef(offset ?? { x: 0, y: 0 });
+  if (offset) offsetRef.current = offset;
 
   // Compute minimum zoom so map always fills viewport
   const getMinZoom = useCallback(() => {
@@ -47,7 +78,7 @@ export const MapViewport = memo(function MapViewport({
     );
   }, [mapModel.mapWidth, mapModel.mapHeight]);
 
-  // Clamp offset so the map edges never leave the viewport
+  // Clamp offset so map edges never leave viewport; center when map fits
   const clampOffset = useCallback((ox: number, oy: number, z: number) => {
     const container = containerRef.current;
     if (!container) return { x: ox, y: oy };
@@ -55,18 +86,21 @@ export const MapViewport = memo(function MapViewport({
     const scaledW = mapModel.mapWidth * z;
     const scaledH = mapModel.mapHeight * z;
 
-    // offset can be at most 0 (left/top edge at viewport edge)
-    // offset must be at least (viewportSize - scaledMapSize) so right/bottom edge stays in
-    const minX = rect.width - scaledW;
-    const minY = rect.height - scaledH;
-
-    return {
-      x: Math.min(0, Math.max(minX, ox)),
-      y: Math.min(0, Math.max(minY, oy)),
-    };
+    let x: number, y: number;
+    if (scaledW <= rect.width) {
+      x = (rect.width - scaledW) / 2;
+    } else {
+      x = Math.min(0, Math.max(rect.width - scaledW, ox));
+    }
+    if (scaledH <= rect.height) {
+      y = (rect.height - scaledH) / 2;
+    } else {
+      y = Math.min(0, Math.max(rect.height - scaledH, oy));
+    }
+    return { x, y };
   }, [mapModel.mapWidth, mapModel.mapHeight]);
 
-  // Auto-center on content when first mounted or when bases appear
+  // Auto-center on first mount
   useEffect(() => {
     if (hasCentered.current) return;
     const container = containerRef.current;
@@ -77,35 +111,15 @@ export const MapViewport = memo(function MapViewport({
     const minZoom = getMinZoom();
     const z = Math.max(zoom, minZoom);
 
-    // Find the center of all content
-    const allPositions = [
-      ...mapModel.bases.map((b) => b.position),
-      ...(mapModel.nydus ? [mapModel.nydus.position] : []),
-    ];
-    if (allPositions.length === 0) {
-      const centered = clampOffset(
-        rect.width / 2 - (mapModel.mapWidth / 2) * z,
-        rect.height / 2 - (mapModel.mapHeight / 2) * z,
-        z,
-      );
-      setOffset(centered);
-      setZoom(z);
-      hasCentered.current = true;
-      return;
-    }
-
-    const avgX = allPositions.reduce((s, p) => s + p.x, 0) / allPositions.length;
-    const avgY = allPositions.reduce((s, p) => s + p.y, 0) / allPositions.length;
-
     const centered = clampOffset(
-      rect.width / 2 - avgX * z,
-      rect.height / 2 - avgY * z,
+      rect.width / 2 - (mapModel.mapWidth / 2) * z,
+      rect.height / 2 - (mapModel.mapHeight / 2) * z,
       z,
     );
     setOffset(centered);
     setZoom(z);
     hasCentered.current = true;
-  }, [mapModel.bases, mapModel.nydus, zoom, getMinZoom, clampOffset, mapModel.mapWidth, mapModel.mapHeight]);
+  }, [mapModel, zoom, getMinZoom, clampOffset]);
 
   // Expose viewport state to parent
   useEffect(() => {
@@ -216,7 +230,6 @@ export const MapViewport = memo(function MapViewport({
       const dy = e.clientY - dragStart.current.y;
       setOffset(clampOffset(dragStart.current.offsetX + dx, dragStart.current.offsetY + dy, zoom));
     }
-    // Edge scroll detection runs even when not dragging
     handleEdgeScroll(e);
   }, [dragging, zoom, clampOffset, handleEdgeScroll]);
 
@@ -224,35 +237,50 @@ export const MapViewport = memo(function MapViewport({
     setDragging(false);
   }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const minZoom = getMinZoom();
-    setZoom((prevZoom) => {
-      const newZoom = Math.max(minZoom, Math.min(2.0, prevZoom - e.deltaY * 0.001));
-      // Re-clamp offset for the new zoom level
-      setOffset((prev) => {
-        if (!prev) return prev;
-        return clampOffset(prev.x, prev.y, newZoom);
-      });
-      return newZoom;
-    });
+  // Native non-passive wheel handler (React onWheel is passive, can't preventDefault)
+  // Uses continuous zoom (no snapping) for smooth trackpad/mousewheel feel
+  // Reads from refs to avoid nested functional updater issues
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const minZoom = getMinZoom();
+      const maxZoom = ZOOM_LEVELS[ZOOM_LEVELS.length - 1]!;
+
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const prevZoom = zoomRef.current;
+      const prevOffset = offsetRef.current;
+
+      const factor = 1 - e.deltaY * 0.002;
+      const newZoom = Math.max(minZoom, Math.min(maxZoom, prevZoom * factor));
+
+      // Map point under cursor: mapPt = (mouse - offset) / oldZoom
+      // After zoom, keep that point under cursor: newOffset = mouse - mapPt * newZoom
+      const newX = mouseX - ((mouseX - prevOffset.x) / prevZoom) * newZoom;
+      const newY = mouseY - ((mouseY - prevOffset.y) / prevZoom) * newZoom;
+      const newOffset = clampOffset(newX, newY, newZoom);
+
+      // Update refs synchronously so rapid events read correct values
+      zoomRef.current = newZoom;
+      offsetRef.current = newOffset;
+
+      setZoom(newZoom);
+      setOffset(newOffset);
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
   }, [getMinZoom, clampOffset]);
 
   // Click on empty map deselects
   const handleMapClick = useCallback(() => {
     onSelect(null);
   }, [onSelect]);
-
-  // Right-click on map: move selected unit to clicked position
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!rtsSelection || rtsSelection.type !== 'session') return;
-
-    const mapX = (e.clientX - containerRef.current!.getBoundingClientRect().left - effectiveOffset.x) / zoom;
-    const mapY = (e.clientY - containerRef.current!.getBoundingClientRect().top - effectiveOffset.y) / zoom;
-
-    onMoveUnit(rtsSelection.sessionId, mapX, mapY);
-  }, [rtsSelection, effectiveOffset, zoom, onMoveUnit]);
 
   // Navigate viewport to position (used by minimap)
   const navigateTo = useCallback((x: number, y: number) => {
@@ -274,67 +302,104 @@ export const MapViewport = memo(function MapViewport({
     }
   }, [navigateTo]);
 
+  // Imperative zoom controls for toolbar
+  useImperativeHandle(ref, () => ({
+    zoomIn() {
+      const minZoom = getMinZoom();
+      setZoom((prev) => {
+        const idx = ZOOM_LEVELS.indexOf(prev);
+        const next = idx >= 0 && idx < ZOOM_LEVELS.length - 1
+          ? ZOOM_LEVELS[idx + 1]!
+          : Math.min(ZOOM_LEVELS[ZOOM_LEVELS.length - 1]!, prev * 1.25);
+        const clamped = Math.max(minZoom, next);
+        setOffset((o) => o ? clampOffset(o.x, o.y, clamped) : o);
+        onZoomChange?.(clamped);
+        return clamped;
+      });
+    },
+    zoomOut() {
+      const minZoom = getMinZoom();
+      setZoom((prev) => {
+        const idx = ZOOM_LEVELS.indexOf(prev);
+        const next = idx > 0
+          ? ZOOM_LEVELS[idx - 1]!
+          : Math.max(minZoom, prev * 0.8);
+        const clamped = Math.max(minZoom, next);
+        setOffset((o) => o ? clampOffset(o.x, o.y, clamped) : o);
+        onZoomChange?.(clamped);
+        return clamped;
+      });
+    },
+    resetView() {
+      hasCentered.current = false;
+      const container = containerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const minZoom = getMinZoom();
+      const z = Math.max(1.0, minZoom);
+      const centered = clampOffset(
+        rect.width / 2 - (mapModel.mapWidth / 2) * z,
+        rect.height / 2 - (mapModel.mapHeight / 2) * z,
+        z,
+      );
+      setOffset(centered);
+      setZoom(z);
+      onZoomChange?.(z);
+    },
+    getZoom() {
+      return zoom;
+    },
+  }), [getMinZoom, clampOffset, mapModel.mapWidth, mapModel.mapHeight, zoom, onZoomChange]);
+
+  // Notify zoom changes from wheel
+  useEffect(() => {
+    onZoomChange?.(zoom);
+  }, [zoom, onZoomChange]);
+
   return (
     <div
       ref={containerRef}
-      className="rts-map-terrain absolute inset-0 overflow-hidden"
+      className="office-map-terrain absolute inset-0 overflow-hidden"
       style={{ cursor: dragging ? 'grabbing' : 'grab' }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={() => { handleMouseUp(); handleEdgeScrollStop(); }}
-      onWheel={handleWheel}
-      onContextMenu={handleContextMenu}
     >
       <div
-        className="rts-map-world"
+        className="office-map-world"
         style={{
           position: 'absolute',
           width: mapModel.mapWidth,
           height: mapModel.mapHeight,
           transform: `translate(${effectiveOffset.x}px, ${effectiveOffset.y}px) scale(${zoom})`,
           transformOrigin: '0 0',
+          imageRendering: 'pixelated',
         }}
         onClick={handleMapClick}
       >
-        {/* Base clusters */}
-        {mapModel.bases.map((base) => {
-          const repoUnits = mapModel.units.filter(
-            (u) =>
-              u.parentType === 'worktree' &&
-              (u.session.repositoryOrg + '/' + u.session.repositoryName) === base.repoKey
-          );
+        {/* Canvas tile layer */}
+        <TileCanvas
+          layers={mapModel.layers}
+          widthTiles={mapModel.mapWidthTiles}
+          heightTiles={mapModel.mapHeightTiles}
+        />
 
-          return (
-            <BaseCluster
-              key={base.repoKey}
-              base={base}
-              rtsSelection={rtsSelection}
-              pullsByBranch={pullsByRepo[base.repoKey] ?? {}}
-              displayNames={displayNames}
-              units={repoUnits.map((u) => ({ session: u.session, position: u.position }))}
-              unitOverrides={unitOverrides}
-              onSelect={onSelect}
-              onFocusSession={onFocusSession}
-            />
-          );
-        })}
+        {/* Room labels */}
+        <RoomLabels rooms={mapModel.rooms} />
 
-        {/* Nydus Network */}
-        {mapModel.nydus && (
-          <NydusNetwork
-            nydus={mapModel.nydus}
-            rtsSelection={rtsSelection}
-            displayNames={displayNames}
-            units={mapModel.units
-              .filter((u) => u.parentType === 'nydus')
-              .map((u) => ({ session: u.session, position: u.position }))}
-            unitOverrides={unitOverrides}
-            onSelect={onSelect}
-            onFocusSession={onFocusSession}
-          />
-        )}
+        {/* Interactive objects */}
+        <ObjectLayer
+          objects={mapModel.objects}
+          selection={selection}
+          sessions={sessions}
+          displayNames={displayNames}
+          onSelect={onSelect}
+          onFocusSession={onFocusSession}
+          onContextMenu={onContextMenu}
+          onOpenDataOverlay={onOpenDataOverlay}
+        />
       </div>
     </div>
   );
-});
+}));

@@ -8,7 +8,7 @@ import { RepositoryDashboard } from '../repository-dashboard/RepositoryDashboard
 import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
 import { ClaudeConfigEditor } from '../claude-config/ClaudeConfigEditor';
 import { ClusterDashboard } from '../cluster/ClusterDashboard';
-import { RtsView } from '../rts/RtsView';
+import { OfficeView } from '../office/OfficeView';
 
 function GroupEmptyCell() {
   return (
@@ -49,7 +49,7 @@ export function MainPanel() {
   }
 
   if (activePanel === 'rts') {
-    return <RtsView />;
+    return <OfficeView />;
   }
 
   if (activePanel === 'repositories') {
