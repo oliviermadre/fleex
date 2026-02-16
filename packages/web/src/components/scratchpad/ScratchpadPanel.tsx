@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { useScrollSync } from '../../hooks/useScrollSync';
+import { HotkeyBadge } from '../ui/HotkeyBadge';
 
 export function ScratchpadPanel() {
   const open = useUIStore((s) => s.scratchpadOpen);
@@ -119,20 +120,23 @@ export function ScratchpadPanel() {
           </div>
           <div className="flex items-center gap-1">
             {/* Preview toggle */}
-            <button
-              className={`p-1.5 rounded transition-colors ${
-                previewExpanded
-                  ? 'bg-[var(--theme-accent)] text-white'
-                  : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] hover:bg-white/[0.06]'
-              }`}
-              onClick={togglePreview}
-              title="Toggle preview (Alt+Shift+V)"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
-                <circle cx="8" cy="8" r="2" />
-              </svg>
-            </button>
+            <span className="relative">
+              <button
+                className={`p-1.5 rounded transition-colors ${
+                  previewExpanded
+                    ? 'bg-[var(--theme-accent)] text-white'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] hover:bg-white/[0.06]'
+                }`}
+                onClick={togglePreview}
+                title="Toggle preview (Alt+Shift+V)"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
+                  <circle cx="8" cy="8" r="2" />
+                </svg>
+              </button>
+              <HotkeyBadge hotkey="⌥⇧V" position="top-left" />
+            </span>
             {/* Hotkey badge */}
             <span className="text-[10px] text-[var(--theme-text-faint)] bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 rounded font-mono mr-1">
               Alt+Shift+P
