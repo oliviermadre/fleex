@@ -25,7 +25,7 @@ export async function handleExec(body: ExecRequest): Promise<ExecResponse> {
 
   if (shell) {
     try {
-      const { stdout, stderr } = await execFileAsync('/bin/zsh', ['-l', '-c', command], {
+      const { stdout, stderr } = await execFileAsync('/bin/zsh', ['-il', '-c', command], {
         cwd,
         timeout,
         maxBuffer,
