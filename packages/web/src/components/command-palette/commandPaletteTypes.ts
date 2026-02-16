@@ -1,4 +1,4 @@
-export type CommandCategory = 'session' | 'view' | 'create' | 'pinned' | 'worktree' | 'action';
+export type CommandCategory = 'session' | 'view' | 'create' | 'pinned' | 'worktree' | 'action' | 'ticket';
 
 export interface CommandItem {
   id: string;

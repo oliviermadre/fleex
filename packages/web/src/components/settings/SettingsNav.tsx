@@ -7,6 +7,7 @@ const tabs: { key: SettingsTab; label: string }[] = [
   { key: 'repositories', label: 'Repositories' },
   { key: 'pinned-icons', label: 'Pinned Icons' },
   { key: 'worktree-actions', label: 'Worktree Actions' },
+  { key: 'agent-tokens', label: 'Agent Tokens' },
 ];
 
 export function SettingsNav() {

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-type ActivePanel = 'sessions' | 'repositories' | 'claude-config' | 'cluster' | 'settings' | 'scratchpads';
-export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions';
+type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'cluster' | 'settings' | 'scratchpads';
+export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions' | 'agent-tokens';
 
 interface UIState {
   // Nav sidebar (left icon bar)
@@ -26,7 +26,9 @@ interface UIState {
 
   // Create session modal
   createModalOpen: boolean;
+  createModalTicketContext: { ticketId: string; repo: string | null; prompt: string } | null;
   openCreateModal: () => void;
+  openCreateModalForTicket: (ctx: { ticketId: string; repo: string | null; prompt: string }) => void;
   closeCreateModal: () => void;
 
   // Command palette
@@ -57,6 +59,7 @@ export const useUIStore = create<UIState>((set) => ({
   settingsTab: 'general',
   altHeld: false,
   createModalOpen: false,
+  createModalTicketContext: null,
   commandPaletteOpen: false,
   collapsedGroups: new Set<string>(),
   scratchpadOpen: false,
@@ -89,7 +92,9 @@ export const useUIStore = create<UIState>((set) => ({
 
   openCreateModal: () => set({ createModalOpen: true }),
 
-  closeCreateModal: () => set({ createModalOpen: false }),
+  openCreateModalForTicket: (ctx) => set({ createModalOpen: true, createModalTicketContext: ctx }),
+
+  closeCreateModal: () => set({ createModalOpen: false, createModalTicketContext: null }),
 
   openCommandPalette: () => set({ commandPaletteOpen: true }),
 

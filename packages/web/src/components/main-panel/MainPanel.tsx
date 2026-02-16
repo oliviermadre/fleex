@@ -11,6 +11,9 @@ import { ClusterDashboard } from '../cluster/ClusterDashboard';
 import { ScratchpadMainView } from '../scratchpad/ScratchpadMainView';
 import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
+import { KanbanBoard } from '../tickets/KanbanBoard';
+import { TicketDetail } from '../tickets/TicketDetail';
+import { useTicketStore } from '../../stores/ticketStore';
 
 function GroupEmptyCell() {
   return (
@@ -35,6 +38,7 @@ export function MainPanel() {
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
+  const selectedTicketId = useTicketStore((s) => s.selectedTicketId);
   const splitSession = splitSessionId
     ? sessions.find((s) => s.id === splitSessionId) ?? null
     : null;
@@ -54,6 +58,13 @@ export function MainPanel() {
 
   if (activePanel === 'cluster') {
     return <ClusterDashboard />;
+  }
+
+  if (activePanel === 'tickets') {
+    if (selectedTicketId) {
+      return <TicketDetail ticketId={selectedTicketId} />;
+    }
+    return <KanbanBoard />;
   }
 
   if (activePanel === 'repositories') {

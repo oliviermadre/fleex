@@ -37,3 +37,27 @@ export class RepositoryNotFoundError extends DomainError {
     super(`Repository not found: ${path}`, 'REPOSITORY_NOT_FOUND');
   }
 }
+
+export class BoardNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Board not found: ${id}`, 'BOARD_NOT_FOUND');
+  }
+}
+
+export class TicketNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Ticket not found: ${id}`, 'TICKET_NOT_FOUND');
+  }
+}
+
+export class ApiTokenInvalidError extends DomainError {
+  constructor() {
+    super('Invalid or missing API token', 'API_TOKEN_INVALID');
+  }
+}
+
+export class LastBoardError extends DomainError {
+  constructor() {
+    super('Cannot delete the last board', 'LAST_BOARD');
+  }
+}

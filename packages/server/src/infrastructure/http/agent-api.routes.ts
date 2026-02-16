@@ -1,0 +1,264 @@
+import { randomUUID } from 'node:crypto';
+import type { FastifyInstance } from 'fastify';
+import type { TicketStatus } from '@asm/shared';
+import { TICKET_STATUSES } from '@asm/shared';
+import { BoardEntity } from '../../domain/entities/board.entity.js';
+import { TicketEntity } from '../../domain/entities/ticket.entity.js';
+import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import { BoardNotFoundError, TicketNotFoundError } from '../../domain/errors.js';
+import type { Container } from '../container.js';
+
+export function agentApiRoutes(container: Container) {
+  return async function (app: FastifyInstance) {
+
+    // List boards
+    app.get('/boards', async () => {
+      return container.ticketStore.getAllBoards().map((b) => {
+        const tickets = container.ticketStore.getTicketsByBoard(b.id);
+        const ticketCounts = {} as Record<TicketStatus, number>;
+        for (const s of TICKET_STATUSES) {
+          ticketCounts[s] = tickets.filter((t) => t.status === s).length;
+        }
+        return { ...b.toDTO(), ticketCounts };
+      });
+    });
+
+    // List/filter tickets
+    app.get<{ Querystring: { board_id?: string; status?: TicketStatus } }>('/tickets', async (request) => {
+      let tickets: TicketEntity[];
+      if (request.query.board_id) {
+        if (request.query.status) {
+          tickets = container.ticketStore.getTicketsByStatus(request.query.board_id, request.query.status);
+        } else {
+          tickets = container.ticketStore.getTicketsByBoard(request.query.board_id);
+        }
+      } else {
+        tickets = container.ticketStore.getAllTickets();
+      }
+      return tickets.map((t) => t.toDTO());
+    });
+
+    // Get ticket
+    app.get<{ Params: { id: string } }>('/tickets/:id', async (request) => {
+      const ticket = container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+      return ticket.toDTO();
+    });
+
+    // Create ticket
+    app.post<{ Body: { boardId: string; title: string; description?: string; status?: TicketStatus; priority?: string; tags?: string[] } }>(
+      '/tickets',
+      async (request, reply) => {
+        const { boardId, title, description, status, priority, tags } = request.body;
+        const board = container.ticketStore.getBoardById(boardId);
+        if (!board) throw new BoardNotFoundError(boardId);
+
+        const targetStatus = status ?? 'backlog';
+        const existing = container.ticketStore.getTicketsByStatus(boardId, targetStatus);
+        const maxPos = existing.reduce((max, t) => Math.max(max, t.position), -1);
+
+        const ticket = TicketEntity.create({
+          id: randomUUID(),
+          boardId,
+          title,
+          description,
+          status: targetStatus,
+          priority: priority as TicketEntity['priority'],
+          position: maxPos + 1,
+          tags,
+        });
+
+        await container.ticketStore.saveTicket(ticket);
+        await container.ticketStore.saveActivity(TicketActivityEntity.create({
+          id: randomUUID(),
+          ticketId: ticket.id,
+          action: 'created',
+          source: 'api',
+          actorType: 'agent',
+          actorName: request.agent?.name,
+        }));
+
+        const dto = ticket.toDTO();
+        container.ticketBroadcast('ticket:created', dto);
+        return reply.code(201).send(dto);
+      },
+    );
+
+    // Update ticket
+    app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>('/tickets/:id', async (request) => {
+      const ticket = container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const diff = ticket.update(request.body as Parameters<TicketEntity['update']>[0]);
+      await container.ticketStore.saveTicket(ticket);
+
+      if (Object.keys(diff).length > 0) {
+        await container.ticketStore.saveActivity(TicketActivityEntity.create({
+          id: randomUUID(),
+          ticketId: ticket.id,
+          action: 'updated',
+          changes: diff,
+          source: 'api',
+          actorType: 'agent',
+          actorName: request.agent?.name,
+        }));
+      }
+
+      const dto = ticket.toDTO();
+      container.ticketBroadcast('ticket:updated', dto);
+      return dto;
+    });
+
+    // Delete ticket
+    app.delete<{ Params: { id: string } }>('/tickets/:id', async (request, reply) => {
+      await container.ticketStore.removeTicket(request.params.id);
+      container.ticketBroadcast('ticket:deleted', { id: request.params.id });
+      return reply.code(204).send();
+    });
+
+    // Claim ticket
+    app.patch<{ Params: { id: string } }>('/tickets/:id/claim', async (request) => {
+      const ticket = container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const agentName = request.agent?.name ?? 'unknown';
+      const diff = ticket.claim(agentName);
+      await container.ticketStore.saveTicket(ticket);
+
+      await container.ticketStore.saveActivity(TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: ticket.id,
+        action: 'assigned',
+        changes: diff,
+        source: 'api',
+        actorType: 'agent',
+        actorName: agentName,
+      }));
+
+      const dto = ticket.toDTO();
+      container.ticketBroadcast('ticket:updated', dto);
+      return dto;
+    });
+
+    // Unclaim ticket
+    app.patch<{ Params: { id: string } }>('/tickets/:id/unclaim', async (request) => {
+      const ticket = container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const diff = ticket.unclaim();
+      await container.ticketStore.saveTicket(ticket);
+
+      await container.ticketStore.saveActivity(TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: ticket.id,
+        action: 'assigned',
+        changes: diff,
+        source: 'api',
+        actorType: 'agent',
+        actorName: request.agent?.name,
+      }));
+
+      const dto = ticket.toDTO();
+      container.ticketBroadcast('ticket:updated', dto);
+      return dto;
+    });
+
+    // Assign
+    app.patch<{ Params: { id: string }; Body: { name: string } }>('/tickets/:id/assign', async (request) => {
+      const ticket = container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const diff = ticket.assign(request.body.name);
+      await container.ticketStore.saveTicket(ticket);
+
+      await container.ticketStore.saveActivity(TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: ticket.id,
+        action: 'assigned',
+        changes: diff,
+        source: 'api',
+        actorType: 'agent',
+        actorName: request.agent?.name,
+      }));
+
+      const dto = ticket.toDTO();
+      container.ticketBroadcast('ticket:updated', dto);
+      return dto;
+    });
+
+    // Unassign
+    app.patch<{ Params: { id: string } }>('/tickets/:id/unassign', async (request) => {
+      const ticket = container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const diff = ticket.unassign();
+      await container.ticketStore.saveTicket(ticket);
+
+      await container.ticketStore.saveActivity(TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: ticket.id,
+        action: 'assigned',
+        changes: diff,
+        source: 'api',
+        actorType: 'agent',
+        actorName: request.agent?.name,
+      }));
+
+      const dto = ticket.toDTO();
+      container.ticketBroadcast('ticket:updated', dto);
+      return dto;
+    });
+
+    // Complete ticket
+    app.patch<{ Params: { id: string } }>('/tickets/:id/complete', async (request) => {
+      const ticket = container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const targetStatus: TicketStatus = ticket.status === 'done' ? 'doing' : 'done';
+      const diff = ticket.moveTo(targetStatus);
+      await container.ticketStore.saveTicket(ticket);
+
+      if (Object.keys(diff).length > 0) {
+        await container.ticketStore.saveActivity(TicketActivityEntity.create({
+          id: randomUUID(),
+          ticketId: ticket.id,
+          action: 'moved',
+          changes: diff,
+          source: 'api',
+          actorType: 'agent',
+          actorName: request.agent?.name,
+        }));
+      }
+
+      const dto = ticket.toDTO();
+      container.ticketBroadcast('ticket:moved', dto);
+      return dto;
+    });
+
+    // Next ticket for agent
+    app.get<{ Querystring: { board_id?: string } }>('/tickets/next', async (request) => {
+      const ticket = container.ticketStore.getNextTicketForAgent(request.query.board_id);
+      if (!ticket) return { ticket: null };
+      return { ticket: ticket.toDTO() };
+    });
+
+    // Agent's claimed tickets
+    app.get('/tickets/pending', async (request) => {
+      const agentName = request.agent?.name ?? '';
+      const tickets = container.ticketStore.getClaimedByAgent(agentName);
+      return tickets.map((t) => t.toDTO());
+    });
+
+    // Agent settings
+    app.get('/settings', async (request) => {
+      return {
+        name: request.agent?.name ?? '',
+        status: 'active',
+      };
+    });
+
+    app.patch('/settings', async (request) => {
+      return { ok: true };
+    });
+  };
+}

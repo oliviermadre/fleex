@@ -236,6 +236,97 @@ export async function fetchScratchpadList(
   );
 }
 
+// ── Tickets & Boards API ──
+
+export async function fetchBoards(): Promise<import('@asm/shared').BoardWithCounts[]> {
+  return request<import('@asm/shared').BoardWithCounts[]>('/boards');
+}
+
+export async function createBoard(req: import('@asm/shared').CreateBoardRequest): Promise<import('@asm/shared').Board> {
+  return request<import('@asm/shared').Board>('/boards', { method: 'POST', body: JSON.stringify(req) });
+}
+
+export async function updateBoard(id: string, req: import('@asm/shared').UpdateBoardRequest): Promise<import('@asm/shared').Board> {
+  return request<import('@asm/shared').Board>(`/boards/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+}
+
+export async function deleteBoard(id: string): Promise<void> {
+  await request<void>(`/boards/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function fetchTickets(boardId?: string): Promise<import('@asm/shared').Ticket[]> {
+  const qs = boardId ? `?boardId=${encodeURIComponent(boardId)}` : '';
+  return request<import('@asm/shared').Ticket[]>(`/tickets${qs}`);
+}
+
+export async function fetchTicket(id: string): Promise<import('@asm/shared').Ticket> {
+  return request<import('@asm/shared').Ticket>(`/tickets/${encodeURIComponent(id)}`);
+}
+
+export async function createTicket(req: import('@asm/shared').CreateTicketRequest): Promise<import('@asm/shared').Ticket> {
+  return request<import('@asm/shared').Ticket>('/tickets', { method: 'POST', body: JSON.stringify(req) });
+}
+
+export async function updateTicket(id: string, req: import('@asm/shared').UpdateTicketRequest): Promise<import('@asm/shared').Ticket> {
+  return request<import('@asm/shared').Ticket>(`/tickets/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+}
+
+export async function updateTicketSilent(id: string, req: import('@asm/shared').UpdateTicketRequest): Promise<import('@asm/shared').Ticket> {
+  return request<import('@asm/shared').Ticket>(`/tickets/${encodeURIComponent(id)}?silent=true`, { method: 'PATCH', body: JSON.stringify(req) });
+}
+
+export async function deleteTicket(id: string): Promise<void> {
+  await request<void>(`/tickets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function moveTicket(id: string, status: import('@asm/shared').TicketStatus, position?: number): Promise<import('@asm/shared').Ticket> {
+  return request<import('@asm/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/move`, {
+    method: 'POST', body: JSON.stringify({ status, position }),
+  });
+}
+
+export async function reorderTickets(updates: { id: string; status: import('@asm/shared').TicketStatus; position: number }[]): Promise<void> {
+  await request<{ ok: boolean }>('/tickets/reorder', { method: 'POST', body: JSON.stringify({ updates }) });
+}
+
+export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string }): Promise<import('@asm/shared').TicketLink> {
+  return request<import('@asm/shared').TicketLink>(`/tickets/${encodeURIComponent(id)}/links`, {
+    method: 'POST', body: JSON.stringify(link),
+  });
+}
+
+export async function removeTicketLink(id: string, linkId: string): Promise<void> {
+  await request<void>(`/tickets/${encodeURIComponent(id)}/links/${encodeURIComponent(linkId)}`, { method: 'DELETE' });
+}
+
+export async function fetchTicketActivity(id: string): Promise<import('@asm/shared').TicketActivity[]> {
+  return request<import('@asm/shared').TicketActivity[]>(`/tickets/${encodeURIComponent(id)}/activity`);
+}
+
+export async function openSessionFromTicket(id: string): Promise<{ sessionId: string }> {
+  return request<{ sessionId: string }>(`/tickets/${encodeURIComponent(id)}/open-session`, { method: 'POST' });
+}
+
+export async function importGitHubIssue(org: string, name: string, issueNumber: number, boardId: string): Promise<import('@asm/shared').Ticket> {
+  return request<import('@asm/shared').Ticket>('/tickets/import-github-issue', {
+    method: 'POST', body: JSON.stringify({ org, name, number: issueNumber, boardId }),
+  });
+}
+
+// ── Agent Tokens API ──
+
+export async function fetchAgentTokens(): Promise<import('@asm/shared').AgentToken[]> {
+  return request<import('@asm/shared').AgentToken[]>('/agent-tokens');
+}
+
+export async function createAgentToken(name: string): Promise<import('@asm/shared').AgentTokenCreated> {
+  return request<import('@asm/shared').AgentTokenCreated>('/agent-tokens', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+export async function deleteAgentToken(id: string): Promise<void> {
+  await request<void>(`/agent-tokens/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 // Claude Usage API
 
 export async function fetchClaudeUsage(force = false): Promise<ClaudeUsage | null> {

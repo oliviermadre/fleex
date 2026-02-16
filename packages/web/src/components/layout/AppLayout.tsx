@@ -5,6 +5,7 @@ import { useRepositoryDashboard } from '../../hooks/useRepositoryDashboard';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useHotkeyReveal } from '../../hooks/useHotkeyReveal';
 import { usePullRequestPolling } from '../../hooks/usePullRequestPolling';
+import { useTickets } from '../../hooks/useTickets';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { NavSidebar } from '../sidebar/NavSidebar';
@@ -24,6 +25,7 @@ export function AppLayout() {
   useKeyboardShortcuts();
   useHotkeyReveal();
   usePullRequestPolling();
+  useTickets();
 
   const navCollapsed = useUIStore((s) => s.navCollapsed);
   const activePanel = useUIStore((s) => s.activePanel);

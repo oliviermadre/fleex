@@ -183,3 +183,4 @@ export class WebSocketManager {
 export const terminalWs = new WebSocketManager();
 export const dashboardWs = new WebSocketManager();
 export const repositoryWs = new WebSocketManager();
+export const ticketWs = new WebSocketManager();

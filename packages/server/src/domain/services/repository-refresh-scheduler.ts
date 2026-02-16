@@ -15,6 +15,7 @@ export class RepositoryRefreshScheduler {
   private refreshing = false;
   private repos: RepoRef[] = [];
   private broadcast: BroadcastFn = () => {};
+  private onMergedPRs: ((mergedPRs: import('@asm/shared').PullRequest[], repoKey: string) => Promise<void>) | null = null;
 
   constructor(
     private readonly graphql: GitHubGraphQLAdapter,
@@ -24,6 +25,10 @@ export class RepositoryRefreshScheduler {
 
   setBroadcast(fn: BroadcastFn): void {
     this.broadcast = fn;
+  }
+
+  setOnMergedPRs(fn: (mergedPRs: import('@asm/shared').PullRequest[], repoKey: string) => Promise<void>): void {
+    this.onMergedPRs = fn;
   }
 
   setRepos(repos: RepoRef[]): void {
@@ -99,6 +104,13 @@ export class RepositoryRefreshScheduler {
         const summary = this.buildSummary(org, name, result, githubUser, now);
         this.cache.set(`summary:${key}`, summary, RepositoryCache.TTL_SUMMARY);
         summaries.push(summary);
+
+        // Notify merge detector
+        if (this.onMergedPRs && result.mergedPRs.length > 0) {
+          this.onMergedPRs(result.mergedPRs, key).catch((err) => {
+            this.logger.warn('Merge detection failed', { key, error: String(err) });
+          });
+        }
       }
 
       // Also keep summaries for repos not in current batch

@@ -1,0 +1,279 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { Session } from '@asm/shared';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useUIStore } from '../../stores/uiStore';
+import { TicketDetailHeader } from './TicketDetailHeader';
+import { TicketMetaSidebar } from './TicketMetaSidebar';
+import { TicketActivityTimeline } from './TicketActivityTimeline';
+import { SessionTerminalOverlay } from './SessionTerminalOverlay';
+import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import * as api from '../../services/api';
+
+type DescriptionMode = 'write' | 'preview' | 'split';
+
+export function TicketDetail({ ticketId }: { ticketId: string }) {
+  const tickets = useTicketStore((s) => s.tickets);
+  const updateTicket = useTicketStore((s) => s.updateTicket);
+  const selectTicket = useTicketStore((s) => s.selectTicket);
+  const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
+  const sessions = useSessionStore((s) => s.sessions);
+  const ticket = tickets.find((t) => t.id === ticketId);
+
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [descMode, setDescMode] = useState<DescriptionMode>('split');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [overlaySession, setOverlaySession] = useState<Session | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(false);
+
+  // Track initial description to know if it changed when leaving
+  const initialDescRef = useRef('');
+  const descriptionRef = useRef('');
+
+  useEffect(() => {
+    if (ticket) {
+      setTitle(ticket.title);
+      setDescription(ticket.description);
+      initialDescRef.current = ticket.description;
+      descriptionRef.current = ticket.description;
+    }
+  }, [ticket?.id]); // Reset on ticket change, not on every ticket update
+
+  // Flush pending description changes and log activity on unmount / ticket switch
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (descriptionRef.current !== initialDescRef.current) {
+        // Fire a normal (non-silent) update to create a single activity entry
+        updateTicket(ticketId, { description: descriptionRef.current });
+      }
+    };
+  }, [ticketId, updateTicket]);
+
+  // ESC to go back to board view (only when overlay is NOT open)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !overlaySession) {
+        selectTicket(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectTicket, overlaySession]);
+
+  // Debounced silent save — persists data without creating activity entries
+  const debouncedSilentDescription = useCallback(
+    (value: string) => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        api.updateTicketSilent(ticketId, { description: value }).then((updated) => {
+          useTicketStore.setState((s) => ({
+            tickets: s.tickets.map((t) => (t.id === ticketId ? updated : t)),
+          }));
+        });
+      }, 500);
+    },
+    [ticketId],
+  );
+
+  const debouncedUpdate = useCallback(
+    (field: 'title' | 'description', value: string) => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        updateTicket(ticketId, { [field]: value });
+      }, 500);
+    },
+    [ticketId, updateTicket],
+  );
+
+  // Find an existing running session for this ticket
+  const findSessionForTicket = useCallback((): Session | null => {
+    if (!ticket) return null;
+
+    // Check session links first
+    const sessionLink = ticket.links.find((l) => l.type === 'session');
+    if (sessionLink) {
+      const session = sessions.find((s) => s.id === sessionLink.ref && s.status === 'running');
+      if (session) return session;
+    }
+
+    // Check worktree link and find matching session
+    const wtLink = ticket.links.find((l) => l.type === 'worktree');
+    if (wtLink) {
+      const colonIdx = wtLink.ref.indexOf(':');
+      if (colonIdx > 0) {
+        const repoKey = wtLink.ref.substring(0, colonIdx);
+        const branch = wtLink.ref.substring(colonIdx + 1);
+        const [org, name] = repoKey.split('/');
+        const session = sessions.find(
+          (s) =>
+            s.status === 'running' &&
+            s.type === 'claude' &&
+            s.repositoryOrg === org &&
+            s.repositoryName === name &&
+            s.worktreeBranch === branch,
+        );
+        if (session) return session;
+      }
+    }
+
+    return null;
+  }, [ticket, sessions]);
+
+  const openCreateModalForTicket = useUIStore((s) => s.openCreateModalForTicket);
+
+  const handleOpenSession = useCallback(async () => {
+    if (!ticket) return;
+
+    // Try to find existing active session
+    const existing = findSessionForTicket();
+    if (existing) {
+      setOverlaySession(existing);
+      return;
+    }
+
+    // If ticket has a worktree link → auto-create via API (existing behavior)
+    const wtLink = ticket.links.find((l) => l.type === 'worktree');
+    if (wtLink) {
+      setSessionLoading(true);
+      try {
+        const { sessionId } = await openSessionFromTicket(ticketId);
+        const tryOpen = () => {
+          const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
+          if (session) {
+            setOverlaySession(session);
+            setSessionLoading(false);
+          } else {
+            setTimeout(tryOpen, 300);
+          }
+        };
+        tryOpen();
+      } catch {
+        setSessionLoading(false);
+      }
+      return;
+    }
+
+    // No worktree → open CreateSessionModal with prefilled context
+    const repoLink = ticket.links.find((l) => l.type === 'repository');
+    const prompt = [ticket.title, ticket.description].filter(Boolean).join('\n\n');
+    openCreateModalForTicket({
+      ticketId: ticket.id,
+      repo: repoLink?.ref ?? null,
+      prompt,
+    });
+  }, [ticket, ticketId, findSessionForTicket, openSessionFromTicket, openCreateModalForTicket]);
+
+  if (!ticket) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-[var(--theme-bg-base)]">
+        <span className="text-sm text-[var(--theme-text-muted)]">Ticket not found</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
+      <TicketDetailHeader ticket={ticket} />
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main content */}
+        <div className="flex flex-1 flex-col overflow-hidden p-6">
+          {/* Title */}
+          <input
+            className="w-full flex-shrink-0 bg-transparent text-lg font-semibold text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              debouncedUpdate('title', e.target.value);
+            }}
+            placeholder="Ticket title..."
+          />
+
+          {/* Description mode tabs */}
+          <div className="mt-3 flex flex-shrink-0 items-center gap-1 border-b border-[var(--theme-border)]">
+            {(['write', 'preview', 'split'] as const).map((mode) => (
+              <button
+                key={mode}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  descMode === mode
+                    ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-text-primary)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                }`}
+                onClick={() => setDescMode(mode)}
+              >
+                {mode === 'write' ? 'Write' : mode === 'preview' ? 'Preview' : 'Split'}
+              </button>
+            ))}
+          </div>
+
+          {/* Description editor/preview */}
+          <div className="mt-3 flex min-h-0 flex-1 gap-4 overflow-hidden">
+            {/* Write pane */}
+            {descMode !== 'preview' && (
+              <textarea
+                className={`resize-none rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 text-sm font-mono text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none ${
+                  descMode === 'split' ? 'w-1/2' : 'w-full'
+                }`}
+                value={description}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  descriptionRef.current = e.target.value;
+                  debouncedSilentDescription(e.target.value);
+                }}
+                placeholder="Add a description (markdown supported)..."
+              />
+            )}
+
+            {/* Preview pane */}
+            {descMode !== 'write' && (
+              <div
+                className={`overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 ${
+                  descMode === 'split' ? 'w-1/2' : 'w-full'
+                }`}
+              >
+                {description.trim() ? (
+                  <MarkdownRenderer
+                    content={description}
+                    onToggleCheckbox={(lineIndex) => {
+                      const lines = description.split('\n');
+                      const line = lines[lineIndex];
+                      if (!line) return;
+                      if (line.includes('[ ]')) {
+                        lines[lineIndex] = line.replace('[ ]', '[x]');
+                      } else if (/\[[xX]\]/.test(line)) {
+                        lines[lineIndex] = line.replace(/\[[xX]\]/, '[ ]');
+                      }
+                      const updated = lines.join('\n');
+                      setDescription(updated);
+                      descriptionRef.current = updated;
+                      debouncedSilentDescription(updated);
+                    }}
+                  />
+                ) : (
+                  <p className="text-sm italic text-[var(--theme-text-muted)]">Nothing to preview</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Activity */}
+          <div className="mt-4 flex-shrink-0 max-h-[200px] overflow-y-auto">
+            <TicketActivityTimeline ticketId={ticketId} />
+          </div>
+        </div>
+
+        {/* Meta sidebar */}
+        <TicketMetaSidebar ticket={ticket} onOpenSession={handleOpenSession} loading={sessionLoading} />
+      </div>
+
+      {/* Session terminal overlay */}
+      {overlaySession && (
+        <SessionTerminalOverlay
+          session={overlaySession}
+          onClose={() => setOverlaySession(null)}
+        />
+      )}
+    </div>
+  );
+}

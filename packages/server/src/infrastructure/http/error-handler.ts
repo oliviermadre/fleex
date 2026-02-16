@@ -7,6 +7,10 @@ const CODE_TO_STATUS: Record<string, number> = {
   TMUX_NOT_AVAILABLE: 503,
   WORKTREE_ERROR: 400,
   REPOSITORY_NOT_FOUND: 404,
+  BOARD_NOT_FOUND: 404,
+  TICKET_NOT_FOUND: 404,
+  API_TOKEN_INVALID: 401,
+  LAST_BOARD: 422,
 };
 
 export function registerErrorHandler(app: FastifyInstance): void {

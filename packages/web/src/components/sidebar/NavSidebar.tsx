@@ -1,6 +1,7 @@
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { HotkeyBadge } from '../ui/HotkeyBadge';
 import { cn } from '../../lib/cn';
 
@@ -12,6 +13,8 @@ export function NavSidebar() {
   const sessions = useSessionStore((s) => s.sessions);
   const summaries = useRepositoryDashboardStore((s) => s.summaries);
   const repoCount = Object.keys(summaries).length;
+  const tickets = useTicketStore((s) => s.tickets);
+  const activeTicketCount = tickets.filter((t) => t.status === 'doing' || t.status === 'reviewing').length;
 
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
@@ -49,6 +52,32 @@ export function NavSidebar() {
           hotkey="⌥2"
           onClick={() => setActivePanel('repositories')}
         />
+        {/* Tickets */}
+        <NavItem
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+              <rect x="1" y="2" width="22" height="20" rx="1.5" stroke="currentColor" fill="none" />
+              <line x1="8.5" y1="2" x2="8.5" y2="22" />
+              <line x1="15.5" y1="2" x2="15.5" y2="22" />
+              <line x1="3" y1="4" x2="7" y2="4" stroke="currentColor" strokeWidth="0.5" />
+              <rect x="3" y="6" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+              <rect x="3" y="10" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+              <line x1="10" y1="4" x2="14" y2="4" stroke="currentColor" strokeWidth="0.5" />
+              <rect x="10" y="6" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+              <line x1="17" y1="4" x2="21" y2="4" stroke="currentColor" strokeWidth="0.5" />
+              <rect x="17" y="6" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+              <rect x="17" y="10" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+              <rect x="17" y="14" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
+            </svg>
+          }
+          label="Tickets"
+          active={activePanel === 'tickets'}
+          collapsed={navCollapsed}
+          badge={activeTicketCount > 0 ? (activeTicketCount > 9 ? '9+' : String(activeTicketCount)) : undefined}
+          hotkey="⌥3"
+          onClick={() => setActivePanel('tickets')}
+        />
+
         {/* Claude Config */}
         <NavItem
           icon={
@@ -65,7 +94,7 @@ export function NavSidebar() {
           label="Claude Config"
           active={activePanel === 'claude-config'}
           collapsed={navCollapsed}
-          hotkey="⌥3"
+          hotkey="⌥4"
           onClick={() => setActivePanel('claude-config')}
         />
 
@@ -100,7 +129,7 @@ export function NavSidebar() {
           label="Cluster"
           active={activePanel === 'cluster'}
           collapsed={navCollapsed}
-          hotkey="⌥4"
+          hotkey="⌥6"
           onClick={() => setActivePanel('cluster')}
         />
       </div>
