@@ -51,7 +51,8 @@ export function KanbanCard({
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const sessions = useSessionStore((s) => s.sessions);
 
-  const githubLinks = ticket.links.filter((l) => l.type === 'github_issue' || l.type === 'github_pr');
+  const issueLinks = ticket.links.filter((l) => l.type === 'github_issue');
+  const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
   const worktreeLinks = ticket.links.filter((l) => l.type === 'worktree');
   const sessionLinks = ticket.links.filter((l) => l.type === 'session');
 
@@ -142,6 +143,27 @@ export function KanbanCard({
         </div>
       )}
 
+      {/* PR badges */}
+      {prLinks.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          {prLinks.map((pr) => (
+            <a
+              key={pr.id}
+              href={pr.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-medium text-purple-400 hover:bg-purple-500/25 transition-colors"
+            >
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
+                <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
+              </svg>
+              {pr.label}
+            </a>
+          ))}
+        </div>
+      )}
+
       {/* Tags */}
       {ticket.tags.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1">
@@ -158,12 +180,12 @@ export function KanbanCard({
 
       {/* Bottom row: links + time + open session */}
       <div className="mt-1.5 flex items-center gap-2 text-[10px] text-[var(--theme-text-muted)]">
-        {githubLinks.length > 0 && (
+        {issueLinks.length > 0 && (
           <span className="flex items-center gap-0.5">
             <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
             </svg>
-            {githubLinks[0]?.label}
+            {issueLinks[0]?.label}
           </span>
         )}
         {sessionLinks.length > 0 && (

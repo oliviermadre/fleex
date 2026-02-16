@@ -139,6 +139,32 @@ export function TicketMetaSidebar({
         onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
       />
 
+      {/* Pull Requests */}
+      {ticket.links.filter((l) => l.type === 'github_pr').length > 0 && (
+        <div>
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            Pull Request
+          </label>
+          <div className="flex flex-col gap-1.5">
+            {ticket.links.filter((l) => l.type === 'github_pr').map((pr) => (
+              <a
+                key={pr.id}
+                href={pr.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-md border border-purple-500/20 bg-purple-500/[0.06] px-2 py-1.5 text-xs transition-colors hover:bg-purple-500/[0.12]"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-purple-400">
+                  <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
+                </svg>
+                <span className="font-medium text-purple-400">{pr.label}</span>
+                <span className="ml-auto text-[10px] text-[var(--theme-text-faint)]">{pr.ref}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tags */}
       <div>
         <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
@@ -192,14 +218,14 @@ export function TicketMetaSidebar({
         </button>
       </div>
 
-      {/* Other Links (non-worktree, non-repository) */}
-      {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository').length > 0 && (
+      {/* Other Links (non-worktree, non-repository, non-PR) */}
+      {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').length > 0 && (
         <div>
           <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
             Links
           </label>
           <div className="flex flex-col gap-1">
-            {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository').map((link) => (
+            {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').map((link) => (
               <div key={link.id} className="flex items-center gap-2 text-xs">
                 <span className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9px] font-medium text-[var(--theme-text-muted)]">
                   {link.type.replace('_', ' ')}
@@ -295,6 +321,9 @@ function RepoWorktreePicker({
 
   // Effective repo (from linked worktree or manual selection)
   const effectiveRepo = linkedRepo ? `${linkedRepo.org}/${linkedRepo.name}` : selectedRepo;
+
+  // Whether the linked repo exists in the current configuration
+  const repoInConfig = effectiveRepo ? repos.some((r) => r.key === effectiveRepo) : false;
 
   // Fetch worktrees from filesystem when repo selection changes
   const fetchWorktreesForRepos = useCallback(async (repoList: { org: string; name: string; key: string }[]) => {
@@ -400,7 +429,15 @@ function RepoWorktreePicker({
         <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
           Repository
         </label>
-        {repos.length === 0 ? (
+        {linkedRepo && !repoInConfig ? (
+          /* Read-only: repo linked but no longer in resolved repositories */
+          <div className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+              <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
+            </svg>
+            <span className="truncate text-xs text-[var(--theme-text-secondary)]">{linkedRepo.org}/{linkedRepo.name}</span>
+          </div>
+        ) : repos.length === 0 ? (
           <span className="text-[10px] text-[var(--theme-text-muted)]">No repositories configured</span>
         ) : (
           <select
@@ -433,16 +470,18 @@ function RepoWorktreePicker({
               </svg>
               <span className="truncate text-xs text-[var(--theme-text-primary)]">{worktreeLink.label}</span>
             </div>
-            <button
-              className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-              onClick={handleClearWorktree}
-              title="Unlink worktree"
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="4" y1="4" x2="12" y2="12" />
-                <line x1="12" y1="4" x2="4" y2="12" />
-              </svg>
-            </button>
+            {repoInConfig && (
+              <button
+                className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+                onClick={handleClearWorktree}
+                title="Unlink worktree"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="4" x2="12" y2="12" />
+                  <line x1="12" y1="4" x2="4" y2="12" />
+                </svg>
+              </button>
+            )}
           </div>
         ) : loading ? (
           <span className="text-[10px] text-[var(--theme-text-muted)]">Loading worktrees...</span>
