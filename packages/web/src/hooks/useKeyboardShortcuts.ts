@@ -147,12 +147,12 @@ export function useKeyboardShortcuts() {
           setActivePanel('claude-config');
           return;
         }
-        if (e.code === 'Digit5') {
+        if (e.code === 'Digit6') {
           e.preventDefault();
           setActivePanel('scratchpads');
           return;
         }
-        if (e.code === 'Digit6') {
+        if (e.code === 'Digit7') {
           e.preventDefault();
           setActivePanel('cluster');
           return;

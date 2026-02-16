@@ -113,7 +113,7 @@ export function NavSidebar() {
           label="Scratchpads"
           active={activePanel === 'scratchpads'}
           collapsed={navCollapsed}
-          hotkey="⌥5"
+          hotkey="⌥6"
           onClick={() => setActivePanel('scratchpads')}
         />
 
@@ -129,7 +129,7 @@ export function NavSidebar() {
           label="Cluster"
           active={activePanel === 'cluster'}
           collapsed={navCollapsed}
-          hotkey="⌥6"
+          hotkey="⌥7"
           onClick={() => setActivePanel('cluster')}
         />
       </div>
