@@ -3,6 +3,7 @@ import { useUIStore } from '../stores/uiStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useClaudeConfigStore } from '../stores/claudeConfigStore';
+import { useScratchpadStore } from '../stores/scratchpadStore';
 import * as api from '../services/api';
 import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
 
@@ -29,6 +30,8 @@ export function useKeyboardShortcuts() {
   const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
   const activePanel = useUIStore((s) => s.activePanel);
   const claudeConfigSaveFile = useClaudeConfigStore((s) => s.saveFile);
+  const scratchpadOpen = useUIStore((s) => s.scratchpadOpen);
+  const togglePreview = useScratchpadStore((s) => s.togglePreview);
   const basePath = useSettingsStore((s) => s.settings.basePath);
   const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
   const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
@@ -115,6 +118,13 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Alt+Shift+V: toggle scratchpad preview (when panel is open)
+      if (e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey && e.code === 'KeyV') {
+        e.preventDefault();
+        if (scratchpadOpen) togglePreview();
+        return;
+      }
+
       // Alt-only combos (uses e.code for macOS Option key compatibility)
       if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
         if (e.code === 'Digit1') {
@@ -135,6 +145,11 @@ export function useKeyboardShortcuts() {
         if (e.code === 'Digit4') {
           e.preventDefault();
           setActivePanel('cluster');
+          return;
+        }
+        if (e.code === 'Digit5') {
+          e.preventDefault();
+          setActivePanel('scratchpads');
           return;
         }
         if (e.code === 'Digit0') {
@@ -259,5 +274,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, activePanel, claudeConfigSaveFile, orderedNavIds, selectedSessionId, selectedGroupId, splitSessionId, focusedPane, selectSession, selectGroup, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
+  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedNavIds, selectedSessionId, selectedGroupId, splitSessionId, focusedPane, selectSession, selectGroup, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
 }

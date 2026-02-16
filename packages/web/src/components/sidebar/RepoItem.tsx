@@ -1,6 +1,7 @@
 import type { RepositorySummary } from '@asm/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
+import { useCallback } from 'react';
 
 interface Props {
   summary: RepositorySummary;
@@ -9,21 +10,42 @@ interface Props {
 export function RepoItem({ summary }: Props) {
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectRepo = useUIStore((s) => s.selectRepo);
+  const openScratchpadForRepo = useUIStore((s) => s.openScratchpadForRepo);
   const key = `${summary.org}/${summary.name}`;
   const isSelected = selectedRepoKey === key;
   const loading = summary.lastFetchedAt === null;
 
+  const handleScratchpadClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      openScratchpadForRepo(key);
+    },
+    [openScratchpadForRepo, key],
+  );
+
   return (
     <button
       className={cn(
-        'flex w-full flex-col gap-1 px-3 py-1.5 text-left transition-colors',
+        'group flex w-full flex-col gap-1 px-3 py-1.5 text-left transition-colors',
         isSelected
           ? 'border-l-2 border-[#D77655] bg-zinc-800/40'
           : 'border-l-2 border-transparent hover:bg-zinc-800/20',
       )}
       onClick={() => selectRepo(key)}
     >
-      <span className="truncate text-sm text-zinc-200">{summary.name}</span>
+      <div className="flex items-center w-full">
+        <span className="truncate text-sm text-zinc-200">{summary.name}</span>
+        <span
+          role="button"
+          className="ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/[0.08]"
+          onClick={handleScratchpadClick}
+          title="Open scratchpad"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" />
+          </svg>
+        </span>
+      </div>
       {loading ? (
         <div className="flex gap-2">
           {Array.from({ length: 5 }, (_, i) => (

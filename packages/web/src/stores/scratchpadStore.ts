@@ -1,62 +1,142 @@
 import { create } from 'zustand';
-import { fetchScratchpad, saveScratchpad } from '../services/api';
+import {
+  fetchScratchpad,
+  saveScratchpad,
+  fetchRepoScratchpad,
+  saveRepoScratchpad,
+  fetchScratchpadList,
+} from '../services/api';
 
-interface ScratchpadState {
+interface ScratchpadEntry {
   content: string;
   loaded: boolean;
   saving: boolean;
-  mode: 'preview' | 'edit';
-
-  setContent: (content: string) => void;
-  setMode: (mode: 'preview' | 'edit') => void;
-  load: () => Promise<void>;
-  save: () => Promise<void>;
-  toggleCheckbox: (lineIndex: number) => void;
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
+interface ScratchpadState {
+  entries: Record<string, ScratchpadEntry>; // key: '__global__' | 'org/name'
+  previewExpanded: boolean;
+
+  // For Feature 3 main panel view
+  selectedScratchpadKey: string | null;
+  scratchpadList: { key: string; label: string; lineCount: number }[];
+  scratchpadListLoaded: boolean;
+
+  // Actions
+  setContent: (key: string, content: string) => void;
+  load: (key: string) => Promise<void>;
+  save: (key: string) => Promise<void>;
+  flushSave: (key: string) => void;
+  toggleCheckbox: (key: string, lineIndex: number) => void;
+  togglePreview: () => void;
+  setSelectedScratchpadKey: (key: string | null) => void;
+  loadScratchpadList: (repos?: string[]) => Promise<void>;
+}
+
+const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function getEntry(entries: Record<string, ScratchpadEntry>, key: string): ScratchpadEntry {
+  return entries[key] ?? { content: '', loaded: false, saving: false };
+}
+
+function parseRepoKey(key: string): { org: string; name: string } | null {
+  if (key === '__global__') return null;
+  const slash = key.indexOf('/');
+  if (slash === -1) return null;
+  return { org: key.slice(0, slash), name: key.slice(slash + 1) };
+}
 
 export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
-  content: '',
-  loaded: false,
-  saving: false,
-  mode: 'preview',
+  entries: {},
+  previewExpanded: false,
+  selectedScratchpadKey: null,
+  scratchpadList: [],
+  scratchpadListLoaded: false,
 
-  setContent: (content: string) => {
-    set({ content });
+  setContent: (key: string, content: string) => {
+    set((state) => ({
+      entries: {
+        ...state.entries,
+        [key]: { ...getEntry(state.entries, key), content },
+      },
+    }));
     // Debounced auto-save
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      get().save();
-    }, 800);
+    const existing = saveTimers.get(key);
+    if (existing) clearTimeout(existing);
+    saveTimers.set(
+      key,
+      setTimeout(() => {
+        get().save(key);
+      }, 800),
+    );
   },
 
-  setMode: (mode) => set({ mode }),
-
-  load: async () => {
+  load: async (key: string) => {
     try {
-      const { content } = await fetchScratchpad();
-      set({ content, loaded: true });
+      let content: string;
+      const repo = parseRepoKey(key);
+      if (repo) {
+        const res = await fetchRepoScratchpad(repo.org, repo.name);
+        content = res.content;
+      } else {
+        const res = await fetchScratchpad();
+        content = res.content;
+      }
+      set((state) => ({
+        entries: {
+          ...state.entries,
+          [key]: { content, loaded: true, saving: false },
+        },
+      }));
     } catch {
-      set({ loaded: true });
+      set((state) => ({
+        entries: {
+          ...state.entries,
+          [key]: { ...getEntry(state.entries, key), loaded: true },
+        },
+      }));
     }
   },
 
-  save: async () => {
-    const { content } = get();
-    set({ saving: true });
+  save: async (key: string) => {
+    const entry = getEntry(get().entries, key);
+    set((state) => ({
+      entries: {
+        ...state.entries,
+        [key]: { ...getEntry(state.entries, key), saving: true },
+      },
+    }));
     try {
-      await saveScratchpad(content);
+      const repo = parseRepoKey(key);
+      if (repo) {
+        await saveRepoScratchpad(repo.org, repo.name, entry.content);
+      } else {
+        await saveScratchpad(entry.content);
+      }
     } catch {
       // silent fail — will retry on next save
     } finally {
-      set({ saving: false });
+      set((state) => ({
+        entries: {
+          ...state.entries,
+          [key]: { ...getEntry(state.entries, key), saving: false },
+        },
+      }));
     }
   },
 
-  toggleCheckbox: (lineIndex: number) => {
-    const { content } = get();
-    const lines = content.split('\n');
+  flushSave: (key: string) => {
+    const timer = saveTimers.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      saveTimers.delete(key);
+      get().save(key);
+    }
+  },
+
+  toggleCheckbox: (key: string, lineIndex: number) => {
+    const entry = getEntry(get().entries, key);
+    const lines = entry.content.split('\n');
     if (lineIndex < 0 || lineIndex >= lines.length) return;
 
     const line = lines[lineIndex]!;
@@ -69,11 +149,33 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
     }
 
     const newContent = lines.join('\n');
-    set({ content: newContent });
+    set((state) => ({
+      entries: {
+        ...state.entries,
+        [key]: { ...getEntry(state.entries, key), content: newContent },
+      },
+    }));
     // Debounced save
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      get().save();
-    }, 400);
+    const existing = saveTimers.get(key);
+    if (existing) clearTimeout(existing);
+    saveTimers.set(
+      key,
+      setTimeout(() => {
+        get().save(key);
+      }, 400),
+    );
+  },
+
+  togglePreview: () => set((state) => ({ previewExpanded: !state.previewExpanded })),
+
+  setSelectedScratchpadKey: (key) => set({ selectedScratchpadKey: key }),
+
+  loadScratchpadList: async (repos?: string[]) => {
+    try {
+      const { items } = await fetchScratchpadList(repos);
+      set({ scratchpadList: items, scratchpadListLoaded: true });
+    } catch {
+      set({ scratchpadListLoaded: true });
+    }
   },
 }));

@@ -5,6 +5,7 @@ import { SessionGroups } from './SessionGroups';
 import { SettingsNav } from '../settings/SettingsNav';
 import { RepositoriesContent } from './RepositoriesContent';
 import { ClaudeConfigTree } from '../claude-config/ClaudeConfigTree';
+import { ScratchpadsContent } from '../scratchpad/ScratchpadsContent';
 
 export function ContentPanel() {
   const activePanel = useUIStore((s) => s.activePanel);
@@ -15,6 +16,7 @@ export function ContentPanel() {
       {activePanel === 'repositories' && <RepositoriesContent />}
       {activePanel === 'claude-config' && <ClaudeConfigTree />}
       {activePanel === 'cluster' && null}
+      {activePanel === 'scratchpads' && <ScratchpadsContent />}
       {activePanel === 'settings' && <SettingsNav />}
     </div>
   );

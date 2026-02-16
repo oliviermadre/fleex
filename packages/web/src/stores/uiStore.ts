@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type ActivePanel = 'sessions' | 'repositories' | 'claude-config' | 'cluster' | 'settings';
+type ActivePanel = 'sessions' | 'repositories' | 'claude-config' | 'cluster' | 'settings' | 'scratchpads';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions';
 
 interface UIState {
@@ -40,8 +40,10 @@ interface UIState {
 
   // Scratchpad panel
   scratchpadOpen: boolean;
+  scratchpadRepoKey: string | null; // null = global, 'org/name' = per-repo
   toggleScratchpad: () => void;
   setScratchpadOpen: (open: boolean) => void;
+  openScratchpadForRepo: (repoKey: string | null) => void;
 
   // Repository dashboard selection
   selectedRepoKey: string | null;
@@ -58,11 +60,19 @@ export const useUIStore = create<UIState>((set) => ({
   commandPaletteOpen: false,
   collapsedGroups: new Set<string>(),
   scratchpadOpen: false,
+  scratchpadRepoKey: null,
 
   toggleScratchpad: () =>
-    set((state) => ({ scratchpadOpen: !state.scratchpadOpen })),
+    set((state) => ({
+      scratchpadOpen: !state.scratchpadOpen,
+      // When opening (was closed), reset to global
+      scratchpadRepoKey: state.scratchpadOpen ? state.scratchpadRepoKey : null,
+    })),
 
   setScratchpadOpen: (open) => set({ scratchpadOpen: open }),
+
+  openScratchpadForRepo: (repoKey) =>
+    set({ scratchpadRepoKey: repoKey, scratchpadOpen: true }),
 
   selectedRepoKey: null,
 
