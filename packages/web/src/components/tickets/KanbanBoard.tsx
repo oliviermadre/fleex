@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { TICKET_STATUSES } from '@asm/shared';
 import type { TicketStatus, Session } from '@asm/shared';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -8,7 +8,8 @@ import { KanbanHeader } from './KanbanHeader';
 import { SessionTerminalOverlay } from './SessionTerminalOverlay';
 
 export function KanbanBoard() {
-  const boards = useTicketStore((s) => s.boards);
+  const rawBoards = useTicketStore((s) => s.boards);
+  const boards = useMemo(() => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)), [rawBoards]);
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const ticketsByColumn = useTicketStore((s) => s.ticketsByColumn);
   const tickets = useTicketStore((s) => s.tickets);

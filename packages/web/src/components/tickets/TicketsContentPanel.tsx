@@ -2,11 +2,13 @@ import { useState, useMemo } from 'react';
 import type { TicketPriority } from '@asm/shared';
 import { TICKET_PRIORITIES } from '@asm/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
 
 export function TicketsContentPanel() {
-  const boards = useTicketStore((s) => s.boards);
+  const rawBoards = useTicketStore((s) => s.boards);
+  const boards = useMemo(() => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)), [rawBoards]);
   const tickets = useTicketStore((s) => s.tickets);
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const selectBoard = useTicketStore((s) => s.selectBoard);
@@ -24,10 +26,14 @@ export function TicketsContentPanel() {
   const [renamingBoardId, setRenamingBoardId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
-  // Collect unique repos and tags from tickets for filter options
+  const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
+
+  // Collect unique repos (from settings + ticket links) and tags for filter options
   const { repos, tags } = useMemo(() => {
     const repoSet = new Set<string>();
-    const tagSet = new Set<string>();
+    // Add all repos from settings (resolvedRepositories are already "org/name" strings)
+    for (const r of resolvedRepositories) repoSet.add(r);
+    // Also include any repos referenced by tickets but not in settings
     for (const t of tickets) {
       for (const l of t.links) {
         if (l.type === 'worktree') {
@@ -35,10 +41,13 @@ export function TicketsContentPanel() {
           if (colonIdx > 0) repoSet.add(l.ref.substring(0, colonIdx));
         }
       }
+    }
+    const tagSet = new Set<string>();
+    for (const t of tickets) {
       for (const tag of t.tags) tagSet.add(tag);
     }
     return { repos: [...repoSet].sort(), tags: [...tagSet].sort() };
-  }, [tickets]);
+  }, [tickets, resolvedRepositories]);
 
   const activeFilterCount =
     (filters.repo ? 1 : 0) +
