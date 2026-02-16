@@ -74,6 +74,8 @@ html, body {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  transition: width 250ms cubic-bezier(0.16, 1, 0.3, 1),
+              max-width 250ms cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Liquid glass effect */
   background:
@@ -94,6 +96,11 @@ html, body {
 
   /* Slide-in animation */
   animation: scratchpad-slide-in 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.scratchpad-panel-wide {
+  width: 80%;
+  max-width: 80vw;
 }
 
 @keyframes scratchpad-slide-in {

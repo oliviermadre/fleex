@@ -69,6 +69,25 @@ export function NavSidebar() {
           onClick={() => setActivePanel('claude-config')}
         />
 
+        {/* Scratchpads */}
+        <NavItem
+          icon={
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+              <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+            </svg>
+          }
+          label="Scratchpads"
+          active={activePanel === 'scratchpads'}
+          collapsed={navCollapsed}
+          hotkey="⌥5"
+          onClick={() => setActivePanel('scratchpads')}
+        />
+
         {/* Cluster */}
         <NavItem
           icon={

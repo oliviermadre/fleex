@@ -8,6 +8,9 @@ import { RepositoryDashboard } from '../repository-dashboard/RepositoryDashboard
 import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
 import { ClaudeConfigEditor } from '../claude-config/ClaudeConfigEditor';
 import { ClusterDashboard } from '../cluster/ClusterDashboard';
+import { ScratchpadMainView } from '../scratchpad/ScratchpadMainView';
+import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
+import { useScratchpadStore } from '../../stores/scratchpadStore';
 
 function GroupEmptyCell() {
   return (
@@ -31,6 +34,7 @@ export function MainPanel() {
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
+  const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
   const splitSession = splitSessionId
     ? sessions.find((s) => s.id === splitSessionId) ?? null
     : null;
@@ -41,6 +45,11 @@ export function MainPanel() {
 
   if (activePanel === 'claude-config') {
     return <ClaudeConfigEditor />;
+  }
+
+  if (activePanel === 'scratchpads') {
+    if (!selectedScratchpadKey) return <ScratchpadEmptyState />;
+    return <ScratchpadMainView scratchpadKey={selectedScratchpadKey} />;
   }
 
   if (activePanel === 'cluster') {

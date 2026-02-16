@@ -214,6 +214,28 @@ export async function saveScratchpad(content: string): Promise<void> {
   });
 }
 
+export async function fetchRepoScratchpad(org: string, name: string): Promise<{ content: string }> {
+  return request<{ content: string }>(
+    `/scratchpads/${encodeURIComponent(org)}/${encodeURIComponent(name)}`,
+  );
+}
+
+export async function saveRepoScratchpad(org: string, name: string, content: string): Promise<void> {
+  await request<{ ok: boolean }>(
+    `/scratchpads/${encodeURIComponent(org)}/${encodeURIComponent(name)}`,
+    { method: 'PUT', body: JSON.stringify({ content }) },
+  );
+}
+
+export async function fetchScratchpadList(
+  repos?: string[],
+): Promise<{ items: { key: string; label: string; lineCount: number }[] }> {
+  const qs = repos && repos.length > 0 ? `?repos=${encodeURIComponent(repos.join(','))}` : '';
+  return request<{ items: { key: string; label: string; lineCount: number }[] }>(
+    `/scratchpads${qs}`,
+  );
+}
+
 // Claude Usage API
 
 export async function fetchClaudeUsage(force = false): Promise<ClaudeUsage | null> {

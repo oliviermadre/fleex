@@ -37,6 +37,7 @@ export function RepositoryGroup({ group }: Props) {
   const groupId = `${group.repositoryOrg}/${group.repositoryName}`;
   const collapsedGroups = useUIStore((s) => s.collapsedGroups);
   const toggleGroup = useUIStore((s) => s.toggleGroup);
+  const openScratchpadForRepo = useUIStore((s) => s.openScratchpadForRepo);
   const collapsed = collapsedGroups.has(groupId);
 
   const wtOrder = useSettingsStore((s) => s.settings.worktreeOrder[groupId]);
@@ -137,15 +138,30 @@ export function RepositoryGroup({ group }: Props) {
         <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
           {group.repositoryOrg}/{group.repositoryName}
         </span>
-        <a
-          href={`https://github.com/${group.repositoryOrg}/${group.repositoryName}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ml-auto text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <ExternalLinkIcon size={14} />
-        </a>
+        <span className="ml-auto flex items-center gap-1">
+          <span
+            role="button"
+            className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] p-0.5 rounded hover:bg-white/[0.08] transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              openScratchpadForRepo(groupId);
+            }}
+            title="Open scratchpad"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" />
+            </svg>
+          </span>
+          <a
+            href={`https://github.com/${group.repositoryOrg}/${group.repositoryName}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLinkIcon size={14} />
+          </a>
+        </span>
       </button>
       {!collapsed &&
         sortedWorktrees.map((wt) => {
