@@ -20,7 +20,8 @@ export function KanbanHeader({ board, isAllBoards }: KanbanHeaderProps) {
     (filters.repo ? 1 : 0) +
     (filters.priority ? 1 : 0) +
     (filters.hasSession !== null ? 1 : 0) +
-    (filters.tag ? 1 : 0);
+    (filters.tag ? 1 : 0) +
+    (filters.favorite !== null ? 1 : 0);
 
   return (
     <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-6" style={{ height: 'var(--header-height)' }}>

@@ -3,6 +3,7 @@ import type { Ticket, BoardWithCounts } from '@asm/shared';
 import { PriorityIndicator } from './PriorityIndicator';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { cn } from '../../lib/cn';
 
 const PRIORITY_BORDER: Record<string, string> = {
   none: 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
@@ -49,6 +50,7 @@ export function KanbanCard({
   onOpenSession: (ticketId: string) => void;
 }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
+  const updateTicket = useTicketStore((s) => s.updateTicket);
   const sessions = useSessionStore((s) => s.sessions);
 
   const githubLinks = ticket.links.filter((l) => l.type === 'github_issue' || l.type === 'github_pr');
@@ -103,8 +105,27 @@ export function KanbanCard({
         (e.currentTarget as HTMLElement).style.opacity = '';
       }}
       onClick={() => selectTicket(ticket.id)}
-      className={`cursor-pointer rounded-md border p-2.5 transition-colors ${PRIORITY_BORDER[ticket.priority]} ${PRIORITY_LEFT[ticket.priority]} ${PRIORITY_BG[ticket.priority]}`}
+      className={`group relative cursor-pointer rounded-md border p-2.5 transition-colors ${PRIORITY_BORDER[ticket.priority]} ${PRIORITY_LEFT[ticket.priority]} ${PRIORITY_BG[ticket.priority]}`}
     >
+      {/* Favorite star */}
+      <button
+        className={cn(
+          'absolute right-1.5 top-1.5 z-10 rounded p-0.5 transition-all',
+          ticket.favorite
+            ? 'opacity-100 text-yellow-400'
+            : 'opacity-0 group-hover:opacity-100 text-[var(--theme-text-faint)] hover:text-yellow-400',
+        )}
+        onClick={(e) => {
+          e.stopPropagation();
+          updateTicket(ticket.id, { favorite: !ticket.favorite });
+        }}
+        title={ticket.favorite ? 'Remove from favorites' : 'Add to favorites'}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill={ticket.favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+          <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
+        </svg>
+      </button>
+
       {/* Board badge (shown in "All boards" view) */}
       {board && (
         <div className="mb-1">

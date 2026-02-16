@@ -22,6 +22,7 @@ export interface Ticket {
   readonly tags: string[];
   readonly links: TicketLink[];
   readonly blocked: boolean;
+  readonly favorite: boolean;
   readonly dueDate: string | null;
   readonly assignee: string | null;
   readonly agentClaimedAt: string | null;
@@ -66,6 +67,7 @@ export interface UpdateTicketRequest {
   readonly position?: number;
   readonly tags?: string[];
   readonly blocked?: boolean;
+  readonly favorite?: boolean;
   readonly dueDate?: string | null;
   readonly assignee?: string | null;
 }
