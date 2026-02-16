@@ -301,3 +301,12 @@ html, body {
 .session-pane-unfocused {
   opacity: 0.5;
 }
+
+/* GitHub icon glow on kanban cards */
+.github-glow-icon {
+  cursor: pointer;
+  transition: filter 200ms ease, color 200ms ease;
+}
+.github-glow-icon:hover {
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6)) drop-shadow(0 0 12px rgba(255, 255, 255, 0.3));
+}
