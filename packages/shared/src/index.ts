@@ -40,6 +40,25 @@ export type {
 
 export type { ClaudeConfigTreeEntry } from './types/claude-config.js';
 
+export type {
+  TicketStatus,
+  TicketPriority,
+  TicketLinkType,
+  TicketLink,
+  Ticket,
+  Board,
+  BoardWithCounts,
+  CreateTicketRequest,
+  UpdateTicketRequest,
+  CreateBoardRequest,
+  UpdateBoardRequest,
+  TicketActivity,
+  AgentToken,
+  AgentTokenCreated,
+  TicketWsMessageType,
+  TicketWsMessage,
+} from './types/ticket.js';
+
 export {
   ClientMessageType,
   ServerMessageType,
@@ -76,4 +95,8 @@ export {
   REPO_REFRESH_LABELS,
   DEFAULT_REPO_REFRESH_INTERVAL,
   CLAUDE_USAGE_CACHE_TTL_MS,
+  WS_TICKET_PATH,
+  TICKET_STATUSES,
+  TICKET_STATUS_LABELS,
+  TICKET_PRIORITIES,
 } from './constants.js';

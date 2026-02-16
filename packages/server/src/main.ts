@@ -14,10 +14,15 @@ import { execRoutes } from './infrastructure/http/exec.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
 import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
+import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
+import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
+import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
+import { createAgentAuthHook } from './infrastructure/http/agent-auth.hook.js';
 import { registerErrorHandler } from './infrastructure/http/error-handler.js';
 import { terminalWsPlugin } from './infrastructure/ws/terminal-ws.js';
 import { dashboardWsPlugin } from './infrastructure/ws/dashboard-ws.js';
 import { repositoryWsPlugin } from './infrastructure/ws/repository-ws.js';
+import { ticketWsPlugin } from './infrastructure/ws/ticket-ws.js';
 
 async function main() {
   const container = await createContainer();
@@ -40,11 +45,21 @@ async function main() {
   await app.register(claudeConfigRoutes(container));
   await app.register(scratchpadRoutes(container));
   await app.register(claudeUsageRoutes(container));
+  await app.register(agentTokenRoutes(container));
+  await app.register(ticketRoutes(container));
+
+  // Agent API with auth
+  const authHook = createAgentAuthHook(container);
+  await app.register(async function (v1) {
+    v1.addHook('preHandler', authHook);
+    await v1.register(agentApiRoutes(container));
+  }, { prefix: '/api/agents/v1' });
 
   // Register WebSocket handlers
   await app.register(terminalWsPlugin(container));
   await app.register(dashboardWsPlugin(container));
   await app.register(repositoryWsPlugin(container));
+  await app.register(ticketWsPlugin(container));
 
   // Start repository refresh scheduler if configured
   const config = container.config.get() as unknown as Record<string, unknown>;
@@ -62,6 +77,15 @@ async function main() {
       container.repositoryRefreshScheduler.start(refreshInterval);
     }
   }
+
+  // Wire merge detection for ticket auto-complete
+  container.repositoryRefreshScheduler.setOnMergedPRs(async (mergedPRs, repoKey) => {
+    const movedIds = await container.detectMerge.execute(mergedPRs, repoKey);
+    for (const id of movedIds) {
+      const ticket = container.ticketStore.getTicketById(id);
+      if (ticket) container.ticketBroadcast('ticket:moved', ticket.toDTO());
+    }
+  });
 
   // Serve frontend static files in production
   const __dirname = dirname(fileURLToPath(import.meta.url));

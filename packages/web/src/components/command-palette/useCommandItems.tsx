@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { buildWorktreeContext } from '../../lib/templateUtils';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { ClaudeIcon, TerminalIcon, PlusIcon } from '../sidebar/icons';
@@ -30,6 +31,9 @@ export function useCommandItems(query: string): CommandItem[] {
   const executeWorktreeAction = useSettingsStore((s) => s.executeWorktreeAction);
   const sessionDisplayNames = useSettingsStore((s) => s.settings.sessionDisplayNames);
 
+  const ticketItems = useTicketStore((s) => s.tickets);
+  const selectTicket = useTicketStore((s) => s.selectTicket);
+
   const allItems = useMemo<CommandItem[]>(() => {
     const items: CommandItem[] = [];
 
@@ -53,9 +57,10 @@ export function useCommandItems(query: string): CommandItem[] {
     }
 
     // ── Views ──
-    const views: { panel: 'sessions' | 'repositories' | 'claude-config' | 'cluster' | 'settings'; label: string }[] = [
+    const views: { panel: 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'cluster' | 'settings'; label: string }[] = [
       { panel: 'sessions', label: 'Sessions' },
       { panel: 'repositories', label: 'Repositories' },
+      { panel: 'tickets', label: 'Tickets' },
       { panel: 'claude-config', label: 'Claude Config' },
       { panel: 'cluster', label: 'Cluster' },
       { panel: 'settings', label: 'Settings' },
@@ -176,6 +181,40 @@ export function useCommandItems(query: string): CommandItem[] {
       }
     }
 
+    // ── Ticket items ──
+    items.push({
+      id: 'ticket:create',
+      label: 'Create new ticket',
+      category: 'ticket',
+      categoryLabel: 'Tickets',
+      icon: getTicketIcon(),
+      keywords: 'ticket task kanban',
+      onExecute: () => { setActivePanel('tickets'); closeCommandPalette(); },
+    });
+
+    items.push({
+      id: 'ticket:board',
+      label: 'Open kanban board',
+      category: 'ticket',
+      categoryLabel: 'Tickets',
+      icon: getTicketIcon(),
+      keywords: 'kanban board tickets',
+      onExecute: () => { setActivePanel('tickets'); selectTicket(null); closeCommandPalette(); },
+    });
+
+    for (const ticket of ticketItems) {
+      items.push({
+        id: `ticket:${ticket.id}`,
+        label: ticket.title,
+        description: `${ticket.status}${ticket.tags.length > 0 ? ' · ' + ticket.tags.join(', ') : ''}`,
+        category: 'ticket',
+        categoryLabel: 'Tickets',
+        icon: getTicketIcon(),
+        keywords: `ticket ${ticket.title} ${ticket.tags.join(' ')} ${ticket.status}`,
+        onExecute: () => { setActivePanel('tickets'); selectTicket(ticket.id); closeCommandPalette(); },
+      });
+    }
+
     // ── Misc actions ──
     items.push({
       id: 'action:scratchpad',
@@ -194,6 +233,7 @@ export function useCommandItems(query: string): CommandItem[] {
     toggleScratchpad, pinnedIcons, worktreeActions, basePath,
     addLayoutGroup, addSession, setSessionGroups,
     executePinnedAction, executeWorktreeAction,
+    ticketItems, selectTicket,
   ]);
 
   // Filter by query
@@ -242,6 +282,14 @@ function getViewIcon(panel: string): React.ReactNode {
           <line x1="5.5" y1="11" x2="8.5" y2="11" />
         </svg>
       );
+    case 'tickets':
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="1.5" y="2" width="4" height="12" rx="0.5" />
+          <rect x="6" y="2" width="4" height="12" rx="0.5" />
+          <rect x="10.5" y="2" width="4" height="12" rx="0.5" />
+        </svg>
+      );
     case 'cluster':
       return (
         <svg width="16" height="16" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
@@ -276,6 +324,17 @@ function getGridIcon(type: '1x2' | '2x2'): React.ReactNode {
       <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
       <line x1="8" y1="2.5" x2="8" y2="13.5" />
       <line x1="1.5" y1="8" x2="14.5" y2="8" />
+    </svg>
+  );
+}
+
+function getTicketIcon(): React.ReactNode {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="12" height="12" rx="2" />
+      <line x1="5" y1="6" x2="11" y2="6" />
+      <line x1="5" y1="8.5" x2="9" y2="8.5" />
+      <line x1="5" y1="11" x2="7" y2="11" />
     </svg>
   );
 }

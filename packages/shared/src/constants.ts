@@ -40,3 +40,15 @@ export const DEFAULT_REPO_REFRESH_INTERVAL = 0;
 
 // Claude usage
 export const CLAUDE_USAGE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// Tickets
+export const WS_TICKET_PATH = '/ws/tickets';
+export const TICKET_STATUSES = ['backlog', 'todo', 'doing', 'reviewing', 'done'] as const;
+export const TICKET_STATUS_LABELS: Record<string, string> = {
+  backlog: 'Backlog',
+  todo: 'Todo',
+  doing: 'Doing',
+  reviewing: 'Reviewing',
+  done: 'Done',
+};
+export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;

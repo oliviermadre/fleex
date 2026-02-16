@@ -5,6 +5,8 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { AppearanceTab } from './AppearanceTab';
 import { cn } from '../../lib/cn';
+import type { AgentToken } from '@asm/shared';
+import * as api from '../../services/api';
 
 const tabLabels: Record<SettingsTab, string> = {
   general: 'General',
@@ -12,6 +14,7 @@ const tabLabels: Record<SettingsTab, string> = {
   repositories: 'Repositories',
   'pinned-icons': 'Pinned Icons',
   'worktree-actions': 'Worktree Actions',
+  'agent-tokens': 'Agent Tokens',
 };
 
 export function SettingsPanel() {
@@ -147,6 +150,7 @@ export function SettingsPanel() {
               onReorder={setWorktreeActions}
             />
           )}
+          {settingsTab === 'agent-tokens' && <AgentTokensTab />}
 
           {/* Save button */}
           <div className="mt-8 flex justify-end">
@@ -824,6 +828,122 @@ function PinnedIconEditor({
               onChange={(e) => onUpdate({ actionValue: e.target.value })}
             />
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AgentTokensTab() {
+  const [tokens, setTokens] = useState<AgentToken[]>([]);
+  const [newName, setNewName] = useState('');
+  const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.fetchAgentTokens().then((t) => { setTokens(t); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  const handleCreate = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    const created = await api.createAgentToken(name);
+    setRevealedSecret(created.secret);
+    setNewName('');
+    api.fetchAgentTokens().then(setTokens).catch(() => {});
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Revoke this token? Any agents using it will lose access.')) return;
+    await api.deleteAgentToken(id);
+    setTokens((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  if (loading) {
+    return <p className="py-8 text-center text-sm text-[var(--theme-text-muted)]">Loading...</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <p className="text-xs text-[var(--theme-text-muted)]">
+        Agent tokens allow external agents to access the ticket API at <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">/api/agents/v1/</code>
+      </p>
+
+      {/* Create form */}
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <Input
+            label="Token Name"
+            placeholder="my-agent"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
+          />
+        </div>
+        <Button variant="primary" size="sm" onClick={handleCreate} disabled={!newName.trim()}>
+          Generate Token
+        </Button>
+      </div>
+
+      {/* Revealed secret */}
+      {revealedSecret && (
+        <div className="rounded-md border border-[var(--theme-accent)] bg-[var(--theme-accent)]/5 p-3">
+          <p className="mb-1 text-xs font-medium text-[var(--theme-text-primary)]">
+            Token created! Copy it now — it won't be shown again.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 break-all rounded bg-[var(--theme-bg-overlay)] px-2 py-1 text-xs text-[var(--theme-text-primary)]">
+              {revealedSecret}
+            </code>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => { navigator.clipboard.writeText(revealedSecret); }}
+            >
+              Copy
+            </Button>
+          </div>
+          <button
+            className="mt-2 text-[10px] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
+            onClick={() => setRevealedSecret(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Token list */}
+      {tokens.length === 0 ? (
+        <p className="py-6 text-center text-sm text-[var(--theme-text-muted)]">
+          No agent tokens created yet.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+            Active Tokens ({tokens.length})
+          </label>
+          {tokens.map((token) => (
+            <div
+              key={token.id}
+              className="flex items-center gap-3 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2"
+            >
+              <div className="flex-1">
+                <span className="text-sm font-medium text-[var(--theme-text-primary)]">{token.name}</span>
+                <span className="ml-2 text-xs text-[var(--theme-text-muted)]">{token.prefix}...</span>
+              </div>
+              {token.lastUsedAt && (
+                <span className="text-[10px] text-[var(--theme-text-muted)]">
+                  Last used {new Date(token.lastUsedAt).toLocaleDateString()}
+                </span>
+              )}
+              <button
+                className="text-xs text-[var(--theme-danger)] hover:underline"
+                onClick={() => handleDelete(token.id)}
+              >
+                Revoke
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>

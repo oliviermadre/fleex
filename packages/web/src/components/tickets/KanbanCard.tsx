@@ -1,0 +1,216 @@
+import { useMemo } from 'react';
+import type { Ticket, BoardWithCounts } from '@asm/shared';
+import { PriorityIndicator } from './PriorityIndicator';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useSessionStore } from '../../stores/sessionStore';
+
+const PRIORITY_BORDER: Record<string, string> = {
+  none: 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
+  low: 'border-[var(--theme-border)] hover:border-blue-500/40',
+  medium: 'border-[var(--theme-border)] hover:border-yellow-500/40',
+  high: 'border-[var(--theme-border)] hover:border-red-500/50',
+};
+
+const PRIORITY_LEFT: Record<string, string> = {
+  none: '',
+  low: 'border-l-2 !border-l-blue-500/50',
+  medium: 'border-l-2 !border-l-yellow-500/50',
+  high: 'border-l-2 !border-l-red-500/60',
+};
+
+const PRIORITY_BG: Record<string, string> = {
+  none: 'bg-[var(--theme-bg-surface)] hover:bg-[var(--theme-bg-hover)]',
+  low: 'bg-blue-500/[0.04] hover:bg-blue-500/[0.08]',
+  medium: 'bg-yellow-500/[0.04] hover:bg-yellow-500/[0.08]',
+  high: 'bg-red-500/[0.05] hover:bg-red-500/[0.09]',
+};
+
+function formatTimeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  if (diff < 0) return 'just now';
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  return `${weeks}w`;
+}
+
+export function KanbanCard({
+  ticket,
+  board,
+  onOpenSession,
+}: {
+  ticket: Ticket;
+  board?: BoardWithCounts | null;
+  onOpenSession: (ticketId: string) => void;
+}) {
+  const selectTicket = useTicketStore((s) => s.selectTicket);
+  const sessions = useSessionStore((s) => s.sessions);
+
+  const githubLinks = ticket.links.filter((l) => l.type === 'github_issue' || l.type === 'github_pr');
+  const worktreeLinks = ticket.links.filter((l) => l.type === 'worktree');
+  const sessionLinks = ticket.links.filter((l) => l.type === 'session');
+
+  const repoLinks = ticket.links.filter((l) => l.type === 'repository');
+
+  const repoWorktreeInfo = useMemo(() => {
+    const wtLink = worktreeLinks[0];
+    if (wtLink) {
+      const colonIdx = wtLink.ref.indexOf(':');
+      if (colonIdx > 0) {
+        const repoKey = wtLink.ref.substring(0, colonIdx);
+        const branch = wtLink.ref.substring(colonIdx + 1);
+        return { repo: repoKey, branch };
+      }
+    }
+    // Fallback: show repo from repository link (no branch)
+    const repoLink = repoLinks[0];
+    if (repoLink) {
+      return { repo: repoLink.ref, branch: null as string | null };
+    }
+    return null;
+  }, [worktreeLinks, repoLinks]);
+
+  const hasActiveSession = useMemo(() => {
+    if (sessionLinks.length > 0) return true;
+    if (!repoWorktreeInfo) return false;
+    const [org, name] = repoWorktreeInfo.repo.split('/');
+    return sessions.some(
+      (s) =>
+        s.status === 'running' &&
+        s.repositoryOrg === org &&
+        s.repositoryName === name &&
+        s.worktreeBranch === repoWorktreeInfo.branch,
+    );
+  }, [sessionLinks, repoWorktreeInfo, sessions]);
+
+  // Time spent in current column — based on when the ticket entered this status
+  const timeInColumn = formatTimeAgo(ticket.statusChangedAt);
+
+  return (
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-ticket-id', ticket.id);
+        e.dataTransfer.effectAllowed = 'move';
+        (e.currentTarget as HTMLElement).style.opacity = '0.5';
+      }}
+      onDragEnd={(e) => {
+        (e.currentTarget as HTMLElement).style.opacity = '';
+      }}
+      onClick={() => selectTicket(ticket.id)}
+      className={`cursor-pointer rounded-md border p-2.5 transition-colors ${PRIORITY_BORDER[ticket.priority]} ${PRIORITY_LEFT[ticket.priority]} ${PRIORITY_BG[ticket.priority]}`}
+    >
+      {/* Board badge (shown in "All boards" view) */}
+      {board && (
+        <div className="mb-1">
+          <span className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
+            {board.emoji} {board.name}
+          </span>
+        </div>
+      )}
+
+      {/* Priority + Title */}
+      <div className="flex items-start gap-1.5">
+        <PriorityIndicator priority={ticket.priority} />
+        <span className="line-clamp-2 flex-1 text-xs font-medium text-[var(--theme-text-primary)]">
+          {ticket.title}
+        </span>
+      </div>
+
+      {/* Repo & Worktree info */}
+      {repoWorktreeInfo && (
+        <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[var(--theme-text-muted)]">
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+            <circle cx="5" cy="3.5" r="1.5" />
+            <circle cx="8" cy="12.5" r="1.5" />
+            <line x1="5" y1="5" x2="8" y2="11" />
+          </svg>
+          <span className="truncate">
+            <span className="text-[var(--theme-text-faint)]">{repoWorktreeInfo.repo}</span>
+            {repoWorktreeInfo.branch && (
+              <>
+                {' '}
+                <span className="font-medium text-[var(--theme-text-secondary)]">{repoWorktreeInfo.branch}</span>
+              </>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* Tags */}
+      {ticket.tags.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {ticket.tags.slice(0, 3).map((tag) => (
+            <span
+              key={tag}
+              className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Bottom row: links + time + open session */}
+      <div className="mt-1.5 flex items-center gap-2 text-[10px] text-[var(--theme-text-muted)]">
+        {githubLinks.length > 0 && (
+          <span className="flex items-center gap-0.5">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+            </svg>
+            {githubLinks[0]?.label}
+          </span>
+        )}
+        {sessionLinks.length > 0 && (
+          <span className="flex items-center gap-0.5">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+              <polyline points="4.5,7 6,8.5 4.5,10" />
+            </svg>
+            {sessionLinks.length}
+          </span>
+        )}
+        {ticket.blocked && (
+          <span className="rounded bg-red-500/20 px-1 text-red-400">blocked</span>
+        )}
+
+        {/* Time in column */}
+        <span className="text-[var(--theme-text-faint)]" title={`In this column since ${new Date(ticket.statusChangedAt).toLocaleString()}`}>
+          {timeInColumn}
+        </span>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Due date */}
+        {ticket.dueDate && (
+          <span>
+            {new Date(ticket.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+          </span>
+        )}
+
+        {/* Open Session button */}
+        <button
+          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors hover:bg-[var(--theme-bg-overlay)]"
+          style={{ color: hasActiveSession ? '#22c55e' : 'var(--theme-text-muted)' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenSession(ticket.id);
+          }}
+          title={hasActiveSession ? 'Open active session' : 'Start new session'}
+        >
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+            <polyline points="4.5,7 6,8.5 4.5,10" />
+          </svg>
+          {hasActiveSession ? 'Session' : 'Open'}
+        </button>
+      </div>
+    </div>
+  );
+}

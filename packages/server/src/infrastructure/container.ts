@@ -13,6 +13,11 @@ import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
+import { JsonTicketStore } from './adapters/json-ticket-store.adapter.js';
+import { JsonAgentTokenStore } from './adapters/json-agent-token-store.adapter.js';
+import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-session-from-ticket.js';
+import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
+import { ImportGitHubIssueUseCase } from '../application/use-cases/import-github-issue.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
@@ -77,6 +82,20 @@ export async function createContainer() {
   const githubGraphql = new GitHubGraphQLAdapter(execFn, logger);
   const repositoryRefreshScheduler = new RepositoryRefreshScheduler(githubGraphql, repositoryCache, logger);
 
+  // Ticket management
+  const agentTokenStore = new JsonAgentTokenStore(hostFs, hostHomedir, logger);
+  await agentTokenStore.init();
+  const ticketStore = new JsonTicketStore(hostFs, hostHomedir, logger);
+  await ticketStore.init();
+
+  const createSession = new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger);
+  const createWorktreeUC = new CreateWorktreeUseCase(git, logger);
+  const detectMerge = new DetectMergeUseCase(ticketStore, logger);
+  const createSessionFromTicket = new CreateSessionFromTicketUseCase(
+    ticketStore, createSession, createWorktreeUC, git, config, logger,
+  );
+  const importGitHubIssue = new ImportGitHubIssueUseCase(ticketStore, githubGraphql, logger);
+
   return {
     logger,
     execFn,
@@ -91,15 +110,21 @@ export async function createContainer() {
     repositoryCache,
     githubGraphql,
     repositoryRefreshScheduler,
-    createSession: new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger),
+    createSession,
     listSessions: new ListSessionsUseCase(sessionStore, tmux, logger),
     killSession: new KillSessionUseCase(tmux, sessionStore, logger),
     getSessionGroups: new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity),
     discoverSessions: new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git),
     listRepositories: new ListRepositoriesUseCase(git, config, logger),
     listWorktrees: new ListWorktreesUseCase(git, logger),
-    createWorktree: new CreateWorktreeUseCase(git, logger),
+    createWorktree: createWorktreeUC,
     getClaudeUsage,
+    agentTokenStore,
+    ticketStore,
+    detectMerge,
+    createSessionFromTicket,
+    importGitHubIssue,
+    ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
   };
 }
 

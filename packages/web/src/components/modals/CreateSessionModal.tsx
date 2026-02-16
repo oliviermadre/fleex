@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { DataTable } from '../ui/DataTable';
@@ -28,6 +29,11 @@ const MODE_ORDER: WorktreeMode[] = ['main', 'existing', 'pr', 'issue', 'new'];
 export function CreateSessionModal() {
   const open = useUIStore((s) => s.createModalOpen);
   const closeModal = useUIStore((s) => s.closeCreateModal);
+  const ticketContext = useUIStore((s) => s.createModalTicketContext);
+
+  const addTicketLink = useTicketStore((s) => s.addLink);
+  const removeTicketLink = useTicketStore((s) => s.removeLink);
+  const ticketStoreTickets = useTicketStore((s) => s.tickets);
 
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
   const basePath = useSettingsStore((s) => s.settings.basePath);
@@ -171,6 +177,22 @@ export function CreateSessionModal() {
       .catch(() => {})
       .finally(() => setLoadingDiffStats(false));
   }, [worktreeMode, selectedRepo, pullRequests, diffStatsByBranch]);
+
+  // Prefill from ticket context when modal opens
+  const appliedTicketContextRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open || !ticketContext) return;
+    // Only apply once per ticket context (avoid re-applying on re-renders)
+    if (appliedTicketContextRef.current === ticketContext.ticketId) return;
+    appliedTicketContextRef.current = ticketContext.ticketId;
+
+    if (ticketContext.repo) {
+      setSelectedRepo(ticketContext.repo);
+    }
+    if (ticketContext.prompt) {
+      setClaudePrompt(ticketContext.prompt);
+    }
+  }, [open, ticketContext]);
 
   const repoOptions = resolvedRepositories.map((r) => ({ value: r, label: r }));
 
@@ -422,6 +444,53 @@ export function CreateSessionModal() {
       // Select the claude session by default
       selectSession(claudeSession.id);
 
+      // Auto-link session (and worktree) to ticket if opened from ticket context
+      if (ticketContext) {
+        const { ticketId } = ticketContext;
+        // Link the session
+        addTicketLink(ticketId, {
+          type: 'session',
+          ref: claudeSession.id,
+          label: claudeSession.tmuxName ?? claudeSession.id,
+        }).catch(() => {});
+
+        // Link worktree if we created/selected one (not 'main' mode)
+        if (worktreeMode && worktreeMode !== 'main' && selectedRepo) {
+          const [org, name] = selectedRepo.split('/');
+          let branch: string | null = null;
+
+          if (worktreeMode === 'existing' && selectedWorktreeIndex !== null) {
+            branch = filteredWorktrees[selectedWorktreeIndex]?.branch ?? null;
+          } else if (worktreeMode === 'pr' && selectedPRIndex !== null) {
+            branch = pullRequests[selectedPRIndex]?.headRefName ?? null;
+          } else if (worktreeMode === 'issue' && selectedIssueIndex !== null) {
+            const issue = issues[selectedIssueIndex];
+            if (issue) {
+              const sanitizedTitle = issue.title
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .slice(0, 40);
+              branch = `issue-${issue.number}/${sanitizedTitle}`;
+            }
+          } else if (worktreeMode === 'new') {
+            branch = newBranchName.trim();
+          }
+
+          if (org && name && branch) {
+            const ref = `${org}/${name}:${branch}`;
+            addTicketLink(ticketId, { type: 'worktree', ref, label: branch }).catch(() => {});
+          }
+
+          // Remove the repository link since worktree link now implies the repo
+          const currentTicket = ticketStoreTickets.find((t) => t.id === ticketId);
+          const existingRepoLink = currentTicket?.links.find((l) => l.type === 'repository');
+          if (existingRepoLink) {
+            removeTicketLink(ticketId, existingRepoLink.id).catch(() => {});
+          }
+        }
+      }
+
       // Refresh session groups
       api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
 
@@ -432,7 +501,7 @@ export function CreateSessionModal() {
     } finally {
       setCreating(false);
     }
-  }, [selectedRepo, worktreeMode, defaultBranchInfo, basePath, selectedWorktreeIndex, filteredWorktrees, selectedPRIndex, pullRequests, selectedIssueIndex, issues, newBranchName, claudePrompt, addSession, selectSession, setSessionGroups, closeModal]);
+  }, [selectedRepo, worktreeMode, defaultBranchInfo, basePath, selectedWorktreeIndex, filteredWorktrees, selectedPRIndex, pullRequests, selectedIssueIndex, issues, newBranchName, claudePrompt, addSession, selectSession, setSessionGroups, closeModal, ticketContext, addTicketLink, removeTicketLink, ticketStoreTickets]);
 
   const resetForm = () => {
     setSelectedRepo('');
@@ -447,6 +516,7 @@ export function CreateSessionModal() {
     setIssues([]);
     setDefaultBranchInfo(null);
     setDiffStatsByBranch({});
+    appliedTicketContextRef.current = null;
   };
 
   const handleClose = () => {
@@ -521,7 +591,7 @@ export function CreateSessionModal() {
           value={selectedRepo}
           onChange={setSelectedRepo}
           placeholder="Search repository..."
-          autoFocus={open}
+          autoFocus={open && !ticketContext?.repo}
         />
 
         {/* Worktree mode segmented control */}

@@ -139,17 +139,22 @@ export function useKeyboardShortcuts() {
         }
         if (e.code === 'Digit3') {
           e.preventDefault();
-          setActivePanel('claude-config');
+          setActivePanel('tickets');
           return;
         }
         if (e.code === 'Digit4') {
           e.preventDefault();
-          setActivePanel('cluster');
+          setActivePanel('claude-config');
           return;
         }
         if (e.code === 'Digit5') {
           e.preventDefault();
           setActivePanel('scratchpads');
+          return;
+        }
+        if (e.code === 'Digit6') {
+          e.preventDefault();
+          setActivePanel('cluster');
           return;
         }
         if (e.code === 'Digit0') {
