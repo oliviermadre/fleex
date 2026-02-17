@@ -66,7 +66,7 @@ export function SessionItem({ session }: Props) {
     setConfirmKill(false);
   }, [confirmKill, session.id, removeSession]);
 
-  const displayName = displayNames[session.id] || session.tmuxName;
+  const displayName = session.displayName || displayNames[session.id] || session.tmuxName;
 
   const isRunning = session.status === 'running';
   const isClaude = session.type !== 'shell';

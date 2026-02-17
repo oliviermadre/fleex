@@ -218,7 +218,7 @@ export const SessionTerminalOverlay = memo(function SessionTerminalOverlay({
               whiteSpace: 'nowrap',
             }}
           >
-            {displayName || session.tmuxName}
+            {session.displayName || displayName || session.tmuxName}
           </span>
 
           <span

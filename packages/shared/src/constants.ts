@@ -20,6 +20,9 @@ export const WS_RECONNECT_MAX_ATTEMPTS = 10;
 
 export const SESSION_HASH_LENGTH = 8;
 
+export const DEFAULT_CLAUDE_DISPLAY_NAME = 'Claude';
+export const DEFAULT_SHELL_DISPLAY_NAME = 'Shell';
+
 export const ASM_DIR = '.asm';
 export const SESSIONS_FILE = 'sessions.json';
 export const CONFIG_FILE = 'config.json';

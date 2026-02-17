@@ -16,8 +16,9 @@ function CellGrid({ group, selectedGroupId, activeGroupCellIndex, onCellClick }:
 
   const getCellLabel = (sessionId: string | null): string | null => {
     if (!sessionId) return null;
-    if (displayNames[sessionId]) return displayNames[sessionId];
     const session = sessions.find((s) => s.id === sessionId);
+    if (session?.displayName) return session.displayName;
+    if (displayNames[sessionId]) return displayNames[sessionId];
     return session?.tmuxName ?? null;
   };
 

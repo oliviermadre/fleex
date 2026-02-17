@@ -56,6 +56,12 @@ export class ApiTokenInvalidError extends DomainError {
   }
 }
 
+export class SessionNameConflictError extends DomainError {
+  constructor(displayName: string) {
+    super(`Session name "${displayName}" conflict`, 'SESSION_NAME_CONFLICT');
+  }
+}
+
 export class LastBoardError extends DomainError {
   constructor() {
     super('Cannot delete the last board', 'LAST_BOARD');

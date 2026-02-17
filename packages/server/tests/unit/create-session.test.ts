@@ -28,7 +28,7 @@ describe('CreateSessionUseCase', () => {
     );
   });
 
-  it('should create a shell session', async () => {
+  it('should create a shell session with human-readable name', async () => {
     git.setInfo('/tmp/project', {
       org: 'myorg',
       name: 'myrepo',
@@ -44,7 +44,8 @@ describe('CreateSessionUseCase', () => {
     });
 
     expect(session.type).toBe('shell');
-    expect(session.tmuxName).toMatch(/^asm_shell_/);
+    expect(session.tmuxName).toBe('asm_shell_myorg_myrepo_main_shell');
+    expect(session.displayName).toBe('Shell');
     expect(session.cwd).toBe('/tmp/project');
     expect(session.repositoryOrg).toBe('myorg');
     expect(session.repositoryName).toBe('myrepo');
@@ -57,18 +58,47 @@ describe('CreateSessionUseCase', () => {
     expect(store.getById(session.id)).not.toBeNull();
   });
 
-  it('should create a claude session with command', async () => {
+  it('should create a claude session with human-readable name', async () => {
+    git.setInfo('/tmp/project', {
+      org: 'myorg',
+      name: 'myrepo',
+      remote: 'https://github.com/myorg/myrepo.git',
+      branch: 'feat/test',
+      isWorktree: false,
+      mainWorktreePath: '/tmp/project',
+    });
+
     const session = await useCase.execute({
       cwd: '/tmp/project',
       type: 'claude',
     });
 
     expect(session.type).toBe('claude');
-    expect(session.tmuxName).toMatch(/^asm_claude_/);
+    expect(session.tmuxName).toBe('asm_claude_myorg_myrepo_feat-test_claude');
+    expect(session.displayName).toBe('Claude');
 
     // Should have sent the claude command
     expect(tmux.sentKeys).toHaveLength(1);
     expect(tmux.sentKeys[0]!.keys).toBe('claude');
+  });
+
+  it('should auto-suffix duplicate names', async () => {
+    git.setInfo('/tmp/project', {
+      org: 'myorg',
+      name: 'myrepo',
+      remote: 'https://github.com/myorg/myrepo.git',
+      branch: 'main',
+      isWorktree: false,
+      mainWorktreePath: '/tmp/project',
+    });
+
+    const session1 = await useCase.execute({ cwd: '/tmp/project', type: 'claude' });
+    const session2 = await useCase.execute({ cwd: '/tmp/project', type: 'claude' });
+
+    expect(session1.tmuxName).toBe('asm_claude_myorg_myrepo_main_claude');
+    expect(session1.displayName).toBe('Claude');
+    expect(session2.tmuxName).toBe('asm_claude_myorg_myrepo_main_claude-1');
+    expect(session2.displayName).toBe('Claude-1');
   });
 
   it('should create a claude session with custom prompt', async () => {
@@ -91,5 +121,24 @@ describe('CreateSessionUseCase', () => {
 
     expect(session.repositoryOrg).toBeNull();
     expect(session.repositoryName).toBeNull();
+    // Without git context, name is just asm_shell_<displayName>
+    expect(session.tmuxName).toBe('asm_shell_shell');
+    expect(session.displayName).toBe('Shell');
+  });
+
+  it('should include displayName in DTO', async () => {
+    git.setInfo('/tmp/project', {
+      org: 'myorg',
+      name: 'myrepo',
+      remote: 'https://github.com/myorg/myrepo.git',
+      branch: 'main',
+      isWorktree: false,
+      mainWorktreePath: '/tmp/project',
+    });
+
+    const session = await useCase.execute({ cwd: '/tmp/project', type: 'claude' });
+    const dto = session.toDTO();
+
+    expect(dto.displayName).toBe('Claude');
   });
 });

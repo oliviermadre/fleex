@@ -42,6 +42,14 @@ export class FakeTmuxPort implements TmuxPort {
     return (await this.listSessions()).filter((s) => s.name.startsWith('asm_'));
   }
 
+  async renameSession(oldName: string, newName: string): Promise<void> {
+    const data = this.sessions.get(oldName);
+    if (data) {
+      this.sessions.delete(oldName);
+      this.sessions.set(newName, data);
+    }
+  }
+
   async sendKeys(name: string, keys: string): Promise<void> {
     this.sentKeys.push({ name, keys });
   }

@@ -13,6 +13,7 @@ export interface TmuxPort {
   hasSession(name: string): Promise<boolean>;
   listSessions(): Promise<TmuxSessionInfo[]>;
   listManagedSessions(): Promise<TmuxSessionInfo[]>;
+  renameSession(oldName: string, newName: string): Promise<void>;
   sendKeys(name: string, keys: string): Promise<void>;
   getSessionCwd(name: string): Promise<string | null>;
 }

@@ -40,6 +40,13 @@ export async function createSession(req: CreateSessionRequest): Promise<Session>
   });
 }
 
+export async function renameSession(id: string, displayName: string): Promise<Session> {
+  return request<Session>(`/sessions/${encodeURIComponent(id)}/rename`, {
+    method: 'PATCH',
+    body: JSON.stringify({ displayName }),
+  });
+}
+
 export async function killSession(id: string): Promise<void> {
   await request<void>(`/sessions/${encodeURIComponent(id)}`, {
     method: 'DELETE',

@@ -22,6 +22,7 @@ export interface Session {
   readonly repositoryName: string | null;
   readonly worktreeBranch: string | null;
   readonly gitRemote: string | null;
+  readonly displayName: string;
   readonly claudePrompt?: string;
   readonly claudeActivity?: import('./claude-activity.js').ClaudeActivityStatus;
 }
@@ -31,6 +32,10 @@ export interface CreateSessionRequest {
   readonly type: SessionType;
   readonly dimensions?: TerminalDimensions;
   readonly claudePrompt?: string;
+}
+
+export interface RenameSessionRequest {
+  readonly displayName: string;
 }
 
 export interface SessionGroup {

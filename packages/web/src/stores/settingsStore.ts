@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { API_URL } from '../lib/constants';
 import { resolveTemplate, type WorktreeContext } from '../lib/templateUtils';
 import type { Theme } from '../lib/themes';
+import * as api from '../services/api';
 
 export interface PinnedIcon {
   id: string;
@@ -133,22 +134,28 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setSessionDisplayName: (sessionId, name) => {
-    const current = get().settings;
-    const sessionDisplayNames = { ...current.sessionDisplayNames };
     const trimmed = name.trim();
-    if (trimmed) {
-      sessionDisplayNames[sessionId] = trimmed;
-    } else {
+    api.renameSession(sessionId, trimmed).then(() => {
+      // On success, remove local override — server is now authoritative
+      const current = get().settings;
+      const sessionDisplayNames = { ...current.sessionDisplayNames };
       delete sessionDisplayNames[sessionId];
-    }
-    const updated = { ...current, sessionDisplayNames };
-    set({ settings: updated });
-    saveToStorage(updated);
-    fetch(`${API_URL}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+      const updated = { ...current, sessionDisplayNames };
+      set({ settings: updated });
+      saveToStorage(updated);
+    }).catch(() => {
+      // On failure, keep local state as fallback
+      const current = get().settings;
+      const sessionDisplayNames = { ...current.sessionDisplayNames };
+      if (trimmed) {
+        sessionDisplayNames[sessionId] = trimmed;
+      } else {
+        delete sessionDisplayNames[sessionId];
+      }
+      const updated = { ...current, sessionDisplayNames };
+      set({ settings: updated });
+      saveToStorage(updated);
+    });
   },
 
   getSessionDisplayName: (sessionId) => {

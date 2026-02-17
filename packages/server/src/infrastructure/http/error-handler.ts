@@ -4,6 +4,7 @@ import { DomainError } from '../../domain/errors.js';
 const CODE_TO_STATUS: Record<string, number> = {
   SESSION_NOT_FOUND: 404,
   SESSION_ALREADY_EXISTS: 409,
+  SESSION_NAME_CONFLICT: 409,
   TMUX_NOT_AVAILABLE: 503,
   WORKTREE_ERROR: 400,
   REPOSITORY_NOT_FOUND: 404,
