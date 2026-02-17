@@ -130,6 +130,13 @@ export function TicketMetaSidebar({
         </div>
       </div>
 
+      {/* GitHub Issue */}
+      <GitHubIssuePicker
+        ticket={ticket}
+        onAddLink={(link) => addLink(ticket.id, link)}
+        onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
+      />
+
       {/* Repository & Worktree */}
       <RepoWorktreePicker
         linkedRepo={linkedRepo}
@@ -510,6 +517,155 @@ function RepoWorktreePicker({
         )}
       </div>
     </>
+  );
+}
+
+// ── GitHub Issue Picker ──
+
+const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\/?$/;
+
+function GitHubIssuePicker({
+  ticket,
+  onAddLink,
+  onRemoveLink,
+}: {
+  ticket: Ticket;
+  onAddLink: (link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
+  onRemoveLink: (linkId: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [urlValue, setUrlValue] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const issueLink = ticket.links.find((l) => l.type === 'github_issue');
+
+  const handleSave = async () => {
+    const trimmed = urlValue.trim();
+    setError(null);
+
+    // If empty, just close
+    if (!trimmed) {
+      setEditing(false);
+      return;
+    }
+
+    const match = trimmed.match(GITHUB_ISSUE_RE);
+    if (!match) {
+      setError('Invalid GitHub issue URL');
+      return;
+    }
+
+    const [, org, name, num] = match;
+    const issueNumber = parseInt(num, 10);
+    const ref = `${org}/${name}#${issueNumber}`;
+    const label = `#${issueNumber}`;
+
+    setLoading(true);
+    try {
+      // Remove existing github_issue link first
+      if (issueLink) {
+        await onRemoveLink(issueLink.id);
+      }
+      await onAddLink({ type: 'github_issue', ref, label, url: trimmed });
+      setEditing(false);
+      setUrlValue('');
+    } catch (err) {
+      setError('Failed to save link');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    if (issueLink) {
+      await onRemoveLink(issueLink.id);
+    }
+  };
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+        GitHub Issue
+      </label>
+      {issueLink && !editing ? (
+        <div className="flex items-center gap-2">
+          <a
+            href={issueLink.url ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1.5 text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-secondary)]">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+            </svg>
+            <span className="truncate font-medium text-[var(--theme-text-primary)]">{issueLink.ref}</span>
+          </a>
+          <button
+            className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
+            onClick={() => {
+              setUrlValue(issueLink.url ?? '');
+              setEditing(true);
+            }}
+            title="Edit GitHub issue link"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
+            </svg>
+          </button>
+          <button
+            className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+            onClick={handleRemove}
+            title="Remove GitHub issue link"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="4" y1="4" x2="12" y2="12" />
+              <line x1="12" y1="4" x2="4" y2="12" />
+            </svg>
+          </button>
+        </div>
+      ) : editing ? (
+        <div className="flex flex-col gap-1.5">
+          <input
+            autoFocus
+            className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
+            placeholder="https://github.com/org/repo/issues/123"
+            value={urlValue}
+            onChange={(e) => { setUrlValue(e.target.value); setError(null); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSave();
+              if (e.key === 'Escape') { setEditing(false); setUrlValue(''); setError(null); }
+            }}
+            disabled={loading}
+          />
+          {error && (
+            <span className="text-[10px] text-[var(--theme-danger)]">{error}</span>
+          )}
+          <div className="flex gap-1">
+            <button
+              className="rounded-md bg-[var(--theme-accent)] px-2 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
+              onClick={handleSave}
+              disabled={loading}
+            >
+              {loading ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              className="rounded-md bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+              onClick={() => { setEditing(false); setUrlValue(''); setError(null); }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          className="w-full rounded-md border border-dashed border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:border-[var(--theme-border-input)] hover:text-[var(--theme-text-secondary)]"
+          onClick={() => setEditing(true)}
+        >
+          + Link GitHub issue
+        </button>
+      )}
+    </div>
   );
 }
 

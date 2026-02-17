@@ -32,6 +32,7 @@ interface TicketState {
   moveTicket: (id: string, status: TicketStatus, position?: number) => Promise<void>;
   addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
+  importGitHubIssue: (url: string, boardId: string, status?: import('@asm/shared').TicketStatus) => Promise<Ticket>;
   openSessionFromTicket: (id: string) => Promise<{ sessionId: string }>;
   selectBoard: (id: string | null) => void;
   selectTicket: (id: string | null) => void;
@@ -174,6 +175,27 @@ export const useTicketStore = create<TicketState>((set, get) => ({
         t.id === ticketId ? { ...t, links: t.links.filter((l) => l.id !== linkId) } : t,
       ),
     }));
+  },
+
+  importGitHubIssue: async (url, boardId, status) => {
+    const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/);
+    if (!match) throw new Error('Invalid GitHub issue URL');
+    const [, org, name, num] = match;
+    const ticket = await api.importGitHubIssue(org, name, parseInt(num, 10), boardId);
+    // If a specific status was requested (e.g. creating in a specific column), move the ticket
+    if (status && status !== 'backlog') {
+      const moved = await api.moveTicket(ticket.id, status);
+      set((s) => {
+        if (s.tickets.some((t) => t.id === moved.id)) return s;
+        return { tickets: [...s.tickets, moved] };
+      });
+      return moved;
+    }
+    set((s) => {
+      if (s.tickets.some((t) => t.id === ticket.id)) return s;
+      return { tickets: [...s.tickets, ticket] };
+    });
+    return ticket;
   },
 
   openSessionFromTicket: async (id) => {
