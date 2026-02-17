@@ -59,6 +59,15 @@ export class ImportGitHubIssueUseCase {
       randomUUID(),
     );
 
+    ticket.setGithubMetadata({
+      state: detail.state,
+      author: detail.author,
+      assignees: detail.assignees,
+      labels: detail.labels,
+      milestone: detail.milestone,
+      syncedAt: new Date().toISOString(),
+    });
+
     ticket.addLink(
       'repository',
       `${org}/${name}`,

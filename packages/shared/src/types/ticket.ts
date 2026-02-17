@@ -11,6 +11,15 @@ export interface TicketLink {
   readonly createdAt: string;
 }
 
+export interface GitHubIssueMetadata {
+  readonly state: string;
+  readonly author: string;
+  readonly assignees: string[];
+  readonly labels: string[];
+  readonly milestone: string | null;
+  readonly syncedAt: string;
+}
+
 export interface Ticket {
   readonly id: string;
   readonly boardId: string;
@@ -25,6 +34,7 @@ export interface Ticket {
   readonly dueDate: string | null;
   readonly assignee: string | null;
   readonly agentClaimedAt: string | null;
+  readonly githubMetadata: GitHubIssueMetadata | null;
   readonly statusChangedAt: string;
   readonly createdAt: string;
   readonly updatedAt: string;

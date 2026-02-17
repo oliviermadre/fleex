@@ -45,6 +45,7 @@ export type {
   TicketPriority,
   TicketLinkType,
   TicketLink,
+  GitHubIssueMetadata,
   Ticket,
   Board,
   BoardWithCounts,

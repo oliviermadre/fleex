@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import type { TicketPriority } from '@asm/shared';
 import { TICKET_PRIORITIES } from '@asm/shared';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -21,8 +21,12 @@ export function TicketsContentPanel() {
   const searchQuery = useTicketStore((s) => s.searchQuery);
   const setSearchQuery = useTicketStore((s) => s.setSearchQuery);
   const createTicket = useTicketStore((s) => s.createTicket);
+  const importGitHubIssue = useTicketStore((s) => s.importGitHubIssue);
 
   const [quickTitle, setQuickTitle] = useState('');
+  const [quickImporting, setQuickImporting] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const quickSubmittingRef = useRef(false);
   const [renamingBoardId, setRenamingBoardId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
@@ -55,8 +59,13 @@ export function TicketsContentPanel() {
     (filters.hasSession !== null ? 1 : 0) +
     (filters.tag ? 1 : 0);
 
+  const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;
+
   const handleQuickCreate = async () => {
-    if (!quickTitle.trim()) return;
+    if (quickSubmittingRef.current) return;
+    const trimmed = quickTitle.trim();
+    if (!trimmed) return;
+
     let boardId = selectedBoardId;
     if (!boardId) {
       if (boards.length === 0) {
@@ -68,8 +77,25 @@ export function TicketsContentPanel() {
       }
       if (!boardId) return;
     }
-    await createTicket({ boardId, title: quickTitle.trim() });
-    setQuickTitle('');
+
+    quickSubmittingRef.current = true;
+    setQuickError(null);
+
+    try {
+      if (GITHUB_ISSUE_RE.test(trimmed)) {
+        setQuickImporting(true);
+        await importGitHubIssue(trimmed, boardId);
+      } else {
+        await createTicket({ boardId, title: trimmed });
+      }
+      setQuickTitle('');
+    } catch (err) {
+      console.error('Failed to import GitHub issue:', err);
+      setQuickError(err instanceof Error ? err.message : 'Failed to import GitHub issue');
+    } finally {
+      setQuickImporting(false);
+      quickSubmittingRef.current = false;
+    }
   };
 
   const handleCreateBoard = async () => {
@@ -176,13 +202,33 @@ export function TicketsContentPanel() {
           <input
             type="text"
             className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
-            placeholder="New ticket title..."
+            placeholder="Ticket title or GitHub issue URL..."
             value={quickTitle}
-            onChange={(e) => setQuickTitle(e.target.value)}
+            onChange={(e) => { setQuickTitle(e.target.value); setQuickError(null); }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); handleQuickCreate(); }
             }}
+            disabled={quickImporting}
           />
+          {GITHUB_ISSUE_RE.test(quickTitle.trim()) && !quickImporting && !quickError && (
+            <div className="flex items-center gap-1.5 pt-1 text-[10px] text-[var(--theme-text-muted)]">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-secondary)]">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+              </svg>
+              <span>Will import from GitHub</span>
+            </div>
+          )}
+          {quickError && (
+            <span className="text-[10px] text-[var(--theme-danger)]">{quickError}</span>
+          )}
+          {quickImporting && (
+            <div className="flex items-center gap-1.5 pt-1 text-[10px] text-[var(--theme-accent)]">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                <circle cx="8" cy="8" r="6" strokeDasharray="30" strokeDashoffset="10" />
+              </svg>
+              <span>Importing from GitHub...</span>
+            </div>
+          )}
         </div>
 
         {/* Search */}
