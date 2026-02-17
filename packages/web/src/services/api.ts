@@ -313,6 +313,12 @@ export async function importGitHubIssue(org: string, name: string, issueNumber: 
   });
 }
 
+export async function syncGithubIssue(ticketId: string): Promise<import('@asm/shared').Ticket> {
+  return request<import('@asm/shared').Ticket>(`/tickets/${encodeURIComponent(ticketId)}/sync-github`, {
+    method: 'POST',
+  });
+}
+
 // ── Agent Tokens API ──
 
 export async function fetchAgentTokens(): Promise<import('@asm/shared').AgentToken[]> {

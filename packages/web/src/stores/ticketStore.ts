@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Board, BoardWithCounts, Ticket, TicketStatus, TicketPriority, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@asm/shared';
 import { TICKET_STATUSES } from '@asm/shared';
 import * as api from '../services/api';
+import { useSessionStore } from './sessionStore';
 
 interface TicketFilters {
   repo: string | null;        // "org/name" or null for all
@@ -32,6 +33,8 @@ interface TicketState {
   moveTicket: (id: string, status: TicketStatus, position?: number) => Promise<void>;
   addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
+  importGitHubIssue: (url: string, boardId: string, status?: import('@asm/shared').TicketStatus) => Promise<Ticket>;
+  syncGithubIssue: (ticketId: string) => Promise<void>;
   openSessionFromTicket: (id: string) => Promise<{ sessionId: string }>;
   selectBoard: (id: string | null) => void;
   selectTicket: (id: string | null) => void;
@@ -47,10 +50,36 @@ interface TicketState {
   handleWsMessage: (msg: TicketWsMessage) => void;
 }
 
+/** Extract repo/branch info from a ticket's worktree or repository links. */
+function getTicketRepoWorktreeInfo(t: Ticket): { repo: string; branch: string | null } | null {
+  const wtLink = t.links.find((l) => l.type === 'worktree');
+  if (wtLink) {
+    const colonIdx = wtLink.ref.indexOf(':');
+    if (colonIdx > 0) {
+      return { repo: wtLink.ref.substring(0, colonIdx), branch: wtLink.ref.substring(colonIdx + 1) };
+    }
+  }
+  const repoLink = t.links.find((l) => l.type === 'repository');
+  if (repoLink) {
+    return { repo: repoLink.ref, branch: null };
+  }
+  return null;
+}
+
+const BOARD_STORAGE_KEY = 'asm:lastBoardId';
+const ALL_BOARDS_SENTINEL = '__all__';
+
+function loadPersistedBoardId(): string | null | undefined {
+  const stored = localStorage.getItem(BOARD_STORAGE_KEY);
+  if (stored === ALL_BOARDS_SENTINEL) return null;   // explicitly chose "All boards"
+  if (stored) return stored;                          // specific board id
+  return undefined;                                   // never set — will auto-select
+}
+
 export const useTicketStore = create<TicketState>((set, get) => ({
   boards: [],
   tickets: [],
-  selectedBoardId: null,
+  selectedBoardId: loadPersistedBoardId() ?? null,
   selectedTicketId: null,
   statusFilter: 'all',
   searchQuery: '',
@@ -59,9 +88,18 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   fetchBoards: async () => {
     const boards = await api.fetchBoards();
     set({ boards });
-    // Auto-select first board if none selected
-    if (!get().selectedBoardId && boards.length > 0) {
-      set({ selectedBoardId: boards[0]!.id });
+    const persisted = loadPersistedBoardId();
+    if (persisted === null) {
+      // User explicitly chose "All boards" — keep it
+      set({ selectedBoardId: null });
+    } else if (persisted && boards.some((b) => b.id === persisted)) {
+      // Persisted board still exists
+      set({ selectedBoardId: persisted });
+    } else {
+      // Never set or board was deleted — fall back to first
+      const fallback = boards[0]?.id ?? null;
+      set({ selectedBoardId: fallback });
+      if (fallback) localStorage.setItem(BOARD_STORAGE_KEY, fallback);
     }
   },
 
@@ -141,12 +179,41 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     }));
   },
 
+  importGitHubIssue: async (url, boardId, status) => {
+    const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/);
+    if (!match) throw new Error('Invalid GitHub issue URL');
+    const [, org, name, num] = match;
+    const ticket = await api.importGitHubIssue(org, name, parseInt(num, 10), boardId);
+    // If a specific status was requested (e.g. creating in a specific column), move the ticket
+    if (status && status !== 'backlog') {
+      const moved = await api.moveTicket(ticket.id, status);
+      set((s) => {
+        if (s.tickets.some((t) => t.id === moved.id)) return s;
+        return { tickets: [...s.tickets, moved] };
+      });
+      return moved;
+    }
+    set((s) => {
+      if (s.tickets.some((t) => t.id === ticket.id)) return s;
+      return { tickets: [...s.tickets, ticket] };
+    });
+    return ticket;
+  },
+
+  syncGithubIssue: async (ticketId) => {
+    const updated = await api.syncGithubIssue(ticketId);
+    set((s) => ({
+      tickets: s.tickets.map((t) => (t.id === ticketId ? updated : t)),
+    }));
+  },
+
   openSessionFromTicket: async (id) => {
     return api.openSessionFromTicket(id);
   },
 
   selectBoard: (id) => {
     set({ selectedBoardId: id, selectedTicketId: null });
+    localStorage.setItem(BOARD_STORAGE_KEY, id ?? ALL_BOARDS_SENTINEL);
     // Refetch tickets for the new board (or all)
     get().fetchTickets(id ?? undefined);
   },
@@ -185,10 +252,24 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       filtered = filtered.filter((t) => t.priority === filters.priority);
     }
 
-    // Has session filter
+    // Has session filter (mirrors badge logic in KanbanCard)
     if (filters.hasSession !== null) {
+      const runningSessions = useSessionStore.getState().sessions;
       filtered = filtered.filter((t) => {
-        const has = t.links.some((l) => l.type === 'session');
+        let has = t.links.some((l) => l.type === 'session');
+        if (!has) {
+          const repoInfo = getTicketRepoWorktreeInfo(t);
+          if (repoInfo) {
+            const [org, name] = repoInfo.repo.split('/');
+            has = runningSessions.some(
+              (s) =>
+                s.status === 'running' &&
+                s.repositoryOrg === org &&
+                s.repositoryName === name &&
+                s.worktreeBranch === repoInfo.branch,
+            );
+          }
+        }
         return filters.hasSession ? has : !has;
       });
     }

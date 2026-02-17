@@ -1,4 +1,4 @@
-import type { Ticket, TicketStatus, TicketPriority, TicketLink, TicketLinkType } from '@asm/shared';
+import type { Ticket, TicketStatus, TicketPriority, TicketLink, TicketLinkType, GitHubIssueMetadata } from '@asm/shared';
 
 export class TicketEntity {
   constructor(
@@ -16,6 +16,7 @@ export class TicketEntity {
     public dueDate: Date | null,
     public assignee: string | null,
     public agentClaimedAt: Date | null,
+    public githubMetadata: GitHubIssueMetadata | null,
     public statusChangedAt: Date,
     public readonly createdAt: Date,
     public updatedAt: Date,
@@ -47,6 +48,7 @@ export class TicketEntity {
       false,
       false,
       params.dueDate ?? null,
+      null,
       null,
       null,
       now,
@@ -137,6 +139,11 @@ export class TicketEntity {
     return { status: { from, to: status } };
   }
 
+  setGithubMetadata(metadata: GitHubIssueMetadata | null): void {
+    this.githubMetadata = metadata;
+    this.updatedAt = new Date();
+  }
+
   addLink(type: TicketLinkType, ref: string, label: string, url: string | null, linkId: string): TicketLink {
     const link: TicketLink = {
       id: linkId,
@@ -222,6 +229,7 @@ export class TicketEntity {
       dueDate: this.dueDate?.toISOString() ?? null,
       assignee: this.assignee,
       agentClaimedAt: this.agentClaimedAt?.toISOString() ?? null,
+      githubMetadata: this.githubMetadata,
       statusChangedAt: this.statusChangedAt.toISOString(),
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),

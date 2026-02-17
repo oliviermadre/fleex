@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Ticket, TicketStatus, TicketPriority, Worktree } from '@asm/shared';
+import type { Ticket, TicketStatus, TicketPriority, Worktree, GitHubIssueMetadata } from '@asm/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES } from '@asm/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -20,6 +20,7 @@ export function TicketMetaSidebar({
   const deleteTicket = useTicketStore((s) => s.deleteTicket);
   const addLink = useTicketStore((s) => s.addLink);
   const removeLink = useTicketStore((s) => s.removeLink);
+  const syncGithubIssue = useTicketStore((s) => s.syncGithubIssue);
   const boards = useTicketStore((s) => s.boards);
 
   const handleStatusChange = (status: TicketStatus) => {
@@ -130,6 +131,19 @@ export function TicketMetaSidebar({
         </div>
       </div>
 
+      {/* GitHub Issue */}
+      <GitHubIssuePicker
+        ticket={ticket}
+        onAddLink={(link) => addLink(ticket.id, link)}
+        onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
+        onSync={() => syncGithubIssue(ticket.id)}
+      />
+
+      {/* GitHub Metadata */}
+      {ticket.githubMetadata && (
+        <GitHubMetadataSection metadata={ticket.githubMetadata} />
+      )}
+
       {/* Repository & Worktree */}
       <RepoWorktreePicker
         linkedRepo={linkedRepo}
@@ -138,6 +152,32 @@ export function TicketMetaSidebar({
         onAddLink={(link) => addLink(ticket.id, link)}
         onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
       />
+
+      {/* Pull Requests */}
+      {ticket.links.filter((l) => l.type === 'github_pr').length > 0 && (
+        <div>
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            Pull Request
+          </label>
+          <div className="flex flex-col gap-1.5">
+            {ticket.links.filter((l) => l.type === 'github_pr').map((pr) => (
+              <a
+                key={pr.id}
+                href={pr.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-md border border-purple-500/20 bg-purple-500/[0.06] px-2 py-1.5 text-xs transition-colors hover:bg-purple-500/[0.12]"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-purple-400">
+                  <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
+                </svg>
+                <span className="font-medium text-purple-400">{pr.label}</span>
+                <span className="ml-auto text-[10px] text-[var(--theme-text-faint)]">{pr.ref}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tags */}
       <div>
@@ -192,6 +232,7 @@ export function TicketMetaSidebar({
         </button>
       </div>
 
+
       {/* Favorite */}
       <div className="flex items-center gap-2">
         <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
@@ -213,14 +254,15 @@ export function TicketMetaSidebar({
         </button>
       </div>
 
-      {/* Other Links (non-worktree, non-repository) */}
-      {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository').length > 0 && (
+      {/* Other Links (non-worktree, non-repository, non-PR) */}
+      {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').length > 0 && (
+
         <div>
           <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
             Links
           </label>
           <div className="flex flex-col gap-1">
-            {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository').map((link) => (
+            {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').map((link) => (
               <div key={link.id} className="flex items-center gap-2 text-xs">
                 <span className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9px] font-medium text-[var(--theme-text-muted)]">
                   {link.type.replace('_', ' ')}
@@ -316,6 +358,9 @@ function RepoWorktreePicker({
 
   // Effective repo (from linked worktree or manual selection)
   const effectiveRepo = linkedRepo ? `${linkedRepo.org}/${linkedRepo.name}` : selectedRepo;
+
+  // Whether the linked repo exists in the current configuration
+  const repoInConfig = effectiveRepo ? repos.some((r) => r.key === effectiveRepo) : false;
 
   // Fetch worktrees from filesystem when repo selection changes
   const fetchWorktreesForRepos = useCallback(async (repoList: { org: string; name: string; key: string }[]) => {
@@ -421,7 +466,15 @@ function RepoWorktreePicker({
         <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
           Repository
         </label>
-        {repos.length === 0 ? (
+        {linkedRepo && !repoInConfig ? (
+          /* Read-only: repo linked but no longer in resolved repositories */
+          <div className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+              <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
+            </svg>
+            <span className="truncate text-xs text-[var(--theme-text-secondary)]">{linkedRepo.org}/{linkedRepo.name}</span>
+          </div>
+        ) : repos.length === 0 ? (
           <span className="text-[10px] text-[var(--theme-text-muted)]">No repositories configured</span>
         ) : (
           <select
@@ -454,16 +507,18 @@ function RepoWorktreePicker({
               </svg>
               <span className="truncate text-xs text-[var(--theme-text-primary)]">{worktreeLink.label}</span>
             </div>
-            <button
-              className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-              onClick={handleClearWorktree}
-              title="Unlink worktree"
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="4" y1="4" x2="12" y2="12" />
-                <line x1="12" y1="4" x2="4" y2="12" />
-              </svg>
-            </button>
+            {repoInConfig && (
+              <button
+                className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+                onClick={handleClearWorktree}
+                title="Unlink worktree"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="4" x2="12" y2="12" />
+                  <line x1="12" y1="4" x2="4" y2="12" />
+                </svg>
+              </button>
+            )}
           </div>
         ) : loading ? (
           <span className="text-[10px] text-[var(--theme-text-muted)]">Loading worktrees...</span>
@@ -492,6 +547,259 @@ function RepoWorktreePicker({
         )}
       </div>
     </>
+  );
+}
+
+// ── GitHub Issue Picker ──
+
+const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\/?$/;
+
+function GitHubIssuePicker({
+  ticket,
+  onAddLink,
+  onRemoveLink,
+  onSync,
+}: {
+  ticket: Ticket;
+  onAddLink: (link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
+  onRemoveLink: (linkId: string) => Promise<void>;
+  onSync: () => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [urlValue, setUrlValue] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const issueLink = ticket.links.find((l) => l.type === 'github_issue');
+
+  const handleSave = async () => {
+    const trimmed = urlValue.trim();
+    setError(null);
+
+    // If empty, just close
+    if (!trimmed) {
+      setEditing(false);
+      return;
+    }
+
+    const match = trimmed.match(GITHUB_ISSUE_RE);
+    if (!match) {
+      setError('Invalid GitHub issue URL');
+      return;
+    }
+
+    const [, org, name, num] = match;
+    const issueNumber = parseInt(num, 10);
+    const ref = `${org}/${name}#${issueNumber}`;
+    const label = `#${issueNumber}`;
+
+    setLoading(true);
+    try {
+      // Remove existing github_issue link first
+      if (issueLink) {
+        await onRemoveLink(issueLink.id);
+      }
+      await onAddLink({ type: 'github_issue', ref, label, url: trimmed });
+      setEditing(false);
+      setUrlValue('');
+    } catch (err) {
+      setError('Failed to save link');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await onSync();
+    } catch {
+      // Sync errors are non-fatal
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    if (issueLink) {
+      await onRemoveLink(issueLink.id);
+    }
+  };
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+        GitHub Issue
+      </label>
+      {issueLink && !editing ? (
+        <div className="flex items-center gap-2">
+          <a
+            href={issueLink.url ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1.5 text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-secondary)]">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+            </svg>
+            <span className="truncate font-medium text-[var(--theme-text-primary)]">{issueLink.ref}</span>
+          </a>
+          <button
+            className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
+            onClick={() => {
+              setUrlValue(issueLink.url ?? '');
+              setEditing(true);
+            }}
+            title="Edit GitHub issue link"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
+            </svg>
+          </button>
+          <button
+            className={cn(
+              'rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)] disabled:opacity-50',
+              syncing && 'animate-spin',
+            )}
+            onClick={handleSync}
+            disabled={syncing}
+            title="Sync GitHub metadata"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 4v-3h3" />
+              <path d="M15 12v3h-3" />
+              <path d="M13.5 6.5A6 6 0 0 0 4 3L1 1" />
+              <path d="M2.5 9.5A6 6 0 0 0 12 13l3 2" />
+            </svg>
+          </button>
+          <button
+            className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+            onClick={handleRemove}
+            title="Remove GitHub issue link"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="4" y1="4" x2="12" y2="12" />
+              <line x1="12" y1="4" x2="4" y2="12" />
+            </svg>
+          </button>
+        </div>
+      ) : editing ? (
+        <div className="flex flex-col gap-1.5">
+          <input
+            autoFocus
+            className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
+            placeholder="https://github.com/org/repo/issues/123"
+            value={urlValue}
+            onChange={(e) => { setUrlValue(e.target.value); setError(null); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSave();
+              if (e.key === 'Escape') { setEditing(false); setUrlValue(''); setError(null); }
+            }}
+            disabled={loading}
+          />
+          {error && (
+            <span className="text-[10px] text-[var(--theme-danger)]">{error}</span>
+          )}
+          <div className="flex gap-1">
+            <button
+              className="rounded-md bg-[var(--theme-accent)] px-2 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
+              onClick={handleSave}
+              disabled={loading}
+            >
+              {loading ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              className="rounded-md bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+              onClick={() => { setEditing(false); setUrlValue(''); setError(null); }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          className="w-full rounded-md border border-dashed border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:border-[var(--theme-border-input)] hover:text-[var(--theme-text-secondary)]"
+          onClick={() => setEditing(true)}
+        >
+          + Link GitHub issue
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── GitHub Metadata Section ──
+
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return 'just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDays = Math.floor(diffHr / 24);
+  return `${diffDays}d ago`;
+}
+
+const STATE_COLORS: Record<string, string> = {
+  OPEN: 'text-green-400',
+  CLOSED: 'text-red-400',
+  MERGED: 'text-purple-400',
+};
+
+function GitHubMetadataSection({ metadata }: { metadata: GitHubIssueMetadata }) {
+  const rows: [string, React.ReactNode][] = [
+    ['State', (
+      <span className={cn('font-medium', STATE_COLORS[metadata.state] ?? 'text-[var(--theme-text-secondary)]')}>
+        {metadata.state.charAt(0) + metadata.state.slice(1).toLowerCase()}
+      </span>
+    )],
+    ['Author', <span>@{metadata.author}</span>],
+  ];
+
+  if (metadata.assignees.length > 0) {
+    rows.push(['Assignees', <span>{metadata.assignees.map((a) => `@${a}`).join(', ')}</span>]);
+  }
+
+  if (metadata.labels.length > 0) {
+    rows.push(['Labels', (
+      <div className="flex flex-wrap gap-0.5">
+        {metadata.labels.map((l) => (
+          <span key={l} className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9px]">{l}</span>
+        ))}
+      </div>
+    )]);
+  }
+
+  if (metadata.milestone) {
+    rows.push(['Milestone', <span>{metadata.milestone}</span>]);
+  }
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+        GitHub Metadata
+      </label>
+      <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-xs">
+        <table className="w-full">
+          <tbody>
+            {rows.map(([label, value], i) => (
+              <tr key={label} className={i > 0 ? 'border-t border-[var(--theme-border)]' : ''}>
+                <td className="whitespace-nowrap px-2 py-1 text-[10px] font-medium text-[var(--theme-text-muted)]">{label}</td>
+                <td className="px-2 py-1 text-[var(--theme-text-secondary)]">{value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <span className="mt-1 block text-[9px] text-[var(--theme-text-faint)]">
+        Last synced: {formatRelativeTime(metadata.syncedAt)}
+      </span>
+    </div>
   );
 }
 

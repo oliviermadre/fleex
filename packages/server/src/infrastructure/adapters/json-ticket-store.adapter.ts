@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { ASM_DIR } from '@asm/shared';
-import type { TicketStatus, TicketLinkType, TicketLink } from '@asm/shared';
+import type { TicketStatus, TicketLinkType, TicketLink, GitHubIssueMetadata } from '@asm/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
@@ -36,6 +36,7 @@ interface SerializedTicket {
   dueDate: string | null;
   assignee: string | null;
   agentClaimedAt: string | null;
+  githubMetadata?: GitHubIssueMetadata | null;
   statusChangedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -229,6 +230,7 @@ export class JsonTicketStore implements TicketStorePort {
           t.dueDate ? new Date(t.dueDate) : null,
           t.assignee,
           t.agentClaimedAt ? new Date(t.agentClaimedAt) : null,
+          t.githubMetadata ?? null,
           new Date(t.statusChangedAt ?? t.updatedAt),
           new Date(t.createdAt), new Date(t.updatedAt),
         );
@@ -285,6 +287,7 @@ export class JsonTicketStore implements TicketStorePort {
         dueDate: t.dueDate?.toISOString() ?? null,
         assignee: t.assignee,
         agentClaimedAt: t.agentClaimedAt?.toISOString() ?? null,
+        githubMetadata: t.githubMetadata ?? null,
         statusChangedAt: t.statusChangedAt.toISOString(),
         createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(),
       }));
