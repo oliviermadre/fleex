@@ -5,9 +5,12 @@ export type {
   TerminalDimensions,
   Session,
   CreateSessionRequest,
+  RenameSessionRequest,
   SessionGroup,
   WorktreeSessionGroup,
 } from './types/session.js';
+
+export { slugify } from './slugify.js';
 
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
 
@@ -88,6 +91,8 @@ export {
   WS_RECONNECT_MAX_MS,
   WS_RECONNECT_MAX_ATTEMPTS,
   SESSION_HASH_LENGTH,
+  DEFAULT_CLAUDE_DISPLAY_NAME,
+  DEFAULT_SHELL_DISPLAY_NAME,
   ASM_DIR,
   SESSIONS_FILE,
   CONFIG_FILE,

@@ -44,14 +44,14 @@ export function useCommandItems(query: string): CommandItem[] {
       const description = descParts.length > 0 ? descParts.join(' · ') : undefined;
       items.push({
         id: `session:${session.id}`,
-        label: displayName || session.tmuxName,
+        label: session.displayName || displayName || session.tmuxName,
         description,
         category: 'session',
         categoryLabel: 'Sessions',
         icon: session.type === 'claude'
           ? ClaudeIcon({ size: 16, className: 'text-[var(--theme-text-secondary)]' })
           : TerminalIcon({ size: 16, className: 'text-[var(--theme-text-secondary)]' }),
-        keywords: [session.tmuxName, displayName, session.repositoryName, session.worktreeBranch].filter(Boolean).join(' '),
+        keywords: [session.tmuxName, session.displayName, displayName, session.repositoryName, session.worktreeBranch].filter(Boolean).join(' '),
         onExecute: () => { setActivePanel('sessions'); selectSession(session.id); closeCommandPalette(); },
       });
     }

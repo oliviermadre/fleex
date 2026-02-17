@@ -19,6 +19,7 @@ interface SerializedSession {
   worktreeBranch: string | null;
   gitRemote: string | null;
   claudePrompt?: string;
+  displayName?: string;
 }
 
 export class JsonSessionStore implements SessionStorePort {
@@ -97,6 +98,7 @@ export class JsonSessionStore implements SessionStorePort {
           s.worktreeBranch,
           s.gitRemote,
           s.claudePrompt,
+          s.displayName ?? '',
         );
         this.sessions.set(entity.id, entity);
       }
@@ -124,6 +126,7 @@ export class JsonSessionStore implements SessionStorePort {
         worktreeBranch: s.worktreeBranch,
         gitRemote: s.gitRemote,
         claudePrompt: s.claudePrompt,
+        displayName: s.displayName,
       }));
 
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));

@@ -27,6 +27,8 @@ export class DiscoverExistingSessionsUseCase {
 
       const metadata = await this.resolveMetadata(tmuxSession.name);
 
+      const extractedDisplayName = this.namingService.extractDisplayName(tmuxSession.name);
+
       const session = new SessionEntity(
         randomUUID(),
         tmuxSession.name,
@@ -39,6 +41,8 @@ export class DiscoverExistingSessionsUseCase {
         metadata.repositoryName,
         metadata.worktreeBranch,
         metadata.gitRemote,
+        undefined,
+        extractedDisplayName,
       );
 
       await this.sessionStore.save(session);
@@ -72,6 +76,7 @@ export class DiscoverExistingSessionsUseCase {
         metadata.worktreeBranch,
         metadata.gitRemote,
         session.claudePrompt,
+        session.displayName,
       );
 
       await this.sessionStore.save(enriched);

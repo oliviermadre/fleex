@@ -17,6 +17,7 @@ import { JsonTicketStore } from './adapters/json-ticket-store.adapter.js';
 import { JsonAgentTokenStore } from './adapters/json-agent-token-store.adapter.js';
 import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-session-from-ticket.js';
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
+import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
 import { ImportGitHubIssueUseCase } from '../application/use-cases/import-github-issue.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
@@ -89,6 +90,7 @@ export async function createContainer() {
   await ticketStore.init();
 
   const createSession = new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger);
+  const renameSession = new RenameSessionUseCase(tmux, sessionStore, namingService, logger);
   const createWorktreeUC = new CreateWorktreeUseCase(git, logger);
   const detectMerge = new DetectMergeUseCase(ticketStore, logger);
   const createSessionFromTicket = new CreateSessionFromTicketUseCase(
@@ -111,6 +113,7 @@ export async function createContainer() {
     githubGraphql,
     repositoryRefreshScheduler,
     createSession,
+    renameSession,
     listSessions: new ListSessionsUseCase(sessionStore, tmux, logger),
     killSession: new KillSessionUseCase(tmux, sessionStore, logger),
     getSessionGroups: new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity),

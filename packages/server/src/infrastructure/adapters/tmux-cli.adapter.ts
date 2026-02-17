@@ -98,6 +98,11 @@ export class TmuxCliAdapter implements TmuxPort {
     return all.filter((s) => s.name.startsWith(ASM_PREFIX));
   }
 
+  async renameSession(oldName: string, newName: string): Promise<void> {
+    await this.execFn('tmux', ['rename-session', '-t', oldName, newName]);
+    this.logger.debug('tmux session renamed', { oldName, newName });
+  }
+
   async sendKeys(name: string, keys: string): Promise<void> {
     await this.execFn('tmux', ['send-keys', '-t', name, keys, 'Enter']);
     this.logger.debug('tmux send-keys', { name });

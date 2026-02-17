@@ -22,7 +22,7 @@ export function SessionHeader({ session, splitFocused }: Props) {
       style={{ height: 'var(--header-height)' }}
     >
       <span className="text-sm font-medium text-[var(--theme-text-primary)] truncate">
-        {session.tmuxName}
+        {session.displayName || session.tmuxName}
       </span>
       <Badge type={session.type} />
       <span className="truncate text-xs text-[var(--theme-text-muted)]" title={session.cwd}>

@@ -3,7 +3,7 @@ import type { Session, SessionType, SessionStatus, ClaudeActivityStatus } from '
 export class SessionEntity {
   constructor(
     public readonly id: string,
-    public readonly tmuxName: string,
+    public tmuxName: string,
     public readonly type: SessionType,
     public status: SessionStatus,
     public readonly cwd: string,
@@ -14,10 +14,16 @@ export class SessionEntity {
     public readonly worktreeBranch: string | null,
     public readonly gitRemote: string | null,
     public readonly claudePrompt?: string,
+    public displayName: string = '',
   ) {}
 
   /** Mutable, not persisted — set each broadcast cycle by enrichment. */
   public claudeActivity?: ClaudeActivityStatus;
+
+  rename(newTmuxName: string, newDisplayName: string): void {
+    this.tmuxName = newTmuxName;
+    this.displayName = newDisplayName;
+  }
 
   markAttached(): void {
     this.lastAttachedAt = new Date();
@@ -44,6 +50,7 @@ export class SessionEntity {
       repositoryName: this.repositoryName,
       worktreeBranch: this.worktreeBranch,
       gitRemote: this.gitRemote,
+      displayName: this.displayName,
       claudePrompt: this.claudePrompt,
       claudeActivity: this.claudeActivity,
     };

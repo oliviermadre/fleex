@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { CreateSessionRequest } from '@asm/shared';
 import { SessionEntity } from '../../domain/entities.js';
 import { SessionNamingService } from '../../domain/services/session-naming.js';
-import { SessionAlreadyExistsError } from '../../domain/errors.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { GitPort } from '../ports/git.port.js';
@@ -20,15 +19,6 @@ export class CreateSessionUseCase {
   ) {}
 
   async execute(request: CreateSessionRequest): Promise<SessionEntity> {
-    const tmuxName =
-      request.type === 'claude'
-        ? this.namingService.generateClaudeName(request.cwd)
-        : this.namingService.generateShellName(request.cwd);
-
-    if (await this.tmux.hasSession(tmuxName)) {
-      throw new SessionAlreadyExistsError(tmuxName);
-    }
-
     let repositoryOrg: string | null = null;
     let repositoryName: string | null = null;
     let worktreeBranch: string | null = null;
@@ -43,6 +33,21 @@ export class CreateSessionUseCase {
     } catch {
       this.logger.debug('No git info found for cwd', { cwd: request.cwd });
     }
+
+    const defaultDisplayName = this.namingService.defaultDisplayName(request.type);
+
+    // Gather existing tmux names for uniqueness check
+    const storedNames = this.sessionStore.getAll().map((s) => s.tmuxName);
+    const liveSessions = await this.tmux.listManagedSessions();
+    const liveNames = liveSessions.map((s) => s.name);
+    const existingTmuxNames = [...new Set([...storedNames, ...liveNames])];
+
+    const { displayName, tmuxName } = this.namingService.resolveUniqueName(
+      defaultDisplayName,
+      request.type,
+      { org: repositoryOrg, repo: repositoryName, worktree: worktreeBranch },
+      existingTmuxNames,
+    );
 
     const command =
       request.type === 'shell' ? this.config.get().defaultShell : undefined;
@@ -69,10 +74,11 @@ export class CreateSessionUseCase {
       worktreeBranch,
       gitRemote,
       request.claudePrompt,
+      displayName,
     );
 
     await this.sessionStore.save(session);
-    this.logger.info('Session created', { id: session.id, type: request.type, tmuxName });
+    this.logger.info('Session created', { id: session.id, type: request.type, tmuxName, displayName });
 
     return session;
   }

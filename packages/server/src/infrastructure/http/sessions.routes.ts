@@ -26,6 +26,15 @@ export function sessionRoutes(container: Container) {
       return session.toDTO();
     });
 
+    app.patch<{ Params: { id: string }; Body: { displayName: string } }>(
+      '/api/sessions/:id/rename',
+      async (request, reply) => {
+        await container.renameSession.execute(request.params.id, request.body.displayName);
+        const session = container.sessionStore.getById(request.params.id);
+        return reply.code(200).send(session?.toDTO());
+      },
+    );
+
     app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (request, reply) => {
       await container.killSession.execute(request.params.id);
       return reply.code(204).send();
