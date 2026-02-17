@@ -275,6 +275,45 @@ export function ticketRoutes(container: Container) {
       },
     );
 
+    // Sync GitHub metadata
+    app.post<{ Params: { id: string } }>(
+      '/api/tickets/:id/sync-github',
+      async (request) => {
+        const ticket = container.ticketStore.getTicketById(request.params.id);
+        if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+        const issueLink = ticket.links.find((l) => l.type === 'github_issue');
+        if (!issueLink) {
+          throw new Error('Ticket has no linked GitHub issue');
+        }
+
+        // Parse org/name#number from ref
+        const match = issueLink.ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
+        if (!match) {
+          throw new Error('Invalid GitHub issue link ref format');
+        }
+
+        const org = match[1]!;
+        const name = match[2]!;
+        const num = match[3]!;
+        const detail = await container.githubGraphql.fetchIssueDetail(org, name, parseInt(num, 10));
+
+        ticket.setGithubMetadata({
+          state: detail.state,
+          author: detail.author,
+          assignees: detail.assignees,
+          labels: detail.labels,
+          milestone: detail.milestone,
+          syncedAt: new Date().toISOString(),
+        });
+
+        await container.ticketStore.saveTicket(ticket);
+        const dto = ticket.toDTO();
+        container.ticketBroadcast('ticket:updated', dto);
+        return dto;
+      },
+    );
+
     // Batch reorder
     app.post<{ Body: { updates: { id: string; status: TicketStatus; position: number }[] } }>(
       '/api/tickets/reorder',

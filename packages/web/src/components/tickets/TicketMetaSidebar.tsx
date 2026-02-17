@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Ticket, TicketStatus, TicketPriority, Worktree } from '@asm/shared';
+import type { Ticket, TicketStatus, TicketPriority, Worktree, GitHubIssueMetadata } from '@asm/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES } from '@asm/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -20,6 +20,7 @@ export function TicketMetaSidebar({
   const deleteTicket = useTicketStore((s) => s.deleteTicket);
   const addLink = useTicketStore((s) => s.addLink);
   const removeLink = useTicketStore((s) => s.removeLink);
+  const syncGithubIssue = useTicketStore((s) => s.syncGithubIssue);
   const boards = useTicketStore((s) => s.boards);
 
   const handleStatusChange = (status: TicketStatus) => {
@@ -135,7 +136,13 @@ export function TicketMetaSidebar({
         ticket={ticket}
         onAddLink={(link) => addLink(ticket.id, link)}
         onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
+        onSync={() => syncGithubIssue(ticket.id)}
       />
+
+      {/* GitHub Metadata */}
+      {ticket.githubMetadata && (
+        <GitHubMetadataSection metadata={ticket.githubMetadata} />
+      )}
 
       {/* Repository & Worktree */}
       <RepoWorktreePicker
@@ -528,14 +535,17 @@ function GitHubIssuePicker({
   ticket,
   onAddLink,
   onRemoveLink,
+  onSync,
 }: {
   ticket: Ticket;
   onAddLink: (link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   onRemoveLink: (linkId: string) => Promise<void>;
+  onSync: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [urlValue, setUrlValue] = useState('');
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const issueLink = ticket.links.find((l) => l.type === 'github_issue');
@@ -577,6 +587,17 @@ function GitHubIssuePicker({
     }
   };
 
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await onSync();
+    } catch {
+      // Sync errors are non-fatal
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleRemove = async () => {
     if (issueLink) {
       await onRemoveLink(issueLink.id);
@@ -611,6 +632,22 @@ function GitHubIssuePicker({
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
+            </svg>
+          </button>
+          <button
+            className={cn(
+              'rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)] disabled:opacity-50',
+              syncing && 'animate-spin',
+            )}
+            onClick={handleSync}
+            disabled={syncing}
+            title="Sync GitHub metadata"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 4v-3h3" />
+              <path d="M15 12v3h-3" />
+              <path d="M13.5 6.5A6 6 0 0 0 4 3L1 1" />
+              <path d="M2.5 9.5A6 6 0 0 0 12 13l3 2" />
             </svg>
           </button>
           <button
@@ -665,6 +702,80 @@ function GitHubIssuePicker({
           + Link GitHub issue
         </button>
       )}
+    </div>
+  );
+}
+
+// ── GitHub Metadata Section ──
+
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return 'just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDays = Math.floor(diffHr / 24);
+  return `${diffDays}d ago`;
+}
+
+const STATE_COLORS: Record<string, string> = {
+  OPEN: 'text-green-400',
+  CLOSED: 'text-red-400',
+  MERGED: 'text-purple-400',
+};
+
+function GitHubMetadataSection({ metadata }: { metadata: GitHubIssueMetadata }) {
+  const rows: [string, React.ReactNode][] = [
+    ['State', (
+      <span className={cn('font-medium', STATE_COLORS[metadata.state] ?? 'text-[var(--theme-text-secondary)]')}>
+        {metadata.state.charAt(0) + metadata.state.slice(1).toLowerCase()}
+      </span>
+    )],
+    ['Author', <span>@{metadata.author}</span>],
+  ];
+
+  if (metadata.assignees.length > 0) {
+    rows.push(['Assignees', <span>{metadata.assignees.map((a) => `@${a}`).join(', ')}</span>]);
+  }
+
+  if (metadata.labels.length > 0) {
+    rows.push(['Labels', (
+      <div className="flex flex-wrap gap-0.5">
+        {metadata.labels.map((l) => (
+          <span key={l} className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9px]">{l}</span>
+        ))}
+      </div>
+    )]);
+  }
+
+  if (metadata.milestone) {
+    rows.push(['Milestone', <span>{metadata.milestone}</span>]);
+  }
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+        GitHub Metadata
+      </label>
+      <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-xs">
+        <table className="w-full">
+          <tbody>
+            {rows.map(([label, value], i) => (
+              <tr key={label} className={i > 0 ? 'border-t border-[var(--theme-border)]' : ''}>
+                <td className="whitespace-nowrap px-2 py-1 text-[10px] font-medium text-[var(--theme-text-muted)]">{label}</td>
+                <td className="px-2 py-1 text-[var(--theme-text-secondary)]">{value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <span className="mt-1 block text-[9px] text-[var(--theme-text-faint)]">
+        Last synced: {formatRelativeTime(metadata.syncedAt)}
+      </span>
     </div>
   );
 }

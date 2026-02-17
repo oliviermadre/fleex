@@ -33,6 +33,7 @@ interface TicketState {
   addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
   importGitHubIssue: (url: string, boardId: string, status?: import('@asm/shared').TicketStatus) => Promise<Ticket>;
+  syncGithubIssue: (ticketId: string) => Promise<void>;
   openSessionFromTicket: (id: string) => Promise<{ sessionId: string }>;
   selectBoard: (id: string | null) => void;
   selectTicket: (id: string | null) => void;
@@ -196,6 +197,13 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       return { tickets: [...s.tickets, ticket] };
     });
     return ticket;
+  },
+
+  syncGithubIssue: async (ticketId) => {
+    const updated = await api.syncGithubIssue(ticketId);
+    set((s) => ({
+      tickets: s.tickets.map((t) => (t.id === ticketId ? updated : t)),
+    }));
   },
 
   openSessionFromTicket: async (id) => {
