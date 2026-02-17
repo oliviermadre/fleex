@@ -184,7 +184,7 @@ export function KanbanCard({
           {prLinks.map((pr) => (
             <a
               key={pr.id}
-              href={pr.url}
+              href={pr.url ?? undefined}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}

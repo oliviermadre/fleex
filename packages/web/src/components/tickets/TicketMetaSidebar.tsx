@@ -163,7 +163,7 @@ export function TicketMetaSidebar({
             {ticket.links.filter((l) => l.type === 'github_pr').map((pr) => (
               <a
                 key={pr.id}
-                href={pr.url}
+                href={pr.url ?? undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 rounded-md border border-purple-500/20 bg-purple-500/[0.06] px-2 py-1.5 text-xs transition-colors hover:bg-purple-500/[0.12]"
@@ -269,7 +269,7 @@ export function TicketMetaSidebar({
                 </span>
                 {link.url ? (
                   <a
-                    href={link.url}
+                    href={link.url ?? undefined}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex-1 truncate text-[var(--theme-accent)] hover:underline"
