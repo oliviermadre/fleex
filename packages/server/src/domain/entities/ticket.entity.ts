@@ -12,6 +12,7 @@ export class TicketEntity {
     public tags: string[],
     public links: TicketLink[],
     public blocked: boolean,
+    public favorite: boolean,
     public dueDate: Date | null,
     public assignee: string | null,
     public agentClaimedAt: Date | null,
@@ -45,6 +46,7 @@ export class TicketEntity {
       params.tags ?? [],
       params.links ?? [],
       false,
+      false,
       params.dueDate ?? null,
       null,
       null,
@@ -64,6 +66,7 @@ export class TicketEntity {
     position?: number;
     tags?: string[];
     blocked?: boolean;
+    favorite?: boolean;
     dueDate?: Date | null;
     assignee?: string | null;
   }): Record<string, { from: unknown; to: unknown }> {
@@ -101,6 +104,10 @@ export class TicketEntity {
     if (changes.blocked !== undefined && changes.blocked !== this.blocked) {
       diff['blocked'] = { from: this.blocked, to: changes.blocked };
       this.blocked = changes.blocked;
+    }
+    if (changes.favorite !== undefined && changes.favorite !== this.favorite) {
+      diff['favorite'] = { from: this.favorite, to: changes.favorite };
+      this.favorite = changes.favorite;
     }
     if (changes.dueDate !== undefined) {
       const fromStr = this.dueDate?.toISOString() ?? null;
@@ -218,6 +225,7 @@ export class TicketEntity {
       tags: this.tags,
       links: this.links,
       blocked: this.blocked,
+      favorite: this.favorite,
       dueDate: this.dueDate?.toISOString() ?? null,
       assignee: this.assignee,
       agentClaimedAt: this.agentClaimedAt?.toISOString() ?? null,

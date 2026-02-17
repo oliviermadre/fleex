@@ -57,7 +57,8 @@ export function TicketsContentPanel() {
     (filters.repo ? 1 : 0) +
     (filters.priority ? 1 : 0) +
     (filters.hasSession !== null ? 1 : 0) +
-    (filters.tag ? 1 : 0);
+    (filters.tag ? 1 : 0) +
+    (filters.favorite !== null ? 1 : 0);
 
   const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;
 
@@ -336,6 +337,30 @@ export function TicketsContentPanel() {
                         : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                     )}
                     onClick={() => setFilters({ hasSession: opt.value })}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Favorite */}
+            <div>
+              <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">Favorite</label>
+              <div className="flex gap-1">
+                {([
+                  { label: 'All', value: null },
+                  { label: '\u2605 Favorites', value: true },
+                ] as const).map((opt) => (
+                  <button
+                    key={String(opt.value)}
+                    className={cn(
+                      'rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                      filters.favorite === opt.value
+                        ? 'bg-[var(--theme-accent)] text-white'
+                        : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                    )}
+                    onClick={() => setFilters({ favorite: opt.value })}
                   >
                     {opt.label}
                   </button>

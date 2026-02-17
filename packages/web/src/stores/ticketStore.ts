@@ -9,6 +9,7 @@ interface TicketFilters {
   priority: TicketPriority | null;
   hasSession: boolean | null;  // true=with session, false=without, null=any
   tag: string | null;
+  favorite: boolean | null;
 }
 
 interface TicketState {
@@ -82,7 +83,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   selectedTicketId: null,
   statusFilter: 'all',
   searchQuery: '',
-  filters: { repo: null, priority: null, hasSession: null, tag: null },
+  filters: { repo: null, priority: null, hasSession: null, tag: null, favorite: null },
 
   fetchBoards: async () => {
     const boards = await api.fetchBoards();
@@ -220,7 +221,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   setStatusFilter: (filter) => set({ statusFilter: filter }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setFilters: (partial) => set((s) => ({ filters: { ...s.filters, ...partial } })),
-  clearFilters: () => set({ filters: { repo: null, priority: null, hasSession: null, tag: null } }),
+  clearFilters: () => set({ filters: { repo: null, priority: null, hasSession: null, tag: null, favorite: null } }),
 
   ticketsByColumn: (boardId) => {
     const { tickets, searchQuery, filters } = get();
@@ -277,6 +278,11 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     if (filters.tag) {
       const tag = filters.tag;
       filtered = filtered.filter((t) => t.tags.includes(tag));
+    }
+
+    // Favorite filter
+    if (filters.favorite !== null) {
+      filtered = filtered.filter((t) => t.favorite === filters.favorite);
     }
 
     const columns = {} as Record<TicketStatus, Ticket[]>;

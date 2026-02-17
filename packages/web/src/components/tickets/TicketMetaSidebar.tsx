@@ -232,8 +232,31 @@ export function TicketMetaSidebar({
         </button>
       </div>
 
+
+      {/* Favorite */}
+      <div className="flex items-center gap-2">
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+          Favorite
+        </label>
+        <button
+          className={cn(
+            'h-4 w-7 rounded-full transition-colors',
+            ticket.favorite ? 'bg-yellow-400' : 'bg-[var(--theme-bg-overlay)]',
+          )}
+          onClick={() => updateTicket(ticket.id, { favorite: !ticket.favorite })}
+        >
+          <span
+            className={cn(
+              'block h-3 w-3 rounded-full bg-white transition-transform',
+              ticket.favorite ? 'translate-x-3.5' : 'translate-x-0.5',
+            )}
+          />
+        </button>
+      </div>
+
       {/* Other Links (non-worktree, non-repository, non-PR) */}
       {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').length > 0 && (
+
         <div>
           <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
             Links

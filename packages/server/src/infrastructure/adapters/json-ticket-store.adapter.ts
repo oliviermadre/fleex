@@ -32,6 +32,7 @@ interface SerializedTicket {
   tags: string[];
   links: TicketLink[];
   blocked: boolean;
+  favorite?: boolean;
   dueDate: string | null;
   assignee: string | null;
   agentClaimedAt: string | null;
@@ -225,7 +226,7 @@ export class JsonTicketStore implements TicketStorePort {
         const entity = new TicketEntity(
           t.id, t.boardId, t.title, t.description,
           t.status, t.priority as TicketEntity['priority'],
-          t.position, t.tags, t.links, t.blocked,
+          t.position, t.tags, t.links, t.blocked, t.favorite ?? false,
           t.dueDate ? new Date(t.dueDate) : null,
           t.assignee,
           t.agentClaimedAt ? new Date(t.agentClaimedAt) : null,
@@ -282,7 +283,7 @@ export class JsonTicketStore implements TicketStorePort {
       const data: SerializedTicket[] = this.getAllTickets().map((t) => ({
         id: t.id, boardId: t.boardId, title: t.title, description: t.description,
         status: t.status, priority: t.priority, position: t.position,
-        tags: t.tags, links: t.links, blocked: t.blocked,
+        tags: t.tags, links: t.links, blocked: t.blocked, favorite: t.favorite,
         dueDate: t.dueDate?.toISOString() ?? null,
         assignee: t.assignee,
         agentClaimedAt: t.agentClaimedAt?.toISOString() ?? null,
