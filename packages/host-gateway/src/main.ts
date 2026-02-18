@@ -6,6 +6,7 @@ import { handleExec } from './exec';
 import { handleFs } from './fs';
 import { handlePtyMessage, handlePtyOpen, handlePtyClose } from './pty';
 import { logAlways, getVerbosity } from './logger';
+import { startTunnel } from './tunnel';
 
 const PORT = parseInt(process.env['GATEWAY_PORT'] ?? '3001', 10);
 const CENTRAL_SERVER_URL = process.env['ASM_CENTRAL_URL'];
@@ -159,8 +160,14 @@ logAlways(`Host gateway listening on http://localhost:${PORT}${verbLabel}`);
 logAlways(`Gateway ID: ${identity.id}`);
 logAlways(`Gateway name: ${GATEWAY_NAME}`);
 
-// Register and start heartbeat
+// Register and start heartbeat + tunnel
 registerWithCentral();
 if (CENTRAL_SERVER_URL) {
   setInterval(sendHeartbeat, 30_000);
+
+  // Start reverse tunnel for NAT traversal
+  const enableTunnel = process.env['GATEWAY_TUNNEL'] !== 'false';
+  if (enableTunnel) {
+    startTunnel(CENTRAL_SERVER_URL, identity.id, identity.secret);
+  }
 }
