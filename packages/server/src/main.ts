@@ -29,6 +29,7 @@ import { dashboardWsPlugin } from './infrastructure/ws/dashboard-ws.js';
 import { repositoryWsPlugin } from './infrastructure/ws/repository-ws.js';
 import { ticketWsPlugin } from './infrastructure/ws/ticket-ws.js';
 import { agentWsPlugin } from './infrastructure/ws/agent-ws.js';
+import { gatewayRoutes } from './infrastructure/http/gateway.routes.js';
 
 async function main() {
   const container = await createContainer();
@@ -53,6 +54,7 @@ async function main() {
   await app.register(claudeUsageRoutes(container));
   await app.register(agentTokenRoutes(container));
   await app.register(ticketRoutes(container));
+  await app.register(gatewayRoutes(container));
 
   // Agent API with auth
   const authHook = createAgentAuthHook(container);

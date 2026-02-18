@@ -69,6 +69,12 @@ export type {
   TicketWsMessage,
 } from './types/ticket.js';
 
+export type {
+  Gateway,
+  GatewayRegisterRequest,
+  GatewayHeartbeatRequest,
+} from './types/gateway.js';
+
 export {
   ClientMessageType,
   ServerMessageType,
