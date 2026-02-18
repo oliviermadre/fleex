@@ -1,8 +1,24 @@
-# Design: Orchestration Multi-Agents sur le Ticketing ASM
+# Design: Collaboration Multi-Agents sur le Ticketing ASM
 
-## Contexte
+## Principe directeur
 
-ASM dispose aujourd'hui d'un socle ticketing fonctionnel avec une API agent authentifiee (Bearer token + `X-Agent-Name`), un systeme d'assignation/claim, du WebSocket temps reel, et un activity log par ticket. L'objectif est d'etendre ce socle pour permettre a des agents IA autonomes de collaborer sur un ticket a travers un workflow sequentiel (user researcher -> PM -> designer -> archi -> dev -> code quality -> QA -> chef de projet), avec discussions internes, mentions, livrables structures et notifications ciblees.
+Le Kanban ASM est un **receptacle passif**. Il ne prescrit aucun workflow, aucun role, aucun pipeline. L'intelligence d'orchestration est **entierement externe** : un agent chef de projet (ou tout autre systeme) lit les tickets, decide qui mentionner, quand changer un statut, quel livrable demander. ASM fournit les primitives — discussion, mentions, livrables, notifications — et les agents s'en servent librement.
+
+## Ce qui existe deja
+
+| Capacite | API | Detail |
+|----------|-----|--------|
+| Auth agent | `Bearer token` + `X-Agent-Name` | Token SHA256, header identite |
+| CRUD tickets | `GET/POST/PATCH/DELETE /api/agents/v1/tickets` | Complet |
+| Assignation | `PATCH /tickets/:id/assign` | Label assignee, pas de changement statut |
+| Claim/Unclaim | `PATCH /tickets/:id/claim` | Self-assignment + auto-move doing + timestamp |
+| Statut | `PATCH /tickets/:id` | L'agent change le statut librement |
+| WebSocket | `/ws/tickets` | Broadcast de tous les events tickets (non auth) |
+| Activity log | `GET /tickets/:id/activity` | Audit trail des changements |
+| Next ticket | `GET /tickets/next` | Prochain ticket non assigne |
+| Pending | `GET /tickets/pending` | Tickets reclames par l'agent appelant |
+
+**Ce qui manque** : discussion interne, mentions, livrables, notifications ciblees, contexte agrege.
 
 ---
 
@@ -10,7 +26,7 @@ ASM dispose aujourd'hui d'un socle ticketing fonctionnel avec une API agent auth
 
 ### 1.1 TicketComment (nouveau)
 
-Fil de discussion interne par ticket. Chaque message est un commentaire.
+Fil de discussion par ticket. Tous les echanges entre agents passent par la.
 
 ```typescript
 // packages/shared/src/types/ticket.ts
@@ -22,141 +38,85 @@ export interface TicketComment {
   readonly ticketId: string;
   readonly authorType: 'user' | 'agent';
   readonly authorName: string;
-  readonly body: string;                    // contenu markdown
-  readonly visibility: CommentVisibility;   // public = visible par tous, private = visible uniquement par les destinataires
-  readonly privateRecipients: string[];     // noms d'agents destinataires si visibility = private
-  readonly mentions: string[];              // noms d'agents mentionnes (@agent:designer)
-  readonly parentId: string | null;         // pour les reponses threadees (optionnel, null = top-level)
+  readonly body: string;                    // markdown, peut contenir des @agent:xxx
+  readonly visibility: CommentVisibility;   // public = tout le monde, private = destinataires seulement
+  readonly privateRecipients: string[];     // si private : noms des agents destinataires
+  readonly mentions: string[];              // extrait auto du body : noms des agents mentionnes
+  readonly parentId: string | null;         // reponse threadee (null = top-level)
   readonly createdAt: string;
   readonly updatedAt: string;
 }
 ```
 
-**Stockage** : `~/.asm/projects/comments.json` — fichier JSON separe pour ne pas alourdir tickets.json.
+**Stockage** : `~/.asm/projects/comments.json`
+
+**Logique cle** : a la creation d'un commentaire, le body est parse pour extraire les patterns `@agent:<name>`. Chaque match genere un `TicketMention`.
 
 ### 1.2 TicketMention (nouveau)
 
-Systeme de mentions resolvables. Quand un agent est mentionne, une mention est creee. L'agent la traite, puis la resout.
+Une mention est une **demande d'input** adressée a un agent specifique. Elle a un cycle de vie : creee automatiquement quand un agent est mentionne dans un commentaire, resolue quand l'agent cible repond.
 
 ```typescript
-// packages/shared/src/types/ticket.ts
-
 export type MentionStatus = 'pending' | 'acknowledged' | 'resolved';
 
 export interface TicketMention {
   readonly id: string;
   readonly ticketId: string;
-  readonly commentId: string;            // commentaire d'origine
-  readonly targetAgent: string;          // agent mentionne
-  readonly sourceAgent: string;          // agent qui a mentionne
+  readonly commentId: string;               // commentaire source (celui qui contient le @agent:xxx)
+  readonly targetAgent: string;             // agent mentionne
+  readonly sourceAgent: string;             // agent qui a mentionne
   readonly status: MentionStatus;
   readonly resolvedAt: string | null;
-  readonly resolvedCommentId: string | null;  // commentaire de resolution (le livrable/la reponse)
+  readonly resolvedCommentId: string | null; // le commentaire qui repond a la mention
   readonly createdAt: string;
 }
 ```
 
 **Stockage** : `~/.asm/projects/mentions.json`
 
+**Cycle de vie** :
+- `pending` : l'agent est mentionne, il n'a pas encore reagi
+- `acknowledged` : l'agent a vu la mention (optionnel, utile pour le monitoring)
+- `resolved` : l'agent a fourni sa reponse — pointe vers le commentaire de reponse
+
+Un meme agent peut avoir **plusieurs mentions en parallele** sur le meme ticket (ex: le chef de projet le mentionne 3 fois sur 3 sujets differents). Chaque mention est independante.
+
 ### 1.3 TicketDeliverable (nouveau)
 
-Livrable structure produit par un agent pour un ticket. Chaque agent dans le pipeline produit un ou plusieurs livrables types.
+Un livrable est un **output structure** produit par un agent. Pas de type impose — c'est l'agent qui decide de son type et contenu. Le chef de projet peut demander un livrable specifique via un commentaire+mention, et l'agent le poste quand il est pret.
 
 ```typescript
-// packages/shared/src/types/ticket.ts
-
 export interface TicketDeliverable {
   readonly id: string;
   readonly ticketId: string;
-  readonly agentRole: string;            // 'user-researcher' | 'pm' | 'designer' | 'architect' | 'dev' | 'code-quality' | 'qa' | 'project-manager'
-  readonly agentName: string;            // nom de l'agent qui l'a produit
-  readonly type: string;                 // type libre: 'user-research-report', 'prd', 'wireframe', 'tech-spec', 'code-diff', 'review-report', 'test-plan', 'status-update'
+  readonly agentName: string;               // qui l'a produit
+  readonly type: string;                    // type libre choisi par l'agent : 'prd', 'wireframe', 'code-review', ...
   readonly title: string;
-  readonly content: string;              // contenu markdown ou JSON stringifie
-  readonly attachments: DeliverableAttachment[];
-  readonly version: number;              // versionning simple (1, 2, 3...)
-  readonly status: 'draft' | 'final';
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
-export interface DeliverableAttachment {
-  readonly id: string;
-  readonly filename: string;
-  readonly mimeType: string;
-  readonly path: string;                 // chemin local relatif dans ~/.asm/deliverables/<ticketId>/
-  readonly size: number;
-}
-```
-
-**Stockage** :
-- Metadonnees : `~/.asm/projects/deliverables.json`
-- Fichiers : `~/.asm/deliverables/<ticketId>/<deliverableId>/<filename>`
-
-### 1.4 TicketPipeline (nouveau)
-
-Definition du workflow sequentiel pour un ticket. Chaque etape est une phase avec un agent role assigne.
-
-```typescript
-// packages/shared/src/types/ticket.ts
-
-export type PipelineStepStatus = 'pending' | 'active' | 'blocked' | 'completed' | 'skipped';
-
-export interface PipelineStep {
-  readonly id: string;
-  readonly agentRole: string;            // role attendu
-  readonly assignedAgent: string | null; // agent specifique assigne (ou null = n'importe quel agent de ce role)
-  readonly status: PipelineStepStatus;
-  readonly requiredDeliverables: string[];  // types de livrables attendus pour considerer l'etape complete
-  readonly startedAt: string | null;
-  readonly completedAt: string | null;
-}
-
-export interface TicketPipeline {
-  readonly id: string;
-  readonly ticketId: string;
-  readonly steps: PipelineStep[];
-  readonly currentStepIndex: number;     // -1 = pas commence, 0..n = etape en cours
-  readonly status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  readonly content: string;                 // markdown ou JSON stringifie
+  readonly version: number;                 // auto-incremente a chaque mise a jour du content
+  readonly status: 'draft' | 'final';       // l'agent marque final quand il considere que c'est pret
+  readonly mentionId: string | null;        // optionnel : lien vers la mention qui a demande ce livrable
   readonly createdAt: string;
   readonly updatedAt: string;
 }
 ```
 
-**Stockage** : `~/.asm/projects/pipelines.json`
+**Stockage** : `~/.asm/projects/deliverables.json`
 
-### 1.5 Modifications du Ticket existant
+**Pas de contrainte de role** : n'importe quel agent peut poster n'importe quel type de livrable. C'est le chef de projet agent qui decide si le livrable est satisfaisant et fait avancer le ticket.
 
-Ajout de champs au `Ticket` existant :
+### 1.4 Modifications du Ticket existant
+
+Ajout minimal au `Ticket` existant :
 
 ```typescript
-// Ajouts a l'interface Ticket existante
 export interface Ticket {
-  // ... champs existants ...
-  readonly pipelineId: string | null;          // reference vers le pipeline actif
-  readonly currentAgentRole: string | null;    // role de l'agent actuellement attendu
-  readonly pendingMentionCount: number;        // nombre de mentions non resolues (denormalise pour perf)
+  // ... champs existants inchanges ...
+  readonly pendingMentionCount: number;     // denormalise : nombre de mentions non resolues sur ce ticket
 }
 ```
 
-### 1.6 AgentProfile (nouveau)
-
-Registre des agents connus et de leurs roles/capacites.
-
-```typescript
-// packages/shared/src/types/ticket.ts
-
-export interface AgentProfile {
-  readonly name: string;               // identifiant unique (= X-Agent-Name)
-  readonly roles: string[];            // roles que cet agent peut remplir
-  readonly description: string;        // description pour les autres agents
-  readonly status: 'online' | 'offline' | 'busy';
-  readonly lastSeenAt: string;
-  readonly settings: Record<string, unknown>;  // config specifique a l'agent
-}
-```
-
-**Stockage** : `~/.asm/agents.json`
+C'est le seul ajout. Pas de `pipelineId`, pas de `currentAgentRole`. Le ticket ne sait rien de l'orchestration. Le `pendingMentionCount` est un compteur denormalise pour afficher rapidement dans l'UI si un ticket attend des reponses.
 
 ---
 
@@ -164,317 +124,322 @@ export interface AgentProfile {
 
 Tous sous le prefix existant `/api/agents/v1/` (authentifie par Bearer token).
 
-### 2.1 Comments (Discussion interne)
+### 2.1 Comments (Discussion)
 
 ```
-GET    /tickets/:id/comments                    → liste les commentaires du ticket
-       Query: ?visibility=public|private          (filtre optionnel)
-       Note: un agent ne voit les messages private que s'il est dans privateRecipients
-POST   /tickets/:id/comments                    → creer un commentaire
-       Body: { body, visibility?, privateRecipients?, parentId? }
-       Note: les mentions @agent:xxx sont extraites automatiquement du body
-PATCH  /tickets/:id/comments/:commentId         → editer un commentaire (auteur only)
-       Body: { body }
-DELETE /tickets/:id/comments/:commentId         → supprimer (auteur only)
+GET    /tickets/:id/comments
+       Query: ?visibility=public|private&since=<ISO>&limit=50&parentId=<id>
+       Note: les commentaires private sont filtres — un agent ne voit que ceux
+             dont il est auteur ou destinataire
+
+POST   /tickets/:id/comments
+       Body: { body: string, visibility?: 'public'|'private', privateRecipients?: string[], parentId?: string }
+       Retour: TicketComment + mentions creees
+       Effet de bord: parse le body, cree un TicketMention par @agent:xxx trouve
+
+PATCH  /tickets/:id/comments/:commentId
+       Body: { body: string }
+       Note: auteur seulement. Re-parse les mentions (supprime les anciennes, cree les nouvelles)
+
+DELETE /tickets/:id/comments/:commentId
+       Note: auteur seulement. Les mentions associees passent a 'resolved' (annulees)
 ```
 
 ### 2.2 Mentions
 
 ```
-GET    /mentions/pending                         → mentions en attente pour l'agent appelant
-       Query: ?ticket_id=xxx                      (filtre optionnel)
-GET    /tickets/:id/mentions                     → toutes les mentions d'un ticket
-PATCH  /mentions/:id/acknowledge                 → passer de pending a acknowledged
-PATCH  /mentions/:id/resolve                     → resoudre la mention
-       Body: { commentId? }                       (commentaire de reponse optionnel)
+GET    /mentions/pending
+       Retour: TicketMention[] pour l'agent appelant (toutes les mentions pending/acknowledged)
+       Query: ?ticket_id=<id>
+       C'est le endpoint de polling principal pour un agent : "ai-je des demandes en attente ?"
+
+GET    /tickets/:id/mentions
+       Retour: toutes les mentions du ticket (toutes statuts)
+       Query: ?status=pending|acknowledged|resolved&target_agent=<name>&source_agent=<name>
+
+PATCH  /mentions/:id/acknowledge
+       Effet: pending -> acknowledged
+       Usage: l'agent signale qu'il a vu la demande et qu'il va y repondre
+
+PATCH  /mentions/:id/resolve
+       Body: { commentId?: string, deliverableId?: string }
+       Effet: -> resolved, lie le commentaire ou livrable de reponse
+       Note: seul l'agent cible (targetAgent) peut resoudre sa propre mention
 ```
 
 ### 2.3 Deliverables (Livrables)
 
 ```
-GET    /tickets/:id/deliverables                 → livrables du ticket
-       Query: ?agent_role=xxx&type=xxx            (filtres optionnels)
-POST   /tickets/:id/deliverables                 → soumettre un livrable
-       Body: { agentRole, type, title, content, status? }
-PATCH  /tickets/:id/deliverables/:delivId        → mettre a jour un livrable
-       Body: { content?, title?, status? }
-       Note: incremente automatiquement la version si content change
-GET    /tickets/:id/deliverables/:delivId        → detail d'un livrable
+GET    /tickets/:id/deliverables
+       Query: ?agent_name=<name>&type=<type>&status=draft|final
+
+POST   /tickets/:id/deliverables
+       Body: { type: string, title: string, content: string, status?: 'draft'|'final', mentionId?: string }
+       Note: agentName est deduit du token/header
+
+PATCH  /tickets/:id/deliverables/:delivId
+       Body: { title?: string, content?: string, status?: 'draft'|'final' }
+       Note: si content change, version s'incremente. Auteur seulement.
+
+GET    /tickets/:id/deliverables/:delivId
+       Retour: detail complet du livrable
 ```
 
-### 2.4 Pipeline (Workflow)
+### 2.4 Context (vue synthetique)
 
 ```
-POST   /tickets/:id/pipeline                     → creer/attacher un pipeline au ticket
-       Body: { steps: [{ agentRole, assignedAgent?, requiredDeliverables? }] }
-GET    /tickets/:id/pipeline                     → etat du pipeline
-PATCH  /tickets/:id/pipeline/advance             → avancer a l'etape suivante
-       Note: verifie que les livrables requis sont fournis et marques 'final'
-PATCH  /tickets/:id/pipeline/steps/:stepId       → modifier une etape
-       Body: { status?, assignedAgent? }
+GET    /tickets/:id/context
 ```
 
-### 2.5 Agent Profiles
-
-```
-GET    /agents                                   → liste des agents enregistres
-GET    /agents/:name                             → profil d'un agent
-PUT    /agents/me                                → creer/mettre a jour son propre profil
-       Body: { roles, description, settings? }
-       Note: le nom est deduit du token/header X-Agent-Name
-```
-
-### 2.6 Context Window (vue synthetique)
-
-```
-GET    /tickets/:id/context                      → contexte complet du ticket
-```
-
-Retourne un objet agrege :
+Retourne tout le contexte du ticket en un appel :
 
 ```typescript
 interface TicketContext {
-  ticket: Ticket;
-  pipeline: TicketPipeline | null;
-  deliverables: TicketDeliverable[];
-  recentComments: TicketComment[];       // 50 derniers commentaires publics
-  pendingMentions: TicketMention[];      // mentions en attente pour l'agent appelant
-  relatedAgents: AgentProfile[];         // agents impliques dans le pipeline
+  ticket: Ticket;                           // le ticket avec ses champs existants
+  comments: TicketComment[];                // N derniers commentaires publics (default 50) + tous les private pour l'agent
+  mentions: {
+    pending: TicketMention[];               // mentions en attente pour l'agent appelant sur ce ticket
+    all: TicketMention[];                   // toutes les mentions du ticket (overview)
+  };
+  deliverables: TicketDeliverable[];        // tous les livrables du ticket
+  activity: TicketActivity[];               // N dernieres entrees d'activite
 }
 ```
 
-C'est le **point d'entree principal** pour un agent qui arrive sur un ticket. Il obtient tout le contexte en un seul appel, ce qui est essentiel pour limiter le nombre de requetes et remplir efficacement sa context window.
+C'est le **point d'entree principal** pour un agent qui debarque sur un ticket. Il obtient en un call tout ce dont il a besoin pour comprendre le contexte, voir ce qu'on lui demande, et decider de sa reponse.
+
+Query optionnels : `?comments_limit=50&activity_limit=20`
 
 ---
 
 ## 3. WebSocket — Notifications ciblees
 
-### 3.1 Extension du protocol WebSocket tickets
+### 3.1 Nouveaux types de messages sur `/ws/tickets` (broadcast)
 
-Nouveaux types de messages :
+Extension des types existants pour l'UI web :
 
 ```typescript
 export type TicketWsMessageType =
-  // ... existants ...
-  | 'comment:created'
-  | 'comment:updated'
-  | 'comment:deleted'
-  | 'mention:created'
-  | 'mention:resolved'
-  | 'deliverable:created'
-  | 'deliverable:updated'
-  | 'pipeline:advanced'
-  | 'pipeline:step_changed'
-  | 'agent:status_changed';
+  | 'ticket:created' | 'ticket:updated' | 'ticket:deleted' | 'ticket:moved'  // existants
+  | 'board:updated'                                                           // existant
+  | 'comment:created' | 'comment:updated' | 'comment:deleted'                // nouveau
+  | 'mention:created' | 'mention:acknowledged' | 'mention:resolved'          // nouveau
+  | 'deliverable:created' | 'deliverable:updated';                           // nouveau
 ```
 
-### 3.2 WebSocket agent authentifie (nouveau)
-
-Aujourd'hui, le WebSocket `/ws/tickets` est ouvert sans auth (usage dashboard web). Pour les agents, un nouveau endpoint :
+### 3.2 WebSocket agent authentifie (nouveau endpoint)
 
 ```
 /ws/agents?token=<bearer_token>
 ```
 
-Ce WebSocket :
-- Authentifie l'agent via le token
-- Filtre les messages : l'agent ne recoit que les events des tickets ou il est assigne/mentionne/dans le pipeline
-- Envoie des notifications ciblees :
-  - `mention:created` quand il est mentionne
-  - `pipeline:your_turn` quand c'est son tour dans le pipeline
-  - `comment:private` quand il recoit un message prive
+Comportement :
+- **Authentification** : valide le token a la connexion, rejette si invalide
+- **Filtrage** : l'agent ne recoit que les events qui le concernent :
+  - `mention:created` ou il est `targetAgent`
+  - `comment:created` sur les tickets ou il est assigne, ou s'il est dans `privateRecipients`
+  - `deliverable:created` sur les tickets ou il est assigne
+  - `ticket:updated` sur les tickets ou il est assigne
+- **Subscription dynamique** : l'agent peut envoyer un message pour s'abonner a des tickets supplementaires :
+  ```json
+  { "action": "subscribe", "ticketIds": ["uuid-1", "uuid-2"] }
+  { "action": "unsubscribe", "ticketIds": ["uuid-1"] }
+  ```
 
-Message type pour notification directe :
+Message format :
 
 ```typescript
-interface AgentNotification {
-  type: 'mention:created' | 'pipeline:your_turn' | 'comment:private';
+interface AgentWsMessage {
+  type: string;                // ex: 'mention:created', 'comment:created'
   ticketId: string;
-  data: TicketMention | PipelineStep | TicketComment;
-  urgency: 'low' | 'normal' | 'high';
+  data: TicketMention | TicketComment | TicketDeliverable | Ticket;
 }
 ```
 
 ### 3.3 Fallback polling
 
-Pour les agents qui ne maintiennent pas de connexion WebSocket permanente, les endpoints REST suffisent :
-- `GET /mentions/pending` (polling)
-- `GET /tickets/pending` (deja existant)
+Pour les agents sans WebSocket permanent :
+- `GET /mentions/pending` — "ai-je des demandes en attente ?"
+- `GET /tickets/pending` — "quels tickets ai-je claim ?"
+- Polling recommande : toutes les 10-30s
 
 ---
 
 ## 4. Securite et controle d'acces
 
-### 4.1 Visibilite des commentaires
+### 4.1 Pas de changement d'auth
 
-- `public` : visible par tous les agents et l'UI web
-- `private` : visible uniquement par `privateRecipients` et l'auteur
-- L'API filtre automatiquement selon l'identite de l'agent appelant
+On reutilise le systeme existant tel quel :
+- Bearer token pour l'authentification
+- `X-Agent-Name` pour l'identite
+- Pas de roles, pas de permissions par role
 
-### 4.2 Scope des operations
+### 4.2 Regles de scope (simples)
 
-- Un agent ne peut **editer/supprimer** que ses propres commentaires
-- Un agent ne peut **resoudre** que les mentions qui le ciblent
-- Un agent ne peut **soumettre un livrable** que pour son propre role dans le pipeline
-- Un agent ne peut **avancer le pipeline** que s'il est assigne a l'etape courante
+| Action | Qui peut |
+|--------|----------|
+| Lire commentaires publics | Tout agent authentifie |
+| Lire commentaires prives | Auteur + agents dans `privateRecipients` |
+| Editer/supprimer commentaire | Auteur seulement |
+| Resoudre une mention | Agent cible (`targetAgent`) seulement |
+| Editer un livrable | Auteur (`agentName`) seulement |
+| Changer statut ticket | Tout agent authentifie |
+| Assigner un ticket | Tout agent authentifie |
+| Claim un ticket | Tout agent authentifie (self-assign) |
 
-### 4.3 Pas de nouveau mecanisme d'auth
+Pas de restriction par role. Tout agent authentifie peut tout lire (sauf private) et tout faire sur les tickets. La discipline vient de l'orchestrateur externe (le chef de projet agent), pas du systeme.
 
-On reutilise le systeme existant : Bearer token + `X-Agent-Name`. Le header `X-Agent-Name` sert de facto d'identite agent. Pas de changement a `agent-auth.hook.ts`.
+### 4.3 Audit
 
-### 4.4 Audit
-
-Toutes les actions sont tracees dans l'activity log existant (`TicketActivity`) avec :
-- `actorType: 'agent'`
-- `actorName: <X-Agent-Name>`
-- Nouvelles actions : `'commented'`, `'mentioned'`, `'delivered'`, `'pipeline_advanced'`
-
----
-
-## 5. Pipeline : cycle de vie
-
-### 5.1 Creation
-
-Un agent (ou l'UI) cree un pipeline avec les etapes ordonnees :
-
-```json
-{
-  "steps": [
-    { "agentRole": "user-researcher", "requiredDeliverables": ["user-research-report"] },
-    { "agentRole": "pm", "requiredDeliverables": ["prd"] },
-    { "agentRole": "designer", "requiredDeliverables": ["wireframe"] },
-    { "agentRole": "architect", "requiredDeliverables": ["tech-spec"] },
-    { "agentRole": "dev", "requiredDeliverables": ["code-diff"] },
-    { "agentRole": "code-quality", "requiredDeliverables": ["review-report"] },
-    { "agentRole": "qa", "requiredDeliverables": ["test-plan"] },
-    { "agentRole": "project-manager", "requiredDeliverables": ["status-update"] }
-  ]
-}
-```
-
-### 5.2 Avancement automatique
-
-Quand un agent poste un livrable marque `final` correspondant aux `requiredDeliverables` de l'etape courante :
-1. L'etape courante passe a `completed`
-2. L'etape suivante passe a `active`
-3. L'agent de l'etape suivante recoit une notification `pipeline:your_turn`
-4. Le ticket `currentAgentRole` est mis a jour
-5. Si un `assignedAgent` est defini pour l'etape, il est auto-assigne sur le ticket
-
-### 5.3 Re-mention en cours de route
-
-Un agent peut etre re-mentionne a n'importe quel moment (ex: le QA mentionne le dev pour un bug). Cela n'impacte pas la position du pipeline mais cree une mention `pending` que l'agent cible doit traiter. Le pipeline n'avance pas tant que toutes les mentions de l'etape courante ne sont pas resolues.
-
-### 5.4 Blocage
-
-Si une etape est marquee `blocked`, le pipeline s'arrete. Le project-manager recoit une notification. La resolution se fait par discussion dans les commentaires + deblocage manuel.
+Toutes les actions sont tracees dans l'activity log existant avec de nouvelles actions :
+- `'commented'` — commentaire poste
+- `'mentioned'` — mention creee
+- `'mention_resolved'` — mention resolue
+- `'deliverable_submitted'` — livrable poste
+- `'deliverable_updated'` — livrable mis a jour
 
 ---
 
-## 6. Scenario complet (exemple)
+## 5. Scenario complet (agent chef de projet comme orchestrateur)
 
 ```
-1. [user/UI] Cree un ticket "Ajouter l'export CSV des rapports"
-2. [user/UI] Attache un pipeline standard 8 etapes
-3. [system] Notifie l'agent user-researcher → pipeline:your_turn
-4. [user-researcher] GET /tickets/:id/context → obtient tout le contexte
-5. [user-researcher] POST /tickets/:id/comments → "J'analyse les besoins utilisateur..."
-6. [user-researcher] POST /tickets/:id/deliverables → soumet { type: "user-research-report", status: "final" }
-7. [system] Pipeline avance → notifie l'agent PM
-8. [pm] GET /tickets/:id/context → voit le research report dans deliverables
-9. [pm] POST /tickets/:id/comments → "@agent:user-researcher peux-tu preciser le persona B2B ?"
-10. [system] Cree une mention pending pour user-researcher
-11. [user-researcher] Recoit notification mention:created
-12. [user-researcher] POST /tickets/:id/comments → "Le persona B2B est..." (reponse)
-13. [user-researcher] PATCH /mentions/:id/resolve → mention resolue
-14. [pm] Continue son travail, soumet le PRD
-15. [system] Pipeline avance vers designer...
-    ...
-16. [qa] POST /tickets/:id/comments → "@agent:dev regression sur le parsing des dates"
-17. [dev] Recoit notification, repond, fixe
-18. [qa] PATCH /mentions/:id/resolve, soumet test-plan final
-19. [system] Pipeline avance vers project-manager
-20. [project-manager] Soumet status-update final → pipeline completed → ticket passe en "done"
+1.  [humain]          Cree un ticket "Ajouter l'export CSV des rapports"
+                      Statut: backlog, description du besoin
+
+2.  [chef-de-projet]  Poll GET /tickets?status=backlog → voit le nouveau ticket
+                      GET /tickets/:id/context → lit le besoin
+                      POST /tickets/:id/comments →
+                        "@agent:user-researcher Analyse le besoin utilisateur pour l'export CSV.
+                         Qui sont les utilisateurs cibles ? Quels formats ? Quelles donnees ?"
+                      PATCH /tickets/:id → { status: 'doing' }
+
+3.  [systeme]         Cree une mention pending pour user-researcher
+                      Broadcast mention:created via WS agent
+
+4.  [user-researcher] Recoit notification (WS ou polling GET /mentions/pending)
+                      GET /tickets/:id/context → comprend le ticket et la demande
+                      PATCH /mentions/:id/acknowledge → "je bosse dessus"
+                      ... travaille ...
+                      POST /tickets/:id/deliverables →
+                        { type: "user-research", title: "Analyse utilisateur export CSV", content: "...", status: "final" }
+                      POST /tickets/:id/comments →
+                        "@agent:chef-de-projet Voici mon analyse. 3 personas identifies, format CSV + Excel souhaite."
+                      PATCH /mentions/:id/resolve → { deliverableId: "..." }
+
+5.  [chef-de-projet]  Recoit notification (mention resolue + nouveau commentaire)
+                      GET /tickets/:id/context → voit le livrable
+                      Decide que c'est suffisant pour passer au PM
+                      POST /tickets/:id/comments →
+                        "@agent:pm Redige le PRD a partir de l'analyse user research (voir livrable).
+                         Focus sur les contraintes de volume de donnees."
+
+6.  [pm]              Recoit notification, lit le contexte, voit le livrable user-research
+                      Travaille, a une question :
+                      POST /tickets/:id/comments →
+                        "@agent:user-researcher Quelle est la taille max de dataset chez les users B2B ?"
+                      → Cree une 2e mention pour user-researcher (independante de la 1ere, deja resolue)
+
+7.  [user-researcher] Recoit la notification, repond :
+                      POST /tickets/:id/comments → "Jusqu'a 500k lignes pour les gros comptes."
+                      PATCH /mentions/:id/resolve → { commentId: "..." }
+
+8.  [pm]              Continue, soumet le PRD
+                      POST /tickets/:id/deliverables → { type: "prd", ... status: "final" }
+                      POST /tickets/:id/comments → "@agent:chef-de-projet PRD finalise."
+                      PATCH /mentions/:id/resolve
+
+9.  [chef-de-projet]  Lit le PRD, decide d'envoyer en parallele au designer et a l'archi :
+                      POST /tickets/:id/comments →
+                        "@agent:designer Propose les maquettes pour l'ecran d'export.
+                         @agent:architect Definis l'architecture technique (voir PRD)."
+                      → 2 mentions creees en parallele
+
+10. [designer]        Repond avec un livrable wireframe
+11. [architect]       Repond avec un livrable tech-spec
+
+12. [chef-de-projet]  Les 2 mentions sont resolues. Decide de passer au dev :
+                      POST /tickets/:id/comments →
+                        "@agent:dev Implemente l'export CSV. Specs : voir PRD + tech-spec."
+                      PATCH /tickets/:id → { status: 'reviewing' } (quand le dev a fini)
+
+    ... et ainsi de suite, le chef de projet orchestre dynamiquement ...
 ```
+
+**Point cle** : a aucun moment le systeme ASM ne decide de l'enchainement. C'est l'agent chef de projet qui lit, decide, mentionne. ASM fournit juste les tuyaux.
 
 ---
 
-## 7. Plan d'implementation
+## 6. Plan d'implementation
 
-L'implementation suit l'architecture DDD existante du projet.
-
-### Phase 1 — Fondations (modeles + stockage)
-
-Fichiers a creer/modifier :
+### Phase 1 — Fondations (entites + stockage)
 
 | Action | Fichier |
 |--------|---------|
-| Creer | `packages/shared/src/types/ticket.ts` — ajouter les interfaces Comment, Mention, Deliverable, Pipeline, AgentProfile |
+| Modifier | `packages/shared/src/types/ticket.ts` — ajouter `TicketComment`, `TicketMention`, `TicketDeliverable`, `CommentVisibility`, `MentionStatus`, `pendingMentionCount` au `Ticket` |
 | Creer | `packages/server/src/domain/entities/ticket-comment.entity.ts` |
 | Creer | `packages/server/src/domain/entities/ticket-mention.entity.ts` |
 | Creer | `packages/server/src/domain/entities/ticket-deliverable.entity.ts` |
-| Creer | `packages/server/src/domain/entities/ticket-pipeline.entity.ts` |
-| Creer | `packages/server/src/domain/entities/agent-profile.entity.ts` |
 | Creer | `packages/server/src/infrastructure/adapters/json-comment-store.adapter.ts` |
 | Creer | `packages/server/src/infrastructure/adapters/json-mention-store.adapter.ts` |
 | Creer | `packages/server/src/infrastructure/adapters/json-deliverable-store.adapter.ts` |
-| Creer | `packages/server/src/infrastructure/adapters/json-pipeline-store.adapter.ts` |
-| Creer | `packages/server/src/infrastructure/adapters/json-agent-profile-store.adapter.ts` |
-| Modifier | `packages/server/src/domain/entities/ticket.entity.ts` — ajouter `pipelineId`, `currentAgentRole`, `pendingMentionCount` |
-| Modifier | `packages/server/src/infrastructure/container.ts` — injecter les nouveaux stores |
+| Modifier | `packages/server/src/domain/entities/ticket.entity.ts` — ajouter `pendingMentionCount` |
+| Modifier | `packages/server/src/infrastructure/container.ts` — injecter les 3 nouveaux stores |
 
-### Phase 2 — Use cases (logique metier)
+### Phase 2 — Use cases
 
 | Action | Fichier |
 |--------|---------|
-| Creer | `packages/server/src/application/use-cases/post-comment.ts` — extraction auto des mentions du body |
-| Creer | `packages/server/src/application/use-cases/resolve-mention.ts` |
-| Creer | `packages/server/src/application/use-cases/submit-deliverable.ts` — verification du role pipeline |
-| Creer | `packages/server/src/application/use-cases/advance-pipeline.ts` — logique d'avancement auto |
-| Creer | `packages/server/src/application/use-cases/create-pipeline.ts` |
-| Creer | `packages/server/src/application/use-cases/get-ticket-context.ts` — agregation du contexte complet |
+| Creer | `packages/server/src/application/use-cases/post-comment.ts` — parse `@agent:xxx`, cree les mentions, met a jour `pendingMentionCount` |
+| Creer | `packages/server/src/application/use-cases/resolve-mention.ts` — lie le commentaire/livrable de reponse, decremente `pendingMentionCount` |
+| Creer | `packages/server/src/application/use-cases/submit-deliverable.ts` |
+| Creer | `packages/server/src/application/use-cases/get-ticket-context.ts` — agrege ticket + comments + mentions + deliverables + activity |
 
-### Phase 3 — Routes API
+### Phase 3 — Routes API agent
 
 | Action | Fichier |
 |--------|---------|
-| Modifier | `packages/server/src/infrastructure/http/agent-api.routes.ts` — ajouter tous les endpoints sections 2.1-2.6 |
-| Alternative | Creer des fichiers de routes separes par domaine si le fichier devient trop gros : `agent-comments.routes.ts`, `agent-mentions.routes.ts`, `agent-deliverables.routes.ts`, `agent-pipeline.routes.ts`, `agent-profiles.routes.ts` |
+| Creer | `packages/server/src/infrastructure/http/agent-comments.routes.ts` |
+| Creer | `packages/server/src/infrastructure/http/agent-mentions.routes.ts` |
+| Creer | `packages/server/src/infrastructure/http/agent-deliverables.routes.ts` |
+| Creer | `packages/server/src/infrastructure/http/agent-context.routes.ts` |
+| Modifier | `packages/server/src/main.ts` — enregistrer les nouvelles routes sous `/api/agents/v1/` |
 
-### Phase 4 — WebSocket agent
-
-| Action | Fichier |
-|--------|---------|
-| Creer | `packages/server/src/infrastructure/ws/agent-ws.ts` — WebSocket authentifie avec filtrage par agent |
-| Modifier | `packages/server/src/infrastructure/ws/ticket-ws.ts` — ajouter les nouveaux types de messages |
-| Modifier | `packages/shared/src/types/websocket.ts` — nouveaux types WS |
-| Modifier | `packages/server/src/main.ts` — enregistrer le nouveau plugin WS |
-
-### Phase 5 — Frontend (optionnel, UI de monitoring)
+### Phase 4 — WebSocket agent authentifie
 
 | Action | Fichier |
 |--------|---------|
-| Modifier | Vue ticket existante — ajouter onglet "Discussion" avec les commentaires |
-| Modifier | Vue ticket existante — ajouter section "Pipeline" avec progression visuelle |
-| Modifier | Vue ticket existante — ajouter section "Livrables" |
-| Creer | Page "Agents" pour voir les agents enregistres et leur statut |
+| Creer | `packages/server/src/infrastructure/ws/agent-ws.ts` — auth, filtrage, subscription dynamique |
+| Modifier | `packages/server/src/infrastructure/ws/ticket-ws.ts` — emettre les nouveaux types d'events |
+| Modifier | `packages/shared/src/types/websocket.ts` — nouveaux types |
+| Modifier | `packages/shared/src/constants.ts` — nouveau path WS |
+| Modifier | `packages/server/src/main.ts` — enregistrer le plugin WS agent |
+
+### Phase 5 — Frontend (monitoring, optionnel)
+
+| Action | Fichier |
+|--------|---------|
+| Modifier | Vue ticket — onglet "Discussion" avec les commentaires |
+| Modifier | Vue ticket — section "Livrables" |
+| Modifier | Vue ticket — indicateur de mentions pendantes |
 
 ---
 
-## 8. Ce qu'on ne fait PAS (hors scope)
+## 7. Ce qu'on ne fait PAS
 
-- **Pas de base de donnees** : on reste sur le stockage JSON existant. Pour une mise a l'echelle future, migrer vers SQLite ou PostgreSQL.
-- **Pas d'orchestrateur centralisé** : chaque agent est autonome et reagit aux notifications. Le pipeline est une convention, pas un scheduler.
-- **Pas de file d'attente** : pas de Redis/RabbitMQ. Les agents polled ou ecoutent le WS. Si un agent est offline, ses mentions restent `pending` jusqu'a son retour.
-- **Pas de LLM intégré** : ASM ne contient pas de logique IA. Les agents sont des clients externes qui appellent l'API. La logique de raisonnement est du cote de l'agent.
-- **Pas de gestion de conflits** : si deux agents modifient le meme livrable, last-write-wins (coherent avec le modele JSON actuel).
+- **Pas de pipeline/workflow** dans ASM. L'orchestration est externe.
+- **Pas de roles** dans ASM. Un agent est juste un nom (`X-Agent-Name`). C'est l'orchestrateur qui sait quel agent fait quoi.
+- **Pas de registre d'agents** dans ASM. ASM ne sait pas quels agents existent. Il voit juste des noms dans les tokens.
+- **Pas d'auto-avancement de statut**. Seul un agent (ou l'UI) change le statut d'un ticket via `PATCH`.
+- **Pas de base de donnees**. On reste sur JSON. Migration future vers SQLite si besoin.
+- **Pas de file d'attente**. WebSocket + polling. Si un agent est offline, ses mentions restent `pending`.
+- **Pas de LLM integre**. ASM ne raisonne pas. Les agents sont des clients externes.
 
 ---
 
-## 9. Questions ouvertes
+## 8. Questions ouvertes
 
-1. **Templates de pipeline** : faut-il pouvoir sauvegarder des templates de pipeline reutilisables (ex: "standard feature pipeline 8 etapes") ?
-2. **Escalation** : faut-il un mecanisme automatique d'escalation si une mention reste `pending` trop longtemps ?
-3. **Sous-tickets** : un agent devrait-il pouvoir creer des sous-tickets pour deleguer une partie de son travail ?
-4. **Permissions par role** : faut-il restreindre certaines actions a certains roles (ex: seul le PM peut modifier le PRD) ?
-5. **Historique des livrables** : faut-il garder toutes les versions d'un livrable ou seulement la derniere ?
+1. **Escalation timeout** : faut-il un mecanisme cote ASM pour signaler qu'une mention est `pending` depuis trop longtemps ? (ex: champ `staleSince` apres X minutes). Ou c'est le chef de projet agent qui gere ca en lisant les timestamps ?
+2. **Sous-tickets** : un agent devrait-il pouvoir creer des sous-tickets lies au ticket parent ? (le modele de `links` existant le permettrait avec un type `'child_ticket'`)
+3. **Historique des livrables** : garder toutes les versions (append-only) ou seulement la derniere (in-place update) ?
+4. **Taille des commentaires/livrables** : faut-il une limite ? Le stockage JSON rend les gros contenus couteux en I/O.
+5. **Cleanup** : faut-il un mecanisme de purge pour les vieux commentaires/mentions resolues ?
