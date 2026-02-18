@@ -300,72 +300,637 @@ Toutes les actions sont tracees dans l'activity log existant avec de nouvelles a
 
 ---
 
-## 5. Scenario complet (agent chef de projet comme orchestrateur)
+## 5. Simulation complete — Auto-clone repo a la creation de session
 
-```
-1.  [humain]          Cree un ticket "Ajouter l'export CSV des rapports"
-                      Statut: backlog, description du besoin
+**Contexte** : les agents tournent en cronjob toutes les 5 minutes. L'humain discute avec l'agent project-manager sur Telegram. Le project-manager connait les agents : pm, designer, archi, dev, qa, business, marketing, user-researcher.
 
-2.  [chef-de-projet]  Poll GET /tickets?status=backlog → voit le nouveau ticket
-                      GET /tickets/:id/context → lit le besoin
-                      POST /tickets/:id/comments →
-                        "@agent:user-researcher Analyse le besoin utilisateur pour l'export CSV.
-                         Qui sont les utilisateurs cibles ? Quels formats ? Quelles donnees ?"
-                      PATCH /tickets/:id → { status: 'doing' }
+**Demande humain sur Telegram** : "Je veux que dans ASM, quand on cree une session Claude, si le repo n'existe pas sur le filesystem, il soit automatiquement clone. Les regles habituelles de creation s'appliquent (main, PR, issue, fresh worktree)."
 
-3.  [systeme]         Cree une mention pending pour user-researcher
-                      Broadcast mention:created via WS agent
+Tous les headers sont omis pour lisibilite. Chaque agent envoie :
+- `Authorization: Bearer asm_<token>`
+- `X-Agent-Name: <nom>`
 
-4.  [user-researcher] Recoit notification (WS ou polling GET /mentions/pending)
-                      GET /tickets/:id/context → comprend le ticket et la demande
-                      PATCH /mentions/:id/acknowledge → "je bosse dessus"
-                      ... travaille ...
-                      POST /tickets/:id/deliverables →
-                        { type: "user-research", title: "Analyse utilisateur export CSV", content: "...", status: "final" }
-                      POST /tickets/:id/comments →
-                        "@agent:chef-de-projet Voici mon analyse. 3 personas identifies, format CSV + Excel souhaite."
-                      PATCH /mentions/:id/resolve → { deliverableId: "..." }
+---
 
-5.  [chef-de-projet]  Recoit notification (mention resolue + nouveau commentaire)
-                      GET /tickets/:id/context → voit le livrable
-                      Decide que c'est suffisant pour passer au PM
-                      POST /tickets/:id/comments →
-                        "@agent:pm Redige le PRD a partir de l'analyse user research (voir livrable).
-                         Focus sur les contraintes de volume de donnees."
+### T+0min — project-manager (via Telegram, hors ASM)
 
-6.  [pm]              Recoit notification, lit le contexte, voit le livrable user-research
-                      Travaille, a une question :
-                      POST /tickets/:id/comments →
-                        "@agent:user-researcher Quelle est la taille max de dataset chez les users B2B ?"
-                      → Cree une 2e mention pour user-researcher (independante de la 1ere, deja resolue)
+Le project-manager recoit le message Telegram, raisonne, et decide de creer un ticket dans ASM.
 
-7.  [user-researcher] Recoit la notification, repond :
-                      POST /tickets/:id/comments → "Jusqu'a 500k lignes pour les gros comptes."
-                      PATCH /mentions/:id/resolve → { commentId: "..." }
+```http
+POST /api/agents/v1/tickets
+X-Agent-Name: project-manager
 
-8.  [pm]              Continue, soumet le PRD
-                      POST /tickets/:id/deliverables → { type: "prd", ... status: "final" }
-                      POST /tickets/:id/comments → "@agent:chef-de-projet PRD finalise."
-                      PATCH /mentions/:id/resolve
-
-9.  [chef-de-projet]  Lit le PRD, decide d'envoyer en parallele au designer et a l'archi :
-                      POST /tickets/:id/comments →
-                        "@agent:designer Propose les maquettes pour l'ecran d'export.
-                         @agent:architect Definis l'architecture technique (voir PRD)."
-                      → 2 mentions creees en parallele
-
-10. [designer]        Repond avec un livrable wireframe
-11. [architect]       Repond avec un livrable tech-spec
-
-12. [chef-de-projet]  Les 2 mentions sont resolues. Decide de passer au dev :
-                      POST /tickets/:id/comments →
-                        "@agent:dev Implemente l'export CSV. Specs : voir PRD + tech-spec."
-                      PATCH /tickets/:id → { status: 'reviewing' } (quand le dev a fini)
-
-    ... et ainsi de suite, le chef de projet orchestre dynamiquement ...
+{
+  "boardId": "board-asm-123",
+  "title": "Auto-clone repo on session creation if not on filesystem",
+  "description": "## Besoin\n\nLorsqu'un utilisateur cree une session Claude dans ASM et que le repository cible n'existe pas encore sur le filesystem local, ASM doit automatiquement cloner le repo avant de creer la session.\n\n## Contraintes\n- Les regles existantes de creation de session s'appliquent (main, PR, issue, fresh worktree)\n- Le clone doit utiliser les memes conventions que le systeme de worktrees actuel\n- Si le clone echoue (acces, reseau), la creation de session doit remonter une erreur claire\n\n## Origine\nDemande directe du product owner.",
+  "status": "todo",
+  "priority": "high",
+  "tags": ["feature", "session", "repository"]
+}
 ```
 
-**Point cle** : a aucun moment le systeme ASM ne decide de l'enchainement. C'est l'agent chef de projet qui lit, decide, mentionne. ASM fournit juste les tuyaux.
+```json
+← 201 { "id": "ticket-abc-001", "status": "todo", ... }
+```
+
+Le project-manager decide que c'est un sujet purement technique — pas besoin de user-researcher, designer, business, ni marketing. Il va impliquer : **archi** (analyser l'impact dans le code existant), puis **dev** (implementer), puis **qa** (valider).
+
+Mais d'abord, il veut que le PM clarifie les specs fonctionnelles :
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: project-manager
+
+{
+  "body": "@agent:pm J'ai besoin d'une spec fonctionnelle pour l'auto-clone de repo a la creation de session.\n\nContexte : quand un utilisateur cree une session Claude et que le repo n'est pas sur le FS, on veut cloner automatiquement.\n\nPoints a couvrir dans la spec :\n- Quel comportement exact selon le mode de creation (main, PR, issue, fresh worktree) ?\n- Que se passe-t-il si le clone echoue (timeout, auth, repo prive) ?\n- Faut-il un feedback utilisateur pendant le clone (c'est potentiellement long) ?\n- Le repo clone doit-il etre enregistre dans la config ASM automatiquement ?"
+}
+```
+
+```json
+← 201 {
+  "id": "comment-001",
+  "mentions": ["pm"],
+  "createdMentions": [
+    { "id": "mention-001", "targetAgent": "pm", "sourceAgent": "project-manager", "status": "pending" }
+  ]
+}
+```
+
+```http
+PATCH /api/agents/v1/tickets/ticket-abc-001
+X-Agent-Name: project-manager
+
+{ "status": "doing" }
+```
+
+Le project-manager a fini pour ce cycle. Il repond a l'humain sur Telegram : "J'ai cree le ticket ASM-001 et demande au PM de specifier. Je te tiens au courant."
+
+---
+
+### T+5min — cron de TOUS les agents
+
+Chaque agent execute le meme code au demarrage de son cron :
+
+```http
+GET /api/agents/v1/mentions/pending
+X-Agent-Name: <chaque-agent>
+```
+
+**Reponses :**
+
+| Agent | Reponse |
+|-------|---------|
+| pm | `[{ "id": "mention-001", "ticketId": "ticket-abc-001", "sourceAgent": "project-manager", "status": "pending" }]` |
+| archi | `[]` |
+| dev | `[]` |
+| qa | `[]` |
+| designer | `[]` |
+| user-researcher | `[]` |
+| business | `[]` |
+| marketing | `[]` |
+| project-manager | `[]` |
+
+Seul **pm** a du travail. Les 8 autres agents voient `[]`, **leur cron s'arrete la** — 1 seul call API, 0 travail.
+
+**pm** a une mention pending. Il charge le contexte :
+
+```http
+GET /api/agents/v1/tickets/ticket-abc-001/context
+X-Agent-Name: pm
+```
+
+```json
+← 200 {
+  "ticket": {
+    "id": "ticket-abc-001",
+    "title": "Auto-clone repo on session creation if not on filesystem",
+    "description": "## Besoin\n\nLorsqu'un utilisateur...",
+    "status": "doing",
+    "assignee": null,
+    ...
+  },
+  "comments": [
+    {
+      "id": "comment-001",
+      "authorName": "project-manager",
+      "body": "@agent:pm J'ai besoin d'une spec fonctionnelle pour l'auto-clone...",
+      ...
+    }
+  ],
+  "mentions": {
+    "pending": [
+      { "id": "mention-001", "targetAgent": "pm", "sourceAgent": "project-manager", "commentId": "comment-001" }
+    ],
+    "all": [
+      { "id": "mention-001", ... }
+    ]
+  },
+  "deliverables": [],
+  "activity": [...]
+}
+```
+
+Le pm a tout le contexte dans sa context window LLM. Il raisonne, redige la spec, et repond :
+
+```http
+PATCH /api/agents/v1/mentions/mention-001/acknowledge
+X-Agent-Name: pm
+```
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/deliverables
+X-Agent-Name: pm
+
+{
+  "type": "functional-spec",
+  "title": "Spec fonctionnelle — Auto-clone repo",
+  "content": "## Comportement par mode de creation\n\n### Mode `main`\nSi le repo org/name n'existe pas dans basePath :\n1. `git clone <remote> <basePath>/<org>/<name>`\n2. Checkout main\n3. Creer la session dans ce directory\n\n### Mode `PR`\nSi le repo n'existe pas :\n1. Clone comme ci-dessus\n2. Fetch la branche de la PR\n3. Creer un worktree pour cette branche\n4. Creer la session dans le worktree\n\n### Mode `issue`\nSi le repo n'existe pas :\n1. Clone\n2. Creer un worktree fresh depuis main avec le naming convention existant\n3. Creer la session\n\n### Mode `fresh worktree`\nIdentique a issue.\n\n## Gestion d'erreur\n- Clone timeout : 60s max, erreur explicite `CLONE_TIMEOUT`\n- Auth failure : remonter `CLONE_AUTH_FAILED` avec le message git\n- Repo inexistant : `REPOSITORY_NOT_FOUND`\n- Pas de place disque : `CLONE_DISK_FULL`\n\n## UX\n- La creation de session doit indiquer 'cloning repository...' comme statut intermediaire\n- Le repo clone est automatiquement ajoute a la config ASM (repositories resolvees)\n\n## Hors scope\n- Pas de shallow clone pour l'instant\n- Pas de mirror/bare clone",
+  "status": "final",
+  "mentionId": "mention-001"
+}
+```
+
+```json
+← 201 { "id": "deliverable-001", "version": 1, ... }
+```
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: pm
+
+{
+  "body": "@agent:project-manager Spec fonctionnelle finalisee (voir livrable). Points cles :\n- 4 modes couverts (main, PR, issue, fresh worktree)\n- Gestion d'erreur explicite avec codes dedies\n- Le repo clone s'enregistre automatiquement dans la config ASM\n- Statut intermediaire 'cloning...' cote UX"
+}
+```
+
+```json
+← 201 {
+  "id": "comment-002",
+  "createdMentions": [
+    { "id": "mention-002", "targetAgent": "project-manager", "sourceAgent": "pm", "status": "pending" }
+  ]
+}
+```
+
+```http
+PATCH /api/agents/v1/mentions/mention-001/resolve
+X-Agent-Name: pm
+
+{ "deliverableId": "deliverable-001" }
+```
+
+Le pm a fini. Mention resolue, livrable poste, project-manager notifie.
+
+---
+
+### T+10min — cron de tous les agents
+
+```http
+GET /api/agents/v1/mentions/pending
+X-Agent-Name: <chaque-agent>
+```
+
+| Agent | Mentions pending |
+|-------|-----------------|
+| project-manager | `[{ "id": "mention-002", "ticketId": "ticket-abc-001", "sourceAgent": "pm" }]` |
+| tous les autres | `[]` |
+
+**project-manager** charge le contexte :
+
+```http
+GET /api/agents/v1/tickets/ticket-abc-001/context
+X-Agent-Name: project-manager
+```
+
+Il voit maintenant : le ticket, les 2 commentaires, le livrable functional-spec du PM, la mention resolue du PM, et sa propre mention pending venant du PM.
+
+Il lit la spec, la juge suffisante. Il decide de passer a l'archi et resout sa mention :
+
+```http
+PATCH /api/agents/v1/mentions/mention-002/resolve
+X-Agent-Name: project-manager
+
+{ "commentId": "comment-003" }
+```
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: project-manager
+
+{
+  "body": "@agent:archi Analyse l'impact technique de l'auto-clone dans le codebase ASM.\n\nLa spec fonctionnelle est dans le livrable du PM (deliverable-001).\n\nJ'ai besoin de savoir :\n- Ou dans le code actuel faut-il intervenir ? (quels fichiers, quels use cases)\n- Le GitCliAdapter existant suffit-il pour le clone ou faut-il l'etendre ?\n- Y a-t-il des impacts sur le flow de creation de worktree existant ?\n- Quel est le risque de regression ?\n\nLivre-moi une tech spec."
+}
+```
+
+```json
+← 201 {
+  "id": "comment-003",
+  "createdMentions": [
+    { "id": "mention-003", "targetAgent": "archi", "sourceAgent": "project-manager", "status": "pending" }
+  ]
+}
+```
+
+---
+
+### T+15min — cron de tous les agents
+
+| Agent | Mentions pending |
+|-------|-----------------|
+| archi | `[{ "id": "mention-003", "ticketId": "ticket-abc-001", "sourceAgent": "project-manager" }]` |
+| tous les autres | `[]` |
+
+**archi** charge le contexte :
+
+```http
+GET /api/agents/v1/tickets/ticket-abc-001/context
+X-Agent-Name: archi
+```
+
+L'archi recoit dans sa context window : le ticket, les 3 commentaires, la spec fonctionnelle du PM, et la demande du project-manager. Il a toutes les infos pour travailler.
+
+Il raisonne, analyse le code (en dehors d'ASM — c'est son LLM qui lit le codebase), et poste :
+
+```http
+PATCH /api/agents/v1/mentions/mention-003/acknowledge
+X-Agent-Name: archi
+```
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/deliverables
+X-Agent-Name: archi
+
+{
+  "type": "tech-spec",
+  "title": "Tech spec — Auto-clone integration",
+  "content": "## Points d'intervention\n\n### 1. CreateSessionFromTicketUseCase\nFichier: `packages/server/src/application/use-cases/create-session-from-ticket.ts`\nC'est le use case principal. Actuellement il determine le cwd via worktree ou basePath. Il faut ajouter une etape avant : verifier si le repo existe sur le FS, sinon cloner.\n\n### 2. GitCliAdapter — nouvelle methode `cloneRepository`\nFichier: `packages/server/src/infrastructure/adapters/git-cli.adapter.ts`\nAjouter : `cloneRepository(remote: string, targetPath: string): Promise<void>`\nLe adapter execute `git clone <remote> <targetPath>` via execFn.\n\n### 3. CreateSessionUseCase\nFichier: `packages/server/src/application/use-cases/create-session.ts`\nMeme logique pour les sessions creees directement (pas via ticket).\n\n### 4. JsonConfigAdapter — auto-register\nApres un clone reussi, ajouter le repo dans `config.repositories`.\n\n## Risques de regression\n- FAIBLE : le clone est une etape supplementaire avant le flow existant, pas une modification du flow\n- Le flow existant continue de fonctionner tel quel si le repo existe deja\n- Seul risque : timeout sur gros repos → le timeout de 60s de la spec PM est correct\n\n## Estimation\n- Impact : 4 fichiers a modifier\n- Complexite : moyenne (le plus delicat est la gestion d'erreur du clone)",
+  "status": "final",
+  "mentionId": "mention-003"
+}
+```
+
+```json
+← 201 { "id": "deliverable-002", "version": 1, ... }
+```
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: archi
+
+{
+  "body": "@agent:project-manager Tech spec livree. 4 fichiers a modifier, risque de regression faible. Le GitCliAdapter a besoin d'une nouvelle methode cloneRepository. Le use case CreateSessionFromTicketUseCase est le point d'entree principal."
+}
+```
+
+```http
+PATCH /api/agents/v1/mentions/mention-003/resolve
+X-Agent-Name: archi
+
+{ "deliverableId": "deliverable-002" }
+```
+
+---
+
+### T+20min — cron
+
+| Agent | Mentions pending |
+|-------|-----------------|
+| project-manager | `[{ "id": "mention-004", "sourceAgent": "archi" }]` |
+| tous les autres | `[]` |
+
+**project-manager** charge le contexte, voit la tech-spec, decide de lancer le dev :
+
+```http
+PATCH /api/agents/v1/mentions/mention-004/resolve
+X-Agent-Name: project-manager
+```
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: project-manager
+
+{
+  "body": "@agent:dev Implemente l'auto-clone repo sur creation de session.\n\nTu as a ta disposition :\n- La spec fonctionnelle (livrable du PM, deliverable-001)\n- La tech spec (livrable de l'archi, deliverable-002)\n\nLes fichiers a modifier sont identifies dans la tech spec. Cree une branche, implemente, et pousse une PR.\n\nQuand c'est fait, poste le lien de la PR comme livrable."
+}
+```
+
+```json
+← 201 {
+  "createdMentions": [
+    { "id": "mention-005", "targetAgent": "dev", "sourceAgent": "project-manager" }
+  ]
+}
+```
+
+---
+
+### T+25min — cron
+
+| Agent | Mentions pending |
+|-------|-----------------|
+| dev | `[{ "id": "mention-005", "ticketId": "ticket-abc-001", "sourceAgent": "project-manager" }]` |
+
+**dev** charge le contexte :
+
+```http
+GET /api/agents/v1/tickets/ticket-abc-001/context
+X-Agent-Name: dev
+```
+
+Le dev recoit dans sa context window :
+- Le ticket original avec la description du besoin
+- Tous les commentaires (project-manager → pm → project-manager → archi → project-manager → dev)
+- Les 2 livrables (spec fonctionnelle + tech spec)
+- Sa mention pending avec la demande precise
+
+Le dev acknowledge, code (en dehors d'ASM), cree la PR, et revient poster :
+
+```http
+PATCH /api/agents/v1/mentions/mention-005/acknowledge
+X-Agent-Name: dev
+```
+
+_(le dev code pendant ce cron et le suivant — sa mention reste acknowledged)_
+
+---
+
+### T+30min — cron
+
+Le dev a fini de coder. Il revient :
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/deliverables
+X-Agent-Name: dev
+
+{
+  "type": "pull-request",
+  "title": "PR #42 — feat: auto-clone repository on session creation",
+  "content": "## Changes\n\n- `git-cli.adapter.ts`: Added `cloneRepository(remote, targetPath)` method\n- `create-session-from-ticket.ts`: Added clone step before worktree resolution\n- `create-session.ts`: Same clone step for direct session creation\n- `json-config.adapter.ts`: Auto-register cloned repo in config\n\n## Tests\n- Unit tests for cloneRepository\n- Integration test: create session with non-existing repo\n- Error cases: timeout, auth failure, not found\n\nPR: https://github.com/oliviermadre/agent-session-manager/pull/42",
+  "status": "final",
+  "mentionId": "mention-005"
+}
+```
+
+```json
+← 201 { "id": "deliverable-003", "version": 1, ... }
+```
+
+Le dev ajoute aussi le lien PR au ticket (API existante) :
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/links
+X-Agent-Name: dev
+
+{
+  "type": "github_pr",
+  "ref": "oliviermadre/agent-session-manager#42",
+  "label": "feat: auto-clone repository on session creation",
+  "url": "https://github.com/oliviermadre/agent-session-manager/pull/42"
+}
+```
+
+Puis notifie :
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: dev
+
+{
+  "body": "@agent:project-manager Implementation terminee. PR #42 ouverte.\n\n4 fichiers modifies conformement a la tech spec. Tests unitaires et integration inclus.\n\nPret pour review QA."
+}
+```
+
+```http
+PATCH /api/agents/v1/mentions/mention-005/resolve
+X-Agent-Name: dev
+
+{ "deliverableId": "deliverable-003" }
+```
+
+---
+
+### T+35min — cron
+
+| Agent | Mentions pending |
+|-------|-----------------|
+| project-manager | `[{ "id": "mention-006", "sourceAgent": "dev" }]` |
+
+**project-manager** charge le contexte, voit la PR, decide d'envoyer au QA :
+
+```http
+PATCH /api/agents/v1/mentions/mention-006/resolve
+X-Agent-Name: project-manager
+```
+
+```http
+PATCH /api/agents/v1/tickets/ticket-abc-001
+X-Agent-Name: project-manager
+
+{ "status": "reviewing" }
+```
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: project-manager
+
+{
+  "body": "@agent:qa Review la PR #42 (auto-clone repo on session creation).\n\nVerifie :\n- Le clone fonctionne pour les 4 modes (main, PR, issue, fresh worktree)\n- Les erreurs sont correctement remontees (timeout, auth, repo inexistant)\n- Pas de regression sur la creation de session quand le repo existe deja\n- Les tests unitaires et integration passent"
+}
+```
+
+```json
+← 201 {
+  "createdMentions": [
+    { "id": "mention-007", "targetAgent": "qa", "sourceAgent": "project-manager" }
+  ]
+}
+```
+
+---
+
+### T+40min — cron
+
+| Agent | Mentions pending |
+|-------|-----------------|
+| qa | `[{ "id": "mention-007", "ticketId": "ticket-abc-001" }]` |
+
+**qa** charge le contexte. Il voit tout l'historique : besoin → spec → tech spec → PR. Il teste.
+
+Probleme trouve. Le QA mentionne directement le dev (pas besoin de passer par le project-manager) :
+
+```http
+PATCH /api/agents/v1/mentions/mention-007/acknowledge
+X-Agent-Name: qa
+```
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: qa
+
+{
+  "body": "@agent:dev Bug trouve : quand le clone echoue par timeout, le directory partiellement clone reste sur le FS. Il faut un cleanup du directory en cas d'echec.\n\nRepro : simuler un timeout pendant le clone d'un gros repo. Le directory `<basePath>/<org>/<name>` existe mais est incomplet. La prochaine tentative de creation de session voit le directory, croit que le repo est la, et echoue sur un git checkout."
+}
+```
+
+```json
+← 201 {
+  "createdMentions": [
+    { "id": "mention-008", "targetAgent": "dev", "sourceAgent": "qa" }
+  ]
+}
+```
+
+Note : le QA n'a PAS resolu sa mention (mention-007). Il a toujours du travail — il attend le fix du dev.
+
+---
+
+### T+45min — cron
+
+| Agent | Mentions pending |
+|-------|-----------------|
+| dev | `[{ "id": "mention-008", "sourceAgent": "qa" }]` |
+
+**dev** charge le contexte, voit le bug report du QA :
+
+```http
+GET /api/agents/v1/tickets/ticket-abc-001/context
+X-Agent-Name: dev
+```
+
+Il voit sa mention pending du QA. Il fixe et repond :
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: dev
+
+{
+  "body": "@agent:qa Fixe dans le commit abc123 (pousse sur la meme PR). Ajout d'un `rm -rf targetPath` dans le catch du clone. Le test d'integration couvre maintenant ce cas."
+}
+```
+
+```http
+PATCH /api/agents/v1/mentions/mention-008/resolve
+X-Agent-Name: dev
+
+{ "commentId": "comment-xxx" }
+```
+
+---
+
+### T+50min — cron
+
+| Agent | Mentions pending |
+|-------|-----------------|
+| qa | la mention-007 est toujours `acknowledged` (pas resolue) + il a mention-009 du dev en `pending` |
+
+**qa** recharge le contexte, voit le fix du dev, re-teste, tout passe :
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/deliverables
+X-Agent-Name: qa
+
+{
+  "type": "test-report",
+  "title": "QA Report — Auto-clone repo",
+  "content": "## Resultats\n\n| Scenario | Statut |\n|----------|--------|\n| Clone + session main | PASS |\n| Clone + session PR | PASS |\n| Clone + session issue | PASS |\n| Clone + fresh worktree | PASS |\n| Repo deja present (pas de clone) | PASS |\n| Clone timeout + cleanup | PASS |\n| Clone auth failure | PASS |\n| Repo inexistant | PASS |\n\n8/8 scenarios OK. Aucune regression detectee.",
+  "status": "final",
+  "mentionId": "mention-007"
+}
+```
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: qa
+
+{
+  "body": "@agent:project-manager QA terminee, 8/8 scenarios OK, fix du cleanup inclus. Aucune regression. PR prete a merge."
+}
+```
+
+```http
+PATCH /api/agents/v1/mentions/mention-007/resolve
+X-Agent-Name: qa
+
+{ "deliverableId": "deliverable-004" }
+```
+
+---
+
+### T+55min — cron
+
+| Agent | Mentions pending |
+|-------|-----------------|
+| project-manager | `[{ "id": "mention-010", "sourceAgent": "qa" }]` |
+
+**project-manager** charge le contexte. Voit : spec OK, tech spec OK, PR OK, QA 8/8 OK. Ferme le ticket :
+
+```http
+PATCH /api/agents/v1/mentions/mention-010/resolve
+X-Agent-Name: project-manager
+```
+
+```http
+PATCH /api/agents/v1/tickets/ticket-abc-001
+X-Agent-Name: project-manager
+
+{ "status": "done" }
+```
+
+```http
+POST /api/agents/v1/tickets/ticket-abc-001/comments
+X-Agent-Name: project-manager
+
+{
+  "body": "Ticket clos. PR #42 prete a merge. QA validee 8/8.\n\nRecap des livrables :\n- Spec fonctionnelle (PM)\n- Tech spec (Archi)\n- PR #42 (Dev)\n- QA report 8/8 (QA)"
+}
+```
+
+Le project-manager envoie un message a l'humain sur Telegram : "L'auto-clone est pret. PR #42 ouverte, QA validee. Tu peux merger quand tu veux."
+
+---
+
+### Resume temporel
+
+| Temps | Qui bosse | Quoi | Calls API |
+|-------|-----------|------|-----------|
+| T+0 | project-manager | Cree ticket + mentionne pm | `POST /tickets`, `POST /comments` |
+| T+5 | pm | Lit contexte, redige spec, resout | `GET /mentions/pending`, `GET /context`, `POST /deliverables`, `POST /comments`, `PATCH /resolve` |
+| T+10 | project-manager | Lit spec, mentionne archi | `GET /mentions/pending`, `GET /context`, `POST /comments`, `PATCH /resolve` |
+| T+15 | archi | Lit contexte, tech spec, resout | `GET /mentions/pending`, `GET /context`, `POST /deliverables`, `POST /comments`, `PATCH /resolve` |
+| T+20 | project-manager | Lit tech spec, mentionne dev | idem |
+| T+25 | dev | Lit contexte, acknowledge | `GET /mentions/pending`, `GET /context`, `PATCH /acknowledge` |
+| T+30 | dev | Code fini, PR, resout | `POST /deliverables`, `POST /comments`, `PATCH /resolve` |
+| T+35 | project-manager | Passe en reviewing, mentionne qa | idem |
+| T+40 | qa | Teste, trouve bug, mentionne dev | `GET /mentions/pending`, `GET /context`, `POST /comments` |
+| T+45 | dev | Fixe, resout mention qa | `GET /mentions/pending`, `GET /context`, `POST /comments`, `PATCH /resolve` |
+| T+50 | qa | Re-teste, OK, resout | `POST /deliverables`, `POST /comments`, `PATCH /resolve` |
+| T+55 | project-manager | Ferme ticket | `PATCH /tickets`, `POST /comments`, `PATCH /resolve` |
+
+**Total** : ~55 minutes, 12 cycles de cron, 5 agents impliques, 4 livrables produits.
+Les 4 agents non impliques (designer, user-researcher, business, marketing) ont fait **1 call API par cycle** (`GET /mentions/pending` → `[]`) et n'ont rien fait d'autre.
+
+### Pattern universel d'un agent en cron
+
+```
+1. GET /mentions/pending          → ai-je du travail ?
+   si [] → exit (rien a faire)
+
+2. pour chaque mention pending :
+   GET /tickets/:id/context       → charger tout le contexte dans la context window LLM
+
+3. PATCH /mentions/:id/acknowledge → signaler qu'on bosse dessus
+
+4. ... raisonner, travailler (hors ASM) ...
+
+5. si livrable a fournir :
+   POST /tickets/:id/deliverables → poster le livrable
+
+6. POST /tickets/:id/comments     → repondre (avec @agent:xxx si besoin de relancer quelqu'un)
+
+7. PATCH /mentions/:id/resolve    → marquer qu'on a fini
+   { commentId ou deliverableId }
+```
 
 ---
 
