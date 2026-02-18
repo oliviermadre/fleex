@@ -9,6 +9,8 @@
 # Access URL: https://<branch-name>.<repo-name>.127.0.0.1.nip.io
 #
 
+_INFRA_LOCAL = 'infrastructure/local'
+
 # ---------------------------------------------------------------------------
 # Shared helpers (loaded from ~/.localenv-saas/lib/tilt_helpers.star)
 # ---------------------------------------------------------------------------
@@ -26,6 +28,10 @@ create_ingress = _helpers['create_ingress']
 load_env_files = _helpers['load_env_files']
 get_hostnames = _helpers['get_hostnames']
 get_host_ip = _helpers['get_host_ip']
+
+def _read_yaml(filename, **kwargs):
+    """Read a YAML template from infrastructure/local/ and interpolate variables."""
+    return str(read_file('./%s/%s' % (_INFRA_LOCAL, filename))).format(**kwargs)
 
 # ---------------------------------------------------------------------------
 # Context detection
@@ -53,7 +59,7 @@ create_namespace(NAMESPACE)
 docker_build(
     APP_NAME,
     _self_dir,
-    dockerfile=_self_dir + '/Dockerfile.dev',
+    dockerfile=_self_dir + '/' + _INFRA_LOCAL + '/Dockerfile.dev',
     only=[
         './packages/shared/src',
         './packages/server/src',
@@ -70,7 +76,7 @@ docker_build(
         './packages/shared/tsconfig.json',
         './packages/server/tsconfig.json',
         './packages/web/tsconfig.json',
-        './Dockerfile.dev',
+        './' + _INFRA_LOCAL + '/Dockerfile.dev',
     ],
     live_update=[
         fall_back_on([
@@ -101,63 +107,9 @@ docker_build(
 # ---------------------------------------------------------------------------
 # Kubernetes resources
 # ---------------------------------------------------------------------------
-k8s_yaml(blob("""
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: {app}
-  namespace: {ns}
-  labels:
-    app: {app}
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: {app}
-  template:
-    metadata:
-      labels:
-        app: {app}
-    spec:
-      containers:
-        - name: app
-          image: {app}
-          ports:
-            - containerPort: 5173
-              name: web
-            - containerPort: 3000
-              name: api
-          env:
-            - name: PORT
-              value: "3000"
-            - name: HOST_GATEWAY_URL
-              value: "http://{hostip}:3001"
-            - name: HOST_HOMEDIR
-              value: "{homedir}"
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "250m"
-            limits:
-              memory: "1Gi"
-              cpu: "1000m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {app}
-  namespace: {ns}
-spec:
-  selector:
-    app: {app}
-  ports:
-    - name: web
-      port: 80
-      targetPort: 5173
-    - name: api
-      port: 3000
-      targetPort: 3000
-""".format(app=APP_NAME, ns=NAMESPACE, homedir=HOST_HOMEDIR, hostip=HOST_IP)))
+k8s_yaml(blob(_read_yaml('resources.yaml',
+    app=APP_NAME, ns=NAMESPACE, homedir=HOST_HOMEDIR, hostip=HOST_IP,
+)))
 
 # ---------------------------------------------------------------------------
 # Ingress
