@@ -6,77 +6,46 @@
 # Designed to be include()'d by a central Tiltfile, but also works
 # standalone: tilt up
 #
-# The central Tiltfile sets `worktree_context` before include().
-# In standalone mode, we fall back to config.main_dir.
-#
-# Access URL: https://<worktree-name>.127.0.0.1.nip.io
+# Access URL: https://<branch-name>.<repo-name>.127.0.0.1.nip.io
 #
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Shared helpers (loaded from ~/.localenv-saas/lib/tilt_helpers.star)
 # ---------------------------------------------------------------------------
-def _sanitize_k8s_name(s):
-    allowed = 'abcdefghijklmnopqrstuvwxyz0123456789-'
-    out = []
-    for i in range(len(s)):
-        c = s[i]
-        if c >= 'A' and c <= 'Z':
-            c = chr(ord(c) + 32)
-        if c in allowed:
-            out.append(c)
-        else:
-            out.append('-')
-    name = ''.join(out).strip('-')
-    if len(name) > 63:
-        name = name[:63]
-    return name
+_helpers_path = os.path.join(os.getenv('HOME'), '.localenv-saas/lib/tilt_helpers.star')
+if not os.path.exists(_helpers_path):
+    fail('localenv-saas helpers not found at %s' % _helpers_path)
 
-def _basename(path):
-    parts = path.split('/')
-    return parts[-1] if parts[-1] != '' else parts[-2]
+_helpers = load_dynamic(_helpers_path)
+sanitize_k8s_name = _helpers['sanitize_k8s_name']
+basename = _helpers['basename']
+env_to_yaml = _helpers['env_to_yaml']
+get_worktree_context = _helpers['get_worktree_context']
+create_namespace = _helpers['create_namespace']
+create_ingress = _helpers['create_ingress']
+load_env_files = _helpers['load_env_files']
+get_hostname = _helpers['get_hostname']
+get_host_ip = _helpers['get_host_ip']
 
 # ---------------------------------------------------------------------------
 # Context detection
 # ---------------------------------------------------------------------------
-# When include()'d from the central Tiltfile, `worktree_context` is set
-# to the absolute path of this worktree BEFORE the include() call.
-# When running standalone (tilt up), it won't exist — detect via main_dir.
-_main_dir = str(config.main_dir)
-_standalone = str(local(
-    'test -f "%s/Dockerfile.dev" && echo 1 || echo 0' % _main_dir,
-    quiet=True,
-)).strip() == '1'
-_self_dir = _main_dir if _standalone else str(local('cat /tmp/.tilt_worktree_context', quiet=True)).strip()
-_worktree_name = _sanitize_k8s_name(_basename(_self_dir))
+_ctx = get_worktree_context()
+_self_dir = _ctx.self_dir
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-NAMESPACE    = 'asm-dev'
-APP_NAME     = _sanitize_k8s_name('asm-' + _basename(_self_dir))
-HOSTNAME     = _worktree_name + '.127.0.0.1.nip.io'
+NAMESPACE    = _ctx.repo_name
+APP_NAME     = _ctx.branch_name
+HOSTNAME     = get_hostname(_ctx)
 HOST_HOMEDIR = str(local('echo $HOME', quiet=True)).strip()
-
-# Resolve the host IP reachable from inside the Kind cluster.
-# OrbStack maps host.docker.internal inside the node — query its IP.
-_kind_cluster_name = str(local(
-    "kubectl config current-context | sed 's/^kind-//'",
-    quiet=True,
-)).strip()
-HOST_IP = str(local(
-    "docker exec %s-control-plane getent hosts host.docker.internal | awk '{print $1}'" % _kind_cluster_name,
-    quiet=True,
-)).strip()
+HOST_IP      = get_host_ip()
 
 # ---------------------------------------------------------------------------
 # Namespace (idempotent — safe to call from multiple Tiltfiles)
 # ---------------------------------------------------------------------------
-k8s_yaml(blob("""
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {ns}
-""".format(ns=NAMESPACE)), allow_duplicates=True)
+create_namespace(NAMESPACE)
 
 # ---------------------------------------------------------------------------
 # Docker image + live_update
@@ -188,42 +157,20 @@ spec:
     - name: api
       port: 3000
       targetPort: 3000
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: {app}
-  namespace: {ns}
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    cert-manager.io/cluster-issuer: "mkcert-ca"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - {host}
-      secretName: {app}-tls
-  rules:
-    - host: {host}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: {app}
-                port:
-                  number: 80
-""".format(app=APP_NAME, ns=NAMESPACE, host=HOSTNAME, homedir=HOST_HOMEDIR, hostip=HOST_IP)))
+""".format(app=APP_NAME, ns=NAMESPACE, homedir=HOST_HOMEDIR, hostip=HOST_IP)))
+
+# ---------------------------------------------------------------------------
+# Ingress
+# ---------------------------------------------------------------------------
+k8s_yaml(blob(create_ingress(APP_NAME, HOSTNAME, NAMESPACE, worktree_name=_ctx.worktree_name)))
 
 k8s_resource(
     APP_NAME,
     port_forwards=[],
-    labels=['asm'],
+    labels=[_ctx.repo_name],
     links=[
        link('https://' + HOSTNAME, 'Open'),
     ]
 )
 
-print('  ASM: ' + _worktree_name + '  ->  https://' + HOSTNAME)
+print('  %s: %s  ->  https://%s' % (_ctx.repo_name.upper(), _ctx.branch_name, HOSTNAME))
