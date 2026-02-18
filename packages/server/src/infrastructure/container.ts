@@ -40,6 +40,7 @@ export async function createContainer() {
   const gatewayUrl = process.env['HOST_GATEWAY_URL'] || DEFAULT_GATEWAY_URL;
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
 
+  // Gateway — always remote
   const execFn = remoteExec(gatewayUrl);
   const shellExecFn = remoteShellExec(gatewayUrl);
   const hostFs = new RemoteHostFs(gatewayUrl);
