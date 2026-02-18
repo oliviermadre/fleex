@@ -13,6 +13,11 @@ import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
+import { PgUserStore } from './adapters/pg-user-store.adapter.js';
+import { PgGatewayStore } from './adapters/pg-gateway-store.adapter.js';
+import { SessionManager } from './auth/session-manager.js';
+import { createDbPool, runMigrations, getDefaultUserId } from './database/db.js';
+import type { DbPool } from './database/db.js';
 import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-session-from-ticket.js';
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
 import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
@@ -39,6 +44,7 @@ export async function createContainer() {
 
   const gatewayUrl = process.env['HOST_GATEWAY_URL'] || DEFAULT_GATEWAY_URL;
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
+  const databaseUrl = process.env['DATABASE_URL'];
 
   // Gateway — always remote
   const execFn = remoteExec(gatewayUrl);
@@ -66,6 +72,21 @@ export async function createContainer() {
     mentionStore,
     deliverableStore,
   } = await createStores(driver, { hostFs, homedir: hostHomedir, logger });
+
+  // Auth & multi-gateway stores (PostgreSQL-only features)
+  let db: DbPool | null = null;
+  let userStore: PgUserStore | null = null;
+  let sessionManager: SessionManager | null = null;
+  let gatewayStore: PgGatewayStore | null = null;
+
+  if (databaseUrl) {
+    db = await createDbPool(logger);
+    await runMigrations(db, logger);
+    const userId = getDefaultUserId();
+    userStore = new PgUserStore(db, logger);
+    sessionManager = new SessionManager(db);
+    gatewayStore = new PgGatewayStore(db, userId, logger);
+  }
 
   const namingService = new SessionNamingService();
   const groupingService = new SessionGroupingService();
@@ -107,6 +128,10 @@ export async function createContainer() {
     tmux,
     pty: ptyAdapter,
     git,
+    db,
+    userStore,
+    sessionManager,
+    gatewayStore,
     sessionStore,
     repositoryCache,
     githubGraphql,

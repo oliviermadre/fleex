@@ -30,6 +30,8 @@ import { repositoryWsPlugin } from './infrastructure/ws/repository-ws.js';
 import { ticketWsPlugin } from './infrastructure/ws/ticket-ws.js';
 import { agentWsPlugin } from './infrastructure/ws/agent-ws.js';
 import { gatewayRoutes } from './infrastructure/http/gateway.routes.js';
+import { authRoutes } from './infrastructure/http/auth.routes.js';
+import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 
 async function main() {
   const container = await createContainer();
@@ -38,10 +40,17 @@ async function main() {
   await container.discoverSessions.execute();
 
   const app = Fastify({ logger: false });
-  await app.register(cors, { origin: true });
+  await app.register(cors, { origin: true, credentials: true });
   await app.register(websocket);
 
   registerErrorHandler(app);
+
+  // Auth routes (public — no middleware)
+  await app.register(authRoutes(container));
+
+  // Auth middleware for all subsequent routes
+  const authMiddleware = createAuthMiddleware(container);
+  app.addHook('preHandler', authMiddleware);
 
   // Register HTTP routes
   await app.register(sessionRoutes(container));
