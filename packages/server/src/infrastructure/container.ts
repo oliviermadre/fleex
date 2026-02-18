@@ -29,41 +29,23 @@ import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
-import { localExec, localShellExec, LocalHostFs } from './host/local.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
-import { JsonlFileWatcher } from './services/jsonl-file-watcher.js';
-import type { ExecFn, ShellExecFn, HostFs } from './host/types.js';
-import type { PtyPort } from '../application/ports/pty.port.js';
+
+const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
 
 export async function createContainer() {
   const logger = new PinoLoggerAdapter();
 
-  const gatewayUrl = process.env['HOST_GATEWAY_URL'];
+  const gatewayUrl = process.env['HOST_GATEWAY_URL'] || DEFAULT_GATEWAY_URL;
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
 
-  let execFn: ExecFn;
-  let shellExecFn: ShellExecFn;
-  let hostFs: HostFs;
-  let ptyAdapter: PtyPort;
-  let jsonlFileWatcher: JsonlFileWatcher | undefined;
+  const execFn = remoteExec(gatewayUrl);
+  const shellExecFn = remoteShellExec(gatewayUrl);
+  const hostFs = new RemoteHostFs(gatewayUrl);
+  const ptyAdapter = new RemotePtyAdapter(gatewayUrl, logger);
 
-  if (gatewayUrl) {
-    execFn = remoteExec(gatewayUrl);
-    shellExecFn = remoteShellExec(gatewayUrl);
-    hostFs = new RemoteHostFs(gatewayUrl);
-    ptyAdapter = new RemotePtyAdapter(gatewayUrl, logger);
-  } else {
-    execFn = localExec;
-    shellExecFn = localShellExec;
-    hostFs = new LocalHostFs();
-    // Dynamic import: node-pty is only installed on the host, not in containers
-    const { NodePtyAdapter } = await import('./adapters/node-pty.adapter.js');
-    const nodePty = new NodePtyAdapter(execFn, logger);
-    await nodePty.init();
-    ptyAdapter = nodePty;
-    jsonlFileWatcher = new JsonlFileWatcher(logger);
-  }
+  logger.info('Gateway configured', { gatewayUrl });
 
   const config = new JsonConfigAdapter(execFn, hostFs, hostHomedir);
   await config.init();
@@ -152,7 +134,7 @@ export async function createContainer() {
     getTicketContext,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     agentBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
-    jsonlFileWatcher,
+    jsonlFileWatcher: undefined,
   };
 }
 
