@@ -6,6 +6,7 @@ import type {
 } from '../../application/ports/claude-state.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ShellExecFn, HostFs } from '../host/types.js';
+import { encodePath } from '../../domain/services/claude-path-encoding.js';
 
 /** CWD never changes for a running PID — cache it. */
 const cwdCache = new Map<number, string>();
@@ -183,9 +184,4 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
     }
     return null;
   }
-}
-
-/** Encode a filesystem path to Claude's project directory naming convention. */
-function encodePath(cwd: string): string {
-  return '-' + cwd.slice(1).replace(/[/.]/g, '-');
 }

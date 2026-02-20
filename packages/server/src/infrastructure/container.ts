@@ -30,6 +30,7 @@ import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js'
 import { localExec, localShellExec, LocalHostFs } from './host/local.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
+import { JsonlFileWatcher } from './services/jsonl-file-watcher.js';
 import type { ExecFn, ShellExecFn, HostFs } from './host/types.js';
 import type { PtyPort } from '../application/ports/pty.port.js';
 
@@ -43,6 +44,7 @@ export async function createContainer() {
   let shellExecFn: ShellExecFn;
   let hostFs: HostFs;
   let ptyAdapter: PtyPort;
+  let jsonlFileWatcher: JsonlFileWatcher | undefined;
 
   if (gatewayUrl) {
     execFn = remoteExec(gatewayUrl);
@@ -58,6 +60,7 @@ export async function createContainer() {
     const nodePty = new NodePtyAdapter(execFn, logger);
     await nodePty.init();
     ptyAdapter = nodePty;
+    jsonlFileWatcher = new JsonlFileWatcher(logger);
   }
 
   const config = new JsonConfigAdapter(execFn, hostFs, hostHomedir);
@@ -128,6 +131,7 @@ export async function createContainer() {
     createSessionFromTicket,
     importGitHubIssue,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
+    jsonlFileWatcher,
   };
 }
 

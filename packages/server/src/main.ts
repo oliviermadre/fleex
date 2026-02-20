@@ -57,7 +57,7 @@ async function main() {
 
   // Register WebSocket handlers
   await app.register(terminalWsPlugin(container));
-  await app.register(dashboardWsPlugin(container));
+  await app.register(dashboardWsPlugin(container, container.jsonlFileWatcher));
   await app.register(repositoryWsPlugin(container));
   await app.register(ticketWsPlugin(container));
 
