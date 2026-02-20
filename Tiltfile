@@ -24,7 +24,7 @@ get_worktree_context = _helpers['get_worktree_context']
 create_namespace = _helpers['create_namespace']
 create_ingress = _helpers['create_ingress']
 load_env_files = _helpers['load_env_files']
-get_hostname = _helpers['get_hostname']
+get_hostnames = _helpers['get_hostnames']
 get_host_ip = _helpers['get_host_ip']
 
 # ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ _self_dir = _ctx.self_dir
 # ---------------------------------------------------------------------------
 NAMESPACE    = _ctx.repo_name
 APP_NAME     = _ctx.branch_name
-HOSTNAME     = get_hostname(_ctx)
+HOSTNAMES    = get_hostnames(_ctx)
 HOST_HOMEDIR = str(local('echo $HOME', quiet=True)).strip()
 HOST_IP      = get_host_ip()
 
@@ -162,15 +162,13 @@ spec:
 # ---------------------------------------------------------------------------
 # Ingress
 # ---------------------------------------------------------------------------
-k8s_yaml(blob(create_ingress(APP_NAME, HOSTNAME, NAMESPACE, worktree_name=_ctx.worktree_name)))
+k8s_yaml(blob(create_ingress(APP_NAME, HOSTNAMES, NAMESPACE, worktree_name=_ctx.worktree_name)))
 
 k8s_resource(
     APP_NAME,
     port_forwards=[],
     labels=[_ctx.repo_name],
-    links=[
-       link('https://' + HOSTNAME, 'Open'),
-    ]
+    links=[link('https://' + h, h) for h in HOSTNAMES],
 )
 
-print('  %s: %s  ->  https://%s' % (_ctx.repo_name.upper(), _ctx.branch_name, HOSTNAME))
+print('  %s: %s  ->  %s' % (_ctx.repo_name.upper(), _ctx.branch_name, '  '.join(['https://' + h for h in HOSTNAMES])))
