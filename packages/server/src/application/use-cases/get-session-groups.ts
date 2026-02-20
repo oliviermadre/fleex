@@ -22,6 +22,19 @@ export class GetSessionGroupsUseCase {
   async execute(): Promise<SessionGroup[]> {
     const sessions = await this.listSessions.execute();
 
+    // Enrich foreground process from tmux pane_current_command
+    try {
+      const paneCommands = await this.tmux.getPaneCommands();
+      for (const session of sessions) {
+        const command = paneCommands.get(session.tmuxName);
+        if (command) {
+          session.foregroundProcess = command;
+        }
+      }
+    } catch (err) {
+      this.logger.debug('Failed to enrich foreground process', { error: String(err) });
+    }
+
     if (this.enrichClaudeActivity) {
       try {
         const activityMap = await this.enrichClaudeActivity.execute(sessions);
