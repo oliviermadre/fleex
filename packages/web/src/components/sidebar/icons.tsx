@@ -103,6 +103,154 @@ export function RefreshCwIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function VimIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M2 3l4.5 10M14 3l-4.5 10" />
+      <path d="M1 3h4M11 3h4" />
+    </svg>
+  );
+}
+
+export function NodeIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M8 1.5l5.5 3.25v6.5L8 14.5l-5.5-3.25v-6.5L8 1.5z" />
+    </svg>
+  );
+}
+
+export function PythonIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M5.5 1.5h5a2 2 0 012 2v2.5a2 2 0 01-2 2H5.5a2 2 0 00-2 2V12.5a2 2 0 002 2h5" />
+      <path d="M10.5 14.5h-5a2 2 0 01-2-2v-2.5a2 2 0 012-2h5a2 2 0 002-2V3.5a2 2 0 00-2-2h-5" />
+      <circle cx="6.5" cy="3.5" r="0.75" fill="currentColor" stroke="none" />
+      <circle cx="9.5" cy="12.5" r="0.75" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function GitIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="4" cy="4" r="1.5" />
+      <circle cx="12" cy="4" r="1.5" />
+      <circle cx="4" cy="12" r="1.5" />
+      <line x1="4" y1="5.5" x2="4" y2="10.5" />
+      <path d="M12 5.5v1a2 2 0 01-2 2H6" />
+    </svg>
+  );
+}
+
+export function K9sIcon({ size = 16, className }: IconProps) {
+  // Kubernetes helm wheel — colors from official logo
+  const r = 4.2;
+  const spokes = 7;
+  const spokeLines = Array.from({ length: spokes }, (_, i) => {
+    const angle = (i * 2 * Math.PI) / spokes - Math.PI / 2;
+    const x2 = 8 + r * Math.cos(angle);
+    const y2 = 8 + r * Math.sin(angle);
+    return <line key={i} x1="8" y1="8" x2={x2.toFixed(2)} y2={y2.toFixed(2)} />;
+  });
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      className={className}
+    >
+      {/* Blue heptagon background */}
+      <polygon
+        points="8,0.8 13.2,2.8 15.2,7.8 13.5,12.8 9.2,15.2 6.8,15.2 2.5,12.8 0.8,7.8 2.8,2.8"
+        fill="#326ce5"
+      />
+      {/* White helm spokes */}
+      <g stroke="white" strokeWidth="1" strokeLinecap="round">
+        {spokeLines}
+      </g>
+      {/* Center dot */}
+      <circle cx="8" cy="8" r="1.5" fill="#326ce5" stroke="white" strokeWidth="1" />
+    </svg>
+  );
+}
+
+export function HtopIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      className={className}
+    >
+      <rect x="2" y="3" width="3" height="10" rx="0.5" />
+      <rect x="6.5" y="6" width="3" height="7" rx="0.5" />
+      <rect x="11" y="1" width="3" height="12" rx="0.5" />
+    </svg>
+  );
+}
+
+type IconComponent = React.ComponentType<IconProps>;
+
+export function getProcessIcon(processName?: string): IconComponent | null {
+  if (!processName) return null;
+  const cmd = processName.split(' ')[0];
+  switch (cmd) {
+    case 'claude': return ClaudeIcon;
+    case 'vim': case 'nvim': return VimIcon;
+    case 'node': return NodeIcon;
+    case 'python': case 'python3': return PythonIcon;
+    case 'git': return GitIcon;
+    case 'k9s': return K9sIcon;
+    case 'htop': case 'btop': case 'top': return HtopIcon;
+    default: return null;
+  }
+}
+
 export function PlusIcon({ size = 16, className }: IconProps) {
   return (
     <svg

@@ -16,4 +16,5 @@ export interface TmuxPort {
   renameSession(oldName: string, newName: string): Promise<void>;
   sendKeys(name: string, keys: string): Promise<void>;
   getSessionCwd(name: string): Promise<string | null>;
+  getPaneCommands(): Promise<Map<string, string>>;
 }

@@ -108,6 +108,60 @@ export class TmuxCliAdapter implements TmuxPort {
     this.logger.debug('tmux send-keys', { name });
   }
 
+  async getPaneCommands(): Promise<Map<string, string>> {
+    try {
+      const { stdout } = await this.execFn('tmux', [
+        'list-panes', '-a', '-F', '#{session_name} #{pane_pid} #{pane_current_command}',
+      ]);
+
+      const result = new Map<string, string>();
+      const pidsToResolve: { sessionName: string; pid: string }[] = [];
+
+      for (const line of stdout.trim().split('\n')) {
+        if (!line) continue;
+        const firstSpace = line.indexOf(' ');
+        if (firstSpace === -1) continue;
+        const sessionName = line.slice(0, firstSpace);
+        if (!sessionName.startsWith(ASM_PREFIX)) continue;
+        const rest = line.slice(firstSpace + 1);
+        const secondSpace = rest.indexOf(' ');
+        if (secondSpace === -1) continue;
+        const pid = rest.slice(0, secondSpace);
+        const command = rest.slice(secondSpace + 1);
+
+        // Claude CLI sets its process title to its version number (e.g. "2.1.49")
+        if (/^\d+\.\d+/.test(command)) {
+          pidsToResolve.push({ sessionName, pid });
+        } else {
+          result.set(sessionName, command);
+        }
+      }
+
+      // Resolve actual binary name for version-like process titles (e.g. claude CLI)
+      // pane_pid is the shell — find its child process and check the real binary
+      for (const { sessionName, pid } of pidsToResolve) {
+        try {
+          const { stdout: pgrepOut } = await this.execFn('pgrep', ['-P', pid]);
+          const childPid = pgrepOut.trim().split('\n')[0];
+          if (childPid) {
+            const { stdout: psOut } = await this.execFn('ps', ['-p', childPid, '-o', 'comm=']);
+            const binary = psOut.trim().split('/').pop() ?? '';
+            result.set(sessionName, binary || 'unknown');
+          }
+        } catch {
+          result.set(sessionName, 'unknown');
+        }
+      }
+
+      return result;
+    } catch (err: any) {
+      if (err.code === 1 || (err.message && err.message.includes('no server running'))) {
+        return new Map();
+      }
+      throw err;
+    }
+  }
+
   async getSessionCwd(name: string): Promise<string | null> {
     try {
       const { stdout } = await this.execFn('tmux', [

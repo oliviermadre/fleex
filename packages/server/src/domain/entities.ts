@@ -20,6 +20,9 @@ export class SessionEntity {
   /** Mutable, not persisted — set each broadcast cycle by enrichment. */
   public claudeActivity?: ClaudeActivityStatus;
 
+  /** Mutable, not persisted — set each broadcast cycle from tmux pane_current_command. */
+  public foregroundProcess?: string;
+
   rename(newTmuxName: string, newDisplayName: string): void {
     this.tmuxName = newTmuxName;
     this.displayName = newDisplayName;
@@ -53,6 +56,7 @@ export class SessionEntity {
       displayName: this.displayName,
       claudePrompt: this.claudePrompt,
       claudeActivity: this.claudeActivity,
+      foregroundProcess: this.foregroundProcess,
     };
   }
 }

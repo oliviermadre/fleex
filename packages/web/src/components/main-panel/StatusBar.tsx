@@ -45,6 +45,11 @@ export function StatusBar({ session, splitFocused }: Props) {
           {session.worktreeBranch}
         </span>
       )}
+      {session.foregroundProcess && !['zsh', 'bash', 'fish'].includes(session.foregroundProcess) && (
+        <span className="mx-2 text-[var(--theme-text-faint)] text-[10px]">
+          {session.foregroundProcess}
+        </span>
+      )}
       <span className="ml-auto flex items-center gap-1.5">
         <span className={cn('h-1.5 w-1.5 rounded-full', statusColor)} />
         {statusLabel}

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Session } from '@asm/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { ClaudeIcon, TerminalIcon } from './icons';
+import { ClaudeIcon, TerminalIcon, getProcessIcon } from './icons';
 import { ActivityDot } from './ActivityDot';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
@@ -159,11 +159,20 @@ export function SessionItem({ session }: Props) {
         startEditing();
       }}
     >
-      <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
-        {isClaude
-          ? <ClaudeIcon size={14} className={iconColor} />
-          : <TerminalIcon size={14} className={iconColor} />
-        }
+      <span
+        className="relative flex h-4 w-4 shrink-0 items-center justify-center"
+        title={session.foregroundProcess || (isClaude ? 'Claude' : 'Shell')}
+      >
+        {(() => {
+          const ProcessIcon = getProcessIcon(session.foregroundProcess);
+          const fgIsShell = !!session.foregroundProcess && ['zsh', 'bash', 'fish'].includes(session.foregroundProcess.split(' ')[0]);
+          const IconComponent = ProcessIcon || (fgIsShell ? TerminalIcon : (isClaude ? ClaudeIcon : TerminalIcon));
+          const isClaudeIcon = IconComponent === ClaudeIcon;
+          const color = isClaudeIcon
+            ? (isRunning ? 'text-[var(--theme-accent)]' : isHighlighted ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-faint)]')
+            : (isRunning ? (isHighlighted ? 'text-emerald-400' : 'text-emerald-400/60') : iconColor);
+          return <IconComponent size={14} className={color} />;
+        })()}
         {isClaude && isRunning && session.claudeActivity && (
           <ActivityDot status={session.claudeActivity} />
         )}
@@ -181,6 +190,9 @@ export function SessionItem({ session }: Props) {
       ) : (
         <span className="min-w-0 flex-1 truncate text-[11px] leading-4">
           {displayName}
+          {session.foregroundProcess && (
+            <span className="text-[var(--theme-text-faint)] text-[10px]"> ({session.foregroundProcess.split(' ')[0]})</span>
+          )}
         </span>
       )}
       {hasActiveGroupCell && (

@@ -25,6 +25,7 @@ export interface Session {
   readonly displayName: string;
   readonly claudePrompt?: string;
   readonly claudeActivity?: import('./claude-activity.js').ClaudeActivityStatus;
+  readonly foregroundProcess?: string;
 }
 
 export interface CreateSessionRequest {
