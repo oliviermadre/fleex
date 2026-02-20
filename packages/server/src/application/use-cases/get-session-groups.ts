@@ -1,4 +1,5 @@
 import type { SessionGroup } from '@asm/shared';
+import type { SessionEntity } from '../../domain/entities.js';
 import { SessionGroupingService } from '../../domain/services/session-grouping.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
@@ -20,19 +21,25 @@ export class GetSessionGroupsUseCase {
   }
 
   async execute(): Promise<SessionGroup[]> {
-    const sessions = await this.listSessions.execute();
-
-    // Enrich foreground process from tmux pane_current_command
+    // Single tmux call to get both managed sessions and pane commands
+    let paneCommands: Map<string, string>;
+    let sessions: SessionEntity[];
     try {
-      const paneCommands = await this.tmux.getPaneCommands();
-      for (const session of sessions) {
-        const command = paneCommands.get(session.tmuxName);
-        if (command) {
-          session.foregroundProcess = command;
-        }
-      }
+      const combined = await this.tmux.listManagedSessionsWithPaneCommands();
+      sessions = await this.listSessions.execute(combined.sessions);
+      paneCommands = combined.paneCommands;
     } catch (err) {
-      this.logger.debug('Failed to enrich foreground process', { error: String(err) });
+      this.logger.debug('Failed combined tmux call, falling back', { error: String(err) });
+      sessions = await this.listSessions.execute();
+      paneCommands = new Map();
+    }
+
+    // Enrich foreground process from pane commands
+    for (const session of sessions) {
+      const command = paneCommands.get(session.tmuxName);
+      if (command) {
+        session.foregroundProcess = command;
+      }
     }
 
     if (this.enrichClaudeActivity) {

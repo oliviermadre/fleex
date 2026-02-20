@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { handleExec } from './exec';
 import { handleFs } from './fs';
 import { handlePtyMessage, handlePtyOpen, handlePtyClose } from './pty';
+import { logAlways, getVerbosity } from './logger';
 
 const PORT = parseInt(process.env['GATEWAY_PORT'] ?? '3001', 10);
 
@@ -68,4 +69,5 @@ Bun.serve<PtyWsData>({
   },
 });
 
-console.log(`Host gateway listening on http://localhost:${PORT}`);
+const verbLabel = getVerbosity() >= 2 ? ' (debug)' : getVerbosity() >= 1 ? ' (verbose)' : '';
+logAlways(`Host gateway listening on http://localhost:${PORT}${verbLabel}`);

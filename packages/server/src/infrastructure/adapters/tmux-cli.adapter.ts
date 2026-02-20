@@ -1,7 +1,10 @@
 import { ASM_PREFIX, DEFAULT_COLS, DEFAULT_ROWS } from '@asm/shared';
-import type { TmuxPort, TmuxSessionInfo } from '../../application/ports/tmux.port.js';
+import type { TmuxPort, TmuxSessionInfo, ManagedSessionsWithPanes } from '../../application/ports/tmux.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn } from '../host/types.js';
+
+/** Cache resolved binary names for version-titled pane processes (e.g. claude CLI) */
+const resolvedBinaryCache = new Map<string, string>();
 
 export class TmuxCliAdapter implements TmuxPort {
   constructor(
@@ -96,6 +99,91 @@ export class TmuxCliAdapter implements TmuxPort {
   async listManagedSessions(): Promise<TmuxSessionInfo[]> {
     const all = await this.listSessions();
     return all.filter((s) => s.name.startsWith(ASM_PREFIX));
+  }
+
+  async listManagedSessionsWithPaneCommands(): Promise<ManagedSessionsWithPanes> {
+    try {
+      const { stdout } = await this.execFn('tmux', [
+        'list-panes', '-a', '-F',
+        '#{session_name},#{session_created},#{session_attached},#{window_width},#{window_height},#{pane_pid},#{pane_current_command}',
+      ]);
+
+      const sessionMap = new Map<string, TmuxSessionInfo>();
+      const paneCommands = new Map<string, string>();
+      const pidsToResolve: { sessionName: string; pid: string }[] = [];
+      const activePids = new Set<string>();
+
+      for (const line of stdout.trim().split('\n')) {
+        if (!line) continue;
+        const parts = line.split(',');
+        if (parts.length < 7) continue;
+
+        const sessionName = parts[0] ?? '';
+        if (!sessionName.startsWith(ASM_PREFIX)) continue;
+
+        // Build session info (deduplicated by name)
+        if (!sessionMap.has(sessionName)) {
+          sessionMap.set(sessionName, {
+            name: sessionName,
+            created: parts[1] ?? '',
+            attached: parts[2] === '1',
+            width: parseInt(parts[3] ?? '0', 10),
+            height: parseInt(parts[4] ?? '0', 10),
+          });
+        }
+
+        const pid = parts[5] ?? '';
+        const command = parts[6] ?? '';
+        activePids.add(pid);
+
+        // Claude CLI sets its process title to its version number (e.g. "2.1.49")
+        if (/^\d+\.\d+/.test(command)) {
+          // Check cache first
+          const cached = resolvedBinaryCache.get(pid);
+          if (cached) {
+            paneCommands.set(sessionName, cached);
+          } else {
+            pidsToResolve.push({ sessionName, pid });
+          }
+        } else {
+          paneCommands.set(sessionName, command);
+        }
+      }
+
+      // Resolve uncached version-titled processes
+      for (const { sessionName, pid } of pidsToResolve) {
+        try {
+          const { stdout: pgrepOut } = await this.execFn('pgrep', ['-P', pid]);
+          const childPid = pgrepOut.trim().split('\n')[0];
+          if (childPid) {
+            const { stdout: psOut } = await this.execFn('ps', ['-p', childPid, '-o', 'comm=']);
+            const binary = psOut.trim().split('/').pop() ?? '';
+            const resolved = binary || 'unknown';
+            resolvedBinaryCache.set(pid, resolved);
+            paneCommands.set(sessionName, resolved);
+          }
+        } catch {
+          paneCommands.set(sessionName, 'unknown');
+        }
+      }
+
+      // Evict stale cache entries for PIDs no longer in any pane
+      for (const cachedPid of resolvedBinaryCache.keys()) {
+        if (!activePids.has(cachedPid)) {
+          resolvedBinaryCache.delete(cachedPid);
+        }
+      }
+
+      return {
+        sessions: Array.from(sessionMap.values()),
+        paneCommands,
+      };
+    } catch (err: any) {
+      if (err.code === 1 || (err.message && err.message.includes('no server running'))) {
+        return { sessions: [], paneCommands: new Map() };
+      }
+      throw err;
+    }
   }
 
   async renameSession(oldName: string, newName: string): Promise<void> {

@@ -10,17 +10,21 @@ export class ListSessionsUseCase {
     private readonly logger: LoggerPort,
   ) {}
 
-  async execute(): Promise<SessionEntity[]> {
+  async execute(prefetchedTmuxSessions?: TmuxSessionInfo[]): Promise<SessionEntity[]> {
     const sessions = this.sessionStore.getAll();
 
     let tmuxSessions: TmuxSessionInfo[];
-    try {
-      tmuxSessions = await this.tmux.listManagedSessions();
-    } catch (err) {
-      this.logger.warn('Failed to list tmux sessions, skipping cleanup', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return sessions;
+    if (prefetchedTmuxSessions) {
+      tmuxSessions = prefetchedTmuxSessions;
+    } else {
+      try {
+        tmuxSessions = await this.tmux.listManagedSessions();
+      } catch (err) {
+        this.logger.warn('Failed to list tmux sessions, skipping cleanup', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return sessions;
+      }
     }
 
     const tmuxNames = new Set(tmuxSessions.map((s) => s.name));

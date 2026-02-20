@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import type { ServerWebSocket } from 'bun';
+import { logInfo, logError } from './logger';
 
 interface PtyInitMessage {
   tmuxSessionName: string;
@@ -30,7 +31,7 @@ function resolveTmuxPath(): string {
 const TMUX_PATH = resolveTmuxPath();
 
 export function handlePtyOpen(ws: ServerWebSocket<PtyWsData>) {
-  console.log('[pty] WebSocket connected, waiting for init message');
+  logInfo('[pty] WebSocket connected, waiting for init message');
 }
 
 export function handlePtyMessage(
@@ -58,11 +59,11 @@ export function handlePtyMessage(
             try {
               ws.sendBinary(data);
             } catch (err) {
-              console.error('[pty] send failed:', err);
+              logError('[pty] send failed:', err);
             }
           },
           exit(_terminal) {
-            console.log(`[pty] terminal exited for tmux session "${tmuxSessionName}"`);
+            logInfo(`[pty] terminal exited for tmux session "${tmuxSessionName}"`);
           },
         },
       });
@@ -70,11 +71,11 @@ export function handlePtyMessage(
       ws.data.proc = proc;
       ws.data.terminal = proc.terminal;
       ws.data.initialized = true;
-      console.log(`[pty] spawned pid=${proc.pid} for tmux session "${tmuxSessionName}"`);
+      logInfo(`[pty] spawned pid=${proc.pid} for tmux session "${tmuxSessionName}"`);
 
       // Handle process exit
       proc.exited.then((exitCode) => {
-        console.log(`[pty] exited pid=${proc.pid} exitCode=${exitCode}`);
+        logInfo(`[pty] exited pid=${proc.pid} exitCode=${exitCode}`);
         try {
           ws.send(JSON.stringify({ type: 'exit', exitCode: exitCode ?? 0 }));
           ws.close();
@@ -83,7 +84,7 @@ export function handlePtyMessage(
         }
       });
     } catch (err) {
-      console.error('[pty] spawn failed:', err);
+      logError('[pty] spawn failed:', err);
       ws.send(JSON.stringify({ type: 'error', message: String(err) }));
       ws.close();
     }
