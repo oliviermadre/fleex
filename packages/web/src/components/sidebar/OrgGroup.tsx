@@ -1,6 +1,6 @@
 import type { RepositorySummary } from '@asm/shared';
 import { useUIStore } from '../../stores/uiStore';
-import { ExternalLinkIcon } from './icons';
+import { GitHubIcon } from './icons';
 import { RepoItem } from './RepoItem';
 import { cn } from '../../lib/cn';
 
@@ -64,7 +64,7 @@ export function OrgGroup({ org, repos }: Props) {
           className="ml-auto text-zinc-500 hover:text-zinc-300"
           onClick={(e) => e.stopPropagation()}
         >
-          <ExternalLinkIcon size={14} />
+          <GitHubIcon size={14} />
         </a>
       </button>
       {!collapsed && repos.map((repo) => (

@@ -1,6 +1,6 @@
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { RefreshControl } from '../ui/RefreshControl';
-import { ExternalLinkIcon } from '../sidebar/icons';
+import { GitHubIcon } from '../sidebar/icons';
 
 interface Props {
   org: string;
@@ -27,7 +27,7 @@ export function DashboardHeader({ org, name }: Props) {
           rel="noopener noreferrer"
           className="text-zinc-500 hover:text-zinc-300"
         >
-          <ExternalLinkIcon size={14} />
+          <GitHubIcon size={14} />
         </a>
       </div>
       <RefreshControl

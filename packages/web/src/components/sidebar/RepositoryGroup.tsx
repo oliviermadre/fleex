@@ -3,7 +3,7 @@ import type { SessionGroup, WorktreeSessionGroup } from '@asm/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { WorktreeGroup } from './WorktreeGroup';
-import { ExternalLinkIcon } from './icons';
+import { GitHubIcon } from './icons';
 import { cn } from '../../lib/cn';
 
 interface Props {
@@ -159,7 +159,7 @@ export function RepositoryGroup({ group }: Props) {
             className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <ExternalLinkIcon size={14} />
+            <GitHubIcon size={14} />
           </a>
         </span>
       </button>

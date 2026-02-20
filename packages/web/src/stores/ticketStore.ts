@@ -182,8 +182,8 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   importGitHubIssue: async (url, boardId, status) => {
     const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/);
     if (!match) throw new Error('Invalid GitHub issue URL');
-    const [, org, name, num] = match;
-    const ticket = await api.importGitHubIssue(org, name, parseInt(num, 10), boardId);
+    const [, org, name, num] = match as RegExpMatchArray & [string, string, string, string];
+    const ticket = await api.importGitHubIssue(org!, name!, parseInt(num!, 10), boardId);
     // If a specific status was requested (e.g. creating in a specific column), move the ticket
     if (status && status !== 'backlog') {
       const moved = await api.moveTicket(ticket.id, status);

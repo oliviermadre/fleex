@@ -165,7 +165,7 @@ export function SessionItem({ session }: Props) {
       >
         {(() => {
           const ProcessIcon = getProcessIcon(session.foregroundProcess);
-          const fgIsShell = !!session.foregroundProcess && ['zsh', 'bash', 'fish'].includes(session.foregroundProcess.split(' ')[0]);
+          const fgIsShell = !!session.foregroundProcess && ['zsh', 'bash', 'fish'].includes(session.foregroundProcess.split(' ')[0] ?? '');
           const IconComponent = ProcessIcon || (fgIsShell ? TerminalIcon : (isClaude ? ClaudeIcon : TerminalIcon));
           const isClaudeIcon = IconComponent === ClaudeIcon;
           const color = isClaudeIcon

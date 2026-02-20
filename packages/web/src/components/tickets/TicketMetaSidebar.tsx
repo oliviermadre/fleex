@@ -589,7 +589,7 @@ function GitHubIssuePicker({
       return;
     }
 
-    const [, org, name, num] = match;
+    const [, org, name, num] = match as RegExpMatchArray & [string, string, string, string];
     const issueNumber = parseInt(num, 10);
     const ref = `${org}/${name}#${issueNumber}`;
     const label = `#${issueNumber}`;
