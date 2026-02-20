@@ -6,6 +6,11 @@ export interface TmuxSessionInfo {
   height: number;
 }
 
+export interface ManagedSessionsWithPanes {
+  sessions: TmuxSessionInfo[];
+  paneCommands: Map<string, string>;
+}
+
 export interface TmuxPort {
   isAvailable(): Promise<boolean>;
   createSession(opts: { name: string; cwd: string; command?: string }): Promise<void>;
@@ -13,6 +18,7 @@ export interface TmuxPort {
   hasSession(name: string): Promise<boolean>;
   listSessions(): Promise<TmuxSessionInfo[]>;
   listManagedSessions(): Promise<TmuxSessionInfo[]>;
+  listManagedSessionsWithPaneCommands(): Promise<ManagedSessionsWithPanes>;
   renameSession(oldName: string, newName: string): Promise<void>;
   sendKeys(name: string, keys: string): Promise<void>;
   getSessionCwd(name: string): Promise<string | null>;

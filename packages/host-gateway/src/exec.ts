@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { logInfo, logDebug } from './logger';
 
 const execFileAsync = promisify(execFile);
 
@@ -18,10 +19,28 @@ interface ExecResponse {
   exitCode: number;
 }
 
+/** High-frequency polling commands logged only at -vv */
+function isPollingCommand(command: string, args: string[], shell?: boolean): boolean {
+  if (shell) {
+    if (/^(ps|pgrep|lsof)\b/.test(command)) return true;
+    if (/^tmux\s+(list-panes|list-sessions)\b/.test(command)) return true;
+    return false;
+  }
+  if (command === 'tmux' && (args[0] === 'list-panes' || args[0] === 'list-sessions')) return true;
+  if (command === 'ps' || command === 'pgrep') return true;
+  if (command === 'lsof') return true;
+  return false;
+}
+
 export async function handleExec(body: ExecRequest): Promise<ExecResponse> {
   const { command, args = [], cwd, timeout = 30_000, maxBuffer = 10 * 1024 * 1024, shell } = body;
 
-  console.log('[exec]', shell ? 'shell' : 'exec', command, shell ? '' : JSON.stringify(args), cwd ?? '');
+  const line = `[exec] ${shell ? 'shell' : 'exec'} ${command} ${shell ? '' : JSON.stringify(args)} ${cwd ?? ''}`.trimEnd();
+  if (isPollingCommand(command, args, shell)) {
+    logDebug(line);
+  } else {
+    logInfo(line);
+  }
 
   if (shell) {
     try {
