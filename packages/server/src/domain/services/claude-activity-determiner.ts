@@ -31,6 +31,15 @@ export function determineClaudeActivity(input: ActivityInput): ClaudeActivitySta
   );
 
   if (meaningful.length === 0) {
+    // No meaningful messages visible — but a pending tool approval from
+    // subagents still indicates the session is waiting for input.
+    if (hasPendingToolApproval) {
+      return 'waiting_tool_approval';
+    }
+    // File recently modified + CPU active → likely working (progress msgs only)
+    if (fileAgeSeconds <= 10 && cpuPercent > CPU_ACTIVE_THRESHOLD) {
+      return 'working';
+    }
     return 'unknown';
   }
 

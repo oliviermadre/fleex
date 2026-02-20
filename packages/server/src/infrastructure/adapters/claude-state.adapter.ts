@@ -95,12 +95,39 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
 
   async readLastMessages(filePath: string, count: number): Promise<string[]> {
     try {
-      const CHUNK_SIZE = 64 * 1024; // 64KB
-      const chunk = await this.hostFs.readTail(filePath, CHUNK_SIZE);
-      if (!chunk) return [];
+      // Progressive chunk reading: start at 64KB, grow up to 1MB if no
+      // meaningful (user/assistant) messages are found. Large progress messages
+      // from subagents can push actual tool_use messages beyond a small window.
+      const INITIAL_CHUNK = 64 * 1024;
+      const MAX_CHUNK = 1024 * 1024;
 
-      const lines = chunk.split('\n').filter((l) => l.trim().length > 0);
-      return lines.slice(-count);
+      let chunkSize = INITIAL_CHUNK;
+      while (chunkSize <= MAX_CHUNK) {
+        const chunk = await this.hostFs.readTail(filePath, chunkSize);
+        if (!chunk) return [];
+
+        const lines = chunk.split('\n').filter((l) => l.trim().length > 0);
+        const selected = lines.slice(-count);
+
+        // Check if we captured any meaningful messages (user or assistant).
+        // If not and we haven't hit the max, read a larger chunk.
+        const hasMeaningful = selected.some((l) => {
+          try {
+            const t = JSON.parse(l).type;
+            return t === 'user' || t === 'assistant';
+          } catch {
+            return false;
+          }
+        });
+
+        if (hasMeaningful || chunkSize >= MAX_CHUNK) {
+          return selected;
+        }
+
+        chunkSize *= 4;
+      }
+
+      return [];
     } catch (err) {
       this.logger.debug('Failed to read session file', { filePath, error: String(err) });
       return [];
@@ -121,16 +148,27 @@ export class ClaudeStateAdapter implements ClaudeStatePort {
         return false;
       }
 
-      // Find most recent agent-*.jsonl
-      const agentFiles = entries
-        .filter((e) => e.isFile && e.name.startsWith('agent-') && e.name.endsWith('.jsonl'))
-        .map((e) => e.name);
+      // Find most recent agent-*.jsonl by modification time
+      const agentEntries = entries.filter(
+        (e) => e.isFile && e.name.startsWith('agent-') && e.name.endsWith('.jsonl'),
+      );
 
-      if (agentFiles.length === 0) return false;
+      if (agentEntries.length === 0) return false;
 
-      // Sort by name (includes timestamp-like IDs) — most recent last
-      agentFiles.sort();
-      const latestAgent = path.join(subagentsDir, agentFiles[agentFiles.length - 1]!);
+      let newest: { name: string; mtimeMs: number } | null = null;
+      for (const entry of agentEntries) {
+        try {
+          const stat = await this.hostFs.stat(path.join(subagentsDir, entry.name));
+          if (stat && (!newest || stat.mtimeMs > newest.mtimeMs)) {
+            newest = { name: entry.name, mtimeMs: stat.mtimeMs };
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      if (!newest) return false;
+      const latestAgent = path.join(subagentsDir, newest.name);
 
       const lines = await this.readLastMessages(latestAgent, 50);
       const toolUseIds = new Set<string>();
