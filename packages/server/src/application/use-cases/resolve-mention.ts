@@ -18,7 +18,7 @@ export class ResolveMentionUseCase {
     commentId?: string;
     deliverableId?: string;
   }): Promise<void> {
-    const mention = this.mentionStore.getById(params.mentionId);
+    const mention = await this.mentionStore.getById(params.mentionId);
     if (!mention) throw new MentionNotFoundError(params.mentionId);
 
     if (!mention.isResolvableBy(params.agentName)) {

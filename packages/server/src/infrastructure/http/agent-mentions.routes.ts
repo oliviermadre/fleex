@@ -10,7 +10,7 @@ export function agentMentionsRoutes(container: Container) {
       Querystring: { ticket_id?: string };
     }>('/mentions/pending', async (request) => {
       const agentName = request.agent?.name ?? '';
-      let mentions = container.mentionStore.getPendingForAgent(agentName);
+      let mentions = await container.mentionStore.getPendingForAgent(agentName);
 
       if (request.query.ticket_id) {
         mentions = mentions.filter((m) => m.ticketId === request.query.ticket_id);
@@ -24,10 +24,10 @@ export function agentMentionsRoutes(container: Container) {
       Params: { id: string };
       Querystring: { status?: string; target_agent?: string; source_agent?: string };
     }>('/tickets/:id/mentions', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
-      let mentions = container.mentionStore.getByTicket(request.params.id);
+      let mentions = await container.mentionStore.getByTicket(request.params.id);
 
       if (request.query.status) {
         mentions = mentions.filter((m) => m.status === request.query.status);
@@ -46,7 +46,7 @@ export function agentMentionsRoutes(container: Container) {
     app.patch<{
       Params: { id: string };
     }>('/mentions/:id/acknowledge', async (request) => {
-      const mention = container.mentionStore.getById(request.params.id);
+      const mention = await container.mentionStore.getById(request.params.id);
       if (!mention) throw new MentionNotFoundError(request.params.id);
 
       const agentName = request.agent?.name ?? '';
@@ -76,7 +76,7 @@ export function agentMentionsRoutes(container: Container) {
         deliverableId: request.body?.deliverableId,
       });
 
-      const mention = container.mentionStore.getById(request.params.id)!;
+      const mention = (await container.mentionStore.getById(request.params.id))!;
       const dto = mention.toDTO();
       container.ticketBroadcast('mention:resolved', dto);
       return dto;

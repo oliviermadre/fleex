@@ -15,14 +15,14 @@ export class DetectMergeUseCase {
 
     for (const pr of mergedPRs) {
       // Find tickets linked to this PR's branch via worktree link
-      const byWorktree = this.ticketStore.getTicketsLinkedTo('worktree', '').filter((t) =>
+      const byWorktree = (await this.ticketStore.getTicketsLinkedTo('worktree', '')).filter((t) =>
         t.links.some(
           (l) => l.type === 'worktree' && l.ref.includes(pr.headRefName),
         ),
       );
 
       // Find tickets with github_pr link matching PR number
-      const byPR = this.ticketStore.getTicketsLinkedTo(
+      const byPR = await this.ticketStore.getTicketsLinkedTo(
         'github_pr',
         `${repoKey}#${pr.number}`,
       );

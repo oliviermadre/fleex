@@ -11,7 +11,7 @@ export class KillSessionUseCase {
   ) {}
 
   async execute(sessionId: string): Promise<void> {
-    const session = this.sessionStore.getById(sessionId);
+    const session = await this.sessionStore.getById(sessionId);
     if (!session) {
       throw new SessionNotFoundError(sessionId);
     }

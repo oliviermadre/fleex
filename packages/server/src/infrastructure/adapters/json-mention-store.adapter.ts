@@ -38,27 +38,27 @@ export class JsonMentionStore implements MentionStorePort {
     this.initialized = true;
   }
 
-  getByTicket(ticketId: string): TicketMentionEntity[] {
+  async getByTicket(ticketId: string): Promise<TicketMentionEntity[]> {
     return Array.from(this.mentions.values())
       .filter((m) => m.ticketId === ticketId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
-  getById(id: string): TicketMentionEntity | null {
+  async getById(id: string): Promise<TicketMentionEntity | null> {
     return this.mentions.get(id) ?? null;
   }
 
-  getByComment(commentId: string): TicketMentionEntity[] {
+  async getByComment(commentId: string): Promise<TicketMentionEntity[]> {
     return Array.from(this.mentions.values()).filter((m) => m.commentId === commentId);
   }
 
-  getPendingForAgent(agentName: string): TicketMentionEntity[] {
+  async getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]> {
     return Array.from(this.mentions.values())
       .filter((m) => m.targetAgent === agentName && m.status !== 'resolved')
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
-  getPendingCountForTicket(ticketId: string): number {
+  async getPendingCountForTicket(ticketId: string): Promise<number> {
     return Array.from(this.mentions.values())
       .filter((m) => m.ticketId === ticketId && m.status !== 'resolved')
       .length;

@@ -13,14 +13,15 @@ export function agentApiRoutes(container: Container) {
 
     // List boards
     app.get('/boards', async () => {
-      return container.ticketStore.getAllBoards().map((b) => {
-        const tickets = container.ticketStore.getTicketsByBoard(b.id);
+      const boards = await container.ticketStore.getAllBoards();
+      return Promise.all(boards.map(async (b) => {
+        const tickets = await container.ticketStore.getTicketsByBoard(b.id);
         const ticketCounts = {} as Record<TicketStatus, number>;
         for (const s of TICKET_STATUSES) {
           ticketCounts[s] = tickets.filter((t) => t.status === s).length;
         }
         return { ...b.toDTO(), ticketCounts };
-      });
+      }));
     });
 
     // List/filter tickets
@@ -28,19 +29,19 @@ export function agentApiRoutes(container: Container) {
       let tickets: TicketEntity[];
       if (request.query.board_id) {
         if (request.query.status) {
-          tickets = container.ticketStore.getTicketsByStatus(request.query.board_id, request.query.status);
+          tickets = await container.ticketStore.getTicketsByStatus(request.query.board_id, request.query.status);
         } else {
-          tickets = container.ticketStore.getTicketsByBoard(request.query.board_id);
+          tickets = await container.ticketStore.getTicketsByBoard(request.query.board_id);
         }
       } else {
-        tickets = container.ticketStore.getAllTickets();
+        tickets = await container.ticketStore.getAllTickets();
       }
       return tickets.map((t) => t.toDTO());
     });
 
     // Get ticket
     app.get<{ Params: { id: string } }>('/tickets/:id', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
       return ticket.toDTO();
     });
@@ -50,11 +51,11 @@ export function agentApiRoutes(container: Container) {
       '/tickets',
       async (request, reply) => {
         const { boardId, title, description, status, priority, tags } = request.body;
-        const board = container.ticketStore.getBoardById(boardId);
+        const board = await container.ticketStore.getBoardById(boardId);
         if (!board) throw new BoardNotFoundError(boardId);
 
         const targetStatus = status ?? 'backlog';
-        const existing = container.ticketStore.getTicketsByStatus(boardId, targetStatus);
+        const existing = await container.ticketStore.getTicketsByStatus(boardId, targetStatus);
         const maxPos = existing.reduce((max, t) => Math.max(max, t.position), -1);
 
         const ticket = TicketEntity.create({
@@ -86,7 +87,7 @@ export function agentApiRoutes(container: Container) {
 
     // Update ticket
     app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>('/tickets/:id', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const diff = ticket.update(request.body as Parameters<TicketEntity['update']>[0]);
@@ -118,7 +119,7 @@ export function agentApiRoutes(container: Container) {
 
     // Claim ticket
     app.patch<{ Params: { id: string } }>('/tickets/:id/claim', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const agentName = request.agent?.name ?? 'unknown';
@@ -142,7 +143,7 @@ export function agentApiRoutes(container: Container) {
 
     // Unclaim ticket
     app.patch<{ Params: { id: string } }>('/tickets/:id/unclaim', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const diff = ticket.unclaim();
@@ -165,7 +166,7 @@ export function agentApiRoutes(container: Container) {
 
     // Assign
     app.patch<{ Params: { id: string }; Body: { name: string } }>('/tickets/:id/assign', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const diff = ticket.assign(request.body.name);
@@ -188,7 +189,7 @@ export function agentApiRoutes(container: Container) {
 
     // Unassign
     app.patch<{ Params: { id: string } }>('/tickets/:id/unassign', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const diff = ticket.unassign();
@@ -211,7 +212,7 @@ export function agentApiRoutes(container: Container) {
 
     // Complete ticket
     app.patch<{ Params: { id: string } }>('/tickets/:id/complete', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const targetStatus: TicketStatus = ticket.status === 'done' ? 'doing' : 'done';
@@ -237,7 +238,7 @@ export function agentApiRoutes(container: Container) {
 
     // Next ticket for agent
     app.get<{ Querystring: { board_id?: string } }>('/tickets/next', async (request) => {
-      const ticket = container.ticketStore.getNextTicketForAgent(request.query.board_id);
+      const ticket = await container.ticketStore.getNextTicketForAgent(request.query.board_id);
       if (!ticket) return { ticket: null };
       return { ticket: ticket.toDTO() };
     });
@@ -245,7 +246,7 @@ export function agentApiRoutes(container: Container) {
     // Agent's claimed tickets
     app.get('/tickets/pending', async (request) => {
       const agentName = request.agent?.name ?? '';
-      const tickets = container.ticketStore.getClaimedByAgent(agentName);
+      const tickets = await container.ticketStore.getClaimedByAgent(agentName);
       return tickets.map((t) => t.toDTO());
     });
 

@@ -13,35 +13,35 @@ export class GetTicketContextUseCase {
     private readonly deliverableStore: DeliverableStorePort,
   ) {}
 
-  execute(params: {
+  async execute(params: {
     ticketId: string;
     agentName: string;
     commentsLimit?: number;
     activityLimit?: number;
-  }): TicketContext {
-    const ticket = this.ticketStore.getTicketById(params.ticketId);
+  }): Promise<TicketContext> {
+    const ticket = await this.ticketStore.getTicketById(params.ticketId);
     if (!ticket) throw new TicketNotFoundError(params.ticketId);
 
     const commentsLimit = params.commentsLimit ?? 50;
     const activityLimit = params.activityLimit ?? 20;
 
     // Get comments visible to this agent (public + private where agent is recipient)
-    const allComments = this.commentStore.getByTicket(params.ticketId);
+    const allComments = await this.commentStore.getByTicket(params.ticketId);
     const visibleComments = allComments
       .filter((c) => c.isVisibleTo(params.agentName))
       .slice(-commentsLimit);
 
     // Get mentions
-    const allMentions = this.mentionStore.getByTicket(params.ticketId);
+    const allMentions = await this.mentionStore.getByTicket(params.ticketId);
     const pendingMentions = allMentions.filter(
       (m) => m.targetAgent === params.agentName && m.status !== 'resolved',
     );
 
     // Get deliverables
-    const deliverables = this.deliverableStore.getByTicket(params.ticketId);
+    const deliverables = await this.deliverableStore.getByTicket(params.ticketId);
 
     // Get activity
-    const activity = this.ticketStore.getActivitiesByTicket(params.ticketId, activityLimit);
+    const activity = await this.ticketStore.getActivitiesByTicket(params.ticketId, activityLimit);
 
     return {
       ticket: ticket.toDTO(),

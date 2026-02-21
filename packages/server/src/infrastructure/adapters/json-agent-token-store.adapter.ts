@@ -38,11 +38,11 @@ export class JsonAgentTokenStore implements AgentTokenStorePort {
     this.initialized = true;
   }
 
-  getAll(): ApiTokenEntity[] {
+  async getAll(): Promise<ApiTokenEntity[]> {
     return Array.from(this.tokens.values());
   }
 
-  getByHash(hash: string): ApiTokenEntity | null {
+  async getByHash(hash: string): Promise<ApiTokenEntity | null> {
     const id = this.hashIndex.get(hash);
     if (!id) return null;
     return this.tokens.get(id) ?? null;
@@ -87,7 +87,7 @@ export class JsonAgentTokenStore implements AgentTokenStorePort {
 
   private async syncToDisk(): Promise<void> {
     try {
-      const data: SerializedToken[] = this.getAll().map((t) => ({
+      const data: SerializedToken[] = Array.from(this.tokens.values()).map((t) => ({
         id: t.id, name: t.name, prefix: t.prefix,
         hashedSecret: t.hashedSecret,
         lastUsedAt: t.lastUsedAt?.toISOString() ?? null,

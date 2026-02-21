@@ -39,13 +39,13 @@ export class JsonCommentStore implements CommentStorePort {
     this.initialized = true;
   }
 
-  getByTicket(ticketId: string): TicketCommentEntity[] {
+  async getByTicket(ticketId: string): Promise<TicketCommentEntity[]> {
     return Array.from(this.comments.values())
       .filter((c) => c.ticketId === ticketId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
-  getById(id: string): TicketCommentEntity | null {
+  async getById(id: string): Promise<TicketCommentEntity | null> {
     return this.comments.get(id) ?? null;
   }
 

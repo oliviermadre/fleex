@@ -37,7 +37,7 @@ export class CreateSessionUseCase {
     const defaultDisplayName = this.namingService.defaultDisplayName(request.type);
 
     // Gather existing tmux names for uniqueness check
-    const storedNames = this.sessionStore.getAll().map((s) => s.tmuxName);
+    const storedNames = (await this.sessionStore.getAll()).map((s) => s.tmuxName);
     const liveSessions = await this.tmux.listManagedSessions();
     const liveNames = liveSessions.map((s) => s.name);
     const existingTmuxNames = [...new Set([...storedNames, ...liveNames])];

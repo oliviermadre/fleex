@@ -10,11 +10,11 @@ export function agentCommentsRoutes(container: Container) {
       Params: { id: string };
       Querystring: { visibility?: string; since?: string; limit?: string; parentId?: string };
     }>('/tickets/:id/comments', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const agentName = request.agent?.name ?? '';
-      let comments = container.commentStore.getByTicket(request.params.id)
+      let comments = (await container.commentStore.getByTicket(request.params.id))
         .filter((c) => c.isVisibleTo(agentName));
 
       if (request.query.visibility) {
@@ -37,7 +37,7 @@ export function agentCommentsRoutes(container: Container) {
       Params: { id: string };
       Body: { body: string; visibility?: 'public' | 'private'; privateRecipients?: string[]; parentId?: string };
     }>('/tickets/:id/comments', async (request, reply) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const agentName = request.agent?.name ?? 'unknown';
@@ -69,7 +69,7 @@ export function agentCommentsRoutes(container: Container) {
       Params: { id: string; commentId: string };
       Body: { body: string };
     }>('/tickets/:id/comments/:commentId', async (request) => {
-      const comment = container.commentStore.getById(request.params.commentId);
+      const comment = await container.commentStore.getById(request.params.commentId);
       if (!comment) throw new CommentNotFoundError(request.params.commentId);
 
       const agentName = request.agent?.name ?? '';
@@ -85,7 +85,7 @@ export function agentCommentsRoutes(container: Container) {
       const newMentionNames = new Set(comment.mentions);
 
       // Remove mentions for agents no longer mentioned
-      const existingMentions = container.mentionStore.getByComment(comment.id);
+      const existingMentions = await container.mentionStore.getByComment(comment.id);
       for (const m of existingMentions) {
         if (!newMentionNames.has(m.targetAgent) && m.status !== 'resolved') {
           m.resolve();
@@ -119,7 +119,7 @@ export function agentCommentsRoutes(container: Container) {
     app.delete<{
       Params: { id: string; commentId: string };
     }>('/tickets/:id/comments/:commentId', async (request, reply) => {
-      const comment = container.commentStore.getById(request.params.commentId);
+      const comment = await container.commentStore.getById(request.params.commentId);
       if (!comment) throw new CommentNotFoundError(request.params.commentId);
 
       const agentName = request.agent?.name ?? '';
@@ -128,7 +128,7 @@ export function agentCommentsRoutes(container: Container) {
       }
 
       // Resolve any pending mentions from this comment
-      const mentions = container.mentionStore.getByComment(comment.id);
+      const mentions = await container.mentionStore.getByComment(comment.id);
       for (const m of mentions) {
         if (m.status !== 'resolved') {
           m.resolve();

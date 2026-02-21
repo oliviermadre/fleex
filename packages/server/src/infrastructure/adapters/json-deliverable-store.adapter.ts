@@ -38,13 +38,13 @@ export class JsonDeliverableStore implements DeliverableStorePort {
     this.initialized = true;
   }
 
-  getByTicket(ticketId: string): TicketDeliverableEntity[] {
+  async getByTicket(ticketId: string): Promise<TicketDeliverableEntity[]> {
     return Array.from(this.deliverables.values())
       .filter((d) => d.ticketId === ticketId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
-  getById(id: string): TicketDeliverableEntity | null {
+  async getById(id: string): Promise<TicketDeliverableEntity | null> {
     return this.deliverables.get(id) ?? null;
   }
 

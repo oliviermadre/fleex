@@ -14,7 +14,7 @@ export function agentWsPlugin(container: Container) {
   return async function (app: FastifyInstance) {
     const clients = new Map<WebSocket, AgentClient>();
 
-    app.get(WS_AGENT_PATH, { websocket: true }, (socket, request) => {
+    app.get(WS_AGENT_PATH, { websocket: true }, async (socket, request) => {
       const ws = socket as unknown as WebSocket;
 
       // Authenticate via query param
@@ -27,7 +27,7 @@ export function agentWsPlugin(container: Container) {
       }
 
       const hash = ApiTokenEntity.hashToken(token);
-      const tokenEntity = container.agentTokenStore.getByHash(hash);
+      const tokenEntity = await container.agentTokenStore.getByHash(hash);
       if (!tokenEntity) {
         ws.close(4001, 'Invalid token');
         return;
