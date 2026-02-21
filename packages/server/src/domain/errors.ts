@@ -67,3 +67,27 @@ export class LastBoardError extends DomainError {
     super('Cannot delete the last board', 'LAST_BOARD');
   }
 }
+
+export class CommentNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Comment not found: ${id}`, 'COMMENT_NOT_FOUND');
+  }
+}
+
+export class MentionNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Mention not found: ${id}`, 'MENTION_NOT_FOUND');
+  }
+}
+
+export class DeliverableNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Deliverable not found: ${id}`, 'DELIVERABLE_NOT_FOUND');
+  }
+}
+
+export class ForbiddenError extends DomainError {
+  constructor(message: string) {
+    super(message, 'FORBIDDEN');
+  }
+}

@@ -12,6 +12,10 @@ const CODE_TO_STATUS: Record<string, number> = {
   TICKET_NOT_FOUND: 404,
   API_TOKEN_INVALID: 401,
   LAST_BOARD: 422,
+  COMMENT_NOT_FOUND: 404,
+  MENTION_NOT_FOUND: 404,
+  DELIVERABLE_NOT_FOUND: 404,
+  FORBIDDEN: 403,
 };
 
 export function registerErrorHandler(app: FastifyInstance): void {

@@ -117,12 +117,86 @@ export interface AgentTokenCreated extends AgentToken {
   readonly secret: string;
 }
 
+// ── Comments ──
+
+export type CommentVisibility = 'public' | 'private';
+
+export interface TicketComment {
+  readonly id: string;
+  readonly ticketId: string;
+  readonly authorType: 'user' | 'agent';
+  readonly authorName: string;
+  readonly body: string;
+  readonly visibility: CommentVisibility;
+  readonly privateRecipients: string[];
+  readonly mentions: string[];
+  readonly parentId: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+// ── Mentions ──
+
+export type MentionStatus = 'pending' | 'acknowledged' | 'resolved';
+
+export interface TicketMention {
+  readonly id: string;
+  readonly ticketId: string;
+  readonly commentId: string;
+  readonly targetAgent: string;
+  readonly sourceAgent: string;
+  readonly status: MentionStatus;
+  readonly resolvedAt: string | null;
+  readonly resolvedCommentId: string | null;
+  readonly resolvedDeliverableId: string | null;
+  readonly createdAt: string;
+}
+
+// ── Deliverables ──
+
+export interface TicketDeliverable {
+  readonly id: string;
+  readonly ticketId: string;
+  readonly agentName: string;
+  readonly type: string;
+  readonly title: string;
+  readonly content: string;
+  readonly version: number;
+  readonly status: 'draft' | 'final';
+  readonly mentionId: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+// ── Context ──
+
+export interface TicketContext {
+  readonly ticket: Ticket;
+  readonly comments: TicketComment[];
+  readonly mentions: {
+    readonly pending: TicketMention[];
+    readonly all: TicketMention[];
+  };
+  readonly deliverables: TicketDeliverable[];
+  readonly activity: TicketActivity[];
+}
+
+// ── WebSocket ──
+
 export type TicketWsMessageType =
   | 'ticket:created'
   | 'ticket:updated'
   | 'ticket:deleted'
   | 'ticket:moved'
-  | 'board:updated';
+  | 'board:updated'
+  | 'comment:created'
+  | 'comment:updated'
+  | 'comment:deleted'
+  | 'mention:created'
+  | 'mention:acknowledged'
+  | 'mention:resolved'
+  | 'deliverable:created'
+  | 'deliverable:updated';
 
 export interface TicketWsMessage {
   readonly type: TicketWsMessageType;
