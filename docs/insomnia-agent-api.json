@@ -91,6 +91,14 @@
       "parentId": "wrk_agent_api",
       "metaSortKey": 700
     },
+    {
+      "_id": "fld_worktrees",
+      "_type": "request_group",
+      "name": "8. Worktrees",
+      "description": "Get or create a git worktree linked to a ticket. Idempotent creation for agent CWD setup.",
+      "parentId": "wrk_agent_api",
+      "metaSortKey": 800
+    },
 
     {
       "_id": "req_create_token",
@@ -633,6 +641,45 @@
       "authentication": {},
       "parentId": "fld_context",
       "metaSortKey": 701
+    },
+
+    {
+      "_id": "req_get_worktree",
+      "_type": "request",
+      "name": "Get Ticket Worktree",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/worktree",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_worktrees",
+      "metaSortKey": 801,
+      "description": "Returns the worktree linked to a ticket, or { linked: false, worktree: null } if none."
+    },
+    {
+      "_id": "req_create_worktree",
+      "_type": "request",
+      "name": "Create Ticket Worktree",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/worktree",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"baseBranch\": \"main\"\n}"
+      },
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_worktrees",
+      "metaSortKey": 802,
+      "description": "Creates a git worktree and links it to the ticket. Idempotent: returns existing (200) or creates new (201). Body is optional."
     }
   ]
 }

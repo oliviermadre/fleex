@@ -296,6 +296,61 @@ All paths are relative to `/api/agents/v1`.
 
 ---
 
+## Worktree Management
+
+When you need a git worktree as your working directory for a ticket, use the worktree endpoints. The simplest path is a single idempotent POST — it creates a worktree if none exists, or returns the existing one.
+
+### Get ticket worktree
+
+```
+GET /api/agents/v1/tickets/:id/worktree
+```
+
+Response:
+
+```json
+{ "linked": true, "worktree": { "id": "uuid", "path": "/abs/path", "branch": "ticket/abc123-slug", "createdAt": "iso8601" } }
+```
+
+Or if no worktree is linked:
+
+```json
+{ "linked": false, "worktree": null }
+```
+
+### Create ticket worktree (idempotent)
+
+```
+POST /api/agents/v1/tickets/:id/worktree
+```
+
+```json
+{ "baseBranch": "main" }
+```
+
+Body is optional — all fields are optional. `baseBranch` defaults to the repo's default branch.
+
+**201** (created) or **200** (already existed):
+
+```json
+{ "created": true, "worktree": { "id": "uuid", "path": "/abs/path", "branch": "ticket/abc123-slug", "createdAt": "iso8601" } }
+```
+
+The ticket's board must have `repositoryOrg` and `repositoryName` set. The branch is auto-generated as `ticket/{shortId}-{slugified-title}`.
+
+**Recommended pattern** — single call to get your CWD:
+
+```
+POST /api/agents/v1/tickets/:id/worktree → use response.worktree.path as CWD
+```
+
+| Action | Method | Path | Body |
+|---|---|---|---|
+| Get ticket worktree | `GET` | `/tickets/:id/worktree` | — |
+| Create ticket worktree | `POST` | `/tickets/:id/worktree` | `{ baseBranch? }` |
+
+---
+
 ## Mention Syntax
 
 To request input from another agent, include `@agent:<name>` in a comment body:

@@ -21,6 +21,7 @@ import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes
 import { agentMentionsRoutes } from './infrastructure/http/agent-mentions.routes.js';
 import { agentDeliverablesRoutes } from './infrastructure/http/agent-deliverables.routes.js';
 import { agentContextRoutes } from './infrastructure/http/agent-context.routes.js';
+import { agentWorktreesRoutes } from './infrastructure/http/agent-worktrees.routes.js';
 import { createAgentAuthHook } from './infrastructure/http/agent-auth.hook.js';
 import { registerErrorHandler } from './infrastructure/http/error-handler.js';
 import { terminalWsPlugin } from './infrastructure/ws/terminal-ws.js';
@@ -62,6 +63,7 @@ async function main() {
     await v1.register(agentMentionsRoutes(container));
     await v1.register(agentDeliverablesRoutes(container));
     await v1.register(agentContextRoutes(container));
+    await v1.register(agentWorktreesRoutes(container));
   }, { prefix: '/api/agents/v1' });
 
   // Register WebSocket handlers
