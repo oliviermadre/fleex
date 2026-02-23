@@ -1,0 +1,638 @@
+{
+  "__export_format": 4,
+  "__export_source": "insomnia.desktop",
+  "__export_date": "2026-02-23T00:00:00.000Z",
+  "resources": [
+    {
+      "_id": "wrk_agent_api",
+      "_type": "workspace",
+      "name": "Agent Session Manager — Agent API",
+      "description": "Complete collection for testing the Agent API (auth, tickets, comments, mentions, deliverables, context).",
+      "scope": "collection",
+      "parentId": null
+    },
+    {
+      "_id": "env_base",
+      "_type": "environment",
+      "name": "Base Environment",
+      "parentId": "wrk_agent_api",
+      "data": {}
+    },
+    {
+      "_id": "env_local",
+      "_type": "environment",
+      "name": "Kind / Tilt (local)",
+      "parentId": "env_base",
+      "data": {
+        "base_url": "https://claude-ai-agents-ticketing-design-0qypx.agent-session-manager.127.0.0.1.nip.io",
+        "agent_token": "",
+        "agent_name": "project-manager",
+        "board_id": "",
+        "ticket_id": "",
+        "comment_id": "",
+        "mention_id": "",
+        "deliverable_id": ""
+      }
+    },
+
+    {
+      "_id": "fld_tokens",
+      "_type": "request_group",
+      "name": "1. Token Management",
+      "description": "Create, list, and revoke agent API tokens. No auth required.",
+      "parentId": "wrk_agent_api",
+      "metaSortKey": 100
+    },
+    {
+      "_id": "fld_settings",
+      "_type": "request_group",
+      "name": "2. Agent Settings",
+      "description": "Read and update the calling agent's settings.",
+      "parentId": "wrk_agent_api",
+      "metaSortKey": 200
+    },
+    {
+      "_id": "fld_boards",
+      "_type": "request_group",
+      "name": "3. Boards & Tickets",
+      "description": "Board listing, ticket CRUD, claim/assign/complete workflows.",
+      "parentId": "wrk_agent_api",
+      "metaSortKey": 300
+    },
+    {
+      "_id": "fld_comments",
+      "_type": "request_group",
+      "name": "4. Comments",
+      "description": "Ticket comments with @agent mention support.",
+      "parentId": "wrk_agent_api",
+      "metaSortKey": 400
+    },
+    {
+      "_id": "fld_mentions",
+      "_type": "request_group",
+      "name": "5. Mentions",
+      "description": "Poll, acknowledge, and resolve agent mentions.",
+      "parentId": "wrk_agent_api",
+      "metaSortKey": 500
+    },
+    {
+      "_id": "fld_deliverables",
+      "_type": "request_group",
+      "name": "6. Deliverables",
+      "description": "Submit and manage ticket deliverables.",
+      "parentId": "wrk_agent_api",
+      "metaSortKey": 600
+    },
+    {
+      "_id": "fld_context",
+      "_type": "request_group",
+      "name": "7. Context",
+      "description": "Single-call endpoint returning full ticket context for LLM consumption.",
+      "parentId": "wrk_agent_api",
+      "metaSortKey": 700
+    },
+
+    {
+      "_id": "req_create_token",
+      "_type": "request",
+      "name": "Create Token",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/agent-tokens",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"project-manager\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_tokens",
+      "metaSortKey": 101
+    },
+    {
+      "_id": "req_list_tokens",
+      "_type": "request",
+      "name": "List Tokens",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agent-tokens",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_tokens",
+      "metaSortKey": 102
+    },
+    {
+      "_id": "req_revoke_token",
+      "_type": "request",
+      "name": "Revoke Token",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/api/agent-tokens/{{ _.agent_token_id }}",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_tokens",
+      "metaSortKey": 103,
+      "description": "Replace agent_token_id with the id returned by Create Token."
+    },
+
+    {
+      "_id": "req_get_settings",
+      "_type": "request",
+      "name": "Get Settings",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/settings",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_settings",
+      "metaSortKey": 201
+    },
+    {
+      "_id": "req_patch_settings",
+      "_type": "request",
+      "name": "Update Settings",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/agents/v1/settings",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_settings",
+      "metaSortKey": 202
+    },
+
+    {
+      "_id": "req_list_boards",
+      "_type": "request",
+      "name": "List Boards",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/boards",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 301
+    },
+    {
+      "_id": "req_list_tickets",
+      "_type": "request",
+      "name": "List Tickets",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [
+        { "name": "board_id", "value": "{{ _.board_id }}", "disabled": false },
+        { "name": "status", "value": "", "disabled": true }
+      ],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 302
+    },
+    {
+      "_id": "req_get_ticket",
+      "_type": "request",
+      "name": "Get Ticket",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 303
+    },
+    {
+      "_id": "req_create_ticket",
+      "_type": "request",
+      "name": "Create Ticket",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"boardId\": \"{{ _.board_id }}\",\n  \"title\": \"Clone repository and set up local environment\",\n  \"description\": \"As an agent, I need to:\\n1. Clone the target repository\\n2. Install dependencies with `bun install`\\n3. Run the test suite to verify green baseline\\n4. Report back with environment status\",\n  \"status\": \"todo\",\n  \"priority\": \"high\",\n  \"tags\": [\"setup\", \"infra\"]\n}"
+      },
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 304
+    },
+    {
+      "_id": "req_update_ticket",
+      "_type": "request",
+      "name": "Update Ticket",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"status\": \"doing\",\n  \"priority\": \"medium\",\n  \"tags\": [\"setup\", \"infra\", \"in-progress\"]\n}"
+      },
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 305
+    },
+    {
+      "_id": "req_delete_ticket",
+      "_type": "request",
+      "name": "Delete Ticket",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 306
+    },
+    {
+      "_id": "req_next_ticket",
+      "_type": "request",
+      "name": "Next Unassigned Ticket",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/next",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [
+        { "name": "board_id", "value": "{{ _.board_id }}", "disabled": true }
+      ],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 307
+    },
+    {
+      "_id": "req_pending_tickets",
+      "_type": "request",
+      "name": "My Claimed Tickets",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/pending",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 308
+    },
+    {
+      "_id": "req_claim_ticket",
+      "_type": "request",
+      "name": "Claim Ticket",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/claim",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 309
+    },
+    {
+      "_id": "req_unclaim_ticket",
+      "_type": "request",
+      "name": "Unclaim Ticket",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/unclaim",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 310
+    },
+    {
+      "_id": "req_assign_ticket",
+      "_type": "request",
+      "name": "Assign Ticket",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/assign",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"developer-agent\"\n}"
+      },
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 311
+    },
+    {
+      "_id": "req_complete_ticket",
+      "_type": "request",
+      "name": "Toggle Complete",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/complete",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_boards",
+      "metaSortKey": 312
+    },
+
+    {
+      "_id": "req_list_comments",
+      "_type": "request",
+      "name": "List Comments",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/comments",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [
+        { "name": "limit", "value": "50", "disabled": true },
+        { "name": "visibility", "value": "", "disabled": true },
+        { "name": "since", "value": "", "disabled": true },
+        { "name": "parentId", "value": "", "disabled": true }
+      ],
+      "authentication": {},
+      "parentId": "fld_comments",
+      "metaSortKey": 401
+    },
+    {
+      "_id": "req_post_comment",
+      "_type": "request",
+      "name": "Post Comment",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/comments",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"body\": \"@agent:developer-agent I've reviewed the requirements. Please clone the repo and run `bun install` to set up the environment. Report back once tests are green.\",\n  \"visibility\": \"public\"\n}"
+      },
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_comments",
+      "metaSortKey": 402
+    },
+    {
+      "_id": "req_edit_comment",
+      "_type": "request",
+      "name": "Edit Comment",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/comments/{{ _.comment_id }}",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"body\": \"@agent:developer-agent Updated instructions: please also run the linter before reporting back.\"\n}"
+      },
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_comments",
+      "metaSortKey": 403
+    },
+    {
+      "_id": "req_delete_comment",
+      "_type": "request",
+      "name": "Delete Comment",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/comments/{{ _.comment_id }}",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_comments",
+      "metaSortKey": 404
+    },
+
+    {
+      "_id": "req_pending_mentions",
+      "_type": "request",
+      "name": "My Pending Mentions",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/mentions/pending",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [
+        { "name": "ticket_id", "value": "", "disabled": true }
+      ],
+      "authentication": {},
+      "parentId": "fld_mentions",
+      "metaSortKey": 501
+    },
+    {
+      "_id": "req_ticket_mentions",
+      "_type": "request",
+      "name": "Ticket Mentions",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/mentions",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [
+        { "name": "status", "value": "", "disabled": true },
+        { "name": "target_agent", "value": "", "disabled": true },
+        { "name": "source_agent", "value": "", "disabled": true }
+      ],
+      "authentication": {},
+      "parentId": "fld_mentions",
+      "metaSortKey": 502
+    },
+    {
+      "_id": "req_ack_mention",
+      "_type": "request",
+      "name": "Acknowledge Mention",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/agents/v1/mentions/{{ _.mention_id }}/acknowledge",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_mentions",
+      "metaSortKey": 503
+    },
+    {
+      "_id": "req_resolve_mention",
+      "_type": "request",
+      "name": "Resolve Mention",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/agents/v1/mentions/{{ _.mention_id }}/resolve",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"deliverableId\": \"{{ _.deliverable_id }}\"\n}"
+      },
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_mentions",
+      "metaSortKey": 504
+    },
+
+    {
+      "_id": "req_list_deliverables",
+      "_type": "request",
+      "name": "List Deliverables",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/deliverables",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [
+        { "name": "agent_name", "value": "", "disabled": true },
+        { "name": "type", "value": "", "disabled": true },
+        { "name": "status", "value": "", "disabled": true }
+      ],
+      "authentication": {},
+      "parentId": "fld_deliverables",
+      "metaSortKey": 601
+    },
+    {
+      "_id": "req_get_deliverable",
+      "_type": "request",
+      "name": "Get Deliverable",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/deliverables/{{ _.deliverable_id }}",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_deliverables",
+      "metaSortKey": 602
+    },
+    {
+      "_id": "req_submit_deliverable",
+      "_type": "request",
+      "name": "Submit Deliverable",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/deliverables",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"type\": \"functional-spec\",\n  \"title\": \"Environment Setup Report\",\n  \"content\": \"# Environment Setup Report\\n\\n## Status: OK\\n\\n### Steps completed\\n\\n1. Repository cloned successfully\\n2. `bun install` — all dependencies resolved\\n3. Test suite — **42 passing**, 0 failing\\n4. Linter — no errors\\n\\n### Environment details\\n\\n- **Node**: v20.11.0\\n- **Bun**: 1.1.38\\n- **OS**: Linux 6.1 (container)\\n\",\n  \"status\": \"final\"\n}"
+      },
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_deliverables",
+      "metaSortKey": 603
+    },
+    {
+      "_id": "req_update_deliverable",
+      "_type": "request",
+      "name": "Update Deliverable",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/deliverables/{{ _.deliverable_id }}",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"content\": \"# Environment Setup Report (updated)\\n\\nAdded missing section on CI configuration.\",\n  \"status\": \"final\"\n}"
+      },
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" },
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "parentId": "fld_deliverables",
+      "metaSortKey": 604
+    },
+
+    {
+      "_id": "req_ticket_context",
+      "_type": "request",
+      "name": "Full Ticket Context",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/agents/v1/tickets/{{ _.ticket_id }}/context",
+      "body": {},
+      "headers": [
+        { "name": "Authorization", "value": "Bearer {{ _.agent_token }}" },
+        { "name": "X-Agent-Name", "value": "{{ _.agent_name }}" }
+      ],
+      "parameters": [
+        { "name": "comments_limit", "value": "50", "disabled": true },
+        { "name": "activity_limit", "value": "20", "disabled": true }
+      ],
+      "authentication": {},
+      "parentId": "fld_context",
+      "metaSortKey": 701
+    }
+  ]
+}
