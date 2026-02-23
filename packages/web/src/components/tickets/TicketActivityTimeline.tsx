@@ -35,13 +35,18 @@ export function TicketActivityTimeline({ ticketId }: { ticketId: string }) {
     api.fetchTicketActivity(ticketId).then(setActivities).catch(() => {});
   }, [ticketId]);
 
-  if (activities.length === 0) return null;
+  if (activities.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-sm text-[var(--theme-text-muted)]">No activity yet</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="mt-6">
-      <h3 className="mb-3 text-xs font-semibold text-[var(--theme-text-secondary)]">Activity</h3>
+    <div>
       <div className="flex flex-col gap-2">
-        {activities.slice(0, 20).map((a) => (
+        {activities.slice(0, 50).map((a) => (
           <div key={a.id} className="flex items-start gap-2 text-xs">
             <div className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--theme-text-muted)]" />
             <div className="flex-1">

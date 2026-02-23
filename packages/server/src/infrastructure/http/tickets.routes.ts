@@ -329,5 +329,42 @@ export function ticketRoutes(container: Container) {
         return { ok: true };
       },
     );
+
+    // ── Comments (web) ──
+
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/comments', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const comments = (await container.commentStore.getByTicket(request.params.id))
+        .filter((c) => c.isVisibleTo('user'));
+
+      return comments.map((c) => c.toDTO());
+    });
+
+    app.post<{ Params: { id: string }; Body: { body: string } }>(
+      '/api/tickets/:id/comments',
+      async (request, reply) => {
+        const ticket = await container.ticketStore.getTicketById(request.params.id);
+        if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+        const { comment, createdMentions } = await container.postComment.execute({
+          ticketId: request.params.id,
+          authorType: 'user',
+          authorName: 'user',
+          body: request.body.body,
+          visibility: 'public',
+        });
+
+        const dto = comment.toDTO();
+        container.ticketBroadcast('comment:created', dto);
+
+        for (const mention of createdMentions) {
+          container.ticketBroadcast('mention:created', mention.toDTO());
+        }
+
+        return reply.code(201).send(dto);
+      },
+    );
   };
 }
