@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import type { CreateWorktreeRequest } from '@asm/shared';
 import { WorktreeError } from '../../domain/errors.js';
 import type { GitPort } from '../ports/git.port.js';
@@ -10,6 +11,31 @@ export class CreateWorktreeUseCase {
   ) {}
 
   async execute(repoPath: string, wtPath: string, request: CreateWorktreeRequest): Promise<string | null> {
+    // Check if repository exists, if not attempt to clone it
+    if (!existsSync(repoPath)) {
+      this.logger.info('Repository does not exist, attempting to clone', { repoPath });
+      
+      // Try to derive the clone URL from the repository path
+      // Expected path format: /base/path/org/repo
+      const pathParts = repoPath.split('/');
+      const repo = pathParts[pathParts.length - 1];
+      const org = pathParts[pathParts.length - 2];
+      
+      if (!org || !repo) {
+        throw new WorktreeError(`Cannot derive organization and repository name from path: ${repoPath}`);
+      }
+      
+      const cloneUrl = `https://github.com/${org}/${repo}.git`;
+      
+      try {
+        await this.git.clone(cloneUrl, repoPath);
+        this.logger.info('Repository cloned successfully', { cloneUrl, repoPath });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new WorktreeError(`Failed to clone repository from ${cloneUrl}: ${message}`);
+      }
+    }
+
     try {
       await this.git.fetch(repoPath);
     } catch {

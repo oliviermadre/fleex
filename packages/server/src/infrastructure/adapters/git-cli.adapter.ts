@@ -224,6 +224,11 @@ export class GitCliAdapter implements GitPort {
     this.logger.debug('Copied gitignored files', { sourceRepo, targetPath, count: paths.length });
   }
 
+  async clone(remote: string, targetPath: string): Promise<void> {
+    await this.execFn('git', ['clone', remote, targetPath]);
+    this.logger.debug('Repository cloned', { remote, targetPath });
+  }
+
   private parseRemoteUrl(url: string): { org: string; name: string } {
     // Handle SSH: git@github.com:org/name.git
     const sshMatch = /[:/]([^/]+)\/([^/]+?)(?:\.git)?$/.exec(url);

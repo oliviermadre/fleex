@@ -92,9 +92,14 @@ export class FakeSessionStore implements SessionStorePort {
 
 export class FakeGitPort implements GitPort {
   private infoByPath = new Map<string, GitRemoteInfo>();
+  private cloneLog: Array<{ remote: string; targetPath: string }> = [];
 
   setInfo(cwd: string, info: GitRemoteInfo): void {
     this.infoByPath.set(cwd, info);
+  }
+
+  getCloneLog(): Array<{ remote: string; targetPath: string }> {
+    return [...this.cloneLog];
   }
 
   async getInfo(cwd: string): Promise<GitRemoteInfo> {
@@ -121,6 +126,9 @@ export class FakeGitPort implements GitPort {
     return { commitsAhead: 0, commitsBehind: 0, filesChanged: 0, additions: 0, deletions: 0 };
   }
   async copyIgnoredFiles(): Promise<void> {}
+  async clone(remote: string, targetPath: string): Promise<void> {
+    this.cloneLog.push({ remote, targetPath });
+  }
 }
 
 export class FakeConfigPort implements ConfigPort {
