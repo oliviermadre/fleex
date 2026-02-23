@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { BoardNotFoundError, TicketNotFoundError, WorktreeError } from '../../domain/errors.js';
+import { TicketNotFoundError, WorktreeError } from '../../domain/errors.js';
 import type { Container } from '../container.js';
 
 function sanitizeBranchForPath(branch: string): string {
@@ -68,17 +68,33 @@ export function agentWorktreesRoutes(container: Container) {
           });
         }
 
-        // Resolve repo from board
-        const board = await container.ticketStore.getBoardById(ticket.boardId);
-        if (!board) throw new BoardNotFoundError(ticket.boardId);
-        if (!board.repositoryOrg || !board.repositoryName) {
-          throw new WorktreeError('Board has no repository configured');
+        // Resolve repo: ticket repository link first, then board fallback
+        let repoOrg: string | undefined;
+        let repoName: string | undefined;
+
+        const repoLink = ticket.links.find((l) => l.type === 'repository');
+        if (repoLink?.ref?.includes('/')) {
+          const [org, name] = repoLink.ref.split('/');
+          repoOrg = org;
+          repoName = name;
         }
 
-        const repoPath = join(container.config.get().basePath, board.repositoryOrg, board.repositoryName);
+        if (!repoOrg || !repoName) {
+          const board = await container.ticketStore.getBoardById(ticket.boardId);
+          if (board?.repositoryOrg && board.repositoryName) {
+            repoOrg = board.repositoryOrg;
+            repoName = board.repositoryName;
+          }
+        }
+
+        if (!repoOrg || !repoName) {
+          throw new WorktreeError('No repository found on ticket or board');
+        }
+
+        const repoPath = join(container.config.get().basePath, repoOrg, repoName);
         const branchName = buildBranchName(ticket.title, ticket.id);
         const sanitized = sanitizeBranchForPath(branchName);
-        const dirName = `${board.repositoryName}.${sanitized}`;
+        const dirName = `${repoName}.${sanitized}`;
         const wtPath = join(repoPath, '..', dirName);
 
         const baseBranch = request.body?.baseBranch;
