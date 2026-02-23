@@ -105,10 +105,17 @@ docker_build(
 )
 
 # ---------------------------------------------------------------------------
+# Env vars from .env / .env.local
+# ---------------------------------------------------------------------------
+_dotenv = load_env_files(_self_dir)
+_EXTRA_ENV = env_to_yaml(_dotenv)
+
+# ---------------------------------------------------------------------------
 # Kubernetes resources
 # ---------------------------------------------------------------------------
 k8s_yaml(blob(_read_yaml('resources.yaml',
     app=APP_NAME, ns=NAMESPACE, homedir=HOST_HOMEDIR, hostip=HOST_IP,
+    extra_env=_EXTRA_ENV,
 )))
 
 # ---------------------------------------------------------------------------
