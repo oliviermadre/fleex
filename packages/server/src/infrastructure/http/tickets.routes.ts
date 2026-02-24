@@ -330,6 +330,26 @@ export function ticketRoutes(container: Container) {
       },
     );
 
+    // ── Mentions (web) ──
+
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/mentions', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const mentions = await container.mentionStore.getByTicket(request.params.id);
+      return mentions.map((m) => m.toDTO());
+    });
+
+    // ── Deliverables (web) ──
+
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/deliverables', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const deliverables = await container.deliverableStore.getByTicket(request.params.id);
+      return deliverables.map((d) => d.toDTO());
+    });
+
     // ── Comments (web) ──
 
     app.get<{ Params: { id: string } }>('/api/tickets/:id/comments', async (request) => {

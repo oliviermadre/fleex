@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Session } from '@asm/shared';
+import type { Session, TicketDeliverable, TicketMention, TicketWsMessage } from '@asm/shared';
+import { ticketWs } from '../../services/websocket';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -7,12 +8,14 @@ import { TicketDetailHeader } from './TicketDetailHeader';
 import { TicketMetaSidebar } from './TicketMetaSidebar';
 import { TicketActivityTimeline } from './TicketActivityTimeline';
 import { TicketComments } from './TicketComments';
+import { TicketDeliverables } from './TicketDeliverables';
+import { TicketMentions } from './TicketMentions';
 import { SessionTerminalOverlay } from './SessionTerminalOverlay';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import * as api from '../../services/api';
 
 type DescriptionMode = 'write' | 'preview' | 'split';
-type MainTab = 'description' | 'comments' | 'activity';
+type MainTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity';
 
 export function TicketDetail({ ticketId }: { ticketId: string }) {
   const tickets = useTicketStore((s) => s.tickets);
@@ -29,6 +32,8 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [overlaySession, setOverlaySession] = useState<Session | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [deliverableCount, setDeliverableCount] = useState(0);
+  const [mentionCount, setMentionCount] = useState(0);
 
   // Track initial description to know if it changed when leaving
   const initialDescRef = useRef('');
@@ -42,6 +47,30 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
       descriptionRef.current = ticket.description;
     }
   }, [ticket?.id]); // Reset on ticket change, not on every ticket update
+
+  // Fetch deliverable & mention counts
+  useEffect(() => {
+    api.fetchTicketDeliverables(ticketId).then((d) => setDeliverableCount(d.length)).catch(() => {});
+    api.fetchTicketMentions(ticketId).then((m) => setMentionCount(m.length)).catch(() => {});
+  }, [ticketId]);
+
+  // Track deliverable & mention counts via WebSocket
+  useEffect(() => {
+    const decoder = new TextDecoder();
+    const unsub = ticketWs.onMessage((buf: ArrayBuffer) => {
+      try {
+        const msg = JSON.parse(decoder.decode(buf)) as TicketWsMessage;
+        if (msg.type === 'deliverable:created') {
+          const d = msg.data as TicketDeliverable;
+          if (d.ticketId === ticketId) setDeliverableCount((c) => c + 1);
+        } else if (msg.type === 'mention:created') {
+          const m = msg.data as TicketMention;
+          if (m.ticketId === ticketId) setMentionCount((c) => c + 1);
+        }
+      } catch { /* ignore */ }
+    });
+    return unsub;
+  }, [ticketId]);
 
   // Flush pending description changes and log activity on unmount / ticket switch
   useEffect(() => {
@@ -179,6 +208,8 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   const mainTabs: { key: MainTab; label: string }[] = [
     { key: 'description', label: 'Description' },
     { key: 'comments', label: 'Comments' },
+    { key: 'mentions', label: `Mentions${mentionCount > 0 ? ` (${mentionCount})` : ''}` },
+    { key: 'deliverables', label: `Deliverables${deliverableCount > 0 ? ` (${deliverableCount})` : ''}` },
     { key: 'activity', label: 'Activity' },
   ];
 
@@ -290,6 +321,16 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
             {/* Comments tab */}
             {mainTab === 'comments' && (
               <TicketComments ticketId={ticketId} />
+            )}
+
+            {/* Mentions tab */}
+            {mainTab === 'mentions' && (
+              <TicketMentions ticketId={ticketId} />
+            )}
+
+            {/* Deliverables tab */}
+            {mainTab === 'deliverables' && (
+              <TicketDeliverables ticketId={ticketId} />
             )}
 
             {/* Activity tab */}
