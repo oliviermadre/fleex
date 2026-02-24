@@ -1,15 +1,15 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { cn } from '../../lib/cn';
 
 export function ScratchpadsContent() {
+  const navigate = useNavigate();
   const scratchpadList = useScratchpadStore((s) => s.scratchpadList);
   const scratchpadListLoaded = useScratchpadStore((s) => s.scratchpadListLoaded);
   const loadScratchpadList = useScratchpadStore((s) => s.loadScratchpadList);
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
-  const setSelectedScratchpadKey = useScratchpadStore((s) => s.setSelectedScratchpadKey);
-  const load = useScratchpadStore((s) => s.load);
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
 
   useEffect(() => {
@@ -17,10 +17,10 @@ export function ScratchpadsContent() {
   }, [loadScratchpadList, resolvedRepositories]);
 
   const handleSelect = (key: string) => {
-    setSelectedScratchpadKey(key);
-    const entries = useScratchpadStore.getState().entries;
-    if (!entries[key]?.loaded) {
-      load(key);
+    if (key === '__global__') {
+      navigate('/scratchpads/global', { replace: true });
+    } else {
+      navigate(`/scratchpads/${key}`, { replace: true });
     }
   };
 

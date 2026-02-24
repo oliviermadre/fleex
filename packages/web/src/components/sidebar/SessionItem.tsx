@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Session } from '@asm/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -20,10 +21,9 @@ interface Props {
 }
 
 export function SessionItem({ session }: Props) {
+  const navigate = useNavigate();
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
-  const selectSession = useSessionStore((s) => s.selectSession);
-  const openSplit = useSessionStore((s) => s.openSplit);
   const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
   const displayNames = useSettingsStore((s) => s.settings.sessionDisplayNames);
   const setSessionDisplayName = useSettingsStore((s) => s.setSessionDisplayName);
@@ -139,7 +139,7 @@ export function SessionItem({ session }: Props) {
         }
         // Shift+click: open in split pane
         if (e.shiftKey && selectedSessionId && selectedSessionId !== session.id) {
-          openSplit(session.id);
+          navigate(`/sessions/${selectedSessionId}?split=${session.id}`, { replace: true });
           return;
         }
         // If clicking on a session already visible in split, just focus that pane
@@ -152,7 +152,7 @@ export function SessionItem({ session }: Props) {
           return;
         }
         // Normal click: select session (exits split mode)
-        selectSession(session.id);
+        navigate(`/sessions/${session.id}`, { replace: true });
       }}
       onDoubleClick={(e) => {
         e.preventDefault();

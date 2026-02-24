@@ -1,4 +1,5 @@
 import type { RepositorySummary } from '@asm/shared';
+import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
 import { useCallback } from 'react';
@@ -8,8 +9,8 @@ interface Props {
 }
 
 export function RepoItem({ summary }: Props) {
+  const navigate = useNavigate();
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
-  const selectRepo = useUIStore((s) => s.selectRepo);
   const openScratchpadForRepo = useUIStore((s) => s.openScratchpadForRepo);
   const key = `${summary.org}/${summary.name}`;
   const isSelected = selectedRepoKey === key;
@@ -31,7 +32,7 @@ export function RepoItem({ summary }: Props) {
           ? 'border-l-2 border-[#D77655] bg-zinc-800/40'
           : 'border-l-2 border-transparent hover:bg-zinc-800/20',
       )}
-      onClick={() => selectRepo(key)}
+      onClick={() => navigate(`/repositories/${key}`, { replace: true })}
     >
       <div className="flex items-center w-full">
         <span className="truncate text-sm text-zinc-200">{summary.name}</span>
