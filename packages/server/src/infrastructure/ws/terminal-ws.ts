@@ -39,7 +39,7 @@ export function terminalWsPlugin(container: Container) {
               const { sessionId, cols, rows } = parseAttachPayload(payload);
               container.logger.info('Terminal ATTACH request', { sessionId, cols, rows });
 
-              const session = container.sessionStore.getById(sessionId);
+              const session = await container.sessionStore.getById(sessionId);
               if (!session) {
                 container.logger.warn('Session not found for attach', { sessionId });
                 sendError(socket, `Session not found: ${sessionId}`);

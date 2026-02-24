@@ -227,6 +227,16 @@ export function KanbanCard({
         {ticket.blocked && (
           <span className="rounded bg-red-500/20 px-1 text-red-400">blocked</span>
         )}
+        {ticket.assignee && (
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400" title={ticket.assignee}>
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+              <rect x="2" y="3" width="12" height="10" rx="1.5" />
+              <circle cx="8" cy="7" r="1.5" />
+              <path d="M5 12c0-1.5 1.3-2.5 3-2.5s3 1 3 2.5" />
+            </svg>
+            <span className="max-w-[60px] truncate">{ticket.assignee}</span>
+          </span>
+        )}
 
         {/* Time in column */}
         <span className="text-[var(--theme-text-faint)]" title={`In this column since ${new Date(ticket.statusChangedAt).toLocaleString()}`}>

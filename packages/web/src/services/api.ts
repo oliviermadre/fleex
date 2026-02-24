@@ -326,6 +326,30 @@ export async function syncGithubIssue(ticketId: string): Promise<import('@asm/sh
   });
 }
 
+// ── Ticket Mentions API ──
+
+export async function fetchTicketMentions(ticketId: string): Promise<import('@asm/shared').TicketMention[]> {
+  return request<import('@asm/shared').TicketMention[]>(`/tickets/${encodeURIComponent(ticketId)}/mentions`);
+}
+
+// ── Ticket Deliverables API ──
+
+export async function fetchTicketDeliverables(ticketId: string): Promise<import('@asm/shared').TicketDeliverable[]> {
+  return request<import('@asm/shared').TicketDeliverable[]>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
+}
+
+// ── Ticket Comments API ──
+
+export async function fetchTicketComments(ticketId: string): Promise<import('@asm/shared').TicketComment[]> {
+  return request<import('@asm/shared').TicketComment[]>(`/tickets/${encodeURIComponent(ticketId)}/comments`);
+}
+
+export async function postTicketComment(ticketId: string, body: string): Promise<import('@asm/shared').TicketComment> {
+  return request<import('@asm/shared').TicketComment>(`/tickets/${encodeURIComponent(ticketId)}/comments`, {
+    method: 'POST', body: JSON.stringify({ body }),
+  });
+}
+
 // ── Agent Tokens API ──
 
 export async function fetchAgentTokens(): Promise<import('@asm/shared').AgentToken[]> {

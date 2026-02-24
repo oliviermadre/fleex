@@ -19,7 +19,7 @@ export function sessionRoutes(container: Container) {
     });
 
     app.get<{ Params: { id: string } }>('/api/sessions/:id', async (request, reply) => {
-      const session = container.sessionStore.getById(request.params.id);
+      const session = await container.sessionStore.getById(request.params.id);
       if (!session) {
         return reply.code(404).send({ error: 'Session not found' });
       }
@@ -30,7 +30,7 @@ export function sessionRoutes(container: Container) {
       '/api/sessions/:id/rename',
       async (request, reply) => {
         await container.renameSession.execute(request.params.id, request.body.displayName);
-        const session = container.sessionStore.getById(request.params.id);
+        const session = await container.sessionStore.getById(request.params.id);
         return reply.code(200).send(session?.toDTO());
       },
     );

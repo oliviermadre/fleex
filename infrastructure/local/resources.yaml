@@ -30,6 +30,7 @@ spec:
               value: "http://{hostip}:3001"
             - name: HOST_HOMEDIR
               value: "{homedir}"
+{extra_env}
           resources:
             requests:
               memory: "512Mi"

@@ -17,12 +17,18 @@ import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js'
 import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
 import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
 import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
+import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes.js';
+import { agentMentionsRoutes } from './infrastructure/http/agent-mentions.routes.js';
+import { agentDeliverablesRoutes } from './infrastructure/http/agent-deliverables.routes.js';
+import { agentContextRoutes } from './infrastructure/http/agent-context.routes.js';
+import { agentWorktreesRoutes } from './infrastructure/http/agent-worktrees.routes.js';
 import { createAgentAuthHook } from './infrastructure/http/agent-auth.hook.js';
 import { registerErrorHandler } from './infrastructure/http/error-handler.js';
 import { terminalWsPlugin } from './infrastructure/ws/terminal-ws.js';
 import { dashboardWsPlugin } from './infrastructure/ws/dashboard-ws.js';
 import { repositoryWsPlugin } from './infrastructure/ws/repository-ws.js';
 import { ticketWsPlugin } from './infrastructure/ws/ticket-ws.js';
+import { agentWsPlugin } from './infrastructure/ws/agent-ws.js';
 
 async function main() {
   const container = await createContainer();
@@ -53,6 +59,11 @@ async function main() {
   await app.register(async function (v1) {
     v1.addHook('preHandler', authHook);
     await v1.register(agentApiRoutes(container));
+    await v1.register(agentCommentsRoutes(container));
+    await v1.register(agentMentionsRoutes(container));
+    await v1.register(agentDeliverablesRoutes(container));
+    await v1.register(agentContextRoutes(container));
+    await v1.register(agentWorktreesRoutes(container));
   }, { prefix: '/api/agents/v1' });
 
   // Register WebSocket handlers
@@ -60,6 +71,7 @@ async function main() {
   await app.register(dashboardWsPlugin(container, container.jsonlFileWatcher));
   await app.register(repositoryWsPlugin(container));
   await app.register(ticketWsPlugin(container));
+  await app.register(agentWsPlugin(container));
 
   // Start repository refresh scheduler if configured
   const config = container.config.get() as unknown as Record<string, unknown>;
@@ -82,7 +94,7 @@ async function main() {
   container.repositoryRefreshScheduler.setOnMergedPRs(async (mergedPRs, repoKey) => {
     const movedIds = await container.detectMerge.execute(mergedPRs, repoKey);
     for (const id of movedIds) {
-      const ticket = container.ticketStore.getTicketById(id);
+      const ticket = await container.ticketStore.getTicketById(id);
       if (ticket) container.ticketBroadcast('ticket:moved', ticket.toDTO());
     }
   });

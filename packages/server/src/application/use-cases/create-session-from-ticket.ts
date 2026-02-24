@@ -20,7 +20,7 @@ export class CreateSessionFromTicketUseCase {
   ) {}
 
   async execute(ticketId: string): Promise<{ sessionId: string }> {
-    const ticket = this.ticketStore.getTicketById(ticketId);
+    const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) throw new TicketNotFoundError(ticketId);
 
     // Move ticket to doing
@@ -50,7 +50,7 @@ export class CreateSessionFromTicketUseCase {
       cwd = worktreeLink.ref;
     } else {
       // Check board for repo scope
-      const board = this.ticketStore.getBoardById(ticket.boardId);
+      const board = await this.ticketStore.getBoardById(ticket.boardId);
       if (board?.repositoryOrg && board.repositoryName) {
         const repoPath = join(this.config.get().basePath, board.repositoryOrg, board.repositoryName);
         // Try to create a worktree with a branch name based on ticket

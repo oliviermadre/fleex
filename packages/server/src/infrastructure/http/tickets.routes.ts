@@ -14,19 +14,19 @@ export function ticketRoutes(container: Container) {
     // ── Boards ──
 
     app.get('/api/boards', async () => {
-      const boards = container.ticketStore.getAllBoards();
-      return boards.map((b): BoardWithCounts => {
-        const tickets = container.ticketStore.getTicketsByBoard(b.id);
+      const boards = await container.ticketStore.getAllBoards();
+      return Promise.all(boards.map(async (b): Promise<BoardWithCounts> => {
+        const tickets = await container.ticketStore.getTicketsByBoard(b.id);
         const ticketCounts = {} as Record<TicketStatus, number>;
         for (const s of TICKET_STATUSES) {
           ticketCounts[s] = tickets.filter((t) => t.status === s).length;
         }
         return { ...b.toDTO(), ticketCounts };
-      });
+      }));
     });
 
     app.get<{ Params: { id: string } }>('/api/boards/:id', async (request) => {
-      const board = container.ticketStore.getBoardById(request.params.id);
+      const board = await container.ticketStore.getBoardById(request.params.id);
       if (!board) throw new BoardNotFoundError(request.params.id);
       return board.toDTO();
     });
@@ -45,7 +45,7 @@ export function ticketRoutes(container: Container) {
     });
 
     app.patch<{ Params: { id: string }; Body: UpdateBoardRequest }>('/api/boards/:id', async (request) => {
-      const board = container.ticketStore.getBoardById(request.params.id);
+      const board = await container.ticketStore.getBoardById(request.params.id);
       if (!board) throw new BoardNotFoundError(request.params.id);
       board.update(request.body);
       await container.ticketStore.saveBoard(board);
@@ -54,7 +54,7 @@ export function ticketRoutes(container: Container) {
     });
 
     app.delete<{ Params: { id: string } }>('/api/boards/:id', async (request, reply) => {
-      const boards = container.ticketStore.getAllBoards();
+      const boards = await container.ticketStore.getAllBoards();
       if (boards.length <= 1) throw new LastBoardError();
       await container.ticketStore.removeTicketsByBoard(request.params.id);
       await container.ticketStore.removeBoard(request.params.id);
@@ -70,12 +70,12 @@ export function ticketRoutes(container: Container) {
         let tickets: TicketEntity[];
         if (request.query.boardId) {
           if (request.query.status) {
-            tickets = container.ticketStore.getTicketsByStatus(request.query.boardId, request.query.status);
+            tickets = await container.ticketStore.getTicketsByStatus(request.query.boardId, request.query.status);
           } else {
-            tickets = container.ticketStore.getTicketsByBoard(request.query.boardId);
+            tickets = await container.ticketStore.getTicketsByBoard(request.query.boardId);
           }
         } else {
-          tickets = container.ticketStore.getAllTickets();
+          tickets = await container.ticketStore.getAllTickets();
         }
         if (request.query.tag) {
           const tag = request.query.tag;
@@ -86,7 +86,7 @@ export function ticketRoutes(container: Container) {
     );
 
     app.get<{ Params: { id: string } }>('/api/tickets/:id', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
       return ticket.toDTO();
     });
@@ -94,12 +94,12 @@ export function ticketRoutes(container: Container) {
     app.post<{ Body: CreateTicketRequest }>('/api/tickets', async (request, reply) => {
       const { boardId, title, description, status, priority, tags, links, dueDate } = request.body;
 
-      const board = container.ticketStore.getBoardById(boardId);
+      const board = await container.ticketStore.getBoardById(boardId);
       if (!board) throw new BoardNotFoundError(boardId);
 
       // Calculate position (end of column)
       const targetStatus = status ?? 'backlog';
-      const existing = container.ticketStore.getTicketsByStatus(boardId, targetStatus);
+      const existing = await container.ticketStore.getTicketsByStatus(boardId, targetStatus);
       const maxPos = existing.reduce((max, t) => Math.max(max, t.position), -1);
 
       const ticketId = randomUUID();
@@ -136,7 +136,7 @@ export function ticketRoutes(container: Container) {
     });
 
     app.patch<{ Params: { id: string }; Querystring: { silent?: string }; Body: UpdateTicketRequest }>('/api/tickets/:id', async (request) => {
-      const ticket = container.ticketStore.getTicketById(request.params.id);
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const { dueDate, ...rest } = request.body;
@@ -173,7 +173,7 @@ export function ticketRoutes(container: Container) {
     app.post<{ Params: { id: string }; Body: { status: TicketStatus; position?: number } }>(
       '/api/tickets/:id/move',
       async (request) => {
-        const ticket = container.ticketStore.getTicketById(request.params.id);
+        const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
         const diff = ticket.moveTo(request.body.status);
@@ -204,7 +204,7 @@ export function ticketRoutes(container: Container) {
     app.post<{ Params: { id: string }; Body: { type: string; ref: string; label: string; url?: string } }>(
       '/api/tickets/:id/links',
       async (request) => {
-        const ticket = container.ticketStore.getTicketById(request.params.id);
+        const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
         const link = ticket.addLink(
@@ -232,7 +232,7 @@ export function ticketRoutes(container: Container) {
     app.delete<{ Params: { id: string; linkId: string } }>(
       '/api/tickets/:id/links/:linkId',
       async (request, reply) => {
-        const ticket = container.ticketStore.getTicketById(request.params.id);
+        const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
         const removed = ticket.removeLink(request.params.linkId);
@@ -254,7 +254,7 @@ export function ticketRoutes(container: Container) {
 
     // Activity
     app.get<{ Params: { id: string } }>('/api/tickets/:id/activity', async (request) => {
-      return container.ticketStore.getActivitiesByTicket(request.params.id).map((a) => a.toDTO());
+      return (await container.ticketStore.getActivitiesByTicket(request.params.id)).map((a) => a.toDTO());
     });
 
     // Workflow: open session from ticket
@@ -279,7 +279,7 @@ export function ticketRoutes(container: Container) {
     app.post<{ Params: { id: string } }>(
       '/api/tickets/:id/sync-github',
       async (request) => {
-        const ticket = container.ticketStore.getTicketById(request.params.id);
+        const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
         const issueLink = ticket.links.find((l) => l.type === 'github_issue');
@@ -319,7 +319,7 @@ export function ticketRoutes(container: Container) {
       '/api/tickets/reorder',
       async (request) => {
         for (const upd of request.body.updates) {
-          const ticket = container.ticketStore.getTicketById(upd.id);
+          const ticket = await container.ticketStore.getTicketById(upd.id);
           if (!ticket) continue;
           ticket.moveTo(upd.status);
           ticket.position = upd.position;
@@ -327,6 +327,63 @@ export function ticketRoutes(container: Container) {
           await container.ticketStore.saveTicket(ticket);
         }
         return { ok: true };
+      },
+    );
+
+    // ── Mentions (web) ──
+
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/mentions', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const mentions = await container.mentionStore.getByTicket(request.params.id);
+      return mentions.map((m) => m.toDTO());
+    });
+
+    // ── Deliverables (web) ──
+
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/deliverables', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const deliverables = await container.deliverableStore.getByTicket(request.params.id);
+      return deliverables.map((d) => d.toDTO());
+    });
+
+    // ── Comments (web) ──
+
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/comments', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const comments = (await container.commentStore.getByTicket(request.params.id))
+        .filter((c) => c.isVisibleTo('user'));
+
+      return comments.map((c) => c.toDTO());
+    });
+
+    app.post<{ Params: { id: string }; Body: { body: string } }>(
+      '/api/tickets/:id/comments',
+      async (request, reply) => {
+        const ticket = await container.ticketStore.getTicketById(request.params.id);
+        if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+        const { comment, createdMentions } = await container.postComment.execute({
+          ticketId: request.params.id,
+          authorType: 'user',
+          authorName: 'user',
+          body: request.body.body,
+          visibility: 'public',
+        });
+
+        const dto = comment.toDTO();
+        container.ticketBroadcast('comment:created', dto);
+
+        for (const mention of createdMentions) {
+          container.ticketBroadcast('mention:created', mention.toDTO());
+        }
+
+        return reply.code(201).send(dto);
       },
     );
   };

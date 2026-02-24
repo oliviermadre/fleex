@@ -58,23 +58,23 @@ export class JsonSessionStore implements SessionStorePort {
     await this.syncToDisk();
   }
 
-  getAll(): SessionEntity[] {
+  async getAll(): Promise<SessionEntity[]> {
     return Array.from(this.sessions.values());
   }
 
-  getById(id: string): SessionEntity | null {
+  async getById(id: string): Promise<SessionEntity | null> {
     return this.sessions.get(id) ?? null;
   }
 
-  getByTmuxName(name: string): SessionEntity | null {
+  async getByTmuxName(name: string): Promise<SessionEntity | null> {
     for (const session of this.sessions.values()) {
       if (session.tmuxName === name) return session;
     }
     return null;
   }
 
-  getByCwd(cwd: string): SessionEntity[] {
-    return this.getAll().filter((s) => s.cwd === cwd);
+  async getByCwd(cwd: string): Promise<SessionEntity[]> {
+    return Array.from(this.sessions.values()).filter((s) => s.cwd === cwd);
   }
 
   private async loadFromDisk(): Promise<void> {
@@ -113,7 +113,7 @@ export class JsonSessionStore implements SessionStorePort {
 
   private async syncToDisk(): Promise<void> {
     try {
-      const data: SerializedSession[] = this.getAll().map((s) => ({
+      const data: SerializedSession[] = Array.from(this.sessions.values()).map((s) => ({
         id: s.id,
         tmuxName: s.tmuxName,
         type: s.type,

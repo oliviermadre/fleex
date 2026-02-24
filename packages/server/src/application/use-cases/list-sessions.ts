@@ -11,7 +11,7 @@ export class ListSessionsUseCase {
   ) {}
 
   async execute(prefetchedTmuxSessions?: TmuxSessionInfo[]): Promise<SessionEntity[]> {
-    const sessions = this.sessionStore.getAll();
+    const sessions = await this.sessionStore.getAll();
 
     let tmuxSessions: TmuxSessionInfo[];
     if (prefetchedTmuxSessions) {

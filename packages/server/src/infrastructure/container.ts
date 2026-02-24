@@ -13,20 +13,22 @@ import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
-import { JsonTicketStore } from './adapters/json-ticket-store.adapter.js';
-import { JsonAgentTokenStore } from './adapters/json-agent-token-store.adapter.js';
 import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-session-from-ticket.js';
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
 import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
 import { ImportGitHubIssueUseCase } from '../application/use-cases/import-github-issue.js';
+import { PostCommentUseCase } from '../application/use-cases/post-comment.js';
+import { ResolveMentionUseCase } from '../application/use-cases/resolve-mention.js';
+import { SubmitDeliverableUseCase } from '../application/use-cases/submit-deliverable.js';
+import { GetTicketContextUseCase } from '../application/use-cases/get-ticket-context.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
-import { JsonSessionStore } from './adapters/json-session-store.adapter.js';
 import { JsonConfigAdapter } from './adapters/json-config.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
+import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
 import { localExec, localShellExec, LocalHostFs } from './host/local.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
@@ -68,8 +70,19 @@ export async function createContainer() {
 
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
-  const sessionStore = new JsonSessionStore(hostFs, hostHomedir, logger);
-  await sessionStore.init();
+
+  // Storage driver selection via ASM_STORAGE_DRIVER env var
+  const driver = resolveStorageDriver();
+  logger.info('Storage driver selected', { driver });
+
+  const {
+    sessionStore,
+    ticketStore,
+    agentTokenStore,
+    commentStore,
+    mentionStore,
+    deliverableStore,
+  } = await createStores(driver, { hostFs, homedir: hostHomedir, logger });
 
   const namingService = new SessionNamingService();
   const groupingService = new SessionGroupingService();
@@ -86,12 +99,6 @@ export async function createContainer() {
   const githubGraphql = new GitHubGraphQLAdapter(execFn, logger);
   const repositoryRefreshScheduler = new RepositoryRefreshScheduler(githubGraphql, repositoryCache, logger);
 
-  // Ticket management
-  const agentTokenStore = new JsonAgentTokenStore(hostFs, hostHomedir, logger);
-  await agentTokenStore.init();
-  const ticketStore = new JsonTicketStore(hostFs, hostHomedir, logger);
-  await ticketStore.init();
-
   const createSession = new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger);
   const renameSession = new RenameSessionUseCase(tmux, sessionStore, namingService, logger);
   const createWorktreeUC = new CreateWorktreeUseCase(git, logger);
@@ -100,6 +107,12 @@ export async function createContainer() {
     ticketStore, createSession, createWorktreeUC, git, config, logger,
   );
   const importGitHubIssue = new ImportGitHubIssueUseCase(ticketStore, githubGraphql, logger);
+
+  // Agent collaboration use cases
+  const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore, logger);
+  const resolveMention = new ResolveMentionUseCase(mentionStore, ticketStore, logger);
+  const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore, logger);
+  const getTicketContext = new GetTicketContextUseCase(ticketStore, commentStore, mentionStore, deliverableStore);
 
   return {
     logger,
@@ -130,7 +143,15 @@ export async function createContainer() {
     detectMerge,
     createSessionFromTicket,
     importGitHubIssue,
+    commentStore,
+    mentionStore,
+    deliverableStore,
+    postComment,
+    resolveMention,
+    submitDeliverable,
+    getTicketContext,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
+    agentBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     jsonlFileWatcher,
   };
 }

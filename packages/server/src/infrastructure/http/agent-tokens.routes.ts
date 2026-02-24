@@ -6,7 +6,7 @@ import type { Container } from '../container.js';
 export function agentTokenRoutes(container: Container) {
   return async function (app: FastifyInstance) {
     app.get('/api/agent-tokens', async () => {
-      return container.agentTokenStore.getAll().map((t) => t.toDTO());
+      return (await container.agentTokenStore.getAll()).map((t) => t.toDTO());
     });
 
     app.post<{ Body: { name: string } }>('/api/agent-tokens', async (request, reply) => {

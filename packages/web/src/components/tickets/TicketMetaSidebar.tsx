@@ -131,6 +131,12 @@ export function TicketMetaSidebar({
         </div>
       </div>
 
+      {/* Assignee */}
+      <AssigneeField
+        assignee={ticket.assignee}
+        onChange={(assignee) => updateTicket(ticket.id, { assignee })}
+      />
+
       {/* GitHub Issue */}
       <GitHubIssuePicker
         ticket={ticket}
@@ -799,6 +805,97 @@ function GitHubMetadataSection({ metadata }: { metadata: GitHubIssueMetadata }) 
       <span className="mt-1 block text-[9px] text-[var(--theme-text-faint)]">
         Last synced: {formatRelativeTime(metadata.syncedAt)}
       </span>
+    </div>
+  );
+}
+
+// ── Assignee Field ──
+
+function AssigneeField({
+  assignee,
+  onChange,
+}: {
+  assignee: string | null;
+  onChange: (assignee: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState('');
+
+  if (assignee && !editing) {
+    return (
+      <div>
+        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+          Assignee
+        </label>
+        <div className="flex items-center gap-1.5">
+          <button
+            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+            onClick={() => { setValue(assignee); setEditing(true); }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+              <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
+            </svg>
+            <span className="truncate">{assignee}</span>
+          </button>
+          <button
+            className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+            onClick={() => onChange(null)}
+            title="Unassign"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="4" y1="4" x2="12" y2="12" />
+              <line x1="12" y1="4" x2="4" y2="12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (editing) {
+    return (
+      <div>
+        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+          Assignee
+        </label>
+        <input
+          autoFocus
+          className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
+          placeholder="Agent or user name..."
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && value.trim()) {
+              onChange(value.trim());
+              setEditing(false);
+              setValue('');
+            }
+            if (e.key === 'Escape') {
+              setEditing(false);
+              setValue('');
+            }
+          }}
+          onBlur={() => {
+            if (value.trim()) onChange(value.trim());
+            setEditing(false);
+            setValue('');
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+        Assignee
+      </label>
+      <button
+        className="w-full rounded-md border border-dashed border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:border-[var(--theme-border-input)] hover:text-[var(--theme-text-secondary)]"
+        onClick={() => setEditing(true)}
+      >
+        + Assign
+      </button>
     </div>
   );
 }

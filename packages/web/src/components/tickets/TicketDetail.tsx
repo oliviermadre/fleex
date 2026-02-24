@@ -1,16 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Session } from '@asm/shared';
+import type { Session, TicketDeliverable, TicketMention, TicketWsMessage } from '@asm/shared';
+import { ticketWs } from '../../services/websocket';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
 import { TicketDetailHeader } from './TicketDetailHeader';
 import { TicketMetaSidebar } from './TicketMetaSidebar';
 import { TicketActivityTimeline } from './TicketActivityTimeline';
+import { TicketComments } from './TicketComments';
+import { TicketDeliverables } from './TicketDeliverables';
+import { TicketMentions } from './TicketMentions';
 import { SessionTerminalOverlay } from './SessionTerminalOverlay';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import * as api from '../../services/api';
 
 type DescriptionMode = 'write' | 'preview' | 'split';
+type MainTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity';
 
 export function TicketDetail({ ticketId }: { ticketId: string }) {
   const tickets = useTicketStore((s) => s.tickets);
@@ -23,9 +28,12 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [descMode, setDescMode] = useState<DescriptionMode>('split');
+  const [mainTab, setMainTab] = useState<MainTab>('comments');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [overlaySession, setOverlaySession] = useState<Session | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [deliverableCount, setDeliverableCount] = useState(0);
+  const [mentionCount, setMentionCount] = useState(0);
 
   // Track initial description to know if it changed when leaving
   const initialDescRef = useRef('');
@@ -39,6 +47,30 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
       descriptionRef.current = ticket.description;
     }
   }, [ticket?.id]); // Reset on ticket change, not on every ticket update
+
+  // Fetch deliverable & mention counts
+  useEffect(() => {
+    api.fetchTicketDeliverables(ticketId).then((d) => setDeliverableCount(d.length)).catch(() => {});
+    api.fetchTicketMentions(ticketId).then((m) => setMentionCount(m.length)).catch(() => {});
+  }, [ticketId]);
+
+  // Track deliverable & mention counts via WebSocket
+  useEffect(() => {
+    const decoder = new TextDecoder();
+    const unsub = ticketWs.onMessage((buf: ArrayBuffer) => {
+      try {
+        const msg = JSON.parse(decoder.decode(buf)) as TicketWsMessage;
+        if (msg.type === 'deliverable:created') {
+          const d = msg.data as TicketDeliverable;
+          if (d.ticketId === ticketId) setDeliverableCount((c) => c + 1);
+        } else if (msg.type === 'mention:created') {
+          const m = msg.data as TicketMention;
+          if (m.ticketId === ticketId) setMentionCount((c) => c + 1);
+        }
+      } catch { /* ignore */ }
+    });
+    return unsub;
+  }, [ticketId]);
 
   // Flush pending description changes and log activity on unmount / ticket switch
   useEffect(() => {
@@ -173,6 +205,14 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     );
   }
 
+  const mainTabs: { key: MainTab; label: string }[] = [
+    { key: 'description', label: 'Description' },
+    { key: 'comments', label: 'Comments' },
+    { key: 'mentions', label: `Mentions${mentionCount > 0 ? ` (${mentionCount})` : ''}` },
+    { key: 'deliverables', label: `Deliverables${deliverableCount > 0 ? ` (${deliverableCount})` : ''}` },
+    { key: 'activity', label: 'Activity' },
+  ];
+
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       <TicketDetailHeader ticket={ticket} />
@@ -190,76 +230,115 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
             placeholder="Ticket title..."
           />
 
-          {/* Description mode tabs */}
+          {/* Main tabs */}
           <div className="mt-3 flex flex-shrink-0 items-center gap-1 border-b border-[var(--theme-border)]">
-            {(['write', 'preview', 'split'] as const).map((mode) => (
+            {mainTabs.map((tab) => (
               <button
-                key={mode}
+                key={tab.key}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  descMode === mode
+                  mainTab === tab.key
                     ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-text-primary)]'
                     : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                 }`}
-                onClick={() => setDescMode(mode)}
+                onClick={() => setMainTab(tab.key)}
               >
-                {mode === 'write' ? 'Write' : mode === 'preview' ? 'Preview' : 'Split'}
+                {tab.label}
               </button>
             ))}
+
+            {/* Description sub-tabs (only when description tab is active) */}
+            {mainTab === 'description' && (
+              <>
+                <div className="mx-2 h-3 w-px bg-[var(--theme-border)]" />
+                {(['write', 'preview', 'split'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    className={`px-2 py-1.5 text-[11px] transition-colors ${
+                      descMode === mode
+                        ? 'text-[var(--theme-text-primary)]'
+                        : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-text-muted)]'
+                    }`}
+                    onClick={() => setDescMode(mode)}
+                  >
+                    {mode === 'write' ? 'Write' : mode === 'preview' ? 'Preview' : 'Split'}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
 
-          {/* Description editor/preview */}
-          <div className="mt-3 flex min-h-0 flex-1 gap-4 overflow-hidden">
-            {/* Write pane */}
-            {descMode !== 'preview' && (
-              <textarea
-                className={`resize-none rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 text-sm font-mono text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none ${
-                  descMode === 'split' ? 'w-1/2' : 'w-full'
-                }`}
-                value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value);
-                  descriptionRef.current = e.target.value;
-                  debouncedSilentDescription(e.target.value);
-                }}
-                placeholder="Add a description (markdown supported)..."
-              />
-            )}
-
-            {/* Preview pane */}
-            {descMode !== 'write' && (
-              <div
-                className={`overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 ${
-                  descMode === 'split' ? 'w-1/2' : 'w-full'
-                }`}
-              >
-                {description.trim() ? (
-                  <MarkdownRenderer
-                    content={description}
-                    onToggleCheckbox={(lineIndex) => {
-                      const lines = description.split('\n');
-                      const line = lines[lineIndex];
-                      if (!line) return;
-                      if (line.includes('[ ]')) {
-                        lines[lineIndex] = line.replace('[ ]', '[x]');
-                      } else if (/\[[xX]\]/.test(line)) {
-                        lines[lineIndex] = line.replace(/\[[xX]\]/, '[ ]');
-                      }
-                      const updated = lines.join('\n');
-                      setDescription(updated);
-                      descriptionRef.current = updated;
-                      debouncedSilentDescription(updated);
+          {/* Tab content */}
+          <div className="mt-3 flex min-h-0 flex-1 overflow-hidden">
+            {/* Description tab */}
+            {mainTab === 'description' && (
+              <div className="flex min-h-0 flex-1 gap-4 overflow-hidden">
+                {descMode !== 'preview' && (
+                  <textarea
+                    className={`resize-none rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 text-sm font-mono text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none ${
+                      descMode === 'split' ? 'w-1/2' : 'w-full'
+                    }`}
+                    value={description}
+                    onChange={(e) => {
+                      setDescription(e.target.value);
+                      descriptionRef.current = e.target.value;
+                      debouncedSilentDescription(e.target.value);
                     }}
+                    placeholder="Add a description (markdown supported)..."
                   />
-                ) : (
-                  <p className="text-sm italic text-[var(--theme-text-muted)]">Nothing to preview</p>
+                )}
+                {descMode !== 'write' && (
+                  <div
+                    className={`overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 ${
+                      descMode === 'split' ? 'w-1/2' : 'w-full'
+                    }`}
+                  >
+                    {description.trim() ? (
+                      <MarkdownRenderer
+                        content={description}
+                        onToggleCheckbox={(lineIndex) => {
+                          const lines = description.split('\n');
+                          const line = lines[lineIndex];
+                          if (!line) return;
+                          if (line.includes('[ ]')) {
+                            lines[lineIndex] = line.replace('[ ]', '[x]');
+                          } else if (/\[[xX]\]/.test(line)) {
+                            lines[lineIndex] = line.replace(/\[[xX]\]/, '[ ]');
+                          }
+                          const updated = lines.join('\n');
+                          setDescription(updated);
+                          descriptionRef.current = updated;
+                          debouncedSilentDescription(updated);
+                        }}
+                      />
+                    ) : (
+                      <p className="text-sm italic text-[var(--theme-text-muted)]">Nothing to preview</p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
-          </div>
 
-          {/* Activity */}
-          <div className="mt-4 flex-shrink-0 max-h-[200px] overflow-y-auto">
-            <TicketActivityTimeline ticketId={ticketId} />
+            {/* Comments tab */}
+            {mainTab === 'comments' && (
+              <TicketComments ticketId={ticketId} />
+            )}
+
+            {/* Mentions tab */}
+            {mainTab === 'mentions' && (
+              <TicketMentions ticketId={ticketId} />
+            )}
+
+            {/* Deliverables tab */}
+            {mainTab === 'deliverables' && (
+              <TicketDeliverables ticketId={ticketId} />
+            )}
+
+            {/* Activity tab */}
+            {mainTab === 'activity' && (
+              <div className="flex-1 overflow-y-auto">
+                <TicketActivityTimeline ticketId={ticketId} />
+              </div>
+            )}
           </div>
         </div>
 

@@ -18,7 +18,7 @@ export function createAgentAuthHook(container: Container) {
 
     const token = authHeader.slice(7);
     const hash = ApiTokenEntity.hashToken(token);
-    const entity = container.agentTokenStore.getByHash(hash);
+    const entity = await container.agentTokenStore.getByHash(hash);
 
     if (!entity) {
       throw new ApiTokenInvalidError();

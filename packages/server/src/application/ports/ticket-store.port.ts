@@ -5,26 +5,26 @@ import type { TicketActivityEntity } from '../../domain/entities/ticket-activity
 
 export interface TicketStorePort {
   // Boards
-  getAllBoards(): BoardEntity[];
-  getBoardById(id: string): BoardEntity | null;
+  getAllBoards(): Promise<BoardEntity[]>;
+  getBoardById(id: string): Promise<BoardEntity | null>;
   saveBoard(board: BoardEntity): Promise<void>;
   removeBoard(id: string): Promise<void>;
 
   // Tickets
-  getAllTickets(): TicketEntity[];
-  getTicketById(id: string): TicketEntity | null;
-  getTicketsByBoard(boardId: string): TicketEntity[];
-  getTicketsByStatus(boardId: string, status: TicketStatus): TicketEntity[];
-  getTicketsLinkedTo(type: TicketLinkType, ref: string): TicketEntity[];
+  getAllTickets(): Promise<TicketEntity[]>;
+  getTicketById(id: string): Promise<TicketEntity | null>;
+  getTicketsByBoard(boardId: string): Promise<TicketEntity[]>;
+  getTicketsByStatus(boardId: string, status: TicketStatus): Promise<TicketEntity[]>;
+  getTicketsLinkedTo(type: TicketLinkType, ref: string): Promise<TicketEntity[]>;
   saveTicket(ticket: TicketEntity): Promise<void>;
   removeTicket(id: string): Promise<void>;
   removeTicketsByBoard(boardId: string): Promise<void>;
 
   // Agent queries
-  getNextTicketForAgent(boardId?: string): TicketEntity | null;
-  getClaimedByAgent(agentName: string): TicketEntity[];
+  getNextTicketForAgent(boardId?: string): Promise<TicketEntity | null>;
+  getClaimedByAgent(agentName: string): Promise<TicketEntity[]>;
 
   // Activity
   saveActivity(entry: TicketActivityEntity): Promise<void>;
-  getActivitiesByTicket(ticketId: string, limit?: number): TicketActivityEntity[];
+  getActivitiesByTicket(ticketId: string, limit?: number): Promise<TicketActivityEntity[]>;
 }
