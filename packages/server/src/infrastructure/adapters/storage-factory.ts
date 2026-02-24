@@ -78,12 +78,12 @@ async function createSqliteStores(logger: LoggerPort): Promise<StorageStores> {
   const { homedir } = await import('node:os');
   const { ASM_DIR } = await import('@asm/shared');
   const { SqliteConnection } = await import('./sqlite/connection.js');
-  const { SqliteSessionStore } = await import('./sqlite/sqlite-session-store.adapter.js');
-  const { SqliteTicketStore } = await import('./sqlite/sqlite-ticket-store.adapter.js');
-  const { SqliteAgentTokenStore } = await import('./sqlite/sqlite-agent-token-store.adapter.js');
-  const { SqliteCommentStore } = await import('./sqlite/sqlite-comment-store.adapter.js');
-  const { SqliteMentionStore } = await import('./sqlite/sqlite-mention-store.adapter.js');
-  const { SqliteDeliverableStore } = await import('./sqlite/sqlite-deliverable-store.adapter.js');
+  const { SqliteSessionStoreAdapter } = await import('./sqlite/sqlite-session-store.adapter.js');
+  const { SqliteTicketStoreAdapter } = await import('./sqlite/sqlite-ticket-store.adapter.js');
+  const { SqliteAgentTokenStoreAdapter } = await import('./sqlite/sqlite-agent-token-store.adapter.js');
+  const { SqliteCommentStoreAdapter } = await import('./sqlite/sqlite-comment-store.adapter.js');
+  const { SqliteMentionStoreAdapter } = await import('./sqlite/sqlite-mention-store.adapter.js');
+  const { SqliteDeliverableStoreAdapter } = await import('./sqlite/sqlite-deliverable-store.adapter.js');
 
   const dbPath = process.env['ASM_SQLITE_PATH'] ?? join(homedir(), ASM_DIR, 'asm.db');
   const connection = new SqliteConnection(dbPath);
@@ -92,12 +92,12 @@ async function createSqliteStores(logger: LoggerPort): Promise<StorageStores> {
   logger.info('SQLite storage initialized', { path: dbPath });
 
   return {
-    sessionStore: new SqliteSessionStore(connection),
-    ticketStore: new SqliteTicketStore(connection),
-    agentTokenStore: new SqliteAgentTokenStore(connection),
-    commentStore: new SqliteCommentStore(connection),
-    mentionStore: new SqliteMentionStore(connection),
-    deliverableStore: new SqliteDeliverableStore(connection),
+    sessionStore: new SqliteSessionStoreAdapter(connection),
+    ticketStore: new SqliteTicketStoreAdapter(connection),
+    agentTokenStore: new SqliteAgentTokenStoreAdapter(connection),
+    commentStore: new SqliteCommentStoreAdapter(connection),
+    mentionStore: new SqliteMentionStoreAdapter(connection),
+    deliverableStore: new SqliteDeliverableStoreAdapter(connection),
   };
 }
 

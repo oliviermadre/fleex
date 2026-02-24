@@ -13,7 +13,7 @@ export class RenameSessionUseCase {
   ) {}
 
   async execute(sessionId: string, newDisplayName: string): Promise<void> {
-    const session = this.sessionStore.getById(sessionId);
+    const session = await this.sessionStore.getById(sessionId);
     if (!session) {
       throw new SessionNotFoundError(sessionId);
     }
@@ -25,7 +25,7 @@ export class RenameSessionUseCase {
     };
 
     // Gather sibling tmux names, excluding self
-    const storedNames = this.sessionStore.getAll()
+    const storedNames = (await this.sessionStore.getAll())
       .filter((s) => s.id !== sessionId)
       .map((s) => s.tmuxName);
     const liveSessions = await this.tmux.listManagedSessions();
