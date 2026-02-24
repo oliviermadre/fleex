@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
 
@@ -11,8 +12,8 @@ const tabs: { key: SettingsTab; label: string }[] = [
 ];
 
 export function SettingsNav() {
+  const navigate = useNavigate();
   const settingsTab = useUIStore((s) => s.settingsTab);
-  const setSettingsTab = useUIStore((s) => s.setSettingsTab);
 
   return (
     <div className="flex h-full flex-col">
@@ -32,7 +33,7 @@ export function SettingsNav() {
                 ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] font-medium text-[var(--theme-text-primary)]'
                 : 'border-transparent text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]'
             )}
-            onClick={() => setSettingsTab(tab.key)}
+            onClick={() => navigate(`/settings/${tab.key}`, { replace: true })}
           >
             {tab.label}
           </button>

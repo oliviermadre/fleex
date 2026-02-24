@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
@@ -6,10 +7,10 @@ import { HotkeyBadge } from '../ui/HotkeyBadge';
 import { cn } from '../../lib/cn';
 
 export function NavSidebar() {
+  const navigate = useNavigate();
   const navCollapsed = useUIStore((s) => s.navCollapsed);
   const toggleNav = useUIStore((s) => s.toggleNav);
   const activePanel = useUIStore((s) => s.activePanel);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const sessions = useSessionStore((s) => s.sessions);
   const summaries = useRepositoryDashboardStore((s) => s.summaries);
   const repoCount = Object.keys(summaries).length;
@@ -33,7 +34,7 @@ export function NavSidebar() {
           collapsed={navCollapsed}
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
           hotkey="⌥1"
-          onClick={() => setActivePanel('sessions')}
+          onClick={() => navigate('/sessions')}
         />
 
         {/* Repositories */}
@@ -50,7 +51,7 @@ export function NavSidebar() {
           collapsed={navCollapsed}
           badge={repoCount > 0 ? (repoCount > 9 ? '9+' : String(repoCount)) : undefined}
           hotkey="⌥2"
-          onClick={() => setActivePanel('repositories')}
+          onClick={() => navigate('/repositories')}
         />
         {/* Tickets */}
         <NavItem
@@ -75,7 +76,7 @@ export function NavSidebar() {
           collapsed={navCollapsed}
           badge={activeTicketCount > 0 ? (activeTicketCount > 9 ? '9+' : String(activeTicketCount)) : undefined}
           hotkey="⌥3"
-          onClick={() => setActivePanel('tickets')}
+          onClick={() => navigate('/tickets')}
         />
 
         {/* Claude Config */}
@@ -95,7 +96,7 @@ export function NavSidebar() {
           active={activePanel === 'claude-config'}
           collapsed={navCollapsed}
           hotkey="⌥4"
-          onClick={() => setActivePanel('claude-config')}
+          onClick={() => navigate('/claude-config')}
         />
 
         {/* Scratchpads */}
@@ -114,7 +115,7 @@ export function NavSidebar() {
           active={activePanel === 'scratchpads'}
           collapsed={navCollapsed}
           hotkey="⌥6"
-          onClick={() => setActivePanel('scratchpads')}
+          onClick={() => navigate('/scratchpads')}
         />
 
         {/* Cluster */}
@@ -130,7 +131,7 @@ export function NavSidebar() {
           active={activePanel === 'cluster'}
           collapsed={navCollapsed}
           hotkey="⌥7"
-          onClick={() => setActivePanel('cluster')}
+          onClick={() => navigate('/cluster')}
         />
       </div>
 
@@ -147,7 +148,7 @@ export function NavSidebar() {
           active={activePanel === 'settings'}
           collapsed={navCollapsed}
           hotkey="⌥0"
-          onClick={() => setActivePanel('settings')}
+          onClick={() => navigate('/settings')}
         />
       </div>
 
