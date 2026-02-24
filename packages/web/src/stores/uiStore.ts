@@ -50,6 +50,10 @@ interface UIState {
   // Repository dashboard selection
   selectedRepoKey: string | null;
   selectRepo: (key: string | null) => void;
+
+  // Floating session overlay
+  floatingSessionId: string | null;
+  setFloatingSession: (id: string | null) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -64,6 +68,7 @@ export const useUIStore = create<UIState>((set) => ({
   collapsedGroups: new Set<string>(),
   scratchpadOpen: false,
   scratchpadRepoKey: null,
+  floatingSessionId: null,
 
   toggleScratchpad: () =>
     set((state) => ({
@@ -112,4 +117,6 @@ export const useUIStore = create<UIState>((set) => ({
     }),
 
   selectRepo: (key) => set({ selectedRepoKey: key }),
+
+  setFloatingSession: (id) => set({ floatingSessionId: id }),
 }));
