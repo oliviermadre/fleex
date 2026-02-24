@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Session, SessionGroup, SessionStatus, WorktreeSessionGroup } from '@asm/shared';
+import { useUIStore } from './uiStore';
 
 interface SessionState {
   sessions: Session[];
@@ -35,7 +36,11 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   setSessionGroups: (groups) => set({ sessionGroups: groups }),
 
-  selectSession: (id) => set({ selectedSessionId: id, splitSessionId: null, focusedPane: 'primary', selectedGroupId: null, activeGroupCellIndex: null }),
+  selectSession: (id) => {
+    set({ selectedSessionId: id, splitSessionId: null, focusedPane: 'primary', selectedGroupId: null, activeGroupCellIndex: null });
+    // Clear floating overlay so re-attaching to main panel works correctly
+    useUIStore.getState().setFloatingSession(null);
+  },
 
   openSplit: (id) =>
     set((state) => {

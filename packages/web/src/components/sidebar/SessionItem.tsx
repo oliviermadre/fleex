@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Session } from '@asm/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useUIStore } from '../../stores/uiStore';
 import { ClaudeIcon, TerminalIcon, getProcessIcon } from './icons';
 import { ActivityDot } from './ActivityDot';
 import { cn } from '../../lib/cn';
@@ -35,6 +36,10 @@ export function SessionItem({ session }: Props) {
     (isSelected && focusedPane === 'primary') ||
     (isSplit && focusedPane === 'split')
   );
+
+  const floatingSessionId = useUIStore((s) => s.floatingSessionId);
+  const setFloatingSession = useUIStore((s) => s.setFloatingSession);
+  const isFloating = floatingSessionId === session.id;
 
   const removeSession = useSessionStore((s) => s.removeSession);
   const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
@@ -198,6 +203,29 @@ export function SessionItem({ session }: Props) {
       {hasActiveGroupCell && (
         <GroupBindIndicator />
       )}
+      {/* Pop-out button: appears on hover, toggles floating overlay */}
+      <span
+        role="button"
+        tabIndex={-1}
+        className={cn(
+          'shrink-0 items-center justify-center rounded transition-colors',
+          isFloating
+            ? 'flex text-[var(--theme-accent)]'
+            : 'hidden group-hover/session:flex text-[var(--theme-text-muted)] hover:text-[var(--theme-accent)]'
+        )}
+        onClick={(e) => {
+          e.stopPropagation();
+          setFloatingSession(isFloating ? null : session.id);
+        }}
+        onDoubleClick={(e) => e.stopPropagation()}
+        title={isFloating ? 'Re-attach to main panel' : 'Detach to floating overlay'}
+      >
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="2" width="9" height="9" rx="1.5" />
+          <path d="M13 7V3h-4" />
+          <line x1="13" y1="3" x2="7" y2="9" />
+        </svg>
+      </span>
       <span
         role="button"
         tabIndex={-1}
