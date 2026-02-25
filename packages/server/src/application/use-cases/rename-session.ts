@@ -1,8 +1,11 @@
+import { EVENT_TYPES } from '@asm/shared';
 import { SessionNamingService } from '../../domain/services/session-naming.js';
 import { SessionNotFoundError } from '../../domain/errors.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { EventBusPort } from '../ports/event-bus.port.js';
 
 export class RenameSessionUseCase {
   constructor(
@@ -10,6 +13,7 @@ export class RenameSessionUseCase {
     private readonly sessionStore: SessionStorePort,
     private readonly namingService: SessionNamingService,
     private readonly logger: LoggerPort,
+    private readonly eventBus?: EventBusPort,
   ) {}
 
   async execute(sessionId: string, newDisplayName: string): Promise<void> {
@@ -41,11 +45,14 @@ export class RenameSessionUseCase {
       existingTmuxNames,
     );
 
+    const oldDisplayName = session.displayName;
+
     if (tmuxName === session.tmuxName) {
       // Name unchanged, just update displayName if different
       if (displayName !== session.displayName) {
         session.rename(tmuxName, displayName);
         await this.sessionStore.save(session);
+        this.emitRenamed(sessionId, oldDisplayName, displayName);
       }
       return;
     }
@@ -60,5 +67,15 @@ export class RenameSessionUseCase {
       newTmuxName: tmuxName,
       displayName,
     });
+
+    this.emitRenamed(sessionId, oldDisplayName, displayName);
+  }
+
+  private emitRenamed(id: string, oldDisplayName: string | null, newDisplayName: string): void {
+    this.eventBus?.emit(createEvent(EVENT_TYPES.SESSION_RENAMED, {
+      id,
+      oldDisplayName,
+      newDisplayName,
+    }, { source: 'use-case' }));
   }
 }

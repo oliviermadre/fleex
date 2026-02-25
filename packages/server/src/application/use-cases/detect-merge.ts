@@ -1,13 +1,17 @@
 import { randomUUID } from 'node:crypto';
+import { EVENT_TYPES } from '@asm/shared';
 import type { PullRequest } from '@asm/shared';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { EventBusPort } from '../ports/event-bus.port.js';
 
 export class DetectMergeUseCase {
   constructor(
     private readonly ticketStore: TicketStorePort,
     private readonly logger: LoggerPort,
+    private readonly eventBus?: EventBusPort,
   ) {}
 
   async execute(mergedPRs: PullRequest[], repoKey: string): Promise<string[]> {
@@ -68,7 +72,20 @@ export class DetectMergeUseCase {
           prNumber: pr.number,
           repoKey,
         });
+
+        this.eventBus?.emit(createEvent(EVENT_TYPES.TICKET_MOVED, {
+          ticket: ticket.toDTO(),
+          changes: diff,
+        }, { source: 'scheduler', actor: 'merge-detector' }));
       }
+    }
+
+    if (movedTicketIds.length > 0) {
+      this.eventBus?.emit(createEvent(EVENT_TYPES.REPOSITORY_MERGE_DETECTED, {
+        repoKey,
+        mergedPRCount: mergedPRs.length,
+        movedTicketIds,
+      }, { source: 'scheduler' }));
     }
 
     return movedTicketIds;

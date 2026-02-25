@@ -1,12 +1,16 @@
+import { EVENT_TYPES } from '@asm/shared';
 import type { CreateWorktreeRequest } from '@asm/shared';
 import { WorktreeError } from '../../domain/errors.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { EventBusPort } from '../ports/event-bus.port.js';
 
 export class CreateWorktreeUseCase {
   constructor(
     private readonly git: GitPort,
     private readonly logger: LoggerPort,
+    private readonly eventBus?: EventBusPort,
   ) {}
 
   async execute(repoPath: string, wtPath: string, request: CreateWorktreeRequest): Promise<string | null> {
@@ -26,6 +30,7 @@ export class CreateWorktreeUseCase {
       );
       this.logger.info('Worktree created', { repoPath, wtPath, branch: request.branch });
       await this.copyIgnoredFiles(repoPath, wtPath);
+      this.emitCreated(repoPath, wtPath, request.branch);
       return null;
     } catch (err) {
       const stderr = (err as { stderr?: string }).stderr?.trim();
@@ -54,10 +59,19 @@ export class CreateWorktreeUseCase {
         );
         this.logger.info('Worktree replaced', { repoPath, wtPath, branch: request.branch });
         await this.copyIgnoredFiles(repoPath, wtPath);
+        this.emitCreated(repoPath, wtPath, request.branch);
         return null;
       }
       throw new WorktreeError(`Failed to create worktree: ${message}`);
     }
+  }
+
+  private emitCreated(repoPath: string, wtPath: string, branch: string): void {
+    this.eventBus?.emit(createEvent(EVENT_TYPES.WORKTREE_CREATED, {
+      repoPath,
+      path: wtPath,
+      branch,
+    }, { source: 'use-case' }));
   }
 
   private async copyIgnoredFiles(repoPath: string, wtPath: string): Promise<void> {

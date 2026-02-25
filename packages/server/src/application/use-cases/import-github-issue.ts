@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { EVENT_TYPES } from '@asm/shared';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { EventBusPort } from '../ports/event-bus.port.js';
 import type { GitHubGraphQLAdapter } from '../../infrastructure/adapters/github-graphql.adapter.js';
 
 export class ImportGitHubIssueUseCase {
@@ -10,6 +13,7 @@ export class ImportGitHubIssueUseCase {
     private readonly ticketStore: TicketStorePort,
     private readonly githubGraphql: GitHubGraphQLAdapter,
     private readonly logger: LoggerPort,
+    private readonly eventBus?: EventBusPort,
   ) {}
 
   async execute(org: string, name: string, issueNumber: number, boardId: string): Promise<TicketEntity> {
@@ -86,6 +90,11 @@ export class ImportGitHubIssueUseCase {
     }));
 
     this.logger.info('GitHub issue imported as ticket', { org, name, issueNumber, ticketId });
+
+    this.eventBus?.emit(createEvent(EVENT_TYPES.TICKET_IMPORTED, {
+      ticket: ticket.toDTO(),
+      source: `github:${org}/${name}#${issueNumber}`,
+    }, { source: 'use-case' }));
 
     return ticket;
   }

@@ -7,6 +7,9 @@ import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { EventBusPort } from '../ports/event-bus.port.js';
+import { EVENT_TYPES } from '@asm/shared';
+import { createEvent } from '../../domain/events/create-event.js';
 
 export class CreateSessionUseCase {
   constructor(
@@ -16,6 +19,7 @@ export class CreateSessionUseCase {
     private readonly git: GitPort,
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
+    private readonly eventBus?: EventBusPort,
   ) {}
 
   async execute(request: CreateSessionRequest): Promise<SessionEntity> {
@@ -79,6 +83,17 @@ export class CreateSessionUseCase {
 
     await this.sessionStore.save(session);
     this.logger.info('Session created', { id: session.id, type: request.type, tmuxName, displayName });
+
+    this.eventBus?.emit(createEvent(EVENT_TYPES.SESSION_CREATED, {
+      id: session.id,
+      tmuxName,
+      type: request.type,
+      displayName,
+      cwd: request.cwd,
+      repositoryOrg,
+      repositoryName,
+      worktreeBranch,
+    }, { source: 'use-case' }));
 
     return session;
   }

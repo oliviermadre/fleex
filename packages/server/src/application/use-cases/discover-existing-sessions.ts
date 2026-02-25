@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import { EVENT_TYPES } from '@asm/shared';
 import { SessionEntity } from '../../domain/entities.js';
 import { SessionNamingService } from '../../domain/services/session-naming.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { EventBusPort } from '../ports/event-bus.port.js';
 
 export class DiscoverExistingSessionsUseCase {
   constructor(
@@ -13,6 +16,7 @@ export class DiscoverExistingSessionsUseCase {
     private readonly namingService: SessionNamingService,
     private readonly logger: LoggerPort,
     private readonly git?: GitPort,
+    private readonly eventBus?: EventBusPort,
   ) {}
 
   async execute(): Promise<void> {
@@ -55,6 +59,10 @@ export class DiscoverExistingSessionsUseCase {
         repositoryName: metadata.repositoryName || undefined,
       });
     }
+
+    this.eventBus?.emit(createEvent(EVENT_TYPES.SESSION_DISCOVERED, {
+      count: managed.length,
+    }, { source: 'use-case' }));
 
     // Re-enrich existing sessions that are missing metadata (e.g. discovered before a bug fix)
     for (const session of await this.sessionStore.getAll()) {
