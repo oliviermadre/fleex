@@ -14,6 +14,7 @@ import { execRoutes } from './infrastructure/http/exec.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
 import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
+import { eventsRoutes } from './infrastructure/http/events.routes.js';
 import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
 import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
 import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
@@ -51,6 +52,7 @@ async function main() {
   await app.register(claudeConfigRoutes(container));
   await app.register(scratchpadRoutes(container));
   await app.register(claudeUsageRoutes(container));
+  await app.register(eventsRoutes(container));
   await app.register(agentTokenRoutes(container));
   await app.register(ticketRoutes(container));
 
@@ -91,12 +93,9 @@ async function main() {
   }
 
   // Wire merge detection for ticket auto-complete
+  // DetectMergeUseCase emits ticket.moved events via EventBus, which ticket-ws.ts listens to
   container.repositoryRefreshScheduler.setOnMergedPRs(async (mergedPRs, repoKey) => {
-    const movedIds = await container.detectMerge.execute(mergedPRs, repoKey);
-    for (const id of movedIds) {
-      const ticket = await container.ticketStore.getTicketById(id);
-      if (ticket) container.ticketBroadcast('ticket:moved', ticket.toDTO());
-    }
+    await container.detectMerge.execute(mergedPRs, repoKey);
   });
 
   // Serve frontend static files in production

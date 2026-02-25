@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
+import type { DomainEvent } from '@asm/shared';
 import { WS_AGENT_PATH } from '@asm/shared';
 import { ApiTokenEntity } from '../../domain/entities/api-token.entity.js';
 import type { Container } from '../container.js';
@@ -9,6 +10,29 @@ interface AgentClient {
   agentName: string;
   subscribedTickets: Set<string>;
 }
+
+// Map domain event types to agent WS message types
+const EVENT_TO_WS_TYPE: Record<string, string> = {
+  'ticket.created': 'ticket:created',
+  'ticket.updated': 'ticket:updated',
+  'ticket.moved': 'ticket:moved',
+  'ticket.deleted': 'ticket:deleted',
+  'ticket.claimed': 'ticket:updated',
+  'ticket.unclaimed': 'ticket:updated',
+  'ticket.assigned': 'ticket:updated',
+  'ticket.unassigned': 'ticket:updated',
+  'ticket.completed': 'ticket:moved',
+  'ticket.linked': 'ticket:updated',
+  'ticket.unlinked': 'ticket:updated',
+  'comment.created': 'comment:created',
+  'comment.updated': 'comment:updated',
+  'comment.deleted': 'comment:deleted',
+  'mention.created': 'mention:created',
+  'mention.acknowledged': 'mention:acknowledged',
+  'mention.resolved': 'mention:resolved',
+  'deliverable.created': 'deliverable:created',
+  'deliverable.updated': 'deliverable:updated',
+};
 
 export function agentWsPlugin(container: Container) {
   return async function (app: FastifyInstance) {
@@ -87,6 +111,19 @@ export function agentWsPlugin(container: Container) {
     };
 
     container.agentBroadcast = agentBroadcast;
+
+    // Listen to EventBus for relevant namespaces
+    const namespaces = ['ticket.*', 'comment.*', 'mention.*', 'deliverable.*'];
+    for (const ns of namespaces) {
+      container.eventBus.on(ns, (event: DomainEvent) => {
+        const wsType = EVENT_TO_WS_TYPE[event.type];
+        if (!wsType) return;
+        const payload = event.payload as Record<string, unknown>;
+        // Extract the data in a format compatible with the shouldReceive filter
+        const data = 'ticket' in payload ? payload.ticket : payload;
+        agentBroadcast(wsType, data);
+      });
+    }
 
     app.addHook('onClose', () => {
       for (const client of clients.values()) {
