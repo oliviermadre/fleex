@@ -53,6 +53,53 @@ Bun.serve<PtyWsData>({
       }
     }
 
+    // SSE event stream proxy — proxies /events/stream to the ASM server
+    if (url.pathname === '/events/stream' && req.method === 'GET') {
+      const asmUrl = process.env['ASM_SERVER_URL'] ?? 'http://localhost:3000';
+      const targetUrl = new URL('/api/events/stream', asmUrl);
+      // Forward query params (filter, lastEventId)
+      url.searchParams.forEach((value, key) => {
+        targetUrl.searchParams.set(key, value);
+      });
+      // Forward Last-Event-ID header
+      const lastEventId = req.headers.get('Last-Event-ID');
+      const headers: Record<string, string> = {};
+      if (lastEventId) {
+        headers['Last-Event-ID'] = lastEventId;
+      }
+
+      try {
+        const upstream = await fetch(targetUrl.toString(), { headers });
+        if (!upstream.ok || !upstream.body) {
+          return new Response('SSE upstream unavailable', { status: 502 });
+        }
+        return new Response(upstream.body, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          },
+        });
+      } catch {
+        return new Response('SSE upstream connection failed', { status: 502 });
+      }
+    }
+
+    // SSE event catalog proxy
+    if (url.pathname === '/events/catalog' && req.method === 'GET') {
+      const asmUrl = process.env['ASM_SERVER_URL'] ?? 'http://localhost:3000';
+      try {
+        const upstream = await fetch(new URL('/api/events/catalog', asmUrl).toString());
+        if (!upstream.ok) {
+          return new Response('Catalog unavailable', { status: 502 });
+        }
+        return Response.json(await upstream.json());
+      } catch {
+        return new Response('Catalog upstream connection failed', { status: 502 });
+      }
+    }
+
     return new Response('Not Found', { status: 404 });
   },
 
