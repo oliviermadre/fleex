@@ -56,3 +56,8 @@ export const TICKET_STATUS_LABELS: Record<string, string> = {
   done: 'Done',
 };
 export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;
+
+// Events
+export const SSE_EVENTS_PATH = '/api/events/stream';
+export const EVENT_CATALOG_PATH = '/api/events/catalog';
+export const EVENT_BUFFER_SIZE = 1000;

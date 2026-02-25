@@ -69,6 +69,14 @@ export type {
   TicketWsMessage,
 } from './types/ticket.js';
 
+export type {
+  EventMeta,
+  DomainEvent,
+  EventType,
+} from './types/events.js';
+
+export { EVENT_TYPES } from './types/events.js';
+
 export {
   ClientMessageType,
   ServerMessageType,
@@ -112,4 +120,7 @@ export {
   TICKET_STATUSES,
   TICKET_STATUS_LABELS,
   TICKET_PRIORITIES,
+  SSE_EVENTS_PATH,
+  EVENT_CATALOG_PATH,
+  EVENT_BUFFER_SIZE,
 } from './constants.js';

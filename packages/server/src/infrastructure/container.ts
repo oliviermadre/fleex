@@ -32,12 +32,14 @@ import { resolveStorageDriver, createStores } from './adapters/storage-factory.j
 import { localExec, localShellExec, LocalHostFs } from './host/local.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
+import { EventBusAdapter } from './adapters/event-bus.adapter.js';
 import { JsonlFileWatcher } from './services/jsonl-file-watcher.js';
 import type { ExecFn, ShellExecFn, HostFs } from './host/types.js';
 import type { PtyPort } from '../application/ports/pty.port.js';
 
 export async function createContainer() {
   const logger = new PinoLoggerAdapter();
+  const eventBus = new EventBusAdapter(logger);
 
   const gatewayUrl = process.env['HOST_GATEWAY_URL'];
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
@@ -99,14 +101,14 @@ export async function createContainer() {
   const githubGraphql = new GitHubGraphQLAdapter(execFn, logger);
   const repositoryRefreshScheduler = new RepositoryRefreshScheduler(githubGraphql, repositoryCache, logger);
 
-  const createSession = new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger);
-  const renameSession = new RenameSessionUseCase(tmux, sessionStore, namingService, logger);
-  const createWorktreeUC = new CreateWorktreeUseCase(git, logger);
-  const detectMerge = new DetectMergeUseCase(ticketStore, logger);
+  const createSession = new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger, eventBus);
+  const renameSession = new RenameSessionUseCase(tmux, sessionStore, namingService, logger, eventBus);
+  const createWorktreeUC = new CreateWorktreeUseCase(git, logger, eventBus);
+  const detectMerge = new DetectMergeUseCase(ticketStore, logger, eventBus);
   const createSessionFromTicket = new CreateSessionFromTicketUseCase(
     ticketStore, createSession, createWorktreeUC, git, config, logger,
   );
-  const importGitHubIssue = new ImportGitHubIssueUseCase(ticketStore, githubGraphql, logger);
+  const importGitHubIssue = new ImportGitHubIssueUseCase(ticketStore, githubGraphql, logger, eventBus);
 
   // Agent collaboration use cases
   const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore, logger);
@@ -116,6 +118,7 @@ export async function createContainer() {
 
   return {
     logger,
+    eventBus,
     execFn,
     shellExecFn,
     hostFs,
@@ -131,9 +134,9 @@ export async function createContainer() {
     createSession,
     renameSession,
     listSessions: new ListSessionsUseCase(sessionStore, tmux, logger),
-    killSession: new KillSessionUseCase(tmux, sessionStore, logger),
+    killSession: new KillSessionUseCase(tmux, sessionStore, logger, eventBus),
     getSessionGroups: new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity),
-    discoverSessions: new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git),
+    discoverSessions: new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git, eventBus),
     listRepositories: new ListRepositoriesUseCase(git, config, logger),
     listWorktrees: new ListWorktreesUseCase(git, logger),
     createWorktree: createWorktreeUC,
