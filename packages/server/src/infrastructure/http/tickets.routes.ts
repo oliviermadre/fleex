@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest } from '@asm/shared';
-import { TICKET_STATUSES } from '@asm/shared';
+import { TICKET_STATUSES, EVENT_TYPES } from '@asm/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError } from '../../domain/errors.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { Container } from '../container.js';
 
 export function ticketRoutes(container: Container) {
@@ -41,6 +42,7 @@ export function ticketRoutes(container: Container) {
       });
       await container.ticketStore.saveBoard(board);
       container.ticketBroadcast('board:updated', board.toDTO());
+      container.eventBus.emit(createEvent(EVENT_TYPES.BOARD_CREATED, board.toDTO(), { source: 'api' }));
       return reply.code(201).send(board.toDTO());
     });
 
@@ -50,6 +52,7 @@ export function ticketRoutes(container: Container) {
       board.update(request.body);
       await container.ticketStore.saveBoard(board);
       container.ticketBroadcast('board:updated', board.toDTO());
+      container.eventBus.emit(createEvent(EVENT_TYPES.BOARD_UPDATED, board.toDTO(), { source: 'api' }));
       return board.toDTO();
     });
 
@@ -59,6 +62,7 @@ export function ticketRoutes(container: Container) {
       await container.ticketStore.removeTicketsByBoard(request.params.id);
       await container.ticketStore.removeBoard(request.params.id);
       container.ticketBroadcast('board:updated', { deleted: request.params.id });
+      container.eventBus.emit(createEvent(EVENT_TYPES.BOARD_DELETED, { id: request.params.id }, { source: 'api' }));
       return reply.code(204).send();
     });
 
@@ -132,6 +136,7 @@ export function ticketRoutes(container: Container) {
 
       const dto = ticket.toDTO();
       container.ticketBroadcast('ticket:created', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_CREATED, { ticket: dto }, { source: 'api' }));
       return reply.code(201).send(dto);
     });
 
@@ -161,12 +166,14 @@ export function ticketRoutes(container: Container) {
 
       const dto = ticket.toDTO();
       container.ticketBroadcast('ticket:updated', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_UPDATED, { ticket: dto, changes: diff }, { source: 'api' }));
       return dto;
     });
 
     app.delete<{ Params: { id: string } }>('/api/tickets/:id', async (request, reply) => {
       await container.ticketStore.removeTicket(request.params.id);
       container.ticketBroadcast('ticket:deleted', { id: request.params.id });
+      container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_DELETED, { id: request.params.id }, { source: 'api' }));
       return reply.code(204).send();
     });
 
@@ -196,6 +203,7 @@ export function ticketRoutes(container: Container) {
 
         const dto = ticket.toDTO();
         container.ticketBroadcast('ticket:moved', dto);
+        container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_MOVED, { ticket: dto, changes: diff }, { source: 'api' }));
         return dto;
       },
     );
@@ -225,6 +233,7 @@ export function ticketRoutes(container: Container) {
         }));
 
         container.ticketBroadcast('ticket:updated', ticket.toDTO());
+        container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_LINKED, { ticket: ticket.toDTO(), link }, { source: 'api' }));
         return link;
       },
     );
@@ -246,6 +255,7 @@ export function ticketRoutes(container: Container) {
             source: 'web',
           }));
           container.ticketBroadcast('ticket:updated', ticket.toDTO());
+          container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_UNLINKED, { ticket: ticket.toDTO(), linkId: request.params.linkId }, { source: 'api' }));
         }
 
         return reply.code(204).send();
@@ -271,6 +281,7 @@ export function ticketRoutes(container: Container) {
         const ticket = await container.importGitHubIssue.execute(org, name, issueNumber, boardId);
         const dto = ticket.toDTO();
         container.ticketBroadcast('ticket:created', dto);
+        // Event already emitted by ImportGitHubIssueUseCase
         return reply.code(201).send(dto);
       },
     );
@@ -310,6 +321,7 @@ export function ticketRoutes(container: Container) {
         await container.ticketStore.saveTicket(ticket);
         const dto = ticket.toDTO();
         container.ticketBroadcast('ticket:updated', dto);
+        container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_GITHUB_SYNCED, { ticket: dto }, { source: 'api' }));
         return dto;
       },
     );
@@ -378,9 +390,11 @@ export function ticketRoutes(container: Container) {
 
         const dto = comment.toDTO();
         container.ticketBroadcast('comment:created', dto);
+        container.eventBus.emit(createEvent(EVENT_TYPES.COMMENT_CREATED, dto, { source: 'api' }));
 
         for (const mention of createdMentions) {
           container.ticketBroadcast('mention:created', mention.toDTO());
+          container.eventBus.emit(createEvent(EVENT_TYPES.MENTION_CREATED, mention.toDTO(), { source: 'api' }));
         }
 
         return reply.code(201).send(dto);

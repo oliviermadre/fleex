@@ -1,7 +1,9 @@
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary } from '@asm/shared';
+import { EVENT_TYPES } from '@asm/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { Container } from '../container.js';
 
 function sanitizeBranchForPath(branch: string): string {
@@ -73,6 +75,11 @@ export function repositoryRoutes(container: Container) {
       async (request, reply) => {
         const repoPath = resolveRepoPath(container, request.params.org, request.params.name);
         await container.git.removeWorktree(repoPath, request.body.path);
+        container.eventBus.emit(createEvent(EVENT_TYPES.WORKTREE_DELETED, {
+          org: request.params.org,
+          name: request.params.name,
+          path: request.body.path,
+        }, { source: 'api' }));
         return reply.code(204).send();
       },
     );

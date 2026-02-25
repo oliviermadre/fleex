@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import { EVENT_TYPES } from '@asm/shared';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketNotFoundError, WorktreeError } from '../../domain/errors.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { Container } from '../container.js';
 
 function sanitizeBranchForPath(branch: string): string {
@@ -120,6 +122,7 @@ export function agentWorktreesRoutes(container: Container) {
 
         const dto = ticket.toDTO();
         container.ticketBroadcast('ticket:updated', dto);
+        container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_LINKED, { ticket: dto, link: { type: 'worktree', ref: wtPath, label: branchName } }, { source: 'api', actor: request.agent?.name }));
 
         return reply.code(201).send({
           created: true,

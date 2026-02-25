@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import { EVENT_TYPES } from '@asm/shared';
 import { TicketNotFoundError, CommentNotFoundError, ForbiddenError } from '../../domain/errors.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { Container } from '../container.js';
 
 export function agentCommentsRoutes(container: Container) {
@@ -53,9 +55,11 @@ export function agentCommentsRoutes(container: Container) {
 
       const dto = comment.toDTO();
       container.ticketBroadcast('comment:created', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.COMMENT_CREATED, dto, { source: 'api', actor: agentName }));
 
       for (const mention of createdMentions) {
         container.ticketBroadcast('mention:created', mention.toDTO());
+        container.eventBus.emit(createEvent(EVENT_TYPES.MENTION_CREATED, mention.toDTO(), { source: 'api', actor: agentName }));
       }
 
       return reply.code(201).send({
@@ -107,11 +111,13 @@ export function agentCommentsRoutes(container: Container) {
           });
           await container.mentionStore.save(mention);
           container.ticketBroadcast('mention:created', mention.toDTO());
+          container.eventBus.emit(createEvent(EVENT_TYPES.MENTION_CREATED, mention.toDTO(), { source: 'api', actor: agentName }));
         }
       }
 
       const dto = comment.toDTO();
       container.ticketBroadcast('comment:updated', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.COMMENT_UPDATED, dto, { source: 'api', actor: agentName }));
       return dto;
     });
 
@@ -138,6 +144,7 @@ export function agentCommentsRoutes(container: Container) {
 
       await container.commentStore.remove(comment.id);
       container.ticketBroadcast('comment:deleted', { id: comment.id, ticketId: comment.ticketId });
+      container.eventBus.emit(createEvent(EVENT_TYPES.COMMENT_DELETED, { id: comment.id, ticketId: comment.ticketId }, { source: 'api', actor: agentName }));
       return reply.code(204).send();
     });
   };

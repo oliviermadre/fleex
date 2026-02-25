@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus } from '@asm/shared';
-import { TICKET_STATUSES } from '@asm/shared';
+import { TICKET_STATUSES, EVENT_TYPES } from '@asm/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { BoardNotFoundError, TicketNotFoundError } from '../../domain/errors.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { Container } from '../container.js';
 
 export function agentApiRoutes(container: Container) {
@@ -81,6 +82,7 @@ export function agentApiRoutes(container: Container) {
 
         const dto = ticket.toDTO();
         container.ticketBroadcast('ticket:created', dto);
+        container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_CREATED, { ticket: dto }, { source: 'api', actor: request.agent?.name }));
         return reply.code(201).send(dto);
       },
     );
@@ -107,6 +109,7 @@ export function agentApiRoutes(container: Container) {
 
       const dto = ticket.toDTO();
       container.ticketBroadcast('ticket:updated', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_UPDATED, { ticket: dto, changes: diff }, { source: 'api', actor: request.agent?.name }));
       return dto;
     });
 
@@ -114,6 +117,7 @@ export function agentApiRoutes(container: Container) {
     app.delete<{ Params: { id: string } }>('/tickets/:id', async (request, reply) => {
       await container.ticketStore.removeTicket(request.params.id);
       container.ticketBroadcast('ticket:deleted', { id: request.params.id });
+      container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_DELETED, { id: request.params.id }, { source: 'api', actor: request.agent?.name }));
       return reply.code(204).send();
     });
 
@@ -138,6 +142,7 @@ export function agentApiRoutes(container: Container) {
 
       const dto = ticket.toDTO();
       container.ticketBroadcast('ticket:updated', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_CLAIMED, { ticket: dto, agentName }, { source: 'api', actor: agentName }));
       return dto;
     });
 
@@ -161,6 +166,7 @@ export function agentApiRoutes(container: Container) {
 
       const dto = ticket.toDTO();
       container.ticketBroadcast('ticket:updated', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_UNCLAIMED, { ticket: dto }, { source: 'api', actor: request.agent?.name }));
       return dto;
     });
 
@@ -184,6 +190,7 @@ export function agentApiRoutes(container: Container) {
 
       const dto = ticket.toDTO();
       container.ticketBroadcast('ticket:updated', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_ASSIGNED, { ticket: dto, assignee: request.body.name }, { source: 'api', actor: request.agent?.name }));
       return dto;
     });
 
@@ -207,6 +214,7 @@ export function agentApiRoutes(container: Container) {
 
       const dto = ticket.toDTO();
       container.ticketBroadcast('ticket:updated', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_UNASSIGNED, { ticket: dto }, { source: 'api', actor: request.agent?.name }));
       return dto;
     });
 
@@ -233,6 +241,7 @@ export function agentApiRoutes(container: Container) {
 
       const dto = ticket.toDTO();
       container.ticketBroadcast('ticket:moved', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.TICKET_COMPLETED, { ticket: dto, changes: diff }, { source: 'api', actor: request.agent?.name }));
       return dto;
     });
 

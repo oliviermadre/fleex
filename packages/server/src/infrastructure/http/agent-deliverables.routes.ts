@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import { EVENT_TYPES } from '@asm/shared';
 import { TicketNotFoundError, DeliverableNotFoundError, ForbiddenError } from '../../domain/errors.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { Container } from '../container.js';
 
 export function agentDeliverablesRoutes(container: Container) {
@@ -58,6 +60,7 @@ export function agentDeliverablesRoutes(container: Container) {
 
       const dto = deliverable.toDTO();
       container.ticketBroadcast('deliverable:created', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.DELIVERABLE_CREATED, dto, { source: 'api', actor: agentName }));
       return reply.code(201).send(dto);
     });
 
@@ -79,6 +82,7 @@ export function agentDeliverablesRoutes(container: Container) {
 
       const dto = deliverable.toDTO();
       container.ticketBroadcast('deliverable:updated', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.DELIVERABLE_UPDATED, dto, { source: 'api', actor: agentName }));
       return dto;
     });
   };

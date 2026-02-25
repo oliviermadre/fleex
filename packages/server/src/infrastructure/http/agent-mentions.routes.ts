@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import { EVENT_TYPES } from '@asm/shared';
 import { TicketNotFoundError, MentionNotFoundError, ForbiddenError } from '../../domain/errors.js';
+import { createEvent } from '../../domain/events/create-event.js';
 import type { Container } from '../container.js';
 
 export function agentMentionsRoutes(container: Container) {
@@ -59,6 +61,7 @@ export function agentMentionsRoutes(container: Container) {
 
       const dto = mention.toDTO();
       container.ticketBroadcast('mention:acknowledged', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.MENTION_ACKNOWLEDGED, dto, { source: 'api', actor: agentName }));
       return dto;
     });
 
@@ -79,6 +82,7 @@ export function agentMentionsRoutes(container: Container) {
       const mention = (await container.mentionStore.getById(request.params.id))!;
       const dto = mention.toDTO();
       container.ticketBroadcast('mention:resolved', dto);
+      container.eventBus.emit(createEvent(EVENT_TYPES.MENTION_RESOLVED, dto, { source: 'api', actor: agentName }));
       return dto;
     });
   };
