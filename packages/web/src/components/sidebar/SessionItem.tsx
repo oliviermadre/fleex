@@ -62,9 +62,9 @@ export function SessionItem({ session }: Props) {
       return;
     }
     clearTimeout(killTimerRef.current);
+    removeSession(session.id);
     try {
       await api.killSession(session.id);
-      removeSession(session.id);
     } catch {
       // ignore
     }

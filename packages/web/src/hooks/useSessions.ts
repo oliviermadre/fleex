@@ -37,7 +37,6 @@ export function useSessions() {
         switch (msg.type) {
           case 'sessions:updated':
             setSessionGroups(msg.data);
-            // Flatten sessions from groups
             {
               const allSessions = msg.data.flatMap((g: SessionGroup) =>
                 g.worktrees.flatMap((w: WorktreeSessionGroup) => w.sessions)

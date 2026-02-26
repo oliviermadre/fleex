@@ -2,6 +2,40 @@ import { create } from 'zustand';
 import type { Session, SessionGroup, SessionStatus, WorktreeSessionGroup } from '@asm/shared';
 import { useUIStore } from './uiStore';
 
+/** IDs of recently killed sessions — filtered out of broadcast updates to prevent flicker */
+const recentlyKilled = new Map<string, number>();
+const KILL_GRACE_MS = 3000;
+
+function pruneKilled(): void {
+  const now = Date.now();
+  for (const [id, ts] of recentlyKilled) {
+    if (now - ts > KILL_GRACE_MS) recentlyKilled.delete(id);
+  }
+}
+
+function filterKilledSessions(groups: SessionGroup[]): SessionGroup[] {
+  if (recentlyKilled.size === 0) return groups;
+  pruneKilled();
+  if (recentlyKilled.size === 0) return groups;
+  return groups
+    .map((g) => ({
+      ...g,
+      worktrees: g.worktrees
+        .map((wt) => ({
+          ...wt,
+          sessions: wt.sessions.filter((s) => !recentlyKilled.has(s.id)),
+        }))
+        .filter((wt) => wt.sessions.length > 0),
+    }))
+    .filter((g) => g.worktrees.length > 0);
+}
+
+function filterKilledFromList(sessions: Session[]): Session[] {
+  if (recentlyKilled.size === 0) return sessions;
+  pruneKilled();
+  return sessions.filter((s) => !recentlyKilled.has(s.id));
+}
+
 interface SessionState {
   sessions: Session[];
   selectedSessionId: string | null;
@@ -32,9 +66,9 @@ export const useSessionStore = create<SessionState>((set) => ({
   selectedGroupId: null,
   activeGroupCellIndex: null,
 
-  setSessions: (sessions) => set({ sessions }),
+  setSessions: (sessions) => set({ sessions: filterKilledFromList(sessions) }),
 
-  setSessionGroups: (groups) => set({ sessionGroups: groups }),
+  setSessionGroups: (groups) => set({ sessionGroups: filterKilledSessions(groups) }),
 
   selectSession: (id) => {
     set({ selectedSessionId: id, splitSessionId: null, focusedPane: 'primary', selectedGroupId: null, activeGroupCellIndex: null });
@@ -58,6 +92,7 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   removeSession: (id) =>
     set((state) => {
+      recentlyKilled.set(id, Date.now());
       const sessions = state.sessions.filter((s) => s.id !== id);
 
       // Remove from sessionGroups, pruning empty worktrees and repo groups
