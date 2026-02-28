@@ -3,6 +3,53 @@
 -- Run this in the Supabase SQL Editor to create all required tables and indexes.
 -- ============================================================================
 
+-- ── Users ─────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS users (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email       TEXT UNIQUE NOT NULL,
+  name        TEXT,
+  avatar_url  TEXT,
+  provider    TEXT NOT NULL,
+  provider_id TEXT NOT NULL,
+  preferences JSONB NOT NULL DEFAULT '{}',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(provider, provider_id)
+);
+
+-- Seed a default user for single-user / local-dev setups.
+INSERT INTO users (id, email, name, provider, provider_id)
+VALUES ('00000000-0000-0000-0000-000000000000', 'local@localhost', 'Local User', 'local', 'local')
+ON CONFLICT (id) DO NOTHING;
+
+-- ── Gateways ──────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS gateways (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  hostname      TEXT,
+  secret_hash   TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'offline',
+  last_seen_at  TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gateways_user ON gateways(user_id);
+
+-- ── User Sessions (OAuth login persistence) ──────────────────────────────
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id          TEXT PRIMARY KEY,
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  data        JSONB NOT NULL DEFAULT '{}',
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user   ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_expiry ON user_sessions(expires_at);
+
 -- ── Sessions ────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -146,6 +193,9 @@ CREATE INDEX IF NOT EXISTS idx_deliverables_ticket_id ON deliverables(ticket_id)
 -- ── Row-Level Security ──────────────────────────────────────────────────────
 -- Enable RLS on all tables and add permissive policies for the service role.
 
+ALTER TABLE users             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gateways          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_sessions     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE boards            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tickets           ENABLE ROW LEVEL SECURITY;
@@ -155,6 +205,9 @@ ALTER TABLE comments          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mentions          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deliverables      ENABLE ROW LEVEL SECURITY;
 
+CREATE POLICY "service_role_users"             ON users             FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_gateways"          ON gateways          FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_user_sessions"     ON user_sessions     FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_sessions"          ON sessions          FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_boards"            ON boards            FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_tickets"           ON tickets           FOR ALL USING (true) WITH CHECK (true);
