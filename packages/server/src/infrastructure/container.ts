@@ -37,23 +37,37 @@ import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js'
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
 import { tunnelExec, tunnelShellExec, TunnelHostFs } from './host/tunnel-adapters.js';
 import { TunnelPtyAdapter } from './host/tunnel-pty.adapter.js';
-import { getFirstTunnel } from './ws/gateway-tunnel-ws.js';
+import { getTunnelForUser } from './ws/gateway-tunnel-ws.js';
+import { getCurrentUserId } from './request-context.js';
+
+/**
+ * Resolve the tunnel for the current authenticated user.
+ * Called lazily at request time — not at container creation.
+ * Uses AsyncLocalStorage to read the userId from the current request context.
+ */
+function userTunnelGetter() {
+  const userId = getCurrentUserId();
+  return getTunnelForUser(userId);
+}
 
 export async function createContainer() {
   const logger = new PinoLoggerAdapter();
 
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
 
-  // Gateway — all traffic routed through the authenticated tunnel
-  const execFn = tunnelExec(getFirstTunnel);
-  const shellExecFn = tunnelShellExec(getFirstTunnel);
-  const hostFs = new TunnelHostFs(getFirstTunnel);
-  const ptyAdapter = new TunnelPtyAdapter(getFirstTunnel);
+  // Gateway adapters — resolve the correct per-user tunnel at request time
+  // via AsyncLocalStorage (see request-context.ts + auth middleware).
+  const execFn = tunnelExec(userTunnelGetter);
+  const shellExecFn = tunnelShellExec(userTunnelGetter);
+  const hostFs = new TunnelHostFs(userTunnelGetter);
+  const ptyAdapter = new TunnelPtyAdapter(userTunnelGetter);
 
-  logger.info('Gateway configured via tunnel');
+  logger.info('Gateway configured via per-user tunnel');
 
+  // Config is per-user (lives on the user's gateway filesystem).
+  // We create it but do NOT call init() at startup — it initializes
+  // lazily on first use when a user's gateway is connected.
   const config = new JsonConfigAdapter(execFn, hostFs, hostHomedir);
-  await config.init();
 
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
@@ -75,6 +89,8 @@ export async function createContainer() {
   let userStore: PgUserStore | SupabaseUserStore | null = null;
   let sessionManager: SessionManager | SupabaseSessionManager | null = null;
   let gatewayStore: PgGatewayStore | SupabaseGatewayStore | null = null;
+  // Factory for creating per-user gateway stores (used by API routes)
+  let createGatewayStoreForUser: ((userId: string) => PgGatewayStore | SupabaseGatewayStore) | null = null;
 
   if (driver === 'supabase') {
     const supabaseUrl = process.env['ASM_SUPABASE_URL'];
@@ -90,6 +106,7 @@ export async function createContainer() {
 
       const defaultUserId = '00000000-0000-0000-0000-000000000000';
       gatewayStore = new SbGw(conn, defaultUserId);
+      createGatewayStoreForUser = (userId: string) => new SbGw(conn, userId);
       userStore = new SbUser(conn);
       sessionManager = new SbSess(conn);
       logger.info('Supabase auth/gateway stores initialized');
@@ -106,6 +123,7 @@ export async function createContainer() {
       await runMigrations(db, logger);
       const userId = getDefaultUserId();
       gatewayStore = new PgGw(db, userId, logger);
+      createGatewayStoreForUser = (uid: string) => new PgGw(db, uid, logger);
       userStore = new PgUser(db, logger);
       sessionManager = new SessMgr(db);
       logger.info('PostgreSQL auth/gateway stores initialized');
@@ -155,6 +173,7 @@ export async function createContainer() {
     userStore,
     sessionManager,
     gatewayStore,
+    createGatewayStoreForUser,
     sessionStore,
     repositoryCache,
     githubGraphql,

@@ -87,23 +87,24 @@ export class PgGatewayStore {
 
   /**
    * Verify a gateway's secret by comparing the SHA256 hash.
+   * Returns the owning userId on success, null on failure.
    * This intentionally does NOT filter by user_id — it validates the
    * cryptographic identity of the gateway itself during tunnel auth.
    */
-  async verifySecret(gatewayId: string, secretHash: string): Promise<boolean> {
+  async verifySecret(gatewayId: string, secretHash: string): Promise<string | null> {
     const { rows } = await this.pool.query(
-      'SELECT secret_hash FROM gateways WHERE id = $1',
+      'SELECT secret_hash, user_id FROM gateways WHERE id = $1',
       [gatewayId],
-    ) as { rows: { secret_hash: string }[] };
-    if (!rows[0]) return false;
+    ) as { rows: { secret_hash: string; user_id: string }[] };
+    if (!rows[0]) return null;
     // Constant-time comparison to prevent timing attacks
     const stored = rows[0].secret_hash;
-    if (stored.length !== secretHash.length) return false;
+    if (stored.length !== secretHash.length) return null;
     let mismatch = 0;
     for (let i = 0; i < stored.length; i++) {
       mismatch |= stored.charCodeAt(i) ^ secretHash.charCodeAt(i);
     }
-    return mismatch === 0;
+    return mismatch === 0 ? rows[0].user_id : null;
   }
 
   async remove(id: string): Promise<void> {

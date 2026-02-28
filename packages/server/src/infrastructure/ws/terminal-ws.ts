@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { PtyHandle } from '@asm/shared';
 import { WS_TERMINAL_PATH, DEFAULT_COLS, DEFAULT_ROWS } from '@asm/shared';
 import type { Container } from '../container.js';
+import { requestContext } from '../request-context.js';
 
 // Binary protocol constants (match shared ClientMessageType / ServerMessageType)
 const CLIENT_ATTACH = 0x01;
@@ -16,98 +17,118 @@ const SERVER_ERROR = 0x04;
 
 export function terminalWsPlugin(container: Container) {
   return async function (app: FastifyInstance) {
-    app.get(WS_TERMINAL_PATH, { websocket: true }, (socket) => {
+    app.get(WS_TERMINAL_PATH, { websocket: true }, (socket, req) => {
       let ptyHandle: PtyHandle | null = null;
-      container.logger.info('Terminal WebSocket connected');
+
+      // Capture the authenticated userId at connection time so that
+      // all operations on this socket are scoped to this user's gateway.
+      const userId = req.userId;
+      if (!userId) {
+        sendError(socket, 'Authentication required');
+        socket.close();
+        return;
+      }
+
+      container.logger.info('Terminal WebSocket connected', { userId });
 
       socket.on('message', async (raw: Buffer) => {
-        const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer);
+        // Run within the user's request context so tunnel adapters
+        // resolve to this user's gateway.
+        requestContext.run({ userId }, async () => {
+          const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer);
 
-        if (data.length === 0) return;
+          if (data.length === 0) return;
 
-        const msgType = data[0];
+          const msgType = data[0];
 
-        switch (msgType) {
-          case CLIENT_ATTACH: {
-            if (ptyHandle) {
-              sendError(socket, 'Already attached to a session');
-              return;
-            }
-
-            try {
-              const payload = data.subarray(1);
-              const { sessionId, cols, rows } = parseAttachPayload(payload);
-              container.logger.info('Terminal ATTACH request', { sessionId, cols, rows });
-
-              const session = await container.sessionStore.getById(sessionId);
-              if (!session) {
-                container.logger.warn('Session not found for attach', { sessionId });
-                sendError(socket, `Session not found: ${sessionId}`);
+          switch (msgType) {
+            case CLIENT_ATTACH: {
+              if (ptyHandle) {
+                sendError(socket, 'Already attached to a session');
                 return;
               }
 
-              session.markAttached();
-              await container.sessionStore.save(session);
+              try {
+                const payload = data.subarray(1);
+                const { sessionId, cols, rows } = parseAttachPayload(payload);
+                container.logger.info('Terminal ATTACH request', { sessionId, cols, rows, userId });
 
-              container.logger.info('Spawning PTY for tmux attach', { tmuxName: session.tmuxName });
-              const handle = container.pty.spawnAttach(session.tmuxName, { cols, rows });
-              ptyHandle = handle;
+                const session = await container.sessionStore.getById(sessionId);
+                if (!session) {
+                  container.logger.warn('Session not found for attach', { sessionId });
+                  sendError(socket, `Session not found: ${sessionId}`);
+                  return;
+                }
 
-              handle.onData((chunk: Uint8Array) => {
-                // Guard: only the active PTY sends data
-                if (ptyHandle !== handle) return;
-                const msg = Buffer.allocUnsafe(1 + chunk.length);
-                msg[0] = SERVER_OUTPUT;
-                msg.set(chunk, 1);
-                socket.send(msg);
-              });
+                // Ownership check: session must belong to the authenticated user.
+                // SessionEntity doesn't carry userId yet; when backed by a
+                // database store, the underlying row has user_id. For now we
+                // rely on the per-user tunnel adapter (which will reject if the
+                // user has no connected gateway) as the primary isolation layer.
 
-              handle.onExit((exitCode: number) => {
-                container.logger.info('PTY exited', { exitCode, tmuxName: session.tmuxName });
-                // Guard: only the active PTY triggers exit notification.
-                // A replaced PTY's onExit must NOT clobber the new ptyHandle.
-                if (ptyHandle !== handle) return;
-                const msg = Buffer.allocUnsafe(2);
-                msg[0] = SERVER_EXIT;
-                msg[1] = exitCode & 0xff;
-                socket.send(msg);
+                session.markAttached();
+                await container.sessionStore.save(session);
+
+                container.logger.info('Spawning PTY for tmux attach', { tmuxName: session.tmuxName });
+                const handle = container.pty.spawnAttach(session.tmuxName, { cols, rows });
+                ptyHandle = handle;
+
+                handle.onData((chunk: Uint8Array) => {
+                  // Guard: only the active PTY sends data
+                  if (ptyHandle !== handle) return;
+                  const msg = Buffer.allocUnsafe(1 + chunk.length);
+                  msg[0] = SERVER_OUTPUT;
+                  msg.set(chunk, 1);
+                  socket.send(msg);
+                });
+
+                handle.onExit((exitCode: number) => {
+                  container.logger.info('PTY exited', { exitCode, tmuxName: session.tmuxName });
+                  // Guard: only the active PTY triggers exit notification.
+                  // A replaced PTY's onExit must NOT clobber the new ptyHandle.
+                  if (ptyHandle !== handle) return;
+                  const msg = Buffer.allocUnsafe(2);
+                  msg[0] = SERVER_EXIT;
+                  msg[1] = exitCode & 0xff;
+                  socket.send(msg);
+                  ptyHandle = null;
+                });
+
+                // Send ATTACHED confirmation
+                socket.send(Buffer.from([SERVER_ATTACHED]));
+                container.logger.info('Terminal ATTACHED confirmation sent', { sessionId });
+              } catch (err) {
+                container.logger.error('Terminal attach failed', { error: err instanceof Error ? err.message : String(err) });
+                sendError(socket, err instanceof Error ? err.message : 'Attach failed');
+              }
+              break;
+            }
+
+            case CLIENT_INPUT: {
+              if (ptyHandle?.isAlive) {
+                ptyHandle.write(data.subarray(1).toString());
+              }
+              break;
+            }
+
+            case CLIENT_RESIZE: {
+              if (ptyHandle?.isAlive && data.length >= 5) {
+                const cols = data.readUInt16BE(1);
+                const rows = data.readUInt16BE(3);
+                ptyHandle.resize({ cols, rows });
+              }
+              break;
+            }
+
+            case CLIENT_DETACH: {
+              if (ptyHandle) {
+                ptyHandle.kill();
                 ptyHandle = null;
-              });
-
-              // Send ATTACHED confirmation
-              socket.send(Buffer.from([SERVER_ATTACHED]));
-              container.logger.info('Terminal ATTACHED confirmation sent', { sessionId });
-            } catch (err) {
-              container.logger.error('Terminal attach failed', { error: err instanceof Error ? err.message : String(err) });
-              sendError(socket, err instanceof Error ? err.message : 'Attach failed');
+              }
+              break;
             }
-            break;
           }
-
-          case CLIENT_INPUT: {
-            if (ptyHandle?.isAlive) {
-              ptyHandle.write(data.subarray(1).toString());
-            }
-            break;
-          }
-
-          case CLIENT_RESIZE: {
-            if (ptyHandle?.isAlive && data.length >= 5) {
-              const cols = data.readUInt16BE(1);
-              const rows = data.readUInt16BE(3);
-              ptyHandle.resize({ cols, rows });
-            }
-            break;
-          }
-
-          case CLIENT_DETACH: {
-            if (ptyHandle) {
-              ptyHandle.kill();
-              ptyHandle = null;
-            }
-            break;
-          }
-        }
+        });
       });
 
       socket.on('close', () => {

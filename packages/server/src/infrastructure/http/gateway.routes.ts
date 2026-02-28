@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
 
@@ -5,17 +6,53 @@ const STALE_THRESHOLD_MS = 90_000; // 90 seconds
 
 export function gatewayRoutes(container: Container) {
   return async function (app: FastifyInstance) {
-    const { gatewayStore, logger } = container;
+    const { createGatewayStoreForUser, logger } = container;
 
-    if (!gatewayStore) {
-      // No Postgres → single-gateway mode, no registry needed
+    if (!createGatewayStoreForUser) {
+      // No database — single-gateway mode, no registry needed
       return;
     }
 
-    // ── Public API endpoints (called by frontend) ──
+    // ── Gateway registration (called from the gateway CLI setup) ──
+    //
+    // The authenticated user registers a gateway by providing the
+    // gateway's id + plaintext secret. The server stores SHA256(secret).
+    // When the gateway later connects via tunnel, it proves it knows
+    // the secret, and the server maps it back to this user.
 
-    app.get('/api/gateways', async () => {
-      const gateways = await gatewayStore.getAll();
+    app.post<{
+      Body: { id: string; name?: string; hostname?: string; secret: string };
+    }>('/api/gateways/register', async (request, reply) => {
+      const userId = request.userId;
+      if (!userId) return reply.code(401).send({ error: 'Authentication required' });
+
+      const { id, name, hostname, secret } = request.body;
+      if (!id || !secret) {
+        return reply.code(400).send({ error: 'id and secret are required' });
+      }
+
+      const secretHash = createHash('sha256').update(secret).digest('hex');
+      const store = createGatewayStoreForUser(userId);
+      const gw = await store.register(id, name || id, hostname || null, secretHash);
+      logger.info('Gateway registered via API', { userId, gatewayId: id, name });
+
+      return reply.code(201).send({
+        id: gw.id,
+        name: gw.name,
+        hostname: gw.hostname,
+        status: gw.status,
+        createdAt: gw.createdAt.toISOString(),
+      });
+    });
+
+    // ── List gateways for the authenticated user ──
+
+    app.get('/api/gateways', async (request, reply) => {
+      const userId = request.userId;
+      if (!userId) return reply.code(401).send({ error: 'Authentication required' });
+
+      const store = createGatewayStoreForUser(userId);
+      const gateways = await store.getAll();
       return gateways.map((gw) => ({
         id: gw.id,
         name: gw.name,
@@ -26,28 +63,36 @@ export function gatewayRoutes(container: Container) {
       }));
     });
 
+    // ── Delete a gateway belonging to the authenticated user ──
+
     app.delete<{ Params: { id: string } }>(
       '/api/gateways/:id',
       async (request, reply) => {
-        await gatewayStore.remove(request.params.id);
+        const userId = request.userId;
+        if (!userId) return reply.code(401).send({ error: 'Authentication required' });
+
+        const store = createGatewayStoreForUser(userId);
+        await store.remove(request.params.id);
         return reply.code(204).send();
       },
     );
 
-    // Stale gateway check — runs periodically
-    const checkInterval = setInterval(async () => {
-      try {
-        const staleIds = await gatewayStore.markStaleOffline(STALE_THRESHOLD_MS);
-        if (staleIds.length > 0) {
-          logger.info('Marked gateways offline (stale)', { ids: staleIds });
+    // Stale gateway check — runs periodically (uses default store for all gateways)
+    if (container.gatewayStore) {
+      const checkInterval = setInterval(async () => {
+        try {
+          const staleIds = await container.gatewayStore!.markStaleOffline(STALE_THRESHOLD_MS);
+          if (staleIds.length > 0) {
+            logger.info('Marked gateways offline (stale)', { ids: staleIds });
+          }
+        } catch (err) {
+          logger.error('Stale gateway check failed', {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
-      } catch (err) {
-        logger.error('Stale gateway check failed', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }, 30_000);
+      }, 30_000);
 
-    app.addHook('onClose', () => clearInterval(checkInterval));
+      app.addHook('onClose', () => clearInterval(checkInterval));
+    }
   };
 }

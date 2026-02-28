@@ -33,12 +33,14 @@ import { gatewayTunnelWsPlugin } from './infrastructure/ws/gateway-tunnel-ws.js'
 import { gatewayRoutes } from './infrastructure/http/gateway.routes.js';
 import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
+import { requestContext } from './infrastructure/request-context.js';
 
 async function main() {
   const container = await createContainer();
 
-  // Discover existing asm_ tmux sessions
-  await container.discoverSessions.execute();
+  // NOTE: discoverSessions and config.init() are NOT called at startup.
+  // They are per-user operations that run when a user's gateway connects
+  // and they make their first request.
 
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true, credentials: true });
@@ -52,6 +54,15 @@ async function main() {
   // Auth middleware for all subsequent routes
   const authMiddleware = createAuthMiddleware(container);
   app.addHook('preHandler', authMiddleware);
+
+  // Bind the authenticated userId into AsyncLocalStorage so that
+  // gateway tunnel adapters resolve the correct per-user tunnel.
+  app.addHook('preHandler', (request, _reply, done) => {
+    if (request.userId) {
+      requestContext.enterWith({ userId: request.userId });
+    }
+    done();
+  });
 
   // Register HTTP routes
   await app.register(sessionRoutes(container));
@@ -85,23 +96,6 @@ async function main() {
   await app.register(ticketWsPlugin(container));
   await app.register(agentWsPlugin(container));
   await app.register(gatewayTunnelWsPlugin(container));
-
-  // Start repository refresh scheduler if configured
-  const config = container.config.get() as unknown as Record<string, unknown>;
-  const refreshInterval = container.config.get().repositoryRefreshIntervalMs;
-  if (refreshInterval > 0) {
-    const resolved = config['resolvedRepositories'];
-    if (Array.isArray(resolved)) {
-      const repos = resolved
-        .filter((entry): entry is string => typeof entry === 'string' && entry.includes('/'))
-        .map((entry) => {
-          const [org, name] = entry.split('/');
-          return { org: org!, name: name! };
-        });
-      container.repositoryRefreshScheduler.setRepos(repos);
-      container.repositoryRefreshScheduler.start(refreshInterval);
-    }
-  }
 
   // Wire merge detection for ticket auto-complete
   container.repositoryRefreshScheduler.setOnMergedPRs(async (mergedPRs, repoKey) => {

@@ -62,6 +62,7 @@ export class GatewayTunnel {
 
   constructor(
     public readonly gatewayId: string,
+    public readonly userId: string,
     private readonly ws: WebSocket,
   ) {
     ws.on('message', (data: Buffer) => {
@@ -238,6 +239,9 @@ export class GatewayTunnel {
 }
 
 // ── Tunnel registry ───────────────────────────────────────────────
+//
+// Keyed by gatewayId. Each tunnel stores its owning userId so lookups
+// can be scoped per user, preventing cross-user access.
 
 const tunnels = new Map<string, GatewayTunnel>();
 
@@ -248,11 +252,18 @@ export function getTunnel(gatewayId: string): GatewayTunnel | null {
   return null;
 }
 
-/** Get the first connected tunnel (mono-gateway mode). */
-export function getFirstTunnel(): GatewayTunnel | null {
+/**
+ * Get a connected tunnel belonging to a specific user.
+ * Returns the first alive tunnel owned by userId, or null.
+ * This is the ONLY function that should be used for request routing.
+ */
+export function getTunnelForUser(userId: string): GatewayTunnel | null {
   for (const [id, tunnel] of tunnels) {
-    if (tunnel.isAlive) return tunnel;
-    tunnels.delete(id);
+    if (!tunnel.isAlive) {
+      tunnels.delete(id);
+      continue;
+    }
+    if (tunnel.userId === userId) return tunnel;
   }
   return null;
 }
@@ -306,32 +317,22 @@ export function gatewayTunnelWsPlugin(container: Container) {
             return;
           }
 
-          // Validate secret
+          // Validate secret — verifySecret returns the owning userId or null
           const secretHash = createHash('sha256').update(msg.secret).digest('hex');
+          let ownerUserId: string | null = null;
 
           if (gatewayStore) {
-            // Check registration token for new gateways
-            // Try to verify secret first; if it fails, try to register
-            const valid = await gatewayStore.verifySecret(gatewayId, secretHash);
-            if (!valid) {
-              // Not registered yet or secret mismatch — attempt auto-registration
-              if (REGISTRATION_TOKEN) {
-                // We can't check the reg token here since it's not in the auth message.
-                // The gateway must have been pre-registered, or the token is not enforced.
-                logger.warn('Tunnel auth rejected: invalid credentials', { gatewayId });
-                socket.send(encodeJsonFrame({ type: 'auth_error', reason: 'Invalid credentials' }));
-                socket.close(4003, 'Invalid credentials');
-                return;
-              }
-              // No registration token required — auto-register
-              await gatewayStore.register(
-                gatewayId,
-                msg.name || gatewayId,
-                msg.hostname || null,
-                secretHash,
-              );
-              logger.info('Gateway auto-registered via tunnel', { gatewayId, name: msg.name });
+            ownerUserId = await gatewayStore.verifySecret(gatewayId, secretHash);
+            if (!ownerUserId) {
+              // Gateway not registered or secret mismatch
+              logger.warn('Tunnel auth rejected: invalid credentials', { gatewayId });
+              socket.send(encodeJsonFrame({ type: 'auth_error', reason: 'Invalid credentials' }));
+              socket.close(4003, 'Invalid credentials');
+              return;
             }
+          } else {
+            // No gateway store (single-user/no-db mode) — assign default user
+            ownerUserId = '00000000-0000-0000-0000-000000000000';
           }
 
           // Auth OK
@@ -341,9 +342,9 @@ export function gatewayTunnelWsPlugin(container: Container) {
           // Remove the one-shot auth listener and install the tunnel
           socket.removeListener('message', onFirstMessage);
 
-          const tunnel = new GatewayTunnel(gatewayId, socket);
+          const tunnel = new GatewayTunnel(gatewayId, ownerUserId, socket);
           tunnels.set(gatewayId, tunnel);
-          logger.info('Gateway tunnel established', { gatewayId });
+          logger.info('Gateway tunnel established', { gatewayId, userId: ownerUserId });
 
           // Mark gateway online
           if (gatewayStore) {

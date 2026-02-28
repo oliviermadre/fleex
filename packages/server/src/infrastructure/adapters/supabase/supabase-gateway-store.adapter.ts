@@ -105,24 +105,25 @@ export class SupabaseGatewayStore {
 
   /**
    * Verify a gateway's secret by comparing the SHA256 hash.
+   * Returns the owning userId on success, null on failure.
    * This intentionally does NOT filter by user_id — it validates the
    * cryptographic identity of the gateway itself during tunnel auth.
    */
-  async verifySecret(gatewayId: string, secretHash: string): Promise<boolean> {
+  async verifySecret(gatewayId: string, secretHash: string): Promise<string | null> {
     const { data, error } = await this.conn.client
       .from('gateways')
-      .select('secret_hash')
+      .select('secret_hash, user_id')
       .eq('id', gatewayId)
       .maybeSingle();
-    if (error || !data) return false;
-    const stored = (data as { secret_hash: string }).secret_hash;
-    if (stored.length !== secretHash.length) return false;
+    if (error || !data) return null;
+    const row = data as { secret_hash: string; user_id: string };
+    if (row.secret_hash.length !== secretHash.length) return null;
     // Constant-time comparison to prevent timing attacks
     let mismatch = 0;
-    for (let i = 0; i < stored.length; i++) {
-      mismatch |= stored.charCodeAt(i) ^ secretHash.charCodeAt(i);
+    for (let i = 0; i < row.secret_hash.length; i++) {
+      mismatch |= row.secret_hash.charCodeAt(i) ^ secretHash.charCodeAt(i);
     }
-    return mismatch === 0;
+    return mismatch === 0 ? row.user_id : null;
   }
 
   async remove(id: string): Promise<void> {
