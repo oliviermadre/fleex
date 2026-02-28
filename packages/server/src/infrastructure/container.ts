@@ -13,11 +13,12 @@ import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
-import { PgUserStore } from './adapters/pg-user-store.adapter.js';
-import { PgGatewayStore } from './adapters/pg-gateway-store.adapter.js';
-import { SessionManager } from './auth/session-manager.js';
-import { createDbPool, runMigrations, getDefaultUserId } from './database/db.js';
-import type { DbPool } from './database/db.js';
+import type { PgUserStore } from './adapters/pg-user-store.adapter.js';
+import type { PgGatewayStore } from './adapters/pg-gateway-store.adapter.js';
+import type { SessionManager } from './auth/session-manager.js';
+import type { SupabaseUserStore } from './adapters/supabase/supabase-user-store.adapter.js';
+import type { SupabaseGatewayStore } from './adapters/supabase/supabase-gateway-store.adapter.js';
+import type { SupabaseSessionManager } from './adapters/supabase/supabase-session-manager.adapter.js';
 import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-session-from-ticket.js';
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
 import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
@@ -44,7 +45,6 @@ export async function createContainer() {
 
   const gatewayUrl = process.env['HOST_GATEWAY_URL'] || DEFAULT_GATEWAY_URL;
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
-  const databaseUrl = process.env['DATABASE_URL'];
 
   // Gateway — always remote
   const execFn = remoteExec(gatewayUrl);
@@ -73,19 +73,45 @@ export async function createContainer() {
     deliverableStore,
   } = await createStores(driver, { hostFs, homedir: hostHomedir, logger });
 
-  // Auth & multi-gateway stores (PostgreSQL-only features)
-  let db: DbPool | null = null;
-  let userStore: PgUserStore | null = null;
-  let sessionManager: SessionManager | null = null;
-  let gatewayStore: PgGatewayStore | null = null;
+  // Auth & multi-gateway stores (database-backed features)
+  let userStore: PgUserStore | SupabaseUserStore | null = null;
+  let sessionManager: SessionManager | SupabaseSessionManager | null = null;
+  let gatewayStore: PgGatewayStore | SupabaseGatewayStore | null = null;
 
-  if (databaseUrl) {
-    db = await createDbPool(logger);
-    await runMigrations(db, logger);
-    const userId = getDefaultUserId();
-    userStore = new PgUserStore(db, logger);
-    sessionManager = new SessionManager(db);
-    gatewayStore = new PgGatewayStore(db, userId, logger);
+  if (driver === 'supabase') {
+    const supabaseUrl = process.env['ASM_SUPABASE_URL'];
+    const supabaseKey = process.env['ASM_SUPABASE_KEY'];
+    if (supabaseUrl && supabaseKey) {
+      const { SupabaseConnection } = await import('./adapters/supabase/connection.js');
+      const { SupabaseGatewayStore: SbGw } = await import('./adapters/supabase/supabase-gateway-store.adapter.js');
+      const { SupabaseUserStore: SbUser } = await import('./adapters/supabase/supabase-user-store.adapter.js');
+      const { SupabaseSessionManager: SbSess } = await import('./adapters/supabase/supabase-session-manager.adapter.js');
+
+      const conn = new SupabaseConnection(supabaseUrl, supabaseKey);
+      await conn.init();
+
+      const defaultUserId = '00000000-0000-0000-0000-000000000000';
+      gatewayStore = new SbGw(conn, defaultUserId);
+      userStore = new SbUser(conn);
+      sessionManager = new SbSess(conn);
+      logger.info('Supabase auth/gateway stores initialized');
+    }
+  } else if (driver === 'pgsql') {
+    const databaseUrl = process.env['DATABASE_URL'] || process.env['ASM_PGSQL_URL'];
+    if (databaseUrl) {
+      const { createDbPool, runMigrations, getDefaultUserId } = await import('./database/db.js');
+      const { PgGatewayStore: PgGw } = await import('./adapters/pg-gateway-store.adapter.js');
+      const { PgUserStore: PgUser } = await import('./adapters/pg-user-store.adapter.js');
+      const { SessionManager: SessMgr } = await import('./auth/session-manager.js');
+
+      const db = await createDbPool(logger);
+      await runMigrations(db, logger);
+      const userId = getDefaultUserId();
+      gatewayStore = new PgGw(db, userId, logger);
+      userStore = new PgUser(db, logger);
+      sessionManager = new SessMgr(db);
+      logger.info('PostgreSQL auth/gateway stores initialized');
+    }
   }
 
   const namingService = new SessionNamingService();
@@ -128,7 +154,6 @@ export async function createContainer() {
     tmux,
     pty: ptyAdapter,
     git,
-    db,
     userStore,
     sessionManager,
     gatewayStore,

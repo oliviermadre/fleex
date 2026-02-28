@@ -26,7 +26,7 @@ function parseCookie(header: string | undefined, name: string): string | null {
 }
 
 export function createAuthMiddleware(container: Container) {
-  const { sessionManager, agentTokenStore, db } = container;
+  const { sessionManager, agentTokenStore } = container;
   const defaultUserId = '00000000-0000-0000-0000-000000000000';
 
   // Check if any OAuth provider is configured
@@ -47,7 +47,7 @@ export function createAuthMiddleware(container: Container) {
     }
 
     // Mode 1: No database — no auth, use default user
-    if (!db) {
+    if (!sessionManager) {
       request.userId = defaultUserId;
       return;
     }
@@ -57,7 +57,7 @@ export function createAuthMiddleware(container: Container) {
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
       const hash = ApiTokenEntity.hashToken(token);
-      const tokenEntity = agentTokenStore.getByHash(hash);
+      const tokenEntity = await agentTokenStore.getByHash(hash);
       if (tokenEntity) {
         tokenEntity.markUsed();
         await agentTokenStore.save(tokenEntity);

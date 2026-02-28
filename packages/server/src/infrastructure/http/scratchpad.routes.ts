@@ -13,7 +13,12 @@ function kvKey(org: string, name: string): string {
 
 export function scratchpadRoutes(container: Container) {
   return async function (app: FastifyInstance) {
-    const { hostFs, hostHomedir, kvStore } = container;
+    const { hostFs, hostHomedir } = container;
+    const kvStore = ('kvStore' in container ? (container as any).kvStore : null) as {
+      get(key: string): Promise<string | null>;
+      set(key: string, value: string): Promise<void>;
+      listByPrefix(prefix: string): Promise<{ key: string; value: string }[]>;
+    } | null;
     const dirPath = join(hostHomedir, SCRATCHPAD_DIR);
     const filePath = join(dirPath, SCRATCHPAD_FILE);
     const scratchpadsDir = join(dirPath, SCRATCHPADS_SUBDIR);
@@ -87,7 +92,7 @@ export function scratchpadRoutes(container: Container) {
           // KV-backed: list all scratchpad:* keys
           const globalContent = await kvStore.get(KV_GLOBAL);
           const globalLines = globalContent
-            ? globalContent.split('\n').filter((l) => l.trim() !== '').length
+            ? globalContent.split('\n').filter((l: string) => l.trim() !== '').length
             : 0;
           items.push({ key: '__global__', label: 'Global', lineCount: globalLines });
 
@@ -117,7 +122,7 @@ export function scratchpadRoutes(container: Container) {
         let globalLineCount = 0;
         if (await hostFs.exists(filePath)) {
           const content = await hostFs.readFile(filePath);
-          globalLineCount = content.split('\n').filter((l) => l.trim() !== '').length;
+          globalLineCount = content.split('\n').filter((l: string) => l.trim() !== '').length;
         }
         items.push({ key: '__global__', label: 'Global', lineCount: globalLineCount });
 
@@ -139,7 +144,7 @@ export function scratchpadRoutes(container: Container) {
                 if (seen.has(key)) continue;
                 seen.add(key);
                 const content = await hostFs.readFile(join(orgPath, fileEntry.name));
-                const lineCount = content.split('\n').filter((l) => l.trim() !== '').length;
+                const lineCount = content.split('\n').filter((l: string) => l.trim() !== '').length;
                 items.push({ key, label: key, lineCount });
               }
             }

@@ -16,7 +16,6 @@ export function NavSidebar() {
   const repoCount = Object.keys(summaries).length;
   const tickets = useTicketStore((s) => s.tickets);
   const activeTicketCount = tickets.filter((t) => t.status === 'doing' || t.status === 'reviewing').length;
-
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <div className="flex flex-1 flex-col gap-0.5 pt-2">

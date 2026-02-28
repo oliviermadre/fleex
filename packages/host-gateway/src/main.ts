@@ -8,6 +8,11 @@ import { handlePtyMessage, handlePtyOpen, handlePtyClose } from './pty';
 import { logAlways, getVerbosity } from './logger';
 import { startTunnel } from './tunnel';
 
+// Disable TLS certificate verification in development
+if (process.env['GATEWAY_TLS_VERIFY'] === 'false') {
+  process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
+}
+
 const PORT = parseInt(process.env['GATEWAY_PORT'] ?? '3001', 10);
 const CENTRAL_SERVER_URL = process.env['ASM_CENTRAL_URL'];
 const GATEWAY_NAME = process.env['GATEWAY_NAME'] || hostname();

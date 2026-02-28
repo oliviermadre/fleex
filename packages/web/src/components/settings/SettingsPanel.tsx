@@ -6,6 +6,7 @@ import { Input } from '../ui/Input';
 import { AppearanceTab } from './AppearanceTab';
 import { cn } from '../../lib/cn';
 import type { AgentToken } from '@asm/shared';
+import { useGatewayStore } from '../../stores/gatewayStore';
 import * as api from '../../services/api';
 
 const tabLabels: Record<SettingsTab, string> = {
@@ -15,6 +16,7 @@ const tabLabels: Record<SettingsTab, string> = {
   'pinned-icons': 'Pinned Icons',
   'worktree-actions': 'Worktree Actions',
   'agent-tokens': 'Agent Tokens',
+  gateways: 'Gateways',
 };
 
 export function SettingsPanel() {
@@ -151,6 +153,7 @@ export function SettingsPanel() {
             />
           )}
           {settingsTab === 'agent-tokens' && <AgentTokensTab />}
+          {settingsTab === 'gateways' && <GatewaysTab />}
 
           {/* Save button */}
           <div className="mt-8 flex justify-end">
@@ -945,6 +948,157 @@ function AgentTokensTab() {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function relativeTime(dateStr: string | null): string {
+  if (!dateStr) return 'Never';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function GatewaysTab() {
+  const gateways = useGatewayStore((s) => s.gateways);
+  const loaded = useGatewayStore((s) => s.loaded);
+  const load = useGatewayStore((s) => s.load);
+  const remove = useGatewayStore((s) => s.remove);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 30_000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    load().finally(() => setTimeout(() => setRefreshing(false), 600));
+  }, [load]);
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      setRemovingId(id);
+      try {
+        await remove(id);
+      } finally {
+        setRemovingId(null);
+      }
+    },
+    [remove],
+  );
+
+  if (!loaded) {
+    return <p className="py-8 text-center text-sm text-[var(--theme-text-muted)]">Loading gateways...</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-[var(--theme-text-muted)]">
+          Registered host gateways that route sessions to remote machines.
+        </p>
+        <button
+          className={cn(
+            'flex items-center justify-center rounded p-1 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
+            refreshing && 'text-[var(--theme-accent)]',
+          )}
+          onClick={handleRefresh}
+          title="Refresh"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={cn(refreshing && 'animate-spin')}
+          >
+            <path d="M2 8a6 6 0 0 1 10.3-4.2" />
+            <polyline points="13,1 13,5 9,5" />
+            <path d="M14 8a6 6 0 0 1-10.3 4.2" />
+            <polyline points="3,15 3,11 7,11" />
+          </svg>
+        </button>
+      </div>
+
+      {gateways.length === 0 ? (
+        <p className="py-6 text-center text-sm text-[var(--theme-text-muted)]">
+          No gateways registered. Start a host-gateway process to register one.
+        </p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[var(--theme-border)] text-left text-xs text-[var(--theme-text-muted)]">
+              <th className="pb-2 pr-4 font-medium">Name</th>
+              <th className="pb-2 pr-4 font-medium">Hostname</th>
+              <th className="pb-2 pr-4 font-medium">Status</th>
+              <th className="pb-2 pr-4 font-medium">Last Seen</th>
+              <th className="pb-2 font-medium" />
+            </tr>
+          </thead>
+          <tbody>
+            {gateways.map((gw) => (
+              <tr
+                key={gw.id}
+                className="border-b border-[var(--theme-border)] last:border-0"
+              >
+                <td className="py-2.5 pr-4 font-medium text-[var(--theme-text-primary)]">
+                  {gw.name}
+                </td>
+                <td className="py-2.5 pr-4 text-[var(--theme-text-secondary)]">
+                  {gw.hostname || '\u2014'}
+                </td>
+                <td className="py-2.5 pr-4">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className={cn(
+                        'inline-block h-2 w-2 rounded-full',
+                        gw.status === 'online' ? 'bg-green-500' : 'bg-neutral-400',
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        'text-xs',
+                        gw.status === 'online'
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-[var(--theme-text-muted)]',
+                      )}
+                    >
+                      {gw.status}
+                    </span>
+                  </span>
+                </td>
+                <td className="py-2.5 pr-4 text-xs text-[var(--theme-text-muted)]">
+                  {relativeTime(gw.lastSeenAt)}
+                </td>
+                <td className="py-2.5 text-right">
+                  <button
+                    className="rounded px-2 py-1 text-xs text-[var(--theme-text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+                    onClick={() => handleDelete(gw.id)}
+                    disabled={removingId === gw.id}
+                    title="Remove gateway"
+                  >
+                    {removingId === gw.id ? 'Removing...' : 'Delete'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );

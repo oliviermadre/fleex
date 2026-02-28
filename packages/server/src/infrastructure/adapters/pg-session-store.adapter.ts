@@ -36,10 +36,10 @@ export class PgSessionStore implements SessionStorePort {
   ) {}
 
   async init(): Promise<void> {
-    const { rows } = await this.pool.query<SessionRow>(
+    const { rows } = (await this.pool.query(
       'SELECT * FROM sessions WHERE user_id = $1',
       [this.userId],
-    );
+    )) as { rows: SessionRow[] };
     for (const row of rows) {
       const entity = this.rowToEntity(row);
       this.sessions.set(entity.id, entity);
@@ -78,23 +78,24 @@ export class PgSessionStore implements SessionStorePort {
     this.sessions.delete(sessionId);
   }
 
-  getAll(): SessionEntity[] {
+  async getAll(): Promise<SessionEntity[]> {
     return Array.from(this.sessions.values());
   }
 
-  getById(id: string): SessionEntity | null {
+  async getById(id: string): Promise<SessionEntity | null> {
     return this.sessions.get(id) ?? null;
   }
 
-  getByTmuxName(name: string): SessionEntity | null {
+  async getByTmuxName(name: string): Promise<SessionEntity | null> {
     for (const session of this.sessions.values()) {
       if (session.tmuxName === name) return session;
     }
     return null;
   }
 
-  getByCwd(cwd: string): SessionEntity[] {
-    return this.getAll().filter((s) => s.cwd === cwd);
+  async getByCwd(cwd: string): Promise<SessionEntity[]> {
+    const all = await this.getAll();
+    return all.filter((s) => s.cwd === cwd);
   }
 
   private rowToEntity(row: SessionRow): SessionEntity {

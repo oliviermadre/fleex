@@ -30,26 +30,26 @@ export class PgUserStore {
   ) {}
 
   async findById(id: string): Promise<UserRecord | null> {
-    const { rows } = await this.pool.query<UserRow>(
+    const { rows } = await this.pool.query(
       'SELECT * FROM users WHERE id = $1',
       [id],
-    );
+    ) as { rows: UserRow[] };
     return rows[0] ? this.rowToRecord(rows[0]) : null;
   }
 
   async findByProvider(provider: string, providerId: string): Promise<UserRecord | null> {
-    const { rows } = await this.pool.query<UserRow>(
+    const { rows } = await this.pool.query(
       'SELECT * FROM users WHERE provider = $1 AND provider_id = $2',
       [provider, providerId],
-    );
+    ) as { rows: UserRow[] };
     return rows[0] ? this.rowToRecord(rows[0]) : null;
   }
 
   async findByEmail(email: string): Promise<UserRecord | null> {
-    const { rows } = await this.pool.query<UserRow>(
+    const { rows } = await this.pool.query(
       'SELECT * FROM users WHERE email = $1',
       [email],
-    );
+    ) as { rows: UserRow[] };
     return rows[0] ? this.rowToRecord(rows[0]) : null;
   }
 
@@ -60,14 +60,14 @@ export class PgUserStore {
     name: string | null;
     avatarUrl: string | null;
   }): Promise<UserRecord> {
-    const { rows } = await this.pool.query<UserRow>(
+    const { rows } = await this.pool.query(
       `INSERT INTO users (email, name, avatar_url, provider, provider_id)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (provider, provider_id) DO UPDATE SET
          email = $1, name = $2, avatar_url = $3
        RETURNING *`,
       [params.email, params.name, params.avatarUrl, params.provider, params.providerId],
-    );
+    ) as { rows: UserRow[] };
     this.logger.info('User upserted from OAuth', { provider: params.provider, email: params.email });
     return this.rowToRecord(rows[0]!);
   }

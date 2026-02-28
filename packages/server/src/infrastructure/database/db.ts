@@ -6,7 +6,9 @@ import type { LoggerPort } from '../../application/ports/logger.port.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export type DbPool = pg.Pool;
+export type DbPool = pg.Pool & {
+  connect(): Promise<{ query(text: string, params?: unknown[]): Promise<{ rows: any[] }>; release(): void }>;
+};
 
 const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -25,7 +27,7 @@ export async function createDbPool(logger: LoggerPort): Promise<DbPool> {
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
-  });
+  } as any) as DbPool;
 
   // Verify connectivity
   const client = await pool.connect();

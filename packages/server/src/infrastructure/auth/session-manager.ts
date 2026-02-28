@@ -25,14 +25,10 @@ export class SessionManager {
   }
 
   async get(sessionId: string): Promise<SessionData | null> {
-    const { rows } = await this.pool.query<{
-      user_id: string;
-      data: Record<string, unknown>;
-      expires_at: string;
-    }>(
+    const { rows } = await this.pool.query(
       'SELECT user_id, data, expires_at FROM user_sessions WHERE id = $1',
       [sessionId],
-    );
+    ) as { rows: { user_id: string; data: Record<string, unknown>; expires_at: string }[] };
 
     if (rows.length === 0) return null;
 

@@ -72,28 +72,28 @@ export class PgTicketStore implements TicketStorePort {
 
   async init(): Promise<void> {
     // Load boards
-    const { rows: boardRows } = await this.pool.query<BoardRow>(
+    const { rows: boardRows } = (await this.pool.query(
       'SELECT * FROM boards WHERE user_id = $1',
       [this.userId],
-    );
+    )) as { rows: BoardRow[] };
     for (const row of boardRows) {
       this.boards.set(row.id, this.boardRowToEntity(row));
     }
 
     // Load tickets
-    const { rows: ticketRows } = await this.pool.query<TicketRow>(
+    const { rows: ticketRows } = (await this.pool.query(
       'SELECT * FROM tickets WHERE user_id = $1',
       [this.userId],
-    );
+    )) as { rows: TicketRow[] };
     for (const row of ticketRows) {
       this.tickets.set(row.id, this.ticketRowToEntity(row));
     }
 
     // Load recent activity
-    const { rows: activityRows } = await this.pool.query<ActivityRow>(
+    const { rows: activityRows } = (await this.pool.query(
       'SELECT * FROM ticket_activity WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5000',
       [this.userId],
-    );
+    )) as { rows: ActivityRow[] };
     for (const row of activityRows) {
       this.activities.push(this.activityRowToEntity(row));
     }
@@ -107,11 +107,11 @@ export class PgTicketStore implements TicketStorePort {
 
   // ── Boards ──
 
-  getAllBoards(): BoardEntity[] {
+  async getAllBoards(): Promise<BoardEntity[]> {
     return Array.from(this.boards.values());
   }
 
-  getBoardById(id: string): BoardEntity | null {
+  async getBoardById(id: string): Promise<BoardEntity | null> {
     return this.boards.get(id) ?? null;
   }
 
@@ -142,26 +142,29 @@ export class PgTicketStore implements TicketStorePort {
 
   // ── Tickets ──
 
-  getAllTickets(): TicketEntity[] {
+  async getAllTickets(): Promise<TicketEntity[]> {
     return Array.from(this.tickets.values());
   }
 
-  getTicketById(id: string): TicketEntity | null {
+  async getTicketById(id: string): Promise<TicketEntity | null> {
     return this.tickets.get(id) ?? null;
   }
 
-  getTicketsByBoard(boardId: string): TicketEntity[] {
-    return this.getAllTickets()
+  async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {
+    const all = await this.getAllTickets();
+    return all
       .filter((t) => t.boardId === boardId)
       .sort((a, b) => a.position - b.position);
   }
 
-  getTicketsByStatus(boardId: string, status: TicketStatus): TicketEntity[] {
-    return this.getTicketsByBoard(boardId).filter((t) => t.status === status);
+  async getTicketsByStatus(boardId: string, status: TicketStatus): Promise<TicketEntity[]> {
+    const boardTickets = await this.getTicketsByBoard(boardId);
+    return boardTickets.filter((t) => t.status === status);
   }
 
-  getTicketsLinkedTo(type: TicketLinkType, ref: string): TicketEntity[] {
-    return this.getAllTickets().filter((t) =>
+  async getTicketsLinkedTo(type: TicketLinkType, ref: string): Promise<TicketEntity[]> {
+    const all = await this.getAllTickets();
+    return all.filter((t) =>
       t.links.some((l) => l.type === type && l.ref === ref),
     );
   }
@@ -212,8 +215,9 @@ export class PgTicketStore implements TicketStorePort {
 
   // ── Agent queries ──
 
-  getNextTicketForAgent(boardId?: string): TicketEntity | null {
-    let candidates = this.getAllTickets().filter(
+  async getNextTicketForAgent(boardId?: string): Promise<TicketEntity | null> {
+    const all = await this.getAllTickets();
+    let candidates = all.filter(
       (t) => t.status === 'todo' && !t.blocked,
     );
     if (boardId) {
@@ -228,8 +232,9 @@ export class PgTicketStore implements TicketStorePort {
     return candidates[0] ?? null;
   }
 
-  getClaimedByAgent(agentName: string): TicketEntity[] {
-    return this.getAllTickets().filter(
+  async getClaimedByAgent(agentName: string): Promise<TicketEntity[]> {
+    const all = await this.getAllTickets();
+    return all.filter(
       (t) => t.assignee === agentName && t.status === 'doing',
     );
   }
@@ -253,7 +258,7 @@ export class PgTicketStore implements TicketStorePort {
     this.activities.push(entry);
   }
 
-  getActivitiesByTicket(ticketId: string, limit = 50): TicketActivityEntity[] {
+  async getActivitiesByTicket(ticketId: string, limit = 50): Promise<TicketActivityEntity[]> {
     return this.activities
       .filter((a) => a.ticketId === ticketId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())

@@ -11,10 +11,10 @@ export class PgKvStore {
   ) {}
 
   async get(key: string): Promise<string | null> {
-    const { rows } = await this.pool.query<{ value: unknown }>(
+    const { rows } = await this.pool.query(
       'SELECT value FROM user_kv WHERE user_id = $1 AND key = $2',
       [this.userId, key],
-    );
+    ) as { rows: { value: unknown }[] };
     if (rows.length === 0) return null;
     const val = rows[0]!.value;
     return typeof val === 'string' ? val : JSON.stringify(val);
@@ -39,10 +39,10 @@ export class PgKvStore {
   }
 
   async listByPrefix(prefix: string): Promise<{ key: string; value: string }[]> {
-    const { rows } = await this.pool.query<{ key: string; value: unknown }>(
+    const { rows } = await this.pool.query(
       'SELECT key, value FROM user_kv WHERE user_id = $1 AND key LIKE $2',
       [this.userId, prefix + '%'],
-    );
+    ) as { rows: { key: string; value: unknown }[] };
     return rows.map((r) => ({
       key: r.key,
       value: typeof r.value === 'string' ? r.value : JSON.stringify(r.value),

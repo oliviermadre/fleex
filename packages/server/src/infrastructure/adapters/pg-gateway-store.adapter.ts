@@ -30,30 +30,30 @@ export class PgGatewayStore {
   ) {}
 
   async getAll(): Promise<GatewayRecord[]> {
-    const { rows } = await this.pool.query<GatewayRow>(
+    const { rows } = await this.pool.query(
       'SELECT * FROM gateways WHERE user_id = $1 ORDER BY created_at',
       [this.userId],
-    );
+    ) as { rows: GatewayRow[] };
     return rows.map(this.rowToRecord);
   }
 
   async getById(id: string): Promise<GatewayRecord | null> {
-    const { rows } = await this.pool.query<GatewayRow>(
+    const { rows } = await this.pool.query(
       'SELECT * FROM gateways WHERE id = $1 AND user_id = $2',
       [id, this.userId],
-    );
+    ) as { rows: GatewayRow[] };
     return rows[0] ? this.rowToRecord(rows[0]) : null;
   }
 
   async register(id: string, name: string, hostname: string | null, secretHash: string): Promise<GatewayRecord> {
-    const { rows } = await this.pool.query<GatewayRow>(
+    const { rows } = await this.pool.query(
       `INSERT INTO gateways (id, user_id, name, hostname, secret_hash, status, last_seen_at)
        VALUES ($1, $2, $3, $4, $5, 'online', now())
        ON CONFLICT (id) DO UPDATE SET
          name = $3, hostname = $4, status = 'online', last_seen_at = now()
        RETURNING *`,
       [id, this.userId, name, hostname, secretHash],
-    );
+    ) as { rows: GatewayRow[] };
     this.logger.info('Gateway registered', { id, name, hostname });
     return this.rowToRecord(rows[0]!);
   }
@@ -75,13 +75,13 @@ export class PgGatewayStore {
   }
 
   async markStaleOffline(staleThresholdMs: number): Promise<string[]> {
-    const { rows } = await this.pool.query<{ id: string }>(
+    const { rows } = await this.pool.query(
       `UPDATE gateways SET status = 'offline'
        WHERE user_id = $1 AND status = 'online'
          AND last_seen_at < now() - interval '1 millisecond' * $2
        RETURNING id`,
       [this.userId, staleThresholdMs],
-    );
+    ) as { rows: { id: string }[] };
     return rows.map((r) => r.id);
   }
 

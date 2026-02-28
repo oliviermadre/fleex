@@ -25,10 +25,10 @@ export class PgAgentTokenStore implements AgentTokenStorePort {
   ) {}
 
   async init(): Promise<void> {
-    const { rows } = await this.pool.query<TokenRow>(
+    const { rows } = (await this.pool.query(
       'SELECT * FROM api_tokens WHERE user_id = $1',
       [this.userId],
-    );
+    )) as { rows: TokenRow[] };
     for (const row of rows) {
       const entity = new ApiTokenEntity(
         row.id, row.name, row.prefix, row.hashed_secret,
@@ -41,11 +41,11 @@ export class PgAgentTokenStore implements AgentTokenStorePort {
     this.logger.info('PgAgentTokenStore loaded', { count: this.tokens.size });
   }
 
-  getAll(): ApiTokenEntity[] {
+  async getAll(): Promise<ApiTokenEntity[]> {
     return Array.from(this.tokens.values());
   }
 
-  getByHash(hash: string): ApiTokenEntity | null {
+  async getByHash(hash: string): Promise<ApiTokenEntity | null> {
     const id = this.hashIndex.get(hash);
     if (!id) return null;
     return this.tokens.get(id) ?? null;

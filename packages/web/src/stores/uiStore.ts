@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'cluster' | 'settings' | 'scratchpads';
-export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions' | 'agent-tokens';
+export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions' | 'agent-tokens' | 'gateways';
 
 interface UIState {
   // Nav sidebar (left icon bar)
