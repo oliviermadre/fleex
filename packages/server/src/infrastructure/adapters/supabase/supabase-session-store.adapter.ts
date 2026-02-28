@@ -2,9 +2,11 @@ import type { SessionType, SessionStatus } from '@asm/shared';
 import { SessionEntity } from '../../../domain/entities.js';
 import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
 import type { SupabaseConnection } from './connection.js';
+import { getCurrentUserId } from '../../request-context.js';
 
 interface SessionRow {
   id: string;
+  user_id: string;
   tmux_name: string;
   type: string;
   status: string;
@@ -41,8 +43,10 @@ export class SupabaseSessionStore implements SessionStorePort {
   constructor(private readonly conn: SupabaseConnection) {}
 
   async save(session: SessionEntity): Promise<void> {
+    const userId = getCurrentUserId();
     const { error } = await this.conn.client.from('sessions').upsert({
       id: session.id,
+      user_id: userId,
       tmux_name: session.tmuxName,
       type: session.type,
       status: session.status,
@@ -60,46 +64,56 @@ export class SupabaseSessionStore implements SessionStorePort {
   }
 
   async remove(sessionId: string): Promise<void> {
+    const userId = getCurrentUserId();
     const { error } = await this.conn.client
       .from('sessions')
       .delete()
-      .eq('id', sessionId);
+      .eq('id', sessionId)
+      .eq('user_id', userId);
     if (error) throw new Error(`SupabaseSessionStore.remove failed: ${error.message}`);
   }
 
   async getAll(): Promise<SessionEntity[]> {
+    const userId = getCurrentUserId();
     const { data, error } = await this.conn.client
       .from('sessions')
-      .select('*');
+      .select('*')
+      .eq('user_id', userId);
     if (error) throw new Error(`SupabaseSessionStore.getAll failed: ${error.message}`);
     return (data as SessionRow[]).map(rowToEntity);
   }
 
   async getById(id: string): Promise<SessionEntity | null> {
+    const userId = getCurrentUserId();
     const { data, error } = await this.conn.client
       .from('sessions')
       .select('*')
       .eq('id', id)
+      .eq('user_id', userId)
       .maybeSingle();
     if (error) throw new Error(`SupabaseSessionStore.getById failed: ${error.message}`);
     return data ? rowToEntity(data as SessionRow) : null;
   }
 
   async getByTmuxName(name: string): Promise<SessionEntity | null> {
+    const userId = getCurrentUserId();
     const { data, error } = await this.conn.client
       .from('sessions')
       .select('*')
       .eq('tmux_name', name)
+      .eq('user_id', userId)
       .maybeSingle();
     if (error) throw new Error(`SupabaseSessionStore.getByTmuxName failed: ${error.message}`);
     return data ? rowToEntity(data as SessionRow) : null;
   }
 
   async getByCwd(cwd: string): Promise<SessionEntity[]> {
+    const userId = getCurrentUserId();
     const { data, error } = await this.conn.client
       .from('sessions')
       .select('*')
-      .eq('cwd', cwd);
+      .eq('cwd', cwd)
+      .eq('user_id', userId);
     if (error) throw new Error(`SupabaseSessionStore.getByCwd failed: ${error.message}`);
     return (data as SessionRow[]).map(rowToEntity);
   }

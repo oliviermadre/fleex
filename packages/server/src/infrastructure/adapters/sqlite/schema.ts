@@ -2,6 +2,7 @@ export const SQLITE_SCHEMA: string[] = [
   // ── Sessions ──
   `CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT '',
     tmux_name TEXT NOT NULL,
     type TEXT NOT NULL,
     status TEXT NOT NULL,
@@ -15,6 +16,9 @@ export const SQLITE_SCHEMA: string[] = [
     claude_prompt TEXT,
     display_name TEXT
   )`,
+
+  // Migration: add user_id if missing (for existing databases)
+  `CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`,
 
   // ── Boards ──
   `CREATE TABLE IF NOT EXISTS boards (

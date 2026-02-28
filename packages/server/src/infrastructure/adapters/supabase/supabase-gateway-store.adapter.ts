@@ -52,6 +52,18 @@ export class SupabaseGatewayStore {
   }
 
   async register(id: string, name: string, hostname: string | null, secretHash: string): Promise<GatewayRecord> {
+    // Check if the gateway already exists and belongs to a different user.
+    // Supabase's upsert doesn't support conditional WHERE on conflict,
+    // so we do an explicit ownership check first.
+    const { data: existing } = await this.conn.client
+      .from('gateways')
+      .select('user_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (existing && (existing as { user_id: string }).user_id !== this.userId) {
+      throw new Error('Gateway ID is already registered to another user');
+    }
+
     const now = new Date().toISOString();
     const { data, error } = await this.conn.client
       .from('gateways')

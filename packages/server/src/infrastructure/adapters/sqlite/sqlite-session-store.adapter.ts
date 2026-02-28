@@ -2,9 +2,11 @@ import type { SessionType, SessionStatus } from '@asm/shared';
 import { SessionEntity } from '../../../domain/entities.js';
 import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
 import type { SqliteConnection } from './connection.js';
+import { getCurrentUserId } from '../../request-context.js';
 
 interface SessionRow {
   id: string;
+  user_id: string;
   tmux_name: string;
   type: string;
   status: string;
@@ -23,19 +25,21 @@ export class SqliteSessionStoreAdapter implements SessionStorePort {
   constructor(private readonly conn: SqliteConnection) {}
 
   async save(session: SessionEntity): Promise<void> {
+    const userId = getCurrentUserId();
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO sessions
-        (id, tmux_name, type, status, cwd, created_at, last_attached_at,
+        (id, user_id, tmux_name, type, status, cwd, created_at, last_attached_at,
          repository_org, repository_name, worktree_branch, git_remote,
          claude_prompt, display_name)
       VALUES
-        (@id, @tmux_name, @type, @status, @cwd, @created_at, @last_attached_at,
+        (@id, @user_id, @tmux_name, @type, @status, @cwd, @created_at, @last_attached_at,
          @repository_org, @repository_name, @worktree_branch, @git_remote,
          @claude_prompt, @display_name)
     `);
 
     stmt.run({
       id: session.id,
+      user_id: userId,
       tmux_name: session.tmuxName,
       type: session.type,
       status: session.status,
@@ -52,30 +56,39 @@ export class SqliteSessionStoreAdapter implements SessionStorePort {
   }
 
   async remove(sessionId: string): Promise<void> {
-    this.conn.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+    const userId = getCurrentUserId();
+    this.conn.db.prepare('DELETE FROM sessions WHERE id = ? AND user_id = ?').run(sessionId, userId);
   }
 
   async getAll(): Promise<SessionEntity[]> {
-    const rows = this.conn.db.prepare('SELECT * FROM sessions').all() as SessionRow[];
+    const userId = getCurrentUserId();
+    const rows = this.conn.db
+      .prepare('SELECT * FROM sessions WHERE user_id = ?')
+      .all(userId) as SessionRow[];
     return rows.map((r) => this.toEntity(r));
   }
 
   async getById(id: string): Promise<SessionEntity | null> {
-    const row = this.conn.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+    const userId = getCurrentUserId();
+    const row = this.conn.db
+      .prepare('SELECT * FROM sessions WHERE id = ? AND user_id = ?')
+      .get(id, userId) as SessionRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 
   async getByTmuxName(name: string): Promise<SessionEntity | null> {
+    const userId = getCurrentUserId();
     const row = this.conn.db
-      .prepare('SELECT * FROM sessions WHERE tmux_name = ?')
-      .get(name) as SessionRow | undefined;
+      .prepare('SELECT * FROM sessions WHERE tmux_name = ? AND user_id = ?')
+      .get(name, userId) as SessionRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 
   async getByCwd(cwd: string): Promise<SessionEntity[]> {
+    const userId = getCurrentUserId();
     const rows = this.conn.db
-      .prepare('SELECT * FROM sessions WHERE cwd = ?')
-      .all(cwd) as SessionRow[];
+      .prepare('SELECT * FROM sessions WHERE cwd = ? AND user_id = ?')
+      .all(cwd, userId) as SessionRow[];
     return rows.map((r) => this.toEntity(r));
   }
 

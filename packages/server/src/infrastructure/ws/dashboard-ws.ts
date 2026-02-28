@@ -6,10 +6,16 @@ import type { DashboardMessage } from '@asm/shared';
 import type { Container } from '../container.js';
 import type { JsonlFileWatcher } from '../services/jsonl-file-watcher.js';
 import { encodePath } from '../../domain/services/claude-path-encoding.js';
+import { requestContext } from '../request-context.js';
+
+interface AuthenticatedClient {
+  socket: WebSocket;
+  userId: string;
+}
 
 export function dashboardWsPlugin(container: Container, fileWatcher?: JsonlFileWatcher) {
   return async function (app: FastifyInstance) {
-    const clients = new Set<WebSocket>();
+    const clients = new Set<AuthenticatedClient>();
 
     let broadcastInFlight = false;
     let pendingBroadcast = false;
@@ -24,21 +30,46 @@ export function dashboardWsPlugin(container: Container, fileWatcher?: JsonlFileW
 
       broadcastInFlight = true;
       try {
-        const groups = await container.getSessionGroups.execute();
-        const message: DashboardMessage = {
-          type: 'sessions:updated',
-          data: groups,
-        };
-        const payload = JSON.stringify(message);
-
+        // Group clients by userId so we query once per user.
+        const userClients = new Map<string, WebSocket[]>();
         for (const client of clients) {
-          if (client.readyState === 1) {
-            client.send(payload);
+          if (client.socket.readyState !== 1) continue;
+          let list = userClients.get(client.userId);
+          if (!list) {
+            list = [];
+            userClients.set(client.userId, list);
           }
+          list.push(client.socket);
         }
 
-        if (fileWatcher) {
-          reconcileWatchers(groups);
+        for (const [userId, sockets] of userClients) {
+          try {
+            // Run the session query within this user's request context
+            // so that the session store filters by their userId.
+            const groups = await requestContext.run({ userId }, () =>
+              container.getSessionGroups.execute(),
+            );
+            const message: DashboardMessage = {
+              type: 'sessions:updated',
+              data: groups,
+            };
+            const payload = JSON.stringify(message);
+
+            for (const ws of sockets) {
+              if (ws.readyState === 1) {
+                ws.send(payload);
+              }
+            }
+
+            if (fileWatcher) {
+              reconcileWatchers(groups);
+            }
+          } catch (err) {
+            container.logger.error('Dashboard broadcast failed for user', {
+              userId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
         }
       } catch (err) {
         container.logger.error('Dashboard broadcast failed', {
@@ -83,11 +114,17 @@ export function dashboardWsPlugin(container: Container, fileWatcher?: JsonlFileW
       }
     }
 
-    app.get(WS_DASHBOARD_PATH, { websocket: true }, (socket) => {
-      clients.add(socket as unknown as WebSocket);
+    app.get(WS_DASHBOARD_PATH, { websocket: true }, (socket, req) => {
+      const userId = req.userId;
+      if (!userId) {
+        socket.close();
+        return;
+      }
+      const client: AuthenticatedClient = { socket: socket as unknown as WebSocket, userId };
+      clients.add(client);
 
       socket.on('close', () => {
-        clients.delete(socket as unknown as WebSocket);
+        clients.delete(client);
       });
     });
 
@@ -105,7 +142,7 @@ export function dashboardWsPlugin(container: Container, fileWatcher?: JsonlFileW
         fileWatcher.closeAll();
       }
       for (const client of clients) {
-        client.close();
+        client.socket.close();
       }
       clients.clear();
     });

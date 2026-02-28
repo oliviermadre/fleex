@@ -46,16 +46,23 @@ export class PgGatewayStore {
   }
 
   async register(id: string, name: string, hostname: string | null, secretHash: string): Promise<GatewayRecord> {
+    // The WHERE clause ensures the UPSERT only succeeds if the gateway
+    // either doesn't exist (INSERT) or already belongs to this user (UPDATE).
+    // If the gateway belongs to a different user, no row is returned.
     const { rows } = await this.pool.query(
       `INSERT INTO gateways (id, user_id, name, hostname, secret_hash, status, last_seen_at)
        VALUES ($1, $2, $3, $4, $5, 'online', now())
        ON CONFLICT (id) DO UPDATE SET
-         name = $3, hostname = $4, status = 'online', last_seen_at = now()
+         name = $3, hostname = $4, secret_hash = $5, status = 'online', last_seen_at = now()
+       WHERE gateways.user_id = $2
        RETURNING *`,
       [id, this.userId, name, hostname, secretHash],
     ) as { rows: GatewayRow[] };
+    if (!rows[0]) {
+      throw new Error('Gateway ID is already registered to another user');
+    }
     this.logger.info('Gateway registered', { id, name, hostname });
-    return this.rowToRecord(rows[0]!);
+    return this.rowToRecord(rows[0]);
   }
 
   async heartbeat(id: string): Promise<boolean> {

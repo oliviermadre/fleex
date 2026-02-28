@@ -14,6 +14,13 @@ export class SqliteConnection {
     for (const statement of SQLITE_SCHEMA) {
       this._db.exec(statement);
     }
+
+    // Migration: add user_id to sessions if missing (for existing databases)
+    try {
+      this._db.exec("ALTER TABLE sessions ADD COLUMN user_id TEXT NOT NULL DEFAULT ''");
+    } catch {
+      // Column already exists — ignore
+    }
   }
 
   get db(): Database.Database {

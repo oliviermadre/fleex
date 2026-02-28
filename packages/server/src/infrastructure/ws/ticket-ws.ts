@@ -3,15 +3,26 @@ import type { WebSocket } from 'ws';
 import { WS_TICKET_PATH } from '@asm/shared';
 import type { Container } from '../container.js';
 
+interface AuthenticatedClient {
+  socket: WebSocket;
+  userId: string;
+}
+
 export function ticketWsPlugin(container: Container) {
   return async function (app: FastifyInstance) {
-    const clients = new Set<WebSocket>();
+    const clients = new Set<AuthenticatedClient>();
 
-    app.get(WS_TICKET_PATH, { websocket: true }, (socket) => {
-      clients.add(socket as unknown as WebSocket);
+    app.get(WS_TICKET_PATH, { websocket: true }, (socket, req) => {
+      const userId = req.userId;
+      if (!userId) {
+        socket.close();
+        return;
+      }
+      const client: AuthenticatedClient = { socket: socket as unknown as WebSocket, userId };
+      clients.add(client);
 
       socket.on('close', () => {
-        clients.delete(socket as unknown as WebSocket);
+        clients.delete(client);
       });
     });
 
@@ -20,8 +31,8 @@ export function ticketWsPlugin(container: Container) {
 
       const payload = JSON.stringify({ type, data });
       for (const client of clients) {
-        if (client.readyState === 1) {
-          client.send(payload);
+        if (client.socket.readyState === 1) {
+          client.socket.send(payload);
         }
       }
     };
@@ -31,7 +42,7 @@ export function ticketWsPlugin(container: Container) {
 
     app.addHook('onClose', () => {
       for (const client of clients) {
-        client.close();
+        client.socket.close();
       }
       clients.clear();
     });

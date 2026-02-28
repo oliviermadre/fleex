@@ -33,16 +33,23 @@ export function gatewayRoutes(container: Container) {
 
       const secretHash = createHash('sha256').update(secret).digest('hex');
       const store = createGatewayStoreForUser(userId);
-      const gw = await store.register(id, name || id, hostname || null, secretHash);
-      logger.info('Gateway registered via API', { userId, gatewayId: id, name });
+      try {
+        const gw = await store.register(id, name || id, hostname || null, secretHash);
+        logger.info('Gateway registered via API', { userId, gatewayId: id, name });
 
-      return reply.code(201).send({
-        id: gw.id,
-        name: gw.name,
-        hostname: gw.hostname,
-        status: gw.status,
-        createdAt: gw.createdAt.toISOString(),
-      });
+        return reply.code(201).send({
+          id: gw.id,
+          name: gw.name,
+          hostname: gw.hostname,
+          status: gw.status,
+          createdAt: gw.createdAt.toISOString(),
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('already registered to another user')) {
+          return reply.code(409).send({ error: 'Gateway ID is already registered to another user' });
+        }
+        throw err;
+      }
     });
 
     // ── List gateways for the authenticated user ──
