@@ -1,5 +1,7 @@
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import { checkPathAllowed, getPolicy } from './security-policy';
+import { audit } from './audit-log';
 
 type FsRequest =
   | { op: 'read'; path: string }
@@ -11,7 +13,42 @@ type FsRequest =
   | { op: 'rm'; path: string; recursive?: boolean }
   | { op: 'readTail'; path: string; bytes: number };
 
+function classifyOp(op: string): 'read' | 'write' | 'delete' {
+  if (op === 'rm') return 'delete';
+  if (op === 'write' || op === 'mkdir') return 'write';
+  return 'read';
+}
+
 export async function handleFs(body: FsRequest): Promise<unknown> {
+  // ── Security policy check ──
+  if ('path' in body && body.path) {
+    const opType = classifyOp(body.op);
+    const check = checkPathAllowed(body.path, opType);
+    if (!check.allowed) {
+      const policy = getPolicy();
+      if (policy.auditLog) {
+        await audit({
+          type: 'fs',
+          action: body.op,
+          details: { path: body.path, opType },
+          result: 'denied',
+          reason: check.reason,
+        });
+      }
+      throw new Error(`Security policy violation: ${check.reason}`);
+    }
+
+    const policy = getPolicy();
+    if (policy.auditLog && opType !== 'read') {
+      await audit({
+        type: 'fs',
+        action: body.op,
+        details: { path: body.path, opType },
+        result: 'allowed',
+      });
+    }
+  }
+
   switch (body.op) {
     case 'read': {
       const content = await fsp.readFile(body.path, 'utf-8');

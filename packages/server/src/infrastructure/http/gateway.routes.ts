@@ -5,6 +5,13 @@ import type { GatewayRegisterRequest, GatewayHeartbeatRequest } from '@asm/share
 
 const STALE_THRESHOLD_MS = 90_000; // 90 seconds
 
+/**
+ * Optional registration token. When set, gateways must present this token
+ * to register. This prevents rogue gateways from joining the cluster.
+ * Set via GATEWAY_REGISTRATION_TOKEN env var.
+ */
+const REGISTRATION_TOKEN = process.env['GATEWAY_REGISTRATION_TOKEN'] ?? null;
+
 export function gatewayRoutes(container: Container) {
   return async function (app: FastifyInstance) {
     const { gatewayStore, logger } = container;
@@ -12,6 +19,13 @@ export function gatewayRoutes(container: Container) {
     if (!gatewayStore) {
       // No Postgres → single-gateway mode, no registry needed
       return;
+    }
+
+    if (!REGISTRATION_TOKEN) {
+      logger.warn(
+        'GATEWAY_REGISTRATION_TOKEN is not set — any client can register as a gateway. ' +
+        'Set this environment variable in production to prevent rogue gateway registration.',
+      );
     }
 
     // ── Internal gateway endpoints (called by gateways) ──
@@ -23,8 +37,19 @@ export function gatewayRoutes(container: Container) {
         if (!id || !secret) {
           return reply.code(400).send({ error: 'id and secret are required' });
         }
+
+        // Validate registration token if configured
+        if (REGISTRATION_TOKEN) {
+          const regToken = request.headers['x-gateway-registration-token'] as string | undefined;
+          if (regToken !== REGISTRATION_TOKEN) {
+            logger.warn('Gateway registration rejected: invalid registration token', { id, name });
+            return reply.code(403).send({ error: 'Invalid registration token' });
+          }
+        }
+
         const secretHash = createHash('sha256').update(secret).digest('hex');
         const gw = await gatewayStore.register(id, name, hostname ?? null, secretHash);
+        logger.info('Gateway registered', { id, name, hostname });
         return { gateway: gw };
       },
     );
@@ -36,6 +61,15 @@ export function gatewayRoutes(container: Container) {
         if (!id || !secret) {
           return reply.code(400).send({ error: 'id and secret are required' });
         }
+
+        // Validate gateway secret
+        const secretHash = createHash('sha256').update(secret).digest('hex');
+        const valid = await gatewayStore.verifySecret(id, secretHash);
+        if (!valid) {
+          logger.warn('Heartbeat rejected: invalid gateway credentials', { id });
+          return reply.code(403).send({ error: 'Invalid gateway credentials' });
+        }
+
         const ok = await gatewayStore.heartbeat(id);
         if (!ok) {
           return reply.code(404).send({ error: 'Gateway not found' });

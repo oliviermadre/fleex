@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import type { Container } from '../container.js';
@@ -106,7 +106,7 @@ export function gatewayTunnelWsPlugin(container: Container) {
   return async function (app: FastifyInstance) {
     const { gatewayStore, logger } = container;
 
-    app.get('/ws/gateway-tunnel', { websocket: true }, (socket, req) => {
+    app.get('/ws/gateway-tunnel', { websocket: true }, async (socket, req) => {
       const url = new URL(req.url, 'http://localhost');
       const gatewayId = url.searchParams.get('id');
       const secret = url.searchParams.get('secret');
@@ -115,6 +115,17 @@ export function gatewayTunnelWsPlugin(container: Container) {
         logger.warn('Tunnel connection rejected: missing id or secret');
         socket.close(4001, 'Missing id or secret');
         return;
+      }
+
+      // Validate gateway secret against stored hash
+      if (gatewayStore) {
+        const secretHash = createHash('sha256').update(secret).digest('hex');
+        const valid = await gatewayStore.verifySecret(gatewayId, secretHash);
+        if (!valid) {
+          logger.warn('Tunnel connection rejected: invalid gateway credentials', { gatewayId });
+          socket.close(4003, 'Invalid gateway credentials');
+          return;
+        }
       }
 
       // Register tunnel
