@@ -3,7 +3,7 @@ import type { TerminalDimensions } from './session.js';
 export interface PtyHandle {
   write(data: string): void;
   resize(dims: TerminalDimensions): void;
-  onData(cb: (data: Buffer) => void): void;
+  onData(cb: (data: Uint8Array) => void): void;
   onExit(cb: (exitCode: number, signal: number) => void): void;
   kill(): void;
   readonly isAlive: boolean;

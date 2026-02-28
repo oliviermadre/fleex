@@ -53,12 +53,12 @@ export function terminalWsPlugin(container: Container) {
               const handle = container.pty.spawnAttach(session.tmuxName, { cols, rows });
               ptyHandle = handle;
 
-              handle.onData((chunk: Buffer) => {
+              handle.onData((chunk: Uint8Array) => {
                 // Guard: only the active PTY sends data
                 if (ptyHandle !== handle) return;
                 const msg = Buffer.allocUnsafe(1 + chunk.length);
                 msg[0] = SERVER_OUTPUT;
-                chunk.copy(msg, 1);
+                msg.set(chunk, 1);
                 socket.send(msg);
               });
 

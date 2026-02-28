@@ -35,24 +35,22 @@ import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
-import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
-import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
-
-const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
+import { tunnelExec, tunnelShellExec, TunnelHostFs } from './host/tunnel-adapters.js';
+import { TunnelPtyAdapter } from './host/tunnel-pty.adapter.js';
+import { getFirstTunnel } from './ws/gateway-tunnel-ws.js';
 
 export async function createContainer() {
   const logger = new PinoLoggerAdapter();
 
-  const gatewayUrl = process.env['HOST_GATEWAY_URL'] || DEFAULT_GATEWAY_URL;
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
 
-  // Gateway — always remote
-  const execFn = remoteExec(gatewayUrl);
-  const shellExecFn = remoteShellExec(gatewayUrl);
-  const hostFs = new RemoteHostFs(gatewayUrl);
-  const ptyAdapter = new RemotePtyAdapter(gatewayUrl, logger);
+  // Gateway — all traffic routed through the authenticated tunnel
+  const execFn = tunnelExec(getFirstTunnel);
+  const shellExecFn = tunnelShellExec(getFirstTunnel);
+  const hostFs = new TunnelHostFs(getFirstTunnel);
+  const ptyAdapter = new TunnelPtyAdapter(getFirstTunnel);
 
-  logger.info('Gateway configured', { gatewayUrl });
+  logger.info('Gateway configured via tunnel');
 
   const config = new JsonConfigAdapter(execFn, hostFs, hostHomedir);
   await config.init();

@@ -1,22 +1,39 @@
 import { randomUUID, createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
+import type { PtyHandle, TerminalDimensions } from '@asm/shared';
 import type { Container } from '../container.js';
+import {
+  TunnelFrame,
+  encodeJsonFrame,
+  encodePtyDataFrame,
+  encodePtyCtrlFrame,
+  parseFrameType,
+  parseJsonPayload,
+  parsePtyDataPayload,
+  parsePtyCtrlPayload,
+} from '@asm/shared';
+import type {
+  TunnelRequest,
+  TunnelResponse,
+  TunnelAuthMessage,
+  PtyControlMessage,
+} from '@asm/shared';
 
 /**
- * WebSocket-based reverse tunnel for gateways behind NAT/firewalls.
+ * WebSocket-based reverse tunnel for gateways.
  *
- * Protocol:
- * 1. Gateway connects to wss://central/ws/gateway-tunnel?id=<gatewayId>&secret=<secret>
- * 2. Central authenticates the gateway.
- * 3. Central can send requests through the tunnel:
- *    → { id: requestId, method: 'POST', path: '/exec', body: {...} }
- *    ← { id: requestId, status: 200, body: {...} }
- * 4. For PTY, a sub-protocol upgrades a specific requestId to binary streaming.
+ * Single authenticated channel carrying JSON requests/responses
+ * and multiplexed binary PTY streams.
  *
- * This module manages the tunnel connections and provides a way for the
- * server's remote adapters to route requests through tunnels.
+ * Auth flow:
+ * 1. Gateway connects with ?id=<gatewayId> (no secret in URL).
+ * 2. Gateway sends first message: { type: "auth", secret, name, hostname }
+ * 3. Server validates SHA256(secret), registers gateway, replies { type: "auth_ok" }.
+ * 4. All subsequent traffic uses the binary frame protocol.
  */
+
+// ── Pending JSON request tracking ─────────────────────────────────
 
 interface PendingRequest {
   resolve: (response: TunnelResponse) => void;
@@ -24,53 +41,57 @@ interface PendingRequest {
   timeout: ReturnType<typeof setTimeout>;
 }
 
-interface TunnelRequest {
-  id: string;
-  method: string;
-  path: string;
-  body?: unknown;
+// ── PTY channel tracking (server side) ────────────────────────────
+
+interface PtyChannel {
+  dataCallbacks: Array<(data: Uint8Array) => void>;
+  exitCallbacks: Array<(exitCode: number, signal: number) => void>;
+  alive: boolean;
 }
 
-interface TunnelResponse {
-  id: string;
-  status: number;
-  body?: unknown;
-  error?: string;
-}
+// ── Auth timeout ──────────────────────────────────────────────────
 
-class GatewayTunnel {
+const AUTH_TIMEOUT_MS = 5_000;
+
+// ── GatewayTunnel class ───────────────────────────────────────────
+
+export class GatewayTunnel {
   private readonly pending = new Map<string, PendingRequest>();
+  private readonly ptyChannels = new Map<number, PtyChannel>();
+  private nextChannelId = 1;
 
   constructor(
     public readonly gatewayId: string,
     private readonly ws: WebSocket,
   ) {
-    ws.on('message', (data) => {
-      try {
-        const msg = JSON.parse(String(data)) as TunnelResponse;
-        const req = this.pending.get(msg.id);
-        if (req) {
-          clearTimeout(req.timeout);
-          this.pending.delete(msg.id);
-          req.resolve(msg);
-        }
-      } catch {
-        // Ignore malformed responses
-      }
+    ws.on('message', (data: Buffer) => {
+      this.handleMessage(data);
     });
 
     ws.on('close', () => {
-      for (const [id, req] of this.pending) {
+      // Reject all pending requests
+      for (const [, req] of this.pending) {
         clearTimeout(req.timeout);
         req.reject(new Error('Tunnel closed'));
       }
       this.pending.clear();
+
+      // Notify all PTY channels
+      for (const [, ch] of this.ptyChannels) {
+        if (ch.alive) {
+          ch.alive = false;
+          for (const cb of ch.exitCallbacks) cb(1, 0);
+        }
+      }
+      this.ptyChannels.clear();
     });
   }
 
   get isAlive(): boolean {
     return this.ws.readyState === this.ws.OPEN;
   }
+
+  // ── JSON request/response ──
 
   async send(method: string, path: string, body?: unknown, timeoutMs = 30_000): Promise<TunnelResponse> {
     const id = randomUUID();
@@ -83,16 +104,141 @@ class GatewayTunnel {
       }, timeoutMs);
 
       this.pending.set(id, { resolve, reject, timeout });
-      this.ws.send(JSON.stringify(request));
+      this.ws.send(encodeJsonFrame(request));
     });
+  }
+
+  // ── PTY channel management ──
+
+  openPty(tmuxSessionName: string, dims: TerminalDimensions): PtyHandle {
+    const channelId = this.nextChannelId++;
+    const channel: PtyChannel = {
+      dataCallbacks: [],
+      exitCallbacks: [],
+      alive: true,
+    };
+    this.ptyChannels.set(channelId, channel);
+
+    // Send open command to gateway
+    this.ws.send(encodePtyCtrlFrame({
+      channelId,
+      action: 'open',
+      tmuxSessionName,
+      cols: dims.cols,
+      rows: dims.rows,
+    }));
+
+    const tunnel = this;
+
+    return {
+      write(data: string) {
+        if (channel.alive && tunnel.ws.readyState === tunnel.ws.OPEN) {
+          tunnel.ws.send(encodePtyDataFrame(channelId, Buffer.from(data, 'utf-8')));
+        }
+      },
+      resize(d: TerminalDimensions) {
+        if (channel.alive && tunnel.ws.readyState === tunnel.ws.OPEN) {
+          tunnel.ws.send(encodePtyCtrlFrame({
+            channelId,
+            action: 'resize',
+            cols: d.cols,
+            rows: d.rows,
+          }));
+        }
+      },
+      onData(cb: (data: Uint8Array) => void) {
+        channel.dataCallbacks.push(cb);
+      },
+      onExit(cb: (exitCode: number, signal: number) => void) {
+        channel.exitCallbacks.push(cb);
+      },
+      kill() {
+        if (channel.alive) {
+          channel.alive = false;
+          tunnel.ptyChannels.delete(channelId);
+          if (tunnel.ws.readyState === tunnel.ws.OPEN) {
+            tunnel.ws.send(encodePtyCtrlFrame({ channelId, action: 'close' }));
+          }
+        }
+      },
+      get isAlive() {
+        return channel.alive;
+      },
+    };
   }
 
   close(): void {
     this.ws.close();
   }
+
+  // ── Internal message dispatch ──
+
+  private handleMessage(raw: Buffer): void {
+    const frameType = parseFrameType(raw);
+    if (frameType === null) return;
+
+    // JSON frame — tunnel response
+    if (frameType === TunnelFrame.JSON) {
+      try {
+        const msg = parseJsonPayload<TunnelResponse>(raw);
+        const req = this.pending.get(msg.id);
+        if (req) {
+          clearTimeout(req.timeout);
+          this.pending.delete(msg.id);
+          req.resolve(msg);
+        }
+      } catch {
+        // Ignore malformed
+      }
+      return;
+    }
+
+    // PTY data frame
+    if (frameType === TunnelFrame.PTY_DATA) {
+      const { channelId, payload } = parsePtyDataPayload(raw);
+      const ch = this.ptyChannels.get(channelId);
+      if (ch?.alive) {
+        for (const cb of ch.dataCallbacks) cb(payload);
+      }
+      return;
+    }
+
+    // PTY control frame
+    if (frameType === TunnelFrame.PTY_CTRL) {
+      try {
+        const ctrl = parsePtyCtrlPayload(raw);
+        const ch = this.ptyChannels.get(ctrl.channelId);
+        if (!ch) return;
+
+        switch (ctrl.action) {
+          case 'opened':
+            // Gateway confirmed the PTY is open — nothing to do
+            break;
+          case 'exit':
+            if (ch.alive) {
+              ch.alive = false;
+              this.ptyChannels.delete(ctrl.channelId);
+              for (const cb of ch.exitCallbacks) cb(ctrl.exitCode, 0);
+            }
+            break;
+          case 'error':
+            if (ch.alive) {
+              ch.alive = false;
+              this.ptyChannels.delete(ctrl.channelId);
+              for (const cb of ch.exitCallbacks) cb(1, 0);
+            }
+            break;
+        }
+      } catch {
+        // Ignore malformed
+      }
+      return;
+    }
+  }
 }
 
-/** Registry of active tunnel connections, keyed by gatewayId. */
+// ── Tunnel registry ───────────────────────────────────────────────
+
 const tunnels = new Map<string, GatewayTunnel>();
 
 export function getTunnel(gatewayId: string): GatewayTunnel | null {
@@ -102,6 +248,19 @@ export function getTunnel(gatewayId: string): GatewayTunnel | null {
   return null;
 }
 
+/** Get the first connected tunnel (mono-gateway mode). */
+export function getFirstTunnel(): GatewayTunnel | null {
+  for (const [id, tunnel] of tunnels) {
+    if (tunnel.isAlive) return tunnel;
+    tunnels.delete(id);
+  }
+  return null;
+}
+
+// ── Fastify plugin ────────────────────────────────────────────────
+
+const REGISTRATION_TOKEN = process.env['GATEWAY_REGISTRATION_TOKEN'] ?? null;
+
 export function gatewayTunnelWsPlugin(container: Container) {
   return async function (app: FastifyInstance) {
     const { gatewayStore, logger } = container;
@@ -109,56 +268,118 @@ export function gatewayTunnelWsPlugin(container: Container) {
     app.get('/ws/gateway-tunnel', { websocket: true }, async (socket, req) => {
       const url = new URL(req.url, 'http://localhost');
       const gatewayId = url.searchParams.get('id');
-      const secret = url.searchParams.get('secret');
 
-      if (!gatewayId || !secret) {
-        logger.warn('Tunnel connection rejected: missing id or secret');
-        socket.close(4001, 'Missing id or secret');
+      if (!gatewayId) {
+        logger.warn('Tunnel connection rejected: missing id');
+        socket.close(4001, 'Missing id');
         return;
       }
 
-      // Validate gateway secret against stored hash
-      if (gatewayStore) {
-        const secretHash = createHash('sha256').update(secret).digest('hex');
-        const valid = await gatewayStore.verifySecret(gatewayId, secretHash);
-        if (!valid) {
-          logger.warn('Tunnel connection rejected: invalid gateway credentials', { gatewayId });
-          socket.close(4003, 'Invalid gateway credentials');
-          return;
+      // ── Auth handshake: expect first message within AUTH_TIMEOUT_MS ──
+
+      let authenticated = false;
+
+      const authTimeout = setTimeout(() => {
+        if (!authenticated) {
+          logger.warn('Tunnel auth timeout', { gatewayId });
+          socket.close(4003, 'Authentication timeout');
         }
-      }
+      }, AUTH_TIMEOUT_MS);
 
-      // Register tunnel
-      const tunnel = new GatewayTunnel(gatewayId, socket);
-      tunnels.set(gatewayId, tunnel);
-      logger.info('Gateway tunnel established', { gatewayId });
+      // We need to handle the first message specially for auth
+      const onFirstMessage = async (data: Buffer) => {
+        clearTimeout(authTimeout);
 
-      // Mark gateway online
-      if (gatewayStore) {
-        gatewayStore.heartbeat(gatewayId).catch(() => {});
-      }
+        try {
+          // First message must be a JSON frame with auth
+          const frameType = parseFrameType(data);
+          if (frameType !== TunnelFrame.JSON) {
+            logger.warn('Tunnel auth: expected JSON frame', { gatewayId });
+            socket.close(4003, 'Expected auth message');
+            return;
+          }
 
-      socket.on('close', () => {
-        tunnels.delete(gatewayId);
-        logger.info('Gateway tunnel closed', { gatewayId });
-        if (gatewayStore) {
-          gatewayStore.markOffline(gatewayId).catch(() => {});
+          const msg = parseJsonPayload<TunnelAuthMessage>(data);
+          if (msg.type !== 'auth' || !msg.secret) {
+            logger.warn('Tunnel auth: invalid auth message', { gatewayId });
+            socket.close(4003, 'Invalid auth message');
+            return;
+          }
+
+          // Validate secret
+          const secretHash = createHash('sha256').update(msg.secret).digest('hex');
+
+          if (gatewayStore) {
+            // Check registration token for new gateways
+            // Try to verify secret first; if it fails, try to register
+            const valid = await gatewayStore.verifySecret(gatewayId, secretHash);
+            if (!valid) {
+              // Not registered yet or secret mismatch — attempt auto-registration
+              if (REGISTRATION_TOKEN) {
+                // We can't check the reg token here since it's not in the auth message.
+                // The gateway must have been pre-registered, or the token is not enforced.
+                logger.warn('Tunnel auth rejected: invalid credentials', { gatewayId });
+                socket.send(encodeJsonFrame({ type: 'auth_error', reason: 'Invalid credentials' }));
+                socket.close(4003, 'Invalid credentials');
+                return;
+              }
+              // No registration token required — auto-register
+              await gatewayStore.register(
+                gatewayId,
+                msg.name || gatewayId,
+                msg.hostname || null,
+                secretHash,
+              );
+              logger.info('Gateway auto-registered via tunnel', { gatewayId, name: msg.name });
+            }
+          }
+
+          // Auth OK
+          authenticated = true;
+          socket.send(encodeJsonFrame({ type: 'auth_ok' }));
+
+          // Remove the one-shot auth listener and install the tunnel
+          socket.removeListener('message', onFirstMessage);
+
+          const tunnel = new GatewayTunnel(gatewayId, socket);
+          tunnels.set(gatewayId, tunnel);
+          logger.info('Gateway tunnel established', { gatewayId });
+
+          // Mark gateway online
+          if (gatewayStore) {
+            gatewayStore.heartbeat(gatewayId).catch(() => {});
+          }
+
+          // Periodic heartbeat
+          const heartbeatInterval = setInterval(() => {
+            if (socket.readyState !== socket.OPEN) {
+              clearInterval(heartbeatInterval);
+              return;
+            }
+            socket.ping();
+            if (gatewayStore) {
+              gatewayStore.heartbeat(gatewayId).catch(() => {});
+            }
+          }, 30_000);
+
+          socket.on('close', () => {
+            clearInterval(heartbeatInterval);
+            tunnels.delete(gatewayId);
+            logger.info('Gateway tunnel closed', { gatewayId });
+            if (gatewayStore) {
+              gatewayStore.markOffline(gatewayId).catch(() => {});
+            }
+          });
+        } catch (err) {
+          logger.error('Tunnel auth error', {
+            gatewayId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          socket.close(4003, 'Authentication failed');
         }
-      });
+      };
 
-      // Periodic heartbeat while tunnel is open
-      const heartbeatInterval = setInterval(() => {
-        if (socket.readyState !== socket.OPEN) {
-          clearInterval(heartbeatInterval);
-          return;
-        }
-        socket.ping();
-        if (gatewayStore) {
-          gatewayStore.heartbeat(gatewayId).catch(() => {});
-        }
-      }, 30_000);
-
-      socket.on('close', () => clearInterval(heartbeatInterval));
+      socket.on('message', onFirstMessage);
     });
   };
 }

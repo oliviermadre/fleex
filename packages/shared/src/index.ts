@@ -71,9 +71,34 @@ export type {
 
 export type {
   Gateway,
-  GatewayRegisterRequest,
-  GatewayHeartbeatRequest,
 } from './types/gateway.js';
+
+export {
+  TunnelFrame,
+  encodeJsonFrame,
+  encodePtyDataFrame,
+  encodePtyCtrlFrame,
+  parseFrameType,
+  parseJsonPayload,
+  parsePtyDataPayload,
+  parsePtyCtrlPayload,
+} from './types/tunnel-protocol.js';
+
+export type {
+  TunnelFrameType,
+  TunnelAuthMessage,
+  TunnelAuthOkMessage,
+  TunnelAuthErrorMessage,
+  TunnelRequest,
+  TunnelResponse,
+  PtyOpenMessage,
+  PtyOpenedMessage,
+  PtyResizeMessage,
+  PtyExitMessage,
+  PtyErrorMessage,
+  PtyCloseMessage,
+  PtyControlMessage,
+} from './types/tunnel-protocol.js';
 
 export {
   ClientMessageType,
