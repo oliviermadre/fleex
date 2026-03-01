@@ -10,3 +10,4 @@ coverage/
 .asm/
 *.tsbuildinfo
 .claude/settings.local.json
+.fleex/

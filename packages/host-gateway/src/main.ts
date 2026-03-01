@@ -52,25 +52,36 @@ const identity = loadOrCreateIdentity();
 async function registerWithCentral(): Promise<void> {
   if (!CENTRAL_SERVER_URL) return;
 
-  try {
-    const res = await fetch(`${CENTRAL_SERVER_URL}/internal/gateways/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: identity.id,
-        name: GATEWAY_NAME,
-        hostname: hostname(),
-        secret: identity.secret,
-      }),
-    });
-    if (res.ok) {
-      console.log(`[gateway] Registered with central server at ${CENTRAL_SERVER_URL}`);
-    } else {
+  const MAX_RETRIES = 10;
+  const RETRY_INTERVAL_MS = 2_000;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(`${CENTRAL_SERVER_URL}/internal/gateways/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: identity.id,
+          name: GATEWAY_NAME,
+          hostname: hostname(),
+          secret: identity.secret,
+        }),
+      });
+      if (res.ok) {
+        console.log(`[gateway] Registered with central server at ${CENTRAL_SERVER_URL}`);
+        return;
+      }
       console.error(`[gateway] Registration failed: ${res.status} ${await res.text()}`);
+    } catch (err) {
+      console.warn(`[gateway] Attempt ${attempt}/${MAX_RETRIES} — server not reachable: ${err}`);
     }
-  } catch (err) {
-    console.error(`[gateway] Failed to reach central server: ${err}`);
+
+    if (attempt < MAX_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_INTERVAL_MS));
+    }
   }
+
+  console.error(`[gateway] Failed to register after ${MAX_RETRIES} attempts`);
 }
 
 async function sendHeartbeat(): Promise<void> {

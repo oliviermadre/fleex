@@ -128,6 +128,18 @@ async function main() {
   const port = parseInt(process.env['PORT'] ?? '3000', 10);
   await app.listen({ port, host: '0.0.0.0' });
   container.logger.info(`ASM server started on port ${port}`);
+
+  // Verify gateway connectivity
+  try {
+    const gwRes = await fetch(`${container.gatewayUrl}/health`);
+    if (gwRes.ok) {
+      container.logger.info('Gateway connected', { gatewayUrl: container.gatewayUrl });
+    } else {
+      container.logger.warn('Gateway returned non-OK status', { gatewayUrl: container.gatewayUrl, status: gwRes.status });
+    }
+  } catch {
+    container.logger.warn('Gateway not reachable at startup', { gatewayUrl: container.gatewayUrl });
+  }
 }
 
 main().catch(console.error);
