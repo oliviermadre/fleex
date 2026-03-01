@@ -51,6 +51,14 @@ interface UIState {
   selectedRepoKey: string | null;
   selectRepo: (key: string | null) => void;
 
+  // Content panel collapse
+  contentPanelCollapsed: boolean;
+  toggleContentPanel: () => void;
+
+  // Last active session per worktree (key: "org/name:branch")
+  lastActiveTabByWorktree: Record<string, string>;
+  setLastActiveTab: (worktreeKey: string, sessionId: string) => void;
+
   // Floating session overlay
   floatingSessionId: string | null;
   setFloatingSession: (id: string | null) => void;
@@ -68,6 +76,8 @@ export const useUIStore = create<UIState>((set) => ({
   collapsedGroups: new Set<string>(),
   scratchpadOpen: false,
   scratchpadRepoKey: null,
+  contentPanelCollapsed: false,
+  lastActiveTabByWorktree: {},
   floatingSessionId: null,
 
   toggleScratchpad: () =>
@@ -117,6 +127,12 @@ export const useUIStore = create<UIState>((set) => ({
     }),
 
   selectRepo: (key) => set({ selectedRepoKey: key }),
+
+  toggleContentPanel: () =>
+    set((state) => ({ contentPanelCollapsed: !state.contentPanelCollapsed })),
+
+  setLastActiveTab: (worktreeKey, sessionId) =>
+    set((state) => ({ lastActiveTabByWorktree: { ...state.lastActiveTabByWorktree, [worktreeKey]: sessionId } })),
 
   setFloatingSession: (id) => set({ floatingSessionId: id }),
 }));

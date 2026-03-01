@@ -6,6 +6,26 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { HotkeyBadge } from '../ui/HotkeyBadge';
 import { cn } from '../../lib/cn';
 
+function FleexLogo({ collapsed }: { collapsed: boolean }) {
+  return (
+    <div className={cn(
+      'flex items-center border-b border-[var(--theme-border)] px-4 py-4',
+      collapsed ? 'justify-center' : 'gap-2'
+    )}>
+      {/* Lightning bolt */}
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="shrink-0 text-[var(--theme-accent)]">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor" />
+      </svg>
+      {!collapsed && (
+        <span className="text-base font-bold tracking-tight">
+          <span className="text-[var(--theme-text-primary)]">fleex</span>
+          <span className="text-[var(--theme-accent)]">.run</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function NavSidebar() {
   const navigate = useNavigate();
   const navCollapsed = useUIStore((s) => s.navCollapsed);
@@ -18,17 +38,19 @@ export function NavSidebar() {
   const activeTicketCount = tickets.filter((t) => t.status === 'doing' || t.status === 'reviewing').length;
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
-      <div className="flex flex-1 flex-col gap-0.5 pt-2">
-        {/* Sessions */}
+      <FleexLogo collapsed={navCollapsed} />
+      <div className="flex flex-1 flex-col gap-1 pt-2">
+        {/* Branches (was Sessions) */}
         <NavItem
           icon={
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
-              <polyline points="4.5,7 6,8.5 4.5,10" />
-              <line x1="7.5" y1="10.5" x2="11" y2="10.5" />
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="5" cy="3.5" r="1.5" />
+              <circle cx="5" cy="12.5" r="1.5" />
+              <circle cx="12" cy="7" r="1.5" />
+              <path d="M5 5v6M5 7.5c0-1.5 1-3 4.5-3" />
             </svg>
           }
-          label="Sessions"
+          label="Branches"
           active={activePanel === 'sessions'}
           collapsed={navCollapsed}
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
@@ -39,7 +61,7 @@ export function NavSidebar() {
         {/* Repositories */}
         <NavItem
           icon={
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="2" y="10" width="12" height="2.5" rx="0.5" />
               <rect x="3" y="6" width="10" height="2.5" rx="0.5" />
               <rect x="1.5" y="2" width="13" height="2.5" rx="0.5" />
@@ -52,10 +74,10 @@ export function NavSidebar() {
           hotkey="⌥2"
           onClick={() => navigate('/repositories')}
         />
-        {/* Tickets */}
+        {/* Backlog (was Tickets) */}
         <NavItem
           icon={
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
               <rect x="1" y="2" width="22" height="20" rx="1.5" stroke="currentColor" fill="none" />
               <line x1="8.5" y1="2" x2="8.5" y2="22" />
               <line x1="15.5" y1="2" x2="15.5" y2="22" />
@@ -70,7 +92,7 @@ export function NavSidebar() {
               <rect x="17" y="14" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
             </svg>
           }
-          label="Tickets"
+          label="Backlog"
           active={activePanel === 'tickets'}
           collapsed={navCollapsed}
           badge={activeTicketCount > 0 ? (activeTicketCount > 9 ? '9+' : String(activeTicketCount)) : undefined}
@@ -81,7 +103,7 @@ export function NavSidebar() {
         {/* Claude Config */}
         <NavItem
           icon={
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
               {/* Document */}
               <path d="M9 1.5H4.5A1.5 1.5 0 0 0 3 3v10a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V5.5L9 1.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               <polyline points="9,1.5 9,5.5 13,5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -101,7 +123,7 @@ export function NavSidebar() {
         {/* Scratchpads */}
         <NavItem
           icon={
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
               <path
                 d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11z"
                 stroke="currentColor"
@@ -120,7 +142,7 @@ export function NavSidebar() {
         {/* Cluster */}
         <NavItem
           icon={
-            <svg width="18" height="18" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+            <svg width="20" height="20" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
               <path d="M 168.04 317.81 C170.06,319.98 170.33,320.00 205.79,319.98 C225.43,319.98 242.00,319.64 242.60,319.23 C245.89,317.04 246.00,314.44 246.00,235.64 L 246.00 157.15 L 248.63 155.07 C251.11,153.12 252.53,153.00 272.63,153.00 C292.67,153.00 294.12,152.88 296.00,151.00 C297.92,149.08 298.00,147.67 298.00,116.50 C298.00,85.33 297.92,83.92 296.00,82.00 C294.04,80.04 292.67,80.00 232.04,80.00 L 170.08 80.00 L 168.04 82.19 C166.01,84.36 166.00,85.02 166.00,200.00 C166.00,314.98 166.01,315.64 168.04,317.81 ZM 80.27 151.29 L 82.05 154.00 L 115.02 154.00 C146.67,154.00 148.08,153.92 150.00,152.00 C151.92,150.08 152.00,148.67 152.00,117.19 C152.00,116.60 152.00,116.02 152.00,115.45 C152.00,89.30 152.00,82.71 149.14,81.05 C148.18,80.50 146.89,80.50 145.17,80.51 C145.06,80.51 144.95,80.51 144.83,80.51 C144.69,80.51 144.56,80.51 144.44,80.51 C144.12,80.51 143.84,80.50 143.55,80.52 C140.09,80.67 136.71,82.80 91.21,110.58 C83.01,115.58 79.73,118.16 79.21,119.98 C78.82,121.37 78.50,128.37 78.50,135.54 C78.50,146.34 78.80,149.05 80.27,151.29 Z" fill="rgb(48,178,75)"/>
               <path d="M 168.04 317.81 C166.01,315.64 166.00,314.98 166.00,200.00 C166.00,85.02 166.01,84.36 168.04,82.19 L 170.08 80.00 L 232.04 80.00 C292.67,80.00 294.04,80.04 296.00,82.00 C297.92,83.92 298.00,85.33 298.00,116.50 C298.00,147.67 297.92,149.08 296.00,151.00 C294.12,152.88 292.67,153.00 272.63,153.00 C252.53,153.00 251.11,153.12 248.63,155.07 L 246.00 157.15 L 246.00 235.64 C246.00,314.44 245.89,317.04 242.60,319.23 C242.00,319.64 225.43,319.98 205.79,319.98 C170.33,320.00 170.06,319.98 168.04,317.81 Z" fill="rgb(179,228,189)"/>
               <path d="M 80.27 151.29 C78.80,149.05 78.50,146.34 78.50,135.54 C78.50,128.37 78.82,121.37 79.21,119.98 C79.73,118.16 83.01,115.58 91.21,110.58 C142.02,79.55 140.30,80.52 144.83,80.51 C152.12,80.49 152.00,79.89 152.00,117.19 C152.00,148.67 151.92,150.08 150.00,152.00 C148.08,153.92 146.67,154.00 115.02,154.00 L 82.05 154.00 L 80.27 151.29 Z" fill="rgb(254,254,253)"/>
@@ -135,10 +157,10 @@ export function NavSidebar() {
       </div>
 
       {/* Settings - bottom of sidebar */}
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-1">
         <NavItem
           icon={
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6.86 1.45h2.28l.34 1.7a5.2 5.2 0 0 1 1.16.67l1.62-.54 1.14 1.97-1.28 1.08c.04.22.06.44.06.67s-.02.45-.06.67l1.28 1.08-1.14 1.97-1.62-.54c-.35.27-.74.5-1.16.67l-.34 1.7H6.86l-.34-1.7a5.2 5.2 0 0 1-1.16-.67l-1.62.54-1.14-1.97 1.28-1.08A4.3 4.3 0 0 1 3.82 8c0-.23.02-.45.06-.67L2.6 6.25l1.14-1.97 1.62.54c.35-.27.74-.5 1.16-.67l.34-1.7z" />
               <circle cx="8" cy="8" r="2" />
             </svg>
@@ -153,7 +175,7 @@ export function NavSidebar() {
 
       {/* Collapse/expand toggle */}
       <button
-        className="flex items-center justify-center border-t border-[var(--theme-border)] py-2.5 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+        className="flex items-center justify-center gap-1.5 border-t border-[var(--theme-border)] py-2.5 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
         onClick={toggleNav}
         title={navCollapsed ? 'Expand navigation (Cmd+B)' : 'Collapse navigation (Cmd+B)'}
       >
@@ -170,6 +192,9 @@ export function NavSidebar() {
         >
           <polyline points="6,4 10,8 6,12" />
         </svg>
+        {!navCollapsed && (
+          <span className="text-xs">Collapse</span>
+        )}
       </button>
     </div>
   );
@@ -195,7 +220,7 @@ function NavItem({
   return (
     <button
       className={cn(
-        'relative flex items-center gap-2.5 border-l-2 px-3 py-2 text-sm transition-colors',
+        'relative flex items-center gap-2.5 border-l-2 px-4 py-3 text-[15px] transition-colors',
         active
           ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
           : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',

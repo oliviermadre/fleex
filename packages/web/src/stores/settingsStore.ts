@@ -65,7 +65,7 @@ interface SettingsState {
   bindLayoutGroupCell: (groupId: string, cellIndex: number, sessionId: string | null) => void;
 }
 
-const STORAGE_KEY = 'asm-settings';
+const STORAGE_KEY = 'fleex-settings';
 
 const defaultSettings: AppSettings = {
   basePath: '',
@@ -78,14 +78,23 @@ const defaultSettings: AppSettings = {
   repoOrder: [],
   worktreeOrder: {},
   sessionOrder: {},
-  activeThemeId: 'ember',
+  activeThemeId: 'verdant',
   customThemes: [],
   sessionLayoutGroups: [],
 };
 
 function loadFromStorage(): AppSettings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = localStorage.getItem(STORAGE_KEY);
+    // Migrate from old 'asm-settings' key
+    if (!raw) {
+      const legacy = localStorage.getItem('asm-settings');
+      if (legacy) {
+        raw = legacy;
+        localStorage.setItem(STORAGE_KEY, legacy);
+        localStorage.removeItem('asm-settings');
+      }
+    }
     if (raw) {
       const parsed = JSON.parse(raw);
       return { ...defaultSettings, ...parsed };

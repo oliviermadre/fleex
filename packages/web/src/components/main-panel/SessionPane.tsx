@@ -2,8 +2,9 @@ import { memo, useRef, useEffect } from 'react';
 import type { Session } from '@asm/shared';
 import { useTerminal } from '../../hooks/useTerminal';
 import { terminalManager } from '../../services/terminalManager';
-import { SessionHeader } from './SessionHeader';
-import { StatusBar } from './StatusBar';
+import { useUIStore } from '../../stores/uiStore';
+import { SessionHeader, SessionTabs } from './SessionHeader';
+import { TopToolbar } from './TopToolbar';
 import { cn } from '../../lib/cn';
 
 interface Props {
@@ -24,6 +25,16 @@ export const SessionPane = memo(function SessionPane({ session, focused, isSplit
     }
   }, [focused, session.id]);
 
+  // Track last active tab per worktree (including system shells)
+  const setLastActiveTab = useUIStore((s) => s.setLastActiveTab);
+  useEffect(() => {
+    const isSystem = !session.repositoryOrg || !session.repositoryName || !session.worktreeBranch;
+    const key = isSystem
+      ? '_system'
+      : `${session.repositoryOrg}/${session.repositoryName}:${session.worktreeBranch}`;
+    setLastActiveTab(key, session.id);
+  }, [session.id, session.repositoryOrg, session.repositoryName, session.worktreeBranch, setLastActiveTab]);
+
   return (
     <div
       className={cn(
@@ -33,12 +44,13 @@ export const SessionPane = memo(function SessionPane({ session, focused, isSplit
       )}
       onClick={onFocus}
     >
+      <TopToolbar session={session} />
       <SessionHeader session={session} splitFocused={isSplit && focused} />
+      <SessionTabs currentSession={session} />
       <div
         ref={containerRef}
         className="xterm-container flex-1"
       />
-      <StatusBar session={session} splitFocused={isSplit && focused} />
     </div>
   );
 });

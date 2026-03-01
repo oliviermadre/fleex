@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { useUIStore } from '../../stores/uiStore';
 
-const NAV_COLLAPSED_WIDTH = 48;
+const NAV_COLLAPSED_WIDTH = 55;
 const NAV_EXPANDED_WIDTH = 180;
 
 export function ResizeHandle() {
