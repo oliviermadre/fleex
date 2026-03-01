@@ -16,7 +16,7 @@ set -euo pipefail
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 FLEEX_HOME="${FLEEX_HOME:-$HOME/.fleex}"
-REPO_URL="https://github.com/oliviermadre/agent-session-manager.git"
+REPO_URL="git@github.com:oliviermadre/agent-session-manager.git"
 REPO_DIR="$FLEEX_HOME/repo"
 BIN_DIR="$FLEEX_HOME/bin"
 CLI_NAME="fleex"
@@ -80,19 +80,15 @@ check_prerequisites() {
     ok "bun $(bun --version)"
   fi
 
-  # Node.js (needed for server in dev mode via tsx)
-  if ! command -v node >/dev/null 2>&1; then
-    warn "Node.js is not installed. The server uses tsx which needs Node.js."
-    warn "bun includes a Node.js-compatible runtime, but some features may differ."
-    warn "Install Node.js if you encounter issues: https://nodejs.org"
-  else
-    ok "node $(node --version)"
+  # Node.js (optional — server runs on bun, but useful for other tooling)
+  if command -v node >/dev/null 2>&1; then
+    ok "node $(node --version) (optional)"
   fi
 }
 
 # ── Clone or update ───────────────────────────────────────────────────────────
 clone_or_update() {
-  if [[ -d "$REPO_DIR/.git" ]]; then
+  if [[ -e "$REPO_DIR/.git" ]]; then
     info "Repo already exists, pulling latest changes..."
     (cd "$REPO_DIR" && git pull --rebase origin main 2>/dev/null || git pull origin main)
     ok "Repo updated."
@@ -116,10 +112,10 @@ install_cli() {
   info "Installing fleex CLI..."
 
   mkdir -p "$BIN_DIR"
-  cp "$REPO_DIR/cli/$CLI_NAME" "$BIN_DIR/$CLI_NAME"
-  chmod +x "$BIN_DIR/$CLI_NAME"
+  chmod +x "$REPO_DIR/cli/$CLI_NAME"
+  ln -sf "$REPO_DIR/cli/$CLI_NAME" "$BIN_DIR/$CLI_NAME"
 
-  ok "CLI installed to $BIN_DIR/$CLI_NAME"
+  ok "CLI symlinked to $BIN_DIR/$CLI_NAME → $REPO_DIR/cli/$CLI_NAME"
 }
 
 # ── PATH setup ────────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "NODE_OPTIONS='--conditions development' tsx watch src/main.ts",
+    "dev": "bun --conditions development --watch src/main.ts",
     "build": "tsc",
     "start": "node dist/main.js",
     "test": "vitest run",

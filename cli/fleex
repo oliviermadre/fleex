@@ -12,14 +12,14 @@ FLEEX_HOME="${FLEEX_HOME:-$HOME/.fleex}"
 DEFAULT_REPO_DIR="$FLEEX_HOME/repo"
 
 # ── Colors ─────────────────────────────────────────────────────────────────────
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-DIM='\033[2m'
-NC='\033[0m'
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[0;33m'
+BLUE=$'\033[0;34m'
+CYAN=$'\033[0;36m'
+BOLD=$'\033[1m'
+DIM=$'\033[2m'
+NC=$'\033[0m'
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 info()  { printf "${BLUE}[fleex]${NC} %s\n" "$*"; }
@@ -140,9 +140,40 @@ is_running() {
 save_pid()   { echo "$2" > "$(pid_file "$1")"; }
 remove_pid() { rm -f "$(pid_file "$1")"; }
 
+_kill_tree() {
+  local pid="$1" sig="${2:-TERM}"
+  local children
+  children="$(pgrep -P "$pid" 2>/dev/null || true)"
+  for child in $children; do
+    _kill_tree "$child" "$sig"
+  done
+  kill -"$sig" "$pid" 2>/dev/null || true
+}
+
 # ── Commands ───────────────────────────────────────────────────────────────────
 
 cmd_start() {
+  # Parse --port flag
+  local FORCED_WEB_PORT=""
+  local args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --port)
+        [[ -n "${2:-}" ]] || die "Missing value for --port"
+        if ! [[ "$2" =~ ^[0-9]+$ ]] || (( $2 < 1 || $2 > 65535 )); then
+          die "Invalid port number: $2 (must be 1-65535)"
+        fi
+        FORCED_WEB_PORT="$2"
+        shift 2
+        ;;
+      *)
+        args+=("$1")
+        shift
+        ;;
+    esac
+  done
+  set -- "${args[@]+${args[@]}}"
+
   check_bun
   check_repo
   ensure_dirs
@@ -167,23 +198,45 @@ cmd_start() {
 
   # Allocate dynamic ports
   allocate_ports
+
+  # Override web port if --port was specified
+  if [[ -n "$FORCED_WEB_PORT" ]]; then
+    PORT_WEB="$FORCED_WEB_PORT"
+    cat > "$PORTS_FILE" <<JSON
+{"gateway":$PORT_GATEWAY,"server":$PORT_SERVER,"web":$PORT_WEB}
+JSON
+  fi
+
   info "Allocated ports — gateway:$PORT_GATEWAY  server:$PORT_SERVER  web:$PORT_WEB"
 
+  # Load project .env if present (set -a exports all vars to subprocesses)
+  if [ -f "$REPO_DIR/.env" ]; then
+    set -a
+    . "$REPO_DIR/.env"
+    set +a
+  fi
+
   info "Starting stack for ${BOLD}$INSTANCE_SLUG${NC}..."
+
+  # Enable job control so each background job gets its own process group (PGID = PID).
+  # This makes `kill -- -$pid` reliably kill the entire group on stop.
+  set -m
 
   # Gateway
   (cd "$REPO_DIR" && \
     GATEWAY_PORT="$PORT_GATEWAY" \
+    ASM_CENTRAL_URL="http://localhost:$PORT_SERVER" \
     bun run dev:gateway \
-  ) > "$(log_file gateway)" 2>&1 &
+  ) < /dev/null > "$(log_file gateway)" 2>&1 &
   save_pid gateway $!
 
   # Server
   (cd "$REPO_DIR" && \
     PORT="$PORT_SERVER" \
     HOST_GATEWAY_URL="http://localhost:$PORT_GATEWAY" \
+    ASM_STORAGE_DRIVER="${ASM_STORAGE_DRIVER:-json}" \
     bun run dev:server \
-  ) > "$(log_file server)" 2>&1 &
+  ) < /dev/null > "$(log_file server)" 2>&1 &
   save_pid server $!
 
   # Web (Vite)
@@ -191,8 +244,10 @@ cmd_start() {
     VITE_DEV_PORT="$PORT_WEB" \
     VITE_PROXY_TARGET="http://localhost:$PORT_SERVER" \
     bun run dev:web \
-  ) > "$(log_file web)" 2>&1 &
+  ) < /dev/null > "$(log_file web)" 2>&1 &
   save_pid web $!
+
+  set +m
 
   sleep 1
 
@@ -208,13 +263,16 @@ cmd_start() {
 }
 
 cmd_stop() {
-  local stop_all=false
   if [[ "${1:-}" == "--all" ]]; then
-    stop_all=true
-  fi
-
-  if $stop_all; then
     _stop_all_instances
+  elif [[ -n "${1:-}" ]]; then
+    # Named instance — validate it exists
+    local target="$1"
+    local target_run="$FLEEX_HOME/.run/$target"
+    if [[ ! -d "$target_run" ]]; then
+      die "Unknown instance '$target'. Use 'fleex status' to list instances."
+    fi
+    _stop_instance "$target"
   else
     ensure_dirs
     _stop_instance "$INSTANCE_SLUG"
@@ -232,7 +290,16 @@ _stop_instance() {
       local pid
       pid="$(cat "$pf")"
       if kill -0 "$pid" 2>/dev/null; then
-        kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+        # 1) Process-group kill (works when set -m was active at spawn time)
+        kill -- -"$pid" 2>/dev/null || true
+        # 2) Recursive tree kill as fallback for any escapees
+        _kill_tree "$pid" TERM
+        # 3) Brief wait, then SIGKILL escalation for anything that survived
+        sleep 0.2
+        if kill -0 "$pid" 2>/dev/null; then
+          kill -- -"$pid" 9 2>/dev/null || true
+          _kill_tree "$pid" KILL
+        fi
         info "[$slug] Stopped $svc (PID $pid)"
         stopped=$((stopped + 1))
       fi
@@ -273,9 +340,9 @@ _stop_all_instances() {
 
 cmd_restart() {
   info "Restarting stack..."
-  cmd_stop "${1:-}"
+  cmd_stop
   sleep 1
-  cmd_start
+  cmd_start "$@"
 }
 
 cmd_status() {
@@ -290,8 +357,22 @@ cmd_status() {
     return
   fi
 
-  printf "  ${CYAN}%-22s${NC}  %-10s  %-10s  %-8s  %s\n" "Instance" "Service" "Status" "PID" "Port"
-  printf "  %-22s  %-10s  %-10s  %-8s  %s\n" "────────────────────" "───────" "──────" "───" "────"
+  # Compute max instance name width dynamically
+  local max_iw=8  # minimum: length of "Instance"
+  for dir in "$run_base"/*/; do
+    [[ -d "$dir" ]] || continue
+    local slug w
+    slug="$(basename "$dir")"
+    w=${#slug}
+    [[ "$slug" == "$INSTANCE_SLUG" ]] && w=$((w + 2))  # account for " *"
+    (( w > max_iw )) && max_iw=$w
+  done
+
+  # Header
+  printf "  ${CYAN}%-${max_iw}s${NC}  %-10s  %-10s  %-8s  %s\n" "Instance" "Service" "Status" "PID" "URL"
+  # Divider
+  local dash_i; printf -v dash_i '%*s' "$max_iw" ''; dash_i="${dash_i// /─}"
+  printf "  %s  %s  %s  %s  %s\n" "$dash_i" "──────────" "──────────" "────────" "─────────────────────────"
 
   for dir in "$run_base"/*/; do
     [[ -d "$dir" ]] || continue
@@ -308,18 +389,21 @@ cmd_status() {
 
     local is_current=""
     if [[ "$slug" == "$INSTANCE_SLUG" ]]; then
-      is_current=" ${BOLD}*${NC}"
+      is_current=" *"
     fi
 
     for svc in "${SERVICES[@]}"; do
       local pf="$dir/$svc.pid"
-      local status_label pid_label port_label inst_label
+      local status_text status_color pid_label port_label inst_label
 
+      local port_val
       case "$svc" in
-        gateway) port_label="${p_gw:-?}" ;;
-        server)  port_label="${p_srv:-?}" ;;
-        web)     port_label="${p_web:-?}" ;;
+        gateway) port_val="${p_gw:-}" ;;
+        server)  port_val="${p_srv:-}" ;;
+        web)     port_val="${p_web:-}" ;;
       esac
+      port_label="${port_val:+http://localhost:$port_val}"
+      port_label="${port_label:--}"
 
       # Only show instance name on first service row
       if [[ "$svc" == "gateway" ]]; then
@@ -332,18 +416,21 @@ cmd_status() {
         local pid
         pid="$(cat "$pf")"
         if kill -0 "$pid" 2>/dev/null; then
-          status_label="${GREEN}running${NC}"
+          status_text="running"
+          status_color="$GREEN"
           pid_label="$pid"
         else
-          status_label="${RED}dead${NC}"
+          status_text="dead"
+          status_color="$RED"
           pid_label="-"
         fi
       else
-        status_label="${DIM}stopped${NC}"
+        status_text="stopped"
+        status_color="$DIM"
         pid_label="-"
       fi
 
-      printf "  %-22b  ${CYAN}%-10s${NC}  ${status_label}%-3s  %-8s  %s\n" "$inst_label" "$svc" "" "$pid_label" "$port_label"
+      printf "  %-${max_iw}s  ${CYAN}%-10s${NC}  ${status_color}%-10s${NC}  %-8s  %s\n" "$inst_label" "$svc" "$status_text" "$pid_label" "$port_label"
     done
     echo ""
   done
@@ -368,12 +455,15 @@ cmd_self_update() {
   (cd "$update_dir" && bun install) > "$FLEEX_HOME/.logs/self-update.log" 2>&1
   ok "Dependencies updated."
 
+  # Ensure symlink is in place (in case user installed with an older version that copied)
   local cli_src="$update_dir/cli/fleex"
   local cli_dst="$FLEEX_HOME/bin/fleex"
   if [[ -f "$cli_src" ]]; then
-    cp "$cli_src" "$cli_dst"
-    chmod +x "$cli_dst"
-    ok "CLI binary updated."
+    chmod +x "$cli_src"
+    if [[ ! -L "$cli_dst" ]]; then
+      ln -sf "$cli_src" "$cli_dst"
+      ok "CLI re-linked (was a copy, now a symlink)."
+    fi
   fi
 
   echo ""
@@ -397,45 +487,49 @@ cmd_logs() {
 cmd_help() {
   cat <<EOF
 
-  ${BOLD}fleex${NC} — Local dev-stack manager (multi-instance)
+  ${BOLD}${CYAN}fleex${NC} — Local dev-stack manager (multi-instance)
 
-  ${BOLD}Usage:${NC}
+  ${BOLD}${YELLOW}Usage:${NC}
     fleex <command> [options]
 
-  ${BOLD}Commands:${NC}
-    start         Start all services (gateway, server, web)
-    stop          Stop the current instance
-    stop --all    Stop ALL running instances
-    restart       Restart the current instance
-    status        Show status of all instances
-    logs [svc]    Tail logs (all services, or a specific one)
-    self-update   Pull latest code and update CLI
-    help          Show this help message
+  ${BOLD}${YELLOW}Commands:${NC}
+    ${CYAN}start${NC} [--port <port>]  Start all services (gateway, server, web)
+    ${CYAN}stop${NC} [name]    Stop the current instance (or a named one)
+    ${CYAN}stop --all${NC}    Stop ALL running instances
+    ${CYAN}restart${NC}       Restart the current instance
+    ${CYAN}status${NC}        Show status of all instances
+    ${CYAN}logs${NC} [svc]    Tail logs (all services, or a specific one)
+    ${CYAN}self-update${NC}   Pull latest code and update CLI
+    ${CYAN}help${NC}          Show this help message
 
-  ${BOLD}Multi-instance:${NC}
+  ${BOLD}${YELLOW}Multi-instance:${NC}
     fleex is worktree-aware. Run ${BOLD}fleex start${NC} from different git worktrees
     to start multiple isolated instances with their own ports.
 
     Ports are allocated dynamically — no conflicts, ever.
 
-  ${BOLD}Services:${NC}
-    gateway       Host gateway          (dynamic port)
-    server        API server (Fastify)   (dynamic port)
-    web           Frontend (Vite)        (dynamic port)
+  ${BOLD}${YELLOW}Services:${NC}
+    ${CYAN}gateway${NC}       Host gateway          ${DIM}(dynamic port)${NC}
+    ${CYAN}server${NC}        API server (Fastify)   ${DIM}(dynamic port)${NC}
+    ${CYAN}web${NC}           Frontend (Vite)        ${DIM}(dynamic port)${NC}
 
-  ${BOLD}Paths:${NC}
-    Home          ~/.fleex/
-    Default repo  ~/.fleex/repo/
-    Instances     ~/.fleex/.run/<branch>/
-    Logs          ~/.fleex/.logs/<branch>/
+  ${BOLD}${YELLOW}Paths:${NC}
+    ${DIM}Home${NC}          ~/.fleex/
+    ${DIM}Default repo${NC}  ~/.fleex/repo/
+    ${DIM}Instances${NC}     ~/.fleex/.run/<branch>/
+    ${DIM}Logs${NC}          ~/.fleex/.logs/<branch>/
 
-  ${BOLD}Examples:${NC}
-    fleex start               Start the stack (current worktree or default)
-    fleex status              Show all running instances
-    fleex logs server          Follow server logs for current instance
-    fleex stop                Stop current instance
-    fleex stop --all          Stop everything
-    fleex self-update         Update to latest version
+  ${BOLD}${YELLOW}Options:${NC}
+    ${CYAN}--port <port>${NC}  Force the web (Vite) service to use a specific port
+
+  ${BOLD}${YELLOW}Examples:${NC}
+    ${GREEN}fleex start${NC}               Start the stack (current worktree or default)
+    ${GREEN}fleex start --port 3000${NC}   Start with web on port 3000
+    ${GREEN}fleex status${NC}              Show all running instances
+    ${GREEN}fleex logs server${NC}          Follow server logs for current instance
+    ${GREEN}fleex stop${NC}                Stop current instance
+    ${GREEN}fleex stop --all${NC}          Stop everything
+    ${GREEN}fleex self-update${NC}         Update to latest version
 
 EOF
 }

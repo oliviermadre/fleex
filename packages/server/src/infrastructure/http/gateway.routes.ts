@@ -10,7 +10,39 @@ export function gatewayRoutes(container: Container) {
     const { gatewayStore, logger } = container;
 
     if (!gatewayStore) {
-      // No Postgres → single-gateway mode, no registry needed
+      // No database — accept registration/heartbeat with in-memory tracking
+      const registeredGateways = new Set<string>();
+
+      app.post<{ Body: GatewayRegisterRequest }>(
+        '/internal/gateways/register',
+        async (request) => {
+          const { id, name, hostname } = request.body;
+          registeredGateways.add(id);
+          logger.info('Gateway registered (in-memory)', { id, name, hostname });
+          return { gateway: { id, name, hostname, status: 'online' } };
+        },
+      );
+
+      app.post<{ Body: GatewayHeartbeatRequest }>(
+        '/internal/gateways/heartbeat',
+        async (request) => {
+          const { id } = request.body;
+          registeredGateways.add(id);
+          return { ok: true };
+        },
+      );
+
+      app.get('/api/gateways', async () => {
+        return Array.from(registeredGateways).map((id) => ({
+          id,
+          name: null,
+          hostname: null,
+          status: 'online',
+          lastSeenAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        }));
+      });
+
       return;
     }
 

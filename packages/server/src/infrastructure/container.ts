@@ -146,6 +146,7 @@ export async function createContainer() {
 
   return {
     logger,
+    gatewayUrl,
     execFn,
     shellExecFn,
     hostFs,
