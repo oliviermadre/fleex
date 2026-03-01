@@ -3,31 +3,35 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 
+const webPort = parseInt(process.env['VITE_DEV_PORT'] || '5173', 10);
+const serverUrl = process.env['VITE_PROXY_TARGET'] || 'http://localhost:3000';
+const serverWs = serverUrl.replace(/^http/, 'ws');
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    port: 5173,
+    port: webPort,
     allowedHosts: ['.nip.io'],
     historyApiFallback: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: serverUrl,
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:3000',
+        target: serverWs,
         ws: true,
       },
       '/health': {
-        target: 'http://localhost:3000',
+        target: serverUrl,
         changeOrigin: true,
       },
       '/internal': {
-        target: 'http://localhost:3000',
+        target: serverUrl,
         changeOrigin: true,
       },
       '/auth': {
-        target: 'http://localhost:3000',
+        target: serverUrl,
         changeOrigin: true,
       },
     },
