@@ -8,12 +8,12 @@ html, body {
 }
 
 :root {
-  --nav-collapsed-width: 48px;
-  --nav-expanded-width: 180px;
+  --nav-collapsed-width: 55px;
+  --nav-expanded-width: 200px;
   --content-panel-width: 320px;
   --content-panel-min-width: 240px;
   --content-panel-max-width: 520px;
-  --header-height: 40px;
+  --header-height: 44px;
   --statusbar-height: 28px;
 
   /* Theme colors — Ember defaults (overridden by JS on mount) */

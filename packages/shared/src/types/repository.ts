@@ -34,6 +34,7 @@ export interface PullRequest {
   readonly number: number;
   readonly title: string;
   readonly headRefName: string;
+  readonly state: 'open' | 'merged';
   readonly author: string;
   readonly assignees: string[];
   readonly createdAt: string;

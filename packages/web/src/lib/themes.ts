@@ -310,7 +310,7 @@ export const BUILT_IN_THEMES: Theme[] = [
   THEME_FALL,
 ];
 
-export const DEFAULT_THEME_ID = 'ember';
+export const DEFAULT_THEME_ID = 'verdant';
 
 const CSS_VAR_MAP: Record<keyof ThemeColors, string> = {
   accent: '--theme-accent',
@@ -347,5 +347,5 @@ export function resolveTheme(themeId: string, customThemes: Theme[]): Theme {
   const custom = customThemes.find((t) => t.id === themeId);
   if (custom) return custom;
 
-  return THEME_EMBER;
+  return THEME_VERDANT;
 }

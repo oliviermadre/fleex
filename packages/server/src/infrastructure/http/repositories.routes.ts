@@ -97,31 +97,61 @@ export function repositoryRoutes(container: Container) {
         if (cached) return cached.data;
 
         try {
-          const { stdout } = await container.execFn('gh', [
-            'pr', 'list',
-            '--repo', `${org}/${name}`,
-            '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt',
-            '--limit', '50',
-            '--state', 'open',
-          ], { timeout: 15_000 });
-          const raw = JSON.parse(stdout) as {
-            number: number;
-            title: string;
-            headRefName: string;
-            author: { login: string };
-            assignees: { login: string }[];
-            createdAt: string;
-            updatedAt: string;
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          const mergedDateStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+          const [openResult, mergedResult] = await Promise.all([
+            container.execFn('gh', [
+              'pr', 'list',
+              '--repo', `${org}/${name}`,
+              '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt',
+              '--limit', '50',
+              '--state', 'open',
+            ], { timeout: 15_000 }),
+            container.execFn('gh', [
+              'pr', 'list',
+              '--repo', `${org}/${name}`,
+              '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt,mergedAt',
+              '--limit', '20',
+              '--state', 'merged',
+              '--search', `merged:>${mergedDateStr}`,
+            ], { timeout: 15_000 }),
+          ]);
+
+          const rawOpen = JSON.parse(openResult.stdout) as {
+            number: number; title: string; headRefName: string;
+            author: { login: string }; assignees: { login: string }[];
+            createdAt: string; updatedAt: string;
           }[];
-          const result = raw.map((pr): PullRequest => ({
+          const rawMerged = JSON.parse(mergedResult.stdout) as {
+            number: number; title: string; headRefName: string;
+            author: { login: string }; assignees: { login: string }[];
+            createdAt: string; updatedAt: string; mergedAt: string;
+          }[];
+
+          const openPRs = rawOpen.map((pr): PullRequest => ({
             number: pr.number,
             title: pr.title,
             headRefName: pr.headRefName,
+            state: 'open',
             author: pr.author.login,
             assignees: pr.assignees.map((a) => a.login),
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
+          const mergedPRs = rawMerged.map((pr): PullRequest => ({
+            number: pr.number,
+            title: pr.title,
+            headRefName: pr.headRefName,
+            state: 'merged',
+            author: pr.author.login,
+            assignees: pr.assignees.map((a) => a.login),
+            createdAt: pr.createdAt,
+            updatedAt: pr.updatedAt,
+            mergedAt: pr.mergedAt,
+          }));
+
+          const result = [...openPRs, ...mergedPRs];
           container.repositoryCache.set(cacheKey, result, RepositoryCache.TTL_PULLS);
           return result;
         } catch (err) {
@@ -357,6 +387,7 @@ export function repositoryRoutes(container: Container) {
             number: pr.number,
             title: pr.title,
             headRefName: pr.headRefName,
+            state: 'merged' as const,
             author: pr.author.login,
             assignees: pr.assignees.map((a) => a.login),
             createdAt: pr.createdAt,

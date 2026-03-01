@@ -16,8 +16,9 @@ import { ScratchpadPanel } from '../scratchpad/ScratchpadPanel';
 import { ScratchpadHint } from '../scratchpad/ScratchpadHint';
 import { FloatingSessionOverlay } from '../main-panel/FloatingSessionOverlay';
 
-const NAV_COLLAPSED_WIDTH = 48;
-const NAV_EXPANDED_WIDTH = 180;
+const NAV_COLLAPSED_WIDTH = 55;
+const NAV_EXPANDED_WIDTH = 200;
+const CONTENT_PANEL_COLLAPSED_WIDTH = 55;
 
 export function AppLayout() {
   useWebSocket();
@@ -31,6 +32,7 @@ export function AppLayout() {
   const navCollapsed = useUIStore((s) => s.navCollapsed);
   const activePanel = useUIStore((s) => s.activePanel);
   const contentPanelWidth = useUIStore((s) => s.contentPanelWidth);
+  const contentPanelCollapsed = useUIStore((s) => s.contentPanelCollapsed);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
 
   useEffect(() => {
@@ -39,7 +41,11 @@ export function AppLayout() {
 
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
   const hideContentPanel = activePanel === 'cluster';
-  const effectiveContentWidth = hideContentPanel ? 0 : contentPanelWidth;
+  const effectiveContentWidth = hideContentPanel
+    ? 0
+    : contentPanelCollapsed
+      ? CONTENT_PANEL_COLLAPSED_WIDTH
+      : contentPanelWidth;
 
   return (
     <div
@@ -53,7 +59,7 @@ export function AppLayout() {
       <div className="overflow-hidden">
         <NavSidebar />
       </div>
-      <div className="overflow-hidden">
+      <div className={contentPanelCollapsed ? 'overflow-visible' : 'overflow-hidden'}>
         <ContentPanel />
       </div>
       <div className="relative flex flex-1 overflow-hidden" style={{ minWidth: 0 }}>
