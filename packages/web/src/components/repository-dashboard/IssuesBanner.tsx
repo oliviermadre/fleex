@@ -112,18 +112,18 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
       key: 'number',
       header: '#',
       shrink: true,
-      render: (row) => <span className="text-zinc-500">#{row.number}</span>,
+      render: (row) => <span className="text-[var(--theme-text-muted)]">#{row.number}</span>,
     },
     {
       key: 'title',
       header: 'Title',
-      render: (row) => <span className="truncate text-zinc-300">{row.title}</span>,
+      render: (row) => <span className="truncate text-[var(--theme-text-secondary)]">{row.title}</span>,
     },
     {
       key: 'author',
       header: 'Author',
       shrink: true,
-      render: (row) => <span className="text-zinc-400">{row.author}</span>,
+      render: (row) => <span className="text-[var(--theme-text-secondary)]">{row.author}</span>,
     },
     {
       key: 'created',
@@ -131,7 +131,7 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
       shrink: true,
       align: 'right',
       render: (row) => (
-        <span className="text-zinc-500" title={new Date(row.createdAt).toLocaleString()}>
+        <span className="text-[var(--theme-text-muted)]" title={new Date(row.createdAt).toLocaleString()}>
           {formatRelativeTime(row.createdAt)}
         </span>
       ),
@@ -147,7 +147,7 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
           <span className="flex items-center justify-end gap-1.5">
             <button
               className={cn(
-                'rounded p-1.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300',
+                'rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-secondary)]',
                 busy && 'pointer-events-none opacity-40',
               )}
               onClick={(e) => {
@@ -165,7 +165,7 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
             </button>
             <button
               className={cn(
-                'rounded p-1.5 text-zinc-500 hover:bg-zinc-700 hover:text-[#D77655]',
+                'rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-accent)]',
                 busy && 'pointer-events-none opacity-40',
               )}
               onClick={(e) => {

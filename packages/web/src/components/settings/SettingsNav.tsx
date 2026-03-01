@@ -20,7 +20,7 @@ export function SettingsNav() {
     <div className="flex h-full flex-col">
       {/* Header — matches SidebarHeader height */}
       <div className="flex items-center border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
-        <span className="text-sm font-semibold text-[var(--theme-text-primary)]">Settings</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Settings</span>
       </div>
 
       {/* Category list */}
@@ -29,9 +29,9 @@ export function SettingsNav() {
           <button
             key={tab.key}
             className={cn(
-              'border-l-2 px-4 py-2 text-left text-sm transition-colors',
+              'border-l-2 py-2.5 pl-6 pr-3 text-left text-sm transition-colors',
               settingsTab === tab.key
-                ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] font-medium text-[var(--theme-text-primary)]'
+                ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] font-semibold text-[var(--theme-text-primary)]'
                 : 'border-transparent text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]'
             )}
             onClick={() => navigate(`/settings/${tab.key}`, { replace: true })}

@@ -18,10 +18,10 @@ export function ClusterDashboard() {
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       {/* Header */}
       <div
-        className="flex items-center justify-between border-b border-[var(--theme-border)] px-4"
+        className="flex items-center justify-between border-b border-[var(--theme-border)] px-3"
         style={{ height: 'var(--header-height)' }}
       >
-        <span className="text-sm font-medium text-[var(--theme-text-primary)]">Tilt</span>
+        <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)]">Tilt</span>
         <button
           className={cn(
             'flex items-center justify-center rounded p-1 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',

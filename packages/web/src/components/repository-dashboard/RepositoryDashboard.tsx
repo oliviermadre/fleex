@@ -49,15 +49,15 @@ export function RepositoryDashboard({ repoKey }: Props) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <DashboardHeader org={org} name={name} />
-      <div className="flex items-center gap-1 border-b border-zinc-800 px-6">
+      <div className="flex items-center gap-0 border-b border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             className={cn(
-              'relative flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors',
+              'relative flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap transition-colors',
               activeTab === tab.key
-                ? 'text-zinc-100'
-                : 'text-zinc-500 hover:text-zinc-300',
+                ? 'text-[var(--theme-text-primary)]'
+                : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
             )}
             onClick={() => setActiveTab(tab.key)}
           >
@@ -66,14 +66,14 @@ export function RepositoryDashboard({ repoKey }: Props) {
               className={cn(
                 'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
                 activeTab === tab.key
-                  ? 'bg-zinc-600 text-zinc-200'
-                  : 'bg-zinc-800 text-zinc-500',
+                  ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]'
+                  : 'bg-[var(--theme-bg-surface)] text-[var(--theme-text-muted)]',
               )}
             >
               {tab.count}
             </span>
             {activeTab === tab.key && (
-              <span className="absolute inset-x-0 -bottom-px h-px bg-zinc-400" />
+              <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-[var(--theme-accent)]" />
             )}
           </button>
         ))}

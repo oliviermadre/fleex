@@ -88,7 +88,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
       key: 'number',
       header: '#',
       shrink: true,
-      render: (row) => <span className="text-zinc-500">#{row.number}</span>,
+      render: (row) => <span className="text-[var(--theme-text-muted)]">#{row.number}</span>,
     },
     {
       key: 'title',
@@ -103,14 +103,14 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
       key: 'author',
       header: 'Author',
       shrink: true,
-      render: (row) => <span className="text-zinc-400">{row.author}</span>,
+      render: (row) => <span className="text-[var(--theme-text-secondary)]">{row.author}</span>,
     },
     {
       key: 'branch',
       header: 'Branch',
       shrink: true,
       render: (row) => (
-        <span className="font-mono text-xs text-zinc-500">{row.headRefName}</span>
+        <span className="font-mono text-xs text-[var(--theme-text-muted)]">{row.headRefName}</span>
       ),
     },
     {
@@ -126,7 +126,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
       align: 'right',
       render: (row) => (
         <span
-          className={cn('text-zinc-500', isStale(row.updatedAt) && 'text-amber-400/60')}
+          className={cn('text-[var(--theme-text-muted)]', isStale(row.updatedAt) && 'text-amber-400/60')}
           title={new Date(row.updatedAt).toLocaleString()}
         >
           {formatRelativeTime(row.updatedAt)}
@@ -144,7 +144,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
           <span className="flex items-center justify-end gap-1.5">
             <button
               className={cn(
-                'rounded p-1.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300',
+                'rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-secondary)]',
                 busy && 'pointer-events-none opacity-40',
               )}
               onClick={(e) => {
@@ -162,7 +162,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
             </button>
             <button
               className={cn(
-                'rounded p-1.5 text-zinc-500 hover:bg-zinc-700 hover:text-[#D77655]',
+                'rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-accent)]',
                 busy && 'pointer-events-none opacity-40',
               )}
               onClick={(e) => {
@@ -194,8 +194,8 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
             className={cn(
               'rounded px-2.5 py-1 text-xs transition-colors',
               filter === tab
-                ? 'bg-zinc-700 text-zinc-200'
-                : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300',
+                ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]'
+                : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-surface)] hover:text-[var(--theme-text-secondary)]',
             )}
             onClick={() => setFilter(tab)}
           >

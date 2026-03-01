@@ -8,7 +8,7 @@ import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
 
 const COLUMN_BG: Record<string, string> = {
-  backlog: 'bg-zinc-500/[0.04]',
+  backlog: 'bg-[rgba(113,113,122,0.04)]',
   todo: 'bg-orange-500/[0.04]',
   doing: 'bg-blue-500/[0.04]',
   reviewing: 'bg-yellow-500/[0.04]',

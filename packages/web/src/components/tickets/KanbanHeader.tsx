@@ -24,13 +24,13 @@ export function KanbanHeader({ board, isAllBoards }: KanbanHeaderProps) {
     (filters.favorite !== null ? 1 : 0);
 
   return (
-    <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-6" style={{ height: 'var(--header-height)' }}>
+    <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
       {isAllBoards ? (
-        <span className="text-sm font-semibold text-[var(--theme-text-primary)]">All boards</span>
+        <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)]">All boards</span>
       ) : board ? (
         <div className="flex items-center gap-2">
           <span className="text-base">{board.emoji}</span>
-          <span className="text-sm font-semibold text-[var(--theme-text-primary)]">{board.name}</span>
+          <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)]">{board.name}</span>
         </div>
       ) : null}
 

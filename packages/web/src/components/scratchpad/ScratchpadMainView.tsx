@@ -45,8 +45,8 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
       {/* Title bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--theme-border)]">
-        <span className="text-sm font-medium text-[var(--theme-text-primary)] truncate">
+      <div className="flex items-center justify-between px-3 border-b border-[var(--theme-border)]" style={{ height: 'var(--header-height)' }}>
+        <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)] truncate">
           {label}
         </span>
         {entry.saving && (

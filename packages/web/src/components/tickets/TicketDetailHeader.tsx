@@ -6,7 +6,7 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
 
   return (
-    <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-6" style={{ height: 'var(--header-height)' }}>
+    <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
       <button
         className="rounded p-1 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
         onClick={() => selectTicket(null)}

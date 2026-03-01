@@ -76,7 +76,7 @@ export function WorktreesSection({ org, name, worktrees, diffStats, openPullRequ
         const mergedPRNumber = branchToMergedPR.get(row.branch);
         return (
           <span className="flex items-center gap-2 truncate">
-            <span className="truncate font-mono text-xs text-zinc-200">{row.branch}</span>
+            <span className="truncate font-mono text-xs text-[var(--theme-text-primary)]">{row.branch}</span>
             {prNumber != null && (
               <span className="shrink-0 rounded bg-blue-500/15 px-1.5 py-0.5 text-[11px] font-medium text-blue-400">
                 PR #{prNumber}
@@ -96,7 +96,7 @@ export function WorktreesSection({ org, name, worktrees, diffStats, openPullRequ
       header: 'Path',
       shrink: true,
       render: (row) => (
-        <span className="text-xs text-zinc-500" title={row.path}>
+        <span className="text-xs text-[var(--theme-text-muted)]" title={row.path}>
           {shortenPath(row.path)}
         </span>
       ),
@@ -115,7 +115,7 @@ export function WorktreesSection({ org, name, worktrees, diffStats, openPullRequ
       render: (row) => (
         <span className="flex items-center justify-end gap-1.5">
           <button
-            className="rounded p-1.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+            className="rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-secondary)]"
             onClick={(e) => {
               e.stopPropagation();
               handleCreateSession(row, 'shell');
@@ -129,7 +129,7 @@ export function WorktreesSection({ org, name, worktrees, diffStats, openPullRequ
             </svg>
           </button>
           <button
-            className="rounded p-1.5 text-zinc-500 hover:bg-zinc-700 hover:text-[#D77655]"
+            className="rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-accent)]"
             onClick={(e) => {
               e.stopPropagation();
               handleCreateSession(row, 'claude');
@@ -144,7 +144,7 @@ export function WorktreesSection({ org, name, worktrees, diffStats, openPullRequ
             </svg>
           </button>
           <button
-            className="rounded p-1.5 text-zinc-500 hover:bg-zinc-700 hover:text-red-400"
+            className="rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-red-400"
             onClick={(e) => {
               e.stopPropagation();
               handleDelete(row);

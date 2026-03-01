@@ -16,16 +16,16 @@ export function DashboardHeader({ org, name }: Props) {
   const rateLimitWarning = useRepositoryDashboardStore((s) => s.rateLimitWarning);
 
   return (
-    <div className="flex items-center justify-between border-b border-zinc-800 px-6" style={{ height: 'var(--header-height)' }}>
+    <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
       <div className="flex items-center gap-2">
-        <h1 className="text-sm font-semibold text-zinc-200">
+        <h1 className="text-sm font-semibold font-mono text-[var(--theme-text-primary)]">
           {org}/{name}
         </h1>
         <a
           href={`https://github.com/${org}/${name}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-zinc-500 hover:text-zinc-300"
+          className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
         >
           <GitHubIcon size={14} />
         </a>

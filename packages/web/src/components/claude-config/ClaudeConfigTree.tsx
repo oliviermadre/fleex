@@ -27,7 +27,7 @@ export function ClaudeConfigTree() {
     <div className="flex h-full flex-col">
       {/* Header — matches SidebarHeader height */}
       <div className="flex items-center border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
-        <span className="text-sm font-semibold text-[var(--theme-text-primary)]">Claude Config</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Claude Config</span>
       </div>
 
       {/* Tree content */}

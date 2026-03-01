@@ -124,7 +124,7 @@ export function TicketsContentPanel() {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
-        <span className="text-xs font-semibold text-[var(--theme-text-primary)]">Tickets</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Tickets</span>
         <button
           className="rounded p-1 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
           onClick={handleCreateBoard}

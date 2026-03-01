@@ -65,8 +65,8 @@ export function RefreshControl({
       {/* Refresh button */}
       <button
         className={cn(
-          'flex items-center justify-center rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200',
-          refreshing && 'text-[#D77655]',
+          'flex items-center justify-center rounded p-1 text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)]',
+          refreshing && 'text-[var(--theme-accent)]',
         )}
         onClick={onRefresh}
         disabled={refreshing}
@@ -98,7 +98,7 @@ export function RefreshControl({
       {/* Auto-refresh dropdown */}
       <div className="relative" ref={dropdownRef}>
         <button
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-secondary)]"
           onClick={() => setDropdownOpen(!dropdownOpen)}
         >
           {refreshIntervalMs > 0
@@ -110,13 +110,13 @@ export function RefreshControl({
         </button>
 
         {dropdownOpen && (
-          <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-md border border-zinc-700 bg-zinc-900 py-1 shadow-lg">
+          <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
             {REPO_REFRESH_INTERVALS.map((ms) => (
               <button
                 key={ms}
                 className={cn(
-                  'flex w-full items-center justify-between px-3 py-1.5 text-xs transition-colors hover:bg-zinc-800',
-                  ms === refreshIntervalMs ? 'text-[#D77655]' : 'text-zinc-300',
+                  'flex w-full items-center justify-between px-3 py-1.5 text-xs transition-colors hover:bg-[var(--theme-bg-overlay)]',
+                  ms === refreshIntervalMs ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)]',
                 )}
                 onClick={() => handleIntervalSelect(ms)}
               >
@@ -134,7 +134,7 @@ export function RefreshControl({
 
       {/* Last refreshed */}
       {!compact && lastRefreshedAt && (
-        <span className="text-[10px] text-zinc-600">{timeAgo}</span>
+        <span className="text-[10px] text-[var(--theme-text-faint)]">{timeAgo}</span>
       )}
     </div>
   );

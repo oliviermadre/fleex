@@ -23,7 +23,7 @@ export function ClaudeConfigEditor() {
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       {/* Header bar */}
       <div
-        className="flex items-center justify-between border-b border-[var(--theme-border)] px-4"
+        className="flex items-center justify-between border-b border-[var(--theme-border)] px-3"
         style={{ height: 'var(--header-height)' }}
       >
         {/* Breadcrumbs */}

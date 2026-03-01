@@ -12,10 +12,10 @@ export function RepositoriesSidebarHeader() {
   const repoCount = Object.keys(summaries).length;
 
   return (
-    <div className="flex items-center justify-between border-b border-zinc-800 px-4" style={{ height: 'var(--header-height)' }}>
+    <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
       <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold text-zinc-200">Repositories</span>
-        <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Repositories</span>
+        <span className="rounded-full bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
           {repoCount}
         </span>
       </div>

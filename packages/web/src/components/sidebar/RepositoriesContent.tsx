@@ -26,8 +26,8 @@ export function RepositoriesContent() {
       <RepositoriesSidebarHeader />
       <div className="flex-1 overflow-y-auto pb-2">
         {orgGroups.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center text-zinc-500">
-            <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-700">
+          <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center text-[var(--theme-text-muted)]">
+            <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
               <circle cx="5" cy="3.5" r="1.5" />
               <circle cx="11" cy="3.5" r="1.5" />
               <circle cx="8" cy="12.5" r="1.5" />
@@ -36,7 +36,7 @@ export function RepositoriesContent() {
               <path d="M5 7c0 1.5 1.5 2.5 3 4M11 7c0 1.5-1.5 2.5-3 4" />
             </svg>
             <p className="text-xs">No repositories configured</p>
-            <p className="text-[10px] text-zinc-600">Configure repositories in Settings</p>
+            <p className="text-[10px] text-[var(--theme-text-faint)]">Configure repositories in Settings</p>
           </div>
         ) : (
           orgGroups.map(([org, repos]) => (

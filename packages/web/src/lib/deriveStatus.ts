@@ -20,7 +20,7 @@ const WAITING_STATUSES: ClaudeActivityStatus[] = [
 export function deriveDisplayStatus(session: Session): DerivedStatus {
   // Dead / unknown session
   if (session.status !== 'running') {
-    return { label: 'Unknown', status: 'unknown', dotColor: 'bg-zinc-500', textColor: 'text-[var(--theme-text-muted)]', warning: false };
+    return { label: 'Unknown', status: 'unknown', dotColor: 'bg-[var(--theme-text-muted)]', textColor: 'text-[var(--theme-text-muted)]', warning: false };
   }
 
   // Claude session with activity info
@@ -37,9 +37,9 @@ export function deriveDisplayStatus(session: Session): DerivedStatus {
       return { label: 'Needs Approval', status: 'needs-approval', dotColor: 'bg-amber-400', textColor: 'text-amber-400', warning: true };
     }
     if (activity === 'idle') {
-      return { label: 'Idle', status: 'idle', dotColor: 'bg-zinc-500', textColor: 'text-[var(--theme-text-muted)]', warning: false };
+      return { label: 'Idle', status: 'idle', dotColor: 'bg-[var(--theme-text-muted)]', textColor: 'text-[var(--theme-text-muted)]', warning: false };
     }
-    return { label: 'Unknown', status: 'unknown', dotColor: 'bg-zinc-500', textColor: 'text-[var(--theme-text-muted)]', warning: false };
+    return { label: 'Unknown', status: 'unknown', dotColor: 'bg-[var(--theme-text-muted)]', textColor: 'text-[var(--theme-text-muted)]', warning: false };
   }
 
   // Shell session with foreground process → Working
@@ -52,7 +52,7 @@ export function deriveDisplayStatus(session: Session): DerivedStatus {
   }
 
   // Default: Idle
-  return { label: 'Idle', status: 'idle', dotColor: 'bg-zinc-500', textColor: 'text-[var(--theme-text-muted)]', warning: false };
+  return { label: 'Idle', status: 'idle', dotColor: 'bg-[var(--theme-text-muted)]', textColor: 'text-[var(--theme-text-muted)]', warning: false };
 }
 
 const STATUS_PRIORITY: Record<DisplayStatus, number> = {
@@ -65,7 +65,7 @@ const STATUS_PRIORITY: Record<DisplayStatus, number> = {
 
 export function aggregateBranchStatus(sessions: Session[]): DerivedStatus {
   if (sessions.length === 0) {
-    return { label: 'Unknown', status: 'unknown', dotColor: 'bg-zinc-500', textColor: 'text-[var(--theme-text-muted)]', warning: false };
+    return { label: 'Unknown', status: 'unknown', dotColor: 'bg-[var(--theme-text-muted)]', textColor: 'text-[var(--theme-text-muted)]', warning: false };
   }
 
   let best: DerivedStatus | null = null;

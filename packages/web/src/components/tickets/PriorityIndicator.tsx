@@ -2,7 +2,7 @@ import type { TicketPriority } from '@asm/shared';
 import { cn } from '../../lib/cn';
 
 const PRIORITY_COLORS: Record<TicketPriority, string> = {
-  none: 'bg-zinc-400',
+  none: 'bg-[var(--theme-text-secondary)]',
   low: 'bg-blue-400',
   medium: 'bg-yellow-400',
   high: 'bg-red-400',

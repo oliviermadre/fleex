@@ -31,7 +31,7 @@ export function MergedPRsSection({ org, name, mergedPRs, loading }: Props) {
       key: 'number',
       header: '#',
       shrink: true,
-      render: (row) => <span className="text-zinc-500">#{row.number}</span>,
+      render: (row) => <span className="text-[var(--theme-text-muted)]">#{row.number}</span>,
     },
     {
       key: 'title',
@@ -43,14 +43,14 @@ export function MergedPRsSection({ org, name, mergedPRs, loading }: Props) {
       header: 'Branch',
       shrink: true,
       render: (row) => (
-        <span className="font-mono text-xs text-zinc-500">{row.headRefName}</span>
+        <span className="font-mono text-xs text-[var(--theme-text-muted)]">{row.headRefName}</span>
       ),
     },
     {
       key: 'author',
       header: 'Author',
       shrink: true,
-      render: (row) => <span className="text-zinc-400">{row.author}</span>,
+      render: (row) => <span className="text-[var(--theme-text-secondary)]">{row.author}</span>,
     },
     {
       key: 'merged',

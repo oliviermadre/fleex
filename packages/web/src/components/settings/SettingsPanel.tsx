@@ -111,7 +111,7 @@ export function SettingsPanel() {
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       {/* Breadcrumb header */}
-      <div className="flex w-full items-center border-b border-[var(--theme-border)] px-8" style={{ height: 'var(--header-height)' }}>
+      <div className="flex w-full items-center border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
         <span className="text-sm text-[var(--theme-text-muted)]">Settings</span>
         <span className="mx-2 text-sm text-[var(--theme-text-faint)]">/</span>
         <span className="text-sm font-medium text-[var(--theme-text-primary)]">{tabLabels[settingsTab]}</span>
@@ -1067,14 +1067,14 @@ function GatewaysTab() {
                     <span
                       className={cn(
                         'inline-block h-2 w-2 rounded-full',
-                        gw.status === 'online' ? 'bg-green-500' : 'bg-neutral-400',
+                        gw.status === 'online' ? 'bg-[var(--theme-success)]' : 'bg-[var(--theme-text-muted)]',
                       )}
                     />
                     <span
                       className={cn(
                         'text-xs',
                         gw.status === 'online'
-                          ? 'text-green-600 dark:text-green-400'
+                          ? 'text-[var(--theme-success)]'
                           : 'text-[var(--theme-text-muted)]',
                       )}
                     >

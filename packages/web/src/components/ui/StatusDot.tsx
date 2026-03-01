@@ -27,7 +27,7 @@ export function StatusDot({ status, size = 'md', className }: Props) {
   }
 
   const color =
-    status === 'needs-approval' ? 'bg-amber-400' : 'bg-zinc-500';
+    status === 'needs-approval' ? 'bg-amber-400' : 'bg-[var(--theme-text-muted)]';
 
   return (
     <span className={cn('shrink-0 rounded-full', px, color, className)} />

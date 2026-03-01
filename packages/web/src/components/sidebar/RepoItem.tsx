@@ -27,15 +27,15 @@ export function RepoItem({ summary }: Props) {
   return (
     <button
       className={cn(
-        'group flex w-full flex-col gap-1 px-3 py-1.5 text-left transition-colors',
+        'group flex min-w-0 w-full flex-col gap-0.5 py-2.5 pl-6 pr-3 text-left transition-colors border-l-2',
         isSelected
-          ? 'border-l-2 border-[#D77655] bg-zinc-800/40'
-          : 'border-l-2 border-transparent hover:bg-zinc-800/20',
+          ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
+          : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
       )}
       onClick={() => navigate(`/repositories/${key}`, { replace: true })}
     >
       <div className="flex items-center w-full">
-        <span className="truncate text-sm text-zinc-200">{summary.name}</span>
+        <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{summary.name}</span>
         <span
           role="button"
           className="ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/[0.08]"
@@ -50,7 +50,7 @@ export function RepoItem({ summary }: Props) {
       {loading ? (
         <div className="flex gap-2">
           {Array.from({ length: 5 }, (_, i) => (
-            <span key={i} className="h-3 w-6 animate-pulse rounded bg-zinc-700/50" />
+            <span key={i} className="h-3 w-6 animate-pulse rounded bg-[var(--theme-bg-hover)]" />
           ))}
         </div>
       ) : (
@@ -58,15 +58,15 @@ export function RepoItem({ summary }: Props) {
           {/* Issues - amber */}
           <BadgeIcon
             color="text-amber-400"
-            dimColor="text-zinc-600"
+            dimColor="text-[var(--theme-text-faint)]"
             count={summary.openIssuesCount}
             icon={<CircleDotIcon />}
             title="Open issues"
           />
           {/* My PRs - coral */}
           <BadgeIcon
-            color="text-[#D77655]"
-            dimColor="text-zinc-600"
+            color="text-[var(--theme-accent)]"
+            dimColor="text-[var(--theme-text-faint)]"
             count={summary.myPRsCount}
             icon={<GitPullRequestArrowIcon />}
             title="My PRs"
@@ -74,15 +74,15 @@ export function RepoItem({ summary }: Props) {
           {/* Assigned PRs - blue */}
           <BadgeIcon
             color="text-blue-400"
-            dimColor="text-zinc-600"
+            dimColor="text-[var(--theme-text-faint)]"
             count={summary.assignedPRsCount}
             icon={<UserCheckIcon />}
             title="Assigned to me"
           />
           {/* All open PRs - zinc */}
           <BadgeIcon
-            color="text-zinc-400"
-            dimColor="text-zinc-600"
+            color="text-[var(--theme-text-secondary)]"
+            dimColor="text-[var(--theme-text-faint)]"
             count={summary.openPRsCount}
             icon={<GitPullRequestIcon />}
             title="Open PRs"
@@ -90,7 +90,7 @@ export function RepoItem({ summary }: Props) {
           {/* Merged 7d - emerald */}
           <BadgeIcon
             color="text-emerald-400"
-            dimColor="text-zinc-600"
+            dimColor="text-[var(--theme-text-faint)]"
             count={summary.recentlyMergedPRsCount}
             icon={<GitMergeIcon />}
             title="Merged (7d)"
