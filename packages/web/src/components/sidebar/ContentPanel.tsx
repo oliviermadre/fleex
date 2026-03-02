@@ -639,6 +639,7 @@ function CollapsedScratchpadsPanel() {
   const navigate = useNavigate();
   const scratchpadList = useScratchpadStore((s) => s.scratchpadList);
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
+  const collapsedGroups = useUIStore((s) => s.collapsedGroups);
   const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
 
   const handleSelect = (key: string) => {
@@ -648,6 +649,30 @@ function CollapsedScratchpadsPanel() {
       navigate(`/scratchpads/${key}`, { replace: true });
     }
   };
+
+  const { globalItem, orgGroups } = useMemo(() => {
+    let globalItem: (typeof scratchpadList)[number] | null = null;
+    const byOrg = new Map<string, (typeof scratchpadList)[number][]>();
+
+    for (const item of scratchpadList) {
+      if (item.key === '__global__') {
+        globalItem = item;
+        continue;
+      }
+      const slashIdx = item.key.indexOf('/');
+      if (slashIdx > 0) {
+        const org = item.key.substring(0, slashIdx);
+        const existing = byOrg.get(org) ?? [];
+        existing.push(item);
+        byOrg.set(org, existing);
+      }
+    }
+
+    for (const [, items] of byOrg) items.sort((a, b) => a.label.localeCompare(b.label));
+    const orgGroups = [...byOrg.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+    return { globalItem, orgGroups };
+  }, [scratchpadList]);
 
   return (
     <CollapsedShell>
@@ -659,27 +684,62 @@ function CollapsedScratchpadsPanel() {
               <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" strokeWidth="1" strokeLinecap="round" />
             </svg>
           </div>
-        ) : scratchpadList.map((item) => {
-          const isSelected = selectedScratchpadKey === item.key;
-          const initials = item.key === '__global__' ? 'G' : nameToInitials(item.label);
-          return (
-            <CollapsedRow
-              key={item.key}
-              isSelected={isSelected}
-              onClick={() => handleSelect(item.key)}
-              onMouseEnter={(e) => showTooltip(e, item.label, `${item.lineCount} line${item.lineCount !== 1 ? 's' : ''}`)}
-              onMouseLeave={hideTooltip}
-              icon={
-                <span className={cn(
-                  'text-[10px] font-bold leading-none',
-                  isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
-                )}>
-                  {initials}
-                </span>
-              }
-            />
-          );
-        })}
+        ) : (
+          <>
+            {globalItem && (() => {
+              const isSelected = selectedScratchpadKey === globalItem.key;
+              return (
+                <CollapsedRow
+                  key={globalItem.key}
+                  isSelected={isSelected}
+                  onClick={() => handleSelect(globalItem.key)}
+                  onMouseEnter={(e) => showTooltip(e, globalItem.label, `${globalItem.lineCount} line${globalItem.lineCount !== 1 ? 's' : ''}`)}
+                  onMouseLeave={hideTooltip}
+                  icon={
+                    <span className={cn(
+                      'text-[10px] font-bold leading-none',
+                      isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
+                    )}>
+                      G
+                    </span>
+                  }
+                />
+              );
+            })()}
+            {orgGroups.map(([org, items]) => {
+              const orgGroupId = `scratchpad-org:${org}`;
+              const isOrgCollapsed = collapsedGroups.has(orgGroupId);
+
+              return (
+                <div key={org} className="my-1.5">
+                  <CollapsedSeparator />
+                  {!isOrgCollapsed && items.map((item) => {
+                    const isSelected = selectedScratchpadKey === item.key;
+                    const repoName = item.key.substring(item.key.indexOf('/') + 1);
+                    const initials = nameToInitials(repoName);
+                    return (
+                      <CollapsedRow
+                        key={item.key}
+                        isSelected={isSelected}
+                        onClick={() => handleSelect(item.key)}
+                        onMouseEnter={(e) => showTooltip(e, repoName, org)}
+                        onMouseLeave={hideTooltip}
+                        icon={
+                          <span className={cn(
+                            'text-[10px] font-bold leading-none',
+                            isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
+                          )}>
+                            {initials}
+                          </span>
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
       <CollapsedTooltip data={tooltip} />
     </CollapsedShell>
