@@ -3,6 +3,7 @@ import type { TicketPriority } from '@asm/shared';
 import { TICKET_PRIORITIES } from '@asm/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useUIStore } from '../../stores/uiStore';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
 
@@ -118,6 +119,7 @@ export function TicketsContentPanel() {
     setRenameValue('');
   };
 
+  const toggleContentPanel = useUIStore((s) => s.toggleContentPanel);
   const selectedBoard = selectedBoardId ? boards.find((b) => b.id === selectedBoardId) : null;
 
   return (
@@ -125,16 +127,28 @@ export function TicketsContentPanel() {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
         <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Tickets</span>
-        <button
-          className="rounded p-1 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
-          onClick={handleCreateBoard}
-          title="Create board"
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <line x1="8" y1="3" x2="8" y2="13" />
-            <line x1="3" y1="8" x2="13" y2="8" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            className="rounded p-1 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+            onClick={handleCreateBoard}
+            title="Create board"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="8" y1="3" x2="8" y2="13" />
+              <line x1="3" y1="8" x2="13" y2="8" />
+            </svg>
+          </button>
+          <button
+            onClick={toggleContentPanel}
+            className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+            title="Collapse panel"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+              <line x1="6" y1="1.5" x2="6" y2="14.5" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ClaudeConfigTreeEntry } from '@asm/shared';
 import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
+import { useUIStore } from '../../stores/uiStore';
 import { TreeContextMenu } from './TreeContextMenu';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { cn } from '../../lib/cn';
@@ -10,6 +11,7 @@ export function ClaudeConfigTree() {
   const treeLoading = useClaudeConfigStore((s) => s.treeLoading);
   const loadTree = useClaudeConfigStore((s) => s.loadTree);
   const openContextMenu = useClaudeConfigStore((s) => s.openContextMenu);
+  const toggleContentPanel = useUIStore((s) => s.toggleContentPanel);
 
   useEffect(() => {
     loadTree();
@@ -26,8 +28,18 @@ export function ClaudeConfigTree() {
   return (
     <div className="flex h-full flex-col">
       {/* Header — matches SidebarHeader height */}
-      <div className="flex items-center border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
+      <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
         <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Claude Config</span>
+        <button
+          onClick={toggleContentPanel}
+          className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+          title="Collapse panel"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+            <line x1="6" y1="1.5" x2="6" y2="14.5" />
+          </svg>
+        </button>
       </div>
 
       {/* Tree content */}

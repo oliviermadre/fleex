@@ -1,11 +1,293 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { Ticket, TicketStatus, TicketPriority, Worktree, GitHubIssueMetadata } from '@asm/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES } from '@asm/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useUIStore } from '../../stores/uiStore';
 import * as api from '../../services/api';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
+
+// ── Collapsed sidebar tooltip (portal-based, appears to the LEFT) ──
+
+interface TooltipData {
+  label: string;
+  value: string;
+  top: number;
+  left: number;
+}
+
+function CollapsedMetaTooltip({ data }: { data: TooltipData | null }) {
+  if (!data) return null;
+  return createPortal(
+    <div
+      className="pointer-events-none fixed z-[100]"
+      style={{ top: data.top, right: `calc(100vw - ${data.left}px + 10px)`, transform: 'translateY(-50%)' }}
+    >
+      <div className="whitespace-nowrap rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-3 py-2 shadow-xl">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">{data.label}</div>
+        <div className="text-xs text-[var(--theme-text-primary)]">{data.value}</div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function useCollapsedMetaTooltip() {
+  const [tooltip, setTooltip] = useState<TooltipData | null>(null);
+  const hideTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const show = useCallback((e: React.MouseEvent, label: string, value: string) => {
+    clearTimeout(hideTimeout.current);
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setTooltip({ label, value, top: rect.top + rect.height / 2, left: rect.left });
+  }, []);
+
+  const hide = useCallback(() => {
+    hideTimeout.current = setTimeout(() => setTooltip(null), 80);
+  }, []);
+
+  return { tooltip, show, hide } as const;
+}
+
+// ── Status color mapping ──
+
+const STATUS_COLORS: Record<string, string> = {
+  backlog: 'bg-[var(--theme-text-faint)]',
+  todo: 'bg-blue-400',
+  doing: 'bg-amber-400',
+  reviewing: 'bg-purple-400',
+  done: 'bg-green-400',
+};
+
+// ── Collapsed indicator item ──
+
+function CollapsedIndicator({
+  icon,
+  onMouseEnter,
+  onMouseLeave,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  onMouseEnter: (e: React.MouseEvent) => void;
+  onMouseLeave: () => void;
+  onClick?: () => void;
+}) {
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag
+      className={cn(
+        'flex w-full items-center justify-center py-2.5 transition-colors',
+        onClick && 'hover:bg-[var(--theme-bg-hover)]',
+      )}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onClick={onClick}
+    >
+      {icon}
+    </Tag>
+  );
+}
+
+// ── Collapsed ticket meta sidebar ──
+
+function CollapsedTicketMetaSidebar({
+  ticket,
+  onOpenSession,
+  loading,
+}: {
+  ticket: Ticket;
+  onOpenSession: () => void;
+  loading?: boolean;
+}) {
+  const toggleTicketMetaSidebar = useUIStore((s) => s.toggleTicketMetaSidebar);
+  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedMetaTooltip();
+
+  const worktreeLink = ticket.links.find((l) => l.type === 'worktree');
+  const repoLink = ticket.links.find((l) => l.type === 'repository');
+  const issueLink = ticket.links.find((l) => l.type === 'github_issue');
+  const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+
+  const linkedRepoLabel = useMemo(() => {
+    if (repoLink) return repoLink.ref;
+    if (worktreeLink) {
+      const colonIdx = worktreeLink.ref.indexOf(':');
+      return colonIdx > 0 ? worktreeLink.ref.substring(0, colonIdx) : worktreeLink.ref;
+    }
+    return null;
+  }, [repoLink, worktreeLink]);
+
+  return (
+    <div className="flex w-10 flex-shrink-0 flex-col items-center border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
+      {/* Expand button */}
+      <button
+        onClick={toggleTicketMetaSidebar}
+        className="flex w-full shrink-0 items-center justify-center border-b border-[var(--theme-border)] py-3 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+        title="Expand panel"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+          <line x1="10" y1="1.5" x2="10" y2="14.5" />
+        </svg>
+      </button>
+
+      {/* Scrollable indicators */}
+      <div className="flex flex-1 flex-col items-center overflow-y-auto w-full">
+        {/* Status */}
+        <CollapsedIndicator
+          icon={
+            <span className={cn('h-2.5 w-2.5 rounded-full', STATUS_COLORS[ticket.status] ?? 'bg-[var(--theme-text-faint)]')} />
+          }
+          onMouseEnter={(e) => showTooltip(e, 'Status', TICKET_STATUS_LABELS[ticket.status] ?? ticket.status)}
+          onMouseLeave={hideTooltip}
+        />
+
+        {/* Priority */}
+        <CollapsedIndicator
+          icon={<PriorityIndicator priority={ticket.priority} size="md" />}
+          onMouseEnter={(e) => showTooltip(e, 'Priority', ticket.priority === 'none' ? 'None' : ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1))}
+          onMouseLeave={hideTooltip}
+        />
+
+        {/* Assignee */}
+        <CollapsedIndicator
+          icon={
+            ticket.assignee ? (
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--theme-accent-muted)] text-[9px] font-bold text-[var(--theme-accent)]">
+                {ticket.assignee.charAt(0).toUpperCase()}
+              </span>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-faint)]">
+                <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
+              </svg>
+            )
+          }
+          onMouseEnter={(e) => showTooltip(e, 'Assignee', ticket.assignee ?? 'Unassigned')}
+          onMouseLeave={hideTooltip}
+        />
+
+        {/* Separator */}
+        <div className="mx-2 my-1 h-px w-4 bg-[var(--theme-border)]" />
+
+        {/* GitHub Issue */}
+        {issueLink && (
+          <CollapsedIndicator
+            icon={
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-secondary)]">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+              </svg>
+            }
+            onMouseEnter={(e) => showTooltip(e, 'GitHub Issue', issueLink.ref)}
+            onMouseLeave={hideTooltip}
+          />
+        )}
+
+        {/* Pull Requests */}
+        {prLinks.length > 0 && (
+          <CollapsedIndicator
+            icon={
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-purple-400">
+                <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
+              </svg>
+            }
+            onMouseEnter={(e) => showTooltip(e, 'Pull Request', prLinks.map((p) => p.label).join(', '))}
+            onMouseLeave={hideTooltip}
+          />
+        )}
+
+        {/* Repository */}
+        {linkedRepoLabel && (
+          <CollapsedIndicator
+            icon={
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-faint)]">
+                <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
+              </svg>
+            }
+            onMouseEnter={(e) => showTooltip(e, 'Repository', linkedRepoLabel)}
+            onMouseLeave={hideTooltip}
+          />
+        )}
+
+        {/* Worktree */}
+        {worktreeLink && (
+          <CollapsedIndicator
+            icon={
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
+                <circle cx="5" cy="3.5" r="1.5" />
+                <circle cx="8" cy="12.5" r="1.5" />
+                <line x1="5" y1="5" x2="8" y2="11" />
+              </svg>
+            }
+            onMouseEnter={(e) => showTooltip(e, 'Worktree', worktreeLink.label)}
+            onMouseLeave={hideTooltip}
+          />
+        )}
+
+        {/* Tags */}
+        {ticket.tags.length > 0 && (
+          <CollapsedIndicator
+            icon={
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
+                <path d="M1 8.5V3a1.5 1.5 0 0 1 1.5-1.5H8l6.5 6.5-5 5L1 8.5z" />
+                <circle cx="5" cy="5" r="1" fill="currentColor" />
+              </svg>
+            }
+            onMouseEnter={(e) => showTooltip(e, 'Tags', ticket.tags.join(', '))}
+            onMouseLeave={hideTooltip}
+          />
+        )}
+
+        {/* Separator before toggles */}
+        {(ticket.blocked || ticket.favorite) && (
+          <div className="mx-2 my-1 h-px w-4 bg-[var(--theme-border)]" />
+        )}
+
+        {/* Blocked */}
+        {ticket.blocked && (
+          <CollapsedIndicator
+            icon={<span className="h-2.5 w-2.5 rounded-full bg-red-500" />}
+            onMouseEnter={(e) => showTooltip(e, 'Blocked', 'Yes')}
+            onMouseLeave={hideTooltip}
+          />
+        )}
+
+        {/* Favorite */}
+        {ticket.favorite && (
+          <CollapsedIndicator
+            icon={
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-yellow-400">
+                <path d="M8 1.3l2.1 4.2 4.7.7-3.4 3.3.8 4.7L8 11.8l-4.2 2.4.8-4.7L1.2 6.2l4.7-.7L8 1.3z" />
+              </svg>
+            }
+            onMouseEnter={(e) => showTooltip(e, 'Favorite', 'Yes')}
+            onMouseLeave={hideTooltip}
+          />
+        )}
+      </div>
+
+      {/* Bottom action — open session */}
+      <div className="flex flex-col items-center gap-1 border-t border-[var(--theme-border)] py-2">
+        <button
+          className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--theme-accent)] text-white transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
+          onClick={onOpenSession}
+          disabled={loading}
+          title={loading ? 'Opening...' : 'Open Session'}
+          onMouseEnter={(e) => showTooltip(e, 'Action', loading ? 'Opening...' : 'Open Session')}
+          onMouseLeave={hideTooltip}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="5,3 13,8 5,13" fill="currentColor" />
+          </svg>
+        </button>
+      </div>
+
+      <CollapsedMetaTooltip data={tooltip} />
+    </div>
+  );
+}
+
+// ── Main exported component ──
 
 export function TicketMetaSidebar({
   ticket,
@@ -16,6 +298,27 @@ export function TicketMetaSidebar({
   onOpenSession: () => void;
   loading?: boolean;
 }) {
+  const ticketMetaSidebarCollapsed = useUIStore((s) => s.ticketMetaSidebarCollapsed);
+
+  if (ticketMetaSidebarCollapsed) {
+    return <CollapsedTicketMetaSidebar ticket={ticket} onOpenSession={onOpenSession} loading={loading} />;
+  }
+
+  return <ExpandedTicketMetaSidebar ticket={ticket} onOpenSession={onOpenSession} loading={loading} />;
+}
+
+// ── Expanded ticket meta sidebar ──
+
+function ExpandedTicketMetaSidebar({
+  ticket,
+  onOpenSession,
+  loading,
+}: {
+  ticket: Ticket;
+  onOpenSession: () => void;
+  loading?: boolean;
+}) {
+  const toggleTicketMetaSidebar = useUIStore((s) => s.toggleTicketMetaSidebar);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const deleteTicket = useTicketStore((s) => s.deleteTicket);
   const addLink = useTicketStore((s) => s.addLink);
@@ -63,7 +366,20 @@ export function TicketMetaSidebar({
   }, [repoLink, worktreeLink]);
 
   return (
-    <div className="flex w-[280px] flex-shrink-0 flex-col gap-5 border-l border-[var(--theme-border)] p-4 overflow-y-auto">
+    <div className="flex w-[280px] flex-shrink-0 flex-col border-l border-[var(--theme-border)] overflow-y-auto">
+      {/* Collapse button */}
+      <button
+        onClick={toggleTicketMetaSidebar}
+        className="flex w-full shrink-0 items-center justify-center border-b border-[var(--theme-border)] py-2 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+        title="Collapse panel"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+          <line x1="10" y1="1.5" x2="10" y2="14.5" />
+        </svg>
+      </button>
+
+      <div className="flex flex-1 flex-col gap-5 p-4 overflow-y-auto">
       {/* Status */}
       <div>
         <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
@@ -313,6 +629,7 @@ export function TicketMetaSidebar({
         >
           Delete Ticket
         </button>
+      </div>
       </div>
     </div>
   );

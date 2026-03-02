@@ -59,6 +59,10 @@ interface UIState {
   lastActiveTabByWorktree: Record<string, string>;
   setLastActiveTab: (worktreeKey: string, sessionId: string) => void;
 
+  // Ticket meta sidebar collapse
+  ticketMetaSidebarCollapsed: boolean;
+  toggleTicketMetaSidebar: () => void;
+
   // Floating session overlay
   floatingSessionId: string | null;
   setFloatingSession: (id: string | null) => void;
@@ -78,6 +82,7 @@ export const useUIStore = create<UIState>((set) => ({
   scratchpadRepoKey: null,
   contentPanelCollapsed: false,
   lastActiveTabByWorktree: {},
+  ticketMetaSidebarCollapsed: false,
   floatingSessionId: null,
 
   toggleScratchpad: () =>
@@ -130,6 +135,9 @@ export const useUIStore = create<UIState>((set) => ({
 
   toggleContentPanel: () =>
     set((state) => ({ contentPanelCollapsed: !state.contentPanelCollapsed })),
+
+  toggleTicketMetaSidebar: () =>
+    set((state) => ({ ticketMetaSidebarCollapsed: !state.ticketMetaSidebarCollapsed })),
 
   setLastActiveTab: (worktreeKey, sessionId) =>
     set((state) => ({ lastActiveTabByWorktree: { ...state.lastActiveTabByWorktree, [worktreeKey]: sessionId } })),
