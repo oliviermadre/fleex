@@ -68,7 +68,7 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
   if (!active) {
     return (
       <button
-        className="w-full rounded px-2 py-1.5 text-left text-xs text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+        className="w-full rounded-md px-3 py-2 text-left text-sm text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
         onClick={() => setActive(true)}
       >
         + Add card
@@ -77,10 +77,10 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
   }
 
   return (
-    <div className="rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] p-2">
+    <div className="rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] p-3">
       <textarea
         ref={inputRef}
-        className="w-full resize-none bg-transparent text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
+        className="w-full resize-none bg-transparent text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
         rows={2}
         placeholder="Card title or GitHub issue URL..."
         value={title}

@@ -85,7 +85,7 @@ export function BoardSelectorDropdown() {
           <span className="font-mono font-semibold">Boards</span>
         )}
 
-        <span className="rounded-full bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
+        <span className="rounded-full bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-xs font-medium text-[var(--theme-text-muted)]">
           {totalCount}
         </span>
 
@@ -103,7 +103,7 @@ export function BoardSelectorDropdown() {
       {open && rect && createPortal(
         <div
           ref={menuRef}
-          className="fixed z-50 min-w-[200px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
+          className="fixed z-50 min-w-[220px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1.5 shadow-xl"
           style={{ left: rect.left, top: rect.bottom + 4 }}
         >
           {/* All Boards option */}
@@ -111,7 +111,7 @@ export function BoardSelectorDropdown() {
             <>
               <button
                 className={cn(
-                  'flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition-colors',
+                  'flex w-full items-center justify-between px-3.5 py-2 text-left text-sm transition-colors',
                   isAllBoards
                     ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
                     : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
@@ -119,7 +119,7 @@ export function BoardSelectorDropdown() {
                 onClick={() => handleSelect(null)}
               >
                 <span className="font-medium">All Boards</span>
-                <span className="text-[10px] text-[var(--theme-text-muted)]">{tickets.length}</span>
+                <span className="text-xs text-[var(--theme-text-muted)]">{tickets.length}</span>
               </button>
               <div className="my-1 border-t border-[var(--theme-border)]" />
             </>
@@ -132,7 +132,7 @@ export function BoardSelectorDropdown() {
               <button
                 key={b.id}
                 className={cn(
-                  'flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition-colors',
+                  'flex w-full items-center justify-between px-3.5 py-2 text-left text-sm transition-colors',
                   selectedBoardId === b.id
                     ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
                     : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
@@ -143,7 +143,7 @@ export function BoardSelectorDropdown() {
                   <span>{b.emoji}</span>
                   <span className="font-medium">{b.name}</span>
                 </span>
-                <span className="text-[10px] text-[var(--theme-text-muted)]">{count}</span>
+                <span className="text-xs text-[var(--theme-text-muted)]">{count}</span>
               </button>
             );
           })}
@@ -151,7 +151,7 @@ export function BoardSelectorDropdown() {
           {/* Create new board */}
           <div className="my-1 border-t border-[var(--theme-border)]" />
           <button
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+            className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-sm text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
             onClick={handleCreateBoard}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">

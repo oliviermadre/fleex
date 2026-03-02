@@ -69,7 +69,7 @@ export function FilterDropdown() {
       <button
         ref={buttonRef}
         className={cn(
-          'relative flex h-7 w-7 items-center justify-center rounded-md transition-colors',
+          'relative flex h-8 w-8 items-center justify-center rounded-md transition-colors',
           activeFilterCount > 0
             ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'
             : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
@@ -78,11 +78,11 @@ export function FilterDropdown() {
         onClick={() => setOpen(!open)}
         title="Filter tickets"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <polygon points="1 1 15 1 9 8 9 13 7 15 7 8 1 1" />
         </svg>
         {activeFilterCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--theme-accent)] text-[8px] font-bold text-white">
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--theme-accent)] text-[9px] font-bold text-white">
             {activeFilterCount}
           </span>
         )}
@@ -91,15 +91,15 @@ export function FilterDropdown() {
       {open && rect && createPortal(
         <div
           ref={menuRef}
-          className="fixed z-50 w-[260px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 shadow-xl"
+          className="fixed z-50 w-[280px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4 shadow-xl"
           style={{ right: window.innerWidth - rect.right, top: rect.bottom + 4 }}
         >
           {/* Header */}
-          <div className="mb-2.5 flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Filters</span>
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Filters</span>
             {activeFilterCount > 0 && (
               <button
-                className="text-[10px] text-[var(--theme-accent)] transition-colors hover:underline"
+                className="text-xs text-[var(--theme-accent)] transition-colors hover:underline"
                 onClick={() => { clearFilters(); }}
               >
                 Clear all ({activeFilterCount})
@@ -107,11 +107,11 @@ export function FilterDropdown() {
             )}
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3.5">
             {/* Repository */}
             {repos.length > 0 && (
               <div>
-                <label className="mb-1 block text-[10px] text-[var(--theme-text-muted)]">Repository</label>
+                <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Repository</label>
                 <select
                   className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
                   value={filters.repo ?? ''}
@@ -127,11 +127,11 @@ export function FilterDropdown() {
 
             {/* Priority */}
             <div>
-              <label className="mb-1 block text-[10px] text-[var(--theme-text-muted)]">Priority</label>
+              <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Priority</label>
               <div className="flex flex-wrap gap-1">
                 <button
                   className={cn(
-                    'rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                    'rounded px-2 py-1 text-[11px] transition-colors',
                     !filters.priority
                       ? 'bg-[var(--theme-accent)] text-white'
                       : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
@@ -144,7 +144,7 @@ export function FilterDropdown() {
                   <button
                     key={p}
                     className={cn(
-                      'flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                      'flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors',
                       filters.priority === p
                         ? 'bg-[var(--theme-accent)] text-white'
                         : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
@@ -160,7 +160,7 @@ export function FilterDropdown() {
 
             {/* Session */}
             <div>
-              <label className="mb-1 block text-[10px] text-[var(--theme-text-muted)]">Session</label>
+              <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Session</label>
               <div className="flex gap-1">
                 {([
                   { label: 'All', value: null },
@@ -170,7 +170,7 @@ export function FilterDropdown() {
                   <button
                     key={String(opt.value)}
                     className={cn(
-                      'rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                      'rounded px-2 py-1 text-[11px] transition-colors',
                       filters.hasSession === opt.value
                         ? 'bg-[var(--theme-accent)] text-white'
                         : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
@@ -185,7 +185,7 @@ export function FilterDropdown() {
 
             {/* Favorite */}
             <div>
-              <label className="mb-1 block text-[10px] text-[var(--theme-text-muted)]">Favorite</label>
+              <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Favorite</label>
               <div className="flex gap-1">
                 {([
                   { label: 'All', value: null },
@@ -194,7 +194,7 @@ export function FilterDropdown() {
                   <button
                     key={String(opt.value)}
                     className={cn(
-                      'rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                      'rounded px-2 py-1 text-[11px] transition-colors',
                       filters.favorite === opt.value
                         ? 'bg-[var(--theme-accent)] text-white'
                         : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
@@ -210,7 +210,7 @@ export function FilterDropdown() {
             {/* Tags */}
             {tags.length > 0 && (
               <div>
-                <label className="mb-1 block text-[10px] text-[var(--theme-text-muted)]">Tag</label>
+                <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Tag</label>
                 <select
                   className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
                   value={filters.tag ?? ''}
