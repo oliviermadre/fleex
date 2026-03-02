@@ -7,8 +7,6 @@ import { useScratchpadStore } from '../stores/scratchpadStore';
 import * as api from '../services/api';
 import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
 
-const GROUP_PREFIX = 'group:';
-
 export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
   const openCreateModal = useUIStore((s) => s.openCreateModal);
@@ -20,7 +18,6 @@ export function useKeyboardShortcuts() {
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
   const focusedPane = useSessionStore((s) => s.focusedPane);
   const selectSession = useSessionStore((s) => s.selectSession);
-  const selectGroup = useSessionStore((s) => s.selectGroup);
   const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
   const closeSplit = useSessionStore((s) => s.closeSplit);
   const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
@@ -29,6 +26,7 @@ export function useKeyboardShortcuts() {
   const activeGroupCellIndex = useSessionStore((s) => s.activeGroupCellIndex);
   const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
   const activePanel = useUIStore((s) => s.activePanel);
+  const lastActiveTabByWorktree = useUIStore((s) => s.lastActiveTabByWorktree);
   const claudeConfigSaveFile = useClaudeConfigStore((s) => s.saveFile);
   const scratchpadOpen = useUIStore((s) => s.scratchpadOpen);
   const togglePreview = useScratchpadStore((s) => s.togglePreview);
@@ -38,31 +36,31 @@ export function useKeyboardShortcuts() {
   const sessionOrder = useSettingsStore((s) => s.settings.sessionOrder);
   const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
 
-  // Build a flat list of session IDs in visual (sidebar) order,
-  // respecting system group first, then repo order, worktree order, and session order.
-  // Layout groups are appended at the end with a 'group:' prefix.
-  const orderedNavIds = useMemo(() => {
-    const ids: string[] = [];
+  // Build a flat list of worktrees in visual (sidebar) order.
+  // Each entry has a key (for lastActiveTabByWorktree) and session IDs in tab bar order.
+  // System "Shells" worktree comes first, then repo worktrees in sidebar order.
+  const orderedWorktrees = useMemo(() => {
+    const entries: Array<{ key: string; sessions: string[] }> = [];
 
     // System sessions first (ungrouped)
     const systemGroup = sessionGroups.find(
       (g) => g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped'
     );
     if (systemGroup) {
-      const sysSessOrder = sessionOrder[SYSTEM_GROUP_ID];
       const allSystemSessions = systemGroup.worktrees.flatMap((wt) => wt.sessions);
+      const sysSessOrder = sessionOrder[SYSTEM_GROUP_ID];
       const sortedSystemSessions = sysSessOrder && sysSessOrder.length > 0
         ? [...allSystemSessions].sort((a, b) => {
             const orderMap = new Map(sysSessOrder.map((id, i) => [id, i]));
             return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
           })
         : allSystemSessions;
-      for (const s of sortedSystemSessions) {
-        ids.push(s.id);
+      if (sortedSystemSessions.length > 0) {
+        entries.push({ key: SYSTEM_GROUP_ID, sessions: sortedSystemSessions.map((s) => s.id) });
       }
     }
 
-    // Repo groups
+    // Repo groups in sidebar order
     const repoSessionGroups = sessionGroups.filter(
       (g) => !(g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped')
     );
@@ -94,20 +92,14 @@ export function useKeyboardShortcuts() {
               return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
             })
           : wt.sessions;
-
-        for (const s of sortedSessions) {
-          ids.push(s.id);
+        if (sortedSessions.length > 0) {
+          entries.push({ key: wtGroupId, sessions: sortedSessions.map((s) => s.id) });
         }
       }
     }
 
-    // Append layout groups
-    for (const lg of layoutGroups) {
-      ids.push(`${GROUP_PREFIX}${lg.id}`);
-    }
-
-    return ids;
-  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder, layoutGroups]);
+    return entries;
+  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -244,40 +236,49 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Cmd+Shift+Up/Down: navigate sessions and groups (selectSession exits split)
+      // Cmd+Shift+Left/Right: navigate sessions within the current worktree (tab bar order, loops)
+      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedSessionId) {
+        e.preventDefault();
+        const currentWorktree = orderedWorktrees.find((wt) => wt.sessions.includes(selectedSessionId));
+        if (currentWorktree && currentWorktree.sessions.length > 1) {
+          const currentIdx = currentWorktree.sessions.indexOf(selectedSessionId);
+          const nextIdx = e.key === 'ArrowLeft'
+            ? (currentIdx - 1 + currentWorktree.sessions.length) % currentWorktree.sessions.length
+            : (currentIdx + 1) % currentWorktree.sessions.length;
+          const nextId = currentWorktree.sessions[nextIdx];
+          if (nextId) selectSession(nextId);
+        }
+        return;
+      }
+
+      // Cmd+Shift+Up/Down: navigate between worktrees (sidebar order, including system "Shells")
       if (meta && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
-        if (orderedNavIds.length === 0) return;
+        if (orderedWorktrees.length === 0) return;
 
-        // Determine current position in the navigation list
-        let currentIndex: number;
-        if (selectedGroupId) {
-          currentIndex = orderedNavIds.indexOf(`${GROUP_PREFIX}${selectedGroupId}`);
-        } else if (selectedSessionId) {
-          currentIndex = orderedNavIds.indexOf(selectedSessionId);
-        } else {
-          currentIndex = -1;
-        }
+        // Find current worktree index by the selected session
+        const currentIndex = selectedSessionId
+          ? orderedWorktrees.findIndex((wt) => wt.sessions.includes(selectedSessionId))
+          : -1;
 
-        let nextIndex: number;
-        if (e.key === 'ArrowUp') {
-          nextIndex = currentIndex <= 0 ? orderedNavIds.length - 1 : currentIndex - 1;
-        } else {
-          nextIndex = currentIndex >= orderedNavIds.length - 1 ? 0 : currentIndex + 1;
-        }
+        const nextIndex = e.key === 'ArrowUp'
+          ? (currentIndex <= 0 ? orderedWorktrees.length - 1 : currentIndex - 1)
+          : (currentIndex >= orderedWorktrees.length - 1 ? 0 : currentIndex + 1);
 
-        const nextId = orderedNavIds[nextIndex];
-        if (nextId) {
-          if (nextId.startsWith(GROUP_PREFIX)) {
-            selectGroup(nextId.slice(GROUP_PREFIX.length));
-          } else {
-            selectSession(nextId);
-          }
+        const nextWorktree = orderedWorktrees[nextIndex];
+        if (nextWorktree) {
+          // Select last active tab if still present, otherwise first session
+          const lastActive = lastActiveTabByWorktree[nextWorktree.key];
+          const targetId = (lastActive && nextWorktree.sessions.includes(lastActive))
+            ? lastActive
+            : nextWorktree.sessions[0];
+          if (targetId) selectSession(targetId);
         }
+        return;
       }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedNavIds, selectedSessionId, selectedGroupId, splitSessionId, focusedPane, selectSession, selectGroup, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
+  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
 }
