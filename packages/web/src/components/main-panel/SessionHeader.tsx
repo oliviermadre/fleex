@@ -246,7 +246,7 @@ export function SessionTabs({ currentSession }: { currentSession: Session }) {
     }
   }, [worktreeData, basePath, addSession, selectSession, setSessionGroups, navigate]);
 
-  if (sortedSessions.length <= 1) return null;
+  if (sortedSessions.length === 0) return null;
 
   return (
     <div className="flex items-center gap-0 border-b border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 overflow-x-auto">
