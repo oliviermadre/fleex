@@ -6,6 +6,7 @@ import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import { ListSessionsUseCase } from './list-sessions.js';
 import type { EnrichClaudeActivityUseCase } from './enrich-claude-activity.js';
+import type { DiscoverExistingSessionsUseCase } from './discover-existing-sessions.js';
 
 export class GetSessionGroupsUseCase {
   private readonly listSessions: ListSessionsUseCase;
@@ -16,6 +17,7 @@ export class GetSessionGroupsUseCase {
     private readonly groupingService: SessionGroupingService,
     private readonly logger: LoggerPort,
     private readonly enrichClaudeActivity?: EnrichClaudeActivityUseCase,
+    private readonly discoverSessions?: DiscoverExistingSessionsUseCase,
   ) {
     this.listSessions = new ListSessionsUseCase(sessionStore, tmux, logger);
   }
@@ -26,6 +28,8 @@ export class GetSessionGroupsUseCase {
     let sessions: SessionEntity[];
     try {
       const combined = await this.tmux.listManagedSessionsWithPaneCommands();
+      // Discover any new asm_* sessions not yet in store (reuses pre-fetched list, no extra tmux call)
+      await this.discoverSessions?.execute(combined.sessions);
       sessions = await this.listSessions.execute(combined.sessions);
       paneCommands = combined.paneCommands;
     } catch (err) {

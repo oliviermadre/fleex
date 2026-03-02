@@ -144,6 +144,9 @@ export async function createContainer() {
   const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore, logger);
   const getTicketContext = new GetTicketContextUseCase(ticketStore, commentStore, mentionStore, deliverableStore);
 
+  const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git);
+  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions);
+
   return {
     logger,
     gatewayUrl,
@@ -166,8 +169,8 @@ export async function createContainer() {
     renameSession,
     listSessions: new ListSessionsUseCase(sessionStore, tmux, logger),
     killSession: new KillSessionUseCase(tmux, sessionStore, logger),
-    getSessionGroups: new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity),
-    discoverSessions: new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git),
+    getSessionGroups,
+    discoverSessions,
     listRepositories: new ListRepositoriesUseCase(git, config, logger),
     listWorktrees: new ListWorktreesUseCase(git, logger),
     createWorktree: createWorktreeUC,

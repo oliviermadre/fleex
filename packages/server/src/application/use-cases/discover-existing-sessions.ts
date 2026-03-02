@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { SessionEntity } from '../../domain/entities.js';
 import { SessionNamingService } from '../../domain/services/session-naming.js';
-import type { TmuxPort } from '../ports/tmux.port.js';
+import type { TmuxPort, TmuxSessionInfo } from '../ports/tmux.port.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -15,8 +15,8 @@ export class DiscoverExistingSessionsUseCase {
     private readonly git?: GitPort,
   ) {}
 
-  async execute(): Promise<void> {
-    const managed = await this.tmux.listManagedSessions();
+  async execute(prefetchedSessions?: TmuxSessionInfo[]): Promise<void> {
+    const managed = prefetchedSessions ?? await this.tmux.listManagedSessions();
 
     for (const tmuxSession of managed) {
       const existing = await this.sessionStore.getByTmuxName(tmuxSession.name);
@@ -56,36 +56,39 @@ export class DiscoverExistingSessionsUseCase {
       });
     }
 
-    // Re-enrich existing sessions that are missing metadata (e.g. discovered before a bug fix)
-    for (const session of await this.sessionStore.getAll()) {
-      if (session.repositoryOrg || session.status === 'dead') continue;
+    if (!prefetchedSessions) {
+      // Re-enrich existing sessions that are missing metadata (e.g. discovered before a bug fix)
+      // Skip when called with prefetched sessions (lightweight path, no expensive git lookups)
+      for (const session of await this.sessionStore.getAll()) {
+        if (session.repositoryOrg || session.status === 'dead') continue;
 
-      const metadata = await this.resolveMetadata(session.tmuxName);
-      if (!metadata.repositoryOrg) continue;
+        const metadata = await this.resolveMetadata(session.tmuxName);
+        if (!metadata.repositoryOrg) continue;
 
-      const enriched = new SessionEntity(
-        session.id,
-        session.tmuxName,
-        session.type,
-        session.status,
-        metadata.cwd || session.cwd,
-        session.createdAt,
-        session.lastAttachedAt,
-        metadata.repositoryOrg,
-        metadata.repositoryName,
-        metadata.worktreeBranch,
-        metadata.gitRemote,
-        session.claudePrompt,
-        session.displayName,
-      );
+        const enriched = new SessionEntity(
+          session.id,
+          session.tmuxName,
+          session.type,
+          session.status,
+          metadata.cwd || session.cwd,
+          session.createdAt,
+          session.lastAttachedAt,
+          metadata.repositoryOrg,
+          metadata.repositoryName,
+          metadata.worktreeBranch,
+          metadata.gitRemote,
+          session.claudePrompt,
+          session.displayName,
+        );
 
-      await this.sessionStore.save(enriched);
-      this.logger.info('Re-enriched session metadata', {
-        id: session.id,
-        tmuxName: session.tmuxName,
-        repositoryOrg: metadata.repositoryOrg || undefined,
-        repositoryName: metadata.repositoryName || undefined,
-      });
+        await this.sessionStore.save(enriched);
+        this.logger.info('Re-enriched session metadata', {
+          id: session.id,
+          tmuxName: session.tmuxName,
+          repositoryOrg: metadata.repositoryOrg || undefined,
+          repositoryName: metadata.repositoryName || undefined,
+        });
+      }
     }
   }
 
