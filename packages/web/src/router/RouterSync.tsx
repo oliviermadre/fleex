@@ -229,6 +229,19 @@ export function RouterSync() {
 
     // Update session selection
     if (parsed.panel === 'sessions') {
+      // Auto-restore last active session when navigating to /sessions with no session
+      if (!parsed.sessionId) {
+        const lastActiveSessionId = useUIStore.getState().lastActiveSessionId;
+        if (lastActiveSessionId) {
+          // Verify session still exists before redirecting
+          const sessions = useSessionStore.getState().sessions;
+          if (sessions.some((s) => s.id === lastActiveSessionId)) {
+            navigate(`/sessions/${lastActiveSessionId}`, { replace: true });
+            syncingFromUrl.current = false;
+            return;
+          }
+        }
+      }
       if (parsed.sessionId !== selectedSessionId) {
         selectSession(parsed.sessionId);
       }

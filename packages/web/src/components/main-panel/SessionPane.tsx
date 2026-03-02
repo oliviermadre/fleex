@@ -25,15 +25,17 @@ export const SessionPane = memo(function SessionPane({ session, focused, isSplit
     }
   }, [focused, session.id]);
 
-  // Track last active tab per worktree (including system shells)
+  // Track last active tab per worktree (including system shells) + global last active session
   const setLastActiveTab = useUIStore((s) => s.setLastActiveTab);
+  const setLastActiveSession = useUIStore((s) => s.setLastActiveSession);
   useEffect(() => {
     const isSystem = !session.repositoryOrg || !session.repositoryName || !session.worktreeBranch;
     const key = isSystem
       ? '_system'
       : `${session.repositoryOrg}/${session.repositoryName}:${session.worktreeBranch}`;
     setLastActiveTab(key, session.id);
-  }, [session.id, session.repositoryOrg, session.repositoryName, session.worktreeBranch, setLastActiveTab]);
+    setLastActiveSession(session.id);
+  }, [session.id, session.repositoryOrg, session.repositoryName, session.worktreeBranch, setLastActiveTab, setLastActiveSession]);
 
   return (
     <div

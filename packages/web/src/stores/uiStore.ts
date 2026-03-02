@@ -63,6 +63,10 @@ interface UIState {
   ticketMetaSidebarCollapsed: boolean;
   toggleTicketMetaSidebar: () => void;
 
+  // Last active session (global — for restoring when switching back to sessions panel)
+  lastActiveSessionId: string | null;
+  setLastActiveSession: (id: string) => void;
+
   // Floating session overlay
   floatingSessionId: string | null;
   setFloatingSession: (id: string | null) => void;
@@ -83,6 +87,7 @@ export const useUIStore = create<UIState>((set) => ({
   contentPanelCollapsed: false,
   lastActiveTabByWorktree: {},
   ticketMetaSidebarCollapsed: false,
+  lastActiveSessionId: null,
   floatingSessionId: null,
 
   toggleScratchpad: () =>
@@ -141,6 +146,8 @@ export const useUIStore = create<UIState>((set) => ({
 
   setLastActiveTab: (worktreeKey, sessionId) =>
     set((state) => ({ lastActiveTabByWorktree: { ...state.lastActiveTabByWorktree, [worktreeKey]: sessionId } })),
+
+  setLastActiveSession: (id) => set({ lastActiveSessionId: id }),
 
   setFloatingSession: (id) => set({ floatingSessionId: id }),
 }));
