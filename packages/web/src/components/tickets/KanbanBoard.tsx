@@ -86,12 +86,25 @@ export function KanbanBoard() {
     }
   }, [findSessionForTicket, openSessionFromTicket]);
 
+  const createBoard = useTicketStore((s) => s.createBoard);
+
+  const handleCreateBoard = async () => {
+    const name = prompt('Board name:');
+    if (!name) return;
+    await createBoard({ name });
+  };
+
   if (!board && !isAllBoards && boards.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center bg-[var(--theme-bg-base)]">
         <div className="text-center">
           <p className="text-sm text-[var(--theme-text-muted)]">No board yet</p>
-          <p className="mt-1 text-xs text-[var(--theme-text-faint)]">Create a board from the sidebar</p>
+          <button
+            className="mt-2 rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]"
+            onClick={handleCreateBoard}
+          >
+            Create board
+          </button>
         </div>
       </div>
     );

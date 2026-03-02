@@ -1,48 +1,126 @@
+import { useState, useRef } from 'react';
 import type { BoardWithCounts } from '@asm/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { BoardSelectorDropdown } from './BoardSelectorDropdown';
+import { SearchToggle } from './SearchToggle';
+import { FilterDropdown } from './FilterDropdown';
 
 interface KanbanHeaderProps {
   board: BoardWithCounts | null;
   isAllBoards: boolean;
 }
 
+const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;
+
 export function KanbanHeader({ board, isAllBoards }: KanbanHeaderProps) {
-  const tickets = useTicketStore((s) => s.tickets);
-  const filters = useTicketStore((s) => s.filters);
+  const boards = useTicketStore((s) => s.boards);
+  const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
+  const createTicket = useTicketStore((s) => s.createTicket);
+  const createBoard = useTicketStore((s) => s.createBoard);
+  const importGitHubIssue = useTicketStore((s) => s.importGitHubIssue);
 
-  const totalTickets = isAllBoards
-    ? tickets.length
-    : board
-      ? Object.values(board.ticketCounts).reduce((sum: number, c: number) => sum + c, 0)
-      : 0;
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickImporting, setQuickImporting] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const quickSubmittingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const activeFilterCount =
-    (filters.repo ? 1 : 0) +
-    (filters.priority ? 1 : 0) +
-    (filters.hasSession !== null ? 1 : 0) +
-    (filters.tag ? 1 : 0) +
-    (filters.favorite !== null ? 1 : 0);
+  const handleQuickCreate = async () => {
+    if (quickSubmittingRef.current) return;
+    const trimmed = quickTitle.trim();
+    if (!trimmed) {
+      setShowQuickCreate(false);
+      return;
+    }
+
+    let boardId = selectedBoardId;
+    if (!boardId) {
+      if (boards.length === 0) {
+        await createBoard({ name: 'Default' });
+        const updatedBoards = useTicketStore.getState().boards;
+        boardId = updatedBoards[0]?.id ?? null;
+      } else {
+        boardId = boards[0]?.id ?? null;
+      }
+      if (!boardId) return;
+    }
+
+    quickSubmittingRef.current = true;
+    setQuickError(null);
+
+    try {
+      if (GITHUB_ISSUE_RE.test(trimmed)) {
+        setQuickImporting(true);
+        await importGitHubIssue(trimmed, boardId);
+      } else {
+        await createTicket({ boardId, title: trimmed });
+      }
+      setQuickTitle('');
+      setShowQuickCreate(false);
+    } catch (err) {
+      setQuickError(err instanceof Error ? err.message : 'Failed to create ticket');
+    } finally {
+      setQuickImporting(false);
+      quickSubmittingRef.current = false;
+    }
+  };
 
   return (
     <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
-      {isAllBoards ? (
-        <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)]">All boards</span>
-      ) : board ? (
-        <div className="flex items-center gap-2">
-          <span className="text-base">{board.emoji}</span>
-          <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)]">{board.name}</span>
+      {/* Left: Board selector */}
+      <BoardSelectorDropdown />
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Right: Search, Filter, New ticket */}
+      <div className="flex items-center gap-1.5">
+        <SearchToggle />
+        <FilterDropdown />
+
+        {/* Quick create popover */}
+        <div className="relative">
+          {showQuickCreate ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                ref={inputRef}
+                type="text"
+                className="h-7 w-56 rounded-md border border-[var(--theme-accent)] bg-[var(--theme-bg-surface)] px-2.5 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
+                placeholder="Title or GitHub issue URL..."
+                value={quickTitle}
+                onChange={(e) => { setQuickTitle(e.target.value); setQuickError(null); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); handleQuickCreate(); }
+                  if (e.key === 'Escape') { setQuickTitle(''); setShowQuickCreate(false); }
+                }}
+                onBlur={() => { if (!quickTitle.trim()) setShowQuickCreate(false); }}
+                autoFocus
+                disabled={quickImporting}
+              />
+              {quickImporting && (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin text-[var(--theme-accent)]">
+                  <circle cx="8" cy="8" r="6" strokeDasharray="30" strokeDashoffset="10" />
+                </svg>
+              )}
+              {quickError && (
+                <span className="text-[10px] text-[var(--theme-danger)]">{quickError}</span>
+              )}
+            </div>
+          ) : (
+            <button
+              className="flex h-7 items-center gap-1.5 rounded-md bg-[var(--theme-accent)] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]"
+              onClick={() => setShowQuickCreate(true)}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="8" y1="3" x2="8" y2="13" />
+                <line x1="3" y1="8" x2="13" y2="8" />
+              </svg>
+              New ticket
+            </button>
+          )}
         </div>
-      ) : null}
-
-      <span className="rounded-full bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
-        {totalTickets}
-      </span>
-
-      {activeFilterCount > 0 && (
-        <span className="rounded-full bg-[var(--theme-accent)]/15 px-2 py-0.5 text-[10px] font-medium text-[var(--theme-accent)]">
-          {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
-        </span>
-      )}
+      </div>
     </div>
   );
 }
