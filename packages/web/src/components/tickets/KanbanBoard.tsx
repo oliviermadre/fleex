@@ -118,7 +118,7 @@ export function KanbanBoard() {
         board={board}
         isAllBoards={isAllBoards}
       />
-      <div className="flex min-h-0 flex-1 items-stretch gap-4 overflow-hidden p-5">
+      <div className="flex min-h-0 flex-1 items-stretch overflow-hidden">
         {(TICKET_STATUSES as readonly TicketStatus[]).map((status) => (
           <KanbanColumn
             key={status}

@@ -128,30 +128,30 @@ export function KanbanColumn({
   return (
     <div
       className={cn(
-        'flex min-h-0 min-w-0 flex-1 flex-col rounded-lg',
-        dragOver && 'ring-2 ring-[var(--theme-accent)]/50',
+        'flex min-h-0 min-w-0 flex-1 flex-col border-l border-[var(--theme-border)]',
+        dragOver && 'ring-2 ring-inset ring-[var(--theme-accent)]/50',
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Header */}
-      <div className="flex items-center gap-2.5 px-2.5 py-3">
-        <span className={cn('text-xs font-bold uppercase tracking-wider', COLUMN_TITLE_COLOR[status])}>
+      <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-4 py-3">
+        <span className={cn('text-sm font-bold uppercase tracking-wider', COLUMN_TITLE_COLOR[status])}>
           {TICKET_STATUS_LABELS[status]}
         </span>
-        <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', COLUMN_BADGE_COLOR[status])}>
+        <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', COLUMN_BADGE_COLOR[status])}>
           {tickets.length}
         </span>
       </div>
 
       {/* Inline card creator at top */}
-      <div className="px-1.5">
+      <div className="px-3 py-1.5">
         <InlineCardCreator boardId={boardId} status={status} />
       </div>
 
       {/* Cards */}
-      <div ref={listRef} className="flex flex-1 flex-col gap-2 overflow-y-auto px-1.5 pb-3 pt-1.5">
+      <div ref={listRef} className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-2">
         {tickets.map((ticket, i) => (
           <div key={ticket.id} data-card-index={i}>
             {/* Drop indicator before this card */}
