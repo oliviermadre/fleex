@@ -16,6 +16,7 @@ interface BoardRow {
     emoji: string;
     repositoryOrg: string | null;
     repositoryName: string | null;
+    nextDisplayId?: number;
   };
   created_at: string;
   updated_at: string;
@@ -27,6 +28,7 @@ interface TicketRow {
   board_id: string;
   status: TicketStatus;
   data: {
+    displayId?: number;
     title: string;
     description: string;
     priority: TicketPriority;
@@ -121,6 +123,7 @@ export class PgTicketStore implements TicketStorePort {
       emoji: board.emoji,
       repositoryOrg: board.repositoryOrg,
       repositoryName: board.repositoryName,
+      nextDisplayId: board.nextDisplayId,
     };
     await this.pool.query(
       `INSERT INTO boards (id, user_id, data, created_at, updated_at)
@@ -171,6 +174,7 @@ export class PgTicketStore implements TicketStorePort {
 
   async saveTicket(ticket: TicketEntity): Promise<void> {
     const data = {
+      displayId: ticket.displayId,
       title: ticket.title,
       description: ticket.description,
       priority: ticket.priority,
@@ -211,6 +215,16 @@ export class PgTicketStore implements TicketStorePort {
     for (const [id, t] of this.tickets) {
       if (t.boardId === boardId) this.tickets.delete(id);
     }
+  }
+
+  // ── Display ID ──
+
+  async getNextDisplayId(boardId: string): Promise<number> {
+    const board = await this.getBoardById(boardId);
+    if (!board) throw new Error(`Board not found: ${boardId}`);
+    const displayId = board.incrementDisplayId();
+    await this.saveBoard(board);
+    return displayId;
   }
 
   // ── Agent queries ──
@@ -272,6 +286,7 @@ export class PgTicketStore implements TicketStorePort {
     return new BoardEntity(
       row.id, d.name, d.emoji,
       d.repositoryOrg, d.repositoryName,
+      d.nextDisplayId ?? 1,
       new Date(row.created_at), new Date(row.updated_at),
     );
   }
@@ -279,7 +294,7 @@ export class PgTicketStore implements TicketStorePort {
   private ticketRowToEntity(row: TicketRow): TicketEntity {
     const d = row.data;
     return new TicketEntity(
-      row.id, row.board_id, d.title, d.description,
+      row.id, row.board_id, d.displayId ?? 0, d.title, d.description,
       row.status as TicketStatus, d.priority as TicketPriority,
       d.position, d.tags, d.links, d.blocked, d.favorite ?? false,
       d.dueDate ? new Date(d.dueDate) : null,

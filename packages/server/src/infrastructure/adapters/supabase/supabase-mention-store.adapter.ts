@@ -9,6 +9,7 @@ interface MentionRow {
   comment_id: string;
   target_agent: string;
   source_agent: string;
+  target_type: string | null;
   status: string;
   resolved_at: string | null;
   resolved_comment_id: string | null;
@@ -23,6 +24,7 @@ function rowToEntity(r: MentionRow): TicketMentionEntity {
     r.comment_id,
     r.target_agent,
     r.source_agent,
+    (r.target_type as 'agent' | 'human') ?? 'agent',
     r.status as MentionStatus,
     r.resolved_at ? new Date(r.resolved_at) : null,
     r.resolved_comment_id,
@@ -67,7 +69,7 @@ export class SupabaseMentionStore implements MentionStorePort {
       .from('mentions')
       .select('*')
       .eq('target_agent', agentName)
-      .eq('status', 'pending');
+      .not('status', 'in', '("resolved","waiting_for_info")');
     if (error) throw new Error(`SupabaseMentionStore.getPendingForAgent failed: ${error.message}`);
     return (data as MentionRow[]).map(rowToEntity);
   }
@@ -77,9 +79,19 @@ export class SupabaseMentionStore implements MentionStorePort {
       .from('mentions')
       .select('*', { count: 'exact', head: true })
       .eq('ticket_id', ticketId)
-      .eq('status', 'pending');
+      .neq('status', 'resolved');
     if (error) throw new Error(`SupabaseMentionStore.getPendingCountForTicket failed: ${error.message}`);
     return count ?? 0;
+  }
+
+  async getWaitingByTicket(ticketId: string): Promise<TicketMentionEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('mentions')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .eq('status', 'waiting_for_info');
+    if (error) throw new Error(`SupabaseMentionStore.getWaitingByTicket failed: ${error.message}`);
+    return (data as MentionRow[]).map(rowToEntity);
   }
 
   async save(mention: TicketMentionEntity): Promise<void> {
@@ -89,6 +101,7 @@ export class SupabaseMentionStore implements MentionStorePort {
       comment_id: mention.commentId,
       target_agent: mention.targetAgent,
       source_agent: mention.sourceAgent,
+      target_type: mention.targetType,
       status: mention.status,
       resolved_at: mention.resolvedAt?.toISOString() ?? null,
       resolved_comment_id: mention.resolvedCommentId,

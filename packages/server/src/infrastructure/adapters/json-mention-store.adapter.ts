@@ -12,6 +12,7 @@ interface SerializedMention {
   commentId: string;
   targetAgent: string;
   sourceAgent: string;
+  targetType?: 'agent' | 'human';
   status: MentionStatus;
   resolvedAt: string | null;
   resolvedCommentId: string | null;
@@ -54,7 +55,7 @@ export class JsonMentionStore implements MentionStorePort {
 
   async getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]> {
     return Array.from(this.mentions.values())
-      .filter((m) => m.targetAgent === agentName && m.status !== 'resolved')
+      .filter((m) => m.targetAgent === agentName && m.status !== 'resolved' && m.status !== 'waiting_for_info')
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
@@ -62,6 +63,12 @@ export class JsonMentionStore implements MentionStorePort {
     return Array.from(this.mentions.values())
       .filter((m) => m.ticketId === ticketId && m.status !== 'resolved')
       .length;
+  }
+
+  async getWaitingByTicket(ticketId: string): Promise<TicketMentionEntity[]> {
+    return Array.from(this.mentions.values())
+      .filter((m) => m.ticketId === ticketId && m.status === 'waiting_for_info')
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
   async save(mention: TicketMentionEntity): Promise<void> {
@@ -82,6 +89,7 @@ export class JsonMentionStore implements MentionStorePort {
       for (const m of data) {
         this.mentions.set(m.id, new TicketMentionEntity(
           m.id, m.ticketId, m.commentId, m.targetAgent, m.sourceAgent,
+          m.targetType ?? 'agent',
           m.status, m.resolvedAt ? new Date(m.resolvedAt) : null,
           m.resolvedCommentId, m.resolvedDeliverableId,
           new Date(m.createdAt),
@@ -100,6 +108,7 @@ export class JsonMentionStore implements MentionStorePort {
       const data: SerializedMention[] = Array.from(this.mentions.values()).map((m) => ({
         id: m.id, ticketId: m.ticketId, commentId: m.commentId,
         targetAgent: m.targetAgent, sourceAgent: m.sourceAgent,
+        targetType: m.targetType,
         status: m.status, resolvedAt: m.resolvedAt?.toISOString() ?? null,
         resolvedCommentId: m.resolvedCommentId,
         resolvedDeliverableId: m.resolvedDeliverableId,

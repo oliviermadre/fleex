@@ -23,6 +23,7 @@ export interface GitHubIssueMetadata {
 export interface Ticket {
   readonly id: string;
   readonly boardId: string;
+  readonly displayId: number;
   readonly title: string;
   readonly description: string;
   readonly status: TicketStatus;
@@ -47,6 +48,7 @@ export interface Board {
   readonly emoji: string;
   readonly repositoryOrg: string | null;
   readonly repositoryName: string | null;
+  readonly nextDisplayId: number;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -137,7 +139,9 @@ export interface TicketComment {
 
 // ── Mentions ──
 
-export type MentionStatus = 'pending' | 'acknowledged' | 'resolved';
+export type MentionStatus = 'pending' | 'acknowledged' | 'resolved' | 'waiting_for_info';
+
+export type MentionTargetType = 'agent' | 'human';
 
 export interface TicketMention {
   readonly id: string;
@@ -145,6 +149,7 @@ export interface TicketMention {
   readonly commentId: string;
   readonly targetAgent: string;
   readonly sourceAgent: string;
+  readonly targetType: MentionTargetType;
   readonly status: MentionStatus;
   readonly resolvedAt: string | null;
   readonly resolvedCommentId: string | null;
@@ -195,6 +200,9 @@ export type TicketWsMessageType =
   | 'mention:created'
   | 'mention:acknowledged'
   | 'mention:resolved'
+  | 'mention:updated'
+  | 'mention:waiting_for_info'
+  | 'mention:deleted'
   | 'deliverable:created'
   | 'deliverable:updated';
 

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Ticket, TicketStatus, TicketPriority, Worktree, GitHubIssueMetadata } from '@asm/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES } from '@asm/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import * as api from '../../services/api';
@@ -1135,84 +1136,137 @@ function AssigneeField({
   assignee: string | null;
   onChange: (assignee: string | null) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState('');
+  const personas = useAgentPersonaStore((s) => s.personas);
+  const loaded = useAgentPersonaStore((s) => s.loaded);
+  const loadPersonas = useAgentPersonaStore((s) => s.loadPersonas);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  if (assignee && !editing) {
-    return (
-      <div>
-        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Assignee
-        </label>
-        <div className="flex items-center gap-1.5">
-          <button
-            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-            onClick={() => { setValue(assignee); setEditing(true); }}
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
-              <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
-            </svg>
-            <span className="truncate">{assignee}</span>
-          </button>
-          <button
-            className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-            onClick={() => onChange(null)}
-            title="Unassign"
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="4" y1="4" x2="12" y2="12" />
-              <line x1="12" y1="4" x2="4" y2="12" />
-            </svg>
-          </button>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!loaded) loadPersonas();
+  }, [loaded, loadPersonas]);
 
-  if (editing) {
-    return (
-      <div>
-        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Assignee
-        </label>
-        <input
-          autoFocus
-          className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
-          placeholder="Agent or user name..."
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && value.trim()) {
-              onChange(value.trim());
-              setEditing(false);
-              setValue('');
-            }
-            if (e.key === 'Escape') {
-              setEditing(false);
-              setValue('');
-            }
-          }}
-          onBlur={() => {
-            if (value.trim()) onChange(value.trim());
-            setEditing(false);
-            setValue('');
-          }}
-        />
-      </div>
-    );
-  }
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleSelect = (name: string | null) => {
+    onChange(name);
+    setOpen(false);
+  };
 
   return (
-    <div>
+    <div ref={containerRef} className="relative">
       <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
         Assignee
       </label>
       <button
-        className="w-full rounded-md border border-dashed border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:border-[var(--theme-border-input)] hover:text-[var(--theme-text-secondary)]"
-        onClick={() => setEditing(true)}
+        className={cn(
+          'flex w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors',
+          assignee
+            ? 'border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-hover)]'
+            : 'border-dashed border-[var(--theme-border)] text-[10px] text-[var(--theme-text-muted)] hover:border-[var(--theme-border-input)] hover:text-[var(--theme-text-secondary)]',
+        )}
+        onClick={() => setOpen(!open)}
       >
-        + Assign
+        {assignee ? (
+          <>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+              <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
+            </svg>
+            <span className="flex-1 truncate text-left">{assignee}</span>
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-faint)]">
+              <path d="M4 6l4 4 4-4" />
+            </svg>
+          </>
+        ) : (
+          <span className="flex-1 text-left">+ Assign</span>
+        )}
       </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
+          {/* Unassigned option */}
+          <button
+            className={cn(
+              'flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+              assignee === null
+                ? 'text-[var(--theme-text-primary)] font-medium'
+                : 'text-[var(--theme-text-secondary)]',
+            )}
+            onClick={() => handleSelect(null)}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-[var(--theme-text-faint)]">
+              <circle cx="8" cy="8" r="6" />
+              <line x1="5" y1="8" x2="11" y2="8" />
+            </svg>
+            <span>Unassigned</span>
+            {assignee === null && (
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="ml-auto flex-shrink-0 text-[var(--theme-accent)]">
+                <path d="M6.5 12.5l-4-4 1.5-1.5L6.5 9.5l6-6L14 5z" />
+              </svg>
+            )}
+          </button>
+
+          {/* Me (human) option */}
+          <button
+            className={cn(
+              'flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+              assignee === 'user'
+                ? 'text-[var(--theme-text-primary)] font-medium'
+                : 'text-[var(--theme-text-secondary)]',
+            )}
+            onClick={() => handleSelect('user')}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+              <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
+            </svg>
+            <span>Me</span>
+            {assignee === 'user' && (
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="ml-auto flex-shrink-0 text-[var(--theme-accent)]">
+                <path d="M6.5 12.5l-4-4 1.5-1.5L6.5 9.5l6-6L14 5z" />
+              </svg>
+            )}
+          </button>
+
+          {personas.length > 0 && (
+            <div className="mx-2 my-1 border-t border-[var(--theme-border)]" />
+          )}
+
+          {/* Persona options */}
+          {personas.map((p) => (
+            <button
+              key={p.id}
+              className={cn(
+                'flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                assignee === p.name
+                  ? 'text-[var(--theme-text-primary)] font-medium'
+                  : 'text-[var(--theme-text-secondary)]',
+              )}
+              onClick={() => handleSelect(p.name)}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+                <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
+              </svg>
+              <span className="truncate">{p.displayName}</span>
+              <span className="ml-auto truncate text-[10px] text-[var(--theme-text-faint)]">{p.name}</span>
+              {assignee === p.name && (
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-accent)]">
+                  <path d="M6.5 12.5l-4-4 1.5-1.5L6.5 9.5l6-6L14 5z" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

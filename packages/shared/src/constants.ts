@@ -56,3 +56,9 @@ export const TICKET_STATUS_LABELS: Record<string, string> = {
   done: 'Done',
 };
 export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;
+
+// Agent Personas
+export const WS_PERSONA_PATH = '/ws/personas';
+
+// Agent Events
+export const WS_AGENT_EVENTS_PATH = '/ws/agent-events';

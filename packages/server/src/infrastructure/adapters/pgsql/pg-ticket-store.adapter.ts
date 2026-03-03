@@ -24,21 +24,23 @@ export class PgTicketStore implements TicketStorePort {
 
   async saveBoard(board: BoardEntity): Promise<void> {
     await this.db.query(
-      `INSERT INTO boards (id, name, emoji, repository_org, repository_name, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO boards (id, name, emoji, repository_org, repository_name, next_display_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (id) DO UPDATE SET
          name = $2,
          emoji = $3,
          repository_org = $4,
          repository_name = $5,
-         created_at = $6,
-         updated_at = $7`,
+         next_display_id = $6,
+         created_at = $7,
+         updated_at = $8`,
       [
         board.id,
         board.name,
         board.emoji,
         board.repositoryOrg,
         board.repositoryName,
+        board.nextDisplayId,
         board.createdAt.toISOString(),
         board.updatedAt.toISOString(),
       ],
@@ -47,6 +49,15 @@ export class PgTicketStore implements TicketStorePort {
 
   async removeBoard(id: string): Promise<void> {
     await this.db.query('DELETE FROM boards WHERE id = $1', [id]);
+  }
+
+  async getNextDisplayId(boardId: string): Promise<number> {
+    const { rows } = await this.db.query(
+      'UPDATE boards SET next_display_id = next_display_id + 1 WHERE id = $1 RETURNING next_display_id',
+      [boardId],
+    );
+    if (rows.length === 0) throw new Error(`Board not found: ${boardId}`);
+    return (rows[0].next_display_id as number) - 1;
   }
 
   // ── Tickets ──
@@ -88,31 +99,33 @@ export class PgTicketStore implements TicketStorePort {
   async saveTicket(ticket: TicketEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO tickets (
-        id, board_id, title, description, status, priority, position,
+        id, board_id, display_id, title, description, status, priority, position,
         tags, links, blocked, favorite, due_date, assignee,
         agent_claimed_at, github_metadata, status_changed_at, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
       ON CONFLICT (id) DO UPDATE SET
         board_id = $2,
-        title = $3,
-        description = $4,
-        status = $5,
-        priority = $6,
-        position = $7,
-        tags = $8,
-        links = $9,
-        blocked = $10,
-        favorite = $11,
-        due_date = $12,
-        assignee = $13,
-        agent_claimed_at = $14,
-        github_metadata = $15,
-        status_changed_at = $16,
-        created_at = $17,
-        updated_at = $18`,
+        display_id = $3,
+        title = $4,
+        description = $5,
+        status = $6,
+        priority = $7,
+        position = $8,
+        tags = $9,
+        links = $10,
+        blocked = $11,
+        favorite = $12,
+        due_date = $13,
+        assignee = $14,
+        agent_claimed_at = $15,
+        github_metadata = $16,
+        status_changed_at = $17,
+        created_at = $18,
+        updated_at = $19`,
       [
         ticket.id,
         ticket.boardId,
+        ticket.displayId,
         ticket.title,
         ticket.description,
         ticket.status,
@@ -225,6 +238,7 @@ function rowToBoard(row: Record<string, unknown>): BoardEntity {
     row.emoji as string,
     (row.repository_org as string) ?? null,
     (row.repository_name as string) ?? null,
+    (row.next_display_id as number) ?? 1,
     new Date(row.created_at as string),
     new Date(row.updated_at as string),
   );
@@ -234,6 +248,7 @@ function rowToTicket(row: Record<string, unknown>): TicketEntity {
   return new TicketEntity(
     row.id as string,
     row.board_id as string,
+    (row.display_id as number) ?? 0,
     row.title as string,
     (row.description as string) ?? '',
     row.status as TicketStatus,

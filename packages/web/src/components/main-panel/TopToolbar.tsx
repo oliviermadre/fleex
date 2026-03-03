@@ -47,15 +47,24 @@ function WorktreeToolbarButton({ action, context }: { action: WorktreeAction; co
   );
 }
 
-export function TopToolbar({ session }: { session?: Session }) {
+interface TopToolbarProps {
+  /** Worktree context — preferred source for worktree actions */
+  worktree?: { org: string; repo: string; branch: string; path: string };
+  /** Fallback: extract worktree info from a session (backward compat for SessionPane) */
+  session?: Session;
+}
+
+export function TopToolbar({ worktree, session }: TopToolbarProps) {
   const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
   const worktreeActions = useSettingsStore((s) => s.settings.worktreeActions);
   const { usage, loading } = useClaudeUsage();
 
   const worktreeContext = useMemo(() => {
-    if (!session?.repositoryOrg || !session?.repositoryName || !session?.worktreeBranch) return null;
-    return buildWorktreeContext(session.repositoryOrg, session.repositoryName, session.worktreeBranch, session.cwd);
-  }, [session?.repositoryOrg, session?.repositoryName, session?.worktreeBranch, session?.cwd]);
+    if (worktree) return buildWorktreeContext(worktree.org, worktree.repo, worktree.branch, worktree.path);
+    if (session?.repositoryOrg && session?.repositoryName && session?.worktreeBranch)
+      return buildWorktreeContext(session.repositoryOrg, session.repositoryName, session.worktreeBranch, session.cwd);
+    return null;
+  }, [worktree, session?.repositoryOrg, session?.repositoryName, session?.worktreeBranch, session?.cwd]);
 
   const hasWorktreeActions = worktreeContext && worktreeActions && worktreeActions.length > 0;
   const hasPinnedIcons = pinnedIcons.length > 0;

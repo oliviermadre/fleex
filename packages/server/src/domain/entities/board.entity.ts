@@ -7,6 +7,7 @@ export class BoardEntity {
     public emoji: string,
     public readonly repositoryOrg: string | null,
     public readonly repositoryName: string | null,
+    public nextDisplayId: number,
     public readonly createdAt: Date,
     public updatedAt: Date,
   ) {}
@@ -25,9 +26,17 @@ export class BoardEntity {
       params.emoji ?? '📋',
       params.repositoryOrg ?? null,
       params.repositoryName ?? null,
+      1,
       now,
       now,
     );
+  }
+
+  incrementDisplayId(): number {
+    const id = this.nextDisplayId;
+    this.nextDisplayId++;
+    this.updatedAt = new Date();
+    return id;
   }
 
   update(changes: { name?: string; emoji?: string }): void {
@@ -43,6 +52,7 @@ export class BoardEntity {
       emoji: this.emoji,
       repositoryOrg: this.repositoryOrg,
       repositoryName: this.repositoryName,
+      nextDisplayId: this.nextDisplayId,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };

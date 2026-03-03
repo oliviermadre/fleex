@@ -1,4 +1,4 @@
-import type { TicketMention, MentionStatus } from '@asm/shared';
+import type { TicketMention, MentionStatus, MentionTargetType } from '@asm/shared';
 
 export class TicketMentionEntity {
   constructor(
@@ -7,6 +7,7 @@ export class TicketMentionEntity {
     public readonly commentId: string,
     public readonly targetAgent: string,
     public readonly sourceAgent: string,
+    public readonly targetType: MentionTargetType,
     public status: MentionStatus,
     public resolvedAt: Date | null,
     public resolvedCommentId: string | null,
@@ -20,6 +21,7 @@ export class TicketMentionEntity {
     commentId: string;
     targetAgent: string;
     sourceAgent: string;
+    targetType?: MentionTargetType;
   }): TicketMentionEntity {
     return new TicketMentionEntity(
       params.id,
@@ -27,6 +29,7 @@ export class TicketMentionEntity {
       params.commentId,
       params.targetAgent,
       params.sourceAgent,
+      params.targetType ?? 'agent',
       'pending',
       null,
       null,
@@ -38,6 +41,24 @@ export class TicketMentionEntity {
   acknowledge(): void {
     if (this.status === 'pending') {
       this.status = 'acknowledged';
+    }
+  }
+
+  resetToPending(): void {
+    if (this.status === 'acknowledged') {
+      this.status = 'pending';
+    }
+  }
+
+  waitForInfo(): void {
+    if (this.status === 'acknowledged') {
+      this.status = 'waiting_for_info';
+    }
+  }
+
+  wakeUp(): void {
+    if (this.status === 'waiting_for_info') {
+      this.status = 'pending';
     }
   }
 
@@ -59,6 +80,7 @@ export class TicketMentionEntity {
       commentId: this.commentId,
       targetAgent: this.targetAgent,
       sourceAgent: this.sourceAgent,
+      targetType: this.targetType,
       status: this.status,
       resolvedAt: this.resolvedAt?.toISOString() ?? null,
       resolvedCommentId: this.resolvedCommentId,

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS boards (
   emoji TEXT NOT NULL DEFAULT '',
   repository_org TEXT,
   repository_name TEXT,
+  next_display_id INT NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL
 );
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS boards (
 CREATE TABLE IF NOT EXISTS tickets (
   id TEXT PRIMARY KEY,
   board_id TEXT NOT NULL REFERENCES boards(id),
+  display_id INT NOT NULL DEFAULT 0,
   title TEXT NOT NULL,
   description TEXT DEFAULT '',
   status TEXT NOT NULL,
@@ -93,6 +95,7 @@ CREATE TABLE IF NOT EXISTS mentions (
   comment_id TEXT NOT NULL,
   target_agent TEXT NOT NULL,
   source_agent TEXT NOT NULL,
+  target_type TEXT NOT NULL DEFAULT 'agent',
   status TEXT NOT NULL DEFAULT 'pending',
   resolved_at TIMESTAMPTZ,
   resolved_comment_id TEXT,
@@ -125,4 +128,44 @@ CREATE INDEX IF NOT EXISTS idx_mentions_ticket_id ON mentions(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_mentions_status ON mentions(status);
 CREATE INDEX IF NOT EXISTS idx_mentions_target_agent_status ON mentions(target_agent, status);
 CREATE INDEX IF NOT EXISTS idx_deliverables_ticket_id ON deliverables(ticket_id);
+
+-- Agent Personas
+CREATE TABLE IF NOT EXISTS agent_personas (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  model TEXT NOT NULL,
+  soul_md TEXT DEFAULT '',
+  identity_md TEXT DEFAULT '',
+  memory_md TEXT DEFAULT '',
+  human_mention_name TEXT,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_personas_name ON agent_personas(name);
+
+-- Agent Event Executions
+CREATE TABLE IF NOT EXISTS agent_event_executions (
+  execution_id TEXT PRIMARY KEY,
+  persona_id TEXT NOT NULL,
+  ticket_id TEXT NOT NULL,
+  mention_id TEXT NOT NULL,
+  event_count INT NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'running',
+  started_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket ON agent_event_executions(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_persona ON agent_event_executions(persona_id);
+
+-- Migrations for existing databases
+DO $$ BEGIN
+  ALTER TABLE boards ADD COLUMN IF NOT EXISTS next_display_id INT NOT NULL DEFAULT 1;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE tickets ADD COLUMN IF NOT EXISTS display_id INT NOT NULL DEFAULT 0;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 `;

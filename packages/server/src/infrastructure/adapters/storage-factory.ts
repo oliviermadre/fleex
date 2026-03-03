@@ -4,6 +4,8 @@ import type { AgentTokenStorePort } from '../../application/ports/agent-token-st
 import type { CommentStorePort } from '../../application/ports/comment-store.port.js';
 import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
+import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
+import type { AgentEventStorePort } from '../../application/ports/agent-event-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { HostFs } from '../host/types.js';
 
@@ -16,6 +18,8 @@ export interface StorageStores {
   commentStore: CommentStorePort;
   mentionStore: MentionStorePort;
   deliverableStore: DeliverableStorePort;
+  personaStore: PersonaStorePort;
+  agentEventStore: AgentEventStorePort;
 }
 
 export function resolveStorageDriver(): StorageDriver {
@@ -62,6 +66,8 @@ async function createJsonStores(deps: {
   const { JsonCommentStore } = await import('./json-comment-store.adapter.js');
   const { JsonMentionStore } = await import('./json-mention-store.adapter.js');
   const { JsonDeliverableStore } = await import('./json-deliverable-store.adapter.js');
+  const { JsonPersonaStore } = await import('./json-persona-store.adapter.js');
+  const { JsonAgentEventStore } = await import('./json-agent-event-store.adapter.js');
 
   const sessionStore = new JsonSessionStore(deps.hostFs, deps.homedir, deps.logger);
   await sessionStore.init();
@@ -75,8 +81,12 @@ async function createJsonStores(deps: {
   await mentionStore.init();
   const deliverableStore = new JsonDeliverableStore(deps.hostFs, deps.homedir, deps.logger);
   await deliverableStore.init();
+  const personaStore = new JsonPersonaStore(deps.hostFs, deps.homedir, deps.logger);
+  await personaStore.init();
+  const agentEventStore = new JsonAgentEventStore(deps.hostFs, deps.homedir, deps.logger);
+  await agentEventStore.init();
 
-  return { sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore };
+  return { sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore };
 }
 
 async function createJsonSessionStore(deps: {
@@ -102,10 +112,15 @@ async function createSqliteStores(logger: LoggerPort): Promise<NonSessionStores>
   const { SqliteCommentStoreAdapter } = await import('./sqlite/sqlite-comment-store.adapter.js');
   const { SqliteMentionStoreAdapter } = await import('./sqlite/sqlite-mention-store.adapter.js');
   const { SqliteDeliverableStoreAdapter } = await import('./sqlite/sqlite-deliverable-store.adapter.js');
+  const { SqlitePersonaStoreAdapter } = await import('./sqlite/sqlite-persona-store.adapter.js');
+  const { SqliteAgentEventStoreAdapter } = await import('./sqlite/sqlite-agent-event-store.adapter.js');
 
   const dbPath = process.env['ASM_SQLITE_PATH'] ?? join(homedir(), ASM_DIR, 'asm.db');
   const connection = new SqliteConnection(dbPath);
   await connection.init();
+
+  const agentEventStore = new SqliteAgentEventStoreAdapter(connection);
+  await agentEventStore.init();
 
   logger.info('SQLite storage initialized', { path: dbPath });
 
@@ -115,6 +130,8 @@ async function createSqliteStores(logger: LoggerPort): Promise<NonSessionStores>
     commentStore: new SqliteCommentStoreAdapter(connection),
     mentionStore: new SqliteMentionStoreAdapter(connection),
     deliverableStore: new SqliteDeliverableStoreAdapter(connection),
+    personaStore: new SqlitePersonaStoreAdapter(connection),
+    agentEventStore,
   };
 }
 
@@ -130,9 +147,14 @@ async function createPgsqlStores(logger: LoggerPort): Promise<NonSessionStores> 
   const { PgCommentStore } = await import('./pgsql/pg-comment-store.adapter.js');
   const { PgMentionStore } = await import('./pgsql/pg-mention-store.adapter.js');
   const { PgDeliverableStore } = await import('./pgsql/pg-deliverable-store.adapter.js');
+  const { PgPersonaStore } = await import('./pgsql/pg-persona-store.adapter.js');
+  const { PgAgentEventStore } = await import('./pgsql/pg-agent-event-store.adapter.js');
 
   const connection = new PgConnection(url);
   await connection.init();
+
+  const agentEventStore = new PgAgentEventStore(connection);
+  await agentEventStore.init();
 
   logger.info('PostgreSQL storage initialized', { url: url.replace(/:[^:@]+@/, ':***@') });
 
@@ -142,6 +164,8 @@ async function createPgsqlStores(logger: LoggerPort): Promise<NonSessionStores> 
     commentStore: new PgCommentStore(connection),
     mentionStore: new PgMentionStore(connection),
     deliverableStore: new PgDeliverableStore(connection),
+    personaStore: new PgPersonaStore(connection),
+    agentEventStore,
   };
 }
 
@@ -160,9 +184,14 @@ async function createSupabaseStores(logger: LoggerPort): Promise<NonSessionStore
   const { SupabaseCommentStore } = await import('./supabase/supabase-comment-store.adapter.js');
   const { SupabaseMentionStore } = await import('./supabase/supabase-mention-store.adapter.js');
   const { SupabaseDeliverableStore } = await import('./supabase/supabase-deliverable-store.adapter.js');
+  const { SupabasePersonaStore } = await import('./supabase/supabase-persona-store.adapter.js');
+  const { SupabaseAgentEventStore } = await import('./supabase/supabase-agent-event-store.adapter.js');
 
   const connection = new SupabaseConnection(url, key);
   await connection.init();
+
+  const agentEventStore = new SupabaseAgentEventStore(connection);
+  await agentEventStore.init();
 
   logger.info('Supabase storage initialized', { url });
 
@@ -172,5 +201,7 @@ async function createSupabaseStores(logger: LoggerPort): Promise<NonSessionStore
     commentStore: new SupabaseCommentStore(connection),
     mentionStore: new SupabaseMentionStore(connection),
     deliverableStore: new SupabaseDeliverableStore(connection),
+    personaStore: new SupabasePersonaStore(connection),
+    agentEventStore,
   };
 }

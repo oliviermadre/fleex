@@ -6,6 +6,7 @@ export interface MentionStorePort {
   getByComment(commentId: string): Promise<TicketMentionEntity[]>;
   getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]>;
   getPendingCountForTicket(ticketId: string): Promise<number>;
+  getWaitingByTicket(ticketId: string): Promise<TicketMentionEntity[]>;
   save(mention: TicketMentionEntity): Promise<void>;
   remove(id: string): Promise<void>;
 }

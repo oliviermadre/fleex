@@ -14,6 +14,7 @@ export type ShellExecFn = (
 export interface HostFs {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
+  appendFile(path: string, content: string): Promise<void>;
   readdir(path: string): Promise<{ name: string; isFile: boolean; isDirectory: boolean }[]>;
   stat(path: string): Promise<{ size: number; mtimeMs: number } | null>;
   exists(path: string): Promise<boolean>;

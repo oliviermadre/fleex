@@ -14,6 +14,28 @@ export class SqliteConnection {
     for (const statement of SQLITE_SCHEMA) {
       this._db.exec(statement);
     }
+
+    // Safe column migrations for existing databases
+    this.migrateColumns();
+  }
+
+  private migrateColumns(): void {
+    const db = this._db!;
+    const migrations: [string, string][] = [
+      ['boards', 'ALTER TABLE boards ADD COLUMN next_display_id INTEGER NOT NULL DEFAULT 1'],
+      ['tickets', 'ALTER TABLE tickets ADD COLUMN display_id INTEGER NOT NULL DEFAULT 0'],
+      ['agent_event_executions', 'ALTER TABLE agent_event_executions ADD COLUMN sdk_session_id TEXT'],
+    ];
+
+    for (const [table, sql] of migrations) {
+      try {
+        db.exec(sql);
+      } catch (err: unknown) {
+        // Ignore "duplicate column" errors — column already exists
+        if (err instanceof Error && err.message.includes('duplicate column')) continue;
+        throw err;
+      }
+    }
   }
 
   get db(): Database.Database {

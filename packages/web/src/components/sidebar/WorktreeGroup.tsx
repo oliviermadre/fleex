@@ -10,6 +10,13 @@ import { aggregateBranchStatus } from '../../lib/deriveStatus';
 import { StatusDot } from '../ui/StatusDot';
 import { useNavigate } from 'react-router-dom';
 
+const AGENT_STATUS_STYLE: Record<string, { dot: string; text: string; label: string }> = {
+  running: { dot: 'bg-blue-400 animate-pulse', text: 'text-blue-400', label: 'Running' },
+  completed: { dot: 'bg-green-400', text: 'text-green-400', label: 'Completed' },
+  failed: { dot: 'bg-red-400', text: 'text-red-400', label: 'Failed' },
+  idle: { dot: 'bg-[var(--theme-text-faint)]', text: 'text-[var(--theme-text-faint)]', label: 'Idle' },
+};
+
 interface Props {
   worktree: WorktreeSessionGroup;
   repoGroupId: string;
@@ -36,10 +43,21 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
   // Aggregate status for branch
   const branchStatus = useMemo(() => aggregateBranchStatus(worktree.sessions), [worktree.sessions]);
 
-  // Is this branch selected (any session in it is selected)?
-  const isSelected = worktree.sessions.some((s) => s.id === selectedSessionId);
+  const setSelectedAgentWorktreeTicketId = useUIStore((s) => s.setSelectedAgentWorktreeTicketId);
+  const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
+  const agentInfo = worktree.agentWorktree;
+  const isAgentSelected = agentInfo && selectedAgentWorktreeTicketId === agentInfo.ticketId;
+
+  // Is this branch selected (any session in it is selected, or agent worktree is selected)?
+  const isSelected = worktree.sessions.some((s) => s.id === selectedSessionId) || !!isAgentSelected;
 
   const handleBranchClick = () => {
+    // Agent worktree → always open agent panel (handles sessions + executions)
+    if (agentInfo) {
+      setSelectedAgentWorktreeTicketId(agentInfo.ticketId);
+      navigate(`/sessions/agent/${agentInfo.ticketId}`, { replace: true });
+      return;
+    }
     if (worktree.sessions.length === 0) return;
     // Navigate to last active tab if it still exists, otherwise first session
     const targetId = lastActiveTab && worktree.sessions.some((s) => s.id === lastActiveTab)
@@ -100,6 +118,25 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
               <span className="truncate text-xs text-[var(--theme-text-faint)]">
                 # {linkedTicket.title}
               </span>
+            </div>
+          )}
+
+          {/* Row 4: Agent indicator (if agent worktree) */}
+          {agentInfo && (
+            <div className="flex items-center gap-1.5 pl-5">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-accent)]">
+                <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
+              </svg>
+              <span className="text-xs text-[var(--theme-accent)] truncate">{agentInfo.agentDisplayName}</span>
+              {(() => {
+                const style = AGENT_STATUS_STYLE[agentInfo.executionStatus] ?? AGENT_STATUS_STYLE['idle']!;
+                return (
+                  <span className={cn('ml-auto flex items-center gap-1 shrink-0')}>
+                    <span className={cn('h-1.5 w-1.5 rounded-full', style.dot)} />
+                    <span className={cn('text-[10px]', style.text)}>{style.label}</span>
+                  </span>
+                );
+              })()}
             </div>
           )}
         </button>

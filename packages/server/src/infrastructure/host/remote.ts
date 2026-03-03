@@ -71,6 +71,10 @@ export class RemoteHostFs implements HostFs {
     await this.call({ op: 'write', path, content });
   }
 
+  async appendFile(path: string, content: string): Promise<void> {
+    await this.call({ op: 'append', path, content });
+  }
+
   async readdir(path: string): Promise<{ name: string; isFile: boolean; isDirectory: boolean }[]> {
     const data = await this.call({ op: 'readdir', path });
     return data.entries;
