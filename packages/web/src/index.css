@@ -302,6 +302,52 @@ html, body {
   opacity: 0.5;
 }
 
+/* ── Syntax Highlighting (lowlight / highlight.js dark theme) ── */
+
+.hljs { color: var(--theme-text-primary); background: transparent; }
+
+.hljs-comment,
+.hljs-quote       { color: var(--theme-text-muted); font-style: italic; }
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst       { color: #7dd3fc; } /* sky-300 */
+
+.hljs-number,
+.hljs-literal,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag .hljs-attr { color: #fdba74; } /* orange-300 */
+
+.hljs-string,
+.hljs-doctag      { color: #86efac; } /* green-300 */
+
+.hljs-title,
+.hljs-section,
+.hljs-selector-id { color: #c4b5fd; } /* violet-300 */
+
+.hljs-type,
+.hljs-class .hljs-title { color: #67e8f9; } /* cyan-300 */
+
+.hljs-tag,
+.hljs-name,
+.hljs-attribute   { color: #7dd3fc; } /* sky-300 */
+
+.hljs-regexp,
+.hljs-link        { color: #f9a8d4; } /* pink-300 */
+
+.hljs-symbol,
+.hljs-bullet      { color: #fdba74; } /* orange-300 */
+
+.hljs-built_in,
+.hljs-builtin-name { color: #67e8f9; } /* cyan-300 */
+
+.hljs-meta        { color: var(--theme-text-muted); }
+.hljs-deletion    { background: rgba(239, 68, 68, 0.2); }
+.hljs-addition    { background: rgba(34, 197, 94, 0.2); }
+.hljs-emphasis    { font-style: italic; }
+.hljs-strong      { font-weight: bold; }
+
 /* GitHub icon glow on kanban cards */
 .github-glow-icon {
   cursor: pointer;
