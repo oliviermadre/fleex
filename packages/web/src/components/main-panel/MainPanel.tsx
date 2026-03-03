@@ -105,8 +105,8 @@ export function MainPanel() {
     return <RepositoryDashboard repoKey={selectedRepoKey} />;
   }
 
-  // Agent worktree view (ticket-based, no session required)
-  if (activePanel === 'sessions' && selectedAgentWorktreeTicketId && !selectedSession) {
+  // Agent worktree view (handles both executions and shell sessions)
+  if (activePanel === 'sessions' && selectedAgentWorktreeTicketId) {
     return <AgentWorktreePanel ticketId={selectedAgentWorktreeTicketId} />;
   }
 

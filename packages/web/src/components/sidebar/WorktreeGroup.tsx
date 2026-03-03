@@ -52,8 +52,8 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
   const isSelected = worktree.sessions.some((s) => s.id === selectedSessionId) || !!isAgentSelected;
 
   const handleBranchClick = () => {
-    // Agent worktree with no sessions → open agent panel
-    if (worktree.sessions.length === 0 && agentInfo) {
+    // Agent worktree → always open agent panel (handles sessions + executions)
+    if (agentInfo) {
       setSelectedAgentWorktreeTicketId(agentInfo.ticketId);
       navigate(`/sessions/agent/${agentInfo.ticketId}`, { replace: true });
       return;
