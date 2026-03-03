@@ -139,12 +139,10 @@ export function AgentWorktreePanel({ ticketId }: Props) {
         const remaining = allTabs.filter((t) => !(t.kind === 'session' && t.sessionId === sessionId));
         setActiveTab(remaining.length > 0 ? remaining[0]! : null);
       }
-      const groups = await api.fetchSessionGroups();
-      setSessionGroups(groups);
     } catch {
       // silently fail
     }
-  }, [activeTab, allTabs, removeSession, setSessionGroups]);
+  }, [activeTab, allTabs, removeSession]);
 
   // Drag-to-reorder state
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);

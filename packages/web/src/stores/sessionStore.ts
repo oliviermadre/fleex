@@ -25,7 +25,7 @@ function filterKilledSessions(groups: SessionGroup[]): SessionGroup[] {
           ...wt,
           sessions: wt.sessions.filter((s) => !recentlyKilled.has(s.id)),
         }))
-        .filter((wt) => wt.sessions.length > 0),
+        .filter((wt) => wt.sessions.length > 0 || wt.agentWorktree),
     }))
     .filter((g) => g.worktrees.length > 0);
 }
@@ -95,7 +95,7 @@ export const useSessionStore = create<SessionState>((set) => ({
       recentlyKilled.set(id, Date.now());
       const sessions = state.sessions.filter((s) => s.id !== id);
 
-      // Remove from sessionGroups, pruning empty worktrees and repo groups
+      // Remove from sessionGroups, pruning empty worktrees (but keep agent worktrees) and repo groups
       const sessionGroups = state.sessionGroups
         .map((group: SessionGroup) => ({
           ...group,
@@ -104,7 +104,7 @@ export const useSessionStore = create<SessionState>((set) => ({
               ...wt,
               sessions: wt.sessions.filter((s: Session) => s.id !== id),
             }))
-            .filter((wt: WorktreeSessionGroup) => wt.sessions.length > 0),
+            .filter((wt: WorktreeSessionGroup) => wt.sessions.length > 0 || wt.agentWorktree),
         }))
         .filter((group: SessionGroup) => group.worktrees.length > 0);
 
