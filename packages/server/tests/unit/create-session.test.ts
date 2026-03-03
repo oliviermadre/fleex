@@ -7,6 +7,7 @@ import {
   FakeGitPort,
   FakeConfigPort,
   FakeLoggerPort,
+  FakeFileSystemPort,
 } from '../helpers/fakes.js';
 
 describe('CreateSessionUseCase', () => {
@@ -15,6 +16,7 @@ describe('CreateSessionUseCase', () => {
   let git: FakeGitPort;
   let config: FakeConfigPort;
   let logger: FakeLoggerPort;
+  let fileSystem: FakeFileSystemPort;
   let useCase: CreateSessionUseCase;
 
   beforeEach(() => {
@@ -23,8 +25,9 @@ describe('CreateSessionUseCase', () => {
     git = new FakeGitPort();
     config = new FakeConfigPort();
     logger = new FakeLoggerPort();
+    fileSystem = new FakeFileSystemPort();
     useCase = new CreateSessionUseCase(
-      tmux, store, new SessionNamingService(), git, config, logger,
+      tmux, store, new SessionNamingService(), git, config, logger, fileSystem,
     );
   });
 
@@ -140,5 +143,19 @@ describe('CreateSessionUseCase', () => {
     const dto = session.toDTO();
 
     expect(dto.displayName).toBe('Claude');
+  });
+
+  it('should throw InvalidWorkingDirectoryError when cwd does not exist', async () => {
+    fileSystem.setNotExists('/does/not/exist');
+
+    await expect(
+      useCase.execute({ cwd: '/does/not/exist', type: 'shell' }),
+    ).rejects.toMatchObject({ code: 'INVALID_WORKING_DIRECTORY' });
+
+    // No tmux session should have been created
+    expect(tmux.sessions.size).toBe(0);
+
+    // A warn should have been logged
+    expect(logger.logs.some((l) => l.level === 'warn')).toBe(true);
   });
 });

@@ -103,3 +103,9 @@ export class AgentPersonaNameConflictError extends DomainError {
     super(`Agent persona name already exists: ${name}`, 'AGENT_PERSONA_NAME_CONFLICT');
   }
 }
+
+export class InvalidWorkingDirectoryError extends DomainError {
+  constructor(path: string) {
+    super(`Working directory does not exist: ${path}`, 'INVALID_WORKING_DIRECTORY');
+  }
+}

@@ -3,6 +3,7 @@ import type { SessionStorePort } from '../../src/application/ports/session-store
 import type { GitPort } from '../../src/application/ports/git.port.js';
 import type { ConfigPort, AppConfig } from '../../src/application/ports/config.port.js';
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
+import type { FileSystemPort } from '../../src/application/ports/filesystem.port.js';
 import type { DiffStats, GitRemoteInfo, Worktree } from '@asm/shared';
 import { SessionEntity } from '../../src/domain/entities.js';
 
@@ -160,5 +161,18 @@ export class FakeLoggerPort implements LoggerPort {
 
   debug(msg: string, data?: Record<string, unknown>): void {
     this.logs.push({ level: 'debug', msg, data });
+  }
+}
+
+export class FakeFileSystemPort implements FileSystemPort {
+  private nonExistentPaths = new Set<string>();
+
+  /** Mark a path as non-existent (default: all paths exist). */
+  setNotExists(path: string): void {
+    this.nonExistentPaths.add(path);
+  }
+
+  async exists(path: string): Promise<boolean> {
+    return !this.nonExistentPaths.has(path);
   }
 }

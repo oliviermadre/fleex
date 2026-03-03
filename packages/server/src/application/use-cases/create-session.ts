@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { CreateSessionRequest } from '@asm/shared';
 import { SessionEntity } from '../../domain/entities.js';
 import { SessionNamingService } from '../../domain/services/session-naming.js';
+import { InvalidWorkingDirectoryError } from '../../domain/errors.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { FileSystemPort } from '../ports/filesystem.port.js';
 
 export class CreateSessionUseCase {
   constructor(
@@ -16,9 +18,15 @@ export class CreateSessionUseCase {
     private readonly git: GitPort,
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
+    private readonly fileSystem: FileSystemPort,
   ) {}
 
   async execute(request: CreateSessionRequest): Promise<SessionEntity> {
+    if (!await this.fileSystem.exists(request.cwd)) {
+      this.logger.warn('Session creation rejected: cwd does not exist', { cwd: request.cwd });
+      throw new InvalidWorkingDirectoryError(request.cwd);
+    }
+
     let repositoryOrg: string | null = null;
     let repositoryName: string | null = null;
     let worktreeBranch: string | null = null;

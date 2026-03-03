@@ -34,6 +34,7 @@ import { ExecuteAgentUseCase } from '../application/use-cases/execute-agent.js';
 import { WakeWaitingAgentsUseCase } from '../application/use-cases/wake-waiting-agents.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
+import { HostFileSystemAdapter } from './adapters/host-filesystem.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
 import { JsonConfigAdapter } from './adapters/json-config.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
@@ -136,7 +137,8 @@ export async function createContainer() {
   const githubGraphql = new GitHubGraphQLAdapter(execFn, logger);
   const repositoryRefreshScheduler = new RepositoryRefreshScheduler(githubGraphql, repositoryCache, logger);
 
-  const createSession = new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger);
+  const fileSystem = new HostFileSystemAdapter(hostFs);
+  const createSession = new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger, fileSystem);
   const renameSession = new RenameSessionUseCase(tmux, sessionStore, namingService, logger);
   const createWorktreeUC = new CreateWorktreeUseCase(git, logger);
   const detectMerge = new DetectMergeUseCase(ticketStore, logger);
