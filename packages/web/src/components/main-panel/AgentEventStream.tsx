@@ -249,12 +249,54 @@ function EventBlock({ event }: { event: AgentEvent }) {
     case 'execution_start': {
       const personaName = data?.['personaName'] as string ?? 'Agent';
       const model = data?.['model'] as string ?? '';
+      const execId = data?.['executionId'] as string ?? '';
+      const resumeSessionId = data?.['resumeSessionId'] as string | null;
+      const sdkSessionId = data?.['sdkSessionId'] as string | null; // backfilled for old events
+      const ctx = data?.['context'] as Record<string, unknown> | undefined;
       return (
-        <div className="flex items-center gap-2 py-1 text-[var(--theme-accent)]">
-          <span className="font-bold">▶ Execution started</span>
-          <span className="text-xs text-[var(--theme-text-secondary)]">
-            {personaName} ({model})
-          </span>
+        <div className="py-1 space-y-1">
+          <div className="flex items-center gap-2 text-[var(--theme-accent)]">
+            <span className="font-bold">▶ Execution started</span>
+            <span className="text-xs text-[var(--theme-text-secondary)]">
+              {personaName} ({model})
+            </span>
+          </div>
+          <div className="text-xs text-[var(--theme-text-faint)] pl-4 space-y-0.5">
+            {execId && (
+              <div>
+                <span className="text-[var(--theme-text-secondary)]">execution:</span>{' '}
+                <span className="font-mono">{execId}</span>
+              </div>
+            )}
+            {resumeSessionId && (
+              <div>
+                <span className="text-[var(--theme-text-secondary)]">resume:</span>{' '}
+                <span className="font-mono">{resumeSessionId}</span>
+              </div>
+            )}
+            {!resumeSessionId && sdkSessionId && (
+              <div>
+                <span className="text-[var(--theme-text-secondary)]">session:</span>{' '}
+                <span className="font-mono">{sdkSessionId}</span>
+              </div>
+            )}
+            {ctx && (
+              <>
+                <div>
+                  <span className="text-[var(--theme-text-secondary)]">ticket:</span>{' '}
+                  {ctx['ticketTitle'] as string} ({ctx['ticketStatus'] as string})
+                  {' · '}{ctx['commentsCount'] as number} comments
+                  {' · '}{ctx['deliverablesCount'] as number} deliverables
+                </div>
+                <div>
+                  <span className="text-[var(--theme-text-secondary)]">context:</span>{' '}
+                  {(ctx['systemPromptSections'] as string[])?.join(', ')}
+                  {' · '}system {((ctx['systemPromptLength'] as number) / 1000).toFixed(1)}k chars
+                  {' · '}user {((ctx['userPromptLength'] as number) / 1000).toFixed(1)}k chars
+                </div>
+              </>
+            )}
+          </div>
         </div>
       );
     }

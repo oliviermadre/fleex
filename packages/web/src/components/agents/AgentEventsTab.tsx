@@ -58,6 +58,10 @@ export function AgentEventsTab() {
               <span className="text-xs text-[var(--theme-text-faint)]">
                 {new Date(exec.startedAt).toLocaleString()} · {exec.eventCount} events
               </span>
+              <span className="text-[10px] font-mono text-[var(--theme-text-faint)] opacity-60">
+                exec:{exec.id}
+                {exec.sdkSessionId ? ` · session:${exec.sdkSessionId}` : ''}
+              </span>
             </div>
             <span className="ml-auto text-[var(--theme-text-faint)]">
               {expandedExecutionId === exec.id ? '▾' : '▸'}

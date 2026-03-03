@@ -28,8 +28,34 @@ export function agentEventsRoutes(container: Container) {
     app.get<{ Params: { id: string } }>(
       '/api/executions/:id/events',
       async (request) => {
-        const events = await container.agentEventStore.getEventsByExecution(request.params.id);
-        return events.map((e) => e.toDTO());
+        const executionId = request.params.id;
+        const events = await container.agentEventStore.getEventsByExecution(executionId);
+        const dtos = events.map((e) => e.toDTO());
+
+        // Backfill execution_start events that lack executionId/sdkSessionId (old events)
+        for (const dto of dtos) {
+          if (dto.eventType === 'execution_start' && dto.data && typeof dto.data === 'object') {
+            const data = dto.data as Record<string, unknown>;
+            if (!data['executionId']) {
+              data['executionId'] = executionId;
+            }
+            if (!data['resumeSessionId']) {
+              // Look up sdkSessionId from execution index
+              const executions = await container.agentEventStore.getExecutionsByTicket(
+                (data['ticketId'] as string) ?? '',
+              );
+              // Find the execution just before this one for the same persona to get the resume session
+              const thisExec = executions.find((e) => e.id === executionId);
+              if (thisExec?.sdkSessionId) {
+                // This is the session that was obtained *during* this execution,
+                // not the one it resumed from — but still useful to show
+                data['sdkSessionId'] = thisExec.sdkSessionId;
+              }
+            }
+          }
+        }
+
+        return dtos;
       },
     );
   };
