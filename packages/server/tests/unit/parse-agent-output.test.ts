@@ -251,4 +251,43 @@ Hope that helps!`;
     });
     expect(parseAgentOutput(input)).toBeNull();
   });
+
+  it('parses mentionStatus: resolved', () => {
+    const input = JSON.stringify({
+      deliverable: null,
+      comment: 'All done.',
+      mentionStatus: 'resolved',
+    });
+    const result = parseAgentOutput(input);
+    expect(result?.mentionStatus).toBe('resolved');
+  });
+
+  it('parses mentionStatus: waiting_for_info', () => {
+    const input = JSON.stringify({
+      deliverable: null,
+      comment: 'I need more details about X.',
+      mentionStatus: 'waiting_for_info',
+    });
+    const result = parseAgentOutput(input);
+    expect(result?.mentionStatus).toBe('waiting_for_info');
+  });
+
+  it('omits mentionStatus when not provided', () => {
+    const input = JSON.stringify({
+      deliverable: null,
+      comment: 'Done.',
+    });
+    const result = parseAgentOutput(input);
+    expect(result?.mentionStatus).toBeUndefined();
+  });
+
+  it('ignores invalid mentionStatus value', () => {
+    const input = JSON.stringify({
+      deliverable: null,
+      comment: 'Done.',
+      mentionStatus: 'invalid',
+    });
+    const result = parseAgentOutput(input);
+    expect(result?.mentionStatus).toBeUndefined();
+  });
 });
