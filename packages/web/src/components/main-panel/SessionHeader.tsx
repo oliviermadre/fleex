@@ -223,12 +223,10 @@ export function SessionTabs({ currentSession }: { currentSession: Session }) {
           navigate('/sessions', { replace: true });
         }
       }
-      const groups = await api.fetchSessionGroups();
-      setSessionGroups(groups);
     } catch {
       // silently fail
     }
-  }, [currentSession.id, sortedSessions, removeSession, setSessionGroups, navigate]);
+  }, [currentSession.id, sortedSessions, removeSession, navigate]);
 
   const basePath = useSettingsStore((s) => s.settings.basePath);
 
