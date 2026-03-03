@@ -17,6 +17,7 @@ interface SerializedBoard {
   emoji: string;
   repositoryOrg: string | null;
   repositoryName: string | null;
+  nextDisplayId?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +25,7 @@ interface SerializedBoard {
 interface SerializedTicket {
   id: string;
   boardId: string;
+  displayId: number;
   title: string;
   description: string;
   status: TicketStatus;
@@ -164,6 +166,14 @@ export class JsonTicketStore implements TicketStorePort {
     return candidates[0] ?? null;
   }
 
+  async getNextDisplayId(boardId: string): Promise<number> {
+    const board = this.boards.get(boardId);
+    if (!board) throw new Error(`Board not found: ${boardId}`);
+    const displayId = board.incrementDisplayId();
+    await this.syncBoardsToDisk();
+    return displayId;
+  }
+
   async getClaimedByAgent(agentName: string): Promise<TicketEntity[]> {
     return Array.from(this.tickets.values()).filter(
       (t) => t.assignee === agentName && t.status === 'doing',
@@ -205,6 +215,7 @@ export class JsonTicketStore implements TicketStorePort {
         const entity = new BoardEntity(
           b.id, b.name, b.emoji,
           b.repositoryOrg, b.repositoryName,
+          b.nextDisplayId ?? 1,
           new Date(b.createdAt), new Date(b.updatedAt),
         );
         this.boards.set(entity.id, entity);
@@ -224,7 +235,7 @@ export class JsonTicketStore implements TicketStorePort {
       const data = JSON.parse(raw) as SerializedTicket[];
       for (const t of data) {
         const entity = new TicketEntity(
-          t.id, t.boardId, t.title, t.description,
+          t.id, t.boardId, t.displayId ?? 0, t.title, t.description,
           t.status, t.priority as TicketEntity['priority'],
           t.position, t.tags, t.links, t.blocked, t.favorite ?? false,
           t.dueDate ? new Date(t.dueDate) : null,
@@ -268,6 +279,7 @@ export class JsonTicketStore implements TicketStorePort {
       const data: SerializedBoard[] = Array.from(this.boards.values()).map((b) => ({
         id: b.id, name: b.name, emoji: b.emoji,
         repositoryOrg: b.repositoryOrg, repositoryName: b.repositoryName,
+        nextDisplayId: b.nextDisplayId,
         createdAt: b.createdAt.toISOString(), updatedAt: b.updatedAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.boardsFile, JSON.stringify(data, null, 2));
@@ -281,7 +293,7 @@ export class JsonTicketStore implements TicketStorePort {
   private async syncTicketsToDisk(): Promise<void> {
     try {
       const data: SerializedTicket[] = Array.from(this.tickets.values()).map((t) => ({
-        id: t.id, boardId: t.boardId, title: t.title, description: t.description,
+        id: t.id, boardId: t.boardId, displayId: t.displayId, title: t.title, description: t.description,
         status: t.status, priority: t.priority, position: t.position,
         tags: t.tags, links: t.links, blocked: t.blocked, favorite: t.favorite,
         dueDate: t.dueDate?.toISOString() ?? null,

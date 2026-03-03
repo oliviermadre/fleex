@@ -98,6 +98,11 @@ export class WebSocketManager {
     }
   }
 
+  sendJson(data: unknown): void {
+    const encoded = new TextEncoder().encode(JSON.stringify(data));
+    this.send(encoded.buffer as ArrayBuffer);
+  }
+
   onMessage(handler: Handler<ArrayBuffer>): () => void {
     this.messageHandlers.add(handler);
     return () => this.messageHandlers.delete(handler);
@@ -184,3 +189,5 @@ export const terminalWs = new WebSocketManager();
 export const dashboardWs = new WebSocketManager();
 export const repositoryWs = new WebSocketManager();
 export const ticketWs = new WebSocketManager();
+export const personaWs = new WebSocketManager();
+export const agentEventWs = new WebSocketManager();

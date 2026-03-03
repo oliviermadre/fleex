@@ -20,6 +20,9 @@ export interface TicketStorePort {
   removeTicket(id: string): Promise<void>;
   removeTicketsByBoard(boardId: string): Promise<void>;
 
+  // Display ID
+  getNextDisplayId(boardId: string): Promise<number>;
+
   // Agent queries
   getNextTicketForAgent(boardId?: string): Promise<TicketEntity | null>;
   getClaimedByAgent(agentName: string): Promise<TicketEntity[]>;

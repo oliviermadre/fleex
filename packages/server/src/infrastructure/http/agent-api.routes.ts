@@ -58,9 +58,11 @@ export function agentApiRoutes(container: Container) {
         const existing = await container.ticketStore.getTicketsByStatus(boardId, targetStatus);
         const maxPos = existing.reduce((max, t) => Math.max(max, t.position), -1);
 
+        const displayId = await container.ticketStore.getNextDisplayId(boardId);
         const ticket = TicketEntity.create({
           id: randomUUID(),
           boardId,
+          displayId,
           title,
           description,
           status: targetStatus,

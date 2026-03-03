@@ -42,9 +42,11 @@ export class ImportGitHubIssueUseCase {
     const description = sections.join('\n');
 
     const ticketId = randomUUID();
+    const displayId = await this.ticketStore.getNextDisplayId(boardId);
     const ticket = TicketEntity.create({
       id: ticketId,
       boardId,
+      displayId,
       title: detail.title,
       description,
       status: 'backlog',

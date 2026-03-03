@@ -12,6 +12,7 @@ interface SerializedMention {
   commentId: string;
   targetAgent: string;
   sourceAgent: string;
+  targetType?: 'agent' | 'human';
   status: MentionStatus;
   resolvedAt: string | null;
   resolvedCommentId: string | null;
@@ -82,6 +83,7 @@ export class JsonMentionStore implements MentionStorePort {
       for (const m of data) {
         this.mentions.set(m.id, new TicketMentionEntity(
           m.id, m.ticketId, m.commentId, m.targetAgent, m.sourceAgent,
+          m.targetType ?? 'agent',
           m.status, m.resolvedAt ? new Date(m.resolvedAt) : null,
           m.resolvedCommentId, m.resolvedDeliverableId,
           new Date(m.createdAt),
@@ -100,6 +102,7 @@ export class JsonMentionStore implements MentionStorePort {
       const data: SerializedMention[] = Array.from(this.mentions.values()).map((m) => ({
         id: m.id, ticketId: m.ticketId, commentId: m.commentId,
         targetAgent: m.targetAgent, sourceAgent: m.sourceAgent,
+        targetType: m.targetType,
         status: m.status, resolvedAt: m.resolvedAt?.toISOString() ?? null,
         resolvedCommentId: m.resolvedCommentId,
         resolvedDeliverableId: m.resolvedDeliverableId,

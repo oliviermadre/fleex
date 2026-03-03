@@ -24,6 +24,7 @@ export class PostCommentUseCase {
     visibility?: CommentVisibility;
     privateRecipients?: string[];
     parentId?: string | null;
+    humanMentionNames?: string[];
   }): Promise<{ comment: TicketCommentEntity; createdMentions: TicketMentionEntity[] }> {
     const comment = TicketCommentEntity.create({
       id: randomUUID(),
@@ -48,9 +49,31 @@ export class PostCommentUseCase {
         commentId: comment.id,
         targetAgent,
         sourceAgent: params.authorName,
+        targetType: 'agent',
       });
       await this.mentionStore.save(mention);
       createdMentions.push(mention);
+    }
+
+    // Create mentions for human @mentions (tracked but never auto-executed)
+    if (params.humanMentionNames && params.humanMentionNames.length > 0) {
+      const humanMentions = TicketCommentEntity.extractHumanMentions(
+        params.body,
+        params.humanMentionNames,
+      );
+      for (const humanName of humanMentions) {
+        if (humanName === params.authorName) continue;
+        const mention = TicketMentionEntity.create({
+          id: randomUUID(),
+          ticketId: params.ticketId,
+          commentId: comment.id,
+          targetAgent: humanName,
+          sourceAgent: params.authorName,
+          targetType: 'human',
+        });
+        await this.mentionStore.save(mention);
+        createdMentions.push(mention);
+      }
     }
 
     // Log activity

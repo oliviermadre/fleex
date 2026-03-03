@@ -13,6 +13,8 @@ import type {
   RepositoryDashboardData,
   ClaudeConfigTreeEntry,
   ClaudeUsage,
+  AgentExecution,
+  AgentEvent,
 } from '@asm/shared';
 import { API_URL } from '../lib/constants';
 
@@ -332,6 +334,21 @@ export async function fetchTicketMentions(ticketId: string): Promise<import('@as
   return request<import('@asm/shared').TicketMention[]>(`/tickets/${encodeURIComponent(ticketId)}/mentions`);
 }
 
+export async function updateMentionStatus(mentionId: string, status: import('@asm/shared').MentionStatus): Promise<import('@asm/shared').TicketMention> {
+  return request<import('@asm/shared').TicketMention>(`/mentions/${encodeURIComponent(mentionId)}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function deleteMention(mentionId: string): Promise<void> {
+  return request<void>(`/mentions/${encodeURIComponent(mentionId)}`, { method: 'DELETE' });
+}
+
+export async function deleteMentionFromComment(mentionId: string): Promise<void> {
+  return request<void>(`/mentions/${encodeURIComponent(mentionId)}/from-comment`, { method: 'DELETE' });
+}
+
 // ── Ticket Deliverables API ──
 
 export async function fetchTicketDeliverables(ticketId: string): Promise<import('@asm/shared').TicketDeliverable[]> {
@@ -383,6 +400,36 @@ export async function deleteGateway(id: string): Promise<void> {
   await request<void>(`/gateways/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+// ── Agent Personas API ──
+
+export async function fetchPersonas(): Promise<import('@asm/shared').AgentPersona[]> {
+  return request<import('@asm/shared').AgentPersona[]>('/personas');
+}
+
+export async function fetchPersona(id: string): Promise<import('@asm/shared').AgentPersona> {
+  return request<import('@asm/shared').AgentPersona>(`/personas/${encodeURIComponent(id)}`);
+}
+
+export async function createPersona(req: import('@asm/shared').CreateAgentPersonaRequest): Promise<import('@asm/shared').AgentPersona> {
+  return request<import('@asm/shared').AgentPersona>('/personas', { method: 'POST', body: JSON.stringify(req) });
+}
+
+export async function updatePersona(id: string, req: import('@asm/shared').UpdateAgentPersonaRequest): Promise<import('@asm/shared').AgentPersona> {
+  return request<import('@asm/shared').AgentPersona>(`/personas/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+}
+
+export async function deletePersona(id: string): Promise<void> {
+  await request<void>(`/personas/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function executeAgent(id: string): Promise<import('@asm/shared').AgentExecutionResult> {
+  return request<import('@asm/shared').AgentExecutionResult>(`/personas/${encodeURIComponent(id)}/execute`, { method: 'POST' });
+}
+
+export async function fetchAgentStatus(id: string): Promise<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }> {
+  return request<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>(`/personas/${encodeURIComponent(id)}/status`);
+}
+
 // Claude Usage API
 
 export async function fetchClaudeUsage(force = false): Promise<ClaudeUsage | null> {
@@ -392,4 +439,18 @@ export async function fetchClaudeUsage(force = false): Promise<ClaudeUsage | nul
   } catch {
     return null;
   }
+}
+
+// ── Agent Events & Executions ──
+
+export async function fetchExecutionsForPersona(personaId: string, limit = 50): Promise<AgentExecution[]> {
+  return request<AgentExecution[]>(`/personas/${personaId}/executions?limit=${limit}`);
+}
+
+export async function fetchExecutionsForTicket(ticketId: string): Promise<AgentExecution[]> {
+  return request<AgentExecution[]>(`/tickets/${ticketId}/executions`);
+}
+
+export async function fetchEventsForExecution(executionId: string): Promise<AgentEvent[]> {
+  return request<AgentEvent[]>(`/executions/${executionId}/events`);
 }

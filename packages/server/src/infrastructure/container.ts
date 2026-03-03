@@ -27,6 +27,10 @@ import { PostCommentUseCase } from '../application/use-cases/post-comment.js';
 import { ResolveMentionUseCase } from '../application/use-cases/resolve-mention.js';
 import { SubmitDeliverableUseCase } from '../application/use-cases/submit-deliverable.js';
 import { GetTicketContextUseCase } from '../application/use-cases/get-ticket-context.js';
+import { CreatePersonaUseCase } from '../application/use-cases/create-persona.js';
+import { UpdatePersonaUseCase } from '../application/use-cases/update-persona.js';
+import { DeletePersonaUseCase } from '../application/use-cases/delete-persona.js';
+import { ExecuteAgentUseCase } from '../application/use-cases/execute-agent.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
@@ -71,6 +75,8 @@ export async function createContainer() {
     commentStore,
     mentionStore,
     deliverableStore,
+    personaStore,
+    agentEventStore,
   } = await createStores(driver, { hostFs, homedir: hostHomedir, logger });
 
   // Auth & multi-gateway stores (database-backed features)
@@ -144,8 +150,17 @@ export async function createContainer() {
   const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore, logger);
   const getTicketContext = new GetTicketContextUseCase(ticketStore, commentStore, mentionStore, deliverableStore);
 
+  // Agent personas use cases
+  const createPersona = new CreatePersonaUseCase(personaStore, logger);
+  const updatePersona = new UpdatePersonaUseCase(personaStore, logger);
+  const deletePersona = new DeletePersonaUseCase(personaStore, logger);
+  const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger);
+
+  // Startup recovery: mark orphaned executions, reset mentions, reload session history
+  await executeAgent.init();
+
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git);
-  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions);
+  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore, personaStore, agentEventStore);
 
   return {
     logger,
@@ -187,8 +202,16 @@ export async function createContainer() {
     resolveMention,
     submitDeliverable,
     getTicketContext,
+    personaStore,
+    createPersona,
+    updatePersona,
+    deletePersona,
+    executeAgent,
+    agentEventStore,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     agentBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
+    personaBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
+    agentEventBroadcast: ((_msg: unknown) => {}) as (msg: unknown) => void,
     jsonlFileWatcher: undefined,
   };
 }

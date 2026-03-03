@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSettingsStore, type PinnedIcon, type WorktreeAction } from '../../stores/settingsStore';
+import { useSettingsStore, type AppSettings, type PinnedIcon, type WorktreeAction } from '../../stores/settingsStore';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -27,12 +27,14 @@ export function SettingsPanel() {
   const settingsTab = useUIStore((s) => s.settingsTab);
 
   const [basePath, setBasePath] = useState('');
+  const [humanMentionName, setHumanMentionName] = useState('');
   const [repoPatterns, setRepoPatterns] = useState('');
   const [pinnedIcons, setPinnedIcons] = useState<PinnedIcon[]>([]);
   const [worktreeActions, setWorktreeActions] = useState<WorktreeAction[]>([]);
 
   useEffect(() => {
     setBasePath(settings.basePath);
+    setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
     setRepoPatterns(settings.repositories.join('\n'));
     setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
     setWorktreeActions((settings.worktreeActions ?? []).map((a) => ({ ...a })));
@@ -49,7 +51,8 @@ export function SettingsPanel() {
       repositories: repos,
       pinnedIcons,
       worktreeActions,
-    });
+      ...(humanMentionName.trim() ? { humanMentionName: humanMentionName.trim() } : { humanMentionName: undefined }),
+    } as Partial<AppSettings> & Record<string, unknown>);
   };
 
   const handleResolve = () => {
@@ -121,7 +124,12 @@ export function SettingsPanel() {
       <div className="flex-1 overflow-y-auto p-8">
         <div className="max-w-4xl">
           {settingsTab === 'general' && (
-            <GeneralTab basePath={basePath} setBasePath={setBasePath} />
+            <GeneralTab
+              basePath={basePath}
+              setBasePath={setBasePath}
+              humanMentionName={humanMentionName}
+              setHumanMentionName={setHumanMentionName}
+            />
           )}
           {settingsTab === 'appearance' && <AppearanceTab />}
           {settingsTab === 'repositories' && (
@@ -170,9 +178,13 @@ export function SettingsPanel() {
 function GeneralTab({
   basePath,
   setBasePath,
+  humanMentionName,
+  setHumanMentionName,
 }: {
   basePath: string;
   setBasePath: (v: string) => void;
+  humanMentionName: string;
+  setHumanMentionName: (v: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -189,6 +201,22 @@ function GeneralTab({
           basePath/orgName/repoName
         </code>
       </p>
+
+      <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
+        <Input
+          id="humanMentionName"
+          label="Human Mention Name"
+          placeholder="Olivier"
+          value={humanMentionName}
+          onChange={(e) => setHumanMentionName(e.target.value)}
+        />
+        <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+          The <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">@tag</code> agents
+          should use to mention you (e.g. <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">Olivier</code> for{' '}
+          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-accent)]">@Olivier</code>).
+          Per-agent overrides can be set in agent configuration.
+        </p>
+      </div>
     </div>
   );
 }

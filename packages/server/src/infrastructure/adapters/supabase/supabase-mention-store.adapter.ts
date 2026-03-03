@@ -9,6 +9,7 @@ interface MentionRow {
   comment_id: string;
   target_agent: string;
   source_agent: string;
+  target_type: string | null;
   status: string;
   resolved_at: string | null;
   resolved_comment_id: string | null;
@@ -23,6 +24,7 @@ function rowToEntity(r: MentionRow): TicketMentionEntity {
     r.comment_id,
     r.target_agent,
     r.source_agent,
+    (r.target_type as 'agent' | 'human') ?? 'agent',
     r.status as MentionStatus,
     r.resolved_at ? new Date(r.resolved_at) : null,
     r.resolved_comment_id,
@@ -89,6 +91,7 @@ export class SupabaseMentionStore implements MentionStorePort {
       comment_id: mention.commentId,
       target_agent: mention.targetAgent,
       source_agent: mention.sourceAgent,
+      target_type: mention.targetType,
       status: mention.status,
       resolved_at: mention.resolvedAt?.toISOString() ?? null,
       resolved_comment_id: mention.resolvedCommentId,
