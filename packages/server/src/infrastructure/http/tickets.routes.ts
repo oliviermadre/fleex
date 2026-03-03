@@ -5,7 +5,8 @@ import { TICKET_STATUSES } from '@asm/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { BoardNotFoundError, TicketNotFoundError, LastBoardError } from '../../domain/errors.js';
+import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError } from '../../domain/errors.js';
+import type { MentionStatus } from '@asm/shared';
 import type { Container } from '../container.js';
 
 export function ticketRoutes(container: Container) {
@@ -103,6 +104,7 @@ export function ticketRoutes(container: Container) {
       const maxPos = existing.reduce((max, t) => Math.max(max, t.position), -1);
 
       const ticketId = randomUUID();
+      const displayId = await container.ticketStore.getNextDisplayId(boardId);
       const ticketLinks = (links ?? []).map((l) => ({
         ...l,
         id: randomUUID(),
@@ -112,6 +114,7 @@ export function ticketRoutes(container: Container) {
       const ticket = TicketEntity.create({
         id: ticketId,
         boardId,
+        displayId,
         title,
         description,
         status: targetStatus,
@@ -338,6 +341,65 @@ export function ticketRoutes(container: Container) {
 
       const mentions = await container.mentionStore.getByTicket(request.params.id);
       return mentions.map((m) => m.toDTO());
+    });
+
+    // ── Mention management (web) ──
+
+    app.patch<{
+      Params: { id: string };
+      Body: { status: MentionStatus };
+    }>('/api/mentions/:id/status', async (request) => {
+      const mention = await container.mentionStore.getById(request.params.id);
+      if (!mention) throw new MentionNotFoundError(request.params.id);
+
+      mention.status = request.body.status;
+      if (request.body.status === 'resolved' && !mention.resolvedAt) {
+        mention.resolvedAt = new Date();
+      } else if (request.body.status !== 'resolved') {
+        mention.resolvedAt = null;
+      }
+      await container.mentionStore.save(mention);
+
+      const dto = mention.toDTO();
+      container.ticketBroadcast('mention:updated', dto);
+      return dto;
+    });
+
+    app.delete<{
+      Params: { id: string };
+    }>('/api/mentions/:id', async (request, reply) => {
+      const mention = await container.mentionStore.getById(request.params.id);
+      if (!mention) throw new MentionNotFoundError(request.params.id);
+
+      await container.mentionStore.remove(mention.id);
+      container.ticketBroadcast('mention:deleted', { id: mention.id, ticketId: mention.ticketId, commentId: mention.commentId });
+      return reply.code(204).send();
+    });
+
+    app.delete<{
+      Params: { id: string };
+    }>('/api/mentions/:id/from-comment', async (request, reply) => {
+      const mention = await container.mentionStore.getById(request.params.id);
+      if (!mention) throw new MentionNotFoundError(request.params.id);
+
+      // Update comment body: wrap the mention text in ~~strikethrough~~
+      const comment = await container.commentStore.getById(mention.commentId);
+      if (comment) {
+        const mentionText = mention.targetType === 'human'
+          ? `@${mention.targetAgent}`
+          : `@agent:${mention.targetAgent}`;
+        const newBody = comment.body.replace(mentionText, `~~${mentionText}~~`);
+        if (newBody !== comment.body) {
+          comment.body = newBody;
+          comment.updatedAt = new Date();
+          await container.commentStore.save(comment);
+          container.ticketBroadcast('comment:updated', comment.toDTO());
+        }
+      }
+
+      await container.mentionStore.remove(mention.id);
+      container.ticketBroadcast('mention:deleted', { id: mention.id, ticketId: mention.ticketId, commentId: mention.commentId });
+      return reply.code(204).send();
     });
 
     // ── Deliverables (web) ──

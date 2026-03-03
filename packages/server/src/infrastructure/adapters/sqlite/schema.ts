@@ -23,6 +23,7 @@ export const SQLITE_SCHEMA: string[] = [
     emoji TEXT NOT NULL,
     repository_org TEXT,
     repository_name TEXT,
+    next_display_id INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
@@ -31,6 +32,7 @@ export const SQLITE_SCHEMA: string[] = [
   `CREATE TABLE IF NOT EXISTS tickets (
     id TEXT PRIMARY KEY,
     board_id TEXT NOT NULL,
+    display_id INTEGER NOT NULL DEFAULT 0,
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     status TEXT NOT NULL,
@@ -93,6 +95,7 @@ export const SQLITE_SCHEMA: string[] = [
     comment_id TEXT NOT NULL,
     target_agent TEXT NOT NULL,
     source_agent TEXT NOT NULL,
+    target_type TEXT NOT NULL DEFAULT 'agent',
     status TEXT NOT NULL,
     resolved_at TEXT,
     resolved_comment_id TEXT,
@@ -138,4 +141,37 @@ export const SQLITE_SCHEMA: string[] = [
 
   // Deliverables
   `CREATE INDEX IF NOT EXISTS idx_deliverables_ticket_id ON deliverables(ticket_id)`,
+
+  // ── Agent Personas ──
+  `CREATE TABLE IF NOT EXISTS agent_personas (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    model TEXT NOT NULL,
+    soul_md TEXT DEFAULT '',
+    identity_md TEXT DEFAULT '',
+    memory_md TEXT DEFAULT '',
+    human_mention_name TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_personas_name ON agent_personas(name)`,
+
+  // ── Agent Event Executions ──
+  `CREATE TABLE IF NOT EXISTS agent_event_executions (
+    execution_id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    ticket_id TEXT NOT NULL,
+    mention_id TEXT NOT NULL,
+    event_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'running',
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    sdk_session_id TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket ON agent_event_executions(ticket_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_executions_persona ON agent_event_executions(persona_id)`,
+
 ];
+

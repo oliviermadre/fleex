@@ -1,6 +1,7 @@
 import type { TicketComment, CommentVisibility } from '@asm/shared';
 
-const MENTION_PATTERN = /@agent:([a-zA-Z0-9_-]+)/g;
+const AGENT_MENTION_PATTERN = /@agent:([a-zA-Z0-9_-]+)/g;
+const HUMAN_MENTION_PATTERN = /@([a-zA-Z0-9_-]+)/g;
 
 export class TicketCommentEntity {
   constructor(
@@ -46,8 +47,30 @@ export class TicketCommentEntity {
 
   static extractMentions(body: string): string[] {
     const matches = new Set<string>();
-    for (const match of body.matchAll(MENTION_PATTERN)) {
+    for (const match of body.matchAll(AGENT_MENTION_PATTERN)) {
+      // Skip struck-through mentions: ~~@agent:name~~
+      const prefix = match.index! >= 2 ? body.substring(match.index! - 2, match.index!) : '';
+      if (prefix === '~~') continue;
       matches.add(match[1]!);
+    }
+    return Array.from(matches);
+  }
+
+  static extractHumanMentions(body: string, humanNames: string[]): string[] {
+    if (humanNames.length === 0) return [];
+    const nameSet = new Set(humanNames.map((n) => n.toLowerCase()));
+    const matches = new Set<string>();
+    for (const match of body.matchAll(HUMAN_MENTION_PATTERN)) {
+      const name = match[1]!;
+      // Skip if this is an @agent:xxx mention (already captured)
+      const prefix = body.substring(Math.max(0, match.index! - 6), match.index!);
+      if (prefix.endsWith('agent:')) continue;
+      // Skip struck-through mentions: ~~@name~~
+      const prefix2 = match.index! >= 2 ? body.substring(match.index! - 2, match.index!) : '';
+      if (prefix2 === '~~') continue;
+      if (nameSet.has(name.toLowerCase())) {
+        matches.add(name);
+      }
     }
     return Array.from(matches);
   }

@@ -27,6 +27,8 @@ export function useKeyboardShortcuts() {
   const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
   const activePanel = useUIStore((s) => s.activePanel);
   const lastActiveTabByWorktree = useUIStore((s) => s.lastActiveTabByWorktree);
+  const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
+  const setSelectedAgentWorktreeTicketId = useUIStore((s) => s.setSelectedAgentWorktreeTicketId);
   const claudeConfigSaveFile = useClaudeConfigStore((s) => s.saveFile);
   const scratchpadOpen = useUIStore((s) => s.scratchpadOpen);
   const togglePreview = useScratchpadStore((s) => s.togglePreview);
@@ -40,7 +42,7 @@ export function useKeyboardShortcuts() {
   // Each entry has a key (for lastActiveTabByWorktree) and session IDs in tab bar order.
   // System "Shells" worktree comes first, then repo worktrees in sidebar order.
   const orderedWorktrees = useMemo(() => {
-    const entries: Array<{ key: string; sessions: string[] }> = [];
+    const entries: Array<{ key: string; sessions: string[]; agentTicketId?: string }> = [];
 
     // System sessions first (ungrouped)
     const systemGroup = sessionGroups.find(
@@ -92,8 +94,8 @@ export function useKeyboardShortcuts() {
               return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
             })
           : wt.sessions;
-        if (sortedSessions.length > 0) {
-          entries.push({ key: wtGroupId, sessions: sortedSessions.map((s) => s.id) });
+        if (sortedSessions.length > 0 || wt.agentWorktree) {
+          entries.push({ key: wtGroupId, sessions: sortedSessions.map((s) => s.id), agentTicketId: wt.agentWorktree?.ticketId });
         }
       }
     }
@@ -256,10 +258,13 @@ export function useKeyboardShortcuts() {
         e.preventDefault();
         if (orderedWorktrees.length === 0) return;
 
-        // Find current worktree index by the selected session
-        const currentIndex = selectedSessionId
+        // Find current worktree index by the selected session or agent worktree
+        let currentIndex = selectedSessionId
           ? orderedWorktrees.findIndex((wt) => wt.sessions.includes(selectedSessionId))
           : -1;
+        if (currentIndex === -1 && selectedAgentWorktreeTicketId) {
+          currentIndex = orderedWorktrees.findIndex((wt) => wt.agentTicketId === selectedAgentWorktreeTicketId);
+        }
 
         const nextIndex = e.key === 'ArrowUp'
           ? (currentIndex <= 0 ? orderedWorktrees.length - 1 : currentIndex - 1)
@@ -267,12 +272,21 @@ export function useKeyboardShortcuts() {
 
         const nextWorktree = orderedWorktrees[nextIndex];
         if (nextWorktree) {
-          // Select last active tab if still present, otherwise first session
-          const lastActive = lastActiveTabByWorktree[nextWorktree.key];
-          const targetId = (lastActive && nextWorktree.sessions.includes(lastActive))
-            ? lastActive
-            : nextWorktree.sessions[0];
-          if (targetId) selectSession(targetId);
+          if (nextWorktree.sessions.length > 0) {
+            // Select last active tab if still present, otherwise first session
+            const lastActive = lastActiveTabByWorktree[nextWorktree.key];
+            const targetId = (lastActive && nextWorktree.sessions.includes(lastActive))
+              ? lastActive
+              : nextWorktree.sessions[0];
+            if (targetId) {
+              if (selectedAgentWorktreeTicketId) setSelectedAgentWorktreeTicketId(null);
+              selectSession(targetId);
+            }
+          } else if (nextWorktree.agentTicketId) {
+            // Agent-only worktree (no sessions) — open agent panel
+            selectSession(null);
+            setSelectedAgentWorktreeTicketId(nextWorktree.agentTicketId);
+          }
         }
         return;
       }
@@ -280,5 +294,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
+  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
 }

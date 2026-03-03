@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'cluster' | 'settings' | 'scratchpads';
+type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions' | 'agent-tokens' | 'gateways';
 
 interface UIState {
@@ -70,6 +70,10 @@ interface UIState {
   // Floating session overlay
   floatingSessionId: string | null;
   setFloatingSession: (id: string | null) => void;
+
+  // Agent worktree view (ticket-based)
+  selectedAgentWorktreeTicketId: string | null;
+  setSelectedAgentWorktreeTicketId: (id: string | null) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -89,6 +93,7 @@ export const useUIStore = create<UIState>((set) => ({
   ticketMetaSidebarCollapsed: false,
   lastActiveSessionId: null,
   floatingSessionId: null,
+  selectedAgentWorktreeTicketId: null,
 
   toggleScratchpad: () =>
     set((state) => ({
@@ -150,4 +155,6 @@ export const useUIStore = create<UIState>((set) => ({
   setLastActiveSession: (id) => set({ lastActiveSessionId: id }),
 
   setFloatingSession: (id) => set({ floatingSessionId: id }),
+
+  setSelectedAgentWorktreeTicketId: (id) => set({ selectedAgentWorktreeTicketId: id }),
 }));

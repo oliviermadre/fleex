@@ -7,6 +7,7 @@ export type {
   CreateSessionRequest,
   RenameSessionRequest,
   SessionGroup,
+  AgentWorktreeInfo,
   WorktreeSessionGroup,
 } from './types/session.js';
 
@@ -62,12 +63,32 @@ export type {
   CommentVisibility,
   TicketComment,
   MentionStatus,
+  MentionTargetType,
   TicketMention,
   TicketDeliverable,
   TicketContext,
   TicketWsMessageType,
   TicketWsMessage,
 } from './types/ticket.js';
+
+export type {
+  AgentPersona,
+  AgentStructuredOutput,
+  CreateAgentPersonaRequest,
+  UpdateAgentPersonaRequest,
+  AgentExecutionStatus,
+  AgentExecutionResult,
+  PersonaWsMessageType,
+  PersonaWsMessage,
+} from './types/agent-persona.js';
+
+export type {
+  AgentExecution,
+  AgentEventType,
+  AgentEvent,
+  AgentEventWsMessageType,
+  AgentEventWsMessage,
+} from './types/agent-event.js';
 
 export type {
   Gateway,
@@ -118,4 +139,6 @@ export {
   TICKET_STATUSES,
   TICKET_STATUS_LABELS,
   TICKET_PRIORITIES,
+  WS_PERSONA_PATH,
+  WS_AGENT_EVENTS_PATH,
 } from './constants.js';

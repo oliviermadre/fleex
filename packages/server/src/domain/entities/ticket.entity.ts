@@ -4,6 +4,7 @@ export class TicketEntity {
   constructor(
     public readonly id: string,
     public boardId: string,
+    public displayId: number,
     public title: string,
     public description: string,
     public status: TicketStatus,
@@ -25,6 +26,7 @@ export class TicketEntity {
   static create(params: {
     id: string;
     boardId: string;
+    displayId: number;
     title: string;
     description?: string;
     status?: TicketStatus;
@@ -38,6 +40,7 @@ export class TicketEntity {
     return new TicketEntity(
       params.id,
       params.boardId,
+      params.displayId,
       params.title,
       params.description ?? '',
       params.status ?? 'backlog',
@@ -217,6 +220,7 @@ export class TicketEntity {
     return {
       id: this.id,
       boardId: this.boardId,
+      displayId: this.displayId,
       title: this.title,
       description: this.description,
       status: this.status,

@@ -16,6 +16,8 @@ import { RepositoriesContent } from './RepositoriesContent';
 import { ClaudeConfigTree } from '../claude-config/ClaudeConfigTree';
 import { ScratchpadsContent } from '../scratchpad/ScratchpadsContent';
 import { TicketsContentPanel } from '../tickets/TicketsContentPanel';
+import { AgentListPanel } from '../agents/AgentListPanel';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { aggregateBranchStatus, type DisplayStatus } from '../../lib/deriveStatus';
 import { StatusDot } from '../ui/StatusDot';
 import { cn } from '../../lib/cn';
@@ -29,6 +31,7 @@ export function ContentPanel() {
     if (activePanel === 'repositories') return <CollapsedRepositoriesPanel />;
     if (activePanel === 'tickets') return <CollapsedTicketsPanel />;
     if (activePanel === 'claude-config') return <CollapsedClaudeConfigPanel />;
+    if (activePanel === 'agents') return <CollapsedAgentsPanel />;
     if (activePanel === 'scratchpads') return <CollapsedScratchpadsPanel />;
     if (activePanel === 'settings') return <CollapsedSettingsPanel />;
     // cluster or unknown — just show expand button
@@ -41,6 +44,7 @@ export function ContentPanel() {
       {activePanel === 'repositories' && <RepositoriesContent />}
       {activePanel === 'tickets' && <TicketsContentPanel />}
       {activePanel === 'claude-config' && <ClaudeConfigTree />}
+      {activePanel === 'agents' && <AgentListPanel />}
       {activePanel === 'cluster' && null}
       {activePanel === 'scratchpads' && <ScratchpadsContent />}
       {activePanel === 'settings' && <SettingsNav />}
@@ -632,7 +636,59 @@ function CollapsedClaudeConfigPanel() {
 }
 
 // ═══════════════════════════════════════════════
-// ── 5. Collapsed Scratchpads panel ──
+// ── 5. Collapsed Agents panel ──
+// ═══════════════════════════════════════════════
+
+function CollapsedAgentsPanel() {
+  const navigate = useNavigate();
+  const personas = useAgentPersonaStore((s) => s.personas);
+  const selectedPersonaId = useAgentPersonaStore((s) => s.selectedPersonaId);
+  const executionStatuses = useAgentPersonaStore((s) => s.executionStatuses);
+  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+
+  return (
+    <CollapsedShell>
+      <div className="flex-1 overflow-y-auto w-full">
+        {personas.length === 0 ? (
+          <div className="flex items-center justify-center py-6">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
+              <circle cx="8" cy="5" r="3" /><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+            </svg>
+          </div>
+        ) : personas.map((persona) => {
+          const isSelected = selectedPersonaId === persona.id;
+          const status = executionStatuses[persona.id];
+          const isRunning = status?.running ?? false;
+          const initials = nameToInitials(persona.displayName);
+          return (
+            <CollapsedRow
+              key={persona.id}
+              isSelected={isSelected}
+              onClick={() => navigate(`/agents/${persona.id}`, { replace: true })}
+              onMouseEnter={(e) => showTooltip(e, persona.displayName, isRunning ? 'Running' : 'Agent')}
+              onMouseLeave={hideTooltip}
+              icon={
+                <span className={cn(
+                  'relative text-[10px] font-bold leading-none',
+                  isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
+                )}>
+                  {initials}
+                  {isRunning && (
+                    <span className="absolute -right-1 -top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-400" />
+                  )}
+                </span>
+              }
+            />
+          );
+        })}
+      </div>
+      <CollapsedTooltip data={tooltip} />
+    </CollapsedShell>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// ── 6. Collapsed Scratchpads panel ──
 // ═══════════════════════════════════════════════
 
 function CollapsedScratchpadsPanel() {
@@ -747,7 +803,7 @@ function CollapsedScratchpadsPanel() {
 }
 
 // ═══════════════════════════════════════════════
-// ── 6. Collapsed Settings panel ──
+// ── 7. Collapsed Settings panel ──
 // ═══════════════════════════════════════════════
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ReactNode }[] = [

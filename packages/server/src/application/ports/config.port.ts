@@ -2,6 +2,7 @@ export interface AppConfig {
   basePath: string;
   defaultShell: string;
   repositoryRefreshIntervalMs: number;
+  humanMentionName?: string;
 }
 
 export interface ConfigPort {

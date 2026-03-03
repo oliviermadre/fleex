@@ -46,25 +46,27 @@ export class PgMentionStore implements MentionStorePort {
   async save(mention: TicketMentionEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO mentions (
-        id, ticket_id, comment_id, target_agent, source_agent,
+        id, ticket_id, comment_id, target_agent, source_agent, target_type,
         status, resolved_at, resolved_comment_id, resolved_deliverable_id, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       ON CONFLICT (id) DO UPDATE SET
         ticket_id = $2,
         comment_id = $3,
         target_agent = $4,
         source_agent = $5,
-        status = $6,
-        resolved_at = $7,
-        resolved_comment_id = $8,
-        resolved_deliverable_id = $9,
-        created_at = $10`,
+        target_type = $6,
+        status = $7,
+        resolved_at = $8,
+        resolved_comment_id = $9,
+        resolved_deliverable_id = $10,
+        created_at = $11`,
       [
         mention.id,
         mention.ticketId,
         mention.commentId,
         mention.targetAgent,
         mention.sourceAgent,
+        mention.targetType,
         mention.status,
         mention.resolvedAt?.toISOString() ?? null,
         mention.resolvedCommentId,
@@ -86,6 +88,7 @@ function rowToMention(row: Record<string, unknown>): TicketMentionEntity {
     row.comment_id as string,
     row.target_agent as string,
     row.source_agent as string,
+    (row.target_type as 'agent' | 'human') ?? 'agent',
     (row.status as MentionStatus) ?? 'pending',
     row.resolved_at ? new Date(row.resolved_at as string) : null,
     (row.resolved_comment_id as string) ?? null,

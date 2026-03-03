@@ -91,3 +91,15 @@ export class ForbiddenError extends DomainError {
     super(message, 'FORBIDDEN');
   }
 }
+
+export class AgentPersonaNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Agent persona not found: ${id}`, 'AGENT_PERSONA_NOT_FOUND');
+  }
+}
+
+export class AgentPersonaNameConflictError extends DomainError {
+  constructor(name: string) {
+    super(`Agent persona name already exists: ${name}`, 'AGENT_PERSONA_NAME_CONFLICT');
+  }
+}

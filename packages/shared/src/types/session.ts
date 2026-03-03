@@ -45,8 +45,20 @@ export interface SessionGroup {
   readonly worktrees: WorktreeSessionGroup[];
 }
 
+export interface AgentWorktreeInfo {
+  readonly ticketId: string;
+  readonly ticketDisplayId: number;
+  readonly ticketTitle: string;
+  readonly agentPersonaId: string;
+  readonly agentName: string;
+  readonly agentDisplayName: string;
+  readonly executionStatus: 'idle' | 'running' | 'completed' | 'failed';
+  readonly latestExecutionId: string | null;
+}
+
 export interface WorktreeSessionGroup {
   readonly branch: string;
   readonly path: string;
   readonly sessions: Session[];
+  readonly agentWorktree?: AgentWorktreeInfo;
 }

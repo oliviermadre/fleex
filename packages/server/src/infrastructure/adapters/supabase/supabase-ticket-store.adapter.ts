@@ -16,6 +16,7 @@ interface BoardRow {
   emoji: string;
   repository_org: string | null;
   repository_name: string | null;
+  next_display_id: number;
   created_at: string;
   updated_at: string;
 }
@@ -23,6 +24,7 @@ interface BoardRow {
 interface TicketRow {
   id: string;
   board_id: string;
+  display_id: number;
   title: string;
   description: string;
   status: string;
@@ -61,6 +63,7 @@ function boardRowToEntity(r: BoardRow): BoardEntity {
     r.emoji,
     r.repository_org,
     r.repository_name,
+    r.next_display_id ?? 1,
     new Date(r.created_at),
     new Date(r.updated_at),
   );
@@ -70,6 +73,7 @@ function ticketRowToEntity(r: TicketRow): TicketEntity {
   return new TicketEntity(
     r.id,
     r.board_id,
+    r.display_id ?? 0,
     r.title,
     r.description,
     r.status as TicketStatus,
@@ -134,6 +138,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       emoji: board.emoji,
       repository_org: board.repositoryOrg,
       repository_name: board.repositoryName,
+      next_display_id: board.nextDisplayId,
       created_at: board.createdAt.toISOString(),
       updated_at: board.updatedAt.toISOString(),
     });
@@ -205,6 +210,7 @@ export class SupabaseTicketStore implements TicketStorePort {
     const { error } = await this.conn.client.from('tickets').upsert({
       id: ticket.id,
       board_id: ticket.boardId,
+      display_id: ticket.displayId,
       title: ticket.title,
       description: ticket.description,
       status: ticket.status,
@@ -280,6 +286,28 @@ export class SupabaseTicketStore implements TicketStorePort {
       .eq('status', 'doing');
     if (error) throw new Error(`SupabaseTicketStore.getClaimedByAgent failed: ${error.message}`);
     return (data as TicketRow[]).map(ticketRowToEntity);
+  }
+
+  // ── Display ID ──
+
+  async getNextDisplayId(boardId: string): Promise<number> {
+    const { data, error } = await this.conn.client.rpc('increment_board_display_id', { board_id_param: boardId });
+    if (error) {
+      // Fallback: read-then-write (less atomic but works without RPC)
+      const { data: board, error: readErr } = await this.conn.client
+        .from('boards')
+        .select('next_display_id')
+        .eq('id', boardId)
+        .single();
+      if (readErr || !board) throw new Error(`Board not found: ${boardId}`);
+      const currentId = (board as { next_display_id: number }).next_display_id;
+      await this.conn.client
+        .from('boards')
+        .update({ next_display_id: currentId + 1 })
+        .eq('id', boardId);
+      return currentId;
+    }
+    return data as number;
   }
 
   // ── Activity ──

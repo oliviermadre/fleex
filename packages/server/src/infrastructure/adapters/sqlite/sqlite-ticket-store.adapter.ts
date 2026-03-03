@@ -14,6 +14,7 @@ interface BoardRow {
   emoji: string;
   repository_org: string | null;
   repository_name: string | null;
+  next_display_id: number;
   created_at: string;
   updated_at: string;
 }
@@ -21,6 +22,7 @@ interface BoardRow {
 interface TicketRow {
   id: string;
   board_id: string;
+  display_id: number;
   title: string;
   description: string;
   status: string;
@@ -68,9 +70,9 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
   async saveBoard(board: BoardEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO boards
-        (id, name, emoji, repository_org, repository_name, created_at, updated_at)
+        (id, name, emoji, repository_org, repository_name, next_display_id, created_at, updated_at)
       VALUES
-        (@id, @name, @emoji, @repository_org, @repository_name, @created_at, @updated_at)
+        (@id, @name, @emoji, @repository_org, @repository_name, @next_display_id, @created_at, @updated_at)
     `);
 
     stmt.run({
@@ -79,6 +81,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       emoji: board.emoji,
       repository_org: board.repositoryOrg,
       repository_name: board.repositoryName,
+      next_display_id: board.nextDisplayId,
       created_at: board.createdAt.toISOString(),
       updated_at: board.updatedAt.toISOString(),
     });
@@ -86,6 +89,14 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
 
   async removeBoard(id: string): Promise<void> {
     this.conn.db.prepare('DELETE FROM boards WHERE id = ?').run(id);
+  }
+
+  async getNextDisplayId(boardId: string): Promise<number> {
+    const row = this.conn.db.prepare(
+      'UPDATE boards SET next_display_id = next_display_id + 1 WHERE id = ? RETURNING next_display_id'
+    ).get(boardId) as { next_display_id: number } | undefined;
+    if (!row) throw new Error(`Board not found: ${boardId}`);
+    return row.next_display_id - 1;
   }
 
   // ── Tickets ──
@@ -124,11 +135,11 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
   async saveTicket(ticket: TicketEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO tickets
-        (id, board_id, title, description, status, priority, position,
+        (id, board_id, display_id, title, description, status, priority, position,
          tags, links, blocked, favorite, due_date, assignee, agent_claimed_at,
          github_metadata, status_changed_at, created_at, updated_at)
       VALUES
-        (@id, @board_id, @title, @description, @status, @priority, @position,
+        (@id, @board_id, @display_id, @title, @description, @status, @priority, @position,
          @tags, @links, @blocked, @favorite, @due_date, @assignee, @agent_claimed_at,
          @github_metadata, @status_changed_at, @created_at, @updated_at)
     `);
@@ -136,6 +147,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     stmt.run({
       id: ticket.id,
       board_id: ticket.boardId,
+      display_id: ticket.displayId,
       title: ticket.title,
       description: ticket.description,
       status: ticket.status,
@@ -250,6 +262,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       row.emoji,
       row.repository_org,
       row.repository_name,
+      row.next_display_id ?? 1,
       new Date(row.created_at),
       new Date(row.updated_at),
     );
@@ -259,6 +272,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     return new TicketEntity(
       row.id,
       row.board_id,
+      row.display_id ?? 0,
       row.title,
       row.description,
       row.status as TicketStatus,

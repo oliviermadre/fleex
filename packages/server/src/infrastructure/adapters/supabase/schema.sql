@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS boards (
   emoji           TEXT NOT NULL,
   repository_org  TEXT,
   repository_name TEXT,
+  next_display_id INTEGER NOT NULL DEFAULT 1,
   created_at      TIMESTAMPTZ NOT NULL,
   updated_at      TIMESTAMPTZ NOT NULL
 );
@@ -85,6 +86,7 @@ CREATE TABLE IF NOT EXISTS boards (
 CREATE TABLE IF NOT EXISTS tickets (
   id                TEXT PRIMARY KEY,
   board_id          TEXT NOT NULL,
+  display_id        INTEGER NOT NULL DEFAULT 0,
   title             TEXT NOT NULL,
   description       TEXT NOT NULL,
   status            TEXT NOT NULL,
@@ -190,6 +192,39 @@ CREATE TABLE IF NOT EXISTS deliverables (
 
 CREATE INDEX IF NOT EXISTS idx_deliverables_ticket_id ON deliverables(ticket_id);
 
+-- ── Agent Personas ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS agent_personas (
+  id                 TEXT PRIMARY KEY,
+  name               TEXT NOT NULL UNIQUE,
+  display_name       TEXT NOT NULL,
+  model              TEXT NOT NULL,
+  soul_md            TEXT NOT NULL DEFAULT '',
+  identity_md        TEXT NOT NULL DEFAULT '',
+  memory_md          TEXT NOT NULL DEFAULT '',
+  human_mention_name TEXT,
+  created_at         TIMESTAMPTZ NOT NULL,
+  updated_at         TIMESTAMPTZ NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_personas_name ON agent_personas(name);
+
+-- ── Agent Event Executions ────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS agent_event_executions (
+  execution_id  TEXT PRIMARY KEY,
+  persona_id    TEXT NOT NULL,
+  ticket_id     TEXT NOT NULL,
+  mention_id    TEXT NOT NULL,
+  event_count   INTEGER NOT NULL DEFAULT 0,
+  status        TEXT NOT NULL DEFAULT 'running',
+  started_at    TIMESTAMPTZ NOT NULL,
+  completed_at  TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket  ON agent_event_executions(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_persona ON agent_event_executions(persona_id);
+
 -- ── Row-Level Security ──────────────────────────────────────────────────────
 -- Enable RLS on all tables and add permissive policies for the service role.
 
@@ -204,6 +239,7 @@ ALTER TABLE api_tokens        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comments          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mentions          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deliverables      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_personas    ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "service_role_users"             ON users             FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_gateways"          ON gateways          FOR ALL USING (true) WITH CHECK (true);
@@ -216,3 +252,7 @@ CREATE POLICY "service_role_api_tokens"        ON api_tokens        FOR ALL USIN
 CREATE POLICY "service_role_comments"          ON comments          FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_mentions"          ON mentions          FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_deliverables"      ON deliverables      FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_agent_personas"   ON agent_personas    FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE agent_event_executions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_agent_event_executions" ON agent_event_executions FOR ALL USING (true) WITH CHECK (true);

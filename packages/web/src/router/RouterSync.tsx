@@ -13,8 +13,9 @@ import { useUIStore, type SettingsTab } from '../stores/uiStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useTicketStore } from '../stores/ticketStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
+import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 
-type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'cluster' | 'settings' | 'scratchpads';
+type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads';
 
 const VALID_SETTINGS_TABS: SettingsTab[] = [
   'general',
@@ -28,6 +29,9 @@ const VALID_SETTINGS_TABS: SettingsTab[] = [
 
 // ─── URL → Store state ───────────────────────────────────────────────────────
 
+type PersonaTab = 'config' | 'soul' | 'identity' | 'memory' | 'events';
+const VALID_PERSONA_TABS: PersonaTab[] = ['config', 'soul', 'identity', 'memory', 'events'];
+
 interface ParsedUrl {
   panel: ActivePanel;
   sessionId: string | null;
@@ -37,16 +41,27 @@ interface ParsedUrl {
   boardId: string | null | undefined;
   ticketId: string | null;
   scratchpadKey: string | null;
+  personaId: string | null;
+  personaTab: PersonaTab | null;
   settingsTab: SettingsTab | null;
+  agentWorktreeTicketId: string | null;
   redirect?: string;
 }
 
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
+  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, settingsTab: null as SettingsTab | null, agentWorktreeTicketId: null as string | null };
+
   // Root: redirect to /sessions
   if (pathname === '/') {
-    return { panel: 'sessions', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: null, redirect: '/sessions' };
+    return { ...base, panel: 'sessions' as ActivePanel, redirect: '/sessions' };
+  }
+
+  // Agent worktree within sessions panel
+  const agentWtMatch = pathname.match(/^\/sessions\/agent\/([^/]+)$/);
+  if (agentWtMatch) {
+    return { ...base, panel: 'sessions', agentWorktreeTicketId: agentWtMatch[1]! };
   }
 
   // Sessions
@@ -54,71 +69,83 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   if (sessionsMatch) {
     const sessionId = sessionsMatch[1] ?? null;
     const splitId = sessionId ? (params.get('split') ?? null) : null;
-    return { panel: 'sessions', sessionId, splitId, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: null };
+    return { ...base, panel: 'sessions', sessionId, splitId };
   }
 
   // Repositories
   const reposMatch = pathname.match(/^\/repositories(?:\/([^/]+)\/([^/]+))?$/);
   if (reposMatch) {
     const repoKey = reposMatch[1] && reposMatch[2] ? `${reposMatch[1]}/${reposMatch[2]}` : null;
-    return { panel: 'repositories', sessionId: null, splitId: null, repoKey, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: null };
+    return { ...base, panel: 'repositories', repoKey };
   }
 
   // Tickets — order matters: more specific patterns first
   const ticketBoardTicketMatch = pathname.match(/^\/tickets\/board\/([^/]+)\/ticket\/([^/]+)$/);
   if (ticketBoardTicketMatch) {
-    const boardId = ticketBoardTicketMatch[1]!;
-    const ticketId = ticketBoardTicketMatch[2]!;
-    return { panel: 'tickets', sessionId: null, splitId: null, repoKey: null, boardId, ticketId, scratchpadKey: null, settingsTab: null };
+    return { ...base, panel: 'tickets', boardId: ticketBoardTicketMatch[1]!, ticketId: ticketBoardTicketMatch[2]! };
   }
   const ticketBoardMatch = pathname.match(/^\/tickets\/board\/([^/]+)$/);
   if (ticketBoardMatch) {
     const raw = ticketBoardMatch[1]!;
-    const boardId = raw === 'all' ? null : raw;
-    return { panel: 'tickets', sessionId: null, splitId: null, repoKey: null, boardId, ticketId: null, scratchpadKey: null, settingsTab: null };
+    return { ...base, panel: 'tickets', boardId: raw === 'all' ? null : raw };
   }
   if (pathname === '/tickets') {
-    return { panel: 'tickets', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: null };
+    return { ...base, panel: 'tickets' };
   }
 
   // Claude Config
   if (pathname === '/claude-config') {
-    return { panel: 'claude-config', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: null };
+    return { ...base, panel: 'claude-config' };
+  }
+
+  // Agents — more specific patterns first
+  const agentTabMatch = pathname.match(/^\/agents\/([^/]+)\/([^/]+)$/);
+  if (agentTabMatch) {
+    const personaId = agentTabMatch[1]!;
+    const rawTab = agentTabMatch[2] as PersonaTab;
+    const personaTab = VALID_PERSONA_TABS.includes(rawTab) ? rawTab : 'config';
+    return { ...base, panel: 'agents', personaId, personaTab };
+  }
+  const agentMatch = pathname.match(/^\/agents\/([^/]+)$/);
+  if (agentMatch) {
+    return { ...base, panel: 'agents', personaId: agentMatch[1]!, personaTab: 'config' };
+  }
+  if (pathname === '/agents') {
+    return { ...base, panel: 'agents' };
   }
 
   // Cluster
   if (pathname === '/cluster') {
-    return { panel: 'cluster', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: null };
+    return { ...base, panel: 'cluster' };
   }
 
   // Scratchpads
   if (pathname === '/scratchpads') {
-    return { panel: 'scratchpads', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: null };
+    return { ...base, panel: 'scratchpads' };
   }
   if (pathname === '/scratchpads/global') {
-    return { panel: 'scratchpads', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: '__global__', settingsTab: null };
+    return { ...base, panel: 'scratchpads', scratchpadKey: '__global__' };
   }
   const scratchpadsMatch = pathname.match(/^\/scratchpads\/([^/]+)\/([^/]+)$/);
   if (scratchpadsMatch) {
-    const scratchpadKey = `${scratchpadsMatch[1]}/${scratchpadsMatch[2]}`;
-    return { panel: 'scratchpads', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey, settingsTab: null };
+    return { ...base, panel: 'scratchpads', scratchpadKey: `${scratchpadsMatch[1]}/${scratchpadsMatch[2]}` };
   }
 
   // Settings
   if (pathname === '/settings') {
-    return { panel: 'settings', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: null };
+    return { ...base, panel: 'settings' };
   }
   const settingsMatch = pathname.match(/^\/settings\/([^/]+)$/);
   if (settingsMatch) {
     const rawTab = settingsMatch[1] as SettingsTab;
     if (VALID_SETTINGS_TABS.includes(rawTab)) {
-      return { panel: 'settings', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: rawTab };
+      return { ...base, panel: 'settings', settingsTab: rawTab };
     }
-    return { panel: 'settings', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: null, redirect: '/settings' };
+    return { ...base, panel: 'settings', redirect: '/settings' };
   }
 
   // Unknown route → redirect to /sessions
-  return { panel: 'sessions', sessionId: null, splitId: null, repoKey: null, boardId: undefined, ticketId: null, scratchpadKey: null, settingsTab: null, redirect: '/sessions' };
+  return { ...base, panel: 'sessions', redirect: '/sessions' };
 }
 
 // ─── Store state → URL ───────────────────────────────────────────────────────
@@ -131,10 +158,16 @@ export function storeToUrl(
   selectedBoardId: string | null,
   selectedTicketId: string | null,
   selectedScratchpadKey: string | null,
+  selectedPersonaId: string | null,
+  personaTab: PersonaTab,
   settingsTab: SettingsTab,
+  selectedAgentWorktreeTicketId?: string | null,
 ): { pathname: string; search: string } {
   switch (activePanel) {
     case 'sessions': {
+      if (selectedAgentWorktreeTicketId && !selectedSessionId) {
+        return { pathname: `/sessions/agent/${selectedAgentWorktreeTicketId}`, search: '' };
+      }
       if (selectedSessionId) {
         const search = splitSessionId ? `?split=${splitSessionId}` : '';
         return { pathname: `/sessions/${selectedSessionId}`, search };
@@ -149,7 +182,6 @@ export function storeToUrl(
     }
     case 'tickets': {
       if (selectedBoardId === null) {
-        // All boards view
         return { pathname: '/tickets/board/all', search: '' };
       }
       if (selectedBoardId) {
@@ -162,6 +194,15 @@ export function storeToUrl(
     }
     case 'claude-config':
       return { pathname: '/claude-config', search: '' };
+    case 'agents': {
+      if (selectedPersonaId) {
+        if (personaTab !== 'config') {
+          return { pathname: `/agents/${selectedPersonaId}/${personaTab}`, search: '' };
+        }
+        return { pathname: `/agents/${selectedPersonaId}`, search: '' };
+      }
+      return { pathname: '/agents', search: '' };
+    }
     case 'cluster':
       return { pathname: '/cluster', search: '' };
     case 'scratchpads': {
@@ -192,6 +233,8 @@ export function RouterSync() {
   const setSettingsTab = useUIStore((s) => s.setSettingsTab);
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectRepo = useUIStore((s) => s.selectRepo);
+  const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
+  const setSelectedAgentWorktreeTicketId = useUIStore((s) => s.setSelectedAgentWorktreeTicketId);
 
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
@@ -207,6 +250,11 @@ export function RouterSync() {
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
   const setSelectedScratchpadKey = useScratchpadStore((s) => s.setSelectedScratchpadKey);
   const loadScratchpad = useScratchpadStore((s) => s.load);
+
+  const selectedPersonaId = useAgentPersonaStore((s) => s.selectedPersonaId);
+  const selectPersona = useAgentPersonaStore((s) => s.selectPersona);
+  const personaTab = useAgentPersonaStore((s) => s.activeTab);
+  const setPersonaTab = useAgentPersonaStore((s) => s.setActiveTab);
 
   // Track whether we're currently syncing from URL to prevent circular updates
   const syncingFromUrl = useRef(false);
@@ -229,6 +277,17 @@ export function RouterSync() {
 
     // Update session selection
     if (parsed.panel === 'sessions') {
+      // Agent worktree view
+      if (parsed.agentWorktreeTicketId !== selectedAgentWorktreeTicketId) {
+        setSelectedAgentWorktreeTicketId(parsed.agentWorktreeTicketId);
+      }
+      if (parsed.agentWorktreeTicketId) {
+        // Clear session selection when viewing agent worktree
+        if (selectedSessionId) selectSession(null);
+        syncingFromUrl.current = false;
+        return;
+      }
+
       // Auto-restore last active session when navigating to /sessions with no session
       if (!parsed.sessionId) {
         const lastActiveSessionId = useUIStore.getState().lastActiveSessionId;
@@ -283,6 +342,16 @@ export function RouterSync() {
       }
     }
 
+    // Update agent persona selection
+    if (parsed.panel === 'agents') {
+      if (parsed.personaId !== selectedPersonaId) {
+        selectPersona(parsed.personaId);
+      }
+      if (parsed.personaTab && parsed.personaTab !== personaTab) {
+        setPersonaTab(parsed.personaTab);
+      }
+    }
+
     // Update settings tab
     if (parsed.panel === 'settings' && parsed.settingsTab && parsed.settingsTab !== settingsTab) {
       setSettingsTab(parsed.settingsTab);
@@ -307,7 +376,10 @@ export function RouterSync() {
       selectedBoardId,
       selectedTicketId,
       selectedScratchpadKey,
+      selectedPersonaId,
+      personaTab,
       settingsTab,
+      selectedAgentWorktreeTicketId,
     );
 
     const currentPath = location.pathname;
@@ -327,7 +399,10 @@ export function RouterSync() {
     selectedBoardId,
     selectedTicketId,
     selectedScratchpadKey,
+    selectedPersonaId,
+    personaTab,
     settingsTab,
+    selectedAgentWorktreeTicketId,
     // Don't include location to avoid re-triggering on our own navigate calls
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);

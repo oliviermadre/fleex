@@ -16,6 +16,9 @@ import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { KanbanBoard } from '../tickets/KanbanBoard';
 import { TicketDetail } from '../tickets/TicketDetail';
 import { useTicketStore } from '../../stores/ticketStore';
+import { AgentPersonaView } from '../agents/AgentPersonaView';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { AgentWorktreePanel } from './AgentWorktreePanel';
 
 function GroupEmptyCell() {
   return (
@@ -58,6 +61,7 @@ export function MainPanel() {
   const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
 
   const floatingSessionId = useUIStore((s) => s.floatingSessionId);
+  const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
@@ -79,6 +83,10 @@ export function MainPanel() {
     return <ScratchpadMainView scratchpadKey={selectedScratchpadKey} />;
   }
 
+  if (activePanel === 'agents') {
+    return <AgentPersonaView />;
+  }
+
   if (activePanel === 'cluster') {
     return <ClusterDashboard />;
   }
@@ -95,6 +103,11 @@ export function MainPanel() {
       return <RepositoryEmptyState />;
     }
     return <RepositoryDashboard repoKey={selectedRepoKey} />;
+  }
+
+  // Agent worktree view (ticket-based, no session required)
+  if (activePanel === 'sessions' && selectedAgentWorktreeTicketId && !selectedSession) {
+    return <AgentWorktreePanel ticketId={selectedAgentWorktreeTicketId} />;
   }
 
   // Grouped view
