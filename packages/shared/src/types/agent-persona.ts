@@ -34,6 +34,7 @@ export interface UpdateAgentPersonaRequest {
 export interface AgentStructuredOutput {
   deliverable: { title: string; markdown: string; type: string; status: 'draft' | 'final' } | null;
   comment: string | null;
+  mentionStatus?: 'resolved' | 'waiting_for_info';
 }
 
 export type AgentExecutionStatus = 'no_work' | 'started' | 'already_running';

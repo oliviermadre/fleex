@@ -69,6 +69,12 @@ function validateShape(obj: unknown): AgentStructuredOutput | null {
     if (typeof comment !== 'string') return null;
   }
 
+  // Validate mentionStatus (optional)
+  const mentionStatus = record['mentionStatus'];
+  if (mentionStatus !== undefined && mentionStatus !== 'resolved' && mentionStatus !== 'waiting_for_info') {
+    // Invalid value — ignore it (default to resolved)
+  }
+
   return {
     deliverable:
       deliverable != null
@@ -82,6 +88,9 @@ function validateShape(obj: unknown): AgentStructuredOutput | null {
           }
         : null,
     comment: (comment as string) ?? null,
+    ...(mentionStatus === 'resolved' || mentionStatus === 'waiting_for_info'
+      ? { mentionStatus: mentionStatus as 'resolved' | 'waiting_for_info' }
+      : {}),
   };
 }
 

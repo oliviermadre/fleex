@@ -29,7 +29,7 @@ export class PgMentionStore implements MentionStorePort {
 
   async getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]> {
     const { rows } = await this.db.query(
-      `SELECT * FROM mentions WHERE target_agent = $1 AND status != 'resolved' ORDER BY created_at ASC`,
+      `SELECT * FROM mentions WHERE target_agent = $1 AND status NOT IN ('resolved', 'waiting_for_info') ORDER BY created_at ASC`,
       [agentName],
     );
     return rows.map(rowToMention);
@@ -41,6 +41,14 @@ export class PgMentionStore implements MentionStorePort {
       [ticketId],
     );
     return (rows[0]?.count as number) ?? 0;
+  }
+
+  async getWaitingByTicket(ticketId: string): Promise<TicketMentionEntity[]> {
+    const { rows } = await this.db.query(
+      `SELECT * FROM mentions WHERE ticket_id = $1 AND status = 'waiting_for_info' ORDER BY created_at ASC`,
+      [ticketId],
+    );
+    return rows.map(rowToMention);
   }
 
   async save(mention: TicketMentionEntity): Promise<void> {

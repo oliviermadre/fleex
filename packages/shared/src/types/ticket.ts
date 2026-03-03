@@ -139,7 +139,7 @@ export interface TicketComment {
 
 // ── Mentions ──
 
-export type MentionStatus = 'pending' | 'acknowledged' | 'resolved';
+export type MentionStatus = 'pending' | 'acknowledged' | 'resolved' | 'waiting_for_info';
 
 export type MentionTargetType = 'agent' | 'human';
 
@@ -201,6 +201,7 @@ export type TicketWsMessageType =
   | 'mention:acknowledged'
   | 'mention:resolved'
   | 'mention:updated'
+  | 'mention:waiting_for_info'
   | 'mention:deleted'
   | 'deliverable:created'
   | 'deliverable:updated';

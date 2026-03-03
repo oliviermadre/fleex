@@ -55,7 +55,7 @@ export class JsonMentionStore implements MentionStorePort {
 
   async getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]> {
     return Array.from(this.mentions.values())
-      .filter((m) => m.targetAgent === agentName && m.status !== 'resolved')
+      .filter((m) => m.targetAgent === agentName && m.status !== 'resolved' && m.status !== 'waiting_for_info')
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
@@ -63,6 +63,12 @@ export class JsonMentionStore implements MentionStorePort {
     return Array.from(this.mentions.values())
       .filter((m) => m.ticketId === ticketId && m.status !== 'resolved')
       .length;
+  }
+
+  async getWaitingByTicket(ticketId: string): Promise<TicketMentionEntity[]> {
+    return Array.from(this.mentions.values())
+      .filter((m) => m.ticketId === ticketId && m.status === 'waiting_for_info')
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
   async save(mention: TicketMentionEntity): Promise<void> {

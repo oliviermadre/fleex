@@ -31,6 +31,12 @@ const STATUS_CONFIG: Record<MentionStatus, { label: string; color: string; bg: s
     bg: 'bg-blue-500/15',
     dot: 'bg-blue-400',
   },
+  waiting_for_info: {
+    label: 'Waiting',
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/15',
+    dot: 'bg-orange-400',
+  },
   resolved: {
     label: 'Resolved',
     color: 'text-emerald-400',
@@ -39,7 +45,7 @@ const STATUS_CONFIG: Record<MentionStatus, { label: string; color: string; bg: s
   },
 };
 
-const STATUS_ORDER: MentionStatus[] = ['pending', 'acknowledged', 'resolved'];
+const STATUS_ORDER: MentionStatus[] = ['pending', 'acknowledged', 'waiting_for_info', 'resolved'];
 
 type FilterStatus = MentionStatus | 'all';
 
@@ -135,6 +141,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
         } else if (
           msg.type === 'mention:acknowledged' ||
           msg.type === 'mention:resolved' ||
+          msg.type === 'mention:waiting_for_info' ||
           msg.type === 'mention:updated'
         ) {
           const m = msg.data as TicketMention;
@@ -215,6 +222,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     all: mentions.length,
     pending: mentions.filter((m) => m.status === 'pending').length,
     acknowledged: mentions.filter((m) => m.status === 'acknowledged').length,
+    waiting_for_info: mentions.filter((m) => m.status === 'waiting_for_info').length,
     resolved: mentions.filter((m) => m.status === 'resolved').length,
   };
 
@@ -227,6 +235,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     { key: 'all', label: 'All' },
     { key: 'pending', label: 'Pending' },
     { key: 'acknowledged', label: 'Acknowledged' },
+    { key: 'waiting_for_info', label: 'Waiting' },
     { key: 'resolved', label: 'Resolved' },
   ];
 

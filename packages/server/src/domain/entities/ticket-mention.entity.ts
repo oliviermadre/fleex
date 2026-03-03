@@ -50,6 +50,18 @@ export class TicketMentionEntity {
     }
   }
 
+  waitForInfo(): void {
+    if (this.status === 'acknowledged') {
+      this.status = 'waiting_for_info';
+    }
+  }
+
+  wakeUp(): void {
+    if (this.status === 'waiting_for_info') {
+      this.status = 'pending';
+    }
+  }
+
   resolve(params?: { commentId?: string; deliverableId?: string }): void {
     this.status = 'resolved';
     this.resolvedAt = new Date();
