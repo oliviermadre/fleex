@@ -58,6 +58,10 @@ export function agentDeliverablesRoutes(container: Container) {
 
       const dto = deliverable.toDTO();
       container.ticketBroadcast('deliverable:created', dto);
+
+      // Wake up agents waiting for info on this ticket (exclude submitting agent)
+      container.wakeWaitingAgents.execute(request.params.id, agentName).catch(() => {});
+
       return reply.code(201).send(dto);
     });
 

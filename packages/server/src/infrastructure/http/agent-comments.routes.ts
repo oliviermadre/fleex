@@ -58,6 +58,9 @@ export function agentCommentsRoutes(container: Container) {
         container.ticketBroadcast('mention:created', mention.toDTO());
       }
 
+      // Wake up agents waiting for info on this ticket (exclude posting agent to avoid self-wake)
+      container.wakeWaitingAgents.execute(request.params.id, agentName).catch(() => {});
+
       return reply.code(201).send({
         ...dto,
         createdMentions: createdMentions.map((m) => m.toDTO()),

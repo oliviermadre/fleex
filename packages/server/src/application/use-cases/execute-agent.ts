@@ -52,7 +52,12 @@ Your final response will be structured as JSON with two fields:
 - **comment**: Use when you want to communicate in the ticket thread (status updates, questions,
   requesting another agent via \`@agent:name\`). Set to null if you have nothing to say.
 - Put \`@agent:name\` mentions **only** in comment, never in deliverable.
-- Both fields can be non-null, or both null (silent completion).
+- **mentionStatus**: Controls what happens to your mention after you finish.
+  - \`"resolved"\` (default): your work is done, the mention is closed.
+  - \`"waiting_for_info"\`: you need more information before you can finish. You will be automatically
+    resumed when new content (comments, deliverables) is added to the ticket. You MUST produce at
+    least a comment or a deliverable when using this status — explain what you need and from whom.
+- Both deliverable and comment can be non-null, or both null (silent completion — only valid with "resolved").
 
 ## CRITICAL — Handoff Rules (ENFORCED BY THE SYSTEM)
 
@@ -181,6 +186,33 @@ export class ExecuteAgentUseCase {
     return { status: 'started', mentionIds };
   }
 
+  /**
+   * Wake up a mention that was in waiting_for_info state.
+   * Transitions it to pending and enqueues for execution.
+   */
+  async wakeUp(mention: TicketMentionEntity): Promise<void> {
+    // Skip if already active
+    if (this.activeExecutions.has(mention.id)) return;
+
+    const persona = await this.personaStore.getByName(mention.targetAgent);
+    if (!persona) {
+      this.logger.warn('Cannot wake mention: persona not found', {
+        mentionId: mention.id, targetAgent: mention.targetAgent,
+      });
+      return;
+    }
+
+    mention.wakeUp();
+    await this.mentionStore.save(mention);
+
+    this.logger.info('Waking up waiting agent', {
+      mentionId: mention.id, targetAgent: mention.targetAgent, ticketId: mention.ticketId,
+    });
+
+    this.queue.push({ persona, mention });
+    this.drainQueue();
+  }
+
   getStatus(personaId: string): { running: boolean; activeMentionIds: string[] } {
     const activeMentions = Array.from(this.activeExecutions.entries())
       .filter(([, exec]) => exec.status === 'running' && exec.personaId === personaId)
@@ -252,7 +284,9 @@ export class ExecuteAgentUseCase {
       });
 
       // 5. Build user prompt with ticket context
-      const userPrompt = this.composeUserPrompt(context, mention);
+      const sessionKey = `${persona.name}:${mention.ticketId}`;
+      const isWakeUp = mention.status === 'pending' && this.sessionHistory.has(sessionKey);
+      const userPrompt = this.composeUserPrompt(context, mention, isWakeUp);
 
       // 6. Ensure worktree exists for agent work
       const worktreePath = await this.ensureWorktree(mention.ticketId);
@@ -279,19 +313,39 @@ export class ExecuteAgentUseCase {
         this.onEvent?.(event);
       };
 
+      // 8. Check for previous SDK session (resume)
+      const previousSessionId = this.sessionHistory.get(sessionKey);
+
+      // Build context window summary for observability
+      const contextSections: string[] = [];
+      if (persona.soulMd) contextSections.push('SOUL.md');
+      if (persona.identityMd) contextSections.push('IDENTITY.md');
+      if (persona.memoryMd) contextSections.push('MEMORY.md');
+      contextSections.push('Structured output instructions');
+      if (humanName) contextSections.push(`Human operator (@${humanName})`);
+
       await emitEvent('execution_start', {
+        executionId,
         personaId: persona.id,
         personaName: persona.name,
         ticketId: mention.ticketId,
         mentionId: mention.id,
         model: persona.model,
         worktreePath,
+        resumeSessionId: previousSessionId ?? null,
+        context: {
+          systemPromptSections: contextSections,
+          systemPromptLength: systemPrompt.length,
+          userPromptLength: userPrompt.length,
+          ticketTitle: context.ticket.title,
+          ticketStatus: context.ticket.status,
+          commentsCount: context.comments.length,
+          deliverablesCount: context.deliverables.length,
+        },
       });
 
-      // 8. Call Claude Agent SDK
+      // 9. Call Claude Agent SDK
       const { query } = await import('@anthropic-ai/claude-agent-sdk');
-      const sessionKey = `${persona.name}:${mention.ticketId}`;
-      const previousSessionId = this.sessionHistory.get(sessionKey);
 
       let sdkSessionId: string | undefined;
       let resultText = '';
@@ -326,6 +380,11 @@ export class ExecuteAgentUseCase {
               },
               comment: {
                 oneOf: [{ type: 'string' }, { type: 'null' }],
+              },
+              mentionStatus: {
+                type: 'string',
+                enum: ['resolved', 'waiting_for_info'],
+                default: 'resolved',
               },
             },
             required: ['deliverable', 'comment'],
@@ -468,9 +527,24 @@ export class ExecuteAgentUseCase {
         resultCommentId = comment.id;
       }
 
-      // 12. Resolve mention with references
-      mention.resolve({ commentId: resultCommentId, deliverableId: resultDeliverableId });
-      await this.mentionStore.save(mention);
+      // 12. Resolve or park mention based on mentionStatus
+      if (structured?.mentionStatus === 'waiting_for_info') {
+        // Server-side enforcement: waiting_for_info requires at least a comment or deliverable
+        if (!structured.comment && !structured.deliverable) {
+          this.logger.warn('Agent set waiting_for_info but produced no output, forcing resolved', {
+            executionId, persona: persona.name,
+          });
+          mention.resolve({ commentId: resultCommentId, deliverableId: resultDeliverableId });
+          await this.mentionStore.save(mention);
+        } else {
+          mention.waitForInfo();
+          await this.mentionStore.save(mention);
+          this.onTicketUpdate?.('mention:waiting_for_info', mention.toDTO());
+        }
+      } else {
+        mention.resolve({ commentId: resultCommentId, deliverableId: resultDeliverableId });
+        await this.mentionStore.save(mention);
+      }
 
       // 13. Complete execution tracking
       await this.agentEventStore.completeExecution(executionId, 'completed');
@@ -630,6 +704,7 @@ export class ExecuteAgentUseCase {
   private composeUserPrompt(
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     mention: TicketMentionEntity,
+    isWakeUp = false,
   ): string {
     const parts: string[] = [];
 
@@ -654,7 +729,11 @@ export class ExecuteAgentUseCase {
       }
     }
 
-    parts.push(`\n---\n\nYou were mentioned in comment ${mention.commentId} by ${mention.sourceAgent}. Please review the ticket context above and respond appropriately.`);
+    if (isWakeUp) {
+      parts.push(`\n---\n\n**WAKE-UP: You previously indicated you were waiting for more information.** New content has been added to this ticket since then. Review the updated context above and continue your work. You MUST produce at least a comment or a deliverable — decide whether to ask someone else, escalate to a human, or move forward on your own.`);
+    } else {
+      parts.push(`\n---\n\nYou were mentioned in comment ${mention.commentId} by ${mention.sourceAgent}. Please review the ticket context above and respond appropriately.`);
+    }
 
     return parts.join('\n');
   }

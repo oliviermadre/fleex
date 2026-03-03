@@ -69,7 +69,7 @@ export class SupabaseMentionStore implements MentionStorePort {
       .from('mentions')
       .select('*')
       .eq('target_agent', agentName)
-      .eq('status', 'pending');
+      .not('status', 'in', '("resolved","waiting_for_info")');
     if (error) throw new Error(`SupabaseMentionStore.getPendingForAgent failed: ${error.message}`);
     return (data as MentionRow[]).map(rowToEntity);
   }
@@ -79,9 +79,19 @@ export class SupabaseMentionStore implements MentionStorePort {
       .from('mentions')
       .select('*', { count: 'exact', head: true })
       .eq('ticket_id', ticketId)
-      .eq('status', 'pending');
+      .neq('status', 'resolved');
     if (error) throw new Error(`SupabaseMentionStore.getPendingCountForTicket failed: ${error.message}`);
     return count ?? 0;
+  }
+
+  async getWaitingByTicket(ticketId: string): Promise<TicketMentionEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('mentions')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .eq('status', 'waiting_for_info');
+    if (error) throw new Error(`SupabaseMentionStore.getWaitingByTicket failed: ${error.message}`);
+    return (data as MentionRow[]).map(rowToEntity);
   }
 
   async save(mention: TicketMentionEntity): Promise<void> {

@@ -43,8 +43,8 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
 
   async getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]> {
     const rows = this.conn.db
-      .prepare('SELECT * FROM mentions WHERE target_agent = ? AND status != ? ORDER BY created_at ASC')
-      .all(agentName, 'resolved') as MentionRow[];
+      .prepare('SELECT * FROM mentions WHERE target_agent = ? AND status NOT IN (?, ?) ORDER BY created_at ASC')
+      .all(agentName, 'resolved', 'waiting_for_info') as MentionRow[];
     return rows.map((r) => this.toEntity(r));
   }
 
@@ -53,6 +53,13 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
       .prepare('SELECT COUNT(*) as cnt FROM mentions WHERE ticket_id = ? AND status != ?')
       .get(ticketId, 'resolved') as { cnt: number };
     return row.cnt;
+  }
+
+  async getWaitingByTicket(ticketId: string): Promise<TicketMentionEntity[]> {
+    const rows = this.conn.db
+      .prepare('SELECT * FROM mentions WHERE ticket_id = ? AND status = ? ORDER BY created_at ASC')
+      .all(ticketId, 'waiting_for_info') as MentionRow[];
+    return rows.map((r) => this.toEntity(r));
   }
 
   async save(mention: TicketMentionEntity): Promise<void> {

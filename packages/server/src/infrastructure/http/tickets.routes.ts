@@ -445,6 +445,9 @@ export function ticketRoutes(container: Container) {
           container.ticketBroadcast('mention:created', mention.toDTO());
         }
 
+        // Wake up agents waiting for info on this ticket
+        container.wakeWaitingAgents.execute(request.params.id).catch(() => {});
+
         return reply.code(201).send(dto);
       },
     );
