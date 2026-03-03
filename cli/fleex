@@ -338,6 +338,65 @@ _stop_all_instances() {
   fi
 }
 
+cmd_remove() {
+  if [[ "${1:-}" == "--all-stopped" ]]; then
+    _remove_all_stopped
+    return
+  fi
+
+  local target="${1:-$INSTANCE_SLUG}"
+  local target_run="$FLEEX_HOME/.run/$target"
+  local target_log="$FLEEX_HOME/.logs/$target"
+
+  if [[ ! -d "$target_run" && ! -d "$target_log" ]]; then
+    die "Unknown instance '$target'. Use 'fleex status' to list instances."
+  fi
+
+  # Refuse to remove a running instance
+  for svc in "${SERVICES[@]}"; do
+    local pf="$target_run/$svc.pid"
+    if [[ -f "$pf" ]] && kill -0 "$(cat "$pf")" 2>/dev/null; then
+      die "Instance '$target' is still running. Stop it first: fleex stop $target"
+    fi
+  done
+
+  rm -rf "$target_run" "$target_log"
+  ok "Removed instance '$target'"
+}
+
+_remove_all_stopped() {
+  local run_base="$FLEEX_HOME/.run"
+  [[ -d "$run_base" ]] || { warn "No instances found."; return; }
+
+  local removed=0
+  for dir in "$run_base"/*/; do
+    [[ -d "$dir" ]] || continue
+    local slug
+    slug="$(basename "$dir")"
+
+    # Skip if any service is running
+    local running=false
+    for svc in "${SERVICES[@]}"; do
+      local pf="$dir/$svc.pid"
+      if [[ -f "$pf" ]] && kill -0 "$(cat "$pf")" 2>/dev/null; then
+        running=true
+        break
+      fi
+    done
+    $running && continue
+
+    rm -rf "$FLEEX_HOME/.run/$slug" "$FLEEX_HOME/.logs/$slug"
+    ok "Removed instance '$slug'"
+    removed=$((removed + 1))
+  done
+
+  if [[ $removed -eq 0 ]]; then
+    warn "No stopped instances to remove."
+  else
+    ok "Removed $removed stopped instance(s)."
+  fi
+}
+
 cmd_restart() {
   info "Restarting stack..."
   cmd_stop
@@ -496,6 +555,8 @@ cmd_help() {
     ${CYAN}start${NC} [--port <port>]  Start all services (gateway, server, web)
     ${CYAN}stop${NC} [name]    Stop the current instance (or a named one)
     ${CYAN}stop --all${NC}    Stop ALL running instances
+    ${CYAN}remove${NC} [name]         Remove a stopped instance (run + logs)
+    ${CYAN}remove --all-stopped${NC}  Remove ALL stopped instances
     ${CYAN}restart${NC}       Restart the current instance
     ${CYAN}status${NC}        Show status of all instances
     ${CYAN}logs${NC} [svc]    Tail logs (all services, or a specific one)
@@ -546,6 +607,7 @@ main() {
   case "$cmd" in
     start)       cmd_start "$@" ;;
     stop)        cmd_stop "$@" ;;
+    remove)      cmd_remove "$@" ;;
     restart)     cmd_restart "$@" ;;
     status)      cmd_status "$@" ;;
     logs)        cmd_logs "$@" ;;
