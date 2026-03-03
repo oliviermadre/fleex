@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { TicketComment, TicketMention, TicketWsMessage } from '@asm/shared';
 import { ticketWs } from '../../services/websocket';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
 
 /**
@@ -279,6 +281,66 @@ function relativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
+// ── Mention Autocomplete ──
+
+interface MentionOption {
+  /** The text inserted into the textarea (e.g. "@agent:catalyst" or "@olivier") */
+  insertText: string;
+  /** Display label shown in the dropdown */
+  label: string;
+  /** Secondary text (e.g. "agent" or "human") */
+  type: 'agent' | 'human';
+}
+
+function MentionAutocomplete({
+  options,
+  selectedIndex,
+  onSelect,
+  position,
+}: {
+  options: MentionOption[];
+  selectedIndex: number;
+  onSelect: (opt: MentionOption) => void;
+  position: { bottom: number; left: number };
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = listRef.current?.children[selectedIndex] as HTMLElement | undefined;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [selectedIndex]);
+
+  if (options.length === 0) return null;
+
+  return (
+    <div
+      ref={listRef}
+      className="absolute z-30 max-h-48 min-w-[200px] overflow-y-auto rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
+      style={{ bottom: position.bottom, left: position.left }}
+    >
+      {options.map((opt, i) => (
+        <button
+          key={opt.insertText}
+          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors ${
+            i === selectedIndex
+              ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-text-primary)]'
+              : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
+          }`}
+          onMouseDown={(e) => { e.preventDefault(); onSelect(opt); }}
+        >
+          <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[10px] font-bold ${
+            opt.type === 'agent' ? 'bg-purple-500/20 text-purple-400' : 'bg-amber-500/20 text-amber-400'
+          }`}>
+            {opt.type === 'agent' ? 'A' : 'H'}
+          </span>
+          <span className="flex-1 truncate font-medium">{opt.label}</span>
+          <span className="text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Main Component ──
 
 export function TicketComments({ ticketId }: { ticketId: string }) {
@@ -288,6 +350,43 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const listEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Autocomplete state
+  const [acOpen, setAcOpen] = useState(false);
+  const [acQuery, setAcQuery] = useState('');
+  const [acIndex, setAcIndex] = useState(0);
+  const [acTriggerPos, setAcTriggerPos] = useState(-1); // cursor position of the '@'
+  const inputWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Build mention options from personas + human
+  const personas = useAgentPersonaStore((s) => s.personas);
+  const humanMentionName = useSettingsStore(
+    (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
+  );
+
+  const allMentionOptions = useMemo<MentionOption[]>(() => {
+    const opts: MentionOption[] = personas.map((p) => ({
+      insertText: `@agent:${p.name}`,
+      label: p.displayName || p.name,
+      type: 'agent' as const,
+    }));
+    if (humanMentionName) {
+      opts.push({
+        insertText: `@${humanMentionName}`,
+        label: humanMentionName,
+        type: 'human' as const,
+      });
+    }
+    return opts;
+  }, [personas, humanMentionName]);
+
+  const filteredOptions = useMemo(() => {
+    if (!acOpen) return [];
+    const q = acQuery.toLowerCase();
+    return allMentionOptions.filter((o) =>
+      o.label.toLowerCase().includes(q) || o.insertText.toLowerCase().includes(q),
+    );
+  }, [acOpen, acQuery, allMentionOptions]);
 
   useEffect(() => {
     api.fetchTicketComments(ticketId).then(setComments).catch(() => {});
@@ -327,7 +426,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           if (d.ticketId === ticketId) {
             setMentions((prev) => prev.filter((x) => x.id !== d.id));
           }
-        } else if (msg.type === 'mention:updated' || msg.type === 'mention:acknowledged' || msg.type === 'mention:resolved') {
+        } else if (msg.type === 'mention:updated' || msg.type === 'mention:acknowledged' || msg.type === 'mention:resolved' || msg.type === 'mention:waiting_for_info') {
           const m = msg.data as TicketMention;
           if (m.ticketId === ticketId) {
             setMentions((prev) => prev.map((x) => (x.id === m.id ? m : x)));
@@ -361,6 +460,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       const comment = await api.postTicketComment(ticketId, trimmed);
       setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
       setBody('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
     } catch {
       // keep body so user can retry
     } finally {
@@ -369,14 +471,97 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     }
   }, [body, submitting, ticketId]);
 
+  const autoResize = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, []);
+
+  const closeMentionAc = useCallback(() => {
+    setAcOpen(false);
+    setAcQuery('');
+    setAcIndex(0);
+    setAcTriggerPos(-1);
+  }, []);
+
+  const acceptMention = useCallback((opt: MentionOption) => {
+    const ta = textareaRef.current;
+    if (!ta || acTriggerPos < 0) return;
+    // Replace from '@' trigger to current cursor with the insert text + trailing space
+    const before = body.slice(0, acTriggerPos);
+    const after = body.slice(ta.selectionStart);
+    const newBody = before + opt.insertText + ' ' + after;
+    setBody(newBody);
+    closeMentionAc();
+    // Restore cursor position after React re-render
+    const newCursor = acTriggerPos + opt.insertText.length + 1;
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(newCursor, newCursor);
+      ta.style.height = 'auto';
+      ta.style.height = `${ta.scrollHeight}px`;
+    });
+  }, [body, acTriggerPos, closeMentionAc]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    const cursor = e.target.selectionStart;
+    setBody(val);
+    autoResize();
+
+    // Detect mention trigger: scan backwards from cursor for '@'
+    const textBeforeCursor = val.slice(0, cursor);
+    // Find the last '@' that's either at the start or preceded by whitespace
+    const atIdx = textBeforeCursor.lastIndexOf('@');
+    if (atIdx >= 0 && (atIdx === 0 || /\s/.test(textBeforeCursor[atIdx - 1]!))) {
+      const fragment = textBeforeCursor.slice(atIdx + 1);
+      // Only trigger if there's no space after the @ (user is still typing the name)
+      if (!/\s/.test(fragment)) {
+        setAcOpen(true);
+        setAcTriggerPos(atIdx);
+        // Strip "agent:" prefix for filtering so typing "@agent:cat" matches "catalyst"
+        const q = fragment.replace(/^agent:/, '');
+        setAcQuery(q);
+        setAcIndex(0);
+        return;
+      }
+    }
+    closeMentionAc();
+  }, [autoResize, closeMentionAc]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // Autocomplete navigation
+      if (acOpen && filteredOptions.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setAcIndex((i) => (i + 1) % filteredOptions.length);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setAcIndex((i) => (i - 1 + filteredOptions.length) % filteredOptions.length);
+          return;
+        }
+        if (e.key === 'Tab' || e.key === 'Enter') {
+          e.preventDefault();
+          acceptMention(filteredOptions[acIndex]!);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeMentionAc();
+          return;
+        }
+      }
+      // Normal submit: Enter without shift
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSubmit();
       }
     },
-    [handleSubmit],
+    [acOpen, filteredOptions, acIndex, acceptMention, closeMentionAc, handleSubmit],
   );
 
   return (
@@ -425,29 +610,37 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       </div>
 
       {/* Input area */}
-      <div className="flex-shrink-0 border-t border-[var(--theme-border)] pt-3">
+      <div ref={inputWrapperRef} className="relative flex flex-shrink-0 items-end gap-2 border-t border-[var(--theme-border)] pt-3">
+        {/* Mention autocomplete popup */}
+        {acOpen && filteredOptions.length > 0 && (
+          <MentionAutocomplete
+            options={filteredOptions}
+            selectedIndex={acIndex}
+            onSelect={acceptMention}
+            position={{ bottom: (textareaRef.current?.offsetHeight ?? 36) + 8, left: 0 }}
+          />
+        )}
         <textarea
           ref={textareaRef}
-          className="w-full resize-none rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
-          rows={2}
-          placeholder="Write a comment... (@agent:name to mention)"
+          className="max-h-40 min-h-[36px] flex-1 resize-none overflow-y-auto rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm leading-snug text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
+          rows={1}
+          placeholder="Write a comment... (@ to mention)"
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onBlur={() => { setTimeout(closeMentionAc, 150); }}
           disabled={submitting}
         />
-        <div className="mt-2 flex items-center justify-between">
-          <span className="text-[10px] text-[var(--theme-text-faint)]">
-            {navigator.platform.includes('Mac') ? '\u2318' : 'Ctrl'}+Enter to send
-          </span>
-          <button
-            className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-            onClick={handleSubmit}
-            disabled={submitting || !body.trim()}
-          >
-            {submitting ? 'Sending...' : 'Send'}
-          </button>
-        </div>
+        <button
+          className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-white transition-opacity hover:opacity-90 disabled:opacity-30"
+          onClick={handleSubmit}
+          disabled={submitting || !body.trim()}
+          title="Send (Enter)"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+          </svg>
+        </button>
       </div>
     </div>
   );
