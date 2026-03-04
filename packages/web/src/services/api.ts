@@ -113,6 +113,23 @@ export async function fetchDefaultBranch(
   );
 }
 
+export type CheckCwdResult =
+  | { exists: true }
+  | { exists: false; remote: string; targetPath: string };
+
+export async function checkRepoCwd(org: string, name: string): Promise<CheckCwdResult> {
+  return request<CheckCwdResult>(
+    `/repositories/check-cwd?org=${encodeURIComponent(org)}&name=${encodeURIComponent(name)}`
+  );
+}
+
+export async function cloneRepo(org: string, name: string): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>('/repositories/clone', {
+    method: 'POST',
+    body: JSON.stringify({ org, name }),
+  });
+}
+
 export async function fetchConfig(): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>('/config');
 }

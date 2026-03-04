@@ -13,6 +13,7 @@ import { DiffStatsBadge } from '../ui/DiffStatsBadge';
 import { HotkeyBadge } from '../ui/HotkeyBadge';
 import { Autocomplete } from '../ui/Autocomplete';
 import * as api from '../../services/api';
+import type { CheckCwdResult } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { formatAge } from '../../lib/formatAge';
 
@@ -62,6 +63,12 @@ export function CreateSessionModal() {
   const [diffStatsByBranch, setDiffStatsByBranch] = useState<Record<string, DiffStats>>({});
   const [loadingDiffStats, setLoadingDiffStats] = useState(false);
 
+  // Clone state
+  const [cwdCheckResult, setCwdCheckResult] = useState<CheckCwdResult | null>(null);
+  const [checkingCwd, setCheckingCwd] = useState(false);
+  const [cloning, setCloning] = useState(false);
+  const [cloneError, setCloneError] = useState('');
+
   // Refs for focus management
   const modeContainerRef = useRef<HTMLDivElement>(null);
   const branchInputRef = useRef<HTMLInputElement>(null);
@@ -86,14 +93,33 @@ export function CreateSessionModal() {
     setDefaultBranchInfo(null);
     setDiffStatsByBranch({});
     setError('');
+    setCwdCheckResult(null);
+    setCloneError('');
 
-    fetchWorktrees(org, name).catch(() => {});
-    api.fetchDefaultBranch(org, name)
-      .then(setDefaultBranchInfo)
-      .catch(() => setDefaultBranchInfo(null));
-
-    // Auto-focus mode selector after repo selection
-    setTimeout(() => modeContainerRef.current?.focus(), 50);
+    // Check if repo is cloned on FS
+    setCheckingCwd(true);
+    api.checkRepoCwd(org, name)
+      .then((result) => {
+        setCwdCheckResult(result);
+        if (result.exists) {
+          // Repo exists — proceed with fetching worktrees / default branch
+          fetchWorktrees(org, name).catch(() => {});
+          api.fetchDefaultBranch(org, name)
+            .then(setDefaultBranchInfo)
+            .catch(() => setDefaultBranchInfo(null));
+          setTimeout(() => modeContainerRef.current?.focus(), 50);
+        }
+      })
+      .catch(() => {
+        // If check fails, assume exists and proceed normally
+        setCwdCheckResult({ exists: true });
+        fetchWorktrees(org, name).catch(() => {});
+        api.fetchDefaultBranch(org, name)
+          .then(setDefaultBranchInfo)
+          .catch(() => setDefaultBranchInfo(null));
+        setTimeout(() => modeContainerRef.current?.focus(), 50);
+      })
+      .finally(() => setCheckingCwd(false));
   }, [selectedRepo, fetchWorktrees]);
 
   // Auto-focus progression when mode changes
@@ -346,8 +372,11 @@ export function CreateSessionModal() {
     [],
   );
 
+  const repoNotCloned = cwdCheckResult !== null && !cwdCheckResult.exists;
+
   const isCreateDisabled = useCallback((): boolean => {
     if (!selectedRepo || !worktreeMode || creating) return true;
+    if (repoNotCloned || cloning) return true;
     switch (worktreeMode) {
       case 'main':
         return defaultBranchInfo !== null && !defaultBranchInfo.isOnDefault;
@@ -360,7 +389,7 @@ export function CreateSessionModal() {
       case 'new':
         return !newBranchName.trim();
     }
-  }, [selectedRepo, creating, worktreeMode, defaultBranchInfo, selectedWorktreeIndex, selectedPRIndex, selectedIssueIndex, newBranchName]);
+  }, [selectedRepo, creating, repoNotCloned, cloning, worktreeMode, defaultBranchInfo, selectedWorktreeIndex, selectedPRIndex, selectedIssueIndex, newBranchName]);
 
   const handleCreate = useCallback(async () => {
     if (!selectedRepo || !worktreeMode) return;
@@ -503,6 +532,38 @@ export function CreateSessionModal() {
     }
   }, [selectedRepo, worktreeMode, defaultBranchInfo, basePath, selectedWorktreeIndex, filteredWorktrees, selectedPRIndex, pullRequests, selectedIssueIndex, issues, newBranchName, claudePrompt, addSession, selectSession, setSessionGroups, closeModal, ticketContext, addTicketLink, removeTicketLink, ticketStoreTickets]);
 
+  const handleClone = useCallback(async () => {
+    if (!selectedRepo) return;
+    const [org, name] = selectedRepo.split('/');
+    if (!org || !name) return;
+
+    setCloning(true);
+    setCloneError('');
+
+    try {
+      await api.cloneRepo(org, name);
+      // Clone succeeded — mark cwd as existing and load worktrees
+      setCwdCheckResult({ exists: true });
+      fetchWorktrees(org, name).catch(() => {});
+      api.fetchDefaultBranch(org, name)
+        .then(setDefaultBranchInfo)
+        .catch(() => setDefaultBranchInfo(null));
+      setTimeout(() => modeContainerRef.current?.focus(), 50);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Clone failed';
+      // Extract message from API error body if present
+      const match = msg.match(/API error \d+: (.+)/s);
+      let friendly = match?.[1] ?? msg;
+      try {
+        const parsed = JSON.parse(friendly);
+        if (parsed?.message) friendly = parsed.message;
+      } catch { /* not JSON */ }
+      setCloneError(friendly);
+    } finally {
+      setCloning(false);
+    }
+  }, [selectedRepo, fetchWorktrees]);
+
   const resetForm = () => {
     setSelectedRepo('');
     setWorktreeMode(null);
@@ -516,6 +577,8 @@ export function CreateSessionModal() {
     setIssues([]);
     setDefaultBranchInfo(null);
     setDiffStatsByBranch({});
+    setCwdCheckResult(null);
+    setCloneError('');
     appliedTicketContextRef.current = null;
   };
 
@@ -594,8 +657,40 @@ export function CreateSessionModal() {
           autoFocus={open && !ticketContext?.repo}
         />
 
+        {/* Clone notice — shown when repo is not cloned yet */}
+        {selectedRepo && checkingCwd && (
+          <div className="rounded-md border border-[var(--theme-border-default)] bg-[var(--theme-bg-overlay)] px-3 py-2 text-sm text-[var(--theme-text-secondary)]">
+            Checking repository…
+          </div>
+        )}
+
+        {selectedRepo && !checkingCwd && repoNotCloned && !cloning && !cloneError && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+            <div className="mb-1 font-medium text-amber-400">📥 Not cloned yet</div>
+            <div className="text-[var(--theme-text-secondary)]">
+              Remote: <span className="font-mono text-xs">{(cwdCheckResult as { exists: false; remote: string; targetPath: string }).remote}</span>
+            </div>
+            <div className="text-[var(--theme-text-secondary)]">
+              Target: <span className="font-mono text-xs">{(cwdCheckResult as { exists: false; remote: string; targetPath: string }).targetPath}</span>
+            </div>
+          </div>
+        )}
+
+        {selectedRepo && cloning && (
+          <div className="rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm text-blue-400">
+            ⏳ Cloning {selectedRepo}…
+          </div>
+        )}
+
+        {selectedRepo && cloneError && (
+          <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            <div className="mb-1 font-medium">❌ Clone failed</div>
+            <div className="font-mono text-xs">{cloneError}</div>
+          </div>
+        )}
+
         {/* Worktree mode segmented control */}
-        {selectedRepo && (
+        {selectedRepo && !repoNotCloned && !cloning && (
           <div className="flex flex-col gap-1">
             <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Worktree</span>
             <div
@@ -749,14 +844,24 @@ export function CreateSessionModal() {
         <Button variant="ghost" onClick={handleClose}>
           Cancel
         </Button>
-        <Button
-          variant="primary"
-          onClick={handleCreate}
-          disabled={isCreateDisabled()}
-        >
-          {creating ? 'Creating...' : 'Create Sessions'}
-          <HotkeyBadge hotkey="⌘↵" position="inline" visible={!isCreateDisabled()} />
-        </Button>
+        {selectedRepo && (repoNotCloned || cloning || cloneError) ? (
+          <Button
+            variant="primary"
+            onClick={cloneError ? () => { setCloneError(''); handleClone(); } : handleClone}
+            disabled={cloning}
+          >
+            {cloning ? 'Cloning…' : cloneError ? 'Retry Clone' : 'Clone & Open →'}
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={handleCreate}
+            disabled={isCreateDisabled()}
+          >
+            {creating ? 'Creating...' : 'Create Sessions'}
+            <HotkeyBadge hotkey="⌘↵" position="inline" visible={!isCreateDisabled()} />
+          </Button>
+        )}
       </div>
     </Modal>
   );

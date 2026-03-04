@@ -3,6 +3,7 @@ import type { SessionStorePort } from '../../src/application/ports/session-store
 import type { GitPort } from '../../src/application/ports/git.port.js';
 import type { ConfigPort, AppConfig } from '../../src/application/ports/config.port.js';
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
+import type { HostFs } from '../../src/infrastructure/host/types.js';
 import type { DiffStats, GitRemoteInfo, Worktree } from '@asm/shared';
 import { SessionEntity } from '../../src/domain/entities.js';
 
@@ -160,5 +161,48 @@ export class FakeLoggerPort implements LoggerPort {
 
   debug(msg: string, data?: Record<string, unknown>): void {
     this.logs.push({ level: 'debug', msg, data });
+  }
+}
+
+export class FakeHostFs implements HostFs {
+  private existingPaths = new Set<string>();
+  writtenFiles = new Map<string, string>();
+  createdDirs = new Set<string>();
+
+  addExistingPath(path: string): void {
+    this.existingPaths.add(path);
+  }
+
+  async exists(path: string): Promise<boolean> {
+    return this.existingPaths.has(path);
+  }
+
+  async mkdir(path: string): Promise<void> {
+    this.createdDirs.add(path);
+    this.existingPaths.add(path);
+  }
+
+  async readFile(path: string): Promise<string> {
+    const content = this.writtenFiles.get(path);
+    if (content === undefined) throw new Error(`File not found: ${path}`);
+    return content;
+  }
+
+  async writeFile(path: string, content: string): Promise<void> {
+    this.writtenFiles.set(path, content);
+  }
+
+  async readdir(): Promise<{ name: string; isFile: boolean; isDirectory: boolean }[]> {
+    return [];
+  }
+
+  async stat(): Promise<{ size: number; mtimeMs: number } | null> {
+    return null;
+  }
+
+  async rm(): Promise<void> {}
+
+  async readTail(): Promise<string> {
+    return '';
   }
 }
