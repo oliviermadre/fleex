@@ -3,6 +3,7 @@ import { useSettingsStore, type AppSettings, type PinnedIcon, type WorktreeActio
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { TagInput } from '../ui/TagInput';
 import { AppearanceTab } from './AppearanceTab';
 import { cn } from '../../lib/cn';
 import type { AgentToken } from '@asm/shared';
@@ -28,40 +29,36 @@ export function SettingsPanel() {
 
   const [basePath, setBasePath] = useState('');
   const [humanMentionName, setHumanMentionName] = useState('');
-  const [repoPatterns, setRepoPatterns] = useState('');
+  const [repoPatterns, setRepoPatterns] = useState<string[]>([]);
+  const resolveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [pinnedIcons, setPinnedIcons] = useState<PinnedIcon[]>([]);
   const [worktreeActions, setWorktreeActions] = useState<WorktreeAction[]>([]);
 
   useEffect(() => {
     setBasePath(settings.basePath);
     setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
-    setRepoPatterns(settings.repositories.join('\n'));
+    setRepoPatterns(settings.repositories);
     setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
     setWorktreeActions((settings.worktreeActions ?? []).map((a) => ({ ...a })));
   }, [settings]);
 
   const handleSave = async () => {
-    const repos = repoPatterns
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-
     await saveSettings({
       basePath,
-      repositories: repos,
+      repositories: repoPatterns,
       pinnedIcons,
       worktreeActions,
       ...(humanMentionName.trim() ? { humanMentionName: humanMentionName.trim() } : { humanMentionName: undefined }),
     } as Partial<AppSettings> & Record<string, unknown>);
   };
 
-  const handleResolve = () => {
-    const repos = repoPatterns
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-    saveSettings({ repositories: repos }).then(() => resolveRepositories());
-  };
+  const handleTagsChange = useCallback((newTags: string[]) => {
+    setRepoPatterns(newTags);
+    clearTimeout(resolveTimerRef.current);
+    resolveTimerRef.current = setTimeout(() => {
+      saveSettings({ repositories: newTags }).then(() => resolveRepositories());
+    }, 600);
+  }, [saveSettings, resolveRepositories]);
 
   const addPinnedIcon = () => {
     setPinnedIcons([
@@ -134,12 +131,9 @@ export function SettingsPanel() {
           {settingsTab === 'appearance' && <AppearanceTab />}
           {settingsTab === 'repositories' && (
             <RepositoriesTab
-              repoPatterns={repoPatterns}
-              setRepoPatterns={setRepoPatterns}
-              resolvedRepositories={settings.resolvedRepositories}
-              resolvedAt={settings.resolvedAt}
+              tags={repoPatterns}
+              onTagsChange={handleTagsChange}
               resolving={resolving}
-              onResolve={handleResolve}
             />
           )}
           {settingsTab === 'pinned-icons' && (
@@ -222,69 +216,29 @@ function GeneralTab({
 }
 
 function RepositoriesTab({
-  repoPatterns,
-  setRepoPatterns,
-  resolvedRepositories,
-  resolvedAt,
+  tags,
+  onTagsChange,
   resolving,
-  onResolve,
 }: {
-  repoPatterns: string;
-  setRepoPatterns: (v: string) => void;
-  resolvedRepositories: string[];
-  resolvedAt: string | null;
+  tags: string[];
+  onTagsChange: (tags: string[]) => void;
   resolving: boolean;
-  onResolve: () => void;
 }) {
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
-          Repository Patterns
-        </label>
-        <textarea
-          className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
-          rows={8}
-          placeholder={"odys-travel/*\nmyorg/specific-repo\nanother-org/*"}
-          value={repoPatterns}
-          onChange={(e) => setRepoPatterns(e.target.value)}
-        />
-        <p className="text-xs text-[var(--theme-text-muted)]">
-          One pattern per line. Use <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">org/*</code> to
-          include all repos from an organization.
-        </p>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onResolve}
-          disabled={resolving}
-        >
-          {resolving ? 'Resolving...' : 'Resolve Patterns'}
-        </Button>
-        {resolvedAt && (
-          <span className="text-xs text-[var(--theme-text-muted)]">
-            Last resolved: {new Date(resolvedAt).toLocaleString()}
-          </span>
-        )}
-      </div>
-
-      {resolvedRepositories.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
-            Resolved Repositories ({resolvedRepositories.length})
-          </label>
-          <div className="max-h-64 overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-3">
-            {resolvedRepositories.map((repo) => (
-              <div key={repo} className="text-xs text-[var(--theme-text-secondary)] py-0.5">
-                {repo}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <TagInput
+        label="Repository Patterns"
+        tags={tags}
+        onChange={onTagsChange}
+        placeholder="org/* or owner/repo"
+        helperText={
+          <p>
+            Use <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">org/*</code> to
+            include all repos from an organization.{' '}
+            {resolving && <span className="text-[var(--theme-accent)]">Resolving…</span>}
+          </p>
+        }
+      />
     </div>
   );
 }
