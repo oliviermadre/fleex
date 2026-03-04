@@ -274,22 +274,22 @@ export class ExecuteAgentUseCase {
         mentionId: mention.id,
       });
 
-      // 3. Compose system prompt from persona files
-      const systemPrompt = this.composeSystemPrompt(persona, humanName);
+      // 3. Ensure worktree exists for agent work (needed before prompt composition)
+      const worktreePath = await this.ensureWorktree(mention.ticketId);
 
-      // 4. Load ticket context
+      // 4. Compose system prompt from persona files
+      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
+
+      // 5. Load ticket context
       const context = await this.getTicketContext.execute({
         ticketId: mention.ticketId,
         agentName: persona.name,
       });
 
-      // 5. Build user prompt with ticket context
+      // 6. Build user prompt with ticket context
       const sessionKey = `${persona.name}:${mention.ticketId}`;
       const isWakeUp = mention.status === 'pending' && this.sessionHistory.has(sessionKey);
       const userPrompt = this.composeUserPrompt(context, mention, isWakeUp);
-
-      // 6. Ensure worktree exists for agent work
-      const worktreePath = await this.ensureWorktree(mention.ticketId);
 
       this.logger.info('Agent execution started', {
         executionId,
@@ -323,6 +323,7 @@ export class ExecuteAgentUseCase {
       if (persona.memoryMd) contextSections.push('MEMORY.md');
       contextSections.push('Structured output instructions');
       if (humanName) contextSections.push(`Human operator (@${humanName})`);
+      if (worktreePath) contextSections.push(`Working directory (${worktreePath})`);
 
       await emitEvent('execution_start', {
         executionId,
@@ -669,7 +670,7 @@ export class ExecuteAgentUseCase {
     }
   }
 
-  private composeSystemPrompt(persona: AgentPersonaEntity, humanName: string | null): string {
+  private composeSystemPrompt(persona: AgentPersonaEntity, humanName: string | null, worktreePath: string | null = null): string {
     const parts: string[] = [];
 
     if (persona.soulMd) {
@@ -695,6 +696,15 @@ export class ExecuteAgentUseCase {
         + `To mention the human, you **MUST** use exactly \`@${humanName}\` — this is the only tag the system tracks. `
         + `Do NOT use any other form (no display name, no email, no variation). `
         + `Use \`@${humanName}\` whenever you need human input, decisions, or answers to open questions.`,
+      );
+    }
+
+    if (worktreePath) {
+      parts.push(
+        `## Working Directory\n\n`
+        + `Your working directory is:\n\`${worktreePath}\`\n\n`
+        + `Always use relative paths (e.g. \`packages/server/src/...\`) or this exact path for absolute references. `
+        + `Do NOT guess or infer the project root from other context — use this path.`,
       );
     }
 
@@ -725,7 +735,10 @@ export class ExecuteAgentUseCase {
     if (context.deliverables.length > 0) {
       parts.push('\n## Deliverables\n');
       for (const d of context.deliverables) {
-        parts.push(`- [${d.status}] ${d.title} (${d.type}) by ${d.agentName}`);
+        parts.push(`### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}\n`);
+        if (d.content) {
+          parts.push(d.content);
+        }
       }
     }
 
