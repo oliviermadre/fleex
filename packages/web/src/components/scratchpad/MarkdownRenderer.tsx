@@ -1,271 +1,361 @@
-import { useState } from 'react';
+import { useMemo, useState, Children } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import type { Components } from 'react-markdown';
 
 interface MarkdownRendererProps {
   content: string;
   onToggleCheckbox: (lineIndex: number) => void;
 }
 
-/**
- * Lightweight markdown renderer supporting:
- * - Headings (h1, h2, h3)
- * - Checkboxes (- [ ] / - [x]) — interactive
- * - Unordered lists (- item)
- * - Ordered lists (1. item)
- * - Bold, italic, inline code
- * - Collapsible toggles (>>> summary / content / <<<)
- * - Horizontal rules (---)
- * - Blockquotes (> text)
- */
-export function MarkdownRenderer({ content, onToggleCheckbox }: MarkdownRendererProps) {
-  const lines = content.split('\n');
-  const elements: React.ReactNode[] = [];
+// ── Segment types ─────────────────────────────────────────────────────────────
 
+interface TextSegment {
+  type: 'text';
+  content: string;
+  /** 0-indexed line offset in the original content */
+  startLine: number;
+}
+
+interface ToggleSegment {
+  type: 'toggle';
+  summary: string;
+  content: string;
+  /** 0-indexed line of the first content line in the original content */
+  contentStartLine: number;
+}
+
+type Segment = TextSegment | ToggleSegment;
+
+/**
+ * Split content into plain text segments and toggle blocks (>>> ... <<<).
+ * Toggle block content is not passed to react-markdown — it's rendered
+ * recursively by MarkdownRenderer itself, which handles nesting correctly.
+ */
+function parseSegments(content: string): Segment[] {
+  const segments: Segment[] = [];
+  const lines = content.split('\n');
   let i = 0;
+  let textBuffer: string[] = [];
+  let textStartLine = 0;
+
+  const flushText = () => {
+    if (textBuffer.length > 0) {
+      segments.push({ type: 'text', content: textBuffer.join('\n'), startLine: textStartLine });
+      textBuffer = [];
+    }
+  };
+
   while (i < lines.length) {
     const line = lines[i]!;
 
-    // Collapsible toggle block: >>> summary ... <<<
     if (line.startsWith('>>>')) {
+      flushText();
+
       const summary = line.slice(3).trim() || 'Toggle';
-      const blockLines: string[] = [];
       i++;
+      const contentStartLine = i;
+      const blockLines: string[] = [];
+
       while (i < lines.length && !lines[i]!.startsWith('<<<')) {
         blockLines.push(lines[i]!);
         i++;
       }
       if (i < lines.length) i++; // skip <<<
-      elements.push(
-        <ToggleBlock key={`toggle-${i}`} summary={summary}>
-          <MarkdownRenderer
-            content={blockLines.join('\n')}
-            onToggleCheckbox={(localLine) => {
-              // Map local line to global line index
-              // We need to find the start of this block
-            }}
+
+      segments.push({ type: 'toggle', summary, content: blockLines.join('\n'), contentStartLine });
+      textStartLine = i;
+    } else {
+      if (textBuffer.length === 0) textStartLine = i;
+      textBuffer.push(line);
+      i++;
+    }
+  }
+
+  flushText();
+  return segments;
+}
+
+// ── rehype plugins config ─────────────────────────────────────────────────────
+
+// detect: true → rehype-highlight adds the `hljs` class even to code blocks
+// without a language specifier, so we can reliably distinguish block vs inline
+// code in the `code` component override.
+const remarkPlugins = [remarkGfm];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const rehypePlugins: any[] = [[rehypeHighlight, { detect: true }]];
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export function MarkdownRenderer({ content, onToggleCheckbox }: MarkdownRendererProps) {
+  const segments = useMemo(() => parseSegments(content), [content]);
+
+  return (
+    <div className="scratchpad-md">
+      {segments.map((segment, i) => {
+        if (segment.type === 'toggle') {
+          return (
+            <ToggleBlock key={i} summary={segment.summary}>
+              <MarkdownRenderer
+                content={segment.content}
+                onToggleCheckbox={(localLine) =>
+                  onToggleCheckbox(segment.contentStartLine + localLine)
+                }
+              />
+            </ToggleBlock>
+          );
+        }
+
+        return (
+          <MarkdownSection
+            key={i}
+            content={segment.content}
+            startLine={segment.startLine}
+            onToggleCheckbox={onToggleCheckbox}
           />
-        </ToggleBlock>
-      );
-      continue;
-    }
+        );
+      })}
+    </div>
+  );
+}
 
-    // Empty line
-    if (line.trim() === '') {
-      elements.push(<div key={`blank-${i}`} className="h-2" />);
-      i++;
-      continue;
-    }
+// ── Section renderer ──────────────────────────────────────────────────────────
 
-    // Horizontal rule
-    if (/^-{3,}$/.test(line.trim()) || /^\*{3,}$/.test(line.trim())) {
-      elements.push(
-        <hr
-          key={`hr-${i}`}
-          className="my-3 border-t border-[var(--theme-border)]"
-        />
-      );
-      i++;
-      continue;
-    }
+function MarkdownSection({
+  content,
+  startLine,
+  onToggleCheckbox,
+}: {
+  content: string;
+  startLine: number;
+  onToggleCheckbox: (lineIndex: number) => void;
+}) {
+  // Pre-compute checkbox line indices within this segment (0-indexed, local)
+  const lines = useMemo(() => content.split('\n'), [content]);
+  const checkboxLocalLines = useMemo(
+    () =>
+      lines
+        .map((line, idx) => ({ line, idx }))
+        .filter(({ line }) => /^(\s*)[-*]\s+\[([ xX])\]/.test(line))
+        .map(({ idx }) => idx),
+    [lines],
+  );
 
-    // Heading
-    const headingMatch = line.match(/^(#{1,3})\s+(.+)/);
-    if (headingMatch) {
-      const level = headingMatch[1]!.length;
-      const text = headingMatch[2]!;
-      const Tag = `h${level}` as 'h1' | 'h2' | 'h3';
-      const sizes: Record<string, string> = {
-        h1: 'text-xl font-bold mt-4 mb-2',
-        h2: 'text-lg font-semibold mt-3 mb-1.5',
-        h3: 'text-base font-medium mt-2 mb-1',
-      };
-      elements.push(
-        <Tag
-          key={`h-${i}`}
-          className={`${sizes[Tag]} text-[var(--theme-text-primary)]`}
-        >
-          {renderInline(text)}
-        </Tag>
-      );
-      i++;
-      continue;
-    }
+  // Mutable counter — incremented during a single render pass in tree order.
+  // `li` (task-list-item) reads the counter BEFORE `input` increments it,
+  // because React calls parent component overrides before child ones.
+  let checkboxCounter = 0;
 
-    // Blockquote
-    if (line.startsWith('>')) {
-      const quoteLines: string[] = [];
-      while (i < lines.length && lines[i]!.startsWith('>')) {
-        quoteLines.push(lines[i]!.replace(/^>\s?/, ''));
-        i++;
+  const components: Components = {
+    // ── Links ───────────────────────────────────────────────────────────────
+    a: ({ href, children }) => (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[var(--theme-accent)] underline underline-offset-2 hover:text-[var(--theme-accent-hover)] transition-colors break-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </a>
+    ),
+
+    // ── Headings ─────────────────────────────────────────────────────────────
+    h1: ({ children }) => (
+      <h1 className="text-xl font-bold mt-4 mb-2 text-[var(--theme-text-primary)]">{children}</h1>
+    ),
+    h2: ({ children }) => (
+      <h2 className="text-lg font-semibold mt-3 mb-1.5 text-[var(--theme-text-primary)]">
+        {children}
+      </h2>
+    ),
+    h3: ({ children }) => (
+      <h3 className="text-base font-medium mt-2 mb-1 text-[var(--theme-text-primary)]">
+        {children}
+      </h3>
+    ),
+    h4: ({ children }) => (
+      <h4 className="text-sm font-medium mt-2 mb-1 text-[var(--theme-text-secondary)]">
+        {children}
+      </h4>
+    ),
+    h5: ({ children }) => (
+      <h5 className="text-xs font-medium mt-1.5 mb-0.5 text-[var(--theme-text-secondary)]">
+        {children}
+      </h5>
+    ),
+    h6: ({ children }) => (
+      <h6 className="text-xs font-medium mt-1.5 mb-0.5 text-[var(--theme-text-muted)]">
+        {children}
+      </h6>
+    ),
+
+    // ── Paragraph ────────────────────────────────────────────────────────────
+    p: ({ children }) => (
+      <p className="text-sm leading-5 py-0.5 text-[var(--theme-text-primary)]">{children}</p>
+    ),
+
+    // ── Blockquote ───────────────────────────────────────────────────────────
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-2 border-[var(--theme-accent)] pl-3 my-1 text-[var(--theme-text-secondary)] italic">
+        {children}
+      </blockquote>
+    ),
+
+    // ── Horizontal rule ──────────────────────────────────────────────────────
+    hr: () => <hr className="my-3 border-t border-[var(--theme-border)]" />,
+
+    // ── Lists ────────────────────────────────────────────────────────────────
+    ul: ({ children, className }) => (
+      <ul
+        className={`my-1 ${
+          className?.includes('contains-task-list') ? 'list-none pl-0' : 'list-disc pl-5'
+        }`}
+      >
+        {children}
+      </ul>
+    ),
+    ol: ({ children }) => <ol className="my-1 pl-5 list-decimal">{children}</ol>,
+
+    li: ({ children, className }) => {
+      if (className?.includes('task-list-item')) {
+        // Capture the counter BEFORE input increments it.
+        const cbIdx = checkboxCounter;
+        const localLine = checkboxLocalLines[cbIdx] ?? 0;
+        const rawLine = lines[localLine] ?? '';
+        const isChecked = /^(\s*)[-*]\s+\[[xX]\]/.test(rawLine);
+        const globalLine = startLine + localLine;
+
+        // children = [checkboxSpan, ...textNodes]
+        // The checkbox span comes from our `input` override below.
+        const childArr = Children.toArray(children);
+
+        return (
+          <div
+            className="flex items-start gap-2 py-0.5 cursor-pointer group"
+            onClick={() => onToggleCheckbox(globalLine)}
+          >
+            {childArr[0]}
+            <span
+              className={`text-sm leading-5 ${
+                isChecked
+                  ? 'line-through text-[var(--theme-text-muted)]'
+                  : 'text-[var(--theme-text-primary)]'
+              }`}
+            >
+              {childArr.slice(1)}
+            </span>
+          </div>
+        );
       }
-      elements.push(
-        <blockquote
-          key={`bq-${i}`}
-          className="border-l-2 border-[var(--theme-accent)] pl-3 my-1 text-[var(--theme-text-secondary)] italic"
-        >
-          {quoteLines.map((ql, qi) => (
-            <div key={qi}>{renderInline(ql)}</div>
-          ))}
-        </blockquote>
-      );
-      continue;
-    }
 
-    // Checkbox list item
-    const checkboxMatch = line.match(/^(\s*)[-*]\s+\[([ xX])\]\s*(.*)/);
-    if (checkboxMatch) {
-      const indent = checkboxMatch[1]!.length;
-      const checked = checkboxMatch[2] !== ' ';
-      const text = checkboxMatch[3]!;
-      const lineIdx = i;
-      elements.push(
-        <div
-          key={`cb-${i}`}
-          className="flex items-start gap-2 py-0.5 cursor-pointer group"
-          style={{ paddingLeft: `${indent * 8 + 4}px` }}
-          onClick={() => onToggleCheckbox(lineIdx)}
-        >
+      return (
+        <li className="py-0.5 text-sm leading-5 text-[var(--theme-text-primary)] marker:text-[var(--theme-text-muted)]">
+          {children}
+        </li>
+      );
+    },
+
+    // ── Checkbox (interactive) ───────────────────────────────────────────────
+    // Incremented AFTER li reads the counter (parent renders before child).
+    input: ({ type, checked }) => {
+      if (type === 'checkbox') {
+        checkboxCounter++;
+        const isChecked = checked ?? false;
+        return (
           <span
             className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-              checked
+              isChecked
                 ? 'bg-[var(--theme-accent)] border-[var(--theme-accent)] text-white'
                 : 'border-[var(--theme-text-muted)] group-hover:border-[var(--theme-accent)]'
             }`}
           >
-            {checked && (
+            {isChecked && (
               <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
-                <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d="M2.5 6L5 8.5L9.5 3.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             )}
           </span>
-          <span
-            className={`text-sm leading-5 ${
-              checked
-                ? 'line-through text-[var(--theme-text-muted)]'
-                : 'text-[var(--theme-text-primary)]'
-            }`}
-          >
-            {renderInline(text)}
-          </span>
-        </div>
-      );
-      i++;
-      continue;
-    }
+        );
+      }
+      return <input type={type} readOnly />;
+    },
 
-    // Unordered list
-    const ulMatch = line.match(/^(\s*)[-*]\s+(.*)/);
-    if (ulMatch) {
-      const indent = ulMatch[1]!.length;
-      const text = ulMatch[2]!;
-      elements.push(
-        <div
-          key={`ul-${i}`}
-          className="flex items-start gap-2 py-0.5"
-          style={{ paddingLeft: `${indent * 8 + 4}px` }}
-        >
-          <span className="mt-2 flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--theme-text-muted)]" />
-          <span className="text-sm leading-5 text-[var(--theme-text-primary)]">
-            {renderInline(text)}
-          </span>
-        </div>
-      );
-      i++;
-      continue;
-    }
+    // ── Inline formatting ────────────────────────────────────────────────────
+    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+    em: ({ children }) => <em className="italic">{children}</em>,
+    del: ({ children }) => (
+      <del className="line-through text-[var(--theme-text-muted)]">{children}</del>
+    ),
 
-    // Ordered list
-    const olMatch = line.match(/^(\s*)(\d+)\.\s+(.*)/);
-    if (olMatch) {
-      const indent = olMatch[1]!.length;
-      const num = olMatch[2]!;
-      const text = olMatch[3]!;
-      elements.push(
-        <div
-          key={`ol-${i}`}
-          className="flex items-start gap-2 py-0.5"
-          style={{ paddingLeft: `${indent * 8 + 4}px` }}
-        >
-          <span className="flex-shrink-0 text-sm text-[var(--theme-text-muted)] min-w-[1.2em] text-right">
-            {num}.
-          </span>
-          <span className="text-sm leading-5 text-[var(--theme-text-primary)]">
-            {renderInline(text)}
-          </span>
-        </div>
-      );
-      i++;
-      continue;
-    }
-
-    // Plain paragraph
-    elements.push(
-      <p key={`p-${i}`} className="text-sm leading-5 py-0.5 text-[var(--theme-text-primary)]">
-        {renderInline(line)}
-      </p>
-    );
-    i++;
-  }
-
-  return <div className="scratchpad-md">{elements}</div>;
-}
-
-/** Render inline markdown: bold, italic, code, strikethrough */
-function renderInline(text: string): React.ReactNode[] {
-  const nodes: React.ReactNode[] = [];
-  // Pattern order: code first (to avoid matching * inside code), then bold, italic, strikethrough
-  const regex = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\~\~[^~]+\~\~)/g;
-
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(text)) !== null) {
-    // Add text before this match
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
-    }
-
-    const [full] = match;
-    if (full.startsWith('`')) {
-      nodes.push(
-        <code
-          key={`code-${match.index}`}
-          className="px-1 py-0.5 rounded text-xs bg-[var(--theme-bg-overlay)] text-[var(--theme-accent)] font-mono"
-        >
-          {full.slice(1, -1)}
+    // ── Code ─────────────────────────────────────────────────────────────────
+    // rehype-highlight (detect:true) adds the `hljs` class to ALL pre>code
+    // elements. Inline code has no className → reliable block vs inline check.
+    code: ({ children, className }) => {
+      if (className?.includes('hljs')) {
+        // Block code — `pre` handles the container styling
+        return <code className={className}>{children}</code>;
+      }
+      // Inline code
+      return (
+        <code className="px-1 py-0.5 rounded text-xs bg-[var(--theme-bg-overlay)] text-[var(--theme-accent)] font-mono">
+          {children}
         </code>
       );
-    } else if (full.startsWith('**')) {
-      nodes.push(
-        <strong key={`b-${match.index}`} className="font-semibold">
-          {full.slice(2, -2)}
-        </strong>
-      );
-    } else if (full.startsWith('*')) {
-      nodes.push(
-        <em key={`i-${match.index}`} className="italic">
-          {full.slice(1, -1)}
-        </em>
-      );
-    } else if (full.startsWith('~~')) {
-      nodes.push(
-        <span key={`s-${match.index}`} className="line-through text-[var(--theme-text-muted)]">
-          {full.slice(2, -2)}
-        </span>
-      );
-    }
+    },
 
-    lastIndex = match.index + full.length;
-  }
+    pre: ({ children }) => (
+      <pre className="my-2 p-3 rounded-md bg-[var(--theme-bg-overlay)] overflow-x-auto text-xs font-mono leading-relaxed">
+        {children}
+      </pre>
+    ),
 
-  // Add remaining text
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
+    // ── Tables ───────────────────────────────────────────────────────────────
+    table: ({ children }) => (
+      <div className="my-2 overflow-x-auto rounded-md border border-[var(--theme-border)]">
+        <table className="w-full text-sm border-collapse">{children}</table>
+      </div>
+    ),
+    thead: ({ children }) => (
+      <thead className="bg-[var(--theme-bg-overlay)]">{children}</thead>
+    ),
+    tbody: ({ children }) => (
+      <tbody className="divide-y divide-[var(--theme-border)]">{children}</tbody>
+    ),
+    tr: ({ children }) => <tr className="even:bg-[var(--theme-bg-hover)]">{children}</tr>,
+    th: ({ children }) => (
+      <th className="px-3 py-1.5 text-left text-xs font-semibold text-[var(--theme-text-primary)] border-r border-[var(--theme-border)] last:border-r-0 whitespace-nowrap">
+        {children}
+      </th>
+    ),
+    td: ({ children }) => (
+      <td className="px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] border-r border-[var(--theme-border)] last:border-r-0">
+        {children}
+      </td>
+    ),
 
-  return nodes.length > 0 ? nodes : [text];
+    // ── Images ───────────────────────────────────────────────────────────────
+    img: ({ src, alt }) => (
+      <img src={src} alt={alt ?? ''} className="max-w-full rounded-md my-2" loading="lazy" />
+    ),
+  };
+
+  return (
+    <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+      {content}
+    </Markdown>
+  );
 }
 
-/** Collapsible toggle block */
+// ── Collapsible toggle block ──────────────────────────────────────────────────
+
 function ToggleBlock({ summary, children }: { summary: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
@@ -285,9 +375,7 @@ function ToggleBlock({ summary, children }: { summary: string; children: React.R
         <span className="font-medium">{summary}</span>
       </button>
       {open && (
-        <div className="px-3 pb-2 border-t border-[var(--theme-border-subtle)]">
-          {children}
-        </div>
+        <div className="px-3 pb-2 border-t border-[var(--theme-border-subtle)]">{children}</div>
       )}
     </div>
   );
