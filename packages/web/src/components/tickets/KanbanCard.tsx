@@ -146,7 +146,7 @@ export function KanbanCard({
               'rounded transition-all',
               ticket.blocked
                 ? 'opacity-100 text-red-500 hover:text-red-400'
-                : 'opacity-15 text-[var(--theme-text-muted)] hover:opacity-100',
+                : 'opacity-30 text-[var(--theme-text-muted)] hover:opacity-100',
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -154,7 +154,7 @@ export function KanbanCard({
             }}
             title={ticket.blocked ? 'Unblock ticket' : 'Mark as blocked'}
           >
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
               <rect x="3" y="7" width="10" height="8" rx="1.5" />
               <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
             </svg>
