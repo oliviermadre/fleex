@@ -111,7 +111,7 @@ export function SessionHeader({ session, splitFocused }: Props) {
 }
 
 /** Tab bar for sibling sessions within the same worktree */
-export function SessionTabs({ currentSession }: { currentSession: Session }) {
+export function SessionTabs({ currentSession, onSessionChange }: { currentSession: Session; onSessionChange?: (sessionId: string) => void }) {
   const navigate = useNavigate();
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const addSession = useSessionStore((s) => s.addSession);
@@ -214,19 +214,23 @@ export function SessionTabs({ currentSession }: { currentSession: Session }) {
     try {
       await api.killSession(sessionId);
       removeSession(sessionId);
-      // If we just closed the active tab, navigate to a sibling
+      // If we just closed the active tab, switch to a sibling
       if (sessionId === currentSession.id) {
         const remaining = sortedSessions.filter((s) => s.id !== sessionId);
         if (remaining.length > 0) {
-          navigate(`/sessions/${remaining[0]!.id}`, { replace: true });
-        } else {
+          if (onSessionChange) {
+            onSessionChange(remaining[0]!.id);
+          } else {
+            navigate(`/sessions/${remaining[0]!.id}`, { replace: true });
+          }
+        } else if (!onSessionChange) {
           navigate('/sessions', { replace: true });
         }
       }
     } catch {
       // silently fail
     }
-  }, [currentSession.id, sortedSessions, removeSession, navigate]);
+  }, [currentSession.id, sortedSessions, removeSession, setSessionGroups, navigate, onSessionChange]);
 
   const basePath = useSettingsStore((s) => s.settings.basePath);
 
@@ -268,6 +272,7 @@ export function SessionTabs({ currentSession }: { currentSession: Session }) {
               session={s}
               isActive={s.id === currentSession.id}
               onClose={handleCloseTab}
+              onNavigate={onSessionChange}
             />
             {isOver && dropEdge === 'right' && (
               <div className="absolute right-0 top-1 bottom-1 z-10 w-0.5 rounded bg-[var(--theme-accent)]" />
@@ -292,7 +297,7 @@ export function SessionTabs({ currentSession }: { currentSession: Session }) {
 }
 
 /** Individual tab with inline rename (double-click) and close button (hover) */
-function SessionTab({ session, isActive, onClose }: { session: Session; isActive: boolean; onClose: (id: string) => void }) {
+function SessionTab({ session, isActive, onClose, onNavigate }: { session: Session; isActive: boolean; onClose: (id: string) => void; onNavigate?: (id: string) => void }) {
   const navigate = useNavigate();
   const setSessions = useSessionStore((s) => s.setSessions);
   const sessions = useSessionStore((s) => s.sessions);
@@ -347,7 +352,7 @@ function SessionTab({ session, isActive, onClose }: { session: Session; isActive
           : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
       )}
       role="button"
-      onClick={() => { if (!editing) navigate(`/sessions/${session.id}`, { replace: true }); }}
+      onClick={() => { if (!editing) { if (onNavigate) onNavigate(session.id); else navigate(`/sessions/${session.id}`, { replace: true }); } }}
       onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
     >
       {/* Session type icon */}

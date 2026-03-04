@@ -2,90 +2,62 @@ import { useState } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { SessionLayoutGroup, SessionLayoutType } from '../../stores/settingsStore';
+// cells now store worktree keys ("org/repo:branch" or "_system"), not session IDs
+import { CellAssignDropdown } from '../ui/CellAssignDropdown';
 import { cn } from '../../lib/cn';
 
-function CellGrid({ group, selectedGroupId, activeGroupCellIndex, onCellClick }: {
+interface OpenDropdown {
+  groupId: string;
+  cellIndex: number;
+  currentWorktreeKey: string | null;
+  rect: DOMRect;
+}
+
+function CellGrid({ group, selectedGroupId, onCellClick }: {
   group: SessionLayoutGroup;
   selectedGroupId: string | null;
-  activeGroupCellIndex: number | null;
-  onCellClick: (groupId: string, cellIndex: number) => void;
+  onCellClick: (groupId: string, cellIndex: number, currentWorktreeKey: string | null, rect: DOMRect) => void;
 }) {
-  const displayNames = useSettingsStore((s) => s.settings.sessionDisplayNames);
-  const sessions = useSessionStore((s) => s.sessions);
   const isGroupSelected = selectedGroupId === group.id;
 
-  const getCellLabel = (sessionId: string | null): string | null => {
-    if (!sessionId) return null;
-    const session = sessions.find((s) => s.id === sessionId);
-    if (session?.displayName) return session.displayName;
-    if (displayNames[sessionId]) return displayNames[sessionId];
-    return session?.tmuxName ?? null;
+  // Derive a short label from a worktree key ("org/repo:branch" → "branch", "_system" → "shell")
+  const getCellLabel = (worktreeKey: string | null): string | null => {
+    if (!worktreeKey) return null;
+    if (worktreeKey === '_system') return 'shell';
+    const colonIdx = worktreeKey.lastIndexOf(':');
+    return colonIdx !== -1 ? worktreeKey.substring(colonIdx + 1) : worktreeKey;
   };
 
-  if (group.type === '1x2') {
+  const cellButtons = group.cells.map((cellSessionId, i) => {
+    const label = getCellLabel(cellSessionId);
     return (
-      <div className="flex gap-0.5">
-        {group.cells.map((cellSessionId, i) => {
-          const label = getCellLabel(cellSessionId);
-          const isActiveCell = isGroupSelected && activeGroupCellIndex === i;
-          return (
-            <button
-              key={i}
-              className={cn(
-                'h-5 flex-1 rounded-sm border text-[8px] leading-none truncate px-0.5 transition-colors cursor-pointer',
-                isActiveCell
-                  ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
-                  : cellSessionId
-                    ? `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] bg-[var(--theme-bg-hover)]`
-                    : `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] border-dashed bg-transparent`
-              )}
-              title={label ?? 'Empty — click then shift-click a session to bind'}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCellClick(group.id, i);
-              }}
-            >
-              <span className="text-[var(--theme-text-muted)] truncate">
-                {label ?? ''}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <button
+        key={i}
+        className={cn(
+          'rounded-sm border text-[8px] leading-none truncate px-0.5 transition-colors cursor-pointer',
+          group.type === '1x2' ? 'h-5 flex-1' : 'h-4',
+          cellSessionId
+            ? `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] bg-[var(--theme-bg-hover)]`
+            : `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] border-dashed bg-transparent`
+        )}
+        title={label ?? 'Click to assign a session'}
+        onClick={(e) => {
+          e.stopPropagation();
+          onCellClick(group.id, i, cellSessionId, e.currentTarget.getBoundingClientRect());
+        }}
+      >
+        <span className="text-[var(--theme-text-muted)] truncate">
+          {label ?? ''}
+        </span>
+      </button>
     );
+  });
+
+  if (group.type === '1x2') {
+    return <div className="flex gap-0.5">{cellButtons}</div>;
   }
 
-  // 2x2
-  return (
-    <div className="grid grid-cols-2 gap-0.5">
-      {group.cells.map((cellSessionId, i) => {
-        const label = getCellLabel(cellSessionId);
-        const isActiveCell = isGroupSelected && activeGroupCellIndex === i;
-        return (
-          <button
-            key={i}
-            className={cn(
-              'h-4 rounded-sm border text-[7px] leading-none truncate px-0.5 transition-colors cursor-pointer',
-              isActiveCell
-                ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
-                : cellSessionId
-                  ? `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] bg-[var(--theme-bg-hover)]`
-                  : `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] border-dashed bg-transparent`
-            )}
-            title={label ?? 'Empty — click then shift-click a session to bind'}
-            onClick={(e) => {
-              e.stopPropagation();
-              onCellClick(group.id, i);
-            }}
-          >
-            <span className="text-[var(--theme-text-muted)] truncate">
-              {label ?? ''}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
+  return <div className="grid grid-cols-2 gap-0.5">{cellButtons}</div>;
 }
 
 export function GroupedSessions() {
@@ -93,15 +65,14 @@ export function GroupedSessions() {
   const addLayoutGroup = useSettingsStore((s) => s.addLayoutGroup);
   const removeLayoutGroup = useSettingsStore((s) => s.removeLayoutGroup);
   const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
-  const activeGroupCellIndex = useSessionStore((s) => s.activeGroupCellIndex);
   const selectGroup = useSessionStore((s) => s.selectGroup);
-  const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
 
   const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<OpenDropdown | null>(null);
 
-  const handleCellClick = (groupId: string, cellIndex: number) => {
+  const handleCellClick = (groupId: string, cellIndex: number, currentWorktreeKey: string | null, rect: DOMRect) => {
     selectGroup(groupId);
-    setActiveGroupCellIndex(cellIndex);
+    setOpenDropdown({ groupId, cellIndex, currentWorktreeKey, rect });
   };
 
   const handleGroupClick = (groupId: string) => {
@@ -217,7 +188,6 @@ export function GroupedSessions() {
                 <CellGrid
                   group={group}
                   selectedGroupId={selectedGroupId}
-                  activeGroupCellIndex={activeGroupCellIndex}
                   onCellClick={handleCellClick}
                 />
               </div>
@@ -237,6 +207,16 @@ export function GroupedSessions() {
           );
         })}
       </div>
+
+      {openDropdown && (
+        <CellAssignDropdown
+          groupId={openDropdown.groupId}
+          cellIndex={openDropdown.cellIndex}
+          currentWorktreeKey={openDropdown.currentWorktreeKey}
+          anchorRect={openDropdown.rect}
+          onClose={() => setOpenDropdown(null)}
+        />
+      )}
     </div>
   );
 }

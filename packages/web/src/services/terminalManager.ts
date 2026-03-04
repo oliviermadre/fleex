@@ -12,16 +12,22 @@ interface TerminalInstance {
   serializeAddon: SerializeAddon;
   clipboardProvider: AsmClipboardProvider;
   serializedBuffer: string | null;
+  /** The PTY session this terminal is connected to */
   sessionId: string;
+  /** Unique key for this instance (= sessionId in normal mode, cell-specific in group mode) */
+  instanceKey: string;
   lastActiveAt: number;
 }
 
 class TerminalManager {
+  /** All terminal instances, keyed by instanceKey */
   private terminals = new Map<string, TerminalInstance>();
+  /** sessionId → Set of instanceKeys watching that session (for output broadcast) */
+  private sessionInstances = new Map<string, Set<string>>();
   private currentTerminalTheme = TERMINAL_THEME;
 
-  create(sessionId: string): Terminal {
-    const existing = this.terminals.get(sessionId);
+  create(instanceKey: string, sessionId: string = instanceKey): Terminal {
+    const existing = this.terminals.get(instanceKey);
     if (existing) return existing.terminal;
 
     const terminal = new Terminal({
@@ -42,21 +48,16 @@ class TerminalManager {
     terminal.loadAddon(serializeAddon);
     terminal.loadAddon(new ClipboardAddon(undefined, clipboardProvider));
 
-    // Diagnostic: log OSC 52 sequences from tmux
     terminal.parser.registerOscHandler(52, (data) => {
       console.debug('[ASM:OSC52] received', { len: data.length });
-      return false; // let ClipboardAddon handle it too
+      return false;
     });
 
-    // Cmd+C (macOS) / Ctrl+Shift+C (Linux): copy from xterm selection or pending OSC 52 text
     terminal.attachCustomKeyEventHandler((ev) => {
       if (ev.type !== 'keydown' || ev.key !== 'c') return true;
-
       const isMacCopy = ev.metaKey && !ev.shiftKey && !ev.ctrlKey;
       const isLinuxCopy = ev.ctrlKey && ev.shiftKey && !ev.metaKey;
       if (!isMacCopy && !isLinuxCopy) return true;
-
-      // Priority 1: xterm.js native selection (user gesture → clipboard works)
       if (terminal.hasSelection()) {
         navigator.clipboard.writeText(terminal.getSelection()).then(
           () => console.debug('[ASM:Clipboard] copied xterm selection'),
@@ -64,8 +65,6 @@ class TerminalManager {
         );
         return false;
       }
-
-      // Priority 2: pending OSC 52 text that failed auto-write
       const pending = clipboardProvider.consumePendingText();
       if (pending) {
         navigator.clipboard.writeText(pending).then(
@@ -74,102 +73,89 @@ class TerminalManager {
         );
         return false;
       }
-
-      // No selection, no pending → let event through (Ctrl+C = SIGINT, etc.)
       return true;
     });
 
-    this.terminals.set(sessionId, {
+    this.terminals.set(instanceKey, {
       terminal,
       fitAddon,
       serializeAddon,
       clipboardProvider,
       serializedBuffer: null,
       sessionId,
+      instanceKey,
       lastActiveAt: Date.now(),
     });
 
-    this.loadWebGL(terminal);
+    // Register in session→instances map
+    if (!this.sessionInstances.has(sessionId)) {
+      this.sessionInstances.set(sessionId, new Set());
+    }
+    this.sessionInstances.get(sessionId)!.add(instanceKey);
 
+    this.loadWebGL(terminal);
     return terminal;
   }
 
-  attach(sessionId: string, container: HTMLElement): void {
-    const instance = this.terminals.get(sessionId);
+  attach(instanceKey: string, container: HTMLElement): void {
+    const instance = this.terminals.get(instanceKey);
     if (!instance) return;
-
     instance.lastActiveAt = Date.now();
-
-    // Open terminal in container if not already opened
     if (!instance.terminal.element) {
       instance.terminal.open(container);
     } else {
       container.appendChild(instance.terminal.element);
     }
-
-    // Restore serialized buffer if available
     if (instance.serializedBuffer) {
       instance.terminal.write(instance.serializedBuffer);
       instance.serializedBuffer = null;
     }
-
-    // Fit to container
-    try {
-      instance.fitAddon.fit();
-    } catch {
-      // Container may not be visible yet
-    }
+    try { instance.fitAddon.fit(); } catch { /* not visible yet */ }
   }
 
-  detach(sessionId: string): void {
-    const instance = this.terminals.get(sessionId);
+  detach(instanceKey: string): void {
+    const instance = this.terminals.get(instanceKey);
     if (!instance) return;
-
-    // Serialize buffer before detaching
-    try {
-      instance.serializedBuffer = instance.serializeAddon.serialize();
-    } catch {
-      instance.serializedBuffer = null;
-    }
-
-    // Remove terminal DOM element from container
+    try { instance.serializedBuffer = instance.serializeAddon.serialize(); } catch { instance.serializedBuffer = null; }
     if (instance.terminal.element?.parentElement) {
       instance.terminal.element.parentElement.removeChild(instance.terminal.element);
     }
   }
 
+  /** Write output data to ALL terminal instances watching this sessionId */
   write(sessionId: string, data: string | Uint8Array): void {
-    const instance = this.terminals.get(sessionId);
-    if (!instance) return;
-    instance.terminal.write(data);
-  }
-
-  resize(sessionId: string): void {
-    const instance = this.terminals.get(sessionId);
-    if (!instance) return;
-    try {
-      instance.fitAddon.fit();
-    } catch {
-      // ignore
+    const instanceKeys = this.sessionInstances.get(sessionId);
+    if (!instanceKeys) return;
+    for (const key of instanceKeys) {
+      this.terminals.get(key)?.terminal.write(data);
     }
   }
 
-  dispose(sessionId: string): void {
-    const instance = this.terminals.get(sessionId);
+  resize(instanceKey: string): void {
+    const instance = this.terminals.get(instanceKey);
     if (!instance) return;
+    try { instance.fitAddon.fit(); } catch { /* ignore */ }
+  }
 
+  dispose(instanceKey: string): void {
+    const instance = this.terminals.get(instanceKey);
+    if (!instance) return;
+    // Remove from session→instances map
+    const set = this.sessionInstances.get(instance.sessionId);
+    if (set) {
+      set.delete(instanceKey);
+      if (set.size === 0) this.sessionInstances.delete(instance.sessionId);
+    }
     instance.terminal.dispose();
-    this.terminals.delete(sessionId);
+    this.terminals.delete(instanceKey);
   }
 
   disposeAll(): void {
-    for (const [id] of this.terminals) {
-      this.dispose(id);
-    }
+    for (const [key] of this.terminals) this.dispose(key);
   }
 
-  get(sessionId: string): TerminalInstance | null {
-    return this.terminals.get(sessionId) ?? null;
+  get(instanceKey: string): TerminalInstance | null {
+    return this.terminals.get(instanceKey) ?? null;
   }
 
   updateTheme(theme: Theme): void {
@@ -191,13 +177,9 @@ class TerminalManager {
     try {
       const { WebglAddon } = await import('@xterm/addon-webgl');
       const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        webgl.dispose();
-      });
+      webgl.onContextLoss(() => { webgl.dispose(); });
       terminal.loadAddon(webgl);
-    } catch {
-      // WebGL not available, fallback to canvas renderer
-    }
+    } catch { /* fallback to canvas */ }
   }
 }
 

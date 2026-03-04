@@ -36,6 +36,7 @@ interface ParsedUrl {
   panel: ActivePanel;
   sessionId: string | null;
   splitId: string | null;
+  groupId: string | null;
   repoKey: string | null;
   /** undefined = "no board preference in URL", null = "all boards", string = specific board */
   boardId: string | null | undefined;
@@ -51,7 +52,7 @@ interface ParsedUrl {
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
-  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, settingsTab: null as SettingsTab | null, agentWorktreeTicketId: null as string | null };
+  const base = { sessionId: null, splitId: null, groupId: null as string | null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, settingsTab: null as SettingsTab | null, agentWorktreeTicketId: null as string | null };
 
   // Root: redirect to /sessions
   if (pathname === '/') {
@@ -62,6 +63,12 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   const agentWtMatch = pathname.match(/^\/sessions\/agent\/([^/]+)$/);
   if (agentWtMatch) {
     return { ...base, panel: 'sessions', agentWorktreeTicketId: agentWtMatch[1]! };
+  }
+
+  // Session layout groups
+  const groupMatch = pathname.match(/^\/sessions\/group\/(.+)$/);
+  if (groupMatch) {
+    return { ...base, panel: 'sessions', groupId: groupMatch[1]! };
   }
 
   // Sessions
@@ -154,6 +161,7 @@ export function storeToUrl(
   activePanel: ActivePanel,
   selectedSessionId: string | null,
   splitSessionId: string | null,
+  selectedGroupId: string | null,
   selectedRepoKey: string | null,
   selectedBoardId: string | null,
   selectedTicketId: string | null,
@@ -167,6 +175,9 @@ export function storeToUrl(
     case 'sessions': {
       if (selectedAgentWorktreeTicketId && !selectedSessionId) {
         return { pathname: `/sessions/agent/${selectedAgentWorktreeTicketId}`, search: '' };
+      }
+      if (selectedGroupId) {
+        return { pathname: `/sessions/group/${selectedGroupId}`, search: '' };
       }
       if (selectedSessionId) {
         const search = splitSessionId ? `?split=${splitSessionId}` : '';
@@ -238,7 +249,9 @@ export function RouterSync() {
 
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
+  const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
   const selectSession = useSessionStore((s) => s.selectSession);
+  const selectGroup = useSessionStore((s) => s.selectGroup);
   const openSplit = useSessionStore((s) => s.openSplit);
   const closeSplit = useSessionStore((s) => s.closeSplit);
 
@@ -288,27 +301,34 @@ export function RouterSync() {
         return;
       }
 
-      // Auto-restore last active session when navigating to /sessions with no session
-      if (!parsed.sessionId) {
-        const lastActiveSessionId = useUIStore.getState().lastActiveSessionId;
-        if (lastActiveSessionId) {
-          // Verify session still exists before redirecting
-          const sessions = useSessionStore.getState().sessions;
-          if (sessions.some((s) => s.id === lastActiveSessionId)) {
-            navigate(`/sessions/${lastActiveSessionId}`, { replace: true });
-            syncingFromUrl.current = false;
-            return;
+      // Group view
+      if (parsed.groupId) {
+        if (parsed.groupId !== selectedGroupId) {
+          selectGroup(parsed.groupId);
+        }
+      } else {
+        // Auto-restore last active session when navigating to /sessions with no session
+        if (!parsed.sessionId) {
+          const lastActiveSessionId = useUIStore.getState().lastActiveSessionId;
+          if (lastActiveSessionId) {
+            // Verify session still exists before redirecting
+            const sessions = useSessionStore.getState().sessions;
+            if (sessions.some((s) => s.id === lastActiveSessionId)) {
+              navigate(`/sessions/${lastActiveSessionId}`, { replace: true });
+              syncingFromUrl.current = false;
+              return;
+            }
           }
         }
-      }
-      if (parsed.sessionId !== selectedSessionId) {
-        selectSession(parsed.sessionId);
-      }
-      if (parsed.splitId && parsed.splitId !== splitSessionId) {
-        // openSplit requires selectedSessionId to be set first — give store time to update
-        setTimeout(() => openSplit(parsed.splitId!), 0);
-      } else if (!parsed.splitId && splitSessionId) {
-        closeSplit();
+        if (parsed.sessionId !== selectedSessionId) {
+          selectSession(parsed.sessionId);
+        }
+        if (parsed.splitId && parsed.splitId !== splitSessionId) {
+          // openSplit requires selectedSessionId to be set first — give store time to update
+          setTimeout(() => openSplit(parsed.splitId!), 0);
+        } else if (!parsed.splitId && splitSessionId) {
+          closeSplit();
+        }
       }
     }
 
@@ -372,6 +392,7 @@ export function RouterSync() {
       activePanel,
       selectedSessionId,
       splitSessionId,
+      selectedGroupId,
       selectedRepoKey,
       selectedBoardId,
       selectedTicketId,
@@ -395,6 +416,7 @@ export function RouterSync() {
     activePanel,
     selectedSessionId,
     splitSessionId,
+    selectedGroupId,
     selectedRepoKey,
     selectedBoardId,
     selectedTicketId,

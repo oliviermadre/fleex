@@ -44,6 +44,9 @@ interface SessionState {
   sessionGroups: SessionGroup[];
   selectedGroupId: string | null;
   activeGroupCellIndex: number | null;
+  /** Per-cell active session. Key: "groupId:cellIndex". Independent per cell so
+   *  two cells bound to the same worktree can show different sessions. */
+  groupCellActiveSessions: Record<string, string>;
   setSessions: (sessions: Session[]) => void;
   setSessionGroups: (groups: SessionGroup[]) => void;
   selectSession: (id: string | null) => void;
@@ -55,6 +58,7 @@ interface SessionState {
   updateSessionStatus: (id: string, status: SessionStatus) => void;
   selectGroup: (id: string | null) => void;
   setActiveGroupCellIndex: (index: number | null) => void;
+  setGroupCellSession: (groupId: string, cellIndex: number, sessionId: string) => void;
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -65,6 +69,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   sessionGroups: [],
   selectedGroupId: null,
   activeGroupCellIndex: null,
+  groupCellActiveSessions: {},
 
   setSessions: (sessions) => set({ sessions: filterKilledFromList(sessions) }),
 
@@ -153,4 +158,12 @@ export const useSessionStore = create<SessionState>((set) => ({
   }),
 
   setActiveGroupCellIndex: (index) => set({ activeGroupCellIndex: index }),
+
+  setGroupCellSession: (groupId, cellIndex, sessionId) =>
+    set((state) => ({
+      groupCellActiveSessions: {
+        ...state.groupCellActiveSessions,
+        [`${groupId}:${cellIndex}`]: sessionId,
+      },
+    })),
 }));

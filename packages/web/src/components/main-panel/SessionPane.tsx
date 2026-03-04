@@ -12,18 +12,25 @@ interface Props {
   focused: boolean;
   isSplit: boolean;
   onFocus: () => void;
+  onSessionChange?: (sessionId: string) => void;
+  hideToolbar?: boolean;
+  /** Unique key for the xterm instance. Defaults to session.id.
+   *  Group cells pass a per-cell key so each cell has its own terminal instance,
+   *  allowing the same session to be displayed in multiple cells simultaneously. */
+  terminalInstanceKey?: string;
 }
 
-export const SessionPane = memo(function SessionPane({ session, focused, isSplit, onFocus }: Props) {
+export const SessionPane = memo(function SessionPane({ session, focused, isSplit, onFocus, onSessionChange, hideToolbar, terminalInstanceKey }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  useTerminal(session.id, containerRef);
+  const instanceKey = terminalInstanceKey ?? session.id;
+  useTerminal(session.id, containerRef, instanceKey);
 
   // Move xterm.js DOM focus when this pane becomes focused
   useEffect(() => {
     if (focused) {
-      terminalManager.get(session.id)?.terminal.focus();
+      terminalManager.get(instanceKey)?.terminal.focus();
     }
-  }, [focused, session.id]);
+  }, [focused, instanceKey]);
 
   // Track last active tab per worktree (including system shells) + global last active session
   const setLastActiveTab = useUIStore((s) => s.setLastActiveTab);
@@ -46,9 +53,9 @@ export const SessionPane = memo(function SessionPane({ session, focused, isSplit
       )}
       onClick={onFocus}
     >
-      <TopToolbar session={session} />
+      {!hideToolbar && <TopToolbar session={session} />}
       <SessionHeader session={session} splitFocused={isSplit && focused} />
-      <SessionTabs currentSession={session} />
+      <SessionTabs currentSession={session} onSessionChange={onSessionChange} />
       <div
         ref={containerRef}
         className="xterm-container flex-1"

@@ -5,21 +5,23 @@ import { WebSocketManager } from '../services/websocket';
 import { useTerminalStore } from '../stores/terminalStore';
 import { WS_BASE_URL } from '../lib/constants';
 
-export function useTerminal(sessionId: string | null, containerRef: React.RefObject<HTMLElement | null>) {
+export function useTerminal(sessionId: string | null, containerRef: React.RefObject<HTMLElement | null>, instanceKey?: string) {
   const setConnectionStatus = useTerminalStore((s) => s.setConnectionStatus);
   const wsRef = useRef<WebSocketManager | null>(null);
+  // instanceKey defaults to sessionId; group cells pass a unique per-cell key
+  const key = instanceKey ?? sessionId;
 
   const handleResize = useCallback(() => {
-    if (!sessionId) return;
-    terminalManager.resize(sessionId);
-    const instance = terminalManager.get(sessionId);
+    if (!key) return;
+    terminalManager.resize(key);
+    const instance = terminalManager.get(key);
     if (instance && wsRef.current) {
       wsRef.current.sendResize(instance.terminal.cols, instance.terminal.rows);
     }
   }, [sessionId]);
 
   useEffect(() => {
-    if (!sessionId || !containerRef.current) return;
+    if (!sessionId || !key || !containerRef.current) return;
 
     const container = containerRef.current;
 
@@ -27,12 +29,12 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
     const ws = new WebSocketManager();
     wsRef.current = ws;
 
-    // Create terminal if not exists, then attach to this container
-    terminalManager.create(sessionId);
-    terminalManager.attach(sessionId, container);
+    // Create terminal instance (keyed by instanceKey), attach to this container
+    terminalManager.create(key, sessionId);
+    terminalManager.attach(key, container);
 
     // Get dimensions
-    const instance = terminalManager.get(sessionId);
+    const instance = terminalManager.get(key);
     const cols = instance?.terminal.cols ?? DEFAULT_COLS;
     const rows = instance?.terminal.rows ?? DEFAULT_ROWS;
 
@@ -55,7 +57,7 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
       }
     });
 
-    // Intercept wheel events for tmux scroll
+    // Intercept wheel events for tmux scroll (instance already retrieved above)
     if (instance) {
       instance.terminal.attachCustomWheelEventHandler((e: WheelEvent) => {
         e.preventDefault();
@@ -78,7 +80,7 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
     // Handle connection status
     const unsubOpen = ws.onOpen(() => {
       setConnectionStatus(sessionId, 'connecting');
-      const inst = terminalManager.get(sessionId);
+      const inst = terminalManager.get(key);
       if (inst) {
         ws.sendAttach(sessionId, inst.terminal.cols, inst.terminal.rows);
       }
@@ -110,7 +112,7 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
       ws.sendDetach();
       ws.disconnect();
       wsRef.current = null;
-      terminalManager.detach(sessionId);
+      terminalManager.detach(key);
     };
-  }, [sessionId, containerRef, handleResize, setConnectionStatus]);
+  }, [sessionId, key, containerRef, handleResize, setConnectionStatus]);
 }
