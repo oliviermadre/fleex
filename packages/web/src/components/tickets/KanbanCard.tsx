@@ -136,9 +136,30 @@ export function KanbanCard({
         </div>
       )}
 
-      {/* Priority + Title + GitHub icon */}
+      {/* Priority + Lock + Title + GitHub icon */}
       <div className="flex items-start gap-2">
-        <PriorityIndicator priority={ticket.priority} size="md" />
+        {/* Left column: priority indicator + blocked lock */}
+        <div className="flex flex-col items-center gap-1 flex-shrink-0">
+          <PriorityIndicator priority={ticket.priority} size="md" />
+          <button
+            className={cn(
+              'rounded transition-all',
+              ticket.blocked
+                ? 'opacity-100 text-red-500 hover:text-red-400'
+                : 'opacity-15 text-[var(--theme-text-muted)] hover:opacity-100',
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              updateTicket(ticket.id, { blocked: !ticket.blocked });
+            }}
+            title={ticket.blocked ? 'Unblock ticket' : 'Mark as blocked'}
+          >
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
+              <rect x="3" y="7" width="10" height="8" rx="1.5" />
+              <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+            </svg>
+          </button>
+        </div>
         <span className="line-clamp-2 flex-1 text-sm font-medium leading-snug text-[var(--theme-text-primary)]">
           {ticket.title}
         </span>
@@ -224,10 +245,7 @@ export function KanbanCard({
             {sessionLinks.length}
           </span>
         )}
-        {ticket.blocked && (
-          <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-red-400">blocked</span>
-        )}
-        {ticket.assignee && (
+{ticket.assignee && (
           ticket.agentClaimedAt ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-400" title={`Agent: ${ticket.assignee}`}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
