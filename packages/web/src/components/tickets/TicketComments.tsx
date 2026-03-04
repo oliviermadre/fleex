@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { TicketComment, TicketMention, TicketWsMessage } from '@asm/shared';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import type { Components } from 'react-markdown';
 import { ticketWs } from '../../services/websocket';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -22,97 +26,38 @@ function buildMentionLookup(mentions: TicketMention[]): Map<string, Map<string, 
   return lookup;
 }
 
-// ── Inline markdown + mention rendering ──
+// ── Mention pre-processing ──
 
-const MENTION_PATTERN = /(~~@agent:[a-zA-Z0-9_-]+~~|@agent:[a-zA-Z0-9_-]+|~~@[a-zA-Z0-9_-]+~~|@[a-zA-Z0-9_-]+)/;
-const INLINE_MD = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\~\~[^~]+\~\~)/g;
-
-/** Render inline markdown (bold, italic, code, strikethrough) for a plain text segment */
-function renderInlineMd(text: string, keyPrefix: string): React.ReactNode[] {
-  const nodes: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  const regex = new RegExp(INLINE_MD.source, 'g');
-
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(<span key={`${keyPrefix}-t${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>);
-    }
-    const full = match[0];
-    if (full.startsWith('`')) {
-      nodes.push(
-        <code key={`${keyPrefix}-c${match.index}`} className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 font-mono text-xs text-[var(--theme-accent)]">
-          {full.slice(1, -1)}
-        </code>,
-      );
-    } else if (full.startsWith('**')) {
-      nodes.push(<strong key={`${keyPrefix}-b${match.index}`} className="font-semibold">{full.slice(2, -2)}</strong>);
-    } else if (full.startsWith('*')) {
-      nodes.push(<em key={`${keyPrefix}-i${match.index}`} className="italic">{full.slice(1, -1)}</em>);
-    } else if (full.startsWith('~~')) {
-      nodes.push(
-        <span key={`${keyPrefix}-s${match.index}`} className="text-[var(--theme-text-muted)] line-through">{full.slice(2, -2)}</span>,
-      );
-    }
-    lastIndex = match.index + full.length;
-  }
-  if (lastIndex < text.length) {
-    nodes.push(<span key={`${keyPrefix}-t${lastIndex}`}>{text.slice(lastIndex)}</span>);
-  }
-  return nodes.length > 0 ? nodes : [<span key={`${keyPrefix}-raw`}>{text}</span>];
-}
-
-/** Render a line's inline content with mentions + markdown */
-function renderInlineWithMentions(
-  text: string,
-  keyPrefix: string,
-  commentMentions: Map<string, string> | undefined,
-  onRemoveMention: (id: string) => void,
-): React.ReactNode[] {
-  const parts = text.split(MENTION_PATTERN);
-  const nodes: React.ReactNode[] = [];
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]!;
-    if (!part) continue;
-    const pk = `${keyPrefix}-${i}`;
-
-    // Struck-through agent mention
-    if (/^~~@agent:[a-zA-Z0-9_-]+~~$/.test(part)) {
-      nodes.push(
-        <span key={pk} className="rounded-sm px-1 py-px text-[var(--theme-text-faint)] line-through opacity-60">{part.slice(2, -2)}</span>,
-      );
-      continue;
-    }
-    // Active agent mention
-    if (/^@agent:[a-zA-Z0-9_-]+$/.test(part)) {
-      const mId = commentMentions?.get(part);
-      nodes.push(
-        <MentionSpan key={pk} text={part} mentionId={mId} onRemove={onRemoveMention} className="bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]" />,
-      );
-      continue;
-    }
-    // Struck-through human mention
-    if (/^~~@[a-zA-Z0-9_-]+~~$/.test(part)) {
-      nodes.push(
-        <span key={pk} className="rounded-sm px-1 py-px text-[var(--theme-text-faint)] line-through opacity-60">{part.slice(2, -2)}</span>,
-      );
-      continue;
-    }
-    // Active human mention (only highlight if tracked)
-    if (/^@[a-zA-Z0-9_-]+$/.test(part)) {
-      const mId = commentMentions?.get(part);
-      if (mId) {
-        nodes.push(
-          <MentionSpan key={pk} text={part} mentionId={mId} onRemove={onRemoveMention} className="bg-amber-500/15 text-amber-400" />,
-        );
-        continue;
-      }
-    }
-    // Plain text segment → apply inline markdown
-    nodes.push(...renderInlineMd(part, pk));
-  }
-  return nodes;
+/**
+ * Encode @mentions as markdown links with a custom href prefix so that
+ * react-markdown can process the rest of the content normally, and we can
+ * intercept mentions in the `a` component override.
+ *
+ * Content inside backtick code spans is left untouched.
+ *
+ * Mapping:
+ *   @agent:name        →  [@agent:name](#asm-agent:name)
+ *   @username          →  [@username](#asm-human:username)
+ *   ~~@agent:name~~    →  [@agent:name](#asm-struck:agent:name)
+ *   ~~@username~~      →  [@username](#asm-struck:username)
+ */
+function preprocessMentions(body: string): string {
+  return body.replace(
+    // Group 1: code span (preserve verbatim)
+    // Group 2: struck agent mention
+    // Group 3: struck human mention
+    // Group 4: active agent mention
+    // Group 5: active human mention
+    /(```[\s\S]*?```|`[^`]*`)|~~(@agent:[a-zA-Z0-9_-]+)~~|~~(@[a-zA-Z0-9_-]+)~~|(@agent:[a-zA-Z0-9_-]+)|(@[a-zA-Z0-9_-]+)/g,
+    (_match, codeSpan, struckAgent, struckHuman, activeAgent, activeHuman) => {
+      if (codeSpan !== undefined) return codeSpan;
+      if (struckAgent !== undefined) return `[${struckAgent}](#asm-struck:${struckAgent.slice(1)})`;
+      if (struckHuman !== undefined) return `[${struckHuman}](#asm-struck:${struckHuman.slice(1)})`;
+      if (activeAgent !== undefined) return `[${activeAgent}](#asm-agent:${activeAgent.slice(1)})`;
+      if (activeHuman !== undefined) return `[${activeHuman}](#asm-human:${activeHuman.slice(1)})`;
+      return _match;
+    },
+  );
 }
 
 function MentionSpan({ text, mentionId, onRemove, className }: {
@@ -141,6 +86,10 @@ function MentionSpan({ text, mentionId, onRemove, className }: {
 
 // ── Comment Markdown Renderer ──
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const commentRehypePlugins: any[] = [[rehypeHighlight, { detect: true }]];
+const commentRemarkPlugins = [remarkGfm];
+
 function CommentMarkdown({
   body,
   commentId,
@@ -153,117 +102,168 @@ function CommentMarkdown({
   onRemoveMention: (id: string) => void;
 }) {
   const commentMentions = mentionLookup.get(commentId);
-  // Normalize literal \n sequences (common in agent output) to real newlines
-  const normalized = body.replace(/\\n/g, '\n');
-  const lines = normalized.split('\n');
-  const elements: React.ReactNode[] = [];
 
-  const inline = (text: string, kp: string) =>
-    renderInlineWithMentions(text, kp, commentMentions, onRemoveMention);
+  // Normalize literal \n escape sequences from agent output, then encode mentions
+  const processed = preprocessMentions(body.replace(/\\n/g, '\n'));
 
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i]!;
-    const lk = `l${i}`;
-
-    // Fenced code block
-    if (line.trimStart().startsWith('```')) {
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i]!.trimStart().startsWith('```')) {
-        codeLines.push(lines[i]!);
-        i++;
+  const components: Components = {
+    // ── Mentions & links ─────────────────────────────────────────────────────
+    a: ({ href, children }) => {
+      if (href?.startsWith('#asm-struck:')) {
+        // Struck-through mention (removed/resolved)
+        return (
+          <span className="rounded-sm px-1 py-px text-[var(--theme-text-faint)] line-through opacity-60">
+            {children}
+          </span>
+        );
       }
-      if (i < lines.length) i++; // skip closing ```
-      elements.push(
-        <pre key={lk} className="my-1.5 overflow-x-auto rounded-md bg-[var(--theme-bg-overlay)] p-3 text-xs leading-relaxed">
-          <code>{codeLines.join('\n')}</code>
-        </pre>,
-      );
-      continue;
-    }
-
-    // Empty line → spacer
-    if (line.trim() === '') {
-      elements.push(<div key={lk} className="h-1.5" />);
-      i++;
-      continue;
-    }
-
-    // Horizontal rule
-    if (/^-{3,}$/.test(line.trim()) || /^\*{3,}$/.test(line.trim())) {
-      elements.push(<hr key={lk} className="my-2 border-t border-[var(--theme-border)]" />);
-      i++;
-      continue;
-    }
-
-    // Heading
-    const hMatch = line.match(/^(#{1,3})\s+(.+)/);
-    if (hMatch) {
-      const level = hMatch[1]!.length;
-      const sizes = ['text-base font-bold mt-3 mb-1', 'text-sm font-semibold mt-2 mb-0.5', 'text-sm font-medium mt-1.5 mb-0.5'];
-      elements.push(
-        <div key={lk} className={`${sizes[level - 1]} text-[var(--theme-text-primary)]`}>
-          {inline(hMatch[2]!, lk)}
-        </div>,
-      );
-      i++;
-      continue;
-    }
-
-    // Blockquote
-    if (line.startsWith('>')) {
-      const qLines: string[] = [];
-      while (i < lines.length && lines[i]!.startsWith('>')) {
-        qLines.push(lines[i]!.replace(/^>\s?/, ''));
-        i++;
+      if (href?.startsWith('#asm-agent:')) {
+        const name = href.slice('#asm-agent:'.length);
+        const mentionText = `@agent:${name}`;
+        const mId = commentMentions?.get(mentionText);
+        return (
+          <MentionSpan
+            text={mentionText}
+            mentionId={mId}
+            onRemove={onRemoveMention}
+            className="bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]"
+          />
+        );
       }
-      elements.push(
-        <blockquote key={lk} className="my-1 border-l-2 border-[var(--theme-accent)] pl-3 text-[var(--theme-text-secondary)] italic">
-          {qLines.map((ql, qi) => <div key={qi}>{inline(ql, `${lk}q${qi}`)}</div>)}
-        </blockquote>,
+      if (href?.startsWith('#asm-human:')) {
+        const name = href.slice('#asm-human:'.length);
+        const mentionText = `@${name}`;
+        const mId = commentMentions?.get(mentionText);
+        if (mId) {
+          return (
+            <MentionSpan
+              text={mentionText}
+              mentionId={mId}
+              onRemove={onRemoveMention}
+              className="bg-amber-500/15 text-amber-400"
+            />
+          );
+        }
+        // Not a tracked mention — render as plain text
+        return <span>{children}</span>;
+      }
+      // Regular link
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--theme-accent)] underline underline-offset-2 hover:text-[var(--theme-accent-hover)] transition-colors break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {children}
+        </a>
       );
-      continue;
-    }
+    },
 
-    // Unordered list
-    const ulMatch = line.match(/^(\s*)[-*]\s+(.*)/);
-    if (ulMatch) {
-      const indent = ulMatch[1]!.length;
-      elements.push(
-        <div key={lk} className="flex items-start gap-2 py-0.5" style={{ paddingLeft: `${indent * 8 + 4}px` }}>
-          <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--theme-text-muted)]" />
-          <span className="text-sm leading-relaxed text-[var(--theme-text-secondary)]">{inline(ulMatch[2]!, lk)}</span>
-        </div>,
+    // ── Headings (slightly smaller than scratchpad — comments are denser) ────
+    h1: ({ children }) => (
+      <h1 className="text-base font-bold mt-3 mb-1 text-[var(--theme-text-primary)]">{children}</h1>
+    ),
+    h2: ({ children }) => (
+      <h2 className="text-sm font-semibold mt-2 mb-0.5 text-[var(--theme-text-primary)]">{children}</h2>
+    ),
+    h3: ({ children }) => (
+      <h3 className="text-sm font-medium mt-1.5 mb-0.5 text-[var(--theme-text-primary)]">{children}</h3>
+    ),
+    h4: ({ children }) => (
+      <h4 className="text-xs font-medium mt-1.5 mb-0.5 text-[var(--theme-text-secondary)]">{children}</h4>
+    ),
+    h5: ({ children }) => (
+      <h5 className="text-xs font-medium mt-1 text-[var(--theme-text-secondary)]">{children}</h5>
+    ),
+    h6: ({ children }) => (
+      <h6 className="text-xs font-medium mt-1 text-[var(--theme-text-muted)]">{children}</h6>
+    ),
+
+    p: ({ children }) => (
+      <p className="py-0.5 text-sm leading-relaxed text-[var(--theme-text-secondary)]">{children}</p>
+    ),
+
+    blockquote: ({ children }) => (
+      <blockquote className="my-1 border-l-2 border-[var(--theme-accent)] pl-3 text-[var(--theme-text-secondary)] italic">
+        {children}
+      </blockquote>
+    ),
+
+    hr: () => <hr className="my-2 border-t border-[var(--theme-border)]" />,
+
+    ul: ({ children, className }) => (
+      <ul
+        className={`my-1 ${
+          className?.includes('contains-task-list') ? 'list-none pl-0' : 'list-disc pl-5'
+        }`}
+      >
+        {children}
+      </ul>
+    ),
+    ol: ({ children }) => <ol className="my-1 pl-5 list-decimal">{children}</ol>,
+    li: ({ children }) => (
+      <li className="py-0.5 text-sm leading-relaxed text-[var(--theme-text-secondary)] marker:text-[var(--theme-text-muted)]">
+        {children}
+      </li>
+    ),
+
+    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+    em: ({ children }) => <em className="italic">{children}</em>,
+    del: ({ children }) => (
+      <del className="line-through text-[var(--theme-text-muted)]">{children}</del>
+    ),
+
+    // Inline code
+    code: ({ children, className }) => {
+      if (className?.includes('hljs')) {
+        return <code className={className}>{children}</code>;
+      }
+      return (
+        <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 font-mono text-xs text-[var(--theme-accent)]">
+          {children}
+        </code>
       );
-      i++;
-      continue;
-    }
+    },
+    pre: ({ children }) => (
+      <pre className="my-1.5 overflow-x-auto rounded-md bg-[var(--theme-bg-overlay)] p-3 text-xs leading-relaxed font-mono">
+        {children}
+      </pre>
+    ),
 
-    // Ordered list
-    const olMatch = line.match(/^(\s*)(\d+)\.\s+(.*)/);
-    if (olMatch) {
-      const indent = olMatch[1]!.length;
-      elements.push(
-        <div key={lk} className="flex items-start gap-2 py-0.5" style={{ paddingLeft: `${indent * 8 + 4}px` }}>
-          <span className="min-w-[1.2em] flex-shrink-0 text-right text-sm text-[var(--theme-text-muted)]">{olMatch[2]}.</span>
-          <span className="text-sm leading-relaxed text-[var(--theme-text-secondary)]">{inline(olMatch[3]!, lk)}</span>
-        </div>,
-      );
-      i++;
-      continue;
-    }
+    // Tables
+    table: ({ children }) => (
+      <div className="my-2 overflow-x-auto rounded-md border border-[var(--theme-border)]">
+        <table className="w-full text-sm border-collapse">{children}</table>
+      </div>
+    ),
+    thead: ({ children }) => <thead className="bg-[var(--theme-bg-overlay)]">{children}</thead>,
+    tbody: ({ children }) => (
+      <tbody className="divide-y divide-[var(--theme-border)]">{children}</tbody>
+    ),
+    tr: ({ children }) => <tr className="even:bg-[var(--theme-bg-hover)]">{children}</tr>,
+    th: ({ children }) => (
+      <th className="px-3 py-1.5 text-left text-xs font-semibold text-[var(--theme-text-primary)] border-r border-[var(--theme-border)] last:border-r-0 whitespace-nowrap">
+        {children}
+      </th>
+    ),
+    td: ({ children }) => (
+      <td className="px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] border-r border-[var(--theme-border)] last:border-r-0">
+        {children}
+      </td>
+    ),
+  };
 
-    // Plain paragraph
-    elements.push(
-      <p key={lk} className="py-0.5 text-sm leading-relaxed text-[var(--theme-text-secondary)]">
-        {inline(line, lk)}
-      </p>,
-    );
-    i++;
-  }
-
-  return <div>{elements}</div>;
+  return (
+    <Markdown
+      remarkPlugins={commentRemarkPlugins}
+      rehypePlugins={commentRehypePlugins}
+      components={components}
+    >
+      {processed}
+    </Markdown>
+  );
 }
 
 // ── Utilities ──
