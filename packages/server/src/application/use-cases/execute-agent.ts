@@ -540,6 +540,12 @@ export class ExecuteAgentUseCase {
         } else {
           mention.waitForInfo();
           await this.mentionStore.save(mention);
+          // Auto-block ticket when agent waits for info
+          if (ticket) {
+            ticket.update({ blocked: true });
+            await this.ticketStore.saveTicket(ticket);
+            this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+          }
           this.onTicketUpdate?.('mention:waiting_for_info', mention.toDTO());
         }
       } else {
