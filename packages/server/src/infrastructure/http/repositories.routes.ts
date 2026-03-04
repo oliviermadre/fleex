@@ -422,11 +422,80 @@ export function repositoryRoutes(container: Container) {
       container.repositoryCache.set('github:user', login, RepositoryCache.TTL_USER);
       return { login };
     });
+
+    // ---- Clone endpoints ----
+
+    app.get<{ Querystring: { org: string; name: string } }>(
+      '/api/repositories/check-cwd',
+      async (request, reply) => {
+        const { org, name } = request.query;
+        if (!org || !name) {
+          return reply.code(400).send({ error: 'org and name query parameters are required' });
+        }
+        const repoPath = resolveRepoPath(container, org, name);
+        const exists = await container.hostFs.exists(repoPath);
+        if (exists) {
+          return { exists: true };
+        }
+        const gitHost = getGitHost(container);
+        const remote = `git@${gitHost}:${org}/${name}`;
+        return { exists: false, remote, targetPath: repoPath };
+      },
+    );
+
+    app.post<{ Body: { org: string; name: string } }>(
+      '/api/repositories/clone',
+      async (request, reply) => {
+        const { org, name } = request.body;
+        if (!org || !name) {
+          return reply.code(400).send({ error: 'org and name are required' });
+        }
+
+        // Security: only allow cloning repos that are configured in settings
+        const configuredRepos = getConfiguredRepos(container);
+        const isAllowed = configuredRepos.some((r) => r.org === org && r.name === name);
+        if (!isAllowed) {
+          return reply.code(403).send({
+            code: 'REPO_NOT_CONFIGURED',
+            message: `Repository ${org}/${name} is not in the configured repositories list`,
+          });
+        }
+
+        const repoPath = resolveRepoPath(container, org, name);
+        const gitHost = getGitHost(container);
+        const remote = `git@${gitHost}:${org}/${name}`;
+
+        // Ensure parent directory exists
+        const parentPath = join(container.config.get().basePath, org);
+        const parentExists = await container.hostFs.exists(parentPath);
+        if (!parentExists) {
+          await container.hostFs.mkdir(parentPath);
+        }
+
+        try {
+          await container.execFn('git', ['clone', remote, repoPath], { timeout: 120_000 });
+          return { success: true };
+        } catch (err) {
+          const stderr = (err as any)?.stderr ?? String(err);
+          container.logger.warn('git clone failed', { org, name, remote, error: stderr });
+          return reply.code(422).send({
+            code: 'CLONE_FAILED',
+            message: stderr || `Failed to clone ${remote}`,
+          });
+        }
+      },
+    );
   };
 }
 
 function resolveRepoPath(container: Container, org: string, name: string): string {
   return join(container.config.get().basePath, org, name);
+}
+
+function getGitHost(container: Container): string {
+  const config = container.config.get() as unknown as Record<string, unknown>;
+  const gitHost = config['gitHost'];
+  return typeof gitHost === 'string' && gitHost ? gitHost : 'github.com';
 }
 
 function getConfiguredRepos(container: Container): { org: string; name: string }[] {
