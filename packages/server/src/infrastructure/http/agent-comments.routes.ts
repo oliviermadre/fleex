@@ -61,6 +61,14 @@ export function agentCommentsRoutes(container: Container) {
       // Wake up agents waiting for info on this ticket (exclude posting agent to avoid self-wake)
       container.wakeWaitingAgents.execute(request.params.id, agentName).catch(() => {});
 
+      // Auto-trigger mentioned agents
+      for (const mention of createdMentions) {
+        if (mention.targetType === 'agent') {
+          const persona = await container.personaStore.getByName(mention.targetAgent);
+          if (persona) container.executeAgent.execute(persona.id).catch(() => {});
+        }
+      }
+
       return reply.code(201).send({
         ...dto,
         createdMentions: createdMentions.map((m) => m.toDTO()),
@@ -96,7 +104,7 @@ export function agentCommentsRoutes(container: Container) {
         }
       }
 
-      // Create mentions for newly added agents
+      // Create mentions for newly added agents and auto-trigger them
       const { randomUUID } = await import('node:crypto');
       const { TicketMentionEntity } = await import('../../domain/entities/ticket-mention.entity.js');
       for (const target of newMentionNames) {
@@ -110,6 +118,10 @@ export function agentCommentsRoutes(container: Container) {
           });
           await container.mentionStore.save(mention);
           container.ticketBroadcast('mention:created', mention.toDTO());
+
+          // Auto-trigger the newly mentioned agent
+          const persona = await container.personaStore.getByName(target);
+          if (persona) container.executeAgent.execute(persona.id).catch(() => {});
         }
       }
 

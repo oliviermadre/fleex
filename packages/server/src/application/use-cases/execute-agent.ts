@@ -151,8 +151,7 @@ export class ExecuteAgentUseCase {
   }
 
   get maxConcurrency(): number {
-    const cfg = this.config.get() as unknown as Record<string, unknown>;
-    return (cfg['agentMaxConcurrency'] as number) ?? 1;
+    return this.config.get().agentMaxConcurrency ?? 1;
   }
 
   async execute(personaId: string): Promise<AgentExecutionResult> {
@@ -164,9 +163,10 @@ export class ExecuteAgentUseCase {
     // Get pending mentions for this agent
     const pendingMentions = await this.mentionStore.getPendingForAgent(persona.name);
 
-    // Filter out mentions already being executed
+    // Filter out mentions already being executed or already queued
+    const queuedMentionIds = new Set(this.queue.map((q) => q.mention.id));
     const workableMentions = pendingMentions.filter(
-      (m) => !this.activeExecutions.has(m.id),
+      (m) => !this.activeExecutions.has(m.id) && !queuedMentionIds.has(m.id),
     );
 
     if (workableMentions.length === 0) {
@@ -479,7 +479,7 @@ export class ExecuteAgentUseCase {
             }
           }
 
-          const { comment } = await this.postComment.execute({
+          const { comment, createdMentions: commentMentions } = await this.postComment.execute({
             ticketId: mention.ticketId,
             body: commentBody,
             authorName: persona.name,
@@ -488,6 +488,23 @@ export class ExecuteAgentUseCase {
             humanMentionNames: humanName ? [humanName] : [],
           });
           resultCommentId = comment.id;
+
+          // Auto-trigger mentioned agents
+          for (const m of commentMentions) {
+            if (m.targetType === 'agent') {
+              const targetPersona = await this.personaStore.getByName(m.targetAgent);
+              if (targetPersona) this.execute(targetPersona.id).catch(() => {});
+            }
+          }
+
+          // Auto-assign ticket to human when mentioned by agent
+          for (const m of commentMentions) {
+            if (m.targetType === 'human' && ticket) {
+              ticket.assign(m.targetAgent);
+              await this.ticketStore.saveTicket(ticket);
+              this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+            }
+          }
         }
 
         if (structured.deliverable) {
@@ -518,14 +535,32 @@ export class ExecuteAgentUseCase {
           resultLength: resultText.length,
         });
 
-        const { comment } = await this.postComment.execute({
+        const { comment, createdMentions: fallbackMentions } = await this.postComment.execute({
           ticketId: mention.ticketId,
           body: resultText,
           authorName: persona.name,
           authorType: 'agent',
           parentId: mention.commentId,
+          humanMentionNames: humanName ? [humanName] : [],
         });
         resultCommentId = comment.id;
+
+        // Auto-trigger mentioned agents
+        for (const m of fallbackMentions) {
+          if (m.targetType === 'agent') {
+            const targetPersona = await this.personaStore.getByName(m.targetAgent);
+            if (targetPersona) this.execute(targetPersona.id).catch(() => {});
+          }
+        }
+
+        // Auto-assign ticket to human when mentioned by agent
+        for (const m of fallbackMentions) {
+          if (m.targetType === 'human' && ticket) {
+            ticket.assign(m.targetAgent);
+            await this.ticketStore.saveTicket(ticket);
+            this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+          }
+        }
       }
 
       // 12. Resolve or park mention based on mentionStatus

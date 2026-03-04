@@ -44,6 +44,7 @@ export interface AppSettings {
   activeThemeId: string;
   customThemes: Theme[];
   sessionLayoutGroups: SessionLayoutGroup[];
+  agentMaxConcurrency: number;
 }
 
 interface SettingsState {
@@ -81,6 +82,7 @@ const defaultSettings: AppSettings = {
   activeThemeId: 'verdant',
   customThemes: [],
   sessionLayoutGroups: [],
+  agentMaxConcurrency: 1,
 };
 
 function loadFromStorage(): AppSettings {

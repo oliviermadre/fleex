@@ -3,6 +3,7 @@ export interface AppConfig {
   defaultShell: string;
   repositoryRefreshIntervalMs: number;
   humanMentionName?: string;
+  agentMaxConcurrency?: number;
 }
 
 export interface ConfigPort {

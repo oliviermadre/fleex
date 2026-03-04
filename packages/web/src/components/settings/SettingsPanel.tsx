@@ -29,6 +29,7 @@ export function SettingsPanel() {
 
   const [basePath, setBasePath] = useState('');
   const [humanMentionName, setHumanMentionName] = useState('');
+  const [agentMaxConcurrency, setAgentMaxConcurrency] = useState(1);
   const [repoPatterns, setRepoPatterns] = useState<string[]>([]);
   const resolveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [pinnedIcons, setPinnedIcons] = useState<PinnedIcon[]>([]);
@@ -37,6 +38,7 @@ export function SettingsPanel() {
   useEffect(() => {
     setBasePath(settings.basePath);
     setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
+    setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
     setRepoPatterns(settings.repositories);
     setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
     setWorktreeActions((settings.worktreeActions ?? []).map((a) => ({ ...a })));
@@ -49,6 +51,7 @@ export function SettingsPanel() {
       pinnedIcons,
       worktreeActions,
       ...(humanMentionName.trim() ? { humanMentionName: humanMentionName.trim() } : { humanMentionName: undefined }),
+      agentMaxConcurrency,
     } as Partial<AppSettings> & Record<string, unknown>);
   };
 
@@ -126,6 +129,8 @@ export function SettingsPanel() {
               setBasePath={setBasePath}
               humanMentionName={humanMentionName}
               setHumanMentionName={setHumanMentionName}
+              agentMaxConcurrency={agentMaxConcurrency}
+              setAgentMaxConcurrency={setAgentMaxConcurrency}
             />
           )}
           {settingsTab === 'appearance' && <AppearanceTab />}
@@ -174,11 +179,15 @@ function GeneralTab({
   setBasePath,
   humanMentionName,
   setHumanMentionName,
+  agentMaxConcurrency,
+  setAgentMaxConcurrency,
 }: {
   basePath: string;
   setBasePath: (v: string) => void;
   humanMentionName: string;
   setHumanMentionName: (v: string) => void;
+  agentMaxConcurrency: number;
+  setAgentMaxConcurrency: (v: number) => void;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -209,6 +218,21 @@ function GeneralTab({
           should use to mention you (e.g. <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">Olivier</code> for{' '}
           <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-accent)]">@Olivier</code>).
           Per-agent overrides can be set in agent configuration.
+        </p>
+      </div>
+
+      <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
+        <Input
+          id="agentMaxConcurrency"
+          label="Max Simultaneous Agent Executions"
+          type="number"
+          min={1}
+          max={20}
+          value={String(agentMaxConcurrency)}
+          onChange={(e) => setAgentMaxConcurrency(Math.max(1, parseInt(e.target.value, 10) || 1))}
+        />
+        <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+          Maximum number of agents that can run simultaneously. Additional mentions are queued.
         </p>
       </div>
     </div>

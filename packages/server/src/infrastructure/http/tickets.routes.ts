@@ -430,12 +430,14 @@ export function ticketRoutes(container: Container) {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
+        const humanMentionName = container.config.get().humanMentionName;
         const { comment, createdMentions } = await container.postComment.execute({
           ticketId: request.params.id,
           authorType: 'user',
           authorName: 'user',
           body: request.body.body,
           visibility: 'public',
+          humanMentionNames: humanMentionName ? [humanMentionName] : [],
         });
 
         const dto = comment.toDTO();
@@ -447,6 +449,14 @@ export function ticketRoutes(container: Container) {
 
         // Wake up agents waiting for info on this ticket
         container.wakeWaitingAgents.execute(request.params.id).catch(() => {});
+
+        // Auto-trigger mentioned agents
+        for (const mention of createdMentions) {
+          if (mention.targetType === 'agent') {
+            const persona = await container.personaStore.getByName(mention.targetAgent);
+            if (persona) container.executeAgent.execute(persona.id).catch(() => {});
+          }
+        }
 
         return reply.code(201).send(dto);
       },
