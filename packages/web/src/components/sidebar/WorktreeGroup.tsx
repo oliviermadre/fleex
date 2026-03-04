@@ -43,8 +43,11 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
   // Aggregate status for branch
   const branchStatus = useMemo(() => aggregateBranchStatus(worktree.sessions), [worktree.sessions]);
 
+  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const setSelectedAgentWorktreeTicketId = useUIStore((s) => s.setSelectedAgentWorktreeTicketId);
   const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
+  const selectBoard = useTicketStore((s) => s.selectBoard);
+  const selectTicket = useTicketStore((s) => s.selectTicket);
   const agentInfo = worktree.agentWorktree;
   const isAgentSelected = agentInfo && selectedAgentWorktreeTicketId === agentInfo.ticketId;
 
@@ -115,9 +118,19 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
           {/* Row 3: Ticket description (if linked) */}
           {linkedTicket && (
             <div className="flex items-center gap-1 pl-5">
-              <span className="truncate text-xs text-[var(--theme-text-faint)]">
+              <button
+                className="truncate text-left text-xs text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)] hover:underline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  selectBoard(linkedTicket.boardId);
+                  selectTicket(linkedTicket.id);
+                  setActivePanel('tickets');
+                  navigate(`/tickets/board/${linkedTicket.boardId}/ticket/${linkedTicket.id}`, { replace: true });
+                }}
+                title="View ticket"
+              >
                 # {linkedTicket.title}
-              </span>
+              </button>
             </div>
           )}
 

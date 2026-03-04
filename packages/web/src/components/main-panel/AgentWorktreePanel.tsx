@@ -8,20 +8,24 @@ import { useUIStore } from '../../stores/uiStore';
 import { useTerminal } from '../../hooks/useTerminal';
 import { terminalManager } from '../../services/terminalManager';
 import { AgentEventStream } from './AgentEventStream';
+import { TicketInfoPanel } from './TicketInfoPanel';
 import { TopToolbar } from './TopToolbar';
 import { StatusDot } from '../ui/StatusDot';
 import { deriveDisplayStatus } from '../../lib/deriveStatus';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
+import { useNavigate } from 'react-router-dom';
 
 const EMPTY_EXECUTIONS: AgentExecution[] = [];
 
 type ActiveTab =
   | { kind: 'execution'; executionId: string }
-  | { kind: 'session'; sessionId: string };
+  | { kind: 'session'; sessionId: string }
+  | { kind: 'ticket' };
 
 /** Unique key for a tab — used for ordering and drag-to-reorder */
 function tabKey(tab: ActiveTab): string {
+  if (tab.kind === 'ticket') return 'ticket';
   return tab.kind === 'session' ? `s:${tab.sessionId}` : `e:${tab.executionId}`;
 }
 
@@ -34,7 +38,11 @@ interface Props {
 }
 
 export function AgentWorktreePanel({ ticketId }: Props) {
+  const navigate = useNavigate();
   const ticket = useTicketStore((s) => s.tickets.find((t) => t.id === ticketId));
+  const selectBoard = useTicketStore((s) => s.selectBoard);
+  const selectTicket = useTicketStore((s) => s.selectTicket);
+  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const executions = useAgentEventStore((s) => s.executionsByTicket[ticketId] ?? EMPTY_EXECUTIONS);
   const loadExecutions = useAgentEventStore((s) => s.loadExecutionsForTicket);
 
@@ -86,10 +94,11 @@ export function AgentWorktreePanel({ ticketId }: Props) {
   // Active tab state
   const [activeTab, setActiveTab] = useState<ActiveTab | null>(null);
 
-  // Persist last active tab per worktree
+  // Persist last active tab per worktree (skip the structural ticket tab)
   const setLastActiveTab = useUIStore((s) => s.setLastActiveTab);
   useEffect(() => {
     if (!activeTab || !groupId) return;
+    if (activeTab.kind === 'ticket') return;
     setLastActiveTab(groupId, tabKey(activeTab));
   }, [activeTab, groupId, setLastActiveTab]);
 
@@ -251,9 +260,18 @@ export function AgentWorktreePanel({ ticketId }: Props) {
         <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)] truncate">
           {worktreeData?.branch ?? 'agent'}
         </span>
-        <span className="text-xs text-[var(--theme-text-faint)] truncate">
+        <button
+          className="text-left text-xs text-[var(--theme-text-faint)] truncate hover:text-[var(--theme-text-secondary)] hover:underline"
+          onClick={() => {
+            selectBoard(ticket.boardId);
+            selectTicket(ticket.id);
+            setActivePanel('tickets');
+            navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`, { replace: true });
+          }}
+          title="View ticket"
+        >
           #{ticket.displayId} {ticket.title}
-        </span>
+        </button>
         {ticket.assignee && (
           <span className="ml-auto shrink-0 text-xs px-2 py-0.5 rounded bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]">
             @{ticket.assignee}
@@ -287,19 +305,36 @@ export function AgentWorktreePanel({ ticketId }: Props) {
                   onClick={() => setActiveTab(tab)}
                   onClose={handleCloseTab}
                 />
-              ) : (
+              ) : tab.kind === 'execution' ? (
                 <ExecutionTab
                   execution={executions.find((e) => e.id === tab.executionId)!}
                   isSelected={activeTab ? tabsMatch(activeTab, tab) : false}
                   onClick={() => setActiveTab(tab)}
                 />
-              )}
+              ) : null}
               {isOver && dropEdge === 'right' && (
                 <div className="absolute right-0 top-1 bottom-1 z-10 w-0.5 rounded bg-[var(--theme-accent)]" />
               )}
             </div>
           );
         })}
+
+        {/* Ticket info tab — always present, not draggable */}
+        <button
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap border-b-2 transition-colors',
+            activeTab?.kind === 'ticket'
+              ? 'border-[var(--theme-accent)] text-[var(--theme-text-primary)]'
+              : 'border-transparent text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
+          )}
+          onClick={() => setActiveTab({ kind: 'ticket' })}
+          title="Ticket information"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+            <path d="M15 5v2M15 11v2M15 17v2M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7a2 2 0 0 1 2-2z" />
+          </svg>
+          <span>Ticket</span>
+        </button>
 
         {/* New Tab button */}
         <button
@@ -316,7 +351,9 @@ export function AgentWorktreePanel({ ticketId }: Props) {
       </div>
 
       {/* Content area */}
-      {activeSession ? (
+      {activeTab?.kind === 'ticket' ? (
+        <TicketInfoPanel ticketId={ticketId} />
+      ) : activeSession ? (
         <TerminalPane session={activeSession} />
       ) : activeExecutionId ? (
         <AgentEventStream executionId={activeExecutionId} />
