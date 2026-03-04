@@ -251,6 +251,12 @@ export function AgentWorktreePanel({ ticketId }: Props) {
         <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)] truncate">
           {worktreeData?.branch ?? 'agent'}
         </span>
+        {worktreeData?.worktreeStatus === 'reconciling' && (
+          <span className="shrink-0 text-xs text-[var(--theme-text-faint)] animate-pulse">syncing…</span>
+        )}
+        {(worktreeData?.worktreeStatus === 'repo_missing' || worktreeData?.worktreeStatus === 'unavailable') && (
+          <span className="shrink-0 text-xs text-[var(--theme-warning,#f59e0b)]">not available locally</span>
+        )}
         <span className="text-xs text-[var(--theme-text-faint)] truncate">
           #{ticket.displayId} {ticket.title}
         </span>
@@ -303,9 +309,19 @@ export function AgentWorktreePanel({ ticketId }: Props) {
 
         {/* New Tab button */}
         <button
-          className="flex items-center gap-1 px-3 py-2 text-xs whitespace-nowrap text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]"
+          className={cn(
+            'flex items-center gap-1 px-3 py-2 text-xs whitespace-nowrap transition-colors',
+            worktreeData?.worktreeStatus === 'repo_missing' || worktreeData?.worktreeStatus === 'unavailable'
+              ? 'text-[var(--theme-text-faint)] cursor-not-allowed opacity-50'
+              : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+          )}
           onClick={handleNewTab}
-          title="New shell in this worktree"
+          disabled={worktreeData?.worktreeStatus === 'repo_missing' || worktreeData?.worktreeStatus === 'unavailable'}
+          title={
+            worktreeData?.worktreeStatus === 'repo_missing' ? 'Repository not found locally'
+            : worktreeData?.worktreeStatus === 'unavailable' ? 'Worktree unavailable'
+            : 'New shell in this worktree'
+          }
         >
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
             <line x1="8" y1="3" x2="8" y2="13" />
@@ -322,13 +338,19 @@ export function AgentWorktreePanel({ ticketId }: Props) {
         <AgentEventStream executionId={activeExecutionId} />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[var(--theme-text-faint)]">
-          <span className="text-sm">No executions yet</span>
-          <button
-            className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
-            onClick={handleNewTab}
-          >
-            + New Shell Tab
-          </button>
+          <span className="text-sm">
+            {worktreeData?.worktreeStatus === 'repo_missing' ? 'Repository not found locally'
+              : worktreeData?.worktreeStatus === 'unavailable' ? 'Worktree unavailable'
+              : 'No executions yet'}
+          </span>
+          {worktreeData?.worktreeStatus !== 'repo_missing' && worktreeData?.worktreeStatus !== 'unavailable' && (
+            <button
+              className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+              onClick={handleNewTab}
+            >
+              + New Shell Tab
+            </button>
+          )}
         </div>
       )}
     </div>

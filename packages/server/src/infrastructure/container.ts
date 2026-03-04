@@ -11,6 +11,7 @@ import { DiscoverExistingSessionsUseCase } from '../application/use-cases/discov
 import { ListRepositoriesUseCase } from '../application/use-cases/list-repositories.js';
 import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js';
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
+import { ReconcileWorktreeUseCase } from '../application/use-cases/reconcile-worktree.js';
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
 import type { PgUserStore } from './adapters/pg-user-store.adapter.js';
@@ -162,8 +163,10 @@ export async function createContainer() {
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
 
+  const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, config, hostFs, git, logger);
+
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git);
-  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore, personaStore, agentEventStore);
+  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore, personaStore, agentEventStore, reconcileWorktree, hostFs);
 
   return {
     logger,

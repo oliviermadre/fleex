@@ -61,4 +61,5 @@ export interface WorktreeSessionGroup {
   readonly path: string;
   readonly sessions: Session[];
   readonly agentWorktree?: AgentWorktreeInfo;
+  readonly worktreeStatus?: 'ready' | 'reconciling' | 'repo_missing' | 'unavailable';
 }

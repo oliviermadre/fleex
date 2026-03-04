@@ -7,9 +7,11 @@ import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { HostFs } from '../../infrastructure/host/types.js';
 import { ListSessionsUseCase } from './list-sessions.js';
 import type { EnrichClaudeActivityUseCase } from './enrich-claude-activity.js';
 import type { DiscoverExistingSessionsUseCase } from './discover-existing-sessions.js';
+import type { ReconcileWorktreeUseCase } from './reconcile-worktree.js';
 
 export class GetSessionGroupsUseCase {
   private readonly listSessions: ListSessionsUseCase;
@@ -24,6 +26,8 @@ export class GetSessionGroupsUseCase {
     private readonly ticketStore?: TicketStorePort,
     private readonly personaStore?: PersonaStorePort,
     private readonly agentEventStore?: AgentEventStorePort,
+    private readonly reconcileWorktree?: ReconcileWorktreeUseCase,
+    private readonly hostFs?: HostFs,
   ) {
     this.listSessions = new ListSessionsUseCase(sessionStore, tmux, logger);
   }
@@ -71,6 +75,11 @@ export class GetSessionGroupsUseCase {
     // Inject agent worktree info for tickets with worktree links and agent assignees
     if (this.ticketStore && this.personaStore) {
       await this.injectAgentWorktreeInfo(groups);
+    }
+
+    // Reconcile worktree paths for multi-machine support
+    if (this.reconcileWorktree && this.hostFs) {
+      await this.reconcileWorktreePaths(groups);
     }
 
     return groups;
@@ -188,6 +197,89 @@ export class GetSessionGroupsUseCase {
           };
           (repoGroup.worktrees as WorktreeSessionGroup[]).push(newWt);
         }
+      }
+    }
+  }
+
+  /**
+   * For each agent worktree group, check if the path exists locally.
+   * If not, attempt to recreate it via ReconcileWorktreeUseCase.
+   */
+  private async reconcileWorktreePaths(groups: SessionGroup[]): Promise<void> {
+    if (!this.reconcileWorktree || !this.hostFs) return;
+
+    type WorktreeRef = {
+      group: SessionGroup;
+      wt: WorktreeSessionGroup;
+      org: string;
+      name: string;
+    };
+
+    const toReconcile: WorktreeRef[] = [];
+
+    for (const group of groups) {
+      for (const wt of group.worktrees) {
+        if (!wt.agentWorktree) {
+          // Not an agent worktree — mark as ready if path exists
+          continue;
+        }
+        toReconcile.push({
+          group,
+          wt,
+          org: group.repositoryOrg,
+          name: group.repositoryName,
+        });
+      }
+    }
+
+    if (toReconcile.length === 0) return;
+
+    const results = await Promise.allSettled(
+      toReconcile.map(async (ref) => {
+        // Quick check: does the path already exist?
+        const pathExists = ref.wt.path
+          ? await this.hostFs!.exists(ref.wt.path).catch(() => false)
+          : false;
+
+        if (pathExists) {
+          (ref.wt as { worktreeStatus?: string }).worktreeStatus = 'ready';
+          return;
+        }
+
+        // Path doesn't exist — reconcile
+        const result = await this.reconcileWorktree!.execute(
+          ref.org,
+          ref.name,
+          ref.wt.branch,
+        );
+
+        const mutableWt = ref.wt as {
+          path: string;
+          worktreeStatus?: string;
+        };
+
+        switch (result.status) {
+          case 'exists':
+          case 'created':
+            mutableWt.path = result.path!;
+            mutableWt.worktreeStatus = 'ready';
+            break;
+          case 'repo_missing':
+            mutableWt.path = '';
+            mutableWt.worktreeStatus = 'repo_missing';
+            break;
+          case 'failed':
+            mutableWt.path = '';
+            mutableWt.worktreeStatus = 'unavailable';
+            break;
+        }
+      }),
+    );
+
+    // Log any unexpected errors
+    for (const r of results) {
+      if (r.status === 'rejected') {
+        this.logger.debug('Worktree reconciliation error', { error: String(r.reason) });
       }
     }
   }

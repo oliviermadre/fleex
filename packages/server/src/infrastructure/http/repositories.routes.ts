@@ -2,15 +2,8 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary } from '@asm/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
+import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
 import type { Container } from '../container.js';
-
-function sanitizeBranchForPath(branch: string): string {
-  return branch.toLowerCase()
-    .replace(/[/_\s]+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-{2,}/g, '-');
-}
 
 export function repositoryRoutes(container: Container) {
   return async function (app: FastifyInstance) {
