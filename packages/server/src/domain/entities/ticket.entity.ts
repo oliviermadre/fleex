@@ -123,6 +123,11 @@ export class TicketEntity {
     if (changes.assignee !== undefined && changes.assignee !== this.assignee) {
       diff['assignee'] = { from: this.assignee, to: changes.assignee };
       this.assignee = changes.assignee;
+      // Clear agent claim when manually reassigned to user or unassigned
+      if (this.agentClaimedAt && (changes.assignee === 'user' || changes.assignee === null)) {
+        diff['agentClaimedAt'] = { from: this.agentClaimedAt.toISOString(), to: null };
+        this.agentClaimedAt = null;
+      }
     }
 
     if (Object.keys(diff).length > 0) {

@@ -1182,7 +1182,7 @@ function AssigneeField({
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
               <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
             </svg>
-            <span className="flex-1 truncate text-left">{assignee}</span>
+            <span className="flex-1 truncate text-left">{assignee === 'user' ? 'Me' : assignee}</span>
             <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-faint)]">
               <path d="M4 6l4 4 4-4" />
             </svg>

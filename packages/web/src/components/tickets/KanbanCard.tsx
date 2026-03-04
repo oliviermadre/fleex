@@ -246,7 +246,16 @@ export function KanbanCard({
           </span>
         )}
 {ticket.assignee && (
-          ticket.agentClaimedAt ? (
+          ticket.assignee === 'user' ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-400" title="Me">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+                <rect x="2" y="3" width="12" height="10" rx="1.5" />
+                <circle cx="8" cy="7" r="1.5" />
+                <path d="M5 12c0-1.5 1.3-2.5 3-2.5s3 1 3 2.5" />
+              </svg>
+              <span className="max-w-[70px] truncate">Me</span>
+            </span>
+          ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-400" title={`Agent: ${ticket.assignee}`}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
                 <rect x="3" y="5" width="10" height="8" rx="1.5" />
@@ -254,15 +263,6 @@ export function KanbanCard({
                 <path d="M6 11h4" />
                 <line x1="8" y1="5" x2="8" y2="2.5" />
                 <circle cx="8" cy="2" r="0.75" />
-              </svg>
-              <span className="max-w-[70px] truncate">{ticket.assignee}</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-400" title={ticket.assignee}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
-                <rect x="2" y="3" width="12" height="10" rx="1.5" />
-                <circle cx="8" cy="7" r="1.5" />
-                <path d="M5 12c0-1.5 1.3-2.5 3-2.5s3 1 3 2.5" />
               </svg>
               <span className="max-w-[70px] truncate">{ticket.assignee}</span>
             </span>
