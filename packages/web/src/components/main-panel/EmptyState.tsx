@@ -21,7 +21,7 @@ export function EmptyState() {
         <Button variant="primary" size="sm" onClick={openCreateModal}>
           New Session
         </Button>
-        <HotkeyBadge hotkey="⌥⌘N" position="top-right" />
+        <HotkeyBadge hotkey="⇧⌘N" position="top-right" />
       </div>
     </div>
   );

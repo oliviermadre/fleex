@@ -6,6 +6,10 @@ import { useUIStore } from './uiStore';
 const recentlyKilled = new Map<string, number>();
 const KILL_GRACE_MS = 3000;
 
+/** Recently added sessions — preserved across broadcast updates to prevent flash */
+const recentlyAdded = new Map<string, { ts: number; session: Session }>();
+const ADD_GRACE_MS = 3000;
+
 function pruneKilled(): void {
   const now = Date.now();
   for (const [id, ts] of recentlyKilled) {
@@ -36,6 +40,26 @@ function filterKilledFromList(sessions: Session[]): Session[] {
   return sessions.filter((s) => !recentlyKilled.has(s.id));
 }
 
+function pruneAdded(): void {
+  const now = Date.now();
+  for (const [id, entry] of recentlyAdded) {
+    if (now - entry.ts > ADD_GRACE_MS) recentlyAdded.delete(id);
+  }
+}
+
+/** Ensure recently-added sessions aren't dropped by stale broadcast data */
+function preserveRecentlyAdded(sessions: Session[]): Session[] {
+  if (recentlyAdded.size === 0) return sessions;
+  pruneAdded();
+  if (recentlyAdded.size === 0) return sessions;
+  const ids = new Set(sessions.map((s) => s.id));
+  const missing: Session[] = [];
+  for (const [id, entry] of recentlyAdded) {
+    if (!ids.has(id)) missing.push(entry.session);
+  }
+  return missing.length > 0 ? [...sessions, ...missing] : sessions;
+}
+
 interface SessionState {
   sessions: Session[];
   selectedSessionId: string | null;
@@ -51,6 +75,8 @@ interface SessionState {
   closeSplit: () => void;
   setFocusedPane: (pane: 'primary' | 'split') => void;
   addSession: (session: Session) => void;
+  /** Add session to both sessions list and sessionGroups (optimistic, avoids race with WS broadcasts) */
+  addSessionToGroup: (session: Session) => void;
   removeSession: (id: string) => void;
   updateSessionStatus: (id: string, status: SessionStatus) => void;
   selectGroup: (id: string | null) => void;
@@ -66,7 +92,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   selectedGroupId: null,
   activeGroupCellIndex: null,
 
-  setSessions: (sessions) => set({ sessions: filterKilledFromList(sessions) }),
+  setSessions: (sessions) => set({ sessions: preserveRecentlyAdded(filterKilledFromList(sessions)) }),
 
   setSessionGroups: (groups) => set({ sessionGroups: filterKilledSessions(groups) }),
 
@@ -89,6 +115,43 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   addSession: (session) =>
     set((state) => ({ sessions: [...state.sessions, session] })),
+
+  addSessionToGroup: (session) =>
+    set((state) => {
+      // Track as recently added to protect from stale WS broadcasts
+      recentlyAdded.set(session.id, { ts: Date.now(), session });
+
+      // Add to flat sessions list (skip if already present)
+      const sessions = state.sessions.some((s) => s.id === session.id)
+        ? state.sessions
+        : [...state.sessions, session];
+
+      // Inject into the correct worktree within sessionGroups
+      const targetOrg = session.repositoryOrg ?? '_ungrouped';
+      const targetName = session.repositoryName ?? '_ungrouped';
+      const targetBranch = session.worktreeBranch ?? '_default';
+
+      let injected = false;
+      const sessionGroups = state.sessionGroups.map((group) => {
+        if (group.repositoryOrg !== targetOrg || group.repositoryName !== targetName) return group;
+        return {
+          ...group,
+          worktrees: group.worktrees.map((wt) => {
+            if (wt.branch !== targetBranch) return wt;
+            // Skip if session already in this worktree
+            if (wt.sessions.some((s) => s.id === session.id)) {
+              injected = true;
+              return wt;
+            }
+            injected = true;
+            return { ...wt, sessions: [...wt.sessions, session] };
+          }),
+        };
+      });
+
+      // If no matching group/worktree found, the background fetch will pick it up
+      return { sessions, sessionGroups: injected ? sessionGroups : state.sessionGroups };
+    }),
 
   removeSession: (id) =>
     set((state) => {

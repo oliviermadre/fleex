@@ -21,7 +21,7 @@ export function useKeyboardShortcuts() {
   const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
   const closeSplit = useSessionStore((s) => s.closeSplit);
   const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
-  const addSession = useSessionStore((s) => s.addSession);
+  const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
   const activeGroupCellIndex = useSessionStore((s) => s.activeGroupCellIndex);
   const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
@@ -162,9 +162,9 @@ export function useKeyboardShortcuts() {
           e.preventDefault();
           const cwd = basePath || '~';
           api.createSession({ cwd, type: 'shell' }).then((session) => {
-            addSession(session);
+            addSessionToGroup(session);
             selectSession(session.id);
-            api.fetchSessionGroups().then((groups) => setSessionGroups(groups));
+            api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
           }).catch(() => { /* silently fail */ });
           return;
         }
@@ -195,10 +195,17 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Cmd+N / Option+Cmd+N: new session (use e.code so Option dead-key doesn't mask the key)
-      if (meta && e.code === 'KeyN') {
+      // Cmd+Shift+N: open "New Session" modal
+      if (meta && e.shiftKey && e.code === 'KeyN') {
         e.preventDefault();
         openCreateModal();
+        return;
+      }
+
+      // Cmd+N: new tab in current worktree (if tab bar visible)
+      if (meta && !e.shiftKey && e.code === 'KeyN') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('asm:new-tab'));
         return;
       }
 
@@ -294,5 +301,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSession, setSessionGroups]);
+  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSessionToGroup, setSessionGroups]);
 }

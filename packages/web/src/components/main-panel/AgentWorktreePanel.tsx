@@ -12,6 +12,7 @@ import { TopToolbar } from './TopToolbar';
 import { StatusDot } from '../ui/StatusDot';
 import { deriveDisplayStatus } from '../../lib/deriveStatus';
 import { cn } from '../../lib/cn';
+import { HotkeyBadge } from '../ui/HotkeyBadge';
 import * as api from '../../services/api';
 
 const EMPTY_EXECUTIONS: AgentExecution[] = [];
@@ -40,7 +41,7 @@ export function AgentWorktreePanel({ ticketId }: Props) {
 
   // Find the worktree + parent repo group that owns this agent ticket
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
-  const addSession = useSessionStore((s) => s.addSession);
+  const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
   const removeSession = useSessionStore((s) => s.removeSession);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
   const basePath = useSettingsStore((s) => s.settings.basePath);
@@ -122,14 +123,22 @@ export function AgentWorktreePanel({ ticketId }: Props) {
     const cwd = worktreeData?.path || basePath || '~';
     try {
       const session = await api.createSession({ cwd, type: 'shell' });
-      addSession(session);
-      const groups = await api.fetchSessionGroups();
-      setSessionGroups(groups);
+      addSessionToGroup(session);
+      api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
       setActiveTab({ kind: 'session', sessionId: session.id });
     } catch {
       // silently fail
     }
-  }, [worktreeData, basePath, addSession, setSessionGroups]);
+  }, [worktreeData, basePath, addSessionToGroup, setSessionGroups]);
+
+  // Listen for Cmd+N "new tab" event
+  const isWorktreeAvailable = worktreeData?.worktreeStatus !== 'repo_missing' && worktreeData?.worktreeStatus !== 'unavailable';
+  useEffect(() => {
+    if (!isWorktreeAvailable) return;
+    const handler = () => { handleNewTab(); };
+    window.addEventListener('asm:new-tab', handler);
+    return () => window.removeEventListener('asm:new-tab', handler);
+  }, [handleNewTab, isWorktreeAvailable]);
 
   const handleCloseTab = useCallback(async (sessionId: string) => {
     try {
@@ -261,8 +270,15 @@ export function AgentWorktreePanel({ ticketId }: Props) {
           #{ticket.displayId} {ticket.title}
         </span>
         {ticket.assignee && (
-          <span className="ml-auto shrink-0 text-xs px-2 py-0.5 rounded bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]">
-            @{ticket.assignee}
+          <span className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-400">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+              <rect x="3" y="5" width="10" height="8" rx="1.5" />
+              <path d="M5.5 8.5h1M9.5 8.5h1" />
+              <path d="M6 11h4" />
+              <line x1="8" y1="5" x2="8" y2="2.5" />
+              <circle cx="8" cy="2" r="0.75" />
+            </svg>
+            {ticket.assignee}
           </span>
         )}
       </div>
@@ -310,7 +326,7 @@ export function AgentWorktreePanel({ ticketId }: Props) {
         {/* New Tab button */}
         <button
           className={cn(
-            'flex items-center gap-1 px-3 py-2 text-xs whitespace-nowrap transition-colors',
+            'relative flex items-center gap-1 px-3 py-2 text-xs whitespace-nowrap transition-colors',
             worktreeData?.worktreeStatus === 'repo_missing' || worktreeData?.worktreeStatus === 'unavailable'
               ? 'text-[var(--theme-text-faint)] cursor-not-allowed opacity-50'
               : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
@@ -328,6 +344,7 @@ export function AgentWorktreePanel({ ticketId }: Props) {
             <line x1="3" y1="8" x2="13" y2="8" />
           </svg>
           <span>New Tab</span>
+          <HotkeyBadge hotkey="⌘N" position="top-right" />
         </button>
       </div>
 
@@ -443,7 +460,7 @@ function ExecutionTab({ execution, isSelected, onClick }: {
       )}
       onClick={onClick}
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-accent)]">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-violet-400">
         <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
       </svg>
       <span className={cn('w-1.5 h-1.5 rounded-full', statusColor.replace('text-', 'bg-'))} />

@@ -132,7 +132,7 @@ export function SessionGroups() {
       >
         <PlusIcon size={16} />
         New Session
-        <HotkeyBadge hotkey="⌥⌘N" position="top-right" />
+        <HotkeyBadge hotkey="⇧⌘N" position="top-right" />
       </button>
     </div>
   );

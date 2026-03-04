@@ -41,7 +41,7 @@ export function CreateSessionModal() {
   const fetchWorktrees = useRepositoryStore((s) => s.fetchWorktrees);
 
   const selectSession = useSessionStore((s) => s.selectSession);
-  const addSession = useSessionStore((s) => s.addSession);
+  const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
 
   const [selectedRepo, setSelectedRepo] = useState('');
@@ -431,7 +431,7 @@ export function CreateSessionModal() {
 
       // Create shell session
       const shellSession = await api.createSession({ cwd, type: 'shell' });
-      addSession(shellSession);
+      addSessionToGroup(shellSession);
 
       // Create claude session
       const claudeSession = await api.createSession({
@@ -439,7 +439,7 @@ export function CreateSessionModal() {
         type: 'claude',
         claudePrompt: claudePrompt.trim() || undefined,
       });
-      addSession(claudeSession);
+      addSessionToGroup(claudeSession);
 
       // Select the claude session by default
       selectSession(claudeSession.id);
@@ -501,7 +501,7 @@ export function CreateSessionModal() {
     } finally {
       setCreating(false);
     }
-  }, [selectedRepo, worktreeMode, defaultBranchInfo, basePath, selectedWorktreeIndex, filteredWorktrees, selectedPRIndex, pullRequests, selectedIssueIndex, issues, newBranchName, claudePrompt, addSession, selectSession, setSessionGroups, closeModal, ticketContext, addTicketLink, removeTicketLink, ticketStoreTickets]);
+  }, [selectedRepo, worktreeMode, defaultBranchInfo, basePath, selectedWorktreeIndex, filteredWorktrees, selectedPRIndex, pullRequests, selectedIssueIndex, issues, newBranchName, claudePrompt, addSessionToGroup, selectSession, setSessionGroups, closeModal, ticketContext, addTicketLink, removeTicketLink, ticketStoreTickets]);
 
   const resetForm = () => {
     setSelectedRepo('');

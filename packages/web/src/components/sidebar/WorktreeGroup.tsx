@@ -124,10 +124,10 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
           {/* Row 4: Agent indicator (if agent worktree) */}
           {agentInfo && (
             <div className="flex items-center gap-1.5 pl-5">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-accent)]">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-violet-400">
                 <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
               </svg>
-              <span className="text-xs text-[var(--theme-accent)] truncate">{agentInfo.agentDisplayName}</span>
+              <span className="text-xs text-violet-400 truncate">{agentInfo.agentDisplayName}</span>
               {(() => {
                 const style = AGENT_STATUS_STYLE[agentInfo.executionStatus] ?? AGENT_STATUS_STYLE['idle']!;
                 return (

@@ -15,7 +15,7 @@ export function useCommandItems(query: string): CommandItem[] {
   const selectSession = useSessionStore((s) => s.selectSession);
   const selectGroup = useSessionStore((s) => s.selectGroup);
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
-  const addSession = useSessionStore((s) => s.addSession);
+  const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
 
   const setActivePanel = useUIStore((s) => s.setActivePanel);
@@ -123,9 +123,9 @@ export function useCommandItems(query: string): CommandItem[] {
       onExecute: () => {
         const cwd = basePath || '~';
         api.createSession({ cwd, type: 'shell' }).then((session) => {
-          addSession(session);
+          addSessionToGroup(session);
           selectSession(session.id);
-          api.fetchSessionGroups().then((groups) => setSessionGroups(groups));
+          api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
         }).catch(() => { /* silently fail */ });
         closeCommandPalette();
       },
@@ -231,7 +231,7 @@ export function useCommandItems(query: string): CommandItem[] {
     sessions, sessionGroups, selectedSessionId, sessionDisplayNames,
     selectSession, selectGroup, setActivePanel, openCreateModal, closeCommandPalette,
     toggleScratchpad, pinnedIcons, worktreeActions, basePath,
-    addLayoutGroup, addSession, setSessionGroups,
+    addLayoutGroup, addSessionToGroup, setSessionGroups,
     executePinnedAction, executeWorktreeAction,
     ticketItems, selectTicket,
   ]);

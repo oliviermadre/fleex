@@ -6,9 +6,10 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { usePullRequestStore } from '../../stores/pullRequestStore';
 import { deriveDisplayStatus } from '../../lib/deriveStatus';
 import { StatusDot } from '../ui/StatusDot';
-import { useMemo, useCallback, useState, useRef } from 'react';
+import { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '../../services/api';
+import { HotkeyBadge } from '../ui/HotkeyBadge';
 
 interface Props {
   session: Session;
@@ -114,7 +115,7 @@ export function SessionHeader({ session, splitFocused }: Props) {
 export function SessionTabs({ currentSession }: { currentSession: Session }) {
   const navigate = useNavigate();
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
-  const addSession = useSessionStore((s) => s.addSession);
+  const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
   const selectSession = useSessionStore((s) => s.selectSession);
   const removeSession = useSessionStore((s) => s.removeSession);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
@@ -234,15 +235,24 @@ export function SessionTabs({ currentSession }: { currentSession: Session }) {
     const cwd = worktreeData?.path || basePath || '~';
     try {
       const session = await api.createSession({ cwd, type: 'shell' });
-      addSession(session);
+      // Optimistically add to both sessions and sessionGroups, then select.
+      // This avoids the flash where a WS broadcast could overwrite the sessions
+      // array before fetchSessionGroups completes.
+      addSessionToGroup(session);
       selectSession(session.id);
-      const groups = await api.fetchSessionGroups();
-      setSessionGroups(groups);
-      navigate(`/sessions/${session.id}`, { replace: true });
+      // Refresh groups in background for eventual consistency (non-blocking)
+      api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
     } catch {
       // silently fail
     }
-  }, [worktreeData, basePath, addSession, selectSession, setSessionGroups, navigate]);
+  }, [worktreeData, basePath, addSessionToGroup, selectSession, setSessionGroups]);
+
+  // Listen for Cmd+N "new tab" event
+  useEffect(() => {
+    const handler = () => { handleNewTab(); };
+    window.addEventListener('asm:new-tab', handler);
+    return () => window.removeEventListener('asm:new-tab', handler);
+  }, [handleNewTab]);
 
   if (sortedSessions.length === 0) return null;
 
@@ -277,7 +287,7 @@ export function SessionTabs({ currentSession }: { currentSession: Session }) {
       })}
       {/* New Tab button */}
       <button
-        className="flex items-center gap-1 px-3 py-2 text-xs whitespace-nowrap text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]"
+        className="relative flex items-center gap-1 px-3 py-2 text-xs whitespace-nowrap text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]"
         onClick={handleNewTab}
         title="New shell in this worktree"
       >
@@ -286,6 +296,7 @@ export function SessionTabs({ currentSession }: { currentSession: Session }) {
           <line x1="3" y1="8" x2="13" y2="8" />
         </svg>
         <span>New Tab</span>
+        <HotkeyBadge hotkey="⌘N" position="top-right" />
       </button>
     </div>
   );
