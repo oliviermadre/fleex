@@ -119,7 +119,7 @@ function CommentMarkdown({
       }
       if (href?.startsWith('#asm-agent:')) {
         const name = href.slice('#asm-agent:'.length);
-        const mentionText = `@agent:${name}`;
+        const mentionText = `@${name}`;
         const mId = commentMentions?.get(mentionText);
         return (
           <MentionSpan
