@@ -135,7 +135,7 @@ export function NavSidebar() {
           label="Agents"
           active={activePanel === 'agents'}
           collapsed={navCollapsed}
-          hotkey="⌥5"
+          hotkey="⌥6"
           onClick={() => navigate('/agents')}
         />
 
@@ -154,7 +154,7 @@ export function NavSidebar() {
           label="Scratchpads"
           active={activePanel === 'scratchpads'}
           collapsed={navCollapsed}
-          hotkey="⌥6"
+          hotkey="⌥7"
           onClick={() => navigate('/scratchpads')}
         />
 
@@ -170,7 +170,7 @@ export function NavSidebar() {
           label="Cluster"
           active={activePanel === 'cluster'}
           collapsed={navCollapsed}
-          hotkey="⌥7"
+          hotkey="⌥8"
           onClick={() => navigate('/cluster')}
         />
       </div>

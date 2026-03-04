@@ -143,10 +143,15 @@ export function useKeyboardShortcuts() {
         }
         if (e.code === 'Digit6') {
           e.preventDefault();
-          setActivePanel('scratchpads');
+          setActivePanel('agents');
           return;
         }
         if (e.code === 'Digit7') {
+          e.preventDefault();
+          setActivePanel('scratchpads');
+          return;
+        }
+        if (e.code === 'Digit8') {
           e.preventDefault();
           setActivePanel('cluster');
           return;
