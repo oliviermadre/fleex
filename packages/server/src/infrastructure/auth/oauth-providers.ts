@@ -4,7 +4,7 @@
  * Environment variables:
  *   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
  *   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
- *   AUTH_CALLBACK_BASE_URL (e.g. https://asm.example.com)
+ *   AUTH_CALLBACK_BASE_URL (e.g. https://fleex.example.com)
  */
 
 export interface OAuthProviderConfig {

@@ -136,8 +136,8 @@ export function AgentWorktreePanel({ ticketId }: Props) {
   useEffect(() => {
     if (!isWorktreeAvailable) return;
     const handler = () => { handleNewTab(); };
-    window.addEventListener('asm:new-tab', handler);
-    return () => window.removeEventListener('asm:new-tab', handler);
+    window.addEventListener('fleex:new-tab', handler);
+    return () => window.removeEventListener('fleex:new-tab', handler);
   }, [handleNewTab, isWorktreeAvailable]);
 
   const handleCloseTab = useCallback(async (sessionId: string) => {

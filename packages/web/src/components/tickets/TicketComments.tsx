@@ -36,10 +36,10 @@ function buildMentionLookup(mentions: TicketMention[]): Map<string, Map<string, 
  * Content inside backtick code spans is left untouched.
  *
  * Mapping:
- *   @agent:name        →  [@agent:name](#asm-agent:name)
- *   @username          →  [@username](#asm-human:username)
- *   ~~@agent:name~~    →  [@agent:name](#asm-struck:agent:name)
- *   ~~@username~~      →  [@username](#asm-struck:username)
+ *   @agent:name        →  [@agent:name](#fleex-agent:name)
+ *   @username          →  [@username](#fleex-human:username)
+ *   ~~@agent:name~~    →  [@agent:name](#fleex-struck:agent:name)
+ *   ~~@username~~      →  [@username](#fleex-struck:username)
  */
 function preprocessMentions(body: string): string {
   return body.replace(
@@ -51,10 +51,10 @@ function preprocessMentions(body: string): string {
     /(```[\s\S]*?```|`[^`]*`)|~~(@agent:[a-zA-Z0-9_-]+)~~|~~(@[a-zA-Z0-9_-]+)~~|(@agent:[a-zA-Z0-9_-]+)|(@[a-zA-Z0-9_-]+)/g,
     (_match, codeSpan, struckAgent, struckHuman, activeAgent, activeHuman) => {
       if (codeSpan !== undefined) return codeSpan;
-      if (struckAgent !== undefined) return `[${struckAgent}](#asm-struck:${struckAgent.slice(1)})`;
-      if (struckHuman !== undefined) return `[${struckHuman}](#asm-struck:${struckHuman.slice(1)})`;
-      if (activeAgent !== undefined) return `[${activeAgent}](#asm-agent:${activeAgent.slice(1)})`;
-      if (activeHuman !== undefined) return `[${activeHuman}](#asm-human:${activeHuman.slice(1)})`;
+      if (struckAgent !== undefined) return `[${struckAgent}](#fleex-struck:${struckAgent.slice(1)})`;
+      if (struckHuman !== undefined) return `[${struckHuman}](#fleex-struck:${struckHuman.slice(1)})`;
+      if (activeAgent !== undefined) return `[${activeAgent}](#fleex-agent:${activeAgent.slice(1)})`;
+      if (activeHuman !== undefined) return `[${activeHuman}](#fleex-human:${activeHuman.slice(1)})`;
       return _match;
     },
   );
@@ -109,7 +109,7 @@ function CommentMarkdown({
   const components: Components = {
     // ── Mentions & links ─────────────────────────────────────────────────────
     a: ({ href, children }) => {
-      if (href?.startsWith('#asm-struck:')) {
+      if (href?.startsWith('#fleex-struck:')) {
         // Struck-through mention (removed/resolved)
         return (
           <span className="rounded-sm px-1 py-px text-[var(--theme-text-faint)] line-through opacity-60">
@@ -117,8 +117,8 @@ function CommentMarkdown({
           </span>
         );
       }
-      if (href?.startsWith('#asm-agent:')) {
-        const name = href.slice('#asm-agent:'.length);
+      if (href?.startsWith('#fleex-agent:')) {
+        const name = href.slice('#fleex-agent:'.length);
         const mentionText = `@${name}`;
         const mId = commentMentions?.get(mentionText);
         return (
@@ -130,8 +130,8 @@ function CommentMarkdown({
           />
         );
       }
-      if (href?.startsWith('#asm-human:')) {
-        const name = href.slice('#asm-human:'.length);
+      if (href?.startsWith('#fleex-human:')) {
+        const name = href.slice('#fleex-human:'.length);
         const mentionText = `@${name}`;
         const mId = commentMentions?.get(mentionText);
         if (mId) {

@@ -210,7 +210,7 @@ export function useKeyboardShortcuts() {
       // Cmd+N: new tab in current worktree (if tab bar visible)
       if (meta && !e.shiftKey && e.code === 'KeyN') {
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent('asm:new-tab'));
+        window.dispatchEvent(new CustomEvent('fleex:new-tab'));
         return;
       }
 
