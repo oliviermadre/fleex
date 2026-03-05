@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
-import type { TicketLink } from '@asm/shared';
+import type { TicketLink } from '@fleex/shared';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { CreateSessionUseCase } from './create-session.js';
