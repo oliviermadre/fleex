@@ -40,7 +40,8 @@ export class SupabaseCommentStore implements CommentStorePort {
     const { data, error } = await this.conn.client
       .from('comments')
       .select('*')
-      .eq('ticket_id', ticketId);
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: true });
     if (error) throw new Error(`SupabaseCommentStore.getByTicket failed: ${error.message}`);
     return (data as CommentRow[]).map(rowToEntity);
   }
