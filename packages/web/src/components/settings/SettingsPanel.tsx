@@ -28,6 +28,7 @@ export function SettingsPanel() {
   const settingsTab = useUIStore((s) => s.settingsTab);
 
   const [basePath, setBasePath] = useState('');
+  const [humanDisplayName, setHumanDisplayName] = useState('');
   const [humanMentionName, setHumanMentionName] = useState('');
   const [agentMaxConcurrency, setAgentMaxConcurrency] = useState(1);
   const [repoPatterns, setRepoPatterns] = useState<string[]>([]);
@@ -37,6 +38,7 @@ export function SettingsPanel() {
 
   useEffect(() => {
     setBasePath(settings.basePath);
+    setHumanDisplayName((settings as unknown as Record<string, unknown>)['humanDisplayName'] as string ?? '');
     setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
     setRepoPatterns(settings.repositories);
@@ -50,6 +52,7 @@ export function SettingsPanel() {
       repositories: repoPatterns,
       pinnedIcons,
       worktreeActions,
+      ...(humanDisplayName.trim() ? { humanDisplayName: humanDisplayName.trim() } : { humanDisplayName: undefined }),
       ...(humanMentionName.trim() ? { humanMentionName: humanMentionName.trim() } : { humanMentionName: undefined }),
       agentMaxConcurrency,
     } as Partial<AppSettings> & Record<string, unknown>);
@@ -127,6 +130,8 @@ export function SettingsPanel() {
             <GeneralTab
               basePath={basePath}
               setBasePath={setBasePath}
+              humanDisplayName={humanDisplayName}
+              setHumanDisplayName={setHumanDisplayName}
               humanMentionName={humanMentionName}
               setHumanMentionName={setHumanMentionName}
               agentMaxConcurrency={agentMaxConcurrency}
@@ -177,6 +182,8 @@ export function SettingsPanel() {
 function GeneralTab({
   basePath,
   setBasePath,
+  humanDisplayName,
+  setHumanDisplayName,
   humanMentionName,
   setHumanMentionName,
   agentMaxConcurrency,
@@ -184,6 +191,8 @@ function GeneralTab({
 }: {
   basePath: string;
   setBasePath: (v: string) => void;
+  humanDisplayName: string;
+  setHumanDisplayName: (v: string) => void;
   humanMentionName: string;
   setHumanMentionName: (v: string) => void;
   agentMaxConcurrency: number;
@@ -207,8 +216,20 @@ function GeneralTab({
 
       <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
         <Input
+          id="humanDisplayName"
+          label="Display Name"
+          placeholder="Olivier"
+          value={humanDisplayName}
+          onChange={(e) => setHumanDisplayName(e.target.value)}
+        />
+        <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+          Your name as shown in ticket comments (e.g. "Olivier"). Falls back to mention name if empty.
+        </p>
+
+        <div className="mt-4">
+        <Input
           id="humanMentionName"
-          label="Human Mention Name"
+          label="Mention Name"
           placeholder="Olivier"
           value={humanMentionName}
           onChange={(e) => setHumanMentionName(e.target.value)}
@@ -219,6 +240,7 @@ function GeneralTab({
           <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-accent)]">@Olivier</code>).
           Per-agent overrides can be set in agent configuration.
         </p>
+        </div>
       </div>
 
       <div className="mt-4 border-t border-[var(--theme-border)] pt-4">

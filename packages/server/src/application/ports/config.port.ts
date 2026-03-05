@@ -2,6 +2,7 @@ export interface AppConfig {
   basePath: string;
   defaultShell: string;
   repositoryRefreshIntervalMs: number;
+  humanDisplayName?: string;
   humanMentionName?: string;
   agentMaxConcurrency?: number;
 }

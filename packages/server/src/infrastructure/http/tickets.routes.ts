@@ -430,11 +430,11 @@ export function ticketRoutes(container: Container) {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
-        const humanMentionName = container.config.get().humanMentionName;
+        const { humanDisplayName, humanMentionName } = container.config.get();
         const { comment, createdMentions } = await container.postComment.execute({
           ticketId: request.params.id,
           authorType: 'user',
-          authorName: 'user',
+          authorName: humanDisplayName || humanMentionName || 'user',
           body: request.body.body,
           visibility: 'public',
           humanMentionNames: humanMentionName ? [humanMentionName] : [],

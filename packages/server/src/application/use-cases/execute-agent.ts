@@ -482,7 +482,7 @@ export class ExecuteAgentUseCase {
           const { comment, createdMentions: commentMentions } = await this.postComment.execute({
             ticketId: mention.ticketId,
             body: commentBody,
-            authorName: persona.name,
+            authorName: persona.displayName || persona.name,
             authorType: 'agent',
             parentId: mention.commentId,
             humanMentionNames: humanName ? [humanName] : [],
@@ -538,7 +538,7 @@ export class ExecuteAgentUseCase {
         const { comment, createdMentions: fallbackMentions } = await this.postComment.execute({
           ticketId: mention.ticketId,
           body: resultText,
-          authorName: persona.name,
+          authorName: persona.displayName || persona.name,
           authorType: 'agent',
           parentId: mention.commentId,
           humanMentionNames: humanName ? [humanName] : [],
