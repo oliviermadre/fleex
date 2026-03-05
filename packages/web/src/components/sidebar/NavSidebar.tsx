@@ -19,7 +19,7 @@ function FleexLogo({ collapsed }: { collapsed: boolean }) {
       {!collapsed && (
         <span className="text-base font-bold tracking-tight">
           <span className="text-[var(--theme-text-primary)]">fleex</span>
-          <span className="text-[var(--theme-accent)]">.run</span>
+          <span className="text-[var(--theme-accent)]">.dev</span>
         </span>
       )}
     </div>
