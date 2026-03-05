@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
@@ -23,6 +24,7 @@ interface ActiveExecution {
   executionId: string;
   personaId: string;
   status: 'running' | 'completed' | 'failed';
+  abortController: AbortController;
 }
 
 interface QueueItem {
@@ -224,6 +226,60 @@ export class ExecuteAgentUseCase {
     };
   }
 
+  /**
+   * Cancel a running execution by executionId.
+   * Immediately marks execution as interrupted in DB and notifies frontend,
+   * then aborts the SDK query loop (which may be hung).
+   */
+  async cancelExecution(executionId: string): Promise<boolean> {
+    let found: { mentionId: string; exec: ActiveExecution } | null = null;
+    for (const [mentionId, exec] of this.activeExecutions) {
+      if (exec.executionId === executionId && exec.status === 'running') {
+        found = { mentionId, exec };
+        break;
+      }
+    }
+    if (!found) return false;
+
+    const { mentionId, exec } = found;
+
+    // 1. Mark completed in DB immediately (don't wait for the loop to notice)
+    try {
+      const cancelEvent = AgentEventEntity.create({
+        executionId,
+        eventType: 'execution_end',
+        data: { status: 'interrupted', reason: 'cancelled' },
+        sequence: 999998,
+      });
+      await this.agentEventStore.appendEvent(cancelEvent);
+      this.onEvent?.(cancelEvent);
+      await this.agentEventStore.completeExecution(executionId, 'interrupted');
+    } catch {
+      // Best-effort — don't let store errors block cancel
+    }
+
+    // 2. Update in-memory state
+    exec.status = 'failed';
+    this.onExecutionComplete?.(exec.personaId, 'failed', mentionId);
+
+    // 3. Reset mention to pending
+    try {
+      const mention = await this.mentionStore.getById(mentionId);
+      if (mention) {
+        mention.resetToPending();
+        await this.mentionStore.save(mention);
+      }
+    } catch {
+      // Best-effort
+    }
+
+    // 4. Abort the SDK loop (may be hung — this is best-effort to free the async generator)
+    exec.abortController.abort(new Error('cancelled'));
+
+    this.logger.info('Agent execution cancelled', { executionId, mentionId });
+    return true;
+  }
+
   /** Resolve human mention name: persona override → global config */
   private resolveHumanMentionName(persona: AgentPersonaEntity): string | null {
     if (persona.humanMentionName) return persona.humanMentionName;
@@ -249,16 +305,27 @@ export class ExecuteAgentUseCase {
     mention: TicketMentionEntity,
   ): Promise<void> {
     const executionId = randomUUID();
-    this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'running' });
+    const abortController = new AbortController();
+    this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'running', abortController });
 
     const humanName = this.resolveHumanMentionName(persona);
 
     try {
-      // 1. Acknowledge mention
+      // 1. Ensure worktree exists BEFORE acknowledging (fail fast if no worktree)
+      const worktreePath = await this.ensureWorktree(mention.ticketId);
+      if (!worktreePath) {
+        this.logger.error('Cannot start agent: no worktree could be resolved', {
+          executionId, persona: persona.name, ticketId: mention.ticketId, mentionId: mention.id,
+        });
+        this.activeExecutions.delete(mention.id);
+        return;
+      }
+
+      // 2. Acknowledge mention
       mention.acknowledge();
       await this.mentionStore.save(mention);
 
-      // 1b. Claim ticket for agent
+      // 2b. Claim ticket for agent
       const ticket = await this.ticketStore.getTicketById(mention.ticketId);
       if (ticket && ticket.assignee !== persona.name) {
         ticket.claim(persona.name);
@@ -266,16 +333,13 @@ export class ExecuteAgentUseCase {
         this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
       }
 
-      // 2. Start execution tracking
+      // 3. Start execution tracking
       await this.agentEventStore.startExecution({
         executionId,
         personaId: persona.id,
         ticketId: mention.ticketId,
         mentionId: mention.id,
       });
-
-      // 3. Ensure worktree exists for agent work (needed before prompt composition)
-      const worktreePath = await this.ensureWorktree(mention.ticketId);
 
       // 4. Compose system prompt from persona files
       const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
@@ -345,7 +409,14 @@ export class ExecuteAgentUseCase {
         },
       });
 
-      // 9. Call Claude Agent SDK
+      // 9. Setup execution timeout
+      const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
+      const timeoutHandle = setTimeout(() => {
+        this.logger.warn('Agent execution timed out', { executionId, persona: persona.name, timeoutMs });
+        abortController.abort(new Error('timeout'));
+      }, timeoutMs);
+
+      // 10. Call Claude Agent SDK
       const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
       let sdkSessionId: string | undefined;
@@ -406,6 +477,11 @@ export class ExecuteAgentUseCase {
           prompt: userPrompt,
           options: queryOptions as Parameters<typeof query>[0]['options'],
         })) {
+          // Check abort signal between events
+          if (abortController.signal.aborted) {
+            break;
+          }
+
           // Capture session ID from init message
           const msg = message as Record<string, unknown>;
           if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
@@ -443,7 +519,9 @@ export class ExecuteAgentUseCase {
       try {
         await runQueryLoop();
       } catch (queryErr) {
-        if (previousSessionId) {
+        if (abortController.signal.aborted) {
+          // Abort was triggered — handle below
+        } else if (previousSessionId) {
           // Stale resume — clear session and retry fresh
           this.logger.warn('SDK query failed with resume, retrying without resume', {
             executionId,
@@ -461,9 +539,32 @@ export class ExecuteAgentUseCase {
         } else {
           throw queryErr;
         }
+      } finally {
+        clearTimeout(timeoutHandle);
       }
 
-      // 9. Parse structured output — prefer SDK-validated output, fall back to text parser
+      // Handle abort (cancel or timeout)
+      if (abortController.signal.aborted) {
+        // Check if cancelExecution() already did the cleanup
+        const currentExec = this.activeExecutions.get(mention.id);
+        if (currentExec && currentExec.status !== 'running') {
+          // Already cleaned up by cancelExecution()
+          return;
+        }
+        // Timeout path — cancelExecution didn't run, we need to do cleanup
+        const reason = abortController.signal.reason instanceof Error && abortController.signal.reason.message === 'timeout'
+          ? 'timeout' : 'cancelled';
+        await emitEvent('execution_end', { status: 'interrupted', reason });
+        await this.agentEventStore.completeExecution(executionId, 'interrupted');
+        this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'failed', abortController });
+        mention.resetToPending();
+        await this.mentionStore.save(mention);
+        this.onExecutionComplete?.(persona.id, 'failed', mention.id);
+        this.logger.info(`Agent execution ${reason}`, { executionId, persona: persona.name });
+        return;
+      }
+
+      // 11. Parse structured output — prefer SDK-validated output, fall back to text parser
       const structured = structuredOutput ?? parseAgentOutput(resultText);
 
       await emitEvent('execution_end', {
@@ -615,7 +716,7 @@ export class ExecuteAgentUseCase {
 
       // 13. Complete execution tracking
       await this.agentEventStore.completeExecution(executionId, 'completed');
-      this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'completed' });
+      this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'completed', abortController });
       this.onExecutionComplete?.(persona.id, 'completed', mention.id);
 
       this.logger.info('Agent execution completed', {
@@ -641,7 +742,7 @@ export class ExecuteAgentUseCase {
         // Don't let event store errors mask the original error
       }
 
-      this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'failed' });
+      this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'failed', abortController });
       this.onExecutionComplete?.(persona.id, 'failed', mention.id);
       this.logger.error('Agent execution failed', {
         executionId,
@@ -666,73 +767,116 @@ export class ExecuteAgentUseCase {
 
   /**
    * Ensure a git worktree exists for agent work on the given ticket.
-   * Returns the filesystem path to the worktree, or the repo basePath if no repo is associated.
+   * Returns the filesystem path to the worktree, or null if no repo/worktree could be resolved.
    *
-   * Worktree links use `ref = "org/repo:branch"` (matching frontend convention),
-   * `label = branchName`, and `url = filesystemPath`.
+   * Priority for resolving org/repo/branch:
+   * 1. Ticket worktree link (source of truth) — if ref = "org/repo:branch", extract all three
+   * 2. Board config (fallback) — if no worktree link, use board.repositoryOrg/Name + generate branch
+   * 3. No repo resolved → return null (agent cannot start)
    */
   private async ensureWorktree(ticketId: string): Promise<string | null> {
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) return null;
 
-    // Resolve repository from board
     const board = await this.ticketStore.getBoardById(ticket.boardId);
-    const hasRepo = !!(board?.repositoryOrg && board.repositoryName);
-    const repoPath = hasRepo
-      ? join(this.config.get().basePath, board!.repositoryOrg!, board!.repositoryName!)
-      : null;
-
-    // Check if ticket already has a worktree link — reuse it
     const existingWorktreeLink = ticket.links.find((l) => l.type === 'worktree');
+
+    // Resolve org, repo, and branch — ticket worktree link is source of truth
+    let org: string | null = null;
+    let repo: string | null = null;
+    let branchName: string;
+    let createNewBranch: boolean;
+
     if (existingWorktreeLink) {
-      // url stores the filesystem path (new convention)
-      if (existingWorktreeLink.url) {
-        return existingWorktreeLink.url;
+      if (existingWorktreeLink.ref.includes(':')) {
+        // ref = "org/repo:branch" — extract all three
+        const [orgRepo, branch] = existingWorktreeLink.ref.split(':');
+        const [linkOrg, linkRepo] = orgRepo!.split('/');
+        org = linkOrg!;
+        repo = linkRepo!;
+        branchName = branch!;
+      } else {
+        // label-only or legacy — use board as fallback for org/repo
+        branchName = existingWorktreeLink.label || existingWorktreeLink.ref;
+        org = board?.repositoryOrg ?? null;
+        repo = board?.repositoryName ?? null;
       }
-      // Legacy: ref is a filesystem path (starts with /)
-      if (existingWorktreeLink.ref.startsWith('/')) {
-        return existingWorktreeLink.ref;
-      }
-      // org/repo:branch ref without url — fall back to repo path
-      return repoPath ?? this.config.get().basePath;
+      createNewBranch = false;
+    } else {
+      // No worktree link — use board config
+      org = board?.repositoryOrg ?? null;
+      repo = board?.repositoryName ?? null;
+      if (!org || !repo) return null;
+      const slug = ticket.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40);
+      branchName = `agent/${ticket.displayId}-${slug}`;
+      createNewBranch = true;
     }
 
-    if (!hasRepo || !repoPath) {
-      return this.config.get().basePath;
+    if (!org || !repo) return null;
+
+    const repoPath = join(this.config.get().basePath, org, repo);
+
+    // Ensure repo is cloned locally
+    if (!existsSync(repoPath)) {
+      this.logger.info('Cloning repository for agent worktree', {
+        ticketId, repoPath, org, name: repo,
+      });
+      try {
+        const remote = `git@github.com:${org}/${repo}.git`;
+        const { execSync } = await import('node:child_process');
+        execSync(`git clone ${remote} ${repoPath}`, { timeout: 120_000 });
+      } catch (err) {
+        this.logger.error('Failed to clone repository for agent', {
+          ticketId, repoPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return null;
+      }
     }
 
-    const slug = ticket.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40);
-    const branchName = `agent/${ticket.displayId}-${slug}`;
-    const wtPath = join(repoPath, '..', `${board!.repositoryName}.agent-${ticket.displayId}-${slug}`);
+    // Derive worktree directory name from branch
+    const branchSlug = branchName.replace(/\//g, '-');
+    const wtPath = join(repoPath, '..', `${repo}.${branchSlug}`);
 
+    // If worktree directory already exists on disk, reuse it directly
+    if (existingWorktreeLink && existsSync(wtPath)) {
+      this.logger.info('Agent worktree ready', {
+        ticketId, worktreePath: wtPath, branchName, reused: true,
+      });
+      return wtPath;
+    }
+
+    // Create or reuse worktree
     try {
       const existingPath = await this.createWorktree.execute(repoPath, wtPath, {
         branch: branchName,
-        createNewBranch: true,
+        createNewBranch,
       });
       const worktreePath = existingPath ?? wtPath;
 
-      // Link worktree to ticket: ref=org/repo:branch, label=branch, url=filesystem path
-      const ref = `${board!.repositoryOrg}/${board!.repositoryName}:${branchName}`;
-      ticket.addLink('worktree', ref, branchName, worktreePath, randomUUID());
-      await this.ticketStore.saveTicket(ticket);
-      this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+      // If this is a new worktree (no link yet), add the link to the ticket
+      if (!existingWorktreeLink) {
+        const ref = `${org}/${repo}:${branchName}`;
+        ticket.addLink('worktree', ref, branchName, worktreePath, randomUUID());
+        await this.ticketStore.saveTicket(ticket);
+        this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+      }
 
-      this.logger.info('Agent worktree created', {
-        ticketId, worktreePath, branchName, ref,
+      this.logger.info('Agent worktree ready', {
+        ticketId, worktreePath, branchName, reused: !!existingWorktreeLink,
       });
 
       return worktreePath;
     } catch (err) {
-      this.logger.warn('Failed to create agent worktree, using repo path', {
-        ticketId,
+      this.logger.error('Failed to ensure agent worktree', {
+        ticketId, branchName, wtPath,
         error: err instanceof Error ? err.message : String(err),
       });
-      return repoPath;
+      return null;
     }
   }
 

@@ -24,6 +24,18 @@ export function agentEventsRoutes(container: Container) {
       },
     );
 
+    // POST /api/executions/:id/cancel — cancel a running execution
+    app.post<{ Params: { id: string } }>(
+      '/api/executions/:id/cancel',
+      async (request, reply) => {
+        const cancelled = await container.executeAgent.cancelExecution(request.params.id);
+        if (!cancelled) {
+          return reply.status(404).send({ error: 'Execution not found or not running' });
+        }
+        return { cancelled: true };
+      },
+    );
+
     // GET /api/executions/:id/events — get all events for an execution (historical replay)
     app.get<{ Params: { id: string } }>(
       '/api/executions/:id/events',

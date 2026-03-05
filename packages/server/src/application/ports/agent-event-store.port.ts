@@ -11,7 +11,7 @@ export interface AgentEventStorePort {
 
   appendEvent(event: AgentEventEntity): Promise<void>;
 
-  completeExecution(executionId: string, status: 'completed' | 'failed'): Promise<void>;
+  completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted'): Promise<void>;
 
   updateSessionId(executionId: string, sdkSessionId: string): Promise<void>;
 

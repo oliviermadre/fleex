@@ -219,7 +219,9 @@ CREATE TABLE IF NOT EXISTS agent_event_executions (
   event_count   INTEGER NOT NULL DEFAULT 0,
   status        TEXT NOT NULL DEFAULT 'running',
   started_at    TIMESTAMPTZ NOT NULL,
-  completed_at  TIMESTAMPTZ
+  completed_at  TIMESTAMPTZ,
+  sdk_session_id TEXT,
+  last_event_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket  ON agent_event_executions(ticket_id);

@@ -7,6 +7,7 @@ export interface AgentExecution {
   readonly status: 'running' | 'completed' | 'failed' | 'interrupted';
   readonly startedAt: string;
   readonly completedAt: string | null;
+  readonly lastEventAt: string | null;
   readonly sdkSessionId?: string | null;
 }
 

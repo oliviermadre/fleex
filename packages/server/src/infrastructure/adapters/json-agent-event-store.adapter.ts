@@ -15,6 +15,7 @@ interface ExecutionIndex {
   status: 'running' | 'completed' | 'failed' | 'interrupted';
   startedAt: string;
   completedAt: string | null;
+  lastEventAt: string | null;
   sdkSessionId?: string | null;
 }
 
@@ -57,6 +58,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       status: 'running',
       startedAt: new Date().toISOString(),
       completedAt: null,
+      lastEventAt: null,
     };
     this.index.push(entry);
     await this.syncIndex();
@@ -70,6 +72,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     const entry = this.index.find((e) => e.id === event.executionId);
     if (entry) {
       entry.eventCount++;
+      entry.lastEventAt = new Date().toISOString();
       // Batch index sync — only sync every 100 events to reduce I/O
       if (entry.eventCount % 100 === 0) {
         await this.syncIndex();
@@ -77,7 +80,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     }
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed'): Promise<void> {
+  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted'): Promise<void> {
     const entry = this.index.find((e) => e.id === executionId);
     if (entry) {
       entry.status = status;
@@ -174,6 +177,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       status: entry.status,
       startedAt: entry.startedAt,
       completedAt: entry.completedAt,
+      lastEventAt: entry.lastEventAt ?? null,
       sdkSessionId: entry.sdkSessionId,
     };
   }

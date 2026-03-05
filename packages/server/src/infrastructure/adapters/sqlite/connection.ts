@@ -25,6 +25,7 @@ export class SqliteConnection {
       ['boards', 'ALTER TABLE boards ADD COLUMN next_display_id INTEGER NOT NULL DEFAULT 1'],
       ['tickets', 'ALTER TABLE tickets ADD COLUMN display_id INTEGER NOT NULL DEFAULT 0'],
       ['agent_event_executions', 'ALTER TABLE agent_event_executions ADD COLUMN sdk_session_id TEXT'],
+      ['agent_event_executions', 'ALTER TABLE agent_event_executions ADD COLUMN last_event_at TEXT'],
     ];
 
     for (const [table, sql] of migrations) {

@@ -168,7 +168,8 @@ export const SQLITE_SCHEMA: string[] = [
     status TEXT NOT NULL DEFAULT 'running',
     started_at TEXT NOT NULL,
     completed_at TEXT,
-    sdk_session_id TEXT
+    sdk_session_id TEXT,
+    last_event_at TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket ON agent_event_executions(ticket_id)`,
   `CREATE INDEX IF NOT EXISTS idx_agent_executions_persona ON agent_event_executions(persona_id)`,

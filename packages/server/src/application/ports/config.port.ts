@@ -5,6 +5,7 @@ export interface AppConfig {
   humanDisplayName?: string;
   humanMentionName?: string;
   agentMaxConcurrency?: number;
+  agentExecutionTimeout?: number;
 }
 
 export interface ConfigPort {

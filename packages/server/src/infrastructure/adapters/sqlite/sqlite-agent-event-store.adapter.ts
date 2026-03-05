@@ -18,6 +18,7 @@ interface ExecutionRow {
   started_at: string;
   completed_at: string | null;
   sdk_session_id: string | null;
+  last_event_at: string | null;
 }
 
 export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
@@ -58,11 +59,11 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     await appendFile(filePath, line, 'utf-8');
 
     this.conn.db.prepare(
-      'UPDATE agent_event_executions SET event_count = event_count + 1 WHERE execution_id = ?'
-    ).run(event.executionId);
+      'UPDATE agent_event_executions SET event_count = event_count + 1, last_event_at = ? WHERE execution_id = ?'
+    ).run(new Date().toISOString(), event.executionId);
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed'): Promise<void> {
+  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted'): Promise<void> {
     this.conn.db.prepare(
       'UPDATE agent_event_executions SET status = ?, completed_at = ? WHERE execution_id = ?'
     ).run(status, new Date().toISOString(), executionId);
@@ -152,6 +153,7 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     status: row.status as AgentExecution['status'],
     startedAt: row.started_at,
     completedAt: row.completed_at,
+    lastEventAt: row.last_event_at ?? null,
     sdkSessionId: row.sdk_session_id,
   };
 }

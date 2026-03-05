@@ -18,6 +18,7 @@ interface ExecutionRow {
   started_at: string;
   completed_at: string | null;
   sdk_session_id: string | null;
+  last_event_at: string | null;
 }
 
 export class SupabaseAgentEventStore implements AgentEventStorePort {
@@ -56,7 +57,7 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     const line = JSON.stringify(event.toDTO()) + '\n';
     await appendFile(filePath, line, 'utf-8');
 
-    // Increment event count - use rpc or manual update
+    // Increment event count and update last_event_at
     const { data, error: readErr } = await this.conn.client
       .from('agent_event_executions')
       .select('event_count')
@@ -66,12 +67,15 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     if (!readErr && data) {
       await this.conn.client
         .from('agent_event_executions')
-        .update({ event_count: (data as { event_count: number }).event_count + 1 })
+        .update({
+          event_count: (data as { event_count: number }).event_count + 1,
+          last_event_at: new Date().toISOString(),
+        })
         .eq('execution_id', event.executionId);
     }
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed'): Promise<void> {
+  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted'): Promise<void> {
     const { error } = await this.conn.client
       .from('agent_event_executions')
       .update({ status, completed_at: new Date().toISOString() })
@@ -178,6 +182,7 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     status: row.status as AgentExecution['status'],
     startedAt: row.started_at,
     completedAt: row.completed_at,
+    lastEventAt: row.last_event_at ?? null,
     sdkSessionId: row.sdk_session_id,
   };
 }

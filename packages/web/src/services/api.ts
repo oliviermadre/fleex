@@ -471,3 +471,7 @@ export async function fetchExecutionsForTicket(ticketId: string): Promise<AgentE
 export async function fetchEventsForExecution(executionId: string): Promise<AgentEvent[]> {
   return request<AgentEvent[]>(`/executions/${executionId}/events`);
 }
+
+export async function cancelExecution(executionId: string): Promise<{ cancelled: boolean }> {
+  return request<{ cancelled: boolean }>(`/executions/${executionId}/cancel`, { method: 'POST' });
+}

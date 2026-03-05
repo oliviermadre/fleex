@@ -41,12 +41,12 @@ export class PgAgentEventStore implements AgentEventStorePort {
     await appendFile(filePath, line, 'utf-8');
 
     await this.db.query(
-      'UPDATE agent_event_executions SET event_count = event_count + 1 WHERE execution_id = $1',
-      [event.executionId],
+      'UPDATE agent_event_executions SET event_count = event_count + 1, last_event_at = $1 WHERE execution_id = $2',
+      [new Date().toISOString(), event.executionId],
     );
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed'): Promise<void> {
+  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted'): Promise<void> {
     await this.db.query(
       'UPDATE agent_event_executions SET status = $1, completed_at = $2 WHERE execution_id = $3',
       [status, new Date().toISOString(), executionId],
@@ -140,6 +140,7 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     status: row.status as AgentExecution['status'],
     startedAt: row.started_at as string,
     completedAt: (row.completed_at as string) ?? null,
+    lastEventAt: (row.last_event_at as string) ?? null,
     sdkSessionId: (row.sdk_session_id as string) ?? null,
   };
 }
