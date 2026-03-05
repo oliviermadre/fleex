@@ -83,7 +83,7 @@ export function useKeyboardShortcuts() {
             const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
             return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
           })
-        : group.worktrees;
+        : [...group.worktrees].sort((a, b) => a.branch.localeCompare(b.branch));
 
       for (const wt of sortedWts) {
         const wtGroupId = `${repoId}:${wt.branch}`;
