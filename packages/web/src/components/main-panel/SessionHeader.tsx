@@ -250,8 +250,8 @@ export function SessionTabs({ currentSession }: { currentSession: Session }) {
   // Listen for Cmd+N "new tab" event
   useEffect(() => {
     const handler = () => { handleNewTab(); };
-    window.addEventListener('asm:new-tab', handler);
-    return () => window.removeEventListener('asm:new-tab', handler);
+    window.addEventListener('fleex:new-tab', handler);
+    return () => window.removeEventListener('fleex:new-tab', handler);
   }, [handleNewTab]);
 
   return (

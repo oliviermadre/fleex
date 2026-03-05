@@ -218,26 +218,26 @@ function GeneralTab({
         <Input
           id="humanDisplayName"
           label="Display Name"
-          placeholder="Olivier"
+          placeholder="Wally Worktree"
           value={humanDisplayName}
           onChange={(e) => setHumanDisplayName(e.target.value)}
         />
         <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
-          Your name as shown in ticket comments (e.g. "Olivier"). Falls back to mention name if empty.
+          Your name as shown in ticket comments (e.g. "Wally Worktree"). Falls back to mention name if empty.
         </p>
 
         <div className="mt-4">
         <Input
           id="humanMentionName"
           label="Mention Name"
-          placeholder="Olivier"
+          placeholder="Wally"
           value={humanMentionName}
           onChange={(e) => setHumanMentionName(e.target.value)}
         />
         <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
           The <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">@tag</code> agents
-          should use to mention you (e.g. <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">Olivier</code> for{' '}
-          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-accent)]">@Olivier</code>).
+          should use to mention you (e.g. <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">Wally</code> for{' '}
+          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-accent)]">@Wally</code>).
           Per-agent overrides can be set in agent configuration.
         </p>
         </div>

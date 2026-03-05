@@ -66,7 +66,7 @@ function getTicketRepoWorktreeInfo(t: Ticket): { repo: string; branch: string | 
   return null;
 }
 
-const BOARD_STORAGE_KEY = 'asm:lastBoardId';
+const BOARD_STORAGE_KEY = 'fleex:lastBoardId';
 const ALL_BOARDS_SENTINEL = '__all__';
 
 function loadPersistedBoardId(): string | null | undefined {

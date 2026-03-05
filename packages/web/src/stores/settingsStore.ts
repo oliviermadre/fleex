@@ -87,20 +87,10 @@ const defaultSettings: AppSettings = {
 
 function loadFromStorage(): AppSettings {
   try {
-    let raw = localStorage.getItem(STORAGE_KEY);
-    // Migrate from old 'asm-settings' key
-    if (!raw) {
-      const legacy = localStorage.getItem('asm-settings');
-      if (legacy) {
-        raw = legacy;
-        localStorage.setItem(STORAGE_KEY, legacy);
-        localStorage.removeItem('asm-settings');
-      }
-    }
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return { ...defaultSettings, ...parsed };
-    }
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultSettings;
+    const parsed = JSON.parse(raw);
+    return { ...defaultSettings, ...parsed };
   } catch { /* ignore */ }
   return defaultSettings;
 }

@@ -148,7 +148,7 @@ describe('SessionNamingService', () => {
       expect(service.isManaged('fleex_claude_org_repo_main_claude')).toBe(true);
     });
 
-    it('should return false for non-asm names', () => {
+    it('should return false for non-fleex names', () => {
       expect(service.isManaged('my-session')).toBe(false);
       expect(service.isManaged('0')).toBe(false);
     });
