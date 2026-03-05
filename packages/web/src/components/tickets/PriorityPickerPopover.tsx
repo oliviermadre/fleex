@@ -75,7 +75,8 @@ export function PriorityPickerPopover({ ticket }: { ticket: Ticket }) {
                   ? 'bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
                   : 'text-[var(--theme-text-secondary)]',
               )}
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 updateTicket(ticket.id, { priority: p });
                 setOpen(false);
               }}
