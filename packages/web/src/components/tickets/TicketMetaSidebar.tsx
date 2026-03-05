@@ -667,6 +667,23 @@ function RepoWorktreePicker({
   const [worktrees, setWorktrees] = useState<WorktreeOption[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // True when the linked worktree is present in the fetched worktree list
+  const worktreeExistsLocally = useMemo(() => {
+    if (!worktreeLink || loading) return true; // no warning while loading or no link
+    const ref = worktreeLink.ref;
+    if (ref.startsWith('/')) {
+      // Absolute path format (written by agents/API)
+      return worktrees.some((wt) => wt.path === ref);
+    }
+    // UI format: "org/name:branch"
+    const colonIdx = ref.indexOf(':');
+    if (colonIdx > 0) {
+      const branch = ref.substring(colonIdx + 1);
+      return worktrees.some((wt) => wt.branch === branch);
+    }
+    return true;
+  }, [worktreeLink, worktrees, loading]);
+
   // Parse resolved repositories into { org, name, key } objects
   const repos = useMemo(() => {
     return resolvedRepositories
@@ -822,28 +839,40 @@ function RepoWorktreePicker({
           Worktree
         </label>
         {worktreeLink ? (
-          <div className="flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-[var(--theme-text-muted)]">
-                <circle cx="5" cy="3.5" r="1.5" />
-                <circle cx="8" cy="12.5" r="1.5" />
-                <line x1="5" y1="5" x2="8" y2="11" />
-              </svg>
-              <span className="truncate text-xs text-[var(--theme-text-primary)]">{worktreeLink.label}</span>
-            </div>
-            {repoInConfig && (
-              <button
-                className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-                onClick={handleClearWorktree}
-                title="Unlink worktree"
-              >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <line x1="4" y1="4" x2="12" y2="12" />
-                  <line x1="12" y1="4" x2="4" y2="12" />
+          <>
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+                  <circle cx="5" cy="3.5" r="1.5" />
+                  <circle cx="8" cy="12.5" r="1.5" />
+                  <line x1="5" y1="5" x2="8" y2="11" />
                 </svg>
-              </button>
+                <span className="truncate text-xs text-[var(--theme-text-primary)]">{worktreeLink.label}</span>
+              </div>
+              {repoInConfig && (
+                <button
+                  className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+                  onClick={handleClearWorktree}
+                  title="Unlink worktree"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="4" y1="4" x2="12" y2="12" />
+                    <line x1="12" y1="4" x2="4" y2="12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {!loading && !worktreeExistsLocally && (
+              <div className="mt-1.5 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="mt-0.5 flex-shrink-0 text-amber-400">
+                  <path d="M8.22 1.754a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575L6.457 1.047zM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm.25-5.25a.75.75 0 0 0-1.5 0v2.5a.75.75 0 0 0 1.5 0v-2.5z" />
+                </svg>
+                <span className="text-[10px] leading-tight text-amber-300">
+                  Worktree not found locally — it will be auto-created when you open a session.
+                </span>
+              </div>
             )}
-          </div>
+          </>
         ) : loading ? (
           <span className="text-[10px] text-[var(--theme-text-muted)]">Loading worktrees...</span>
         ) : worktrees.length === 0 ? (
