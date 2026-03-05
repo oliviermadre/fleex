@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { RepositorySummary } from '@asm/shared';
+import type { RepositorySummary } from '@fleex/shared';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { RepositoriesSidebarHeader } from './RepositoriesSidebarHeader';
 import { OrgGroup } from './OrgGroup';

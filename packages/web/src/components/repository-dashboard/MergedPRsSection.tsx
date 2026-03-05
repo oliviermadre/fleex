@@ -1,4 +1,4 @@
-import type { PullRequest } from '@asm/shared';
+import type { PullRequest } from '@fleex/shared';
 import { DataTable, type Column } from '../ui/DataTable';
 
 interface Props {

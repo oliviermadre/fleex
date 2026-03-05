@@ -1,5 +1,5 @@
 import { cn } from '../../lib/cn';
-import type { SessionType } from '@asm/shared';
+import type { SessionType } from '@fleex/shared';
 
 interface BadgeProps {
   type: SessionType;

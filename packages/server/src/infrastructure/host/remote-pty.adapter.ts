@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws';
-import type { PtyHandle, TerminalDimensions } from '@asm/shared';
+import type { PtyHandle, TerminalDimensions } from '@fleex/shared';
 import type { PtyPort } from '../../application/ports/pty.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 

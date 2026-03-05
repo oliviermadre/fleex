@@ -1,4 +1,4 @@
-import type { TicketMention, MentionStatus, MentionTargetType } from '@asm/shared';
+import type { TicketMention, MentionStatus, MentionTargetType } from '@fleex/shared';
 
 export class TicketMentionEntity {
   constructor(

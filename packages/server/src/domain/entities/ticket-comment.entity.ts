@@ -1,4 +1,4 @@
-import type { TicketComment, CommentVisibility } from '@asm/shared';
+import type { TicketComment, CommentVisibility } from '@fleex/shared';
 
 const AGENT_MENTION_PATTERN = /@agent:([a-zA-Z0-9_-]+)/g;
 const HUMAN_MENTION_PATTERN = /@([a-zA-Z0-9_-]+)/g;

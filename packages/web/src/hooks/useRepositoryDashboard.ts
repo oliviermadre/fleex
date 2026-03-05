@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { RepositoryWsMessage } from '@asm/shared';
+import type { RepositoryWsMessage } from '@fleex/shared';
 import { useRepositoryDashboardStore } from '../stores/repositoryDashboardStore';
 import { repositoryWs } from '../services/websocket';
 import * as api from '../services/api';

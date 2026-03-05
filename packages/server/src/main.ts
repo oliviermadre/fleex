@@ -41,7 +41,7 @@ import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 async function main() {
   const container = await createContainer();
 
-  // Discover existing asm_ tmux sessions
+  // Discover existing fleex_ tmux sessions
   await container.discoverSessions.execute();
 
   const app = Fastify({ logger: false });
@@ -135,7 +135,7 @@ async function main() {
 
   const port = parseInt(process.env['PORT'] ?? '3000', 10);
   await app.listen({ port, host: '0.0.0.0' });
-  container.logger.info(`ASM server started on port ${port}`);
+  container.logger.info(`Fleex server started on port ${port}`);
 
   // Verify gateway connectivity
   try {

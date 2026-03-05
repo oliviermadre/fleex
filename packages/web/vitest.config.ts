@@ -10,7 +10,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@asm/shared': path.resolve(__dirname, '../shared/src/index.ts'),
+      '@fleex/shared': path.resolve(__dirname, '../shared/src/index.ts'),
     },
   },
 });

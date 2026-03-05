@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { TicketWsMessage } from '@asm/shared';
+import type { TicketWsMessage } from '@fleex/shared';
 import { ticketWs } from '../services/websocket';
 import { useTicketStore } from '../stores/ticketStore';
 

@@ -1,9 +1,9 @@
 import { join } from 'node:path';
-import { ASM_DIR, SESSIONS_FILE } from '@asm/shared';
+import { FLEEX_DIR, SESSIONS_FILE } from '@fleex/shared';
 import { SessionEntity } from '../../domain/entities.js';
 import type { SessionStorePort } from '../../application/ports/session-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-import type { SessionType, SessionStatus } from '@asm/shared';
+import type { SessionType, SessionStatus } from '@fleex/shared';
 import type { HostFs } from '../host/types.js';
 
 interface SerializedSession {
@@ -32,13 +32,13 @@ export class JsonSessionStore implements SessionStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    const dir = join(this.homedir, ASM_DIR);
+    const dir = join(this.homedir, FLEEX_DIR);
     this.filePath = join(dir, SESSIONS_FILE);
   }
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    const dir = join(this.homedir, ASM_DIR);
+    const dir = join(this.homedir, FLEEX_DIR);
     if (!(await this.hostFs.exists(dir))) {
       await this.hostFs.mkdir(dir);
     }

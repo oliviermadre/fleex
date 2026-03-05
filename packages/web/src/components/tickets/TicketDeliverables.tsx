@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { TicketDeliverable, TicketWsMessage } from '@asm/shared';
+import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
 import { ticketWs } from '../../services/websocket';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import * as api from '../../services/api';

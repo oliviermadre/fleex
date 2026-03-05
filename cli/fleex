@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# fleex — Local dev-stack manager for Agent Session Manager
+# fleex — Local dev-stack manager
 #
 # Supports multiple concurrent instances via git worktrees.
 # Each instance gets its own dynamically-allocated ports.
@@ -225,7 +225,7 @@ JSON
   # Gateway
   (cd "$REPO_DIR" && \
     GATEWAY_PORT="$PORT_GATEWAY" \
-    ASM_CENTRAL_URL="http://localhost:$PORT_SERVER" \
+    FLEEX_CENTRAL_URL="http://localhost:$PORT_SERVER" \
     bun run dev:gateway \
   ) < /dev/null > "$(log_file gateway)" 2>&1 &
   save_pid gateway $!
@@ -234,7 +234,7 @@ JSON
   (cd "$REPO_DIR" && \
     PORT="$PORT_SERVER" \
     HOST_GATEWAY_URL="http://localhost:$PORT_GATEWAY" \
-    ASM_STORAGE_DRIVER="${ASM_STORAGE_DRIVER:-json}" \
+    FLEEX_STORAGE_DRIVER="${FLEEX_STORAGE_DRIVER:-json}" \
     bun run dev:server \
   ) < /dev/null > "$(log_file server)" 2>&1 &
   save_pid server $!

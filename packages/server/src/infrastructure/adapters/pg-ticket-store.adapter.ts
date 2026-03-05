@@ -1,4 +1,4 @@
-import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, GitHubIssueMetadata } from '@asm/shared';
+import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, GitHubIssueMetadata } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';

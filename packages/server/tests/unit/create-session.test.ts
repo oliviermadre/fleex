@@ -44,7 +44,7 @@ describe('CreateSessionUseCase', () => {
     });
 
     expect(session.type).toBe('shell');
-    expect(session.tmuxName).toBe('asm_shell_myorg_myrepo_main_shell');
+    expect(session.tmuxName).toBe('fleex_shell_myorg_myrepo_main_shell');
     expect(session.displayName).toBe('Shell');
     expect(session.cwd).toBe('/tmp/project');
     expect(session.repositoryOrg).toBe('myorg');
@@ -74,7 +74,7 @@ describe('CreateSessionUseCase', () => {
     });
 
     expect(session.type).toBe('claude');
-    expect(session.tmuxName).toBe('asm_claude_myorg_myrepo_feat-test_claude');
+    expect(session.tmuxName).toBe('fleex_claude_myorg_myrepo_feat-test_claude');
     expect(session.displayName).toBe('Claude');
 
     // Should have sent the claude command
@@ -95,9 +95,9 @@ describe('CreateSessionUseCase', () => {
     const session1 = await useCase.execute({ cwd: '/tmp/project', type: 'claude' });
     const session2 = await useCase.execute({ cwd: '/tmp/project', type: 'claude' });
 
-    expect(session1.tmuxName).toBe('asm_claude_myorg_myrepo_main_claude');
+    expect(session1.tmuxName).toBe('fleex_claude_myorg_myrepo_main_claude');
     expect(session1.displayName).toBe('Claude');
-    expect(session2.tmuxName).toBe('asm_claude_myorg_myrepo_main_claude-1');
+    expect(session2.tmuxName).toBe('fleex_claude_myorg_myrepo_main_claude-1');
     expect(session2.displayName).toBe('Claude-1');
   });
 
@@ -121,8 +121,8 @@ describe('CreateSessionUseCase', () => {
 
     expect(session.repositoryOrg).toBeNull();
     expect(session.repositoryName).toBeNull();
-    // Without git context, name is just asm_shell_<displayName>
-    expect(session.tmuxName).toBe('asm_shell_shell');
+    // Without git context, name is just fleex_shell_<displayName>
+    expect(session.tmuxName).toBe('fleex_shell_shell');
     expect(session.displayName).toBe('Shell');
   });
 

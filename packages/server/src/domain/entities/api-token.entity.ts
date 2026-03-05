@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { AgentToken, AgentTokenCreated } from '@asm/shared';
+import type { AgentToken, AgentTokenCreated } from '@fleex/shared';
 
 export class ApiTokenEntity {
   constructor(
@@ -12,7 +12,7 @@ export class ApiTokenEntity {
   ) {}
 
   static create(params: { id: string; name: string }): { entity: ApiTokenEntity; secret: string } {
-    const secret = `asm_${randomBytes(32).toString('hex')}`;
+    const secret = `fleex_${randomBytes(32).toString('hex')}`;
     const prefix = secret.slice(0, 8);
     const hashedSecret = createHash('sha256').update(secret).digest('hex');
     const entity = new ApiTokenEntity(

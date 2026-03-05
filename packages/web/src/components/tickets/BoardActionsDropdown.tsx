@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import type { BoardWithCounts } from '@asm/shared';
+import type { BoardWithCounts } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { cn } from '../../lib/cn';
 

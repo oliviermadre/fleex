@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PullRequest } from '@asm/shared';
+import type { PullRequest } from '@fleex/shared';
 import { fetchPullRequests } from '../services/api';
 import { useSessionStore } from './sessionStore';
 

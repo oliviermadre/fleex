@@ -74,7 +74,7 @@ export function createAuthMiddleware(container: Container) {
     }
 
     // Mode 3: Full auth — require session cookie
-    const sessionId = parseCookie(request.headers.cookie, 'asm_session');
+    const sessionId = parseCookie(request.headers.cookie, 'fleex_session');
     if (!sessionId || !sessionManager) {
       return reply.code(401).send({ error: 'Authentication required' });
     }

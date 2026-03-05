@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import type { ClaudeUsage, ClaudeUsageMetric } from '@asm/shared';
+import type { ClaudeUsage, ClaudeUsageMetric } from '@fleex/shared';
 
 function parseTimeLeft(resetStr: string): string {
   // Formats: "Resets 12:59pm (Europe/Paris)", "Resets Feb 18 at 9am (Europe/Paris)"

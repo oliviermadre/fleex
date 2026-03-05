@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { DEFAULT_COLS, DEFAULT_ROWS, RESIZE_DEBOUNCE_MS, ServerMessageType, WS_TERMINAL_PATH } from '@asm/shared';
+import { DEFAULT_COLS, DEFAULT_ROWS, RESIZE_DEBOUNCE_MS, ServerMessageType, WS_TERMINAL_PATH } from '@fleex/shared';
 import { terminalManager } from '../services/terminalManager';
 import { WebSocketManager } from '../services/websocket';
 import { useTerminalStore } from '../stores/terminalStore';

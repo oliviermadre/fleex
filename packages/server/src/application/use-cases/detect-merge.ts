@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { PullRequest } from '@asm/shared';
+import type { PullRequest } from '@fleex/shared';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';

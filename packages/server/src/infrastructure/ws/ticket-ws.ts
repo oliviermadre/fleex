@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
-import { WS_TICKET_PATH } from '@asm/shared';
+import { WS_TICKET_PATH } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 export function ticketWsPlugin(container: Container) {

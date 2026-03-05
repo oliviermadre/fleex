@@ -1,4 +1,4 @@
-import type { PullRequest, GitHubIssue, GitHubIssueDetail } from '@asm/shared';
+import type { PullRequest, GitHubIssue, GitHubIssueDetail } from '@fleex/shared';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn } from '../host/types.js';
 

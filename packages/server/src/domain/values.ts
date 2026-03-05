@@ -1,1 +1,1 @@
-export type { SessionType, SessionStatus, TerminalDimensions } from '@asm/shared';
+export type { SessionType, SessionStatus, TerminalDimensions } from '@fleex/shared';

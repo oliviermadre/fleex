@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Repository, Worktree } from '@asm/shared';
+import type { Repository, Worktree } from '@fleex/shared';
 import * as api from '../services/api';
 
 interface RepositoryState {

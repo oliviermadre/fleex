@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { WS_TERMINAL_PATH, WS_DASHBOARD_PATH, WS_REPOSITORY_PATH, WS_TICKET_PATH, WS_AGENT_EVENTS_PATH } from '@asm/shared';
+import { WS_TERMINAL_PATH, WS_DASHBOARD_PATH, WS_REPOSITORY_PATH, WS_TICKET_PATH, WS_AGENT_EVENTS_PATH } from '@fleex/shared';
 import { terminalWs, dashboardWs, repositoryWs, ticketWs, agentEventWs } from '../services/websocket';
 import { useAgentEventStore } from '../stores/agentEventStore';
 import { WS_BASE_URL } from '../lib/constants';

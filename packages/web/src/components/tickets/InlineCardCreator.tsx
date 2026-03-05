@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import type { TicketStatus } from '@asm/shared';
+import type { TicketStatus } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 
 const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;

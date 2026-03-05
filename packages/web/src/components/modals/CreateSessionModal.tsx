@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { DiffStats, GitHubIssue, PullRequest, Worktree } from '@asm/shared';
+import type { DiffStats, GitHubIssue, PullRequest, Worktree } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useSessionStore } from '../../stores/sessionStore';

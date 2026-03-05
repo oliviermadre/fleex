@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
-import { TICKET_STATUSES } from '@asm/shared';
-import type { TicketStatus, Session } from '@asm/shared';
+import { TICKET_STATUSES } from '@fleex/shared';
+import type { TicketStatus, Session } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { KanbanColumn } from './KanbanColumn';

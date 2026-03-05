@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ClaudeConfigTreeEntry } from '@asm/shared';
+import type { ClaudeConfigTreeEntry } from '@fleex/shared';
 import {
   fetchClaudeConfigTree,
   fetchClaudeConfigFile,

@@ -6,7 +6,7 @@ import { Input } from '../ui/Input';
 import { TagInput } from '../ui/TagInput';
 import { AppearanceTab } from './AppearanceTab';
 import { cn } from '../../lib/cn';
-import type { AgentToken } from '@asm/shared';
+import type { AgentToken } from '@fleex/shared';
 import { useGatewayStore } from '../../stores/gatewayStore';
 import * as api from '../../services/api';
 

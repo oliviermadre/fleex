@@ -1,4 +1,4 @@
-import type { ClaudeActivityStatus } from '@asm/shared';
+import type { ClaudeActivityStatus } from '@fleex/shared';
 import type { ClaudeMessage, ClaudeContentBlock } from '../types/claude-message.js';
 
 export interface ActivityInput {

@@ -1,4 +1,4 @@
-import type { RepositorySummary } from '@asm/shared';
+import type { RepositorySummary } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { GitHubIcon } from './icons';
 import { RepoItem } from './RepoItem';

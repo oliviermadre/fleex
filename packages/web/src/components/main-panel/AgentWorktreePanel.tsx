@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import type { Session, AgentExecution, WorktreeSessionGroup } from '@asm/shared';
+import type { Session, AgentExecution, WorktreeSessionGroup } from '@fleex/shared';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';

@@ -1,4 +1,4 @@
-import type { TicketPriority } from '@asm/shared';
+import type { TicketPriority } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 
 const PRIORITY_COLORS: Record<TicketPriority, string> = {

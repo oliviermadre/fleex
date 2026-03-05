@@ -4,7 +4,7 @@ import { SessionEntity } from '../../src/domain/entities.js';
 function createSession(overrides?: Partial<ConstructorParameters<typeof SessionEntity>>) {
   return new SessionEntity(
     'test-id',
-    'asm_shell_abc12345',
+    'fleex_shell_abc12345',
     'shell',
     'running',
     '/tmp/test',
@@ -48,7 +48,7 @@ describe('SessionEntity', () => {
     const session = createSession();
     const dto = session.toDTO();
     expect(dto.id).toBe('test-id');
-    expect(dto.tmuxName).toBe('asm_shell_abc12345');
+    expect(dto.tmuxName).toBe('fleex_shell_abc12345');
     expect(dto.type).toBe('shell');
     expect(dto.status).toBe('running');
     expect(dto.cwd).toBe('/tmp/test');

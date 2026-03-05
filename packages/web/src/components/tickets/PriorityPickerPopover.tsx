@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import type { Ticket, TicketPriority } from '@asm/shared';
+import type { Ticket, TicketPriority } from '@fleex/shared';
 import { PriorityIndicator } from './PriorityIndicator';
 import { useTicketStore } from '../../stores/ticketStore';
 import { cn } from '../../lib/cn';

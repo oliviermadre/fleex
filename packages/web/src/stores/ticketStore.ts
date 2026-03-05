@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { Board, BoardWithCounts, Ticket, TicketStatus, TicketPriority, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@asm/shared';
-import { TICKET_STATUSES } from '@asm/shared';
+import type { Board, BoardWithCounts, Ticket, TicketStatus, TicketPriority, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@fleex/shared';
+import { TICKET_STATUSES } from '@fleex/shared';
 import * as api from '../services/api';
 import { useSessionStore } from './sessionStore';
 
@@ -33,7 +33,7 @@ interface TicketState {
   moveTicket: (id: string, status: TicketStatus, position?: number) => Promise<void>;
   addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
-  importGitHubIssue: (url: string, boardId: string, status?: import('@asm/shared').TicketStatus) => Promise<Ticket>;
+  importGitHubIssue: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
   syncGithubIssue: (ticketId: string) => Promise<void>;
   openSessionFromTicket: (id: string) => Promise<{ sessionId: string }>;
   selectBoard: (id: string | null) => void;

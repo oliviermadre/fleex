@@ -1,4 +1,4 @@
-import type { MentionStatus } from '@asm/shared';
+import type { MentionStatus } from '@fleex/shared';
 import { TicketMentionEntity } from '../../../domain/entities/ticket-mention.entity.js';
 import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
 import type { SqliteConnection } from './connection.js';

@@ -1,4 +1,4 @@
-import type { PtyHandle, TerminalDimensions } from '@asm/shared';
+import type { PtyHandle, TerminalDimensions } from '@fleex/shared';
 
 export interface PtyPort {
   spawnAttach(tmuxSessionName: string, dims: TerminalDimensions): PtyHandle;

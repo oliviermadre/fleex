@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
-import type { TicketPriority } from '@asm/shared';
-import { TICKET_PRIORITIES } from '@asm/shared';
+import type { TicketPriority } from '@fleex/shared';
+import { TICKET_PRIORITIES } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';

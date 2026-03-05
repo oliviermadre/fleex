@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
 
-const SCRATCHPAD_DIR = '.asm';
+const SCRATCHPAD_DIR = '.fleex';
 const SCRATCHPAD_FILE = 'scratchpad.md';
 const SCRATCHPADS_SUBDIR = 'scratchpads';
 

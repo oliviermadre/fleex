@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput } from '@asm/shared';
+import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';

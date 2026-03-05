@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AgentExecution } from '@asm/shared';
+import type { AgentExecution } from '@fleex/shared';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { AgentEventStream } from '../main-panel/AgentEventStream';

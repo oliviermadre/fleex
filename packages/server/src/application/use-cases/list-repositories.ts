@@ -1,6 +1,6 @@
 import { readdir, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { Repository } from '@asm/shared';
+import type { Repository } from '@fleex/shared';
 import type { GitPort } from '../ports/git.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';

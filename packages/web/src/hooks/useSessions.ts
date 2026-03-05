@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { DashboardMessage, SessionGroup, WorktreeSessionGroup } from '@asm/shared';
+import type { DashboardMessage, SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
 import { useSessionStore } from '../stores/sessionStore';
 import { dashboardWs } from '../services/websocket';
 import * as api from '../services/api';

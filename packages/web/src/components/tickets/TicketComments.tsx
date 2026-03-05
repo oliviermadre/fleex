@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { TicketComment, TicketMention, TicketWsMessage } from '@asm/shared';
+import type { TicketComment, TicketMention, TicketWsMessage } from '@fleex/shared';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';

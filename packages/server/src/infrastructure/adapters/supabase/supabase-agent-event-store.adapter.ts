@@ -2,8 +2,8 @@ import { join } from 'node:path';
 import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { ASM_DIR } from '@asm/shared';
-import type { AgentExecution } from '@asm/shared';
+import { FLEEX_DIR } from '@fleex/shared';
+import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort } from '../../../application/ports/agent-event-store.port.js';
 import type { SupabaseConnection } from './connection.js';
@@ -24,7 +24,7 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
   private readonly eventsDir: string;
 
   constructor(private readonly conn: SupabaseConnection) {
-    this.eventsDir = join(homedir(), ASM_DIR, 'projects', 'agent-events');
+    this.eventsDir = join(homedir(), FLEEX_DIR, 'projects', 'agent-events');
   }
 
   async init(): Promise<void> {

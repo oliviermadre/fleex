@@ -1,5 +1,5 @@
 {
-  "name": "@asm/host-gateway",
+  "name": "@fleex/host-gateway",
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/main.ts"

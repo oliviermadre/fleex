@@ -1,5 +1,5 @@
 -- ============================================================================
--- Agent Session Manager – Supabase Schema
+-- Fleex – Supabase Schema
 -- Run this in the Supabase SQL Editor to create all required tables and indexes.
 -- ============================================================================
 

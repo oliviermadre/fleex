@@ -15,7 +15,7 @@ import type {
   ClaudeUsage,
   AgentExecution,
   AgentEvent,
-} from '@asm/shared';
+} from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -264,59 +264,59 @@ export async function fetchScratchpadList(
 
 // ── Tickets & Boards API ──
 
-export async function fetchBoards(): Promise<import('@asm/shared').BoardWithCounts[]> {
-  return request<import('@asm/shared').BoardWithCounts[]>('/boards');
+export async function fetchBoards(): Promise<import('@fleex/shared').BoardWithCounts[]> {
+  return request<import('@fleex/shared').BoardWithCounts[]>('/boards');
 }
 
-export async function createBoard(req: import('@asm/shared').CreateBoardRequest): Promise<import('@asm/shared').Board> {
-  return request<import('@asm/shared').Board>('/boards', { method: 'POST', body: JSON.stringify(req) });
+export async function createBoard(req: import('@fleex/shared').CreateBoardRequest): Promise<import('@fleex/shared').Board> {
+  return request<import('@fleex/shared').Board>('/boards', { method: 'POST', body: JSON.stringify(req) });
 }
 
-export async function updateBoard(id: string, req: import('@asm/shared').UpdateBoardRequest): Promise<import('@asm/shared').Board> {
-  return request<import('@asm/shared').Board>(`/boards/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+export async function updateBoard(id: string, req: import('@fleex/shared').UpdateBoardRequest): Promise<import('@fleex/shared').Board> {
+  return request<import('@fleex/shared').Board>(`/boards/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
 }
 
 export async function deleteBoard(id: string): Promise<void> {
   await request<void>(`/boards/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export async function fetchTickets(boardId?: string): Promise<import('@asm/shared').Ticket[]> {
+export async function fetchTickets(boardId?: string): Promise<import('@fleex/shared').Ticket[]> {
   const qs = boardId ? `?boardId=${encodeURIComponent(boardId)}` : '';
-  return request<import('@asm/shared').Ticket[]>(`/tickets${qs}`);
+  return request<import('@fleex/shared').Ticket[]>(`/tickets${qs}`);
 }
 
-export async function fetchTicket(id: string): Promise<import('@asm/shared').Ticket> {
-  return request<import('@asm/shared').Ticket>(`/tickets/${encodeURIComponent(id)}`);
+export async function fetchTicket(id: string): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}`);
 }
 
-export async function createTicket(req: import('@asm/shared').CreateTicketRequest): Promise<import('@asm/shared').Ticket> {
-  return request<import('@asm/shared').Ticket>('/tickets', { method: 'POST', body: JSON.stringify(req) });
+export async function createTicket(req: import('@fleex/shared').CreateTicketRequest): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>('/tickets', { method: 'POST', body: JSON.stringify(req) });
 }
 
-export async function updateTicket(id: string, req: import('@asm/shared').UpdateTicketRequest): Promise<import('@asm/shared').Ticket> {
-  return request<import('@asm/shared').Ticket>(`/tickets/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+export async function updateTicket(id: string, req: import('@fleex/shared').UpdateTicketRequest): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
 }
 
-export async function updateTicketSilent(id: string, req: import('@asm/shared').UpdateTicketRequest): Promise<import('@asm/shared').Ticket> {
-  return request<import('@asm/shared').Ticket>(`/tickets/${encodeURIComponent(id)}?silent=true`, { method: 'PATCH', body: JSON.stringify(req) });
+export async function updateTicketSilent(id: string, req: import('@fleex/shared').UpdateTicketRequest): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}?silent=true`, { method: 'PATCH', body: JSON.stringify(req) });
 }
 
 export async function deleteTicket(id: string): Promise<void> {
   await request<void>(`/tickets/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export async function moveTicket(id: string, status: import('@asm/shared').TicketStatus, position?: number): Promise<import('@asm/shared').Ticket> {
-  return request<import('@asm/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/move`, {
+export async function moveTicket(id: string, status: import('@fleex/shared').TicketStatus, position?: number): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/move`, {
     method: 'POST', body: JSON.stringify({ status, position }),
   });
 }
 
-export async function reorderTickets(updates: { id: string; status: import('@asm/shared').TicketStatus; position: number }[]): Promise<void> {
+export async function reorderTickets(updates: { id: string; status: import('@fleex/shared').TicketStatus; position: number }[]): Promise<void> {
   await request<{ ok: boolean }>('/tickets/reorder', { method: 'POST', body: JSON.stringify({ updates }) });
 }
 
-export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string }): Promise<import('@asm/shared').TicketLink> {
-  return request<import('@asm/shared').TicketLink>(`/tickets/${encodeURIComponent(id)}/links`, {
+export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string }): Promise<import('@fleex/shared').TicketLink> {
+  return request<import('@fleex/shared').TicketLink>(`/tickets/${encodeURIComponent(id)}/links`, {
     method: 'POST', body: JSON.stringify(link),
   });
 }
@@ -325,34 +325,34 @@ export async function removeTicketLink(id: string, linkId: string): Promise<void
   await request<void>(`/tickets/${encodeURIComponent(id)}/links/${encodeURIComponent(linkId)}`, { method: 'DELETE' });
 }
 
-export async function fetchTicketActivity(id: string): Promise<import('@asm/shared').TicketActivity[]> {
-  return request<import('@asm/shared').TicketActivity[]>(`/tickets/${encodeURIComponent(id)}/activity`);
+export async function fetchTicketActivity(id: string): Promise<import('@fleex/shared').TicketActivity[]> {
+  return request<import('@fleex/shared').TicketActivity[]>(`/tickets/${encodeURIComponent(id)}/activity`);
 }
 
 export async function openSessionFromTicket(id: string): Promise<{ sessionId: string }> {
   return request<{ sessionId: string }>(`/tickets/${encodeURIComponent(id)}/open-session`, { method: 'POST' });
 }
 
-export async function importGitHubIssue(org: string, name: string, issueNumber: number, boardId: string): Promise<import('@asm/shared').Ticket> {
-  return request<import('@asm/shared').Ticket>('/tickets/import-github-issue', {
+export async function importGitHubIssue(org: string, name: string, issueNumber: number, boardId: string): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>('/tickets/import-github-issue', {
     method: 'POST', body: JSON.stringify({ org, name, number: issueNumber, boardId }),
   });
 }
 
-export async function syncGithubIssue(ticketId: string): Promise<import('@asm/shared').Ticket> {
-  return request<import('@asm/shared').Ticket>(`/tickets/${encodeURIComponent(ticketId)}/sync-github`, {
+export async function syncGithubIssue(ticketId: string): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(ticketId)}/sync-github`, {
     method: 'POST',
   });
 }
 
 // ── Ticket Mentions API ──
 
-export async function fetchTicketMentions(ticketId: string): Promise<import('@asm/shared').TicketMention[]> {
-  return request<import('@asm/shared').TicketMention[]>(`/tickets/${encodeURIComponent(ticketId)}/mentions`);
+export async function fetchTicketMentions(ticketId: string): Promise<import('@fleex/shared').TicketMention[]> {
+  return request<import('@fleex/shared').TicketMention[]>(`/tickets/${encodeURIComponent(ticketId)}/mentions`);
 }
 
-export async function updateMentionStatus(mentionId: string, status: import('@asm/shared').MentionStatus): Promise<import('@asm/shared').TicketMention> {
-  return request<import('@asm/shared').TicketMention>(`/mentions/${encodeURIComponent(mentionId)}/status`, {
+export async function updateMentionStatus(mentionId: string, status: import('@fleex/shared').MentionStatus): Promise<import('@fleex/shared').TicketMention> {
+  return request<import('@fleex/shared').TicketMention>(`/mentions/${encodeURIComponent(mentionId)}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),
   });
@@ -368,30 +368,30 @@ export async function deleteMentionFromComment(mentionId: string): Promise<void>
 
 // ── Ticket Deliverables API ──
 
-export async function fetchTicketDeliverables(ticketId: string): Promise<import('@asm/shared').TicketDeliverable[]> {
-  return request<import('@asm/shared').TicketDeliverable[]>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
+export async function fetchTicketDeliverables(ticketId: string): Promise<import('@fleex/shared').TicketDeliverable[]> {
+  return request<import('@fleex/shared').TicketDeliverable[]>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
 }
 
 // ── Ticket Comments API ──
 
-export async function fetchTicketComments(ticketId: string): Promise<import('@asm/shared').TicketComment[]> {
-  return request<import('@asm/shared').TicketComment[]>(`/tickets/${encodeURIComponent(ticketId)}/comments`);
+export async function fetchTicketComments(ticketId: string): Promise<import('@fleex/shared').TicketComment[]> {
+  return request<import('@fleex/shared').TicketComment[]>(`/tickets/${encodeURIComponent(ticketId)}/comments`);
 }
 
-export async function postTicketComment(ticketId: string, body: string): Promise<import('@asm/shared').TicketComment> {
-  return request<import('@asm/shared').TicketComment>(`/tickets/${encodeURIComponent(ticketId)}/comments`, {
+export async function postTicketComment(ticketId: string, body: string): Promise<import('@fleex/shared').TicketComment> {
+  return request<import('@fleex/shared').TicketComment>(`/tickets/${encodeURIComponent(ticketId)}/comments`, {
     method: 'POST', body: JSON.stringify({ body }),
   });
 }
 
 // ── Agent Tokens API ──
 
-export async function fetchAgentTokens(): Promise<import('@asm/shared').AgentToken[]> {
-  return request<import('@asm/shared').AgentToken[]>('/agent-tokens');
+export async function fetchAgentTokens(): Promise<import('@fleex/shared').AgentToken[]> {
+  return request<import('@fleex/shared').AgentToken[]>('/agent-tokens');
 }
 
-export async function createAgentToken(name: string): Promise<import('@asm/shared').AgentTokenCreated> {
-  return request<import('@asm/shared').AgentTokenCreated>('/agent-tokens', { method: 'POST', body: JSON.stringify({ name }) });
+export async function createAgentToken(name: string): Promise<import('@fleex/shared').AgentTokenCreated> {
+  return request<import('@fleex/shared').AgentTokenCreated>('/agent-tokens', { method: 'POST', body: JSON.stringify({ name }) });
 }
 
 export async function deleteAgentToken(id: string): Promise<void> {
@@ -419,28 +419,28 @@ export async function deleteGateway(id: string): Promise<void> {
 
 // ── Agent Personas API ──
 
-export async function fetchPersonas(): Promise<import('@asm/shared').AgentPersona[]> {
-  return request<import('@asm/shared').AgentPersona[]>('/personas');
+export async function fetchPersonas(): Promise<import('@fleex/shared').AgentPersona[]> {
+  return request<import('@fleex/shared').AgentPersona[]>('/personas');
 }
 
-export async function fetchPersona(id: string): Promise<import('@asm/shared').AgentPersona> {
-  return request<import('@asm/shared').AgentPersona>(`/personas/${encodeURIComponent(id)}`);
+export async function fetchPersona(id: string): Promise<import('@fleex/shared').AgentPersona> {
+  return request<import('@fleex/shared').AgentPersona>(`/personas/${encodeURIComponent(id)}`);
 }
 
-export async function createPersona(req: import('@asm/shared').CreateAgentPersonaRequest): Promise<import('@asm/shared').AgentPersona> {
-  return request<import('@asm/shared').AgentPersona>('/personas', { method: 'POST', body: JSON.stringify(req) });
+export async function createPersona(req: import('@fleex/shared').CreateAgentPersonaRequest): Promise<import('@fleex/shared').AgentPersona> {
+  return request<import('@fleex/shared').AgentPersona>('/personas', { method: 'POST', body: JSON.stringify(req) });
 }
 
-export async function updatePersona(id: string, req: import('@asm/shared').UpdateAgentPersonaRequest): Promise<import('@asm/shared').AgentPersona> {
-  return request<import('@asm/shared').AgentPersona>(`/personas/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+export async function updatePersona(id: string, req: import('@fleex/shared').UpdateAgentPersonaRequest): Promise<import('@fleex/shared').AgentPersona> {
+  return request<import('@fleex/shared').AgentPersona>(`/personas/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
 }
 
 export async function deletePersona(id: string): Promise<void> {
   await request<void>(`/personas/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export async function executeAgent(id: string): Promise<import('@asm/shared').AgentExecutionResult> {
-  return request<import('@asm/shared').AgentExecutionResult>(`/personas/${encodeURIComponent(id)}/execute`, { method: 'POST' });
+export async function executeAgent(id: string): Promise<import('@fleex/shared').AgentExecutionResult> {
+  return request<import('@fleex/shared').AgentExecutionResult>(`/personas/${encodeURIComponent(id)}/execute`, { method: 'POST' });
 }
 
 export async function fetchAgentStatus(id: string): Promise<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }> {

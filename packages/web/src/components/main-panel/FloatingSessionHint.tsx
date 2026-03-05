@@ -1,4 +1,4 @@
-import type { Session } from '@asm/shared';
+import type { Session } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 
 interface Props {

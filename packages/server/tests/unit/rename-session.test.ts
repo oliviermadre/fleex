@@ -35,7 +35,7 @@ describe('RenameSessionUseCase', () => {
   }> = {}) {
     const session = new SessionEntity(
       overrides.id ?? 'sess-1',
-      overrides.tmuxName ?? 'asm_claude_org_repo_main_claude',
+      overrides.tmuxName ?? 'fleex_claude_org_repo_main_claude',
       overrides.type ?? 'claude',
       'running',
       '/tmp/project',
@@ -60,21 +60,21 @@ describe('RenameSessionUseCase', () => {
 
     const updated = store.getById('sess-1')!;
     expect(updated.displayName).toBe('my-agent');
-    expect(updated.tmuxName).toBe('asm_claude_org_repo_main_my-agent');
+    expect(updated.tmuxName).toBe('fleex_claude_org_repo_main_my-agent');
     // Verify tmux was renamed
-    expect(tmux.sessions.has('asm_claude_org_repo_main_my-agent')).toBe(true);
-    expect(tmux.sessions.has('asm_claude_org_repo_main_claude')).toBe(false);
+    expect(tmux.sessions.has('fleex_claude_org_repo_main_my-agent')).toBe(true);
+    expect(tmux.sessions.has('fleex_claude_org_repo_main_claude')).toBe(false);
   });
 
   it('should auto-dedup when name conflicts with sibling', async () => {
-    createSession({ id: 'sess-1', tmuxName: 'asm_claude_org_repo_main_claude', displayName: 'Claude' });
-    createSession({ id: 'sess-2', tmuxName: 'asm_claude_org_repo_main_worker', displayName: 'worker' });
+    createSession({ id: 'sess-1', tmuxName: 'fleex_claude_org_repo_main_claude', displayName: 'Claude' });
+    createSession({ id: 'sess-2', tmuxName: 'fleex_claude_org_repo_main_worker', displayName: 'worker' });
 
     await useCase.execute('sess-1', 'worker');
 
     const updated = store.getById('sess-1')!;
     expect(updated.displayName).toBe('worker-1');
-    expect(updated.tmuxName).toBe('asm_claude_org_repo_main_worker-1');
+    expect(updated.tmuxName).toBe('fleex_claude_org_repo_main_worker-1');
   });
 
   it('should throw SessionNotFoundError for unknown id', async () => {
@@ -82,21 +82,21 @@ describe('RenameSessionUseCase', () => {
   });
 
   it('should short-circuit when name is unchanged', async () => {
-    createSession({ tmuxName: 'asm_claude_org_repo_main_claude', displayName: 'Claude' });
+    createSession({ tmuxName: 'fleex_claude_org_repo_main_claude', displayName: 'Claude' });
 
     await useCase.execute('sess-1', 'Claude');
 
     const updated = store.getById('sess-1')!;
-    expect(updated.tmuxName).toBe('asm_claude_org_repo_main_claude');
+    expect(updated.tmuxName).toBe('fleex_claude_org_repo_main_claude');
     expect(updated.displayName).toBe('Claude');
     // tmux rename should not have been called — session map should still have old name
-    expect(tmux.sessions.has('asm_claude_org_repo_main_claude')).toBe(true);
+    expect(tmux.sessions.has('fleex_claude_org_repo_main_claude')).toBe(true);
   });
 
   it('should work for sessions without git context', async () => {
     createSession({
       id: 'sess-1',
-      tmuxName: 'asm_shell_shell',
+      tmuxName: 'fleex_shell_shell',
       type: 'shell',
       org: null,
       repo: null,
@@ -108,6 +108,6 @@ describe('RenameSessionUseCase', () => {
 
     const updated = store.getById('sess-1')!;
     expect(updated.displayName).toBe('dev');
-    expect(updated.tmuxName).toBe('asm_shell_dev');
+    expect(updated.tmuxName).toBe('fleex_shell_dev');
   });
 });

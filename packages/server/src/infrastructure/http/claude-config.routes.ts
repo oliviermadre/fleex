@@ -1,7 +1,7 @@
 import { join, normalize, resolve } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
-import type { ClaudeConfigTreeEntry } from '@asm/shared';
+import type { ClaudeConfigTreeEntry } from '@fleex/shared';
 import type { HostFs } from '../host/types.js';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB

@@ -1,4 +1,4 @@
-import type { Board } from '@asm/shared';
+import type { Board } from '@fleex/shared';
 
 export class BoardEntity {
   constructor(

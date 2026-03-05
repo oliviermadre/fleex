@@ -1,5 +1,5 @@
 import { basename, dirname } from 'node:path';
-import type { DiffStats, GitRemoteInfo, Worktree } from '@asm/shared';
+import type { DiffStats, GitRemoteInfo, Worktree } from '@fleex/shared';
 import type { GitPort } from '../../application/ports/git.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn } from '../host/types.js';

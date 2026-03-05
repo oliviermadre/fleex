@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import type { SessionGroup, WorktreeSessionGroup } from '@asm/shared';
+import type { SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { WorktreeGroup } from './WorktreeGroup';

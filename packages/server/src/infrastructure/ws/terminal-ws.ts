@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import type { PtyHandle } from '@asm/shared';
-import { WS_TERMINAL_PATH, DEFAULT_COLS, DEFAULT_ROWS } from '@asm/shared';
+import type { PtyHandle } from '@fleex/shared';
+import { WS_TERMINAL_PATH, DEFAULT_COLS, DEFAULT_ROWS } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 // Binary protocol constants (match shared ClientMessageType / ServerMessageType)

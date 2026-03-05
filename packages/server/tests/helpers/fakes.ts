@@ -4,7 +4,7 @@ import type { GitPort } from '../../src/application/ports/git.port.js';
 import type { ConfigPort, AppConfig } from '../../src/application/ports/config.port.js';
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
 import type { HostFs } from '../../src/infrastructure/host/types.js';
-import type { DiffStats, GitRemoteInfo, Worktree } from '@asm/shared';
+import type { DiffStats, GitRemoteInfo, Worktree } from '@fleex/shared';
 import { SessionEntity } from '../../src/domain/entities.js';
 
 export class FakeTmuxPort implements TmuxPort {
@@ -40,7 +40,7 @@ export class FakeTmuxPort implements TmuxPort {
   }
 
   async listManagedSessions(): Promise<TmuxSessionInfo[]> {
-    return (await this.listSessions()).filter((s) => s.name.startsWith('asm_'));
+    return (await this.listSessions()).filter((s) => s.name.startsWith('fleex_'));
   }
 
   async renameSession(oldName: string, newName: string): Promise<void> {

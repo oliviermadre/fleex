@@ -1,4 +1,4 @@
-import type { TerminalTheme } from '@asm/shared';
+import type { TerminalTheme } from '@fleex/shared';
 
 export const TERMINAL_THEME: TerminalTheme = {
   background: '#09090b',
