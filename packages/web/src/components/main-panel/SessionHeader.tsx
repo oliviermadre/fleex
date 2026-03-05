@@ -254,8 +254,6 @@ export function SessionTabs({ currentSession }: { currentSession: Session }) {
     return () => window.removeEventListener('asm:new-tab', handler);
   }, [handleNewTab]);
 
-  if (sortedSessions.length === 0) return null;
-
   return (
     <div className="flex items-center gap-0 border-b border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 overflow-x-auto">
       {sortedSessions.map((s) => {

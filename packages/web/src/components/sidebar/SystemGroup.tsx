@@ -7,6 +7,8 @@ import { cn } from '../../lib/cn';
 import { useNavigate } from 'react-router-dom';
 import { aggregateBranchStatus } from '../../lib/deriveStatus';
 import { StatusDot } from '../ui/StatusDot';
+import * as api from '../../services/api';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 const SYSTEM_GROUP_ID = '_system';
 const SYSTEM_WORKTREE_KEY = '_system';
@@ -19,8 +21,6 @@ export function SystemGroup({ sessions }: Props) {
   const collapsedGroups = useUIStore((s) => s.collapsedGroups);
   const toggleGroup = useUIStore((s) => s.toggleGroup);
   const collapsed = collapsedGroups.has(SYSTEM_GROUP_ID);
-
-  if (sessions.length === 0) return null;
 
   return (
     <div className="my-1.5">
@@ -61,8 +61,20 @@ function SystemWorktreeItem({ sessions }: { sessions: Session[] }) {
   const branchStatus = useMemo(() => aggregateBranchStatus(sessions), [sessions]);
   const isSelected = sessions.some((s) => s.id === selectedSessionId);
 
+  const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
+  const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
+  const basePath = useSettingsStore((s) => s.settings.basePath);
+
   const handleClick = () => {
-    if (sessions.length === 0) return;
+    if (sessions.length === 0) {
+      const cwd = basePath || '/tmp';
+      api.createSession({ cwd, type: 'shell' }).then((session) => {
+        addSessionToGroup(session);
+        navigate(`/sessions/${session.id}`, { replace: true });
+        api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
+      }).catch(() => {});
+      return;
+    }
     const targetId = lastActiveTab && sessions.some((s) => s.id === lastActiveTab)
       ? lastActiveTab
       : sessions[0]!.id;
