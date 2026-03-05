@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Ticket, BoardWithCounts } from '@asm/shared';
-import { PriorityIndicator } from './PriorityIndicator';
+import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { cn } from '../../lib/cn';
@@ -140,7 +140,7 @@ export function KanbanCard({
       <div className="flex items-start gap-2">
         {/* Left column: priority indicator + blocked lock */}
         <div className="flex flex-col items-center gap-1 flex-shrink-0">
-          <PriorityIndicator priority={ticket.priority} size="md" />
+          <PriorityPickerPopover ticket={ticket} />
           <button
             className={cn(
               'rounded transition-all',
