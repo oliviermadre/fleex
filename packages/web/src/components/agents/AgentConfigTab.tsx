@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import type { AgentPersona } from '@asm/shared';
+import type { AgentPersona } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 
 interface AgentConfigTabProps {

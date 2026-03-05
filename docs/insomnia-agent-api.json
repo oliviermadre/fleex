@@ -6,7 +6,7 @@
     {
       "_id": "wrk_agent_api",
       "_type": "workspace",
-      "name": "Agent Session Manager — Agent API",
+      "name": "Fleex — Agent API",
       "description": "Complete collection for testing the Agent API (auth, tickets, comments, mentions, deliverables, context).",
       "scope": "collection",
       "parentId": null
@@ -24,7 +24,7 @@
       "name": "Kind / Tilt (local)",
       "parentId": "env_base",
       "data": {
-        "base_url": "https://claude-ai-agents-ticketing-design-0qypx.agent-session-manager.127.0.0.1.nip.io",
+        "base_url": "https://claude-ai-agents-ticketing-design-0qypx.fleex.127.0.0.1.nip.io",
         "agent_token": "",
         "agent_name": "project-manager",
         "board_id": "",

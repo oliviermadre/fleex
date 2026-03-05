@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AgentExecution, AgentEvent } from '@asm/shared';
+import type { AgentExecution, AgentEvent } from '@fleex/shared';
 import * as api from '../services/api';
 import { agentEventWs } from '../services/websocket';
 

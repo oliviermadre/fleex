@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Ticket, BoardWithCounts } from '@asm/shared';
+import type { Ticket, BoardWithCounts } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';

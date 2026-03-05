@@ -1,4 +1,4 @@
-import type { Session } from '@asm/shared';
+import type { Session } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -9,7 +9,6 @@ import { SettingsPanel } from '../settings/SettingsPanel';
 import { RepositoryDashboard } from '../repository-dashboard/RepositoryDashboard';
 import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
 import { ClaudeConfigEditor } from '../claude-config/ClaudeConfigEditor';
-import { ClusterDashboard } from '../cluster/ClusterDashboard';
 import { ScratchpadMainView } from '../scratchpad/ScratchpadMainView';
 import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
@@ -85,10 +84,6 @@ export function MainPanel() {
 
   if (activePanel === 'agents') {
     return <AgentPersonaView />;
-  }
-
-  if (activePanel === 'cluster') {
-    return <ClusterDashboard />;
   }
 
   if (activePanel === 'tickets') {

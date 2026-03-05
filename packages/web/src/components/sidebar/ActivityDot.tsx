@@ -1,4 +1,4 @@
-import type { ClaudeActivityStatus } from '@asm/shared';
+import type { ClaudeActivityStatus } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 
 interface Props {

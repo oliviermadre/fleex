@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { TicketActivity } from '@asm/shared';
+import type { TicketActivity } from '@fleex/shared';
 import * as api from '../../services/api';
 
 function describeActivity(a: TicketActivity): string {

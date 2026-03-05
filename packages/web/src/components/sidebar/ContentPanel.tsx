@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import type { SessionGroup, Session, TicketLink, RepositorySummary } from '@asm/shared';
+import type { SessionGroup, Session, TicketLink, RepositorySummary } from '@fleex/shared';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -163,7 +163,7 @@ function CollapsedRow({
   );
 }
 
-/** Extract initials from a name: "agent-session-manager" → "ASM", "legacy-api" → "LA" */
+/** Extract initials from a name: "fleex-server" → "FS", "legacy-api" → "LA" */
 function nameToInitials(name: string): string {
   return name
     .split(/[-_.\s]+/)

@@ -1,6 +1,6 @@
-# Agent Session Manager — UX System Overview
+# Fleex — UX System Overview
 
-> **Audience:** UX designers creating mockups for the Agent Session Manager (ASM) interface.
+> **Audience:** UX designers creating mockups for the Fleex interface.
 > This document explains the system's purpose, architecture, data relationships,
 > component hierarchy, user workflows, and current UI structure — everything needed
 > to design an optimal interface without reading code.
@@ -9,7 +9,7 @@
 
 ## Table of Contents
 
-1. [What is ASM?](#1-what-is-asm)
+1. [What is Fleex?](#1-what-is-fleex)
 2. [System Architecture](#2-system-architecture)
 3. [Component Hierarchy & Relationships](#3-component-hierarchy--relationships)
 4. [Components in Detail](#4-components-in-detail)
@@ -20,9 +20,9 @@
 
 ---
 
-## 1. What is ASM?
+## 1. What is Fleex?
 
-**Agent Session Manager** is a web-based control center for developers who work with
+**Fleex** is a web-based control center for developers who work with
 multiple AI coding agents (Claude sessions) across multiple machines simultaneously.
 
 ### The Problem It Solves
@@ -33,8 +33,8 @@ A developer might have:
 - Each agent working in a separate git worktree on a different ticket
 - All producing terminal output that needs monitoring
 
-Without ASM, the developer must SSH between machines, manually check tmux sessions,
-and mentally track which agent is doing what. **ASM centralizes all of this into one
+Without Fleex, the developer must SSH between machines, manually check tmux sessions,
+and mentally track which agent is doing what. **Fleex centralizes all of this into one
 browser tab.**
 
 ### Core Value Proposition
@@ -129,7 +129,7 @@ means they work even behind NAT, firewalls, or VPNs — no port forwarding requi
 ```
 
 **Gateway lifecycle:**
-1. Gateway starts → loads or creates identity file (`~/.asm/gateway.json`)
+1. Gateway starts → loads or creates identity file (`~/.fleex/gateway.json`)
 2. Registers with central server (sends ID + secret)
 3. Opens persistent WebSocket tunnel
 4. Sends heartbeat every 30 seconds
@@ -152,9 +152,9 @@ User (authenticated developer)
 │   └── Gateway: "Cloud VM"      status: online
 │
 ├── Sessions (tmux terminal sessions, per gateway)
-│   ├── Session: "asm_feat-login-a3f"     type: claude   status: running
-│   ├── Session: "asm_fix-bug-b72"        type: claude   status: running
-│   ├── Session: "asm_main-c91"           type: shell    status: running
+│   ├── Session: "fleex_feat-login-a3f"     type: claude   status: running
+│   ├── Session: "fleex_fix-bug-b72"        type: claude   status: running
+│   ├── Session: "fleex_main-c91"           type: shell    status: running
 │   └── Session: "devtools"               type: shell    status: dead
 │
 ├── Boards (kanban boards, optionally linked to a repo)
@@ -164,7 +164,7 @@ User (authenticated developer)
 │   │   │   ├── Comment (by user): "@agent:Agent-2 please review CSS"
 │   │   │   │   └── Mention → Agent-2     status: pending
 │   │   │   ├── Deliverable: "CSS Review" by Agent-2   status: final
-│   │   │   ├── Link → Session "asm_feat-login-a3f"
+│   │   │   ├── Link → Session "fleex_feat-login-a3f"
 │   │   │   ├── Link → GitHub PR #42
 │   │   │   └── Activity log (audit trail)
 │   │   │
@@ -179,8 +179,8 @@ User (authenticated developer)
 │   └── Scratchpad: "myorg/backend"
 │
 └── API Tokens (for agent authentication)
-    ├── Token: "CI Agent"         prefix: asm_a1b2...
-    └── Token: "Review Bot"       prefix: asm_c3d4...
+    ├── Token: "CI Agent"         prefix: fleex_a1b2...
+    └── Token: "Review Bot"       prefix: fleex_c3d4...
 ```
 
 ### How Components Relate
@@ -251,7 +251,7 @@ Claude AI agent or a plain shell.
 | Property          | Description                                           |
 |-------------------|-------------------------------------------------------|
 | Display Name      | User-friendly label                                   |
-| tmux Name         | Internal tmux identifier (e.g., `asm_feat-login-a3f`) |
+| tmux Name         | Internal tmux identifier (e.g., `fleex_feat-login-a3f`) |
 | Type              | `claude` (AI agent) or `shell` (plain terminal)       |
 | Status            | `running`, `dead`, or `unknown`                       |
 | Current Directory | Working directory path                                |
@@ -289,7 +289,7 @@ These activity states are **critical for the UX** — they tell the user whether
 needs attention (waiting for approval), is busy (working/executing), or is free (idle).
 
 **Managed vs. unmanaged sessions:**
-- **Managed** (tmux name starts with `asm_`): Created by ASM, tracked and grouped
+- **Managed** (tmux name starts with `fleex_`): Created by Fleex, tracked and grouped
 - **Unmanaged**: Pre-existing tmux sessions discovered on the machine
 
 **Grouping:** Sessions are visually grouped by **repository + worktree branch**. For example,
@@ -460,10 +460,10 @@ header when agents call the API.
 
 ### 5.1 Morning Check-In
 
-> "I open ASM to see what happened overnight."
+> "I open Fleex to see what happened overnight."
 
 ```
-1. Open browser → ASM loads
+1. Open browser → Fleex loads
 2. Sessions panel shows all running agents across machines
    ├── Home PC: 2 agents running, 1 idle
    └── Work Mac: offline (not powered on)
@@ -521,9 +521,9 @@ header when agents call the API.
    ├── Home PC: online (last seen 5s ago)
    └── Work Mac: online (last seen 12s ago)
 2. Sessions panel shows sessions from ALL online gateways
-   ├── [Home PC] asm_feat-login-a3f     claude  running
-   ├── [Home PC] asm_fix-bug-b72        claude  running
-   └── [Work Mac] asm_refactor-c91      claude  running
+   ├── [Home PC] fleex_feat-login-a3f     claude  running
+   ├── [Home PC] fleex_fix-bug-b72        claude  running
+   └── [Work Mac] fleex_refactor-c91      claude  running
 3. Click any session → terminal view connects through the tunnel
 4. Even if Work Mac is behind a VPN, the tunnel provides access
 ```
@@ -562,10 +562,10 @@ header when agents call the API.
 
 ## 6. Agent Collaboration Model
 
-### How Agents Interact with ASM
+### How Agents Interact with Fleex
 
 Agents are **external processes** (typically Claude AI sessions running in tmux) that
-communicate with ASM via a REST API using personal access tokens.
+communicate with Fleex via a REST API using personal access tokens.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -806,7 +806,7 @@ When a ticket is selected, the main panel shows its full detail:
 │  Should respect system preference by default.            │
 │                                                          │
 │  ─── Links ────────────────────────────────────────────  │
-│  🔗 Session: asm_feat-dark-a3f                            │
+│  🔗 Session: fleex_feat-dark-a3f                            │
 │  🔗 PR: myorg/frontend#42                                 │
 │  🔗 Worktree: feat/dark-mode                              │
 │                                                          │

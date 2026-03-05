@@ -8,5 +8,5 @@ dist/
 .vite/
 coverage/
 *.tsbuildinfo
-.asm/
+.fleex/
 .claude/

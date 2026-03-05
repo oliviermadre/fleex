@@ -1,5 +1,5 @@
 {
-  "name": "agent-session-manager",
+  "name": "fleex",
   "private": true,
   "workspaces": [
     "packages/shared",

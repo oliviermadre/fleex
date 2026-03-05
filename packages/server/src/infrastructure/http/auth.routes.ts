@@ -10,8 +10,8 @@ import {
   type OAuthProviderConfig,
 } from '../auth/oauth-providers.js';
 
-const SESSION_COOKIE = 'asm_session';
-const STATE_COOKIE = 'asm_oauth_state';
+const SESSION_COOKIE = 'fleex_session';
+const STATE_COOKIE = 'fleex_oauth_state';
 const COOKIE_OPTS = 'Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000'; // 30 days
 
 function setCookie(name: string, value: string, opts = COOKIE_OPTS): string {

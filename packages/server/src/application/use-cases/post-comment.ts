@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CommentVisibility } from '@asm/shared';
+import type { CommentVisibility } from '@fleex/shared';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';

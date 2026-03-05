@@ -1,4 +1,4 @@
-import type { ClaudeUsage, ClaudeUsageMetric } from '@asm/shared';
+import type { ClaudeUsage, ClaudeUsageMetric } from '@fleex/shared';
 import type { ClaudeUsagePort } from '../../application/ports/claude-usage.port.js';
 import type { ConfigPort } from '../../application/ports/config.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -16,7 +16,7 @@ export class TmuxClaudeUsageAdapter implements ClaudeUsagePort {
   ) {}
 
   async fetch(): Promise<ClaudeUsage> {
-    const sessionName = `asm_usage_${Date.now()}`;
+    const sessionName = `fleex_usage_${Date.now()}`;
     const claudeCmd = this.config.getClaudeCommand();
 
     try {

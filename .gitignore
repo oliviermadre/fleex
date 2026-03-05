@@ -7,7 +7,6 @@ dist/
 .vite/
 coverage/
 *.tsbuildinfo
-.asm/
 *.tsbuildinfo
 .claude/settings.local.json
 .fleex/

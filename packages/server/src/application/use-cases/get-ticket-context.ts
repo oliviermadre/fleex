@@ -1,4 +1,4 @@
-import type { TicketContext } from '@asm/shared';
+import type { TicketContext } from '@fleex/shared';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';

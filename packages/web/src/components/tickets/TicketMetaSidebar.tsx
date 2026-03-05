@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { Ticket, TicketStatus, TicketPriority, Worktree, GitHubIssueMetadata } from '@asm/shared';
-import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES } from '@asm/shared';
+import type { Ticket, TicketStatus, TicketPriority, Worktree, GitHubIssueMetadata } from '@fleex/shared';
+import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSettingsStore } from '../../stores/settingsStore';

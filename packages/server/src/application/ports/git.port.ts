@@ -1,4 +1,4 @@
-import type { DiffStats, GitRemoteInfo, Worktree } from '@asm/shared';
+import type { DiffStats, GitRemoteInfo, Worktree } from '@fleex/shared';
 
 export interface GitPort {
   getInfo(cwd: string): Promise<GitRemoteInfo>;

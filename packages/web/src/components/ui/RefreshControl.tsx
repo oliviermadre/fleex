@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { REPO_REFRESH_INTERVALS, REPO_REFRESH_LABELS } from '@asm/shared';
+import { REPO_REFRESH_INTERVALS, REPO_REFRESH_LABELS } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 
 interface RefreshControlProps {

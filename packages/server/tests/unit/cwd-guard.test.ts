@@ -76,7 +76,7 @@ describe('CWD guard', () => {
     if (!result.allowed) {
       // Route exits early — store.save is never called
     } else {
-      fakeStore.save('asm_shell_myorg_myrepo_main_shell');
+      fakeStore.save('fleex_shell_myorg_myrepo_main_shell');
     }
 
     expect(savedSessions).toHaveLength(0);

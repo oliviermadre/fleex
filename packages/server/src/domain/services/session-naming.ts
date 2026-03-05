@@ -1,12 +1,12 @@
 import {
-  ASM_PREFIX,
-  ASM_SHELL_PREFIX,
-  ASM_CLAUDE_PREFIX,
+  FLEEX_PREFIX,
+  FLEEX_SHELL_PREFIX,
+  FLEEX_CLAUDE_PREFIX,
   DEFAULT_CLAUDE_DISPLAY_NAME,
   DEFAULT_SHELL_DISPLAY_NAME,
   slugify,
-} from '@asm/shared';
-import type { SessionType } from '@asm/shared';
+} from '@fleex/shared';
+import type { SessionType } from '@fleex/shared';
 
 export interface NamingContext {
   org?: string | null;
@@ -24,10 +24,10 @@ export class SessionNamingService {
       const slugOrg = slugify(context.org);
       const slugRepo = slugify(context.repo);
       const slugWorktree = slugify(context.worktree);
-      return `${ASM_PREFIX}${prefix}_${slugOrg}_${slugRepo}_${slugWorktree}_${slugDisplay}`;
+      return `${FLEEX_PREFIX}${prefix}_${slugOrg}_${slugRepo}_${slugWorktree}_${slugDisplay}`;
     }
 
-    return `${ASM_PREFIX}${prefix}_${slugDisplay}`;
+    return `${FLEEX_PREFIX}${prefix}_${slugDisplay}`;
   }
 
   resolveUniqueName(
@@ -57,12 +57,12 @@ export class SessionNamingService {
   }
 
   isManaged(name: string): boolean {
-    return name.startsWith(ASM_PREFIX);
+    return name.startsWith(FLEEX_PREFIX);
   }
 
   parseType(name: string): SessionType | null {
-    if (name.startsWith(ASM_SHELL_PREFIX)) return 'shell';
-    if (name.startsWith(ASM_CLAUDE_PREFIX)) return 'claude';
+    if (name.startsWith(FLEEX_SHELL_PREFIX)) return 'shell';
+    if (name.startsWith(FLEEX_CLAUDE_PREFIX)) return 'claude';
     return null;
   }
 
@@ -74,7 +74,7 @@ export class SessionNamingService {
     const type = this.parseType(tmuxName);
     if (!type) return '';
 
-    const prefix = type === 'claude' ? ASM_CLAUDE_PREFIX : ASM_SHELL_PREFIX;
+    const prefix = type === 'claude' ? FLEEX_CLAUDE_PREFIX : FLEEX_SHELL_PREFIX;
     const rest = tmuxName.slice(prefix.length);
 
     // Old hash format: exactly 8 hex chars

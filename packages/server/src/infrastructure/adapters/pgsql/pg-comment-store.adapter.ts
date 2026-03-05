@@ -1,4 +1,4 @@
-import type { CommentVisibility } from '@asm/shared';
+import type { CommentVisibility } from '@fleex/shared';
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
 import type { CommentStorePort } from '../../../application/ports/comment-store.port.js';
 import type { PgConnection } from './connection.js';

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
-import type { GatewayRegisterRequest, GatewayHeartbeatRequest } from '@asm/shared';
+import type { GatewayRegisterRequest, GatewayHeartbeatRequest } from '@fleex/shared';
 
 const STALE_THRESHOLD_MS = 90_000; // 90 seconds
 

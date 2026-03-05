@@ -1,6 +1,6 @@
 import { memo, useRef, useEffect, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Session } from '@asm/shared';
+import type { Session } from '@fleex/shared';
 import { useTerminal } from '../../hooks/useTerminal';
 import { useTerminalStore } from '../../stores/terminalStore';
 import { terminalManager } from '../../services/terminalManager';

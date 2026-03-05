@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary } from '@asm/shared';
+import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary } from '@fleex/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
 import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
 import type { Container } from '../container.js';

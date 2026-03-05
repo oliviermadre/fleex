@@ -1,4 +1,4 @@
-import type { SessionGroup, WorktreeSessionGroup } from '@asm/shared';
+import type { SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
 import type { SessionEntity } from '../entities.js';
 
 export class SessionGroupingService {

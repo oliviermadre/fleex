@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ClaudeConfigTreeEntry } from '@asm/shared';
+import type { ClaudeConfigTreeEntry } from '@fleex/shared';
 import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
 import { useUIStore } from '../../stores/uiStore';
 import { TreeContextMenu } from './TreeContextMenu';

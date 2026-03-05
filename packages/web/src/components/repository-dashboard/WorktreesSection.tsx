@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { Worktree, DiffStats, PullRequest } from '@asm/shared';
+import type { Worktree, DiffStats, PullRequest } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';

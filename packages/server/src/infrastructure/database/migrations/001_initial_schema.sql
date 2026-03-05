@@ -1,5 +1,5 @@
 -- 001_initial_schema.sql
--- Core tables for multi-user ASM with JSONB for schema flexibility.
+-- Core tables for multi-user Fleex with JSONB for schema flexibility.
 
 CREATE TABLE IF NOT EXISTS users (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

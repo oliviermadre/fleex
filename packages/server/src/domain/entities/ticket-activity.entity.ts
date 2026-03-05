@@ -1,4 +1,4 @@
-import type { TicketActivity } from '@asm/shared';
+import type { TicketActivity } from '@fleex/shared';
 
 export class TicketActivityEntity {
   constructor(

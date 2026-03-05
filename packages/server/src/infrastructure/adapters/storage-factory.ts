@@ -23,11 +23,11 @@ export interface StorageStores {
 }
 
 export function resolveStorageDriver(): StorageDriver {
-  const raw = process.env['ASM_STORAGE_DRIVER']?.toLowerCase() ?? 'json';
+  const raw = process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'json';
   const valid: StorageDriver[] = ['json', 'sqlite', 'pgsql', 'supabase'];
   if (!valid.includes(raw as StorageDriver)) {
     throw new Error(
-      `Invalid ASM_STORAGE_DRIVER="${raw}". Must be one of: ${valid.join(', ')}`,
+      `Invalid FLEEX_STORAGE_DRIVER="${raw}". Must be one of: ${valid.join(', ')}`,
     );
   }
   return raw as StorageDriver;
@@ -105,7 +105,7 @@ type NonSessionStores = Omit<StorageStores, 'sessionStore'>;
 async function createSqliteStores(logger: LoggerPort): Promise<NonSessionStores> {
   const { join } = await import('node:path');
   const { homedir } = await import('node:os');
-  const { ASM_DIR } = await import('@asm/shared');
+  const { FLEEX_DIR } = await import('@fleex/shared');
   const { SqliteConnection } = await import('./sqlite/connection.js');
   const { SqliteTicketStoreAdapter } = await import('./sqlite/sqlite-ticket-store.adapter.js');
   const { SqliteAgentTokenStoreAdapter } = await import('./sqlite/sqlite-agent-token-store.adapter.js');
@@ -115,7 +115,7 @@ async function createSqliteStores(logger: LoggerPort): Promise<NonSessionStores>
   const { SqlitePersonaStoreAdapter } = await import('./sqlite/sqlite-persona-store.adapter.js');
   const { SqliteAgentEventStoreAdapter } = await import('./sqlite/sqlite-agent-event-store.adapter.js');
 
-  const dbPath = process.env['ASM_SQLITE_PATH'] ?? join(homedir(), ASM_DIR, 'asm.db');
+  const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'asm.db');
   const connection = new SqliteConnection(dbPath);
   await connection.init();
 
@@ -136,9 +136,9 @@ async function createSqliteStores(logger: LoggerPort): Promise<NonSessionStores>
 }
 
 async function createPgsqlStores(logger: LoggerPort): Promise<NonSessionStores> {
-  const url = process.env['ASM_PGSQL_URL'];
+  const url = process.env['FLEEX_PGSQL_URL'];
   if (!url) {
-    throw new Error('ASM_PGSQL_URL is required when ASM_STORAGE_DRIVER=pgsql');
+    throw new Error('FLEEX_PGSQL_URL is required when FLEEX_STORAGE_DRIVER=pgsql');
   }
 
   const { PgConnection } = await import('./pgsql/connection.js');
@@ -170,11 +170,11 @@ async function createPgsqlStores(logger: LoggerPort): Promise<NonSessionStores> 
 }
 
 async function createSupabaseStores(logger: LoggerPort): Promise<NonSessionStores> {
-  const url = process.env['ASM_SUPABASE_URL'];
-  const key = process.env['ASM_SUPABASE_KEY'];
+  const url = process.env['FLEEX_SUPABASE_URL'];
+  const key = process.env['FLEEX_SUPABASE_KEY'];
   if (!url || !key) {
     throw new Error(
-      'ASM_SUPABASE_URL and ASM_SUPABASE_KEY are required when ASM_STORAGE_DRIVER=supabase',
+      'FLEEX_SUPABASE_URL and FLEEX_SUPABASE_KEY are required when FLEEX_STORAGE_DRIVER=supabase',
     );
   }
 

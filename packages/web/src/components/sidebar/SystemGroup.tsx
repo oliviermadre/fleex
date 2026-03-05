@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Session } from '@asm/shared';
+import type { Session } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { TerminalIcon } from './icons';

@@ -1,4 +1,4 @@
-import type { SessionGroup, WorktreeSessionGroup, AgentWorktreeInfo } from '@asm/shared';
+import type { SessionGroup, WorktreeSessionGroup, AgentWorktreeInfo } from '@fleex/shared';
 import type { SessionEntity } from '../../domain/entities.js';
 import { SessionGroupingService } from '../../domain/services/session-grouping.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
@@ -38,7 +38,7 @@ export class GetSessionGroupsUseCase {
     let sessions: SessionEntity[];
     try {
       const combined = await this.tmux.listManagedSessionsWithPaneCommands();
-      // Discover any new asm_* sessions not yet in store (reuses pre-fetched list, no extra tmux call)
+      // Discover any new fleex_* sessions not yet in store (reuses pre-fetched list, no extra tmux call)
       await this.discoverSessions?.execute(combined.sessions);
       sessions = await this.listSessions.execute(combined.sessions);
       paneCommands = combined.paneCommands;

@@ -1,4 +1,4 @@
-import type { Session } from '@asm/shared';
+import type { Session } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';

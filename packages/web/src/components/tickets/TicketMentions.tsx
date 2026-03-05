@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import type { TicketMention, MentionStatus, TicketWsMessage } from '@asm/shared';
+import type { TicketMention, MentionStatus, TicketWsMessage } from '@fleex/shared';
 import { ticketWs } from '../../services/websocket';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';

@@ -1,4 +1,4 @@
-import type { RepositorySummary } from '@asm/shared';
+import type { RepositorySummary } from '@fleex/shared';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';

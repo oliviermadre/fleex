@@ -1,4 +1,4 @@
-import type { Worktree } from '@asm/shared';
+import type { Worktree } from '@fleex/shared';
 import type { GitPort } from '../ports/git.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 

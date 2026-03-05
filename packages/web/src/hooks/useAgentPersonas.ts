@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { WS_PERSONA_PATH } from '@asm/shared';
-import type { PersonaWsMessage } from '@asm/shared';
+import { WS_PERSONA_PATH } from '@fleex/shared';
+import type { PersonaWsMessage } from '@fleex/shared';
 import { personaWs } from '../services/websocket';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { WS_BASE_URL } from '../lib/constants';

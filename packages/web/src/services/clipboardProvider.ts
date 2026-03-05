@@ -1,6 +1,6 @@
 import type { IClipboardProvider, ClipboardSelectionType } from '@xterm/addon-clipboard';
 
-const LOG_PREFIX = '[ASM:Clipboard]';
+const LOG_PREFIX = '[FLEEX:Clipboard]';
 
 export class AsmClipboardProvider implements IClipboardProvider {
   private pendingText: string | null = null;

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CreateSessionRequest } from '@asm/shared';
+import type { CreateSessionRequest } from '@fleex/shared';
 import { SessionEntity } from '../../domain/entities.js';
 import { SessionNamingService } from '../../domain/services/session-naming.js';
 import type { TmuxPort } from '../ports/tmux.port.js';

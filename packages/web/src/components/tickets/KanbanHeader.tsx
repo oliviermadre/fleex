@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import type { BoardWithCounts } from '@asm/shared';
+import type { BoardWithCounts } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { BoardSelectorDropdown } from './BoardSelectorDropdown';
 import { SearchToggle } from './SearchToggle';

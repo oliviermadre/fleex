@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Session, TicketDeliverable, TicketMention, TicketWsMessage } from '@asm/shared';
+import type { Session, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
 import { ticketWs } from '../../services/websocket';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';

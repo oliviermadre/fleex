@@ -1,8 +1,8 @@
 import * as path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
-import { WS_DASHBOARD_PATH, DASHBOARD_BROADCAST_INTERVAL_MS } from '@asm/shared';
-import type { DashboardMessage } from '@asm/shared';
+import { WS_DASHBOARD_PATH, DASHBOARD_BROADCAST_INTERVAL_MS } from '@fleex/shared';
+import type { DashboardMessage } from '@fleex/shared';
 import type { Container } from '../container.js';
 import type { JsonlFileWatcher } from '../services/jsonl-file-watcher.js';
 import { encodePath } from '../../domain/services/claude-path-encoding.js';

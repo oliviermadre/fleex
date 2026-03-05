@@ -1,4 +1,4 @@
-import type { AgentPersona } from '@asm/shared';
+import type { AgentPersona } from '@fleex/shared';
 
 export class AgentPersonaEntity {
   constructor(

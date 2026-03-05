@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { GitHubIssue, GitHubIssueDetail } from '@asm/shared';
+import type { GitHubIssue, GitHubIssueDetail } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';

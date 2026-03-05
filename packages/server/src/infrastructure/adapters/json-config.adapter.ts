@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { ASM_DIR, CONFIG_FILE } from '@asm/shared';
+import { FLEEX_DIR, CONFIG_FILE } from '@fleex/shared';
 import type { AppConfig, ConfigPort } from '../../application/ports/config.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
@@ -14,7 +14,7 @@ export class JsonConfigAdapter implements ConfigPort {
     private readonly hostFs: HostFs,
     private readonly homedir: string,
   ) {
-    const dir = join(this.homedir, ASM_DIR);
+    const dir = join(this.homedir, FLEEX_DIR);
     this.filePath = join(dir, CONFIG_FILE);
 
     this.config = {
@@ -26,7 +26,7 @@ export class JsonConfigAdapter implements ConfigPort {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    const dir = join(this.homedir, ASM_DIR);
+    const dir = join(this.homedir, FLEEX_DIR);
     if (!(await this.hostFs.exists(dir))) {
       await this.hostFs.mkdir(dir);
     }

@@ -1,5 +1,5 @@
-import { TICKET_STATUS_LABELS } from '@asm/shared';
-import type { Ticket } from '@asm/shared';
+import { TICKET_STATUS_LABELS } from '@fleex/shared';
+import type { Ticket } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 
 export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {

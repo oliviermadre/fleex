@@ -1,6 +1,6 @@
-export const ASM_PREFIX = 'asm_';
-export const ASM_SHELL_PREFIX = 'asm_shell_';
-export const ASM_CLAUDE_PREFIX = 'asm_claude_';
+export const FLEEX_PREFIX = 'fleex_';
+export const FLEEX_SHELL_PREFIX = 'fleex_shell_';
+export const FLEEX_CLAUDE_PREFIX = 'fleex_claude_';
 
 export const DEFAULT_COLS = 120;
 export const DEFAULT_ROWS = 30;
@@ -23,7 +23,7 @@ export const SESSION_HASH_LENGTH = 8;
 export const DEFAULT_CLAUDE_DISPLAY_NAME = 'Claude';
 export const DEFAULT_SHELL_DISPLAY_NAME = 'Shell';
 
-export const ASM_DIR = '.asm';
+export const FLEEX_DIR = '.fleex';
 export const SESSIONS_FILE = 'sessions.json';
 export const CONFIG_FILE = 'config.json';
 

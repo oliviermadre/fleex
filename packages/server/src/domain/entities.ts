@@ -1,4 +1,4 @@
-import type { Session, SessionType, SessionStatus, ClaudeActivityStatus } from '@asm/shared';
+import type { Session, SessionType, SessionStatus, ClaudeActivityStatus } from '@fleex/shared';
 
 export class SessionEntity {
   constructor(
@@ -37,7 +37,7 @@ export class SessionEntity {
   }
 
   isManaged(): boolean {
-    return this.tmuxName.startsWith('asm_');
+    return this.tmuxName.startsWith('fleex_');
   }
 
   toDTO(): Session {

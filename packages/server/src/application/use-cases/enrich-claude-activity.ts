@@ -1,4 +1,4 @@
-import type { ClaudeActivityStatus } from '@asm/shared';
+import type { ClaudeActivityStatus } from '@fleex/shared';
 import type { ClaudeStatePort } from '../ports/claude-state.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { SessionEntity } from '../../domain/entities.js';

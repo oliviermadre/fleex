@@ -5,7 +5,7 @@ import type {
   UpdateAgentPersonaRequest,
   AgentExecutionResult,
   PersonaWsMessage,
-} from '@asm/shared';
+} from '@fleex/shared';
 import * as api from '../services/api';
 
 type PersonaTab = 'config' | 'soul' | 'identity' | 'memory' | 'events';

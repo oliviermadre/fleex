@@ -66,7 +66,7 @@ export async function createContainer() {
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
 
-  // Storage driver selection via ASM_STORAGE_DRIVER env var
+  // Storage driver selection via FLEEX_STORAGE_DRIVER env var
   const driver = resolveStorageDriver();
   logger.info('Storage driver selected', { driver });
 
@@ -87,8 +87,8 @@ export async function createContainer() {
   let gatewayStore: PgGatewayStore | SupabaseGatewayStore | null = null;
 
   if (driver === 'supabase') {
-    const supabaseUrl = process.env['ASM_SUPABASE_URL'];
-    const supabaseKey = process.env['ASM_SUPABASE_KEY'];
+    const supabaseUrl = process.env['FLEEX_SUPABASE_URL'];
+    const supabaseKey = process.env['FLEEX_SUPABASE_KEY'];
     if (supabaseUrl && supabaseKey) {
       const { SupabaseConnection } = await import('./adapters/supabase/connection.js');
       const { SupabaseGatewayStore: SbGw } = await import('./adapters/supabase/supabase-gateway-store.adapter.js');
@@ -105,7 +105,7 @@ export async function createContainer() {
       logger.info('Supabase auth/gateway stores initialized');
     }
   } else if (driver === 'pgsql') {
-    const databaseUrl = process.env['DATABASE_URL'] || process.env['ASM_PGSQL_URL'];
+    const databaseUrl = process.env['DATABASE_URL'] || process.env['FLEEX_PGSQL_URL'];
     if (databaseUrl) {
       const { createDbPool, runMigrations, getDefaultUserId } = await import('./database/db.js');
       const { PgGatewayStore: PgGw } = await import('./adapters/pg-gateway-store.adapter.js');

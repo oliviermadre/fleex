@@ -1,7 +1,7 @@
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { GitHubGraphQLAdapter, RepoBatchResult } from '../../infrastructure/adapters/github-graphql.adapter.js';
 import { RepositoryCache } from './repository-cache.js';
-import type { RepositorySummary } from '@asm/shared';
+import type { RepositorySummary } from '@fleex/shared';
 
 export interface RepoRef {
   org: string;
@@ -15,7 +15,7 @@ export class RepositoryRefreshScheduler {
   private refreshing = false;
   private repos: RepoRef[] = [];
   private broadcast: BroadcastFn = () => {};
-  private onMergedPRs: ((mergedPRs: import('@asm/shared').PullRequest[], repoKey: string) => Promise<void>) | null = null;
+  private onMergedPRs: ((mergedPRs: import('@fleex/shared').PullRequest[], repoKey: string) => Promise<void>) | null = null;
 
   constructor(
     private readonly graphql: GitHubGraphQLAdapter,
@@ -27,7 +27,7 @@ export class RepositoryRefreshScheduler {
     this.broadcast = fn;
   }
 
-  setOnMergedPRs(fn: (mergedPRs: import('@asm/shared').PullRequest[], repoKey: string) => Promise<void>): void {
+  setOnMergedPRs(fn: (mergedPRs: import('@fleex/shared').PullRequest[], repoKey: string) => Promise<void>): void {
     this.onMergedPRs = fn;
   }
 

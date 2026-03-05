@@ -1,4 +1,4 @@
-import type { AgentStructuredOutput } from '@asm/shared';
+import type { AgentStructuredOutput } from '@fleex/shared';
 
 /**
  * Attempts to extract a valid AgentStructuredOutput from raw agent result text.

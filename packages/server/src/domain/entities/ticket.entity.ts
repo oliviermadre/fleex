@@ -1,4 +1,4 @@
-import type { Ticket, TicketStatus, TicketPriority, TicketLink, TicketLinkType, GitHubIssueMetadata } from '@asm/shared';
+import type { Ticket, TicketStatus, TicketPriority, TicketLink, TicketLinkType, GitHubIssueMetadata } from '@fleex/shared';
 
 export class TicketEntity {
   constructor(

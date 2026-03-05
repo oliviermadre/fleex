@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import type { TicketStatus, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest } from '@asm/shared';
-import { TICKET_STATUSES } from '@asm/shared';
+import type { TicketStatus, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest } from '@fleex/shared';
+import { TICKET_STATUSES } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError } from '../../domain/errors.js';
-import type { MentionStatus } from '@asm/shared';
+import type { MentionStatus } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 export function ticketRoutes(container: Container) {

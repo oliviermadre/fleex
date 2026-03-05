@@ -1,4 +1,4 @@
-import { ASM_PREFIX, DEFAULT_COLS, DEFAULT_ROWS } from '@asm/shared';
+import { FLEEX_PREFIX, DEFAULT_COLS, DEFAULT_ROWS } from '@fleex/shared';
 import type { TmuxPort, TmuxSessionInfo, ManagedSessionsWithPanes } from '../../application/ports/tmux.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn } from '../host/types.js';
@@ -98,7 +98,7 @@ export class TmuxCliAdapter implements TmuxPort {
 
   async listManagedSessions(): Promise<TmuxSessionInfo[]> {
     const all = await this.listSessions();
-    return all.filter((s) => s.name.startsWith(ASM_PREFIX));
+    return all.filter((s) => s.name.startsWith(FLEEX_PREFIX));
   }
 
   async listManagedSessionsWithPaneCommands(): Promise<ManagedSessionsWithPanes> {
@@ -119,7 +119,7 @@ export class TmuxCliAdapter implements TmuxPort {
         if (parts.length < 7) continue;
 
         const sessionName = parts[0] ?? '';
-        if (!sessionName.startsWith(ASM_PREFIX)) continue;
+        if (!sessionName.startsWith(FLEEX_PREFIX)) continue;
 
         // Build session info (deduplicated by name)
         if (!sessionMap.has(sessionName)) {
@@ -210,7 +210,7 @@ export class TmuxCliAdapter implements TmuxPort {
         const firstSpace = line.indexOf(' ');
         if (firstSpace === -1) continue;
         const sessionName = line.slice(0, firstSpace);
-        if (!sessionName.startsWith(ASM_PREFIX)) continue;
+        if (!sessionName.startsWith(FLEEX_PREFIX)) continue;
         const rest = line.slice(firstSpace + 1);
         const secondSpace = rest.indexOf(' ');
         if (secondSpace === -1) continue;

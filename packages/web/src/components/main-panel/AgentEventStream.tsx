@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AgentEvent } from '@asm/shared';
+import type { AgentEvent } from '@fleex/shared';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { cn } from '../../lib/cn';
 

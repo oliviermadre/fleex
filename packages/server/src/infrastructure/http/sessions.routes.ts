@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { CreateSessionRequest } from '@asm/shared';
+import type { CreateSessionRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 export function sessionRoutes(container: Container) {

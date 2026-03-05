@@ -1,5 +1,5 @@
 {
-  "name": "@asm/web",
+  "name": "@fleex/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@asm/shared": "workspace:*",
+    "@fleex/shared": "workspace:*",
     "@monaco-editor/react": "^4.7.0",
     "@xterm/addon-clipboard": "^0.2.0",
     "@xterm/addon-fit": "^0.10.0",

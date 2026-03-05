@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SessionNamingService } from '../../src/domain/services/session-naming.js';
-import { slugify } from '@asm/shared';
+import { slugify } from '@fleex/shared';
 
 describe('slugify', () => {
   it('should lowercase and replace non-alphanum with hyphens', () => {
@@ -40,14 +40,14 @@ describe('SessionNamingService', () => {
         worktree: 'feat/new-feature',
         displayName: 'Claude',
       });
-      expect(name).toBe('asm_claude_myorg_myrepo_feat-new-feature_claude');
+      expect(name).toBe('fleex_claude_myorg_myrepo_feat-new-feature_claude');
     });
 
     it('should build name without git context', () => {
       const name = service.buildTmuxName('shell', {
         displayName: 'Shell',
       });
-      expect(name).toBe('asm_shell_shell');
+      expect(name).toBe('fleex_shell_shell');
     });
 
     it('should build name for shell type with git context', () => {
@@ -57,7 +57,7 @@ describe('SessionNamingService', () => {
         worktree: 'main',
         displayName: 'Shell',
       });
-      expect(name).toBe('asm_shell_odys-travel_odys-proxy_main_shell');
+      expect(name).toBe('fleex_shell_odys-travel_odys-proxy_main_shell');
     });
 
     it('should slugify all segments', () => {
@@ -67,7 +67,7 @@ describe('SessionNamingService', () => {
         worktree: 'feat/UPPER',
         displayName: 'My Session',
       });
-      expect(name).toBe('asm_claude_my-org_my-repo_feat-upper_my-session');
+      expect(name).toBe('fleex_claude_my-org_my-repo_feat-upper_my-session');
     });
 
     it('should omit git segments when any is null', () => {
@@ -77,7 +77,7 @@ describe('SessionNamingService', () => {
         worktree: 'main',
         displayName: 'Claude',
       });
-      expect(name).toBe('asm_claude_claude');
+      expect(name).toBe('fleex_claude_claude');
     });
   });
 
@@ -90,7 +90,7 @@ describe('SessionNamingService', () => {
         [],
       );
       expect(result.displayName).toBe('Claude');
-      expect(result.tmuxName).toBe('asm_claude_org_repo_main_claude');
+      expect(result.tmuxName).toBe('fleex_claude_org_repo_main_claude');
     });
 
     it('should append -1 when base name conflicts', () => {
@@ -98,10 +98,10 @@ describe('SessionNamingService', () => {
         'Claude',
         'claude',
         { org: 'org', repo: 'repo', worktree: 'main' },
-        ['asm_claude_org_repo_main_claude'],
+        ['fleex_claude_org_repo_main_claude'],
       );
       expect(result.displayName).toBe('Claude-1');
-      expect(result.tmuxName).toBe('asm_claude_org_repo_main_claude-1');
+      expect(result.tmuxName).toBe('fleex_claude_org_repo_main_claude-1');
     });
 
     it('should increment suffix until unique', () => {
@@ -110,13 +110,13 @@ describe('SessionNamingService', () => {
         'claude',
         { org: 'org', repo: 'repo', worktree: 'main' },
         [
-          'asm_claude_org_repo_main_claude',
-          'asm_claude_org_repo_main_claude-1',
-          'asm_claude_org_repo_main_claude-2',
+          'fleex_claude_org_repo_main_claude',
+          'fleex_claude_org_repo_main_claude-1',
+          'fleex_claude_org_repo_main_claude-2',
         ],
       );
       expect(result.displayName).toBe('Claude-3');
-      expect(result.tmuxName).toBe('asm_claude_org_repo_main_claude-3');
+      expect(result.tmuxName).toBe('fleex_claude_org_repo_main_claude-3');
     });
 
     it('should work without git context', () => {
@@ -124,10 +124,10 @@ describe('SessionNamingService', () => {
         'Shell',
         'shell',
         {},
-        ['asm_shell_shell'],
+        ['fleex_shell_shell'],
       );
       expect(result.displayName).toBe('Shell-1');
-      expect(result.tmuxName).toBe('asm_shell_shell-1');
+      expect(result.tmuxName).toBe('fleex_shell_shell-1');
     });
   });
 
@@ -142,10 +142,10 @@ describe('SessionNamingService', () => {
   });
 
   describe('isManaged', () => {
-    it('should return true for asm_ prefixed names', () => {
-      expect(service.isManaged('asm_shell_abc12345')).toBe(true);
-      expect(service.isManaged('asm_claude_abc12345')).toBe(true);
-      expect(service.isManaged('asm_claude_org_repo_main_claude')).toBe(true);
+    it('should return true for fleex_ prefixed names', () => {
+      expect(service.isManaged('fleex_shell_abc12345')).toBe(true);
+      expect(service.isManaged('fleex_claude_abc12345')).toBe(true);
+      expect(service.isManaged('fleex_claude_org_repo_main_claude')).toBe(true);
     });
 
     it('should return false for non-asm names', () => {
@@ -156,35 +156,35 @@ describe('SessionNamingService', () => {
 
   describe('parseType', () => {
     it('should parse shell type', () => {
-      expect(service.parseType('asm_shell_abc12345')).toBe('shell');
-      expect(service.parseType('asm_shell_org_repo_main_shell')).toBe('shell');
+      expect(service.parseType('fleex_shell_abc12345')).toBe('shell');
+      expect(service.parseType('fleex_shell_org_repo_main_shell')).toBe('shell');
     });
 
     it('should parse claude type', () => {
-      expect(service.parseType('asm_claude_abc12345')).toBe('claude');
-      expect(service.parseType('asm_claude_org_repo_main_claude')).toBe('claude');
+      expect(service.parseType('fleex_claude_abc12345')).toBe('claude');
+      expect(service.parseType('fleex_claude_org_repo_main_claude')).toBe('claude');
     });
 
     it('should return null for unknown', () => {
-      expect(service.parseType('asm_unknown_abc')).toBeNull();
+      expect(service.parseType('fleex_unknown_abc')).toBeNull();
       expect(service.parseType('other')).toBeNull();
     });
   });
 
   describe('extractDisplayName', () => {
     it('should return empty for old hash format', () => {
-      expect(service.extractDisplayName('asm_claude_a1b2c3d4')).toBe('');
-      expect(service.extractDisplayName('asm_shell_deadbeef')).toBe('');
+      expect(service.extractDisplayName('fleex_claude_a1b2c3d4')).toBe('');
+      expect(service.extractDisplayName('fleex_shell_deadbeef')).toBe('');
     });
 
     it('should extract display name from new format with git context', () => {
-      expect(service.extractDisplayName('asm_claude_org_repo_main_claude')).toBe('claude');
-      expect(service.extractDisplayName('asm_shell_org_repo_feat-x_my-shell')).toBe('my-shell');
+      expect(service.extractDisplayName('fleex_claude_org_repo_main_claude')).toBe('claude');
+      expect(service.extractDisplayName('fleex_shell_org_repo_feat-x_my-shell')).toBe('my-shell');
     });
 
     it('should extract display name from new format without git context', () => {
-      expect(service.extractDisplayName('asm_claude_claude')).toBe('claude');
-      expect(service.extractDisplayName('asm_shell_shell-1')).toBe('shell-1');
+      expect(service.extractDisplayName('fleex_claude_claude')).toBe('claude');
+      expect(service.extractDisplayName('fleex_shell_shell-1')).toBe('shell-1');
     });
 
     it('should return empty for non-managed names', () => {

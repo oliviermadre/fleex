@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
-import { WS_REPOSITORY_PATH } from '@asm/shared';
+import { WS_REPOSITORY_PATH } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 export function repositoryWsPlugin(container: Container) {

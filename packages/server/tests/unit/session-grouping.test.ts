@@ -12,7 +12,7 @@ describe('SessionGroupingService', () => {
     branch: string | null,
   ): SessionEntity {
     return new SessionEntity(
-      id, `asm_shell_${id}`, 'shell', 'running',
+      id, `fleex_shell_${id}`, 'shell', 'running',
       `/projects/${org}/${repo}`, new Date(), null,
       org, repo, branch, null,
     );

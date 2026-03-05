@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { WorktreeSessionGroup, TicketLink } from '@asm/shared';
+import type { WorktreeSessionGroup, TicketLink } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';

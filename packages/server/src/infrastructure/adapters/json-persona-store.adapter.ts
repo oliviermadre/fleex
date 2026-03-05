@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { ASM_DIR } from '@asm/shared';
+import { FLEEX_DIR } from '@fleex/shared';
 import { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -28,7 +28,7 @@ export class JsonPersonaStore implements PersonaStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.filePath = join(this.homedir, ASM_DIR, 'projects', 'personas.json');
+    this.filePath = join(this.homedir, FLEEX_DIR, 'projects', 'personas.json');
   }
 
   async init(): Promise<void> {

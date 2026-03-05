@@ -18,18 +18,18 @@ describe('ListSessionsUseCase', () => {
 
   it('should return alive sessions and remove dead ones', async () => {
     const alive = new SessionEntity(
-      'alive-id', 'asm_shell_alive123', 'shell', 'running',
+      'alive-id', 'fleex_shell_alive123', 'shell', 'running',
       '/tmp/a', new Date(), null, null, null, null, null,
     );
     const dead = new SessionEntity(
-      'dead-id', 'asm_shell_dead1234', 'shell', 'running',
+      'dead-id', 'fleex_shell_dead1234', 'shell', 'running',
       '/tmp/b', new Date(), null, null, null, null, null,
     );
     store.save(alive);
     store.save(dead);
 
     // Only the alive session exists in tmux
-    tmux.sessions.set('asm_shell_alive123', { cwd: '/tmp/a' });
+    tmux.sessions.set('fleex_shell_alive123', { cwd: '/tmp/a' });
 
     const result = await useCase.execute();
 
@@ -40,11 +40,11 @@ describe('ListSessionsUseCase', () => {
 
   it('should return all stored sessions when tmux listing fails', async () => {
     const session1 = new SessionEntity(
-      'id-1', 'asm_shell_abc12345', 'shell', 'running',
+      'id-1', 'fleex_shell_abc12345', 'shell', 'running',
       '/tmp/a', new Date(), null, 'myorg', 'myrepo', 'main', 'https://github.com/myorg/myrepo.git',
     );
     const session2 = new SessionEntity(
-      'id-2', 'asm_claude_def1234', 'claude', 'running',
+      'id-2', 'fleex_claude_def1234', 'claude', 'running',
       '/tmp/b', new Date(), null, 'myorg', 'other', 'feat', 'https://github.com/myorg/other.git',
     );
     store.save(session1);
@@ -69,7 +69,7 @@ describe('ListSessionsUseCase', () => {
 
   it('should remove all sessions when tmux genuinely has none', async () => {
     const session = new SessionEntity(
-      'id-1', 'asm_shell_abc12345', 'shell', 'running',
+      'id-1', 'fleex_shell_abc12345', 'shell', 'running',
       '/tmp/a', new Date(), null, null, null, null, null,
     );
     store.save(session);

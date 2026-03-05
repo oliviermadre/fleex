@@ -1,5 +1,5 @@
 import { memo, useRef, useEffect } from 'react';
-import type { Session } from '@asm/shared';
+import type { Session } from '@fleex/shared';
 import { useTerminal } from '../../hooks/useTerminal';
 import { terminalManager } from '../../services/terminalManager';
 import { useUIStore } from '../../stores/uiStore';

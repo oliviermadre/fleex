@@ -2,7 +2,7 @@ import {
   WS_RECONNECT_INITIAL_MS,
   WS_RECONNECT_MAX_MS,
   WS_RECONNECT_MAX_ATTEMPTS,
-} from '@asm/shared';
+} from '@fleex/shared';
 
 // Binary protocol:
 // Client -> Server:

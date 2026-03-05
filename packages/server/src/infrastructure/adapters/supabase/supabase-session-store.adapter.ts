@@ -1,4 +1,4 @@
-import type { SessionType, SessionStatus } from '@asm/shared';
+import type { SessionType, SessionStatus } from '@fleex/shared';
 import { SessionEntity } from '../../../domain/entities.js';
 import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
 import type { SupabaseConnection } from './connection.js';

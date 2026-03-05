@@ -44,7 +44,7 @@ class TerminalManager {
 
     // Diagnostic: log OSC 52 sequences from tmux
     terminal.parser.registerOscHandler(52, (data) => {
-      console.debug('[ASM:OSC52] received', { len: data.length });
+      console.debug('[FLEEX:OSC52] received', { len: data.length });
       return false; // let ClipboardAddon handle it too
     });
 
@@ -59,8 +59,8 @@ class TerminalManager {
       // Priority 1: xterm.js native selection (user gesture → clipboard works)
       if (terminal.hasSelection()) {
         navigator.clipboard.writeText(terminal.getSelection()).then(
-          () => console.debug('[ASM:Clipboard] copied xterm selection'),
-          (err) => console.warn('[ASM:Clipboard] failed to copy xterm selection', err),
+          () => console.debug('[FLEEX:Clipboard] copied xterm selection'),
+          (err) => console.warn('[FLEEX:Clipboard] failed to copy xterm selection', err),
         );
         return false;
       }
@@ -69,8 +69,8 @@ class TerminalManager {
       const pending = clipboardProvider.consumePendingText();
       if (pending) {
         navigator.clipboard.writeText(pending).then(
-          () => console.debug('[ASM:Clipboard] copied pending OSC52 text'),
-          (err) => console.warn('[ASM:Clipboard] failed to copy pending OSC52 text', err),
+          () => console.debug('[FLEEX:Clipboard] copied pending OSC52 text'),
+          (err) => console.warn('[FLEEX:Clipboard] failed to copy pending OSC52 text', err),
         );
         return false;
       }

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
-import { WS_PERSONA_PATH } from '@asm/shared';
+import { WS_PERSONA_PATH } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 export function personaWsPlugin(container: Container) {

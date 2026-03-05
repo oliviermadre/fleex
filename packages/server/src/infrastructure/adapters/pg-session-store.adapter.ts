@@ -1,7 +1,7 @@
 import { SessionEntity } from '../../domain/entities.js';
 import type { SessionStorePort } from '../../application/ports/session-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-import type { SessionType, SessionStatus } from '@asm/shared';
+import type { SessionType, SessionStatus } from '@fleex/shared';
 import type { DbPool } from '../database/db.js';
 
 interface SessionRow {

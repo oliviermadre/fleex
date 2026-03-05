@@ -1,4 +1,4 @@
-import type { DiffStats } from '@asm/shared';
+import type { DiffStats } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 
 interface DiffStatsBadgeProps {

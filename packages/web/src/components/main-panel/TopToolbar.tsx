@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Session } from '@asm/shared';
+import type { Session } from '@fleex/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useClaudeUsage } from '../../hooks/useClaudeUsage';
 import { renderIcon } from '../sidebar/PinnedIcons';

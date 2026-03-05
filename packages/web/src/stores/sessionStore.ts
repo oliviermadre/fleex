@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Session, SessionGroup, SessionStatus, WorktreeSessionGroup } from '@asm/shared';
+import type { Session, SessionGroup, SessionStatus, WorktreeSessionGroup } from '@fleex/shared';
 import { useUIStore } from './uiStore';
 
 /** IDs of recently killed sessions — filtered out of broadcast updates to prevent flicker */

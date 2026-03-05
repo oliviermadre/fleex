@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
-import type { Ticket, TicketStatus, BoardWithCounts } from '@asm/shared';
-import { TICKET_STATUS_LABELS } from '@asm/shared';
+import type { Ticket, TicketStatus, BoardWithCounts } from '@fleex/shared';
+import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { KanbanCard } from './KanbanCard';
 import { InlineCardCreator } from './InlineCardCreator';
 import { useTicketStore } from '../../stores/ticketStore';

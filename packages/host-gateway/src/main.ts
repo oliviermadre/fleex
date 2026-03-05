@@ -14,18 +14,18 @@ if (process.env['GATEWAY_TLS_VERIFY'] === 'false') {
 }
 
 const PORT = parseInt(process.env['GATEWAY_PORT'] ?? '3001', 10);
-const CENTRAL_SERVER_URL = process.env['ASM_CENTRAL_URL'];
+const CENTRAL_SERVER_URL = process.env['FLEEX_CENTRAL_URL'];
 const GATEWAY_NAME = process.env['GATEWAY_NAME'] || hostname();
 
-// ── Gateway identity (persisted in ~/.asm/gateway.json) ──
+// ── Gateway identity (persisted in ~/.fleex/gateway.json) ──
 
 interface GatewayIdentity {
   id: string;
   secret: string;
 }
 
-const ASM_DIR = join(homedir(), '.asm');
-const IDENTITY_FILE = join(ASM_DIR, 'gateway.json');
+const FLEEX_DIR = join(homedir(), '.fleex');
+const IDENTITY_FILE = join(FLEEX_DIR, 'gateway.json');
 
 function loadOrCreateIdentity(): GatewayIdentity {
   if (existsSync(IDENTITY_FILE)) {
@@ -39,7 +39,7 @@ function loadOrCreateIdentity(): GatewayIdentity {
     id: randomUUID(),
     secret: randomBytes(32).toString('hex'),
   };
-  mkdirSync(ASM_DIR, { recursive: true });
+  mkdirSync(FLEEX_DIR, { recursive: true });
   writeFileSync(IDENTITY_FILE, JSON.stringify(identity, null, 2));
   console.log(`[gateway] Generated new identity: ${identity.id}`);
   return identity;

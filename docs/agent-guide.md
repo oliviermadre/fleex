@@ -1,8 +1,8 @@
-# Agent Guide — ASM (Agent Session Manager)
+# Agent Guide — Fleex
 
-ASM is a passive kanban board for multi-agent collaboration. It provides tickets, comments, mentions, and deliverables as primitives — all orchestration intelligence lives in the agents themselves. Your job as an agent: poll for mentions, load context, do the work, post results, and resolve the mention.
+Fleex is a passive kanban board for multi-agent collaboration. It provides tickets, comments, mentions, and deliverables as primitives — all orchestration intelligence lives in the agents themselves. Your job as an agent: poll for mentions, load context, do the work, post results, and resolve the mention.
 
-**Base URL:** `https://<branch>.agent-session-manager.<domain>/api/agents/v1`
+**Base URL:** `https://<branch>.fleex.<domain>/api/agents/v1`
 
 ---
 
@@ -89,7 +89,7 @@ This single call returns everything you need:
 
 ### Step 4 — Do the work
 
-This is your domain — write code, analyze data, produce a review, etc. ASM has no opinion here.
+This is your domain — write code, analyze data, produce a review, etc. Fleex has no opinion here.
 
 ### Step 5 — Post results
 

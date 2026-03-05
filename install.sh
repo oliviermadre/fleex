@@ -3,7 +3,7 @@
 # fleex installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/oliviermadre/agent-session-manager/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/oliviermadre/fleex/main/install.sh | bash
 #
 # What it does:
 #   1. Checks prerequisites (git, bun)
@@ -16,7 +16,7 @@ set -euo pipefail
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 FLEEX_HOME="${FLEEX_HOME:-$HOME/.fleex}"
-REPO_URL="git@github.com:oliviermadre/agent-session-manager.git"
+REPO_URL="git@github.com:oliviermadre/fleex.git"
 REPO_DIR="$FLEEX_HOME/repo"
 BIN_DIR="$FLEEX_HOME/bin"
 CLI_NAME="fleex"
@@ -170,14 +170,14 @@ create_env_template() {
 # Uncomment and set values as needed.
 
 # Storage driver: json (default), sqlite, pgsql, supabase
-# ASM_STORAGE_DRIVER=json
+# FLEEX_STORAGE_DRIVER=json
 
 # PostgreSQL (if using pgsql driver)
-# ASM_PGSQL_URL=postgresql://user:pass@localhost:5432/asm
+# FLEEX_PGSQL_URL=postgresql://user:pass@localhost:5432/fleex
 
 # Supabase (if using supabase driver)
-# ASM_SUPABASE_URL=https://xxx.supabase.co
-# ASM_SUPABASE_KEY=your-anon-key
+# FLEEX_SUPABASE_URL=https://xxx.supabase.co
+# FLEEX_SUPABASE_KEY=your-anon-key
 
 # OAuth (optional — app works without auth in local mode)
 # GITHUB_CLIENT_ID=

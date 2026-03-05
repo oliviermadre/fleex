@@ -1,8 +1,8 @@
-# Design: Collaboration Multi-Agents sur le Ticketing ASM
+# Design: Collaboration Multi-Agents sur le Ticketing Fleex
 
 ## Principe directeur
 
-Le Kanban ASM est un **receptacle passif**. Il ne prescrit aucun workflow, aucun role, aucun pipeline. L'intelligence d'orchestration est **entierement externe** : un agent chef de projet (ou tout autre systeme) lit les tickets, decide qui mentionner, quand changer un statut, quel livrable demander. ASM fournit les primitives — discussion, mentions, livrables, notifications — et les agents s'en servent librement.
+Le Kanban Fleex est un **receptacle passif**. Il ne prescrit aucun workflow, aucun role, aucun pipeline. L'intelligence d'orchestration est **entierement externe** : un agent chef de projet (ou tout autre systeme) lit les tickets, decide qui mentionner, quand changer un statut, quel livrable demander. Fleex fournit les primitives — discussion, mentions, livrables, notifications — et les agents s'en servent librement.
 
 ## Ce qui existe deja
 
@@ -48,7 +48,7 @@ export interface TicketComment {
 }
 ```
 
-**Stockage** : `~/.asm/projects/comments.json`
+**Stockage** : `~/.fleex/projects/comments.json`
 
 **Logique cle** : a la creation d'un commentaire, le body est parse pour extraire les patterns `@agent:<name>`. Chaque match genere un `TicketMention`.
 
@@ -72,7 +72,7 @@ export interface TicketMention {
 }
 ```
 
-**Stockage** : `~/.asm/projects/mentions.json`
+**Stockage** : `~/.fleex/projects/mentions.json`
 
 **Cycle de vie** :
 - `pending` : l'agent est mentionne, il n'a pas encore reagi
@@ -101,7 +101,7 @@ export interface TicketDeliverable {
 }
 ```
 
-**Stockage** : `~/.asm/projects/deliverables.json`
+**Stockage** : `~/.fleex/projects/deliverables.json`
 
 **Pas de contrainte de role** : n'importe quel agent peut poster n'importe quel type de livrable. C'est le chef de projet agent qui decide si le livrable est satisfaisant et fait avancer le ticket.
 
@@ -304,26 +304,26 @@ Toutes les actions sont tracees dans l'activity log existant avec de nouvelles a
 
 **Contexte** : les agents tournent en cronjob toutes les 5 minutes. L'humain discute avec l'agent project-manager sur Telegram. Le project-manager connait les agents : pm, designer, archi, dev, qa, business, marketing, user-researcher.
 
-**Demande humain sur Telegram** : "Je veux que dans ASM, quand on cree une session Claude, si le repo n'existe pas sur le filesystem, il soit automatiquement clone. Les regles habituelles de creation s'appliquent (main, PR, issue, fresh worktree)."
+**Demande humain sur Telegram** : "Je veux que dans Fleex, quand on cree une session Claude, si le repo n'existe pas sur le filesystem, il soit automatiquement clone. Les regles habituelles de creation s'appliquent (main, PR, issue, fresh worktree)."
 
 Tous les headers sont omis pour lisibilite. Chaque agent envoie :
-- `Authorization: Bearer asm_<token>`
+- `Authorization: Bearer fleex_<token>`
 - `X-Agent-Name: <nom>`
 
 ---
 
-### T+0min — project-manager (via Telegram, hors ASM)
+### T+0min — project-manager (via Telegram, hors Fleex)
 
-Le project-manager recoit le message Telegram, raisonne, et decide de creer un ticket dans ASM.
+Le project-manager recoit le message Telegram, raisonne, et decide de creer un ticket dans Fleex.
 
 ```http
 POST /api/agents/v1/tickets
 X-Agent-Name: project-manager
 
 {
-  "boardId": "board-asm-123",
+  "boardId": "board-fleex-123",
   "title": "Auto-clone repo on session creation if not on filesystem",
-  "description": "## Besoin\n\nLorsqu'un utilisateur cree une session Claude dans ASM et que le repository cible n'existe pas encore sur le filesystem local, ASM doit automatiquement cloner le repo avant de creer la session.\n\n## Contraintes\n- Les regles existantes de creation de session s'appliquent (main, PR, issue, fresh worktree)\n- Le clone doit utiliser les memes conventions que le systeme de worktrees actuel\n- Si le clone echoue (acces, reseau), la creation de session doit remonter une erreur claire\n\n## Origine\nDemande directe du product owner.",
+  "description": "## Besoin\n\nLorsqu'un utilisateur cree une session Claude dans Fleex et que le repository cible n'existe pas encore sur le filesystem local, Fleex doit automatiquement cloner le repo avant de creer la session.\n\n## Contraintes\n- Les regles existantes de creation de session s'appliquent (main, PR, issue, fresh worktree)\n- Le clone doit utiliser les memes conventions que le systeme de worktrees actuel\n- Si le clone echoue (acces, reseau), la creation de session doit remonter une erreur claire\n\n## Origine\nDemande directe du product owner.",
   "status": "todo",
   "priority": "high",
   "tags": ["feature", "session", "repository"]
@@ -343,7 +343,7 @@ POST /api/agents/v1/tickets/ticket-abc-001/comments
 X-Agent-Name: project-manager
 
 {
-  "body": "@agent:pm J'ai besoin d'une spec fonctionnelle pour l'auto-clone de repo a la creation de session.\n\nContexte : quand un utilisateur cree une session Claude et que le repo n'est pas sur le FS, on veut cloner automatiquement.\n\nPoints a couvrir dans la spec :\n- Quel comportement exact selon le mode de creation (main, PR, issue, fresh worktree) ?\n- Que se passe-t-il si le clone echoue (timeout, auth, repo prive) ?\n- Faut-il un feedback utilisateur pendant le clone (c'est potentiellement long) ?\n- Le repo clone doit-il etre enregistre dans la config ASM automatiquement ?"
+  "body": "@agent:pm J'ai besoin d'une spec fonctionnelle pour l'auto-clone de repo a la creation de session.\n\nContexte : quand un utilisateur cree une session Claude et que le repo n'est pas sur le FS, on veut cloner automatiquement.\n\nPoints a couvrir dans la spec :\n- Quel comportement exact selon le mode de creation (main, PR, issue, fresh worktree) ?\n- Que se passe-t-il si le clone echoue (timeout, auth, repo prive) ?\n- Faut-il un feedback utilisateur pendant le clone (c'est potentiellement long) ?\n- Le repo clone doit-il etre enregistre dans la config Fleex automatiquement ?"
 }
 ```
 
@@ -364,7 +364,7 @@ X-Agent-Name: project-manager
 { "status": "doing" }
 ```
 
-Le project-manager a fini pour ce cycle. Il repond a l'humain sur Telegram : "J'ai cree le ticket ASM-001 et demande au PM de specifier. Je te tiens au courant."
+Le project-manager a fini pour ce cycle. Il repond a l'humain sur Telegram : "J'ai cree le ticket FLEEX-001 et demande au PM de specifier. Je te tiens au courant."
 
 ---
 
@@ -445,7 +445,7 @@ X-Agent-Name: pm
 {
   "type": "functional-spec",
   "title": "Spec fonctionnelle — Auto-clone repo",
-  "content": "## Comportement par mode de creation\n\n### Mode `main`\nSi le repo org/name n'existe pas dans basePath :\n1. `git clone <remote> <basePath>/<org>/<name>`\n2. Checkout main\n3. Creer la session dans ce directory\n\n### Mode `PR`\nSi le repo n'existe pas :\n1. Clone comme ci-dessus\n2. Fetch la branche de la PR\n3. Creer un worktree pour cette branche\n4. Creer la session dans le worktree\n\n### Mode `issue`\nSi le repo n'existe pas :\n1. Clone\n2. Creer un worktree fresh depuis main avec le naming convention existant\n3. Creer la session\n\n### Mode `fresh worktree`\nIdentique a issue.\n\n## Gestion d'erreur\n- Clone timeout : 60s max, erreur explicite `CLONE_TIMEOUT`\n- Auth failure : remonter `CLONE_AUTH_FAILED` avec le message git\n- Repo inexistant : `REPOSITORY_NOT_FOUND`\n- Pas de place disque : `CLONE_DISK_FULL`\n\n## UX\n- La creation de session doit indiquer 'cloning repository...' comme statut intermediaire\n- Le repo clone est automatiquement ajoute a la config ASM (repositories resolvees)\n\n## Hors scope\n- Pas de shallow clone pour l'instant\n- Pas de mirror/bare clone",
+  "content": "## Comportement par mode de creation\n\n### Mode `main`\nSi le repo org/name n'existe pas dans basePath :\n1. `git clone <remote> <basePath>/<org>/<name>`\n2. Checkout main\n3. Creer la session dans ce directory\n\n### Mode `PR`\nSi le repo n'existe pas :\n1. Clone comme ci-dessus\n2. Fetch la branche de la PR\n3. Creer un worktree pour cette branche\n4. Creer la session dans le worktree\n\n### Mode `issue`\nSi le repo n'existe pas :\n1. Clone\n2. Creer un worktree fresh depuis main avec le naming convention existant\n3. Creer la session\n\n### Mode `fresh worktree`\nIdentique a issue.\n\n## Gestion d'erreur\n- Clone timeout : 60s max, erreur explicite `CLONE_TIMEOUT`\n- Auth failure : remonter `CLONE_AUTH_FAILED` avec le message git\n- Repo inexistant : `REPOSITORY_NOT_FOUND`\n- Pas de place disque : `CLONE_DISK_FULL`\n\n## UX\n- La creation de session doit indiquer 'cloning repository...' comme statut intermediaire\n- Le repo clone est automatiquement ajoute a la config Fleex (repositories resolvees)\n\n## Hors scope\n- Pas de shallow clone pour l'instant\n- Pas de mirror/bare clone",
   "status": "final",
   "mentionId": "mention-001"
 }
@@ -460,7 +460,7 @@ POST /api/agents/v1/tickets/ticket-abc-001/comments
 X-Agent-Name: pm
 
 {
-  "body": "@agent:project-manager Spec fonctionnelle finalisee (voir livrable). Points cles :\n- 4 modes couverts (main, PR, issue, fresh worktree)\n- Gestion d'erreur explicite avec codes dedies\n- Le repo clone s'enregistre automatiquement dans la config ASM\n- Statut intermediaire 'cloning...' cote UX"
+  "body": "@agent:project-manager Spec fonctionnelle finalisee (voir livrable). Points cles :\n- 4 modes couverts (main, PR, issue, fresh worktree)\n- Gestion d'erreur explicite avec codes dedies\n- Le repo clone s'enregistre automatiquement dans la config Fleex\n- Statut intermediaire 'cloning...' cote UX"
 }
 ```
 
@@ -519,7 +519,7 @@ POST /api/agents/v1/tickets/ticket-abc-001/comments
 X-Agent-Name: project-manager
 
 {
-  "body": "@agent:archi Analyse l'impact technique de l'auto-clone dans le codebase ASM.\n\nLa spec fonctionnelle est dans le livrable du PM (deliverable-001).\n\nJ'ai besoin de savoir :\n- Ou dans le code actuel faut-il intervenir ? (quels fichiers, quels use cases)\n- Le GitCliAdapter existant suffit-il pour le clone ou faut-il l'etendre ?\n- Y a-t-il des impacts sur le flow de creation de worktree existant ?\n- Quel est le risque de regression ?\n\nLivre-moi une tech spec."
+  "body": "@agent:archi Analyse l'impact technique de l'auto-clone dans le codebase Fleex.\n\nLa spec fonctionnelle est dans le livrable du PM (deliverable-001).\n\nJ'ai besoin de savoir :\n- Ou dans le code actuel faut-il intervenir ? (quels fichiers, quels use cases)\n- Le GitCliAdapter existant suffit-il pour le clone ou faut-il l'etendre ?\n- Y a-t-il des impacts sur le flow de creation de worktree existant ?\n- Quel est le risque de regression ?\n\nLivre-moi une tech spec."
 }
 ```
 
@@ -550,7 +550,7 @@ X-Agent-Name: archi
 
 L'archi recoit dans sa context window : le ticket, les 3 commentaires, la spec fonctionnelle du PM, et la demande du project-manager. Il a toutes les infos pour travailler.
 
-Il raisonne, analyse le code (en dehors d'ASM — c'est son LLM qui lit le codebase), et poste :
+Il raisonne, analyse le code (en dehors de Fleex — c'est son LLM qui lit le codebase), et poste :
 
 ```http
 PATCH /api/agents/v1/mentions/mention-003/acknowledge
@@ -644,7 +644,7 @@ Le dev recoit dans sa context window :
 - Les 2 livrables (spec fonctionnelle + tech spec)
 - Sa mention pending avec la demande precise
 
-Le dev acknowledge, code (en dehors d'ASM), cree la PR, et revient poster :
+Le dev acknowledge, code (en dehors de Fleex), cree la PR, et revient poster :
 
 ```http
 PATCH /api/agents/v1/mentions/mention-005/acknowledge
@@ -666,7 +666,7 @@ X-Agent-Name: dev
 {
   "type": "pull-request",
   "title": "PR #42 — feat: auto-clone repository on session creation",
-  "content": "## Changes\n\n- `git-cli.adapter.ts`: Added `cloneRepository(remote, targetPath)` method\n- `create-session-from-ticket.ts`: Added clone step before worktree resolution\n- `create-session.ts`: Same clone step for direct session creation\n- `json-config.adapter.ts`: Auto-register cloned repo in config\n\n## Tests\n- Unit tests for cloneRepository\n- Integration test: create session with non-existing repo\n- Error cases: timeout, auth failure, not found\n\nPR: https://github.com/oliviermadre/agent-session-manager/pull/42",
+  "content": "## Changes\n\n- `git-cli.adapter.ts`: Added `cloneRepository(remote, targetPath)` method\n- `create-session-from-ticket.ts`: Added clone step before worktree resolution\n- `create-session.ts`: Same clone step for direct session creation\n- `json-config.adapter.ts`: Auto-register cloned repo in config\n\n## Tests\n- Unit tests for cloneRepository\n- Integration test: create session with non-existing repo\n- Error cases: timeout, auth failure, not found\n\nPR: https://github.com/oliviermadre/fleex/pull/42",
   "status": "final",
   "mentionId": "mention-005"
 }
@@ -684,9 +684,9 @@ X-Agent-Name: dev
 
 {
   "type": "github_pr",
-  "ref": "oliviermadre/agent-session-manager#42",
+  "ref": "oliviermadre/fleex#42",
   "label": "feat: auto-clone repository on session creation",
-  "url": "https://github.com/oliviermadre/agent-session-manager/pull/42"
+  "url": "https://github.com/oliviermadre/fleex/pull/42"
 }
 ```
 
@@ -921,7 +921,7 @@ Les 4 agents non impliques (designer, user-researcher, business, marketing) ont 
 
 3. PATCH /mentions/:id/acknowledge → signaler qu'on bosse dessus
 
-4. ... raisonner, travailler (hors ASM) ...
+4. ... raisonner, travailler (hors Fleex) ...
 
 5. si livrable a fournir :
    POST /tickets/:id/deliverables → poster le livrable
@@ -991,19 +991,19 @@ Les 4 agents non impliques (designer, user-researcher, business, marketing) ont 
 
 ## 7. Ce qu'on ne fait PAS
 
-- **Pas de pipeline/workflow** dans ASM. L'orchestration est externe.
-- **Pas de roles** dans ASM. Un agent est juste un nom (`X-Agent-Name`). C'est l'orchestrateur qui sait quel agent fait quoi.
-- **Pas de registre d'agents** dans ASM. ASM ne sait pas quels agents existent. Il voit juste des noms dans les tokens.
+- **Pas de pipeline/workflow** dans Fleex. L'orchestration est externe.
+- **Pas de roles** dans Fleex. Un agent est juste un nom (`X-Agent-Name`). C'est l'orchestrateur qui sait quel agent fait quoi.
+- **Pas de registre d'agents** dans Fleex. Fleex ne sait pas quels agents existent. Il voit juste des noms dans les tokens.
 - **Pas d'auto-avancement de statut**. Seul un agent (ou l'UI) change le statut d'un ticket via `PATCH`.
 - **Pas de base de donnees**. On reste sur JSON. Migration future vers SQLite si besoin.
 - **Pas de file d'attente**. WebSocket + polling. Si un agent est offline, ses mentions restent `pending`.
-- **Pas de LLM integre**. ASM ne raisonne pas. Les agents sont des clients externes.
+- **Pas de LLM integre**. Fleex ne raisonne pas. Les agents sont des clients externes.
 
 ---
 
 ## 8. Questions ouvertes
 
-1. **Escalation timeout** : faut-il un mecanisme cote ASM pour signaler qu'une mention est `pending` depuis trop longtemps ? (ex: champ `staleSince` apres X minutes). Ou c'est le chef de projet agent qui gere ca en lisant les timestamps ?
+1. **Escalation timeout** : faut-il un mecanisme cote Fleex pour signaler qu'une mention est `pending` depuis trop longtemps ? (ex: champ `staleSince` apres X minutes). Ou c'est le chef de projet agent qui gere ca en lisant les timestamps ?
 2. **Sous-tickets** : un agent devrait-il pouvoir creer des sous-tickets lies au ticket parent ? (le modele de `links` existant le permettrait avec un type `'child_ticket'`)
 3. **Historique des livrables** : garder toutes les versions (append-only) ou seulement la derniere (in-place update) ?
 4. **Taille des commentaires/livrables** : faut-il une limite ? Le stockage JSON rend les gros contenus couteux en I/O.

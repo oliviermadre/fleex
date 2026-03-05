@@ -1,5 +1,5 @@
-import type { ClaudeActivityStatus } from '@asm/shared';
-import type { Session } from '@asm/shared';
+import type { ClaudeActivityStatus } from '@fleex/shared';
+import type { Session } from '@fleex/shared';
 
 export type DisplayStatus = 'executing' | 'working' | 'needs-approval' | 'idle' | 'unknown';
 

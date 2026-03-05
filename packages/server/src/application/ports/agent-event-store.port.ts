@@ -1,4 +1,4 @@
-import type { AgentExecution } from '@asm/shared';
+import type { AgentExecution } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 
 export interface AgentEventStorePort {
