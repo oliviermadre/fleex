@@ -401,40 +401,65 @@ export class ExecuteAgentUseCase {
         queryOptions['resume'] = previousSessionId;
       }
 
-      for await (const message of query({
-        prompt: userPrompt,
-        options: queryOptions as Parameters<typeof query>[0]['options'],
-      })) {
-        // Capture session ID from init message
-        const msg = message as Record<string, unknown>;
-        if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
-          sdkSessionId = msg['session_id'] as string;
-          await emitEvent('turn_start', { sessionId: sdkSessionId });
-        }
-
-        // Capture final result
-        if ('result' in message) {
-          resultText = (message as { result: string }).result;
-
-          // Use SDK's validated structured output if available
-          if (msg['structured_output']) {
-            structuredOutput = msg['structured_output'] as AgentStructuredOutput;
+      const runQueryLoop = async () => {
+        for await (const message of query({
+          prompt: userPrompt,
+          options: queryOptions as Parameters<typeof query>[0]['options'],
+        })) {
+          // Capture session ID from init message
+          const msg = message as Record<string, unknown>;
+          if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
+            sdkSessionId = msg['session_id'] as string;
+            await emitEvent('turn_start', { sessionId: sdkSessionId });
           }
 
-          if (msg['subtype'] === 'error_max_structured_output_retries') {
-            this.logger.warn('SDK structured output retries exhausted, falling back to parser', {
-              executionId,
-              persona: persona.name,
+          // Capture final result
+          if ('result' in message) {
+            resultText = (message as { result: string }).result;
+
+            // Use SDK's validated structured output if available
+            if (msg['structured_output']) {
+              structuredOutput = msg['structured_output'] as AgentStructuredOutput;
+            }
+
+            if (msg['subtype'] === 'error_max_structured_output_retries') {
+              this.logger.warn('SDK structured output retries exhausted, falling back to parser', {
+                executionId,
+                persona: persona.name,
+              });
+            }
+
+            await emitEvent('message_stop', {
+              result: resultText,
+              subtype: msg['subtype'] as string | undefined,
             });
+          } else {
+            // Store all other SDK messages as events
+            await emitEvent('content_block_delta', msg);
           }
+        }
+      };
 
-          await emitEvent('message_stop', {
-            result: resultText,
-            subtype: msg['subtype'] as string | undefined,
+      try {
+        await runQueryLoop();
+      } catch (queryErr) {
+        if (previousSessionId) {
+          // Stale resume — clear session and retry fresh
+          this.logger.warn('SDK query failed with resume, retrying without resume', {
+            executionId,
+            persona: persona.name,
+            staleSessionId: previousSessionId,
+            error: queryErr instanceof Error ? queryErr.message : String(queryErr),
           });
+          this.sessionHistory.delete(sessionKey);
+          delete queryOptions['resume'];
+          sdkSessionId = undefined;
+          resultText = '';
+          structuredOutput = null;
+          await emitEvent('execution_retry', { reason: 'stale_resume_session', staleSessionId: previousSessionId });
+          await runQueryLoop(); // If this also fails, propagates to outer catch
         } else {
-          // Store all other SDK messages as events
-          await emitEvent('content_block_delta', msg);
+          throw queryErr;
         }
       }
 

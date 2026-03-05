@@ -21,6 +21,7 @@ export type AgentEventType =
   | 'turn_end'
   | 'execution_start'
   | 'execution_end'
+  | 'execution_retry'
   | 'error';
 
 export interface AgentEvent {
