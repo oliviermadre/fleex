@@ -1,15 +1,50 @@
-import Database from 'better-sqlite3';
+import { Database } from 'bun:sqlite';
 import { SQLITE_SCHEMA } from './schema.js';
 
+/**
+ * Adapt better-sqlite3–style named-param objects ({ id: 1 })
+ * to bun:sqlite style ({ "@id": 1 }).  Positional args pass through unchanged.
+ */
+function adaptArgs(args: unknown[]): unknown[] {
+  if (
+    args.length === 1 &&
+    args[0] !== null &&
+    typeof args[0] === 'object' &&
+    !Array.isArray(args[0])
+  ) {
+    const obj = args[0] as Record<string, unknown>;
+    const adapted: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      adapted[`@${key}`] = value;
+    }
+    return [adapted];
+  }
+  return args;
+}
+
+function wrapStatement(stmt: ReturnType<Database['prepare']>) {
+  return {
+    all(...args: unknown[]) {
+      return stmt.all(...adaptArgs(args));
+    },
+    get(...args: unknown[]) {
+      return stmt.get(...adaptArgs(args));
+    },
+    run(...args: unknown[]) {
+      return stmt.run(...adaptArgs(args));
+    },
+  };
+}
+
 export class SqliteConnection {
-  private _db: Database.Database | null = null;
+  private _db: Database | null = null;
 
   constructor(private readonly dbPath: string) {}
 
   async init(): Promise<void> {
     this._db = new Database(this.dbPath);
-    this._db.pragma('journal_mode = WAL');
-    this._db.pragma('foreign_keys = ON');
+    this._db.exec('PRAGMA journal_mode = WAL');
+    this._db.exec('PRAGMA foreign_keys = ON');
 
     for (const statement of SQLITE_SCHEMA) {
       this._db.exec(statement);
@@ -39,11 +74,19 @@ export class SqliteConnection {
     }
   }
 
-  get db(): Database.Database {
+  get db() {
     if (!this._db) {
       throw new Error('SqliteConnection not initialized. Call init() first.');
     }
-    return this._db;
+    const realDb = this._db;
+    return {
+      prepare(sql: string) {
+        return wrapStatement(realDb.prepare(sql));
+      },
+      exec(sql: string) {
+        realDb.exec(sql);
+      },
+    };
   }
 
   close(): void {
