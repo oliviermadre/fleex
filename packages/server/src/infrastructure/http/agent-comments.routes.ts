@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { TicketNotFoundError, CommentNotFoundError, ForbiddenError } from '../../domain/errors.js';
 import type { Container } from '../container.js';
+import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 
 export function agentCommentsRoutes(container: Container) {
   return async function (app: FastifyInstance) {
