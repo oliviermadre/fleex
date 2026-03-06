@@ -165,6 +165,25 @@ async function main() {
   } catch {
     container.logger.warn('Gateway not reachable at startup', { gatewayUrl: container.gatewayUrl });
   }
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    container.logger.info('Shutting down server...');
+
+    // Cleanup auto-review workflow
+    container.autoReviewWorkflow.cleanup();
+
+    // Stop repository refresh scheduler
+    container.repositoryRefreshScheduler.stop();
+
+    // Close Fastify server
+    await app.close();
+
+    container.logger.info('Server shutdown complete');
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 main().catch(console.error);

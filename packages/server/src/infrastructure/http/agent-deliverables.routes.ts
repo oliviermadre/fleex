@@ -59,6 +59,20 @@ export function agentDeliverablesRoutes(container: Container) {
       const dto = deliverable.toDTO();
       container.ticketBroadcast('deliverable:created', dto);
 
+      // Handle auto-review workflow for deliverable creation
+      container.autoReviewWorkflow.handleDeliverableCreated({
+        ticketId: request.params.id,
+        agentName,
+        status: deliverable.status,
+      }).catch((error) => {
+        container.logger.error('Failed to handle deliverable creation for auto-review', {
+          ticketId: request.params.id,
+          agentName,
+          deliverableStatus: deliverable.status,
+          error: String(error),
+        });
+      });
+
       // Wake up agents waiting for info on this ticket (exclude submitting agent)
       container.wakeWaitingAgents.execute(request.params.id, agentName).catch(() => {});
 
@@ -78,8 +92,26 @@ export function agentDeliverablesRoutes(container: Container) {
         throw new ForbiddenError('Only the author can update this deliverable');
       }
 
+      const oldStatus = deliverable.status;
       deliverable.update(request.body);
       await container.deliverableStore.save(deliverable);
+
+      // Handle auto-review workflow if status changed to final
+      if (oldStatus !== 'final' && deliverable.status === 'final') {
+        container.autoReviewWorkflow.handleDeliverableCreated({
+          ticketId: deliverable.ticketId,
+          agentName,
+          status: 'final',
+        }).catch((error) => {
+          container.logger.error('Failed to handle deliverable status change for auto-review', {
+            ticketId: deliverable.ticketId,
+            agentName,
+            oldStatus,
+            newStatus: deliverable.status,
+            error: String(error),
+          });
+        });
+      }
 
       const dto = deliverable.toDTO();
       container.ticketBroadcast('deliverable:updated', dto);

@@ -32,6 +32,7 @@ import { UpdatePersonaUseCase } from '../application/use-cases/update-persona.js
 import { DeletePersonaUseCase } from '../application/use-cases/delete-persona.js';
 import { ExecuteAgentUseCase } from '../application/use-cases/execute-agent.js';
 import { WakeWaitingAgentsUseCase } from '../application/use-cases/wake-waiting-agents.js';
+import { AutoReviewWorkflowUseCase } from '../application/use-cases/auto-review-workflow.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
@@ -152,6 +153,7 @@ export async function createContainer() {
   const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger);
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
+  const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore, config, logger);
 
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
@@ -207,6 +209,7 @@ export async function createContainer() {
     deletePersona,
     executeAgent,
     wakeWaitingAgents,
+    autoReviewWorkflow,
     agentEventStore,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     agentBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

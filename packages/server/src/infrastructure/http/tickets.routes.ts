@@ -450,6 +450,38 @@ export function ticketRoutes(container: Container) {
         // Wake up agents waiting for info on this ticket
         container.wakeWaitingAgents.execute(request.params.id).catch(() => {});
 
+        // Handle auto-review workflow for human mentions
+        for (const mention of createdMentions) {
+          if (mention.targetType === 'human') {
+            container.autoReviewWorkflow.handleHumanMention({
+              ticketId: request.params.id,
+              mentionedHuman: mention.targetAgent,
+            }).catch((error) => {
+              container.logger.error('Failed to handle human mention for auto-review', {
+                ticketId: request.params.id,
+                mentionedHuman: mention.targetAgent,
+                error: String(error),
+              });
+            });
+          }
+        }
+
+        // Handle agent mentions in reviewing status (back to doing)
+        for (const mention of createdMentions) {
+          if (mention.targetType === 'agent') {
+            container.autoReviewWorkflow.handleAgentMentionInReview({
+              ticketId: request.params.id,
+              mentionedAgent: mention.targetAgent,
+            }).catch((error) => {
+              container.logger.error('Failed to handle agent mention in review', {
+                ticketId: request.params.id,
+                mentionedAgent: mention.targetAgent,
+                error: String(error),
+              });
+            });
+          }
+        }
+
         // Auto-trigger mentioned agents
         for (const mention of createdMentions) {
           if (mention.targetType === 'agent') {
