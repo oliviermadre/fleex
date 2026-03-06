@@ -16,10 +16,8 @@ import { ReconcileWorktreeUseCase } from '../application/use-cases/reconcile-wor
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
 import type { PgUserStore } from './adapters/pg-user-store.adapter.js';
-import type { PgGatewayStore } from './adapters/pg-gateway-store.adapter.js';
 import type { SessionManager } from './auth/session-manager.js';
 import type { SupabaseUserStore } from './adapters/supabase/supabase-user-store.adapter.js';
-import type { SupabaseGatewayStore } from './adapters/supabase/supabase-gateway-store.adapter.js';
 import type { SupabaseSessionManager } from './adapters/supabase/supabase-session-manager.adapter.js';
 import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-session-from-ticket.js';
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
@@ -85,41 +83,34 @@ export async function createContainer() {
   // Auth & multi-gateway stores (database-backed features)
   let userStore: PgUserStore | SupabaseUserStore | null = null;
   let sessionManager: SessionManager | SupabaseSessionManager | null = null;
-  let gatewayStore: PgGatewayStore | SupabaseGatewayStore | null = null;
 
   if (driver === 'supabase') {
     const supabaseUrl = process.env['FLEEX_SUPABASE_URL'];
     const supabaseKey = process.env['FLEEX_SUPABASE_KEY'];
     if (supabaseUrl && supabaseKey) {
       const { SupabaseConnection } = await import('./adapters/supabase/connection.js');
-      const { SupabaseGatewayStore: SbGw } = await import('./adapters/supabase/supabase-gateway-store.adapter.js');
       const { SupabaseUserStore: SbUser } = await import('./adapters/supabase/supabase-user-store.adapter.js');
       const { SupabaseSessionManager: SbSess } = await import('./adapters/supabase/supabase-session-manager.adapter.js');
 
       const conn = new SupabaseConnection(supabaseUrl, supabaseKey);
       await conn.init();
 
-      const defaultUserId = '00000000-0000-0000-0000-000000000000';
-      gatewayStore = new SbGw(conn, defaultUserId);
       userStore = new SbUser(conn);
       sessionManager = new SbSess(conn);
-      logger.info('Supabase auth/gateway stores initialized');
+      logger.info('Supabase auth stores initialized');
     }
   } else if (driver === 'pgsql') {
     const databaseUrl = process.env['DATABASE_URL'] || process.env['FLEEX_PGSQL_URL'];
     if (databaseUrl) {
-      const { createDbPool, runMigrations, getDefaultUserId } = await import('./database/db.js');
-      const { PgGatewayStore: PgGw } = await import('./adapters/pg-gateway-store.adapter.js');
+      const { createDbPool, runMigrations } = await import('./database/db.js');
       const { PgUserStore: PgUser } = await import('./adapters/pg-user-store.adapter.js');
       const { SessionManager: SessMgr } = await import('./auth/session-manager.js');
 
       const db = await createDbPool(logger);
       await runMigrations(db, logger);
-      const userId = getDefaultUserId();
-      gatewayStore = new PgGw(db, userId, logger);
       userStore = new PgUser(db, logger);
       sessionManager = new SessMgr(db);
-      logger.info('PostgreSQL auth/gateway stores initialized');
+      logger.info('PostgreSQL auth stores initialized');
     }
   }
 
@@ -183,7 +174,6 @@ export async function createContainer() {
     git,
     userStore,
     sessionManager,
-    gatewayStore,
     sessionStore,
     repositoryCache,
     githubGraphql,

@@ -412,25 +412,6 @@ export async function deleteAgentToken(id: string): Promise<void> {
   await request<void>(`/agent-tokens/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-// ── Gateways API ──
-
-export interface GatewayInfo {
-  id: string;
-  name: string;
-  hostname: string | null;
-  status: 'online' | 'offline';
-  lastSeenAt: string | null;
-  createdAt: string;
-}
-
-export async function fetchGateways(): Promise<GatewayInfo[]> {
-  return request<GatewayInfo[]>('/gateways');
-}
-
-export async function deleteGateway(id: string): Promise<void> {
-  await request<void>(`/gateways/${encodeURIComponent(id)}`, { method: 'DELETE' });
-}
-
 // ── Agent Personas API ──
 
 export async function fetchPersonas(): Promise<import('@fleex/shared').AgentPersona[]> {
