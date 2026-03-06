@@ -3,6 +3,8 @@ import { TicketNotFoundError, MentionNotFoundError, ForbiddenError } from '../..
 import type { Container } from '../container.js';
 
 export function agentMentionsRoutes(container: Container) {
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+
   return async function (app: FastifyInstance) {
 
     // Get pending mentions for the calling agent
@@ -57,9 +59,8 @@ export function agentMentionsRoutes(container: Container) {
       mention.acknowledge();
       await container.mentionStore.save(mention);
 
-      const dto = mention.toDTO();
-      container.ticketBroadcast('mention:acknowledged', dto);
-      return dto;
+      emit({ type: 'mention.acknowledged', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, occurredAt: new Date() });
+      return mention.toDTO();
     });
 
     // Resolve a mention
@@ -77,22 +78,8 @@ export function agentMentionsRoutes(container: Container) {
       });
 
       const mention = (await container.mentionStore.getById(request.params.id))!;
-      const dto = mention.toDTO();
-      container.ticketBroadcast('mention:resolved', dto);
-
-      // Handle auto-review workflow for agent work completion
-      container.autoReviewWorkflow.handleAgentWorkCompletion({
-        ticketId: mention.ticketId,
-        completedAgentName: agentName,
-      }).catch((error) => {
-        container.logger.error('Failed to handle agent work completion for auto-review', {
-          ticketId: mention.ticketId,
-          agentName,
-          error: String(error),
-        });
-      });
-
-      return dto;
+      emit({ type: 'mention.resolved', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, resolvedBy: agentName, occurredAt: new Date() });
+      return mention.toDTO();
     });
 
     // Mark mention as waiting for info
@@ -110,21 +97,8 @@ export function agentMentionsRoutes(container: Container) {
       mention.waitForInfo();
       await container.mentionStore.save(mention);
 
-      // Handle auto-review workflow for waiting for info
-      container.autoReviewWorkflow.handleMentionWaitingForInfo({
-        ticketId: mention.ticketId,
-        agentName,
-      }).catch((error) => {
-        container.logger.error('Failed to handle waiting for info for auto-review', {
-          ticketId: mention.ticketId,
-          agentName,
-          error: String(error),
-        });
-      });
-
-      const dto = mention.toDTO();
-      container.ticketBroadcast('mention:waiting_for_info', dto);
-      return dto;
+      emit({ type: 'mention.waiting_for_info', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, occurredAt: new Date() });
+      return mention.toDTO();
     });
   };
 }

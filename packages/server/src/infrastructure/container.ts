@@ -4,6 +4,8 @@ import { SessionGroupingService } from '../domain/services/session-grouping.js';
 import { RepositoryCache } from '../domain/services/repository-cache.js';
 import { RepositoryRefreshScheduler } from '../domain/services/repository-refresh-scheduler.js';
 import { RepositoryResolver } from '../domain/services/repository-resolver.js';
+import { EventBus } from '../application/event-bus.js';
+import { DomainEventListener } from '../application/domain-event-listener.js';
 import { CreateSessionUseCase } from '../application/use-cases/create-session.js';
 import { ListSessionsUseCase } from '../application/use-cases/list-sessions.js';
 import { KillSessionUseCase } from '../application/use-cases/kill-session.js';
@@ -155,6 +157,25 @@ export async function createContainer() {
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
+  // Domain event bus
+  const eventBus = new EventBus();
+  const domainEventListener = new DomainEventListener({
+    eventBus,
+    personaStore,
+    ticketStore,
+    mentionStore,
+    commentStore,
+    deliverableStore,
+    autoReviewWorkflow,
+    executeAgent,
+    wakeWaitingAgents,
+    logger,
+  });
+  domainEventListener.register();
+
+  // Wire eventBus to executeAgent (avoids circular constructor dep)
+  executeAgent.eventBus = eventBus;
+
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
 
@@ -211,6 +232,8 @@ export async function createContainer() {
     wakeWaitingAgents,
     autoReviewWorkflow,
     agentEventStore,
+    eventBus,
+    domainEventListener,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     agentBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     personaBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

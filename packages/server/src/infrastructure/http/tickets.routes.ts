@@ -10,6 +10,8 @@ import type { MentionStatus } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 export function ticketRoutes(container: Container) {
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+
   return async function (app: FastifyInstance) {
 
     // ── Boards ──
@@ -41,7 +43,7 @@ export function ticketRoutes(container: Container) {
         repositoryName: request.body.repositoryName,
       });
       await container.ticketStore.saveBoard(board);
-      container.ticketBroadcast('board:updated', board.toDTO());
+      emit({ type: 'board.updated', boardId: board.id, occurredAt: new Date() });
       return reply.code(201).send(board.toDTO());
     });
 
@@ -50,7 +52,7 @@ export function ticketRoutes(container: Container) {
       if (!board) throw new BoardNotFoundError(request.params.id);
       board.update(request.body);
       await container.ticketStore.saveBoard(board);
-      container.ticketBroadcast('board:updated', board.toDTO());
+      emit({ type: 'board.updated', boardId: board.id, occurredAt: new Date() });
       return board.toDTO();
     });
 
@@ -59,7 +61,7 @@ export function ticketRoutes(container: Container) {
       if (boards.length <= 1) throw new LastBoardError();
       await container.ticketStore.removeTicketsByBoard(request.params.id);
       await container.ticketStore.removeBoard(request.params.id);
-      container.ticketBroadcast('board:updated', { deleted: request.params.id });
+      emit({ type: 'board.deleted', boardId: request.params.id, occurredAt: new Date() });
       return reply.code(204).send();
     });
 
@@ -133,9 +135,8 @@ export function ticketRoutes(container: Container) {
         source: 'web',
       }));
 
-      const dto = ticket.toDTO();
-      container.ticketBroadcast('ticket:created', dto);
-      return reply.code(201).send(dto);
+      emit({ type: 'ticket.created', ticketId, boardId, occurredAt: new Date() });
+      return reply.code(201).send(ticket.toDTO());
     });
 
     app.patch<{ Params: { id: string }; Querystring: { silent?: string }; Body: UpdateTicketRequest }>('/api/tickets/:id', async (request) => {
@@ -162,27 +163,13 @@ export function ticketRoutes(container: Container) {
         }));
       }
 
-      const dto = ticket.toDTO();
-      container.ticketBroadcast('ticket:updated', dto);
-
-      // Auto-resolve all mentions when ticket moves to done
-      if (ticket.status === 'done' && diff.status) {
-        container.autoReviewWorkflow.handleTicketDone({
-          ticketId: ticket.id,
-        }).catch((error) => {
-          container.logger.error('Failed to auto-resolve mentions on done', {
-            ticketId: ticket.id,
-            error: String(error),
-          });
-        });
-      }
-
-      return dto;
+      emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
+      return ticket.toDTO();
     });
 
     app.delete<{ Params: { id: string } }>('/api/tickets/:id', async (request, reply) => {
       await container.ticketStore.removeTicket(request.params.id);
-      container.ticketBroadcast('ticket:deleted', { id: request.params.id });
+      emit({ type: 'ticket.deleted', ticketId: request.params.id, occurredAt: new Date() });
       return reply.code(204).send();
     });
 
@@ -192,6 +179,7 @@ export function ticketRoutes(container: Container) {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
+        const fromStatus = ticket.status;
         const diff = ticket.moveTo(request.body.status);
         if (request.body.position !== undefined) {
           ticket.position = request.body.position;
@@ -210,22 +198,8 @@ export function ticketRoutes(container: Container) {
           }));
         }
 
-        const dto = ticket.toDTO();
-        container.ticketBroadcast('ticket:moved', dto);
-
-        // Auto-resolve all mentions when ticket moves to done
-        if (request.body.status === 'done') {
-          container.autoReviewWorkflow.handleTicketDone({
-            ticketId: ticket.id,
-          }).catch((error) => {
-            container.logger.error('Failed to auto-resolve mentions on done', {
-              ticketId: ticket.id,
-              error: String(error),
-            });
-          });
-        }
-
-        return dto;
+        emit({ type: 'ticket.moved', ticketId: ticket.id, fromStatus, toStatus: request.body.status, occurredAt: new Date() });
+        return ticket.toDTO();
       },
     );
 
@@ -253,7 +227,7 @@ export function ticketRoutes(container: Container) {
           source: 'web',
         }));
 
-        container.ticketBroadcast('ticket:updated', ticket.toDTO());
+        emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
         return link;
       },
     );
@@ -274,7 +248,7 @@ export function ticketRoutes(container: Container) {
             changes: { linkId: { from: request.params.linkId, to: null } },
             source: 'web',
           }));
-          container.ticketBroadcast('ticket:updated', ticket.toDTO());
+          emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
         }
 
         return reply.code(204).send();
@@ -289,8 +263,7 @@ export function ticketRoutes(container: Container) {
     // Workflow: open session from ticket
     app.post<{ Params: { id: string } }>('/api/tickets/:id/open-session', async (request) => {
       const result = await container.createSessionFromTicket.execute(request.params.id);
-      const updated = await container.ticketStore.getTicketById(request.params.id);
-      if (updated) container.ticketBroadcast('ticket:updated', updated.toDTO());
+      emit({ type: 'ticket.updated', ticketId: request.params.id, changes: {}, occurredAt: new Date() });
       return result;
     });
 
@@ -300,9 +273,8 @@ export function ticketRoutes(container: Container) {
       async (request, reply) => {
         const { org, name, number: issueNumber, boardId } = request.body;
         const ticket = await container.importGitHubIssue.execute(org, name, issueNumber, boardId);
-        const dto = ticket.toDTO();
-        container.ticketBroadcast('ticket:created', dto);
-        return reply.code(201).send(dto);
+        emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
+        return reply.code(201).send(ticket.toDTO());
       },
     );
 
@@ -339,9 +311,8 @@ export function ticketRoutes(container: Container) {
         });
 
         await container.ticketStore.saveTicket(ticket);
-        const dto = ticket.toDTO();
-        container.ticketBroadcast('ticket:updated', dto);
-        return dto;
+        emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
+        return ticket.toDTO();
       },
     );
 
@@ -352,17 +323,12 @@ export function ticketRoutes(container: Container) {
         for (const upd of request.body.updates) {
           const ticket = await container.ticketStore.getTicketById(upd.id);
           if (!ticket) continue;
+          const fromStatus = ticket.status;
           ticket.moveTo(upd.status);
           ticket.position = upd.position;
           ticket.updatedAt = new Date();
           await container.ticketStore.saveTicket(ticket);
-
-          if (upd.status === 'done') {
-            container.autoReviewWorkflow.handleTicketDone({
-              ticketId: upd.id,
-            }).catch(() => {});
-          }
-          container.ticketBroadcast('ticket:moved', ticket.toDTO());
+          emit({ type: 'ticket.moved', ticketId: upd.id, fromStatus, toStatus: upd.status, occurredAt: new Date() });
         }
         return { ok: true };
       },
@@ -387,6 +353,7 @@ export function ticketRoutes(container: Container) {
       const mention = await container.mentionStore.getById(request.params.id);
       if (!mention) throw new MentionNotFoundError(request.params.id);
 
+      const oldStatus = mention.status;
       mention.status = request.body.status;
       if (request.body.status === 'resolved' && !mention.resolvedAt) {
         mention.resolvedAt = new Date();
@@ -395,9 +362,20 @@ export function ticketRoutes(container: Container) {
       }
       await container.mentionStore.save(mention);
 
-      const dto = mention.toDTO();
-      container.ticketBroadcast('mention:updated', dto);
-      return dto;
+      // Emit the appropriate event based on new status
+      const now = new Date();
+      if (request.body.status === 'resolved') {
+        emit({ type: 'mention.resolved', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, resolvedBy: mention.targetAgent, occurredAt: now });
+      } else if (request.body.status === 'waiting_for_info') {
+        emit({ type: 'mention.waiting_for_info', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, occurredAt: now });
+      } else if (request.body.status === 'acknowledged') {
+        emit({ type: 'mention.acknowledged', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, occurredAt: now });
+      } else {
+        // Generic broadcast for other status changes (e.g. pending)
+        container.ticketBroadcast('mention:updated', mention.toDTO());
+      }
+
+      return mention.toDTO();
     });
 
     app.delete<{
@@ -407,7 +385,7 @@ export function ticketRoutes(container: Container) {
       if (!mention) throw new MentionNotFoundError(request.params.id);
 
       await container.mentionStore.remove(mention.id);
-      container.ticketBroadcast('mention:deleted', { id: mention.id, ticketId: mention.ticketId, commentId: mention.commentId });
+      emit({ type: 'mention.deleted', mentionId: mention.id, ticketId: mention.ticketId, commentId: mention.commentId, occurredAt: new Date() });
       return reply.code(204).send();
     });
 
@@ -428,12 +406,12 @@ export function ticketRoutes(container: Container) {
           comment.body = newBody;
           comment.updatedAt = new Date();
           await container.commentStore.save(comment);
-          container.ticketBroadcast('comment:updated', comment.toDTO());
+          emit({ type: 'comment.updated', commentId: comment.id, ticketId: comment.ticketId, createdMentions: [], occurredAt: new Date() });
         }
       }
 
       await container.mentionStore.remove(mention.id);
-      container.ticketBroadcast('mention:deleted', { id: mention.id, ticketId: mention.ticketId, commentId: mention.commentId });
+      emit({ type: 'mention.deleted', mentionId: mention.id, ticketId: mention.ticketId, commentId: mention.commentId, occurredAt: new Date() });
       return reply.code(204).send();
     });
 
@@ -475,67 +453,35 @@ export function ticketRoutes(container: Container) {
           humanMentionNames: humanMentionName ? [humanMentionName] : [],
         });
 
-        const dto = comment.toDTO();
-        container.ticketBroadcast('comment:created', dto);
-
-        for (const mention of createdMentions) {
-          container.ticketBroadcast('mention:created', mention.toDTO());
-        }
-
-        // Wake up agents waiting for info on this ticket
-        container.wakeWaitingAgents.execute(request.params.id).catch(() => {});
-
-        // Human posted a comment: auto-resolve all mentions targeting humans
-        container.autoReviewWorkflow.handleHumanCommentPosted({
+        // Single event — the DomainEventListener handles broadcasting, auto-trigger, auto-review, wake
+        emit({
+          type: 'comment.posted',
+          commentId: comment.id,
           ticketId: request.params.id,
-        }).catch((error) => {
-          container.logger.error('Failed to auto-resolve human mentions', {
-            ticketId: request.params.id,
-            error: String(error),
-          });
+          authorType: 'user',
+          authorName: humanDisplayName || humanMentionName || 'user',
+          createdMentions: createdMentions.map((m) => ({
+            mentionId: m.id,
+            targetAgent: m.targetAgent,
+            targetType: m.targetType,
+          })),
+          occurredAt: new Date(),
         });
 
-        // Handle auto-review workflow for human mentions
-        for (const mention of createdMentions) {
-          if (mention.targetType === 'human') {
-            container.autoReviewWorkflow.handleHumanMention({
-              ticketId: request.params.id,
-              mentionedHuman: mention.targetAgent,
-            }).catch((error) => {
-              container.logger.error('Failed to handle human mention for auto-review', {
-                ticketId: request.params.id,
-                mentionedHuman: mention.targetAgent,
-                error: String(error),
-              });
-            });
-          }
+        // Also emit individual mention.created events for each mention
+        for (const m of createdMentions) {
+          emit({
+            type: 'mention.created',
+            mentionId: m.id,
+            ticketId: request.params.id,
+            targetAgent: m.targetAgent,
+            targetType: m.targetType,
+            sourceAgent: m.sourceAgent,
+            occurredAt: new Date(),
+          });
         }
 
-        // Handle agent mentions in reviewing status (back to doing)
-        for (const mention of createdMentions) {
-          if (mention.targetType === 'agent') {
-            container.autoReviewWorkflow.handleAgentMentionInReview({
-              ticketId: request.params.id,
-              mentionedAgent: mention.targetAgent,
-            }).catch((error) => {
-              container.logger.error('Failed to handle agent mention in review', {
-                ticketId: request.params.id,
-                mentionedAgent: mention.targetAgent,
-                error: String(error),
-              });
-            });
-          }
-        }
-
-        // Auto-trigger mentioned agents
-        for (const mention of createdMentions) {
-          if (mention.targetType === 'agent') {
-            const persona = await container.personaStore.getByName(mention.targetAgent);
-            if (persona) container.executeAgent.execute(persona.id).catch(() => {});
-          }
-        }
-
-        return reply.code(201).send(dto);
+        return reply.code(201).send(comment.toDTO());
       },
     );
   };

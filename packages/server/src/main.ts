@@ -132,8 +132,7 @@ async function main() {
   container.repositoryRefreshScheduler.setOnMergedPRs(async (mergedPRs, repoKey) => {
     const movedIds = await container.detectMerge.execute(mergedPRs, repoKey);
     for (const id of movedIds) {
-      const ticket = await container.ticketStore.getTicketById(id);
-      if (ticket) container.ticketBroadcast('ticket:moved', ticket.toDTO());
+      container.eventBus.emit({ type: 'ticket.moved', ticketId: id, fromStatus: '', toStatus: 'done', occurredAt: new Date() });
     }
   });
 

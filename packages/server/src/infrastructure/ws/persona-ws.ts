@@ -27,6 +27,7 @@ export function personaWsPlugin(container: Container) {
     };
 
     container.personaBroadcast = broadcast;
+    container.domainEventListener.setPersonaBroadcast(broadcast);
 
     app.addHook('onClose', () => {
       for (const client of clients) {
