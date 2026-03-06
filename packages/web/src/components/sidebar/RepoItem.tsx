@@ -36,6 +36,11 @@ export function RepoItem({ summary }: Props) {
     >
       <div className="flex items-center w-full">
         <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{summary.name}</span>
+        {summary.isClonedLocally === false && (
+          <span className="ml-1.5 flex-shrink-0 text-amber-400" title="Not cloned locally">
+            <CloudDownloadIcon />
+          </span>
+        )}
         <span
           role="button"
           className="ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/[0.08]"
@@ -173,6 +178,16 @@ function GitMergeIcon() {
       <circle cx="5" cy="12.5" r="1.5" />
       <line x1="5" y1="5" x2="5" y2="11" />
       <path d="M5 7c2 0 4 1 6 4" />
+    </svg>
+  );
+}
+
+function CloudDownloadIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.5 12.5h-1A2.5 2.5 0 011 10a2.5 2.5 0 012.2-2.5 4 4 0 017.6 0A2.5 2.5 0 0113 10a2.5 2.5 0 01-2.5 2.5h-1" />
+      <line x1="8" y1="8" x2="8" y2="14" />
+      <polyline points="6,12 8,14 10,12" />
     </svg>
   );
 }

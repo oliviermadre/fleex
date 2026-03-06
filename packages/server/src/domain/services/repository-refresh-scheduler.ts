@@ -10,12 +10,15 @@ export interface RepoRef {
 
 export type BroadcastFn = (type: string, data: unknown) => void;
 
+export type CheckRepoExistsFn = (org: string, name: string) => Promise<boolean>;
+
 export class RepositoryRefreshScheduler {
   private timer: ReturnType<typeof setInterval> | null = null;
   private refreshing = false;
   private repos: RepoRef[] = [];
   private broadcast: BroadcastFn = () => {};
   private onMergedPRs: ((mergedPRs: import('@fleex/shared').PullRequest[], repoKey: string) => Promise<void>) | null = null;
+  private checkRepoExists: CheckRepoExistsFn | null = null;
 
   constructor(
     private readonly graphql: GitHubGraphQLAdapter,
@@ -29,6 +32,10 @@ export class RepositoryRefreshScheduler {
 
   setOnMergedPRs(fn: (mergedPRs: import('@fleex/shared').PullRequest[], repoKey: string) => Promise<void>): void {
     this.onMergedPRs = fn;
+  }
+
+  setCheckRepoExists(fn: CheckRepoExistsFn): void {
+    this.checkRepoExists = fn;
   }
 
   setRepos(repos: RepoRef[]): void {
@@ -102,8 +109,12 @@ export class RepositoryRefreshScheduler {
         this.cache.set(`merged:${key}`, result.mergedPRs, RepositoryCache.TTL_MERGED);
 
         const summary = this.buildSummary(org, name, result, githubUser, now);
-        this.cache.set(`summary:${key}`, summary, RepositoryCache.TTL_SUMMARY);
-        summaries.push(summary);
+        const isClonedLocally = this.checkRepoExists
+          ? await this.checkRepoExists(org, name)
+          : undefined;
+        const enriched = isClonedLocally !== undefined ? { ...summary, isClonedLocally } : summary;
+        this.cache.set(`summary:${key}`, enriched, RepositoryCache.TTL_SUMMARY);
+        summaries.push(enriched);
 
         // Notify merge detector
         if (this.onMergedPRs && result.mergedPRs.length > 0) {
@@ -118,7 +129,13 @@ export class RepositoryRefreshScheduler {
         const key = `${repo.org}/${repo.name}`;
         if (!batchResults.has(key)) {
           const cached = this.cache.get<RepositorySummary>(`summary:${key}`);
-          if (cached) summaries.push(cached.data);
+          if (cached) {
+            const isClonedLocally = this.checkRepoExists
+              ? await this.checkRepoExists(repo.org, repo.name)
+              : undefined;
+            const enriched = isClonedLocally !== undefined ? { ...cached.data, isClonedLocally } : cached.data;
+            summaries.push(enriched);
+          }
         }
       }
 

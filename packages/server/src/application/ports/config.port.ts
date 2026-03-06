@@ -6,6 +6,9 @@ export interface AppConfig {
   humanMentionName?: string;
   agentMaxConcurrency?: number;
   agentExecutionTimeout?: number;
+  repositories?: string[];
+  resolvedRepositories?: string[];
+  resolvedAt?: string;
 }
 
 export interface ConfigPort {

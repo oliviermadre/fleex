@@ -9,6 +9,7 @@ export interface RepositorySummary {
   readonly openPRsCount: number;
   readonly recentlyMergedPRsCount: number;
   readonly lastFetchedAt: string | null;
+  readonly isClonedLocally?: boolean;
 }
 
 export interface RepositoryDashboardData {
@@ -20,6 +21,7 @@ export interface RepositoryDashboardData {
   readonly worktrees: Worktree[];
   readonly diffStats: Record<string, DiffStats>;
   readonly githubUser: string;
+  readonly isClonedLocally?: boolean;
 }
 
 export type RefreshInterval = 60000 | 120000 | 300000 | 600000 | 1800000 | 3600000 | 0;

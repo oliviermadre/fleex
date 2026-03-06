@@ -3,6 +3,7 @@ import { SessionNamingService } from '../domain/services/session-naming.js';
 import { SessionGroupingService } from '../domain/services/session-grouping.js';
 import { RepositoryCache } from '../domain/services/repository-cache.js';
 import { RepositoryRefreshScheduler } from '../domain/services/repository-refresh-scheduler.js';
+import { RepositoryResolver } from '../domain/services/repository-resolver.js';
 import { CreateSessionUseCase } from '../application/use-cases/create-session.js';
 import { ListSessionsUseCase } from '../application/use-cases/list-sessions.js';
 import { KillSessionUseCase } from '../application/use-cases/kill-session.js';
@@ -136,6 +137,7 @@ export async function createContainer() {
   const repositoryCache = new RepositoryCache();
   const githubGraphql = new GitHubGraphQLAdapter(execFn, logger);
   const repositoryRefreshScheduler = new RepositoryRefreshScheduler(githubGraphql, repositoryCache, logger);
+  const repositoryResolver = new RepositoryResolver(execFn, logger);
 
   const createSession = new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger);
   const renameSession = new RenameSessionUseCase(tmux, sessionStore, namingService, logger);
@@ -185,6 +187,7 @@ export async function createContainer() {
     sessionStore,
     repositoryCache,
     githubGraphql,
+    repositoryResolver,
     repositoryRefreshScheduler,
     createSession,
     renameSession,

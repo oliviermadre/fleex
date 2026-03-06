@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary } from '@fleex/shared';
+import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary, Worktree } from '@fleex/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
 import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
 import type { Container } from '../container.js';
@@ -19,13 +19,7 @@ export function repositoryRoutes(container: Container) {
           return reply.code(400).send({ error: 'org query parameter is required' });
         }
         try {
-          const { stdout } = await container.execFn('gh', [
-            'repo', 'list', org,
-            '--json', 'nameWithOwner',
-            '--limit', '200',
-          ], { timeout: 15_000 });
-          const repos = JSON.parse(stdout) as { nameWithOwner: string }[];
-          return repos.map((r) => r.nameWithOwner.toLowerCase());
+          return await container.repositoryResolver.resolve([`${org}/*`]);
         } catch (err) {
           container.logger.warn('Failed to resolve repos via gh CLI', { org, error: String(err) });
           return reply.code(502).send({ error: 'Failed to list repositories from GitHub' });
@@ -257,9 +251,11 @@ export function repositoryRoutes(container: Container) {
 
       for (const { org, name } of configuredRepos) {
         const key = `${org}/${name}`;
+        const repoPath = resolveRepoPath(container, org, name);
+        const isClonedLocally = await container.hostFs.exists(repoPath);
         const cached = container.repositoryCache.get<RepositorySummary>(`summary:${key}`);
         if (cached) {
-          summaries.push(cached.data);
+          summaries.push({ ...cached.data, isClonedLocally });
         } else {
           summaries.push({
             org,
@@ -270,6 +266,7 @@ export function repositoryRoutes(container: Container) {
             openPRsCount: 0,
             recentlyMergedPRsCount: 0,
             lastFetchedAt: null,
+            isClonedLocally,
           });
         }
       }
@@ -317,26 +314,31 @@ export function repositoryRoutes(container: Container) {
           }
         }
 
-        // Get worktrees and diff stats
-        const worktrees = await container.listWorktrees.execute(repoPath);
-        const nonBareWorktrees = worktrees.filter((wt) => !wt.isBare);
+        // Get worktrees and diff stats (only if repo is cloned locally)
+        const repoExists = await container.hostFs.exists(repoPath);
+        let worktrees: Worktree[] = [];
         const diffStats: Record<string, DiffStats> = {};
 
-        if (nonBareWorktrees.length > 0) {
-          await container.git.fetch(repoPath).catch(() => {});
-          const defaultBranch = await container.git.getDefaultBranch(repoPath);
-          const base = `origin/${defaultBranch}`;
+        if (repoExists) {
+          worktrees = await container.listWorktrees.execute(repoPath);
+          const nonBareWorktrees = worktrees.filter((wt) => !wt.isBare);
 
-          const results = await Promise.all(
-            nonBareWorktrees.map(async (wt): Promise<[string, DiffStats]> => {
-              const remoteBranch = `origin/${wt.branch}`;
-              const stats = await container.git.getDiffStats(repoPath, remoteBranch, base);
-              return [wt.branch, stats];
-            }),
-          );
+          if (nonBareWorktrees.length > 0) {
+            await container.git.fetch(repoPath).catch(() => {});
+            const defaultBranch = await container.git.getDefaultBranch(repoPath);
+            const base = `origin/${defaultBranch}`;
 
-          for (const [branch, stats] of results) {
-            diffStats[branch] = stats;
+            const results = await Promise.all(
+              nonBareWorktrees.map(async (wt): Promise<[string, DiffStats]> => {
+                const remoteBranch = `origin/${wt.branch}`;
+                const stats = await container.git.getDiffStats(repoPath, remoteBranch, base);
+                return [wt.branch, stats];
+              }),
+            );
+
+            for (const [branch, stats] of results) {
+              diffStats[branch] = stats;
+            }
           }
         }
 
@@ -351,6 +353,7 @@ export function repositoryRoutes(container: Container) {
           worktrees,
           diffStats,
           githubUser,
+          isClonedLocally: repoExists,
         };
       },
     );

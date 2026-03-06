@@ -94,11 +94,26 @@ async function main() {
   await app.register(agentEventsWsPlugin(container));
   await app.register(gatewayTunnelWsPlugin(container));
 
+  // Auto-resolve repository patterns at startup if needed
+  {
+    const cfg = container.config.get();
+    const repos = cfg.repositories;
+    const resolved = cfg.resolvedRepositories;
+    if (Array.isArray(repos) && repos.length > 0 && (!Array.isArray(resolved) || resolved.length === 0)) {
+      try {
+        const resolvedRepos = await container.repositoryResolver.resolve(repos);
+        await container.config.update({ resolvedRepositories: resolvedRepos, resolvedAt: new Date().toISOString() });
+        container.logger.info('Auto-resolved repository patterns', { count: resolvedRepos.length });
+      } catch (err) {
+        container.logger.warn('Failed to auto-resolve repos at startup', { error: String(err) });
+      }
+    }
+  }
+
   // Start repository refresh scheduler if configured
-  const config = container.config.get() as unknown as Record<string, unknown>;
   const refreshInterval = container.config.get().repositoryRefreshIntervalMs;
   if (refreshInterval > 0) {
-    const resolved = config['resolvedRepositories'];
+    const resolved = container.config.get().resolvedRepositories;
     if (Array.isArray(resolved)) {
       const repos = resolved
         .filter((entry): entry is string => typeof entry === 'string' && entry.includes('/'))
@@ -110,6 +125,12 @@ async function main() {
       container.repositoryRefreshScheduler.start(refreshInterval);
     }
   }
+
+  // Wire repo-exists check so refresh summaries include isClonedLocally
+  container.repositoryRefreshScheduler.setCheckRepoExists(async (org, name) => {
+    const repoPath = join(container.config.get().basePath, org, name);
+    return container.hostFs.exists(repoPath);
+  });
 
   // Wire merge detection for ticket auto-complete
   container.repositoryRefreshScheduler.setOnMergedPRs(async (mergedPRs, repoKey) => {

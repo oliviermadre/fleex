@@ -17,6 +17,18 @@ import type {
   AgentEvent,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
+import { useToastStore } from '../stores/toastStore';
+
+function extractErrorMessage(body: string, statusText: string): string {
+  try {
+    const json = JSON.parse(body);
+    if (typeof json.message === 'string') return json.message;
+    if (typeof json.error === 'string') return json.error;
+  } catch {
+    // not JSON
+  }
+  return body || statusText;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -25,6 +37,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    const message = extractErrorMessage(body, res.statusText);
+    useToastStore.getState().addToast('error', message);
     throw new Error(`API error ${res.status}: ${body || res.statusText}`);
   }
   if (res.status === 204) return undefined as T;
