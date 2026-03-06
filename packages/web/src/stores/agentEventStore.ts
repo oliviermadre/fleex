@@ -80,15 +80,41 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
   handleWsEvent: (msg) => {
     if (msg.type === 'agent_event:delta') {
       const event = msg.data as AgentEvent;
-      set((state) => ({
-        eventsByExecution: {
-          ...state.eventsByExecution,
-          [event.executionId]: [...(state.eventsByExecution[event.executionId] ?? []), event],
-        },
-        streamingExecutionIds: state.streamingExecutionIds[event.executionId]
-          ? state.streamingExecutionIds
-          : { ...state.streamingExecutionIds, [event.executionId]: true },
-      }));
+      set((state) => {
+        const next: Partial<AgentEventState> = {
+          eventsByExecution: {
+            ...state.eventsByExecution,
+            [event.executionId]: [...(state.eventsByExecution[event.executionId] ?? []), event],
+          },
+          streamingExecutionIds: state.streamingExecutionIds[event.executionId]
+            ? state.streamingExecutionIds
+            : { ...state.streamingExecutionIds, [event.executionId]: true },
+        };
+
+        // When execution ends, update the execution record in-place so the UI
+        // reflects the final status (badge, timer, cancel button) without reload.
+        if (event.eventType === 'execution_end') {
+          const eventData = event.data as { status?: string } | undefined;
+          const finalStatus = (eventData?.status === 'completed' || eventData?.status === 'failed' || eventData?.status === 'interrupted')
+            ? eventData.status
+            : 'completed';
+          const completedAt = event.createdAt;
+
+          const patchExecution = (exec: AgentExecution): AgentExecution =>
+            exec.id === event.executionId
+              ? { ...exec, status: finalStatus, completedAt, eventCount: (state.eventsByExecution[event.executionId]?.length ?? exec.eventCount) + 1 }
+              : exec;
+
+          next.executionsByPersona = Object.fromEntries(
+            Object.entries(state.executionsByPersona).map(([k, v]) => [k, v.map(patchExecution)]),
+          );
+          next.executionsByTicket = Object.fromEntries(
+            Object.entries(state.executionsByTicket).map(([k, v]) => [k, v.map(patchExecution)]),
+          );
+        }
+
+        return next as AgentEventState;
+      });
 
       // Auto-subscribe to new executions so the events tab updates live
       if (event.eventType === 'execution_start' && !subscribedExecutionIds.has(event.executionId)) {

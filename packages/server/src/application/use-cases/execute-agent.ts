@@ -324,6 +324,7 @@ export class ExecuteAgentUseCase {
       // 2. Acknowledge mention
       mention.acknowledge();
       await this.mentionStore.save(mention);
+      this.onTicketUpdate?.('mention:acknowledged', mention.toDTO());
 
       // 2b. Claim ticket for agent
       const ticket = await this.ticketStore.getTicketById(mention.ticketId);
@@ -698,6 +699,7 @@ export class ExecuteAgentUseCase {
           });
           mention.resolve({ commentId: resultCommentId, deliverableId: resultDeliverableId });
           await this.mentionStore.save(mention);
+          this.onTicketUpdate?.('mention:resolved', mention.toDTO());
         } else {
           mention.waitForInfo();
           await this.mentionStore.save(mention);
@@ -712,6 +714,7 @@ export class ExecuteAgentUseCase {
       } else {
         mention.resolve({ commentId: resultCommentId, deliverableId: resultDeliverableId });
         await this.mentionStore.save(mention);
+        this.onTicketUpdate?.('mention:resolved', mention.toDTO());
       }
 
       // 13. Complete execution tracking
@@ -796,16 +799,30 @@ export class ExecuteAgentUseCase {
         repo = linkRepo!;
         branchName = branch!;
       } else {
-        // label-only or legacy — use board as fallback for org/repo
+        // label-only or legacy — use ticket repo link, then board as fallback
         branchName = existingWorktreeLink.label || existingWorktreeLink.ref;
-        org = board?.repositoryOrg ?? null;
-        repo = board?.repositoryName ?? null;
+        const repoLink = ticket.links.find((l) => l.type === 'repository');
+        if (repoLink && repoLink.ref.includes('/')) {
+          const [linkOrg, linkRepo] = repoLink.ref.split('/');
+          org = linkOrg!;
+          repo = linkRepo!;
+        } else {
+          org = board?.repositoryOrg ?? null;
+          repo = board?.repositoryName ?? null;
+        }
       }
       createNewBranch = false;
     } else {
-      // No worktree link — use board config
-      org = board?.repositoryOrg ?? null;
-      repo = board?.repositoryName ?? null;
+      // No worktree link — check ticket repository link first, then board config
+      const repoLink = ticket.links.find((l) => l.type === 'repository');
+      if (repoLink && repoLink.ref.includes('/')) {
+        const [linkOrg, linkRepo] = repoLink.ref.split('/');
+        org = linkOrg!;
+        repo = linkRepo!;
+      } else {
+        org = board?.repositoryOrg ?? null;
+        repo = board?.repositoryName ?? null;
+      }
       if (!org || !repo) return null;
       const slug = ticket.title
         .toLowerCase()

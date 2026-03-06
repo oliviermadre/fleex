@@ -263,6 +263,8 @@ export function ticketRoutes(container: Container) {
     // Workflow: open session from ticket
     app.post<{ Params: { id: string } }>('/api/tickets/:id/open-session', async (request) => {
       const result = await container.createSessionFromTicket.execute(request.params.id);
+      const updated = await container.ticketStore.getTicketById(request.params.id);
+      if (updated) container.ticketBroadcast('ticket:updated', updated.toDTO());
       return result;
     });
 
@@ -328,6 +330,7 @@ export function ticketRoutes(container: Container) {
           ticket.position = upd.position;
           ticket.updatedAt = new Date();
           await container.ticketStore.saveTicket(ticket);
+          container.ticketBroadcast('ticket:moved', ticket.toDTO());
         }
         return { ok: true };
       },
