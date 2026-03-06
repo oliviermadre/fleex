@@ -326,6 +326,18 @@ describe('AutoReviewWorkflowUseCase', () => {
     it('should clear all pending transitions', async () => {
       // Arrange
       const ticketId = randomUUID();
+      const ticket = TicketEntity.create({
+        id: ticketId,
+        boardId: randomUUID(),
+        displayId: 1,
+        title: 'Test Ticket',
+        status: 'doing',
+      });
+
+      vi.mocked(ticketStore.getTicketById).mockResolvedValue(ticket);
+      vi.mocked(mentionStore.getByTicket).mockResolvedValue([]);
+      vi.mocked(ticketStore.saveTicket).mockResolvedValue();
+      vi.mocked(ticketStore.saveActivity).mockResolvedValue();
 
       vi.useFakeTimers();
 
@@ -335,15 +347,22 @@ describe('AutoReviewWorkflowUseCase', () => {
         completedAgentName: 'test-agent',
       });
 
-      // Act
+      // Clear the mock call counts from the initial setup
+      vi.mocked(ticketStore.getTicketById).mockClear();
+      vi.mocked(ticketStore.saveTicket).mockClear();
+      vi.mocked(ticketStore.saveActivity).mockClear();
+
+      // Act - cleanup should cancel the pending timeout
       useCase.cleanup();
 
-      // Fast-forward time
+      // Fast-forward time - the delayed execution should not happen
       vi.advanceTimersByTime(30000);
       await new Promise(resolve => process.nextTick(resolve));
 
-      // Assert
+      // Assert - no delayed operations should have been called after cleanup
       expect(ticketStore.getTicketById).not.toHaveBeenCalled();
+      expect(ticketStore.saveTicket).not.toHaveBeenCalled();
+      expect(ticketStore.saveActivity).not.toHaveBeenCalled();
 
       vi.useRealTimers();
     });
