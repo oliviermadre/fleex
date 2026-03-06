@@ -164,6 +164,19 @@ export function ticketRoutes(container: Container) {
 
       const dto = ticket.toDTO();
       container.ticketBroadcast('ticket:updated', dto);
+
+      // Auto-resolve all mentions when ticket moves to done
+      if (ticket.status === 'done' && diff.status) {
+        container.autoReviewWorkflow.handleTicketDone({
+          ticketId: ticket.id,
+        }).catch((error) => {
+          container.logger.error('Failed to auto-resolve mentions on done', {
+            ticketId: ticket.id,
+            error: String(error),
+          });
+        });
+      }
+
       return dto;
     });
 
@@ -199,6 +212,19 @@ export function ticketRoutes(container: Container) {
 
         const dto = ticket.toDTO();
         container.ticketBroadcast('ticket:moved', dto);
+
+        // Auto-resolve all mentions when ticket moves to done
+        if (request.body.status === 'done') {
+          container.autoReviewWorkflow.handleTicketDone({
+            ticketId: ticket.id,
+          }).catch((error) => {
+            container.logger.error('Failed to auto-resolve mentions on done', {
+              ticketId: ticket.id,
+              error: String(error),
+            });
+          });
+        }
+
         return dto;
       },
     );
@@ -330,6 +356,12 @@ export function ticketRoutes(container: Container) {
           ticket.position = upd.position;
           ticket.updatedAt = new Date();
           await container.ticketStore.saveTicket(ticket);
+
+          if (upd.status === 'done') {
+            container.autoReviewWorkflow.handleTicketDone({
+              ticketId: upd.id,
+            }).catch(() => {});
+          }
           container.ticketBroadcast('ticket:moved', ticket.toDTO());
         }
         return { ok: true };
@@ -452,6 +484,48 @@ export function ticketRoutes(container: Container) {
 
         // Wake up agents waiting for info on this ticket
         container.wakeWaitingAgents.execute(request.params.id).catch(() => {});
+
+        // Human posted a comment: auto-resolve all mentions targeting humans
+        container.autoReviewWorkflow.handleHumanCommentPosted({
+          ticketId: request.params.id,
+        }).catch((error) => {
+          container.logger.error('Failed to auto-resolve human mentions', {
+            ticketId: request.params.id,
+            error: String(error),
+          });
+        });
+
+        // Handle auto-review workflow for human mentions
+        for (const mention of createdMentions) {
+          if (mention.targetType === 'human') {
+            container.autoReviewWorkflow.handleHumanMention({
+              ticketId: request.params.id,
+              mentionedHuman: mention.targetAgent,
+            }).catch((error) => {
+              container.logger.error('Failed to handle human mention for auto-review', {
+                ticketId: request.params.id,
+                mentionedHuman: mention.targetAgent,
+                error: String(error),
+              });
+            });
+          }
+        }
+
+        // Handle agent mentions in reviewing status (back to doing)
+        for (const mention of createdMentions) {
+          if (mention.targetType === 'agent') {
+            container.autoReviewWorkflow.handleAgentMentionInReview({
+              ticketId: request.params.id,
+              mentionedAgent: mention.targetAgent,
+            }).catch((error) => {
+              container.logger.error('Failed to handle agent mention in review', {
+                ticketId: request.params.id,
+                mentionedAgent: mention.targetAgent,
+                error: String(error),
+              });
+            });
+          }
+        }
 
         // Auto-trigger mentioned agents
         for (const mention of createdMentions) {

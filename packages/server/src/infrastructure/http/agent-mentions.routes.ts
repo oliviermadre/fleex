@@ -79,6 +79,51 @@ export function agentMentionsRoutes(container: Container) {
       const mention = (await container.mentionStore.getById(request.params.id))!;
       const dto = mention.toDTO();
       container.ticketBroadcast('mention:resolved', dto);
+
+      // Handle auto-review workflow for agent work completion
+      container.autoReviewWorkflow.handleAgentWorkCompletion({
+        ticketId: mention.ticketId,
+        completedAgentName: agentName,
+      }).catch((error) => {
+        container.logger.error('Failed to handle agent work completion for auto-review', {
+          ticketId: mention.ticketId,
+          agentName,
+          error: String(error),
+        });
+      });
+
+      return dto;
+    });
+
+    // Mark mention as waiting for info
+    app.patch<{
+      Params: { id: string };
+    }>('/mentions/:id/wait-for-info', async (request) => {
+      const mention = await container.mentionStore.getById(request.params.id);
+      if (!mention) throw new MentionNotFoundError(request.params.id);
+
+      const agentName = request.agent?.name ?? '';
+      if (mention.targetAgent !== agentName) {
+        throw new ForbiddenError(`Only ${mention.targetAgent} can set this mention as waiting for info`);
+      }
+
+      mention.waitForInfo();
+      await container.mentionStore.save(mention);
+
+      // Handle auto-review workflow for waiting for info
+      container.autoReviewWorkflow.handleMentionWaitingForInfo({
+        ticketId: mention.ticketId,
+        agentName,
+      }).catch((error) => {
+        container.logger.error('Failed to handle waiting for info for auto-review', {
+          ticketId: mention.ticketId,
+          agentName,
+          error: String(error),
+        });
+      });
+
+      const dto = mention.toDTO();
+      container.ticketBroadcast('mention:waiting_for_info', dto);
       return dto;
     });
   };

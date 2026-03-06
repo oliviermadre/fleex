@@ -24,7 +24,6 @@ const VALID_SETTINGS_TABS: SettingsTab[] = [
   'pinned-icons',
   'worktree-actions',
   'agent-tokens',
-  'gateways',
 ];
 
 // ─── URL → Store state ───────────────────────────────────────────────────────

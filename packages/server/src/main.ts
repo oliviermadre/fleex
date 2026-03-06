@@ -33,8 +33,6 @@ import { personaWsPlugin } from './infrastructure/ws/persona-ws.js';
 import { agentEventsWsPlugin } from './infrastructure/ws/agent-events-ws.js';
 import { personaRoutes } from './infrastructure/http/persona.routes.js';
 import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
-import { gatewayTunnelWsPlugin } from './infrastructure/ws/gateway-tunnel-ws.js';
-import { gatewayRoutes } from './infrastructure/http/gateway.routes.js';
 import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 
@@ -68,7 +66,6 @@ async function main() {
   await app.register(claudeUsageRoutes(container));
   await app.register(agentTokenRoutes(container));
   await app.register(ticketRoutes(container));
-  await app.register(gatewayRoutes(container));
   await app.register(personaRoutes(container));
   await app.register(agentEventsRoutes(container));
 
@@ -92,7 +89,6 @@ async function main() {
   await app.register(agentWsPlugin(container));
   await app.register(personaWsPlugin(container));
   await app.register(agentEventsWsPlugin(container));
-  await app.register(gatewayTunnelWsPlugin(container));
 
   // Auto-resolve repository patterns at startup if needed
   {
@@ -169,6 +165,25 @@ async function main() {
   } catch {
     container.logger.warn('Gateway not reachable at startup', { gatewayUrl: container.gatewayUrl });
   }
+
+  // Graceful shutdown
+  const shutdown = async () => {
+    container.logger.info('Shutting down server...');
+
+    // Cleanup auto-review workflow
+    container.autoReviewWorkflow.cleanup();
+
+    // Stop repository refresh scheduler
+    container.repositoryRefreshScheduler.stop();
+
+    // Close Fastify server
+    await app.close();
+
+    container.logger.info('Server shutdown complete');
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 main().catch(console.error);

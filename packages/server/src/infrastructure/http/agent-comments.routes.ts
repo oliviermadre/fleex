@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { TicketNotFoundError, CommentNotFoundError, ForbiddenError } from '../../domain/errors.js';
 import type { Container } from '../container.js';
+import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 
 export function agentCommentsRoutes(container: Container) {
   return async function (app: FastifyInstance) {
@@ -41,6 +42,7 @@ export function agentCommentsRoutes(container: Container) {
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const agentName = request.agent?.name ?? 'unknown';
+      const { humanDisplayName, humanMentionName } = container.config.get();
       const { comment, createdMentions } = await container.postComment.execute({
         ticketId: request.params.id,
         authorType: 'agent',
@@ -49,6 +51,7 @@ export function agentCommentsRoutes(container: Container) {
         visibility: request.body.visibility,
         privateRecipients: request.body.privateRecipients,
         parentId: request.body.parentId,
+        humanMentionNames: humanMentionName ? [humanMentionName] : [],
       });
 
       const dto = comment.toDTO();
@@ -60,6 +63,38 @@ export function agentCommentsRoutes(container: Container) {
 
       // Wake up agents waiting for info on this ticket (exclude posting agent to avoid self-wake)
       container.wakeWaitingAgents.execute(request.params.id, agentName).catch(() => {});
+
+      // Handle auto-review workflow for human mentions
+      for (const mention of createdMentions) {
+        if (mention.targetType === 'human') {
+          container.autoReviewWorkflow.handleHumanMention({
+            ticketId: request.params.id,
+            mentionedHuman: mention.targetAgent,
+          }).catch((error) => {
+            container.logger.error('Failed to handle human mention for auto-review', {
+              ticketId: request.params.id,
+              mentionedHuman: mention.targetAgent,
+              error: String(error),
+            });
+          });
+        }
+      }
+
+      // Handle agent mentions in reviewing status (back to doing)
+      for (const mention of createdMentions) {
+        if (mention.targetType === 'agent') {
+          container.autoReviewWorkflow.handleAgentMentionInReview({
+            ticketId: request.params.id,
+            mentionedAgent: mention.targetAgent,
+          }).catch((error) => {
+            container.logger.error('Failed to handle agent mention in review', {
+              ticketId: request.params.id,
+              mentionedAgent: mention.targetAgent,
+              error: String(error),
+            });
+          });
+        }
+      }
 
       // Auto-trigger mentioned agents
       for (const mention of createdMentions) {
@@ -104,24 +139,66 @@ export function agentCommentsRoutes(container: Container) {
         }
       }
 
-      // Create mentions for newly added agents and auto-trigger them
+      // Create mentions for newly added targets and auto-trigger agents
       const { randomUUID } = await import('node:crypto');
       const { TicketMentionEntity } = await import('../../domain/entities/ticket-mention.entity.js');
+      const { humanMentionName } = container.config.get();
+      const newlyCreatedMentions: TicketMentionEntity[] = [];
+
       for (const target of newMentionNames) {
         if (!oldMentions.has(target) && target !== agentName) {
+          // Determine if this is a human or agent mention
+          const isHuman = humanMentionName && target === humanMentionName;
+
           const mention = TicketMentionEntity.create({
             id: randomUUID(),
             ticketId: comment.ticketId,
             commentId: comment.id,
             targetAgent: target,
             sourceAgent: agentName,
+            targetType: isHuman ? 'human' : 'agent',
           });
           await container.mentionStore.save(mention);
           container.ticketBroadcast('mention:created', mention.toDTO());
+          newlyCreatedMentions.push(mention);
 
-          // Auto-trigger the newly mentioned agent
-          const persona = await container.personaStore.getByName(target);
-          if (persona) container.executeAgent.execute(persona.id).catch(() => {});
+          // Auto-trigger the newly mentioned agent (only for agent mentions)
+          if (!isHuman) {
+            const persona = await container.personaStore.getByName(target);
+            if (persona) container.executeAgent.execute(persona.id).catch(() => {});
+          }
+        }
+      }
+
+      // Handle auto-review workflow for newly created human mentions
+      for (const mention of newlyCreatedMentions) {
+        if (mention.targetType === 'human') {
+          container.autoReviewWorkflow.handleHumanMention({
+            ticketId: comment.ticketId,
+            mentionedHuman: mention.targetAgent,
+          }).catch((error) => {
+            container.logger.error('Failed to handle human mention for auto-review', {
+              ticketId: comment.ticketId,
+              mentionedHuman: mention.targetAgent,
+              error: String(error),
+            });
+          });
+        }
+      }
+
+      // Handle agent mentions in reviewing status (back to doing)
+      for (const mention of newlyCreatedMentions) {
+        if (mention.targetType === 'agent') {
+          container.autoReviewWorkflow.handleAgentMentionInReview({
+            ticketId: comment.ticketId,
+            mentionedAgent: mention.targetAgent,
+          }).catch((error) => {
+            container.logger.error('Failed to handle agent mention in review', {
+              ticketId: comment.ticketId,
+              mentionedAgent: mention.targetAgent,
+              error: String(error),
+            });
+          });
         }
       }
 
