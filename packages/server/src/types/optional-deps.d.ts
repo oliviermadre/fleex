@@ -19,3 +19,16 @@ declare module 'pg' {
 
   export = pg;
 }
+
+declare module 'bun:sqlite' {
+  export class Database {
+    constructor(path: string);
+    exec(sql: string): void;
+    prepare(sql: string): {
+      all(...args: unknown[]): unknown[];
+      get(...args: unknown[]): unknown;
+      run(...args: unknown[]): void;
+    };
+    close(): void;
+  }
+}

@@ -54,11 +54,15 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
   scratchpadListLoaded: false,
 
   setContent: (key: string, content: string) => {
+    const lineCount = content.split('\n').filter((l) => l.trim() !== '').length;
     set((state) => ({
       entries: {
         ...state.entries,
         [key]: { ...getEntry(state.entries, key), content },
       },
+      scratchpadList: state.scratchpadList.map((item) =>
+        item.key === key ? { ...item, lineCount } : item,
+      ),
     }));
     // Debounced auto-save
     const existing = saveTimers.get(key);
