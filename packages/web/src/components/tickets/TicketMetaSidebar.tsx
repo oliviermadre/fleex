@@ -6,6 +6,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import * as api from '../../services/api';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
@@ -661,6 +662,7 @@ function RepoWorktreePicker({
   onRemoveLink: (linkId: string) => Promise<void>;
 }) {
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
+  const summaries = useRepositoryDashboardStore((s) => s.summaries);
   const [selectedRepo, setSelectedRepo] = useState<string | null>(
     linkedRepo ? `${linkedRepo.org}/${linkedRepo.name}` : null,
   );
@@ -694,7 +696,8 @@ function RepoWorktreePicker({
         const name = r.substring(slashIdx + 1);
         return { org, name, key: r };
       })
-      .filter((r): r is { org: string; name: string; key: string } => r !== null);
+      .filter((r): r is { org: string; name: string; key: string } => r !== null)
+      .sort((a, b) => a.key.toLowerCase().localeCompare(b.key.toLowerCase()));
   }, [resolvedRepositories]);
 
   // Effective repo (from linked worktree or manual selection)
@@ -705,11 +708,17 @@ function RepoWorktreePicker({
 
   // Fetch worktrees from filesystem when repo selection changes
   const fetchWorktreesForRepos = useCallback(async (repoList: { org: string; name: string; key: string }[]) => {
+    // Only fetch worktrees for repos that are cloned locally
+    const clonedRepos = repoList.filter((r) => summaries[r.key]?.isClonedLocally !== false);
+    if (clonedRepos.length === 0) {
+      setWorktrees([]);
+      return;
+    }
     setLoading(true);
     try {
       const results: WorktreeOption[] = [];
       await Promise.all(
-        repoList.map(async (repo) => {
+        clonedRepos.map(async (repo) => {
           try {
             const wts: Worktree[] = await api.fetchWorktrees(repo.org, repo.name);
             for (const wt of wts) {
@@ -732,7 +741,16 @@ function RepoWorktreePicker({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [summaries]);
+
+  // Whether the effective repo is known to not be cloned locally
+  const effectiveRepoNotCloned = effectiveRepo ? summaries[effectiveRepo]?.isClonedLocally === false : false;
+
+  // Sort worktrees by branch name for display
+  const sortedWorktrees = useMemo(
+    () => [...worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase())),
+    [worktrees],
+  );
 
   useEffect(() => {
     if (repos.length === 0) {
@@ -740,12 +758,17 @@ function RepoWorktreePicker({
       return;
     }
     if (effectiveRepo) {
+      // Skip fetching entirely if the selected repo isn't cloned
+      if (summaries[effectiveRepo]?.isClonedLocally === false) {
+        setWorktrees([]);
+        return;
+      }
       const match = repos.filter((r) => r.key === effectiveRepo);
       fetchWorktreesForRepos(match.length > 0 ? match : repos);
     } else {
       fetchWorktreesForRepos(repos);
     }
-  }, [repos, effectiveRepo, fetchWorktreesForRepos]);
+  }, [repos, effectiveRepo, fetchWorktreesForRepos, summaries]);
 
   const handleRepoChange = async (value: string) => {
     if (value === '__all__') {
@@ -875,7 +898,9 @@ function RepoWorktreePicker({
           </>
         ) : loading ? (
           <span className="text-[10px] text-[var(--theme-text-muted)]">Loading worktrees...</span>
-        ) : worktrees.length === 0 ? (
+        ) : effectiveRepoNotCloned ? (
+          <span className="text-[10px] text-[var(--theme-text-muted)]">Repository not cloned locally</span>
+        ) : sortedWorktrees.length === 0 ? (
           <span className="text-[10px] text-[var(--theme-text-muted)]">No worktrees found</span>
         ) : (
           <select
@@ -883,12 +908,12 @@ function RepoWorktreePicker({
             value=""
             onChange={(e) => {
               const idx = parseInt(e.target.value, 10);
-              const wt = worktrees[idx];
+              const wt = sortedWorktrees[idx];
               if (wt) handleWorktreeSelect(wt);
             }}
           >
             <option value="" disabled>Select a worktree...</option>
-            {worktrees.map((wt, i) => {
+            {sortedWorktrees.map((wt, i) => {
               const prefix = !effectiveRepo ? `${wt.org}/${wt.name} · ` : '';
               return (
                 <option key={`${wt.org}/${wt.name}:${wt.branch}`} value={i}>

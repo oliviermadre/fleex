@@ -31,6 +31,8 @@ export function repositoryRoutes(container: Container) {
       '/api/repositories/:org/:name/worktrees',
       async (request) => {
         const repoPath = resolveRepoPath(container, request.params.org, request.params.name);
+        const exists = await container.hostFs.exists(repoPath);
+        if (!exists) return [];
         return container.listWorktrees.execute(repoPath);
       },
     );
@@ -68,6 +70,8 @@ export function repositoryRoutes(container: Container) {
       '/api/repositories/:org/:name/branches',
       async (request) => {
         const repoPath = resolveRepoPath(container, request.params.org, request.params.name);
+        const exists = await container.hostFs.exists(repoPath);
+        if (!exists) return [];
         return container.git.listBranches(repoPath);
       },
     );
@@ -209,6 +213,8 @@ export function repositoryRoutes(container: Container) {
         }
         const branches = branchesParam.split(',').slice(0, 20);
         const repoPath = resolveRepoPath(container, org, name);
+        const exists = await container.hostFs.exists(repoPath);
+        if (!exists) return {};
         await container.git.fetch(repoPath).catch(() => {});
         const defaultBranch = await container.git.getDefaultBranch(repoPath);
         const base = `origin/${defaultBranch}`;
@@ -231,8 +237,10 @@ export function repositoryRoutes(container: Container) {
 
     app.get<{ Params: { org: string; name: string } }>(
       '/api/repositories/:org/:name/default-branch',
-      async (request) => {
+      async (request, reply) => {
         const repoPath = resolveRepoPath(container, request.params.org, request.params.name);
+        const exists = await container.hostFs.exists(repoPath);
+        if (!exists) return reply.code(404).send({ error: 'Repository not cloned locally' });
         const defaultBranch = await container.git.getDefaultBranch(repoPath);
         const info = await container.git.getInfo(repoPath);
         return {
