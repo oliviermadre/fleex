@@ -47,8 +47,8 @@ export function ScratchpadsContent() {
     }
 
     // Sort repos within each org, then sort orgs alphabetically
-    for (const [, repos] of byOrg) repos.sort((a, b) => a.name.localeCompare(b.name));
-    const orgGroups = [...byOrg.entries()].sort(([a], [b]) => a.localeCompare(b));
+    for (const [, repos] of byOrg) repos.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    const orgGroups = [...byOrg.entries()].sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()));
 
     return { globalItem, orgGroups };
   }, [scratchpadList]);

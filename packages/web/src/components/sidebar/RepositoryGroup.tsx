@@ -25,7 +25,7 @@ export function RepositoryGroup({ group }: Props) {
   const draggedBranchRef = useRef<string | null>(null);
 
   const sortedWorktrees: readonly WorktreeSessionGroup[] = useMemo(() => {
-    if (!wtOrder || wtOrder.length === 0) return [...group.worktrees].sort((a, b) => a.branch.localeCompare(b.branch));
+    if (!wtOrder || wtOrder.length === 0) return [...group.worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()));
     const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
     return [...group.worktrees].sort((a, b) => {
       const aOrder = orderMap.get(a.branch) ?? Infinity;

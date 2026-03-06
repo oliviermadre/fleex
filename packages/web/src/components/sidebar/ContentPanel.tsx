@@ -385,7 +385,7 @@ function CollapsedBranchesPanel() {
                         const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
                         return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
                       })
-                    : [...group.worktrees].sort((a, b) => a.branch.localeCompare(b.branch));
+                    : [...group.worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()));
 
                   return sorted.map((wt) => {
                     const worktreeKey = `${groupId}:${wt.branch}`;
@@ -432,8 +432,8 @@ function CollapsedRepositoriesPanel() {
       existing.push(summary);
       groups.set(summary.org, existing);
     }
-    for (const [, repos] of groups) repos.sort((a, b) => a.name.localeCompare(b.name));
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+    for (const [, repos] of groups) repos.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    return [...groups.entries()].sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()));
   }, [summaries]);
 
   return (
@@ -724,8 +724,8 @@ function CollapsedScratchpadsPanel() {
       }
     }
 
-    for (const [, items] of byOrg) items.sort((a, b) => a.label.localeCompare(b.label));
-    const orgGroups = [...byOrg.entries()].sort(([a], [b]) => a.localeCompare(b));
+    for (const [, items] of byOrg) items.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+    const orgGroups = [...byOrg.entries()].sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()));
 
     return { globalItem, orgGroups };
   }, [scratchpadList]);

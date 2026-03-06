@@ -16,9 +16,9 @@ export function RepositoriesContent() {
     }
     // Sort repos by name within each org, then sort orgs alphabetically
     for (const [, repos] of groups) {
-      repos.sort((a, b) => a.name.localeCompare(b.name));
+      repos.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
     }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+    return [...groups.entries()].sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()));
   }, [summaries]);
 
   return (
