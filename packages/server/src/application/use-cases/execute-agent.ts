@@ -18,6 +18,7 @@ import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { AutoReviewWorkflowUseCase } from './auto-review-workflow.js';
 
 interface ActiveExecution {
   mentionId: string;
@@ -100,6 +101,7 @@ export class ExecuteAgentUseCase {
     private readonly createWorktree: CreateWorktreeUseCase,
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
+    private readonly autoReviewWorkflow: AutoReviewWorkflowUseCase,
   ) {}
 
   /**
@@ -631,6 +633,22 @@ export class ExecuteAgentUseCase {
               this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
             }
           }
+
+          // Auto-review workflow: handle mentions
+          for (const m of commentMentions) {
+            if (m.targetType === 'human') {
+              this.autoReviewWorkflow.handleHumanMention({
+                ticketId: mention.ticketId,
+                mentionedHuman: m.targetAgent,
+              }).catch((err) => this.logger.warn('Auto-review handleHumanMention failed', { error: String(err) }));
+            }
+            if (m.targetType === 'agent') {
+              this.autoReviewWorkflow.handleAgentMentionInReview({
+                ticketId: mention.ticketId,
+                mentionedAgent: m.targetAgent,
+              }).catch((err) => this.logger.warn('Auto-review handleAgentMentionInReview failed', { error: String(err) }));
+            }
+          }
         }
 
         if (structured.deliverable) {
@@ -646,6 +664,13 @@ export class ExecuteAgentUseCase {
             });
             resultDeliverableId = deliverable.id;
             this.onTicketUpdate?.('deliverable:created', deliverable.toDTO());
+
+            // Auto-review workflow: handle deliverable creation
+            this.autoReviewWorkflow.handleDeliverableCreated({
+              ticketId: mention.ticketId,
+              agentName: persona.name,
+              status: structured.deliverable!.status as 'draft' | 'final',
+            }).catch((err) => this.logger.warn('Auto-review handleDeliverableCreated failed', { error: String(err) }));
           } catch (delivErr) {
             this.logger.warn('Failed to create deliverable', {
               executionId,
@@ -687,6 +712,22 @@ export class ExecuteAgentUseCase {
             this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
           }
         }
+
+        // Auto-review workflow: handle mentions (fallback path)
+        for (const m of fallbackMentions) {
+          if (m.targetType === 'human') {
+            this.autoReviewWorkflow.handleHumanMention({
+              ticketId: mention.ticketId,
+              mentionedHuman: m.targetAgent,
+            }).catch((err) => this.logger.warn('Auto-review handleHumanMention failed', { error: String(err) }));
+          }
+          if (m.targetType === 'agent') {
+            this.autoReviewWorkflow.handleAgentMentionInReview({
+              ticketId: mention.ticketId,
+              mentionedAgent: m.targetAgent,
+            }).catch((err) => this.logger.warn('Auto-review handleAgentMentionInReview failed', { error: String(err) }));
+          }
+        }
       }
 
       // 12. Resolve or park mention based on mentionStatus
@@ -698,6 +739,12 @@ export class ExecuteAgentUseCase {
           });
           mention.resolve({ commentId: resultCommentId, deliverableId: resultDeliverableId });
           await this.mentionStore.save(mention);
+
+          // Auto-review workflow: agent work completed (forced resolved)
+          this.autoReviewWorkflow.handleAgentWorkCompletion({
+            ticketId: mention.ticketId,
+            completedAgentName: persona.name,
+          }).catch((err) => this.logger.warn('Auto-review handleAgentWorkCompletion failed', { error: String(err) }));
         } else {
           mention.waitForInfo();
           await this.mentionStore.save(mention);
@@ -708,10 +755,22 @@ export class ExecuteAgentUseCase {
             this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
           }
           this.onTicketUpdate?.('mention:waiting_for_info', mention.toDTO());
+
+          // Auto-review workflow: handle waiting_for_info
+          this.autoReviewWorkflow.handleMentionWaitingForInfo({
+            ticketId: mention.ticketId,
+            agentName: persona.name,
+          }).catch((err) => this.logger.warn('Auto-review handleMentionWaitingForInfo failed', { error: String(err) }));
         }
       } else {
         mention.resolve({ commentId: resultCommentId, deliverableId: resultDeliverableId });
         await this.mentionStore.save(mention);
+
+        // Auto-review workflow: agent work completed (resolved)
+        this.autoReviewWorkflow.handleAgentWorkCompletion({
+          ticketId: mention.ticketId,
+          completedAgentName: persona.name,
+        }).catch((err) => this.logger.warn('Auto-review handleAgentWorkCompletion failed', { error: String(err) }));
       }
 
       // 13. Complete execution tracking

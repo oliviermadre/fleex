@@ -150,10 +150,10 @@ export async function createContainer() {
   const createPersona = new CreatePersonaUseCase(personaStore, logger);
   const updatePersona = new UpdatePersonaUseCase(personaStore, logger);
   const deletePersona = new DeletePersonaUseCase(personaStore, logger);
-  const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger);
+  const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore, config, logger);
+  const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger, autoReviewWorkflow);
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
-  const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore, config, logger);
 
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();

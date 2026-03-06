@@ -28,6 +28,7 @@ export function ticketWsPlugin(container: Container) {
 
     // Wire up broadcast to container
     container.ticketBroadcast = broadcast;
+    container.autoReviewWorkflow.onTicketUpdate = broadcast;
 
     app.addHook('onClose', () => {
       for (const client of clients) {

@@ -25,6 +25,9 @@ interface ReviewWorkflowConfig {
 export class AutoReviewWorkflowUseCase {
   private pendingTransitions = new Map<string, NodeJS.Timeout>();
 
+  /** Set by WS plugin to broadcast ticket updates in real-time */
+  public onTicketUpdate: ((type: string, data: unknown) => void) | null = null;
+
   constructor(
     private readonly mentionStore: MentionStorePort,
     private readonly ticketStore: TicketStorePort,
@@ -72,6 +75,7 @@ export class AutoReviewWorkflowUseCase {
     const assignDiff = ticket.assign(params.mentionedHuman);
 
     await this.ticketStore.saveTicket(ticket);
+    this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
     await this.ticketStore.saveActivity(TicketActivityEntity.create({
       id: randomUUID(),
       ticketId: params.ticketId,
@@ -155,6 +159,7 @@ export class AutoReviewWorkflowUseCase {
     ticket.blocked = false; // Clear blocked flag
 
     await this.ticketStore.saveTicket(ticket);
+    this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
     await this.ticketStore.saveActivity(TicketActivityEntity.create({
       id: randomUUID(),
       ticketId: params.ticketId,
@@ -205,6 +210,7 @@ export class AutoReviewWorkflowUseCase {
     if (!ticket.blocked) {
       const diff = ticket.update({ blocked: true });
       await this.ticketStore.saveTicket(ticket);
+      this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
 
       await this.ticketStore.saveActivity(TicketActivityEntity.create({
         id: randomUUID(),
@@ -265,6 +271,7 @@ export class AutoReviewWorkflowUseCase {
     const assignDiff = ticket.assign(reviewer);
 
     await this.ticketStore.saveTicket(ticket);
+    this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
     await this.ticketStore.saveActivity(TicketActivityEntity.create({
       id: randomUUID(),
       ticketId,
@@ -280,6 +287,54 @@ export class AutoReviewWorkflowUseCase {
       assignedTo: reviewer,
       reviewType: isQaReview ? 'qa' : 'human',
     });
+  }
+
+  /**
+   * When a human posts a comment, resolve all unresolved mentions targeting humans on that ticket.
+   */
+  async handleHumanCommentPosted(params: {
+    ticketId: string;
+  }): Promise<void> {
+    const mentions = await this.mentionStore.getByTicket(params.ticketId);
+    const unresolvedHuman = mentions.filter(
+      (m) => m.targetType === 'human' && m.status !== 'resolved',
+    );
+
+    for (const mention of unresolvedHuman) {
+      mention.resolve();
+      await this.mentionStore.save(mention);
+      this.onTicketUpdate?.('mention:updated', mention.toDTO());
+    }
+
+    if (unresolvedHuman.length > 0) {
+      this.logger.info('Auto-resolved human mentions after human comment', {
+        ticketId: params.ticketId,
+        resolvedCount: unresolvedHuman.length,
+      });
+    }
+  }
+
+  /**
+   * When a ticket moves to done, resolve all unresolved mentions on that ticket.
+   */
+  async handleTicketDone(params: {
+    ticketId: string;
+  }): Promise<void> {
+    const mentions = await this.mentionStore.getByTicket(params.ticketId);
+    const unresolved = mentions.filter((m) => m.status !== 'resolved');
+
+    for (const mention of unresolved) {
+      mention.resolve();
+      await this.mentionStore.save(mention);
+      this.onTicketUpdate?.('mention:updated', mention.toDTO());
+    }
+
+    if (unresolved.length > 0) {
+      this.logger.info('Auto-resolved all mentions after ticket moved to done', {
+        ticketId: params.ticketId,
+        resolvedCount: unresolved.length,
+      });
+    }
   }
 
   private cancelPendingTransition(ticketId: string): void {

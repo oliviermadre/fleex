@@ -235,6 +235,14 @@ export function agentApiRoutes(container: Container) {
 
       const dto = ticket.toDTO();
       container.ticketBroadcast('ticket:moved', dto);
+
+      // Auto-resolve all mentions when ticket moves to done
+      if (targetStatus === 'done') {
+        container.autoReviewWorkflow.handleTicketDone({
+          ticketId: ticket.id,
+        }).catch(() => {});
+      }
+
       return dto;
     });
 
