@@ -34,6 +34,7 @@ export class PgDomainEventLogStore implements DomainEventLogStorePort {
     eventType?: string;
     instanceId?: string;
     since?: Date;
+    until?: Date;
   }): Promise<DomainEventLogEntity[]> {
     const conditions: string[] = [];
     const values: unknown[] = [];
@@ -63,6 +64,12 @@ export class PgDomainEventLogStore implements DomainEventLogStorePort {
     if (params.since) {
       conditions.push(`occurred_at >= $${paramIdx}`);
       values.push(params.since.toISOString());
+      paramIdx++;
+    }
+
+    if (params.until) {
+      conditions.push(`occurred_at <= $${paramIdx}`);
+      values.push(params.until.toISOString());
       paramIdx++;
     }
 

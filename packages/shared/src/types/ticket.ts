@@ -107,6 +107,17 @@ export interface TicketActivity {
   readonly createdAt: string;
 }
 
+export interface TicketActivitySummary {
+  readonly ticketId: string;
+  readonly displayId: number;
+  readonly title: string;
+  readonly status: TicketStatus;
+  readonly boardId: string;
+  readonly activityCount: number;
+  readonly lastActivityAt: string; // ISO 8601
+  readonly eventTypes: string[];   // e.g. ["comment.posted", "ticket.moved"]
+}
+
 export interface AgentToken {
   readonly id: string;
   readonly name: string;

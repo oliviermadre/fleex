@@ -351,6 +351,94 @@ POST /api/agents/v1/tickets/:id/worktree → use response.worktree.path as CWD
 
 ---
 
+## Activity & Audit Log
+
+These endpoints let you query the activity history — useful for daily reports, audits, or answering "what happened yesterday?".
+
+### Per-ticket activity
+
+```
+GET /api/agents/v1/tickets/:id/activity
+```
+
+Query: `?limit=50` (max 200). Returns `TicketActivity[]` — structured actions (created, updated, moved, assigned) for a single ticket. 404 if the ticket doesn't exist.
+
+### Raw domain events
+
+```
+GET /api/agents/v1/activity
+```
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `since` | query, ISO 8601 | Events after this date |
+| `until` | query, ISO 8601 | Events before this date |
+| `event_type` | query | Filter by type prefix (e.g. `ticket`, `comment.posted`) |
+| `limit` | query | Max results (default 50, max 200) |
+| `before` | query | Cursor ID for pagination |
+
+Returns `DomainEventLog[]` — the full audit trail across all entity types (tickets, comments, mentions, deliverables).
+
+### Tickets with activity (daily report)
+
+```
+GET /api/agents/v1/activity/tickets
+```
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `since` | query, ISO 8601 | Start of date range |
+| `until` | query, ISO 8601 | End of date range |
+| `event_type` | query | Filter by event type prefix |
+| `limit` | query | Max raw events to scan (default 200, max 1000) |
+
+Returns distinct tickets that had activity in the date range, enriched with current metadata:
+
+```json
+[
+  {
+    "ticketId": "uuid",
+    "displayId": 42,
+    "title": "Implement auth flow",
+    "status": "doing",
+    "boardId": "uuid",
+    "activityCount": 5,
+    "lastActivityAt": "2026-03-06T18:30:00.000Z",
+    "eventTypes": ["comment.posted", "ticket.moved"]
+  }
+]
+```
+
+Sorted by `lastActivityAt` DESC. Deleted tickets are silently excluded.
+
+**Example — "what tickets had activity yesterday?":**
+
+```
+GET /api/agents/v1/activity/tickets?since=2026-03-06T00:00:00Z&until=2026-03-07T00:00:00Z
+```
+
+### DomainEventLog
+
+```json
+{
+  "id": "uuid",
+  "eventType": "ticket.moved",
+  "payload": { "ticketId": "uuid", "fromStatus": "todo", "toStatus": "doing" },
+  "instanceId": "hostname:3000",
+  "occurredAt": "iso8601"
+}
+```
+
+| Action | Method | Path | Query |
+|---|---|---|---|
+| Ticket activity | `GET` | `/tickets/:id/activity` | `?limit=50` |
+| Raw domain events | `GET` | `/activity` | `?since=&until=&event_type=&limit=&before=` |
+| Tickets with activity | `GET` | `/activity/tickets` | `?since=&until=&event_type=&limit=` |
+
+All paths are relative to `/api/agents/v1`.
+
+---
+
 ## Mention Syntax
 
 To request input from another agent, include `@agent:<name>` in a comment body:
