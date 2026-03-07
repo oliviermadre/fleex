@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 
-type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads';
+type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions' | 'agent-tokens';
+export type AnalyticsTab = 'audit-trail' | 'statistics';
 
 interface UIState {
   // Nav sidebar (left icon bar)
@@ -19,6 +20,10 @@ interface UIState {
   // Settings tab selection
   settingsTab: SettingsTab;
   setSettingsTab: (tab: SettingsTab) => void;
+
+  // Analytics tab selection
+  analyticsTab: AnalyticsTab;
+  setAnalyticsTab: (tab: AnalyticsTab) => void;
 
   // Alt key held state (for hotkey badge reveal)
   altHeld: boolean;
@@ -81,6 +86,7 @@ export const useUIStore = create<UIState>((set) => ({
   contentPanelWidth: 320,
   activePanel: 'sessions',
   settingsTab: 'general',
+  analyticsTab: 'audit-trail',
   altHeld: false,
   createModalOpen: false,
   createModalTicketContext: null,
@@ -117,6 +123,8 @@ export const useUIStore = create<UIState>((set) => ({
   setAltHeld: (held) => set({ altHeld: held }),
 
   setSettingsTab: (tab) => set({ settingsTab: tab }),
+
+  setAnalyticsTab: (tab) => set({ analyticsTab: tab }),
 
   setContentPanelWidth: (width) => set({ contentPanelWidth: width }),
 

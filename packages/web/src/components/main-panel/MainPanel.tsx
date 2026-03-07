@@ -18,6 +18,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { AgentPersonaView } from '../agents/AgentPersonaView';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { AgentWorktreePanel } from './AgentWorktreePanel';
+import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 
 function GroupEmptyCell() {
   return (
@@ -71,6 +72,10 @@ export function MainPanel() {
 
   if (activePanel === 'settings') {
     return <SettingsPanel />;
+  }
+
+  if (activePanel === 'analytics') {
+    return <AnalyticsPanel />;
   }
 
   if (activePanel === 'claude-config') {

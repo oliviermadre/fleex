@@ -49,6 +49,10 @@ export class JsonMentionStore implements MentionStorePort {
     return this.mentions.get(id) ?? null;
   }
 
+  async getAll(): Promise<TicketMentionEntity[]> {
+    return Array.from(this.mentions.values());
+  }
+
   async getByComment(commentId: string): Promise<TicketMentionEntity[]> {
     return Array.from(this.mentions.values()).filter((m) => m.commentId === commentId);
   }

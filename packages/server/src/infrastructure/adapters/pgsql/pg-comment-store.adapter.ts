@@ -19,6 +19,11 @@ export class PgCommentStore implements CommentStorePort {
     return rows.length > 0 ? rowToComment(rows[0]) : null;
   }
 
+  async getAll(): Promise<TicketCommentEntity[]> {
+    const { rows } = await this.db.query('SELECT * FROM comments ORDER BY created_at ASC');
+    return rows.map(rowToComment);
+  }
+
   async save(comment: TicketCommentEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO comments (

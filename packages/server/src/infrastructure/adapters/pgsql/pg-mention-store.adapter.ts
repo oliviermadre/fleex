@@ -19,6 +19,13 @@ export class PgMentionStore implements MentionStorePort {
     return rows.length > 0 ? rowToMention(rows[0]) : null;
   }
 
+  async getAll(): Promise<TicketMentionEntity[]> {
+    const { rows } = await this.db.query(
+      'SELECT * FROM mentions ORDER BY created_at ASC',
+    );
+    return rows.map(rowToMention);
+  }
+
   async getByComment(commentId: string): Promise<TicketMentionEntity[]> {
     const { rows } = await this.db.query(
       'SELECT * FROM mentions WHERE comment_id = $1',

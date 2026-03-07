@@ -90,6 +90,13 @@ export class PgAgentEventStore implements AgentEventStorePort {
     return rows.map(rowToExecution);
   }
 
+  async getAllExecutions(): Promise<AgentExecution[]> {
+    const { rows } = await this.db.query(
+      'SELECT * FROM agent_event_executions ORDER BY started_at DESC',
+    );
+    return rows.map(rowToExecution);
+  }
+
   async updateSessionId(executionId: string, sdkSessionId: string): Promise<void> {
     await this.db.query(
       'UPDATE agent_event_executions SET sdk_session_id = $1 WHERE execution_id = $2',

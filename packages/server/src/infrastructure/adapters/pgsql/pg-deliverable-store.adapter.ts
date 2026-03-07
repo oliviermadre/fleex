@@ -18,6 +18,11 @@ export class PgDeliverableStore implements DeliverableStorePort {
     return rows.length > 0 ? rowToDeliverable(rows[0]) : null;
   }
 
+  async getAll(): Promise<TicketDeliverableEntity[]> {
+    const { rows } = await this.db.query('SELECT * FROM deliverables ORDER BY created_at ASC');
+    return rows.map(rowToDeliverable);
+  }
+
   async save(deliverable: TicketDeliverableEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO deliverables (

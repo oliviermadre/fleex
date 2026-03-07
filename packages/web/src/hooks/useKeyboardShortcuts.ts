@@ -156,6 +156,11 @@ export function useKeyboardShortcuts() {
           setActivePanel('cluster');
           return;
         }
+        if (e.code === 'Digit9') {
+          e.preventDefault();
+          setActivePanel('analytics');
+          return;
+        }
         if (e.code === 'Digit0') {
           e.preventDefault();
           setActivePanel('settings');

@@ -15,6 +15,8 @@ import type {
   ClaudeUsage,
   AgentExecution,
   AgentEvent,
+  DomainEventLog,
+  StatisticsResponse,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -469,4 +471,42 @@ export async function fetchEventsForExecution(executionId: string): Promise<Agen
 
 export async function cancelExecution(executionId: string): Promise<{ cancelled: boolean }> {
   return request<{ cancelled: boolean }>(`/executions/${executionId}/cancel`, { method: 'POST' });
+}
+
+// ── Domain Event Log (Audit Trail) ──
+
+export async function fetchEvents(params: {
+  limit?: number;
+  before?: string;
+  eventType?: string;
+  instanceId?: string;
+  since?: string;
+} = {}): Promise<DomainEventLog[]> {
+  const qs = new URLSearchParams();
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.before) qs.set('before', params.before);
+  if (params.eventType) qs.set('eventType', params.eventType);
+  if (params.instanceId) qs.set('instanceId', params.instanceId);
+  if (params.since) qs.set('since', params.since);
+  const query = qs.toString();
+  return request<DomainEventLog[]>(`/events${query ? `?${query}` : ''}`);
+}
+
+export async function fetchEventStats(): Promise<{ totalEvents: number }> {
+  return request<{ totalEvents: number }>('/events/stats');
+}
+
+// ── Statistics ──
+
+export async function fetchStatistics(params: {
+  from?: string;
+  to?: string;
+  granularity?: 'day' | 'week' | 'month';
+} = {}): Promise<StatisticsResponse> {
+  const qs = new URLSearchParams();
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.granularity) qs.set('granularity', params.granularity);
+  const query = qs.toString();
+  return request<StatisticsResponse>(`/statistics${query ? `?${query}` : ''}`);
 }

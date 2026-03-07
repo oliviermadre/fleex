@@ -1,9 +1,12 @@
 import type { CreateWorktreeRequest } from '@fleex/shared';
 import { WorktreeError } from '../../domain/errors.js';
+import type { EventBus } from '../event-bus.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 
 export class CreateWorktreeUseCase {
+  public eventBus: EventBus | null = null;
+
   constructor(
     private readonly git: GitPort,
     private readonly logger: LoggerPort,
@@ -26,6 +29,7 @@ export class CreateWorktreeUseCase {
       );
       this.logger.info('Worktree created', { repoPath, wtPath, branch: request.branch });
       await this.copyIgnoredFiles(repoPath, wtPath);
+      this.emitCreated(repoPath, wtPath, request);
       return null;
     } catch (err) {
       const stderr = (err as { stderr?: string }).stderr?.trim();
@@ -36,6 +40,7 @@ export class CreateWorktreeUseCase {
         this.logger.info('Branch already checked out, reusing existing worktree', {
           repoPath, existingPath, branch: request.branch,
         });
+        this.emitCreated(repoPath, existingPath, request);
         return existingPath;
       }
       const checkedOutMatch = message.match(/is already checked out at '([^']+)'/);
@@ -54,10 +59,22 @@ export class CreateWorktreeUseCase {
         );
         this.logger.info('Worktree replaced', { repoPath, wtPath, branch: request.branch });
         await this.copyIgnoredFiles(repoPath, wtPath);
+        this.emitCreated(repoPath, wtPath, request);
         return null;
       }
       throw new WorktreeError(`Failed to create worktree: ${message}`);
     }
+  }
+
+  private emitCreated(repoPath: string, worktreePath: string, request: CreateWorktreeRequest): void {
+    this.eventBus?.emit({
+      type: 'worktree.created',
+      repoPath,
+      worktreePath,
+      branch: request.branch,
+      isNewBranch: request.createNewBranch,
+      occurredAt: new Date(),
+    });
   }
 
   private async copyIgnoredFiles(repoPath: string, wtPath: string): Promise<void> {

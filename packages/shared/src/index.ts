@@ -96,6 +96,15 @@ export type {
   GatewayHeartbeatRequest,
 } from './types/gateway.js';
 
+export type { DomainEventLog } from './types/domain-event-log.js';
+
+export type {
+  StatisticsTimeBucket,
+  AgentLeaderboardEntry,
+  StatisticsSummary,
+  StatisticsResponse,
+} from './types/statistics.js';
+
 export {
   ClientMessageType,
   ServerMessageType,

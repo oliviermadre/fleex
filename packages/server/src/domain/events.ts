@@ -162,6 +162,36 @@ export interface PersonaExecutionStartedEvent extends DomainEvent {
   mentionIds: string[];
 }
 
+// ── Worktree events ──
+
+export interface WorktreeCreatedEvent extends DomainEvent {
+  type: 'worktree.created';
+  repoPath: string;
+  worktreePath: string;
+  branch: string;
+  isNewBranch: boolean;
+}
+
+// ── Session events ──
+
+export interface SessionCreatedEvent extends DomainEvent {
+  type: 'session.created';
+  sessionId: string;
+  sessionType: string;
+  worktreeBranch: string | null;
+}
+
+export interface SessionRenamedEvent extends DomainEvent {
+  type: 'session.renamed';
+  sessionId: string;
+  displayName: string;
+}
+
+export interface SessionKilledEvent extends DomainEvent {
+  type: 'session.killed';
+  sessionId: string;
+}
+
 // ── Union type ──
 
 export type AnyDomainEvent =
@@ -184,7 +214,11 @@ export type AnyDomainEvent =
   | PersonaCreatedEvent
   | PersonaUpdatedEvent
   | PersonaDeletedEvent
-  | PersonaExecutionStartedEvent;
+  | PersonaExecutionStartedEvent
+  | WorktreeCreatedEvent
+  | SessionCreatedEvent
+  | SessionRenamedEvent
+  | SessionKilledEvent;
 
 // ── Event type string union ──
 

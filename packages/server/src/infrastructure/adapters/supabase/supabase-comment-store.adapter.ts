@@ -56,6 +56,15 @@ export class SupabaseCommentStore implements CommentStorePort {
     return data ? rowToEntity(data as CommentRow) : null;
   }
 
+  async getAll(): Promise<TicketCommentEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('comments')
+      .select('*')
+      .order('created_at', { ascending: true });
+    if (error) throw new Error(`SupabaseCommentStore.getAll failed: ${error.message}`);
+    return (data as CommentRow[]).map(rowToEntity);
+  }
+
   async save(comment: TicketCommentEntity): Promise<void> {
     const { error } = await this.conn.client.from('comments').upsert({
       id: comment.id,

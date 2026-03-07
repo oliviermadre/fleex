@@ -54,6 +54,15 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     return data ? rowToEntity(data as DeliverableRow) : null;
   }
 
+  async getAll(): Promise<TicketDeliverableEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('deliverables')
+      .select('*')
+      .order('created_at');
+    if (error) throw new Error(`SupabaseDeliverableStore.getAll failed: ${error.message}`);
+    return (data as DeliverableRow[]).map(rowToEntity);
+  }
+
   async save(deliverable: TicketDeliverableEntity): Promise<void> {
     const { error } = await this.conn.client.from('deliverables').upsert({
       id: deliverable.id,

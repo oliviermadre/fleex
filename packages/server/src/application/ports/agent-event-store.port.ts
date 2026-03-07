@@ -26,4 +26,6 @@ export interface AgentEventStorePort {
   getExecutionsByTicket(ticketId: string): Promise<AgentExecution[]>;
 
   getExecutionsByPersona(personaId: string, limit?: number): Promise<AgentExecution[]>;
+
+  getAllExecutions(): Promise<AgentExecution[]>;
 }
