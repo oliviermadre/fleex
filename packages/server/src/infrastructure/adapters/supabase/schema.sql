@@ -227,6 +227,19 @@ CREATE TABLE IF NOT EXISTS agent_event_executions (
 CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket  ON agent_event_executions(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_agent_executions_persona ON agent_event_executions(persona_id);
 
+-- ── Domain Event Log ────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS domain_event_log (
+  id          TEXT PRIMARY KEY,
+  event_type  TEXT NOT NULL,
+  payload     JSONB NOT NULL,
+  instance_id TEXT NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_domain_event_log_occurred_at ON domain_event_log(occurred_at);
+CREATE INDEX IF NOT EXISTS idx_domain_event_log_event_type ON domain_event_log(event_type);
+
 -- ── Row-Level Security ──────────────────────────────────────────────────────
 -- Enable RLS on all tables and add permissive policies for the service role.
 
@@ -257,4 +270,7 @@ CREATE POLICY "service_role_deliverables"      ON deliverables      FOR ALL USIN
 CREATE POLICY "service_role_agent_personas"   ON agent_personas    FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE agent_event_executions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE domain_event_log      ENABLE ROW LEVEL SECURITY;
+
 CREATE POLICY "service_role_agent_event_executions" ON agent_event_executions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_domain_event_log"       ON domain_event_log      FOR ALL USING (true) WITH CHECK (true);
