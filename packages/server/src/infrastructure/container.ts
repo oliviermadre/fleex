@@ -40,7 +40,6 @@ import { AutoReviewWorkflowUseCase } from '../application/use-cases/auto-review-
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
-import { JsonConfigAdapter } from './adapters/json-config.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
@@ -65,17 +64,13 @@ export async function createContainer() {
 
   logger.info('Gateway configured', { gatewayUrl });
 
-  const config = new JsonConfigAdapter(execFn, hostFs, hostHomedir);
-  await config.init();
-
-  const tmux = new TmuxCliAdapter(execFn, logger);
-  const git = new GitCliAdapter(execFn, logger);
-
   // Storage driver selection via FLEEX_STORAGE_DRIVER env var
+  // Config is now created by the storage factory alongside all other stores.
   const driver = resolveStorageDriver();
   logger.info('Storage driver selected', { driver });
 
   const {
+    configStore: config,
     sessionStore,
     ticketStore,
     agentTokenStore,
@@ -85,7 +80,11 @@ export async function createContainer() {
     personaStore,
     agentEventStore,
     domainEventLogStore,
-  } = await createStores(driver, { hostFs, homedir: hostHomedir, logger });
+    kvStore,
+  } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
+
+  const tmux = new TmuxCliAdapter(execFn, logger);
+  const git = new GitCliAdapter(execFn, logger);
 
   // Auth & multi-gateway stores (database-backed features)
   let userStore: PgUserStore | SupabaseUserStore | null = null;
@@ -251,6 +250,7 @@ export async function createContainer() {
     autoReviewWorkflow,
     agentEventStore,
     domainEventLogStore,
+    kvStore,
     eventBus,
     domainEventListener,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

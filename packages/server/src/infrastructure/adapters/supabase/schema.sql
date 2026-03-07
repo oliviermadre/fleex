@@ -274,3 +274,27 @@ ALTER TABLE domain_event_log      ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "service_role_agent_event_executions" ON agent_event_executions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_domain_event_log"       ON domain_event_log      FOR ALL USING (true) WITH CHECK (true);
+
+-- ── App Config ────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS app_config (
+  id          TEXT PRIMARY KEY DEFAULT 'singleton',
+  data        JSONB NOT NULL DEFAULT '{}',
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE app_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_app_config" ON app_config FOR ALL USING (true) WITH CHECK (true);
+
+-- ── User KV Store ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS user_kv (
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key         TEXT NOT NULL,
+  value       JSONB NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, key)
+);
+
+ALTER TABLE user_kv ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_user_kv" ON user_kv FOR ALL USING (true) WITH CHECK (true);

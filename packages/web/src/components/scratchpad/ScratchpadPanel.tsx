@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { SaveStatus } from './SaveStatus';
 import { useScrollSync } from '../../hooks/useScrollSync';
 import { HotkeyBadge } from '../ui/HotkeyBadge';
 
@@ -25,7 +26,7 @@ export function ScratchpadPanel() {
 
   // Derive store key from repo key
   const storeKey = scratchpadRepoKey ?? '__global__';
-  const entry = entries[storeKey] ?? { content: '', loaded: false, saving: false };
+  const entry = entries[storeKey] ?? { content: '', loaded: false, saving: false, savedAt: null, dirty: false };
 
   const { handleTyping, handlePreviewScroll } = useScrollSync(
     textareaRef,
@@ -114,9 +115,7 @@ export function ScratchpadPanel() {
             <span className="text-sm font-medium text-[var(--theme-text-primary)] truncate max-w-[260px]">
               {title}
             </span>
-            {entry.saving && (
-              <span className="text-xs text-[var(--theme-text-muted)]">saving...</span>
-            )}
+            <SaveStatus saving={entry.saving} savedAt={entry.savedAt} dirty={entry.dirty} />
           </div>
           <div className="flex items-center gap-1">
             {/* Preview toggle */}

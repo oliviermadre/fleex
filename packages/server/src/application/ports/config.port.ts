@@ -12,6 +12,7 @@ export interface AppConfig {
 }
 
 export interface ConfigPort {
+  init(): Promise<void>;
   get(): AppConfig;
   update(partial: Partial<AppConfig>): void | Promise<void>;
   getClaudeCommand(): string;
