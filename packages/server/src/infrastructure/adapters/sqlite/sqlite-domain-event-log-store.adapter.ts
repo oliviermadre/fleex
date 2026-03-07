@@ -50,6 +50,7 @@ export class SqliteDomainEventLogStoreAdapter implements DomainEventLogStorePort
     eventType?: string;
     instanceId?: string;
     since?: Date;
+    until?: Date;
   }): Promise<DomainEventLogEntity[]> {
     const conditions: string[] = [];
     const values: unknown[] = [];
@@ -77,6 +78,11 @@ export class SqliteDomainEventLogStoreAdapter implements DomainEventLogStorePort
     if (params.since) {
       conditions.push('occurred_at >= ?');
       values.push(params.since.toISOString());
+    }
+
+    if (params.until) {
+      conditions.push('occurred_at <= ?');
+      values.push(params.until.toISOString());
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

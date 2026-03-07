@@ -58,6 +58,7 @@ export type {
   CreateBoardRequest,
   UpdateBoardRequest,
   TicketActivity,
+  TicketActivitySummary,
   AgentToken,
   AgentTokenCreated,
   CommentVisibility,

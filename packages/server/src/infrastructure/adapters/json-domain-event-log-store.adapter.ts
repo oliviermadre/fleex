@@ -44,6 +44,7 @@ export class JsonDomainEventLogStore implements DomainEventLogStorePort {
     eventType?: string;
     instanceId?: string;
     since?: Date;
+    until?: Date;
   }): Promise<DomainEventLogEntity[]> {
     let result = [...this.entries].reverse(); // newest first
 
@@ -66,6 +67,11 @@ export class JsonDomainEventLogStore implements DomainEventLogStorePort {
     if (params.since) {
       const since = params.since.getTime();
       result = result.filter((e) => e.occurredAt.getTime() >= since);
+    }
+
+    if (params.until) {
+      const until = params.until.getTime();
+      result = result.filter((e) => e.occurredAt.getTime() <= until);
     }
 
     return result.slice(0, params.limit);

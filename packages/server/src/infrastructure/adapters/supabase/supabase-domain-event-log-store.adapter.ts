@@ -40,6 +40,7 @@ export class SupabaseDomainEventLogStore implements DomainEventLogStorePort {
     eventType?: string;
     instanceId?: string;
     since?: Date;
+    until?: Date;
   }): Promise<DomainEventLogEntity[]> {
     let query = this.conn.client
       .from('domain_event_log')
@@ -69,6 +70,10 @@ export class SupabaseDomainEventLogStore implements DomainEventLogStorePort {
 
     if (params.since) {
       query = query.gte('occurred_at', params.since.toISOString());
+    }
+
+    if (params.until) {
+      query = query.lte('occurred_at', params.until.toISOString());
     }
 
     const { data, error } = await query;
