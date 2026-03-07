@@ -604,26 +604,57 @@ phase_wizard() {
   local default_shell
   default_shell="${SHELL:-/bin/zsh}"
 
-  # Write config.json — pass values via env vars for safe JSON encoding
+  # Write config — to DB when sqlite, to config.json when json
   mkdir -p "$FLEEX_HOME"
-  FLEEX_CFG_BASE_PATH="$base_path" \
-  FLEEX_CFG_SHELL="$default_shell" \
-  FLEEX_CFG_DISPLAY="$display_name" \
-  FLEEX_CFG_MENTION="$mention_name" \
-  FLEEX_CFG_OUT="$CONFIG_FILE" \
-  bun -e '
-    const config = {
-      basePath: process.env.FLEEX_CFG_BASE_PATH,
-      defaultShell: process.env.FLEEX_CFG_SHELL,
-      repositoryRefreshIntervalMs: 0,
-      humanDisplayName: process.env.FLEEX_CFG_DISPLAY,
-      humanMentionName: process.env.FLEEX_CFG_MENTION,
-      repositories: [],
-      resolvedRepositories: []
-    };
-    await Bun.write(process.env.FLEEX_CFG_OUT, JSON.stringify(config, null, 2) + "\n");
-  '
-  ok "Config written to $CONFIG_FILE"
+  if [ "$storage_driver" = "sqlite" ]; then
+    FLEEX_CFG_BASE_PATH="$base_path" \
+    FLEEX_CFG_SHELL="$default_shell" \
+    FLEEX_CFG_DISPLAY="$display_name" \
+    FLEEX_CFG_MENTION="$mention_name" \
+    FLEEX_CFG_DB="$DB_FILE" \
+    bun -e '
+import { Database } from "bun:sqlite";
+const db = new Database(process.env.FLEEX_CFG_DB, { create: true });
+db.exec("PRAGMA journal_mode = WAL");
+db.exec(`CREATE TABLE IF NOT EXISTS app_config (
+  id TEXT PRIMARY KEY DEFAULT '"'"'singleton'"'"',
+  data TEXT NOT NULL DEFAULT '"'"'{}'"'"',
+  updated_at TEXT NOT NULL
+)`);
+const config = {
+  basePath: process.env.FLEEX_CFG_BASE_PATH,
+  defaultShell: process.env.FLEEX_CFG_SHELL,
+  repositoryRefreshIntervalMs: 0,
+  humanDisplayName: process.env.FLEEX_CFG_DISPLAY,
+  humanMentionName: process.env.FLEEX_CFG_MENTION,
+  repositories: [],
+  resolvedRepositories: []
+};
+const now = new Date().toISOString();
+db.prepare("INSERT OR REPLACE INTO app_config (id, data, updated_at) VALUES (?, ?, ?)").run("singleton", JSON.stringify(config), now);
+db.close();
+    '
+    ok "Config written to $DB_FILE (app_config table)"
+  else
+    FLEEX_CFG_BASE_PATH="$base_path" \
+    FLEEX_CFG_SHELL="$default_shell" \
+    FLEEX_CFG_DISPLAY="$display_name" \
+    FLEEX_CFG_MENTION="$mention_name" \
+    FLEEX_CFG_OUT="$CONFIG_FILE" \
+    bun -e '
+      const config = {
+        basePath: process.env.FLEEX_CFG_BASE_PATH,
+        defaultShell: process.env.FLEEX_CFG_SHELL,
+        repositoryRefreshIntervalMs: 0,
+        humanDisplayName: process.env.FLEEX_CFG_DISPLAY,
+        humanMentionName: process.env.FLEEX_CFG_MENTION,
+        repositories: [],
+        resolvedRepositories: []
+      };
+      await Bun.write(process.env.FLEEX_CFG_OUT, JSON.stringify(config, null, 2) + "\n");
+    '
+    ok "Config written to $CONFIG_FILE"
+  fi
 
   # Write .env
   mkdir -p "$(dirname "$ENV_FILE")"
@@ -842,6 +873,14 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS app_config (
+    id TEXT PRIMARY KEY DEFAULT 'singleton',
+    data TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL
+  )
+`);
+
 const m = process.env.SEED_MENTION;
 const now = process.env.SEED_NOW;
 
@@ -902,10 +941,26 @@ phase_repositories() {
 
   echo ""
 
-  # Build repositories array and merge into config.json using bun
-  FLEEX_CFG_PATH="$CONFIG_FILE" \
-  FLEEX_REPOS="$repos" \
-  bun -e '
+  # Build repositories array and merge into config
+  if [ "$WIZARD_STORAGE_DRIVER" = "sqlite" ]; then
+    FLEEX_CFG_DB="$DB_FILE" \
+    FLEEX_REPOS="$repos" \
+    bun -e '
+import { Database } from "bun:sqlite";
+const db = new Database(process.env.FLEEX_CFG_DB);
+const row = db.prepare("SELECT data FROM app_config WHERE id = ?").get("singleton");
+const config = row ? JSON.parse(row.data) : {};
+const repoList = process.env.FLEEX_REPOS.split("|").filter(Boolean);
+config.repositories = repoList;
+config.resolvedRepositories = [];
+const now = new Date().toISOString();
+db.prepare("INSERT OR REPLACE INTO app_config (id, data, updated_at) VALUES (?, ?, ?)").run("singleton", JSON.stringify(config), now);
+db.close();
+    '
+  else
+    FLEEX_CFG_PATH="$CONFIG_FILE" \
+    FLEEX_REPOS="$repos" \
+    bun -e '
 const configPath = process.env.FLEEX_CFG_PATH;
 const config = JSON.parse(await Bun.file(configPath).text());
 
@@ -914,7 +969,8 @@ config.repositories = repoList;
 config.resolvedRepositories = [];
 
 await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n");
-'
+    '
+  fi
   ok "Repositories registered in config"
 
   # Show what was registered
@@ -961,7 +1017,11 @@ DONE
   printf "    Mention name     ${BOLD}@%s${NC}\n" "$WIZARD_MENTION_NAME"
   printf "    Base path        ${BOLD}%s${NC}\n" "$WIZARD_BASE_PATH"
   printf "    Storage driver   ${BOLD}%s${NC}\n" "$WIZARD_STORAGE_DRIVER"
-  printf "    Config           ${DIM}%s${NC}\n" "$CONFIG_FILE"
+  if [ "$WIZARD_STORAGE_DRIVER" = "sqlite" ]; then
+    printf "    Config           ${DIM}%s (app_config table)${NC}\n" "$DB_FILE"
+  else
+    printf "    Config           ${DIM}%s${NC}\n" "$CONFIG_FILE"
+  fi
   echo ""
 
   printf "  ${BOLD}Default personas:${NC}\n"

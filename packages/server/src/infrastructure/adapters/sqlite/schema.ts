@@ -185,5 +185,19 @@ export const SQLITE_SCHEMA: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_domain_event_log_occurred_at ON domain_event_log(occurred_at)`,
   `CREATE INDEX IF NOT EXISTS idx_domain_event_log_event_type ON domain_event_log(event_type)`,
 
+  // ── App Config ──
+  `CREATE TABLE IF NOT EXISTS app_config (
+    id TEXT PRIMARY KEY DEFAULT 'singleton',
+    data TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL
+  )`,
+
+  // ── KV Store ──
+  `CREATE TABLE IF NOT EXISTS kv_store (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+
 ];
 

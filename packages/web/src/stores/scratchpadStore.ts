@@ -11,6 +11,8 @@ interface ScratchpadEntry {
   content: string;
   loaded: boolean;
   saving: boolean;
+  savedAt: number | null;
+  dirty: boolean;
 }
 
 interface ScratchpadState {
@@ -36,7 +38,7 @@ interface ScratchpadState {
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function getEntry(entries: Record<string, ScratchpadEntry>, key: string): ScratchpadEntry {
-  return entries[key] ?? { content: '', loaded: false, saving: false };
+  return entries[key] ?? { content: '', loaded: false, saving: false, savedAt: null, dirty: false };
 }
 
 function parseRepoKey(key: string): { org: string; name: string } | null {
@@ -58,7 +60,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
     set((state) => ({
       entries: {
         ...state.entries,
-        [key]: { ...getEntry(state.entries, key), content },
+        [key]: { ...getEntry(state.entries, key), content, dirty: true },
       },
       scratchpadList: state.scratchpadList.map((item) =>
         item.key === key ? { ...item, lineCount } : item,
@@ -89,7 +91,7 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       set((state) => ({
         entries: {
           ...state.entries,
-          [key]: { content, loaded: true, saving: false },
+          [key]: { content, loaded: true, saving: false, savedAt: null, dirty: false },
         },
       }));
     } catch {
@@ -117,9 +119,14 @@ export const useScratchpadStore = create<ScratchpadState>((set, get) => ({
       } else {
         await saveScratchpad(entry.content);
       }
+      set((state) => ({
+        entries: {
+          ...state.entries,
+          [key]: { ...getEntry(state.entries, key), saving: false, savedAt: Date.now(), dirty: false },
+        },
+      }));
     } catch {
       // silent fail — will retry on next save
-    } finally {
       set((state) => ({
         entries: {
           ...state.entries,

@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { FLEEX_DIR, CONFIG_FILE } from '@fleex/shared';
 import type { AppConfig, ConfigPort } from '../../application/ports/config.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
+import { resolveClaudeCommand } from './resolve-claude-command.js';
 
 export class JsonConfigAdapter implements ConfigPort {
   private config: AppConfig;
@@ -30,7 +31,7 @@ export class JsonConfigAdapter implements ConfigPort {
     if (!(await this.hostFs.exists(dir))) {
       await this.hostFs.mkdir(dir);
     }
-    this.claudeCommand = await this.resolveClaudePath();
+    this.claudeCommand = await resolveClaudeCommand(this.execFn, this.hostFs, this.homedir);
     await this.loadFromDisk();
     this.initialized = true;
   }
@@ -47,17 +48,6 @@ export class JsonConfigAdapter implements ConfigPort {
     this.config = { ...this.config, ...partial };
     this.resolveTilde();
     await this.syncToDisk();
-  }
-
-  private async resolveClaudePath(): Promise<string> {
-    const localBin = join(this.homedir, '.local', 'bin', 'claude');
-    if (await this.hostFs.exists(localBin)) return localBin;
-    try {
-      const { stdout } = await this.execFn('which', ['claude']);
-      return stdout.trim();
-    } catch {
-      return 'claude';
-    }
   }
 
   private async loadFromDisk(): Promise<void> {

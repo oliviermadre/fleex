@@ -7,12 +7,15 @@ import type { DeliverableStorePort } from '../../application/ports/deliverable-s
 import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
 import type { AgentEventStorePort } from '../../application/ports/agent-event-store.port.js';
 import type { DomainEventLogStorePort } from '../../application/ports/domain-event-log-store.port.js';
+import type { ConfigPort } from '../../application/ports/config.port.js';
+import type { KvStorePort } from '../../application/ports/kv-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-import type { HostFs } from '../host/types.js';
+import type { ExecFn, HostFs } from '../host/types.js';
 
 export type StorageDriver = 'json' | 'sqlite' | 'pgsql' | 'supabase';
 
 export interface StorageStores {
+  configStore: ConfigPort;
   sessionStore: SessionStorePort;
   ticketStore: TicketStorePort;
   agentTokenStore: AgentTokenStorePort;
@@ -22,6 +25,7 @@ export interface StorageStores {
   personaStore: PersonaStorePort;
   agentEventStore: AgentEventStorePort;
   domainEventLogStore: DomainEventLogStorePort;
+  kvStore: KvStorePort | null;
 }
 
 export function resolveStorageDriver(): StorageDriver {
@@ -37,7 +41,7 @@ export function resolveStorageDriver(): StorageDriver {
 
 export async function createStores(
   driver: StorageDriver,
-  deps: { hostFs: HostFs; homedir: string; logger: LoggerPort },
+  deps: { execFn: ExecFn; hostFs: HostFs; homedir: string; logger: LoggerPort },
 ): Promise<StorageStores> {
   if (driver === 'json') {
     return createJsonStores(deps);
@@ -49,19 +53,21 @@ export async function createStores(
 
   switch (driver) {
     case 'sqlite':
-      return { sessionStore, ...(await createSqliteStores(deps.logger)) };
+      return { sessionStore, ...(await createSqliteStores(deps)) };
     case 'pgsql':
-      return { sessionStore, ...(await createPgsqlStores(deps.logger)) };
+      return { sessionStore, ...(await createPgsqlStores(deps)) };
     case 'supabase':
-      return { sessionStore, ...(await createSupabaseStores(deps.logger)) };
+      return { sessionStore, ...(await createSupabaseStores(deps)) };
   }
 }
 
 async function createJsonStores(deps: {
+  execFn: ExecFn;
   hostFs: HostFs;
   homedir: string;
   logger: LoggerPort;
 }): Promise<StorageStores> {
+  const { JsonConfigAdapter } = await import('./json-config.adapter.js');
   const { JsonSessionStore } = await import('./json-session-store.adapter.js');
   const { JsonTicketStore } = await import('./json-ticket-store.adapter.js');
   const { JsonAgentTokenStore } = await import('./json-agent-token-store.adapter.js');
@@ -72,6 +78,8 @@ async function createJsonStores(deps: {
   const { JsonAgentEventStore } = await import('./json-agent-event-store.adapter.js');
   const { JsonDomainEventLogStore } = await import('./json-domain-event-log-store.adapter.js');
 
+  const configStore = new JsonConfigAdapter(deps.execFn, deps.hostFs, deps.homedir);
+  await configStore.init();
   const sessionStore = new JsonSessionStore(deps.hostFs, deps.homedir, deps.logger);
   await sessionStore.init();
   const ticketStore = new JsonTicketStore(deps.hostFs, deps.homedir, deps.logger);
@@ -91,7 +99,7 @@ async function createJsonStores(deps: {
   const domainEventLogStore = new JsonDomainEventLogStore(deps.hostFs, deps.homedir, deps.logger);
   await domainEventLogStore.init();
 
-  return { sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore };
+  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, kvStore: null };
 }
 
 async function createJsonSessionStore(deps: {
@@ -107,11 +115,17 @@ async function createJsonSessionStore(deps: {
 
 type NonSessionStores = Omit<StorageStores, 'sessionStore'>;
 
-async function createSqliteStores(logger: LoggerPort): Promise<NonSessionStores> {
+async function createSqliteStores(deps: {
+  execFn: ExecFn;
+  hostFs: HostFs;
+  homedir: string;
+  logger: LoggerPort;
+}): Promise<NonSessionStores> {
   const { join } = await import('node:path');
   const { homedir } = await import('node:os');
   const { FLEEX_DIR } = await import('@fleex/shared');
   const { SqliteConnection } = await import('./sqlite/connection.js');
+  const { SqliteConfigAdapter } = await import('./sqlite/sqlite-config.adapter.js');
   const { SqliteTicketStoreAdapter } = await import('./sqlite/sqlite-ticket-store.adapter.js');
   const { SqliteAgentTokenStoreAdapter } = await import('./sqlite/sqlite-agent-token-store.adapter.js');
   const { SqliteCommentStoreAdapter } = await import('./sqlite/sqlite-comment-store.adapter.js');
@@ -120,17 +134,22 @@ async function createSqliteStores(logger: LoggerPort): Promise<NonSessionStores>
   const { SqlitePersonaStoreAdapter } = await import('./sqlite/sqlite-persona-store.adapter.js');
   const { SqliteAgentEventStoreAdapter } = await import('./sqlite/sqlite-agent-event-store.adapter.js');
   const { SqliteDomainEventLogStoreAdapter } = await import('./sqlite/sqlite-domain-event-log-store.adapter.js');
+  const { SqliteKvStoreAdapter } = await import('./sqlite/sqlite-kv-store.adapter.js');
 
   const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
   const connection = new SqliteConnection(dbPath);
   await connection.init();
 
+  const configStore = new SqliteConfigAdapter(connection, deps.execFn, deps.hostFs, deps.homedir);
+  await configStore.init();
+
   const agentEventStore = new SqliteAgentEventStoreAdapter(connection);
   await agentEventStore.init();
 
-  logger.info('SQLite storage initialized', { path: dbPath });
+  deps.logger.info('SQLite storage initialized', { path: dbPath });
 
   return {
+    configStore,
     ticketStore: new SqliteTicketStoreAdapter(connection),
     agentTokenStore: new SqliteAgentTokenStoreAdapter(connection),
     commentStore: new SqliteCommentStoreAdapter(connection),
@@ -139,16 +158,23 @@ async function createSqliteStores(logger: LoggerPort): Promise<NonSessionStores>
     personaStore: new SqlitePersonaStoreAdapter(connection),
     agentEventStore,
     domainEventLogStore: new SqliteDomainEventLogStoreAdapter(connection),
+    kvStore: new SqliteKvStoreAdapter(connection),
   };
 }
 
-async function createPgsqlStores(logger: LoggerPort): Promise<NonSessionStores> {
+async function createPgsqlStores(deps: {
+  execFn: ExecFn;
+  hostFs: HostFs;
+  homedir: string;
+  logger: LoggerPort;
+}): Promise<NonSessionStores> {
   const url = process.env['FLEEX_PGSQL_URL'];
   if (!url) {
     throw new Error('FLEEX_PGSQL_URL is required when FLEEX_STORAGE_DRIVER=pgsql');
   }
 
   const { PgConnection } = await import('./pgsql/connection.js');
+  const { PgConfigAdapter } = await import('./pgsql/pg-config.adapter.js');
   const { PgTicketStore } = await import('./pgsql/pg-ticket-store.adapter.js');
   const { PgAgentTokenStore } = await import('./pgsql/pg-agent-token-store.adapter.js');
   const { PgCommentStore } = await import('./pgsql/pg-comment-store.adapter.js');
@@ -157,9 +183,13 @@ async function createPgsqlStores(logger: LoggerPort): Promise<NonSessionStores> 
   const { PgPersonaStore } = await import('./pgsql/pg-persona-store.adapter.js');
   const { PgAgentEventStore } = await import('./pgsql/pg-agent-event-store.adapter.js');
   const { PgDomainEventLogStore } = await import('./pgsql/pg-domain-event-log-store.adapter.js');
+  const { PgKvStoreAdapter } = await import('./pgsql/pg-kv-store.adapter.js');
 
   const connection = new PgConnection(url);
   await connection.init();
+
+  const configStore = new PgConfigAdapter(connection, deps.execFn, deps.hostFs, deps.homedir);
+  await configStore.init();
 
   const agentEventStore = new PgAgentEventStore(connection);
   await agentEventStore.init();
@@ -167,9 +197,10 @@ async function createPgsqlStores(logger: LoggerPort): Promise<NonSessionStores> 
   const domainEventLogStore = new PgDomainEventLogStore(connection);
   await domainEventLogStore.init();
 
-  logger.info('PostgreSQL storage initialized', { url: url.replace(/:[^:@]+@/, ':***@') });
+  deps.logger.info('PostgreSQL storage initialized', { url: url.replace(/:[^:@]+@/, ':***@') });
 
   return {
+    configStore,
     ticketStore: new PgTicketStore(connection),
     agentTokenStore: new PgAgentTokenStore(connection),
     commentStore: new PgCommentStore(connection),
@@ -178,10 +209,16 @@ async function createPgsqlStores(logger: LoggerPort): Promise<NonSessionStores> 
     personaStore: new PgPersonaStore(connection),
     agentEventStore,
     domainEventLogStore,
+    kvStore: new PgKvStoreAdapter(connection),
   };
 }
 
-async function createSupabaseStores(logger: LoggerPort): Promise<NonSessionStores> {
+async function createSupabaseStores(deps: {
+  execFn: ExecFn;
+  hostFs: HostFs;
+  homedir: string;
+  logger: LoggerPort;
+}): Promise<NonSessionStores> {
   const url = process.env['FLEEX_SUPABASE_URL'];
   const key = process.env['FLEEX_SUPABASE_KEY'];
   if (!url || !key) {
@@ -191,6 +228,7 @@ async function createSupabaseStores(logger: LoggerPort): Promise<NonSessionStore
   }
 
   const { SupabaseConnection } = await import('./supabase/connection.js');
+  const { SupabaseConfigAdapter } = await import('./supabase/supabase-config.adapter.js');
   const { SupabaseTicketStore } = await import('./supabase/supabase-ticket-store.adapter.js');
   const { SupabaseAgentTokenStore } = await import('./supabase/supabase-agent-token-store.adapter.js');
   const { SupabaseCommentStore } = await import('./supabase/supabase-comment-store.adapter.js');
@@ -199,16 +237,21 @@ async function createSupabaseStores(logger: LoggerPort): Promise<NonSessionStore
   const { SupabasePersonaStore } = await import('./supabase/supabase-persona-store.adapter.js');
   const { SupabaseAgentEventStore } = await import('./supabase/supabase-agent-event-store.adapter.js');
   const { SupabaseDomainEventLogStore } = await import('./supabase/supabase-domain-event-log-store.adapter.js');
+  const { SupabaseKvStoreAdapter } = await import('./supabase/supabase-kv-store.adapter.js');
 
   const connection = new SupabaseConnection(url, key);
   await connection.init();
 
+  const configStore = new SupabaseConfigAdapter(connection, deps.execFn, deps.hostFs, deps.homedir);
+  await configStore.init();
+
   const agentEventStore = new SupabaseAgentEventStore(connection);
   await agentEventStore.init();
 
-  logger.info('Supabase storage initialized', { url });
+  deps.logger.info('Supabase storage initialized', { url });
 
   return {
+    configStore,
     ticketStore: new SupabaseTicketStore(connection),
     agentTokenStore: new SupabaseAgentTokenStore(connection),
     commentStore: new SupabaseCommentStore(connection),
@@ -217,5 +260,6 @@ async function createSupabaseStores(logger: LoggerPort): Promise<NonSessionStore
     personaStore: new SupabasePersonaStore(connection),
     agentEventStore,
     domainEventLogStore: new SupabaseDomainEventLogStore(connection),
+    kvStore: new SupabaseKvStoreAdapter(connection),
   };
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { SaveStatus } from './SaveStatus';
 import { useScrollSync } from '../../hooks/useScrollSync';
 
 interface Props {
@@ -13,7 +14,7 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
   const load = useScratchpadStore((s) => s.load);
   const toggleCheckbox = useScratchpadStore((s) => s.toggleCheckbox);
 
-  const entry = entries[scratchpadKey] ?? { content: '', loaded: false, saving: false };
+  const entry = entries[scratchpadKey] ?? { content: '', loaded: false, saving: false, savedAt: null, dirty: false };
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -49,9 +50,7 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
         <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)] truncate">
           {label}
         </span>
-        {entry.saving && (
-          <span className="text-xs text-[var(--theme-text-muted)]">saving...</span>
-        )}
+        <SaveStatus saving={entry.saving} savedAt={entry.savedAt} dirty={entry.dirty} />
       </div>
 
       {/* Split: edit | preview */}

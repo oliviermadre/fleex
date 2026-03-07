@@ -13,12 +13,7 @@ function kvKey(org: string, name: string): string {
 
 export function scratchpadRoutes(container: Container) {
   return async function (app: FastifyInstance) {
-    const { hostFs, hostHomedir } = container;
-    const kvStore = ('kvStore' in container ? (container as any).kvStore : null) as {
-      get(key: string): Promise<string | null>;
-      set(key: string, value: string): Promise<void>;
-      listByPrefix(prefix: string): Promise<{ key: string; value: string }[]>;
-    } | null;
+    const { hostFs, hostHomedir, kvStore } = container;
     const dirPath = join(hostHomedir, SCRATCHPAD_DIR);
     const filePath = join(dirPath, SCRATCHPAD_FILE);
     const scratchpadsDir = join(dirPath, SCRATCHPADS_SUBDIR);
@@ -28,7 +23,16 @@ export function scratchpadRoutes(container: Container) {
     app.get('/api/scratchpad', async () => {
       if (kvStore) {
         const content = await kvStore.get(KV_GLOBAL);
-        return { content: content ?? '' };
+        if (content !== null) return { content };
+        // Lazy migration: check filesystem fallback
+        if (await hostFs.exists(filePath)) {
+          const fsContent = await hostFs.readFile(filePath);
+          if (fsContent) {
+            await kvStore.set(KV_GLOBAL, fsContent);
+            return { content: fsContent };
+          }
+        }
+        return { content: '' };
       }
       if (!(await hostFs.exists(filePath))) return { content: '' };
       return { content: await hostFs.readFile(filePath) };
@@ -53,7 +57,17 @@ export function scratchpadRoutes(container: Container) {
         const { org, name } = request.params;
         if (kvStore) {
           const content = await kvStore.get(kvKey(org, name));
-          return { content: content ?? '' };
+          if (content !== null) return { content };
+          // Lazy migration: check filesystem fallback
+          const repoFilePath = join(scratchpadsDir, org, `${name}.md`);
+          if (await hostFs.exists(repoFilePath)) {
+            const fsContent = await hostFs.readFile(repoFilePath);
+            if (fsContent) {
+              await kvStore.set(kvKey(org, name), fsContent);
+              return { content: fsContent };
+            }
+          }
+          return { content: '' };
         }
         const repoFilePath = join(scratchpadsDir, org, `${name}.md`);
         if (!(await hostFs.exists(repoFilePath))) return { content: '' };
