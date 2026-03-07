@@ -9,13 +9,15 @@
  */
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useUIStore, type SettingsTab } from '../stores/uiStore';
+import { useUIStore, type SettingsTab, type AnalyticsTab } from '../stores/uiStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useTicketStore } from '../stores/ticketStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 
-type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads';
+type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
+
+const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
 const VALID_SETTINGS_TABS: SettingsTab[] = [
   'general',
@@ -43,6 +45,7 @@ interface ParsedUrl {
   personaId: string | null;
   personaTab: PersonaTab | null;
   settingsTab: SettingsTab | null;
+  analyticsTab: AnalyticsTab | null;
   agentWorktreeTicketId: string | null;
   redirect?: string;
 }
@@ -50,7 +53,7 @@ interface ParsedUrl {
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
-  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, settingsTab: null as SettingsTab | null, agentWorktreeTicketId: null as string | null };
+  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
 
   // Root: redirect to /sessions
   if (pathname === '/') {
@@ -130,6 +133,19 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
     return { ...base, panel: 'scratchpads', scratchpadKey: `${scratchpadsMatch[1]}/${scratchpadsMatch[2]}` };
   }
 
+  // Analytics
+  if (pathname === '/analytics') {
+    return { ...base, panel: 'analytics', analyticsTab: 'audit-trail' };
+  }
+  const analyticsMatch = pathname.match(/^\/analytics\/([^/]+)$/);
+  if (analyticsMatch) {
+    const rawTab = analyticsMatch[1] as AnalyticsTab;
+    if (VALID_ANALYTICS_TABS.includes(rawTab)) {
+      return { ...base, panel: 'analytics', analyticsTab: rawTab };
+    }
+    return { ...base, panel: 'analytics', analyticsTab: 'audit-trail', redirect: '/analytics' };
+  }
+
   // Settings
   if (pathname === '/settings') {
     return { ...base, panel: 'settings' };
@@ -161,6 +177,7 @@ export function storeToUrl(
   personaTab: PersonaTab,
   settingsTab: SettingsTab,
   selectedAgentWorktreeTicketId?: string | null,
+  analyticsTab?: AnalyticsTab,
 ): { pathname: string; search: string } {
   switch (activePanel) {
     case 'sessions': {
@@ -213,6 +230,9 @@ export function storeToUrl(
       }
       return { pathname: '/scratchpads', search: '' };
     }
+    case 'analytics': {
+      return { pathname: `/analytics/${analyticsTab ?? 'audit-trail'}`, search: '' };
+    }
     case 'settings': {
       return { pathname: `/settings/${settingsTab}`, search: '' };
     }
@@ -234,6 +254,8 @@ export function RouterSync() {
   const selectRepo = useUIStore((s) => s.selectRepo);
   const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
   const setSelectedAgentWorktreeTicketId = useUIStore((s) => s.setSelectedAgentWorktreeTicketId);
+  const analyticsTab = useUIStore((s) => s.analyticsTab);
+  const setAnalyticsTab = useUIStore((s) => s.setAnalyticsTab);
 
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
@@ -351,6 +373,11 @@ export function RouterSync() {
       }
     }
 
+    // Update analytics tab
+    if (parsed.panel === 'analytics' && parsed.analyticsTab && parsed.analyticsTab !== analyticsTab) {
+      setAnalyticsTab(parsed.analyticsTab);
+    }
+
     // Update settings tab
     if (parsed.panel === 'settings' && parsed.settingsTab && parsed.settingsTab !== settingsTab) {
       setSettingsTab(parsed.settingsTab);
@@ -379,6 +406,7 @@ export function RouterSync() {
       personaTab,
       settingsTab,
       selectedAgentWorktreeTicketId,
+      analyticsTab,
     );
 
     const currentPath = location.pathname;
@@ -402,6 +430,7 @@ export function RouterSync() {
     personaTab,
     settingsTab,
     selectedAgentWorktreeTicketId,
+    analyticsTab,
     // Don't include location to avoid re-triggering on our own navigate calls
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);

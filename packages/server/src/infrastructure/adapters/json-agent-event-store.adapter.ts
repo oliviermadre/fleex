@@ -128,6 +128,12 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       .map(this.indexToExecution);
   }
 
+  async getAllExecutions(): Promise<AgentExecution[]> {
+    return [...this.index]
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+      .map(this.indexToExecution);
+  }
+
   async updateSessionId(executionId: string, sdkSessionId: string): Promise<void> {
     const entry = this.index.find((e) => e.id === executionId);
     if (entry) {

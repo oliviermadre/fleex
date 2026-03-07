@@ -1,9 +1,13 @@
+import { hostname } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { SessionNamingService } from '../domain/services/session-naming.js';
 import { SessionGroupingService } from '../domain/services/session-grouping.js';
 import { RepositoryCache } from '../domain/services/repository-cache.js';
 import { RepositoryRefreshScheduler } from '../domain/services/repository-refresh-scheduler.js';
 import { RepositoryResolver } from '../domain/services/repository-resolver.js';
+import { EventBus } from '../application/event-bus.js';
+import { DomainEventListener } from '../application/domain-event-listener.js';
 import { CreateSessionUseCase } from '../application/use-cases/create-session.js';
 import { ListSessionsUseCase } from '../application/use-cases/list-sessions.js';
 import { KillSessionUseCase } from '../application/use-cases/kill-session.js';
@@ -40,6 +44,7 @@ import { JsonConfigAdapter } from './adapters/json-config.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
+import { DomainEventLogEntity } from '../domain/entities/domain-event-log.entity.js';
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
@@ -79,6 +84,7 @@ export async function createContainer() {
     deliverableStore,
     personaStore,
     agentEventStore,
+    domainEventLogStore,
   } = await createStores(driver, { hostFs, homedir: hostHomedir, logger });
 
   // Auth & multi-gateway stores (database-backed features)
@@ -155,6 +161,39 @@ export async function createContainer() {
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
+  // Domain event bus
+  const eventBus = new EventBus();
+  const domainEventListener = new DomainEventListener({
+    eventBus,
+    personaStore,
+    ticketStore,
+    mentionStore,
+    commentStore,
+    deliverableStore,
+    autoReviewWorkflow,
+    executeAgent,
+    wakeWaitingAgents,
+    logger,
+  });
+  domainEventListener.register();
+
+  // Persist all domain events to the audit trail
+  const instanceId = process.env['FLEEX_INSTANCE_ID'] ?? `${hostname()}:${process.env['PORT'] ?? '3000'}`;
+  eventBus.on('*', (event) => {
+    const entry = DomainEventLogEntity.create({
+      id: randomUUID(),
+      eventType: event.type,
+      payload: { ...event } as Record<string, unknown>,
+      instanceId,
+      occurredAt: event.occurredAt,
+    });
+    return domainEventLogStore.save(entry);
+  });
+
+  // Wire eventBus (avoids circular constructor dep)
+  createWorktreeUC.eventBus = eventBus;
+  executeAgent.eventBus = eventBus;
+
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
 
@@ -211,6 +250,9 @@ export async function createContainer() {
     wakeWaitingAgents,
     autoReviewWorkflow,
     agentEventStore,
+    domainEventLogStore,
+    eventBus,
+    domainEventListener,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     agentBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     personaBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

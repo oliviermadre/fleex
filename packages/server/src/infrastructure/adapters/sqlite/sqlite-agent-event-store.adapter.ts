@@ -104,6 +104,13 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     return rows.map(rowToExecution);
   }
 
+  async getAllExecutions(): Promise<AgentExecution[]> {
+    const rows = this.conn.db
+      .prepare('SELECT * FROM agent_event_executions ORDER BY started_at DESC')
+      .all() as ExecutionRow[];
+    return rows.map(rowToExecution);
+  }
+
   async updateSessionId(executionId: string, sdkSessionId: string): Promise<void> {
     this.conn.db.prepare(
       'UPDATE agent_event_executions SET sdk_session_id = ? WHERE execution_id = ?'

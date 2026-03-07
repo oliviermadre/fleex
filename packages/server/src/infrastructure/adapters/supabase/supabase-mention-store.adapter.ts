@@ -55,6 +55,15 @@ export class SupabaseMentionStore implements MentionStorePort {
     return data ? rowToEntity(data as MentionRow) : null;
   }
 
+  async getAll(): Promise<TicketMentionEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('mentions')
+      .select('*')
+      .order('created_at');
+    if (error) throw new Error(`SupabaseMentionStore.getAll failed: ${error.message}`);
+    return (data as MentionRow[]).map(rowToEntity);
+  }
+
   async getByComment(commentId: string): Promise<TicketMentionEntity[]> {
     const { data, error } = await this.conn.client
       .from('mentions')

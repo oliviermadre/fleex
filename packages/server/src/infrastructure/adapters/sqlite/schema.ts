@@ -174,5 +174,16 @@ export const SQLITE_SCHEMA: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_agent_executions_ticket ON agent_event_executions(ticket_id)`,
   `CREATE INDEX IF NOT EXISTS idx_agent_executions_persona ON agent_event_executions(persona_id)`,
 
+  // ── Domain Event Log ──
+  `CREATE TABLE IF NOT EXISTS domain_event_log (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    instance_id TEXT NOT NULL,
+    occurred_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_domain_event_log_occurred_at ON domain_event_log(occurred_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_domain_event_log_event_type ON domain_event_log(event_type)`,
+
 ];
 

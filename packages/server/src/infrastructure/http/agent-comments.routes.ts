@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { TicketNotFoundError, CommentNotFoundError, ForbiddenError } from '../../domain/errors.js';
 import type { Container } from '../container.js';
-import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 
 export function agentCommentsRoutes(container: Container) {
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+
   return async function (app: FastifyInstance) {
 
     // List comments for a ticket
@@ -42,7 +43,7 @@ export function agentCommentsRoutes(container: Container) {
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const agentName = request.agent?.name ?? 'unknown';
-      const { humanDisplayName, humanMentionName } = container.config.get();
+      const { humanMentionName } = container.config.get();
       const { comment, createdMentions } = await container.postComment.execute({
         ticketId: request.params.id,
         authorType: 'agent',
@@ -54,58 +55,35 @@ export function agentCommentsRoutes(container: Container) {
         humanMentionNames: humanMentionName ? [humanMentionName] : [],
       });
 
-      const dto = comment.toDTO();
-      container.ticketBroadcast('comment:created', dto);
+      // Single event — the DomainEventListener handles broadcasting, auto-trigger, auto-review, wake
+      emit({
+        type: 'comment.posted',
+        commentId: comment.id,
+        ticketId: request.params.id,
+        authorType: 'agent',
+        authorName: agentName,
+        createdMentions: createdMentions.map((m) => ({
+          mentionId: m.id,
+          targetAgent: m.targetAgent,
+          targetType: m.targetType,
+        })),
+        occurredAt: new Date(),
+      });
 
-      for (const mention of createdMentions) {
-        container.ticketBroadcast('mention:created', mention.toDTO());
-      }
-
-      // Wake up agents waiting for info on this ticket (exclude posting agent to avoid self-wake)
-      container.wakeWaitingAgents.execute(request.params.id, agentName).catch(() => {});
-
-      // Handle auto-review workflow for human mentions
-      for (const mention of createdMentions) {
-        if (mention.targetType === 'human') {
-          container.autoReviewWorkflow.handleHumanMention({
-            ticketId: request.params.id,
-            mentionedHuman: mention.targetAgent,
-          }).catch((error) => {
-            container.logger.error('Failed to handle human mention for auto-review', {
-              ticketId: request.params.id,
-              mentionedHuman: mention.targetAgent,
-              error: String(error),
-            });
-          });
-        }
-      }
-
-      // Handle agent mentions in reviewing status (back to doing)
-      for (const mention of createdMentions) {
-        if (mention.targetType === 'agent') {
-          container.autoReviewWorkflow.handleAgentMentionInReview({
-            ticketId: request.params.id,
-            mentionedAgent: mention.targetAgent,
-          }).catch((error) => {
-            container.logger.error('Failed to handle agent mention in review', {
-              ticketId: request.params.id,
-              mentionedAgent: mention.targetAgent,
-              error: String(error),
-            });
-          });
-        }
-      }
-
-      // Auto-trigger mentioned agents
-      for (const mention of createdMentions) {
-        if (mention.targetType === 'agent') {
-          const persona = await container.personaStore.getByName(mention.targetAgent);
-          if (persona) container.executeAgent.execute(persona.id).catch(() => {});
-        }
+      for (const m of createdMentions) {
+        emit({
+          type: 'mention.created',
+          mentionId: m.id,
+          ticketId: request.params.id,
+          targetAgent: m.targetAgent,
+          targetType: m.targetType,
+          sourceAgent: m.sourceAgent,
+          occurredAt: new Date(),
+        });
       }
 
       return reply.code(201).send({
-        ...dto,
+        ...comment.toDTO(),
         createdMentions: createdMentions.map((m) => m.toDTO()),
       });
     });
@@ -139,15 +117,14 @@ export function agentCommentsRoutes(container: Container) {
         }
       }
 
-      // Create mentions for newly added targets and auto-trigger agents
+      // Create mentions for newly added targets
       const { randomUUID } = await import('node:crypto');
       const { TicketMentionEntity } = await import('../../domain/entities/ticket-mention.entity.js');
       const { humanMentionName } = container.config.get();
-      const newlyCreatedMentions: TicketMentionEntity[] = [];
+      const newlyCreatedMentions: Array<{ mentionId: string; targetAgent: string; targetType: 'agent' | 'human' }> = [];
 
       for (const target of newMentionNames) {
         if (!oldMentions.has(target) && target !== agentName) {
-          // Determine if this is a human or agent mention
           const isHuman = humanMentionName && target === humanMentionName;
 
           const mention = TicketMentionEntity.create({
@@ -159,52 +136,35 @@ export function agentCommentsRoutes(container: Container) {
             targetType: isHuman ? 'human' : 'agent',
           });
           await container.mentionStore.save(mention);
-          container.ticketBroadcast('mention:created', mention.toDTO());
-          newlyCreatedMentions.push(mention);
+          newlyCreatedMentions.push({
+            mentionId: mention.id,
+            targetAgent: mention.targetAgent,
+            targetType: mention.targetType,
+          });
 
-          // Auto-trigger the newly mentioned agent (only for agent mentions)
-          if (!isHuman) {
-            const persona = await container.personaStore.getByName(target);
-            if (persona) container.executeAgent.execute(persona.id).catch(() => {});
-          }
-        }
-      }
-
-      // Handle auto-review workflow for newly created human mentions
-      for (const mention of newlyCreatedMentions) {
-        if (mention.targetType === 'human') {
-          container.autoReviewWorkflow.handleHumanMention({
+          // Emit mention.created for auto-trigger and workflow
+          emit({
+            type: 'mention.created',
+            mentionId: mention.id,
             ticketId: comment.ticketId,
-            mentionedHuman: mention.targetAgent,
-          }).catch((error) => {
-            container.logger.error('Failed to handle human mention for auto-review', {
-              ticketId: comment.ticketId,
-              mentionedHuman: mention.targetAgent,
-              error: String(error),
-            });
+            targetAgent: mention.targetAgent,
+            targetType: mention.targetType,
+            sourceAgent: agentName,
+            occurredAt: new Date(),
           });
         }
       }
 
-      // Handle agent mentions in reviewing status (back to doing)
-      for (const mention of newlyCreatedMentions) {
-        if (mention.targetType === 'agent') {
-          container.autoReviewWorkflow.handleAgentMentionInReview({
-            ticketId: comment.ticketId,
-            mentionedAgent: mention.targetAgent,
-          }).catch((error) => {
-            container.logger.error('Failed to handle agent mention in review', {
-              ticketId: comment.ticketId,
-              mentionedAgent: mention.targetAgent,
-              error: String(error),
-            });
-          });
-        }
-      }
+      // Emit comment.updated with newly created mentions for workflow
+      emit({
+        type: 'comment.updated',
+        commentId: comment.id,
+        ticketId: comment.ticketId,
+        createdMentions: newlyCreatedMentions,
+        occurredAt: new Date(),
+      });
 
-      const dto = comment.toDTO();
-      container.ticketBroadcast('comment:updated', dto);
-      return dto;
+      return comment.toDTO();
     });
 
     // Delete a comment
@@ -229,7 +189,7 @@ export function agentCommentsRoutes(container: Container) {
       }
 
       await container.commentStore.remove(comment.id);
-      container.ticketBroadcast('comment:deleted', { id: comment.id, ticketId: comment.ticketId });
+      emit({ type: 'comment.deleted', commentId: comment.id, ticketId: comment.ticketId, occurredAt: new Date() });
       return reply.code(204).send();
     });
   };

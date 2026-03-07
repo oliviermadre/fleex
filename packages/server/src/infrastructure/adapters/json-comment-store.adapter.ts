@@ -49,6 +49,10 @@ export class JsonCommentStore implements CommentStorePort {
     return this.comments.get(id) ?? null;
   }
 
+  async getAll(): Promise<TicketCommentEntity[]> {
+    return Array.from(this.comments.values());
+  }
+
   async save(comment: TicketCommentEntity): Promise<void> {
     this.comments.set(comment.id, comment);
     await this.syncToDisk();

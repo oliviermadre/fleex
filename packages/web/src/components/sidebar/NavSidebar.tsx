@@ -175,8 +175,20 @@ export function NavSidebar() {
         />
       </div>
 
-      {/* Settings - bottom of sidebar */}
+      {/* Analytics & Settings - bottom of sidebar */}
       <div className="flex flex-col gap-1">
+        <NavItem
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 4-6" />
+            </svg>
+          }
+          label="Analytics"
+          active={activePanel === 'analytics'}
+          collapsed={navCollapsed}
+          hotkey="⌥9"
+          onClick={() => navigate('/analytics')}
+        />
         <NavItem
           icon={
             <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

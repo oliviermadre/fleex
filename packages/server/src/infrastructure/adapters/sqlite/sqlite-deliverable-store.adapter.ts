@@ -33,6 +33,13 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
     return row ? this.toEntity(row) : null;
   }
 
+  async getAll(): Promise<TicketDeliverableEntity[]> {
+    const rows = this.conn.db
+      .prepare('SELECT * FROM deliverables ORDER BY created_at ASC')
+      .all() as DeliverableRow[];
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async save(deliverable: TicketDeliverableEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO deliverables

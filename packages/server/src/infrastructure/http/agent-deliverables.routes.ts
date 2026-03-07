@@ -3,6 +3,8 @@ import { TicketNotFoundError, DeliverableNotFoundError, ForbiddenError } from '.
 import type { Container } from '../container.js';
 
 export function agentDeliverablesRoutes(container: Container) {
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+
   return async function (app: FastifyInstance) {
 
     // List deliverables for a ticket
@@ -56,27 +58,16 @@ export function agentDeliverablesRoutes(container: Container) {
         mentionId: request.body.mentionId,
       });
 
-      const dto = deliverable.toDTO();
-      container.ticketBroadcast('deliverable:created', dto);
-
-      // Handle auto-review workflow for deliverable creation
-      container.autoReviewWorkflow.handleDeliverableCreated({
+      emit({
+        type: 'deliverable.created',
+        deliverableId: deliverable.id,
         ticketId: request.params.id,
         agentName,
         status: deliverable.status,
-      }).catch((error) => {
-        container.logger.error('Failed to handle deliverable creation for auto-review', {
-          ticketId: request.params.id,
-          agentName,
-          deliverableStatus: deliverable.status,
-          error: String(error),
-        });
+        occurredAt: new Date(),
       });
 
-      // Wake up agents waiting for info on this ticket (exclude submitting agent)
-      container.wakeWaitingAgents.execute(request.params.id, agentName).catch(() => {});
-
-      return reply.code(201).send(dto);
+      return reply.code(201).send(deliverable.toDTO());
     });
 
     // Update a deliverable
@@ -96,26 +87,17 @@ export function agentDeliverablesRoutes(container: Container) {
       deliverable.update(request.body);
       await container.deliverableStore.save(deliverable);
 
-      // Handle auto-review workflow if status changed to final
-      if (oldStatus !== 'final' && deliverable.status === 'final') {
-        container.autoReviewWorkflow.handleDeliverableCreated({
-          ticketId: deliverable.ticketId,
-          agentName,
-          status: 'final',
-        }).catch((error) => {
-          container.logger.error('Failed to handle deliverable status change for auto-review', {
-            ticketId: deliverable.ticketId,
-            agentName,
-            oldStatus,
-            newStatus: deliverable.status,
-            error: String(error),
-          });
-        });
-      }
+      emit({
+        type: 'deliverable.updated',
+        deliverableId: deliverable.id,
+        ticketId: deliverable.ticketId,
+        agentName,
+        oldStatus,
+        newStatus: deliverable.status,
+        occurredAt: new Date(),
+      });
 
-      const dto = deliverable.toDTO();
-      container.ticketBroadcast('deliverable:updated', dto);
-      return dto;
+      return deliverable.toDTO();
     });
   };
 }

@@ -48,6 +48,10 @@ export class JsonDeliverableStore implements DeliverableStorePort {
     return this.deliverables.get(id) ?? null;
   }
 
+  async getAll(): Promise<TicketDeliverableEntity[]> {
+    return Array.from(this.deliverables.values());
+  }
+
   async save(deliverable: TicketDeliverableEntity): Promise<void> {
     this.deliverables.set(deliverable.id, deliverable);
     await this.syncToDisk();

@@ -125,6 +125,15 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     return (data as ExecutionRow[]).map(rowToExecution);
   }
 
+  async getAllExecutions(): Promise<AgentExecution[]> {
+    const { data, error } = await this.conn.client
+      .from('agent_event_executions')
+      .select('*')
+      .order('started_at', { ascending: false });
+    if (error) throw new Error(`SupabaseAgentEventStore.getAllExecutions failed: ${error.message}`);
+    return (data as ExecutionRow[]).map(rowToExecution);
+  }
+
   async updateSessionId(executionId: string, sdkSessionId: string): Promise<void> {
     const { error } = await this.conn.client
       .from('agent_event_executions')

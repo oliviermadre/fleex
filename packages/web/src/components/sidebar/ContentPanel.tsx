@@ -12,6 +12,7 @@ import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { SidebarHeader } from './SidebarHeader';
 import { SessionGroups } from './SessionGroups';
 import { SettingsNav } from '../settings/SettingsNav';
+import { AnalyticsNav } from '../analytics/AnalyticsNav';
 import { RepositoriesContent } from './RepositoriesContent';
 import { ClaudeConfigTree } from '../claude-config/ClaudeConfigTree';
 import { ScratchpadsContent } from '../scratchpad/ScratchpadsContent';
@@ -33,6 +34,7 @@ export function ContentPanel() {
     if (activePanel === 'claude-config') return <CollapsedClaudeConfigPanel />;
     if (activePanel === 'agents') return <CollapsedAgentsPanel />;
     if (activePanel === 'scratchpads') return <CollapsedScratchpadsPanel />;
+    if (activePanel === 'analytics') return <CollapsedAnalyticsPanel />;
     if (activePanel === 'settings') return <CollapsedSettingsPanel />;
     // cluster or unknown — just show expand button
     return <CollapsedShell />;
@@ -47,6 +49,7 @@ export function ContentPanel() {
       {activePanel === 'agents' && <AgentListPanel />}
       {activePanel === 'cluster' && null}
       {activePanel === 'scratchpads' && <ScratchpadsContent />}
+      {activePanel === 'analytics' && <AnalyticsNav />}
       {activePanel === 'settings' && <SettingsNav />}
     </div>
   );
@@ -803,7 +806,58 @@ function CollapsedScratchpadsPanel() {
 }
 
 // ═══════════════════════════════════════════════
-// ── 7. Collapsed Settings panel ──
+// ── 7. Collapsed Analytics panel ──
+// ═══════════════════════════════════════════════
+
+const ANALYTICS_TABS: { key: 'audit-trail' | 'statistics'; label: string; icon: React.ReactNode }[] = [
+  { key: 'audit-trail', label: 'Audit Trail', icon: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+    </svg>
+  )},
+  { key: 'statistics', label: 'Statistics', icon: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 4-6" />
+    </svg>
+  )},
+];
+
+function CollapsedAnalyticsPanel() {
+  const navigate = useNavigate();
+  const analyticsTab = useUIStore((s) => s.analyticsTab);
+  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+
+  return (
+    <CollapsedShell>
+      <div className="flex-1 overflow-y-auto w-full pt-1">
+        {ANALYTICS_TABS.map((tab) => {
+          const isSelected = analyticsTab === tab.key;
+          return (
+            <CollapsedRow
+              key={tab.key}
+              isSelected={isSelected}
+              onClick={() => navigate(`/analytics/${tab.key}`, { replace: true })}
+              onMouseEnter={(e) => showTooltip(e, tab.label, 'Analytics')}
+              onMouseLeave={hideTooltip}
+              icon={
+                <span className={isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-faint)]'}>
+                  {tab.icon}
+                </span>
+              }
+            />
+          );
+        })}
+      </div>
+      <CollapsedTooltip data={tooltip} />
+    </CollapsedShell>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// ── 8. Collapsed Settings panel ──
 // ═══════════════════════════════════════════════
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ReactNode }[] = [

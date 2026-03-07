@@ -34,6 +34,13 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
     return row ? this.toEntity(row) : null;
   }
 
+  async getAll(): Promise<TicketCommentEntity[]> {
+    const rows = this.conn.db
+      .prepare('SELECT * FROM comments ORDER BY created_at ASC')
+      .all() as CommentRow[];
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async save(comment: TicketCommentEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO comments

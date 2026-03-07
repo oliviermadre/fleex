@@ -3,6 +3,8 @@ import type { Container } from '../container.js';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 
 export function personaRoutes(container: Container) {
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+
   return async function (app: FastifyInstance) {
     // GET /api/personas — list all personas
     app.get('/api/personas', async () => {
@@ -30,9 +32,8 @@ export function personaRoutes(container: Container) {
       };
     }>('/api/personas', async (request, reply) => {
       const persona = await container.createPersona.execute(request.body);
-      const dto = persona.toDTO();
-      container.personaBroadcast('persona:created', dto);
-      return reply.code(201).send(dto);
+      emit({ type: 'persona.created', personaId: persona.id, occurredAt: new Date() });
+      return reply.code(201).send(persona.toDTO());
     });
 
     // PATCH /api/personas/:id — update persona
@@ -52,15 +53,14 @@ export function personaRoutes(container: Container) {
         request.params.id,
         request.body,
       );
-      const dto = persona.toDTO();
-      container.personaBroadcast('persona:updated', dto);
-      return dto;
+      emit({ type: 'persona.updated', personaId: persona.id, occurredAt: new Date() });
+      return persona.toDTO();
     });
 
     // DELETE /api/personas/:id — delete persona
     app.delete<{ Params: { id: string } }>('/api/personas/:id', async (request, reply) => {
       await container.deletePersona.execute(request.params.id);
-      container.personaBroadcast('persona:deleted', { id: request.params.id });
+      emit({ type: 'persona.deleted', personaId: request.params.id, occurredAt: new Date() });
       return reply.code(204).send();
     });
 
@@ -68,10 +68,7 @@ export function personaRoutes(container: Container) {
     app.post<{ Params: { id: string } }>('/api/personas/:id/execute', async (request) => {
       const result = await container.executeAgent.execute(request.params.id);
       if (result.status === 'started') {
-        container.personaBroadcast('persona:execution_started', {
-          personaId: request.params.id,
-          mentionIds: result.mentionIds,
-        });
+        emit({ type: 'persona.execution_started', personaId: request.params.id, mentionIds: result.mentionIds, occurredAt: new Date() });
       }
       return result;
     });

@@ -19,6 +19,7 @@ import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { AutoReviewWorkflowUseCase } from './auto-review-workflow.js';
+import type { EventBus } from '../event-bus.js';
 
 interface ActiveExecution {
   mentionId: string;
@@ -88,6 +89,9 @@ export class ExecuteAgentUseCase {
 
   /** Set by WS plugin to broadcast ticket updates */
   public onTicketUpdate: ((type: string, data: unknown) => void) | null = null;
+
+  /** Set by container after construction (avoids circular dep) */
+  public eventBus: EventBus | null = null;
 
   constructor(
     private readonly personaStore: PersonaStorePort,
@@ -326,14 +330,25 @@ export class ExecuteAgentUseCase {
       // 2. Acknowledge mention
       mention.acknowledge();
       await this.mentionStore.save(mention);
-      this.onTicketUpdate?.('mention:acknowledged', mention.toDTO());
+      this.eventBus?.emit({
+        type: 'mention.acknowledged',
+        mentionId: mention.id,
+        ticketId: mention.ticketId,
+        targetAgent: mention.targetAgent,
+        occurredAt: new Date(),
+      });
 
       // 2b. Claim ticket for agent
       const ticket = await this.ticketStore.getTicketById(mention.ticketId);
       if (ticket && ticket.assignee !== persona.name) {
         ticket.claim(persona.name);
         await this.ticketStore.saveTicket(ticket);
-        this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+        this.eventBus?.emit({
+          type: 'ticket.updated',
+          ticketId: ticket.id,
+          changes: {},
+          occurredAt: new Date(),
+        });
       }
 
       // 3. Start execution tracking
@@ -586,6 +601,37 @@ export class ExecuteAgentUseCase {
       let resultCommentId: string | undefined;
       let resultDeliverableId: string | undefined;
 
+      const emitDomainEvents = (commentMentions: { id: string; targetAgent: string; targetType: string; sourceAgent: string }[], commentId: string, ticketId: string) => {
+        if (!this.eventBus) return;
+        const now = new Date();
+        // Emit comment.posted — triggers broadcast, auto-review, wake
+        this.eventBus.emit({
+          type: 'comment.posted',
+          commentId,
+          ticketId,
+          authorType: 'agent',
+          authorName: persona.displayName || persona.name,
+          createdMentions: commentMentions.map((m) => ({
+            mentionId: m.id,
+            targetAgent: m.targetAgent,
+            targetType: m.targetType as 'agent' | 'human',
+          })),
+          occurredAt: now,
+        });
+        // Emit mention.created for each mention — triggers auto-trigger agent
+        for (const m of commentMentions) {
+          this.eventBus.emit({
+            type: 'mention.created',
+            mentionId: m.id,
+            ticketId,
+            targetAgent: m.targetAgent,
+            targetType: m.targetType as 'agent' | 'human',
+            sourceAgent: m.sourceAgent,
+            occurredAt: now,
+          });
+        }
+      };
+
       if (structured) {
         // Structured path: create comment and deliverable independently based on parsed output
         if (structured.comment) {
@@ -618,14 +664,6 @@ export class ExecuteAgentUseCase {
           });
           resultCommentId = comment.id;
 
-          // Auto-trigger mentioned agents
-          for (const m of commentMentions) {
-            if (m.targetType === 'agent') {
-              const targetPersona = await this.personaStore.getByName(m.targetAgent);
-              if (targetPersona) this.execute(targetPersona.id).catch(() => {});
-            }
-          }
-
           // Auto-assign ticket to human when mentioned by agent
           for (const m of commentMentions) {
             if (m.targetType === 'human' && ticket) {
@@ -635,21 +673,8 @@ export class ExecuteAgentUseCase {
             }
           }
 
-          // Auto-review workflow: handle mentions
-          for (const m of commentMentions) {
-            if (m.targetType === 'human') {
-              this.autoReviewWorkflow.handleHumanMention({
-                ticketId: mention.ticketId,
-                mentionedHuman: m.targetAgent,
-              }).catch((err) => this.logger.warn('Auto-review handleHumanMention failed', { error: String(err) }));
-            }
-            if (m.targetType === 'agent') {
-              this.autoReviewWorkflow.handleAgentMentionInReview({
-                ticketId: mention.ticketId,
-                mentionedAgent: m.targetAgent,
-              }).catch((err) => this.logger.warn('Auto-review handleAgentMentionInReview failed', { error: String(err) }));
-            }
-          }
+          // Domain events handle auto-trigger, auto-review, wake
+          emitDomainEvents(commentMentions, comment.id, mention.ticketId);
         }
 
         if (structured.deliverable) {
@@ -664,14 +689,16 @@ export class ExecuteAgentUseCase {
               mentionId: mention.id,
             });
             resultDeliverableId = deliverable.id;
-            this.onTicketUpdate?.('deliverable:created', deliverable.toDTO());
 
-            // Auto-review workflow: handle deliverable creation
-            this.autoReviewWorkflow.handleDeliverableCreated({
+            // Domain event handles broadcast + auto-review workflow
+            this.eventBus?.emit({
+              type: 'deliverable.created',
+              deliverableId: deliverable.id,
               ticketId: mention.ticketId,
               agentName: persona.name,
               status: structured.deliverable!.status as 'draft' | 'final',
-            }).catch((err) => this.logger.warn('Auto-review handleDeliverableCreated failed', { error: String(err) }));
+              occurredAt: new Date(),
+            });
           } catch (delivErr) {
             this.logger.warn('Failed to create deliverable', {
               executionId,
@@ -697,14 +724,6 @@ export class ExecuteAgentUseCase {
         });
         resultCommentId = comment.id;
 
-        // Auto-trigger mentioned agents
-        for (const m of fallbackMentions) {
-          if (m.targetType === 'agent') {
-            const targetPersona = await this.personaStore.getByName(m.targetAgent);
-            if (targetPersona) this.execute(targetPersona.id).catch(() => {});
-          }
-        }
-
         // Auto-assign ticket to human when mentioned by agent
         for (const m of fallbackMentions) {
           if (m.targetType === 'human' && ticket) {
@@ -714,24 +733,12 @@ export class ExecuteAgentUseCase {
           }
         }
 
-        // Auto-review workflow: handle mentions (fallback path)
-        for (const m of fallbackMentions) {
-          if (m.targetType === 'human') {
-            this.autoReviewWorkflow.handleHumanMention({
-              ticketId: mention.ticketId,
-              mentionedHuman: m.targetAgent,
-            }).catch((err) => this.logger.warn('Auto-review handleHumanMention failed', { error: String(err) }));
-          }
-          if (m.targetType === 'agent') {
-            this.autoReviewWorkflow.handleAgentMentionInReview({
-              ticketId: mention.ticketId,
-              mentionedAgent: m.targetAgent,
-            }).catch((err) => this.logger.warn('Auto-review handleAgentMentionInReview failed', { error: String(err) }));
-          }
-        }
+        // Domain events handle auto-trigger, auto-review, wake
+        emitDomainEvents(fallbackMentions, comment.id, mention.ticketId);
       }
 
       // 12. Resolve or park mention based on mentionStatus
+      const now = new Date();
       if (structured?.mentionStatus === 'waiting_for_info') {
         // Server-side enforcement: waiting_for_info requires at least a comment or deliverable
         if (!structured.comment && !structured.deliverable) {
@@ -740,14 +747,14 @@ export class ExecuteAgentUseCase {
           });
           mention.resolve({ commentId: resultCommentId, deliverableId: resultDeliverableId });
           await this.mentionStore.save(mention);
-          // Auto-review workflow: agent work completed (forced resolved)
-          this.autoReviewWorkflow.handleAgentWorkCompletion({
+          this.eventBus?.emit({
+            type: 'mention.resolved',
+            mentionId: mention.id,
             ticketId: mention.ticketId,
-            completedAgentName: persona.name,
-          }).catch((err) => this.logger.warn('Auto-review handleAgentWorkCompletion failed', { error: String(err) }));
-
-          this.onTicketUpdate?.('mention:resolved', mention.toDTO());
-
+            targetAgent: mention.targetAgent,
+            resolvedBy: persona.name,
+            occurredAt: now,
+          });
         } else {
           mention.waitForInfo();
           await this.mentionStore.save(mention);
@@ -757,24 +764,25 @@ export class ExecuteAgentUseCase {
             await this.ticketStore.saveTicket(ticket);
             this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
           }
-          this.onTicketUpdate?.('mention:waiting_for_info', mention.toDTO());
-
-          // Auto-review workflow: handle waiting_for_info
-          this.autoReviewWorkflow.handleMentionWaitingForInfo({
+          this.eventBus?.emit({
+            type: 'mention.waiting_for_info',
+            mentionId: mention.id,
             ticketId: mention.ticketId,
-            agentName: persona.name,
-          }).catch((err) => this.logger.warn('Auto-review handleMentionWaitingForInfo failed', { error: String(err) }));
+            targetAgent: mention.targetAgent,
+            occurredAt: now,
+          });
         }
       } else {
         mention.resolve({ commentId: resultCommentId, deliverableId: resultDeliverableId });
         await this.mentionStore.save(mention);
-
-        // Auto-review workflow: agent work completed (resolved)
-        this.autoReviewWorkflow.handleAgentWorkCompletion({
+        this.eventBus?.emit({
+          type: 'mention.resolved',
+          mentionId: mention.id,
           ticketId: mention.ticketId,
-          completedAgentName: persona.name,
-        }).catch((err) => this.logger.warn('Auto-review handleAgentWorkCompletion failed', { error: String(err) }));
-        this.onTicketUpdate?.('mention:resolved', mention.toDTO());
+          targetAgent: mention.targetAgent,
+          resolvedBy: persona.name,
+          occurredAt: now,
+        });
       }
 
       // 13. Complete execution tracking
@@ -940,7 +948,7 @@ export class ExecuteAgentUseCase {
         const ref = `${org}/${repo}:${branchName}`;
         ticket.addLink('worktree', ref, branchName, worktreePath, randomUUID());
         await this.ticketStore.saveTicket(ticket);
-        this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+        this.eventBus?.emit({ type: 'ticket.updated', ticketId, changes: {}, occurredAt: new Date() });
       }
 
       this.logger.info('Agent worktree ready', {
