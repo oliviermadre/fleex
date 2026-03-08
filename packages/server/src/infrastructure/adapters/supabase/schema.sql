@@ -29,13 +29,15 @@ CREATE TABLE IF NOT EXISTS gateways (
   user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   hostname      TEXT,
-  secret_hash   TEXT NOT NULL,
+  public_key    TEXT,
+  secret_hash   TEXT NOT NULL DEFAULT '',
   status        TEXT NOT NULL DEFAULT 'offline',
   last_seen_at  TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_gateways_user ON gateways(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_gateways_public_key ON gateways(public_key);
 
 -- ── User Sessions (OAuth login persistence) ──────────────────────────────
 
