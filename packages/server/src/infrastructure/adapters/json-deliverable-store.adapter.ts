@@ -34,8 +34,12 @@ export class JsonDeliverableStore implements DeliverableStorePort {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    await this.loadFromDisk();
-    this.initialized = true;
+    try {
+      await this.loadFromDisk();
+      this.initialized = true;
+    } catch {
+      // Gateway tunnel may not be connected yet — will retry on next operation.
+    }
   }
 
   async getByTicket(ticketId: string): Promise<TicketDeliverableEntity[]> {

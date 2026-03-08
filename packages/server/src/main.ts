@@ -1,6 +1,31 @@
-import { existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// Load .env from monorepo root (bun only auto-loads from CWD which may be packages/server)
+function loadEnvFromRoot() {
+  const __dir = dirname(fileURLToPath(import.meta.url));
+  let dir = __dir;
+  for (let i = 0; i < 5; i++) {
+    const envPath = join(dir, '.env');
+    if (existsSync(envPath)) {
+      const lines = readFileSync(envPath, 'utf-8').split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eq = trimmed.indexOf('=');
+        if (eq === -1) continue;
+        const key = trimmed.slice(0, eq).trim();
+        const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+        if (!(key in process.env)) process.env[key] = val;
+      }
+      break;
+    }
+    dir = dirname(dir);
+  }
+}
+loadEnvFromRoot();
+
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
@@ -44,8 +69,12 @@ import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 async function main() {
   const container = await createContainer();
 
-  // Discover existing fleex_ tmux sessions
-  await container.discoverSessions.execute();
+  // Discover existing fleex_ tmux sessions (may fail if no gateway connected yet)
+  try {
+    await container.discoverSessions.execute();
+  } catch {
+    container.logger.warn('Session discovery deferred — no gateway connected yet');
+  }
 
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true, credentials: true });

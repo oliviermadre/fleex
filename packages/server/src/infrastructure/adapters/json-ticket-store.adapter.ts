@@ -78,11 +78,15 @@ export class JsonTicketStore implements TicketStorePort {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    if (!(await this.hostFs.exists(this.projectsDir))) {
-      await this.hostFs.mkdir(this.projectsDir);
+    try {
+      if (!(await this.hostFs.exists(this.projectsDir))) {
+        await this.hostFs.mkdir(this.projectsDir);
+      }
+      await this.loadFromDisk();
+      this.initialized = true;
+    } catch {
+      // Gateway tunnel may not be connected yet — will retry on next operation.
     }
-    await this.loadFromDisk();
-    this.initialized = true;
   }
 
   // ── Boards ──

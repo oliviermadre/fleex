@@ -27,12 +27,17 @@ export class JsonConfigAdapter implements ConfigPort {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    const dir = join(this.homedir, FLEEX_DIR);
-    if (!(await this.hostFs.exists(dir))) {
-      await this.hostFs.mkdir(dir);
+    try {
+      const dir = join(this.homedir, FLEEX_DIR);
+      if (!(await this.hostFs.exists(dir))) {
+        await this.hostFs.mkdir(dir);
+      }
+      this.claudeCommand = await resolveClaudeCommand(this.execFn, this.hostFs, this.homedir);
+      await this.loadFromDisk();
+    } catch {
+      // Gateway tunnel may not be connected yet — use defaults.
+      // Config will be loaded on first gateway connection.
     }
-    this.claudeCommand = await resolveClaudeCommand(this.execFn, this.hostFs, this.homedir);
-    await this.loadFromDisk();
     this.initialized = true;
   }
 

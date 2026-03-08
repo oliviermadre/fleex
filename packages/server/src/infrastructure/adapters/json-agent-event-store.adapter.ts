@@ -36,11 +36,15 @@ export class JsonAgentEventStore implements AgentEventStorePort {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    if (!(await this.hostFs.exists(this.eventsDir))) {
-      await this.hostFs.mkdir(this.eventsDir);
+    try {
+      if (!(await this.hostFs.exists(this.eventsDir))) {
+        await this.hostFs.mkdir(this.eventsDir);
+      }
+      await this.loadIndex();
+      this.initialized = true;
+    } catch {
+      // Gateway tunnel may not be connected yet — will retry on next operation.
     }
-    await this.loadIndex();
-    this.initialized = true;
   }
 
   async startExecution(params: {
