@@ -95,7 +95,6 @@ export type {
   Gateway,
   GatewayRegisterRequest,
   GatewayRegisterResponse,
-  GatewayHeartbeatRequest,
 } from './types/gateway.js';
 
 export {

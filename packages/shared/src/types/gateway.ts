@@ -19,8 +19,3 @@ export interface GatewayRegisterResponse {
   readonly name: string;
   readonly serverUrl: string;
 }
-
-export interface GatewayHeartbeatRequest {
-  readonly id: string;
-  readonly secret: string;
-}

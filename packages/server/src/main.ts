@@ -166,18 +166,10 @@ async function main() {
   container.logger.info(`Fleex server started on port ${port}`);
 
   // Gateway connectivity: tunnel connections are accepted dynamically.
-  // Also try legacy HTTP health check for backward compat.
   if (container.tunnelManager.hasConnectedGateway) {
     container.logger.info('Gateway tunnel already connected');
   } else {
-    try {
-      const gwRes = await fetch(`${container.gatewayUrl}/health`);
-      if (gwRes.ok) {
-        container.logger.info('Gateway reachable via HTTP (legacy)', { gatewayUrl: container.gatewayUrl });
-      }
-    } catch {
-      container.logger.info('No gateway connected yet — waiting for tunnel connections on /ws/gateway-tunnel');
-    }
+    container.logger.info('Waiting for gateway tunnel connections on /ws/gateway-tunnel');
   }
 
   // Graceful shutdown

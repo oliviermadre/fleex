@@ -46,45 +46,18 @@ import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
 import { DomainEventLogEntity } from '../domain/entities/domain-event-log.entity.js';
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
-import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
-import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 import { GatewayTunnelManager } from './host/gateway-tunnel-manager.js';
-import { hybridExec, hybridShellExec, HybridHostFs, HybridPtyAdapter } from './host/hybrid.js';
-
-const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
+import { tunnelExec, tunnelShellExec, TunnelHostFs } from './host/tunnel.js';
+import { TunnelPtyAdapter } from './host/tunnel-pty.adapter.js';
 
 export async function createContainer() {
   const logger = new PinoLoggerAdapter();
 
-  const gatewayUrl = process.env['HOST_GATEWAY_URL'] || DEFAULT_GATEWAY_URL;
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
 
-  // Gateway — HTTP fallback adapters (used when no tunnel connected)
-  const httpExecFn = remoteExec(gatewayUrl);
-  const httpShellExecFn = remoteShellExec(gatewayUrl);
-  const httpHostFs = new RemoteHostFs(gatewayUrl);
-  const httpPtyAdapter = new RemotePtyAdapter(gatewayUrl, logger);
-
-  logger.info('Gateway configured', { gatewayUrl });
-
   // Storage driver selection via FLEEX_STORAGE_DRIVER env var
-  // Config is now created by the storage factory alongside all other stores.
   const driver = resolveStorageDriver();
   logger.info('Storage driver selected', { driver });
-
-  const {
-    configStore: config,
-    sessionStore,
-    ticketStore,
-    agentTokenStore,
-    commentStore,
-    mentionStore,
-    deliverableStore,
-    personaStore,
-    agentEventStore,
-    domainEventLogStore,
-    kvStore,
-  } = await createStores(driver, { execFn: httpExecFn, hostFs: httpHostFs, homedir: hostHomedir, logger });
 
   // Auth & multi-gateway stores (database-backed features)
   let userStore: PgUserStore | SupabaseUserStore | null = null;
@@ -123,14 +96,26 @@ export async function createContainer() {
     }
   }
 
-  // Gateway reverse-tunnel manager + hybrid adapters
-  // Hybrid adapters route through the tunnel when a gateway is connected,
-  // falling back to HTTP for backward compatibility.
+  // Gateway reverse-tunnel manager + tunnel adapters (tunnel-only, no HTTP fallback)
   const tunnelManager = new GatewayTunnelManager(gatewayStore, logger);
-  const execFn = hybridExec(tunnelManager, httpExecFn);
-  const shellExecFn = hybridShellExec(tunnelManager, httpShellExecFn);
-  const hostFs = new HybridHostFs(tunnelManager, httpHostFs);
-  const ptyAdapter = new HybridPtyAdapter(tunnelManager, httpPtyAdapter, logger);
+  const execFn = tunnelExec(tunnelManager);
+  const shellExecFn = tunnelShellExec(tunnelManager);
+  const hostFs = new TunnelHostFs(tunnelManager);
+  const ptyAdapter = new TunnelPtyAdapter(tunnelManager, logger);
+
+  const {
+    configStore: config,
+    sessionStore,
+    ticketStore,
+    agentTokenStore,
+    commentStore,
+    mentionStore,
+    deliverableStore,
+    personaStore,
+    agentEventStore,
+    domainEventLogStore,
+    kvStore,
+  } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
@@ -218,7 +203,6 @@ export async function createContainer() {
 
   return {
     logger,
-    gatewayUrl,
     execFn,
     shellExecFn,
     hostFs,
