@@ -4,6 +4,7 @@ import * as path from 'node:path';
 type FsRequest =
   | { op: 'read'; path: string }
   | { op: 'write'; path: string; content: string }
+  | { op: 'append'; path: string; content: string }
   | { op: 'readdir'; path: string }
   | { op: 'stat'; path: string }
   | { op: 'exists'; path: string }
@@ -20,6 +21,11 @@ export async function handleFs(body: FsRequest): Promise<unknown> {
 
     case 'write': {
       await fsp.writeFile(body.path, body.content, 'utf-8');
+      return { ok: true };
+    }
+
+    case 'append': {
+      await fsp.appendFile(body.path, body.content, 'utf-8');
       return { ok: true };
     }
 

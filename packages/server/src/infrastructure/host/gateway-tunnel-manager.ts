@@ -68,6 +68,10 @@ export class GatewayTunnelManager {
     return this.gateways.size > 0;
   }
 
+  get connectedGatewayIds(): string[] {
+    return Array.from(this.gateways.keys());
+  }
+
   getDefaultGateway(): ConnectedGateway | null {
     if (!this.defaultGatewayId) return null;
     return this.gateways.get(this.defaultGatewayId) ?? null;

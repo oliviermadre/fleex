@@ -30,15 +30,33 @@ export function gatewayRoutes(container: Container) {
       });
     });
 
-    // List gateways for the current user
+    // List gateways with live tunnel status
     app.get('/api/gateways', async (req, reply) => {
       const gatewayStore = container.gatewayStore;
       if (!gatewayStore) {
-        return reply.send([]);
+        // No DB: report tunnel-only status
+        const connected = container.tunnelManager.connectedGatewayIds;
+        return reply.send(connected.map((id) => ({
+          id,
+          name: 'default',
+          hostname: null,
+          publicKey: null,
+          status: 'online' as const,
+          lastSeenAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        })));
       }
       const userId = (req as any).userId ?? '00000000-0000-0000-0000-000000000000';
       const gateways = await gatewayStore.listByUser(userId);
-      return reply.send(gateways);
+
+      // Enrich with live tunnel status
+      const connected = new Set(container.tunnelManager.connectedGatewayIds);
+      const enriched = gateways.map((gw) => ({
+        ...gw,
+        status: connected.has(gw.id) ? 'online' as const : gw.status,
+        tunnelConnected: connected.has(gw.id),
+      }));
+      return reply.send(enriched);
     });
 
     // Delete a gateway
