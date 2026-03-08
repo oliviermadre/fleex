@@ -54,8 +54,6 @@ interface ConnectedGateway {
 
 export class GatewayTunnelManager {
   private readonly gateways = new Map<string, ConnectedGateway>();
-  // Map from WebSocket to gateway for quick lookup during message handling
-  private readonly wsBySocket = new Map<WebSocket, ConnectedGateway>();
   // Default gateway (first connected, or only one) for backward compat
   private defaultGatewayId: string | null = null;
 
@@ -126,33 +124,59 @@ export class GatewayTunnelManager {
     }
 
     // Step 3: Verify signature
-    if (this.gatewayStore) {
-      const gw = await this.gatewayStore.getById(hello.gatewayId);
-      if (!gw || !gw.publicKey) {
-        this.logger.warn('Unknown gateway or missing public key', { gatewayId: hello.gatewayId });
-        const errorFrame = encodeTunnelJson(TUNNEL_CONTROL_CHANNEL, TunnelMsgType.ERROR, { message: 'Unknown gateway' });
-        ws.send(errorFrame);
-        ws.close();
-        return;
-      }
-
-      const valid = verifyEd25519(gw.publicKey, challenge, hello.signature);
-      if (!valid) {
-        this.logger.warn('Invalid signature from gateway', { gatewayId: hello.gatewayId });
-        const errorFrame = encodeTunnelJson(TUNNEL_CONTROL_CHANNEL, TunnelMsgType.ERROR, { message: 'Invalid signature' });
-        ws.send(errorFrame);
-        ws.close();
-        return;
-      }
-
-      await this.gatewayStore.updateStatus(hello.gatewayId, 'online');
+    if (!this.gatewayStore) {
+      this.logger.warn('Tunnel connection rejected: gateway auth requires a database');
+      const errorFrame = encodeTunnelJson(TUNNEL_CONTROL_CHANNEL, TunnelMsgType.ERROR, {
+        message: 'Gateway tunnel requires database-backed auth',
+      });
+      ws.send(errorFrame);
+      ws.close();
+      return;
     }
+
+    const gw = await this.gatewayStore.getById(hello.gatewayId);
+    if (!gw || !gw.publicKey) {
+      this.logger.warn('Unknown gateway or missing public key', { gatewayId: hello.gatewayId });
+      const errorFrame = encodeTunnelJson(TUNNEL_CONTROL_CHANNEL, TunnelMsgType.ERROR, { message: 'Unknown gateway' });
+      ws.send(errorFrame);
+      ws.close();
+      return;
+    }
+
+    const valid = verifyEd25519(gw.publicKey, challenge, hello.signature);
+    if (!valid) {
+      this.logger.warn('Invalid signature from gateway', { gatewayId: hello.gatewayId });
+      const errorFrame = encodeTunnelJson(TUNNEL_CONTROL_CHANNEL, TunnelMsgType.ERROR, { message: 'Invalid signature' });
+      ws.send(errorFrame);
+      ws.close();
+      return;
+    }
+
+    await this.gatewayStore.updateStatus(hello.gatewayId, 'online');
 
     // Step 4: Send HELLO_ACK
     const ackFrame = encodeTunnelJson(TUNNEL_CONTROL_CHANNEL, TunnelMsgType.HELLO_ACK, { ok: true });
     ws.send(ackFrame);
 
-    // Step 5: Register gateway
+    // Step 5: Register gateway (close stale connection if reconnecting)
+    const existing = this.gateways.get(hello.gatewayId);
+    if (existing) {
+      this.logger.info('Gateway reconnecting, closing stale connection', { gatewayId: hello.gatewayId });
+      if (existing.pingTimer) clearInterval(existing.pingTimer);
+      if (existing.pongTimer) clearTimeout(existing.pongTimer);
+      for (const [, pending] of existing.pendingRequests) {
+        clearTimeout(pending.timer);
+        pending.reject(new Error('Gateway reconnected'));
+      }
+      existing.pendingRequests.clear();
+      for (const [, cb] of existing.ptyExitCallbacks) {
+        cb(1);
+      }
+      existing.ptyDataCallbacks.clear();
+      existing.ptyExitCallbacks.clear();
+      existing.ws.close();
+    }
+
     const connected: ConnectedGateway = {
       gatewayId: hello.gatewayId,
       ws,
@@ -165,7 +189,6 @@ export class GatewayTunnelManager {
     };
 
     this.gateways.set(hello.gatewayId, connected);
-    this.wsBySocket.set(ws, connected);
     if (!this.defaultGatewayId) {
       this.defaultGatewayId = hello.gatewayId;
     }
@@ -300,7 +323,6 @@ export class GatewayTunnelManager {
     gw.ptyExitCallbacks.clear();
 
     this.gateways.delete(gw.gatewayId);
-    this.wsBySocket.delete(gw.ws);
 
     if (this.defaultGatewayId === gw.gatewayId) {
       const first = this.gateways.keys().next();
@@ -438,7 +460,6 @@ export class GatewayTunnelManager {
       gw.ws.close();
     }
     this.gateways.clear();
-    this.wsBySocket.clear();
     this.defaultGatewayId = null;
   }
 }

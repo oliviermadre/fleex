@@ -36,7 +36,7 @@ export class PgGatewayStore {
     const { rows } = await this.pool.query(
       `INSERT INTO gateways (user_id, name, hostname, public_key, secret_hash, status)
        VALUES ($1, $2, $3, $4, '', 'offline')
-       ON CONFLICT ((public_key)) DO UPDATE SET name = $2, hostname = $3
+       ON CONFLICT (public_key) DO UPDATE SET name = EXCLUDED.name, hostname = EXCLUDED.hostname
        RETURNING *`,
       [userId, name, hostname ?? null, publicKey],
     );

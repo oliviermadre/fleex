@@ -32,13 +32,18 @@ export function loadIdentity(): GatewayIdentity | null {
   try {
     const raw = readFileSync(IDENTITY_FILE, 'utf-8');
     const data = JSON.parse(raw) as IdentityFile;
+    if (!data.gatewayId || !data.publicKey || !data.privateKey || !data.serverUrl) {
+      logInfo(`Identity file incomplete, ignoring: ${IDENTITY_FILE}`);
+      return null;
+    }
     return {
       gatewayId: data.gatewayId,
       publicKeyHex: data.publicKey,
       privateKeyHex: data.privateKey,
       serverUrl: data.serverUrl,
     };
-  } catch {
+  } catch (err) {
+    logInfo(`Failed to load identity from ${IDENTITY_FILE}: ${err}`);
     return null;
   }
 }
@@ -83,16 +88,4 @@ export function signChallenge(privateKeyHex: string, challengeHex: string): stri
   const keyObject = createPrivateKey({ key: pkcs8Der, format: 'der', type: 'pkcs8' });
   const signature = sign(null, challenge, keyObject);
   return signature.toString('hex');
-}
-
-export function verifySignature(publicKeyHex: string, challengeHex: string, signatureHex: string): boolean {
-  const { verify, createPublicKey } = require('node:crypto') as typeof import('node:crypto');
-  const challenge = Buffer.from(challengeHex, 'hex');
-  const signature = Buffer.from(signatureHex, 'hex');
-  // Reconstruct DER-encoded SPKI for Ed25519 from raw 32-byte public key
-  const pubRaw = Buffer.from(publicKeyHex, 'hex');
-  const spkiPrefix = Buffer.from('302a300506032b6570032100', 'hex'); // 12 bytes
-  const spkiDer = Buffer.concat([spkiPrefix, pubRaw]);
-  const keyObject = createPublicKey({ key: spkiDer, format: 'der', type: 'spki' });
-  return verify(null, challenge, keyObject, signature);
 }

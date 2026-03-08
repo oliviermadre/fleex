@@ -8,24 +8,21 @@ import { logAlways, logInfo, logError } from './logger';
 import type { GatewayIdentity } from './identity';
 import { signChallenge } from './identity';
 
-import type {
-  TunnelChallengePayload,
-  TunnelHelloPayload,
-  TunnelHelloAckPayload,
-  TunnelExecReqPayload,
-  TunnelFsReqPayload,
-  TunnelPtyOpenPayload,
-  TunnelPtyResizePayload,
-} from '@fleex/shared';
-
-// We import from @fleex/shared via the source path since the gateway
-// is a Bun project and can resolve TS directly.
 import {
   TunnelMsgType,
   TUNNEL_CONTROL_CHANNEL,
   TUNNEL_RECONNECT_INITIAL_MS,
   TUNNEL_RECONNECT_MAX_MS,
   WS_GATEWAY_TUNNEL_PATH,
+} from '../../shared/src/types/gateway-tunnel';
+
+import type {
+  TunnelChallengePayload,
+  TunnelHelloPayload,
+  TunnelExecReqPayload,
+  TunnelFsReqPayload,
+  TunnelPtyOpenPayload,
+  TunnelPtyResizePayload,
 } from '../../shared/src/types/gateway-tunnel';
 
 import {

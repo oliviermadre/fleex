@@ -5,11 +5,11 @@
 
 import { execFileSync } from 'node:child_process';
 import { logInfo, logError } from './logger';
-import type { TunnelPtyOpenPayload } from '@fleex/shared';
-
 import {
   TunnelMsgType,
 } from '../../shared/src/types/gateway-tunnel';
+
+import type { TunnelPtyOpenPayload } from '../../shared/src/types/gateway-tunnel';
 
 import {
   encodeTunnelJson,

@@ -56,6 +56,9 @@ async function main() {
   // Auth routes (public — no middleware)
   await app.register(authRoutes(container));
 
+  // Gateway tunnel WebSocket (public — gateway authenticates via Ed25519 challenge)
+  await app.register(gatewayTunnelWsPlugin(container));
+
   // Auth middleware for all subsequent routes
   const authMiddleware = createAuthMiddleware(container);
   app.addHook('preHandler', authMiddleware);
@@ -98,7 +101,6 @@ async function main() {
   await app.register(agentWsPlugin(container));
   await app.register(personaWsPlugin(container));
   await app.register(agentEventsWsPlugin(container));
-  await app.register(gatewayTunnelWsPlugin(container));
 
   // Auto-resolve repository patterns at startup if needed
   {
