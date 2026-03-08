@@ -48,6 +48,9 @@ import { DomainEventLogEntity } from '../domain/entities/domain-event-log.entity
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
+import { GatewayTunnelManager } from './host/gateway-tunnel-manager.js';
+import { tunnelExec, tunnelShellExec, TunnelHostFs } from './host/tunnel.js';
+import { TunnelPtyAdapter } from './host/tunnel-pty.adapter.js';
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
 
@@ -123,6 +126,9 @@ export async function createContainer() {
       logger.info('PostgreSQL auth stores initialized');
     }
   }
+
+  // Gateway reverse-tunnel manager
+  const tunnelManager = new GatewayTunnelManager(gatewayStore, logger);
 
   const namingService = new SessionNamingService();
   const groupingService = new SessionGroupingService();
@@ -219,6 +225,7 @@ export async function createContainer() {
     userStore,
     sessionManager,
     gatewayStore,
+    tunnelManager,
     sessionStore,
     repositoryCache,
     githubGraphql,

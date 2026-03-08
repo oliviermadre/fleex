@@ -32,6 +32,7 @@ import { ticketWsPlugin } from './infrastructure/ws/ticket-ws.js';
 import { agentWsPlugin } from './infrastructure/ws/agent-ws.js';
 import { personaWsPlugin } from './infrastructure/ws/persona-ws.js';
 import { agentEventsWsPlugin } from './infrastructure/ws/agent-events-ws.js';
+import { gatewayTunnelWsPlugin } from './infrastructure/ws/gateway-tunnel-ws.js';
 import { personaRoutes } from './infrastructure/http/persona.routes.js';
 import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
 import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.routes.js';
@@ -97,6 +98,7 @@ async function main() {
   await app.register(agentWsPlugin(container));
   await app.register(personaWsPlugin(container));
   await app.register(agentEventsWsPlugin(container));
+  await app.register(gatewayTunnelWsPlugin(container));
 
   // Auto-resolve repository patterns at startup if needed
   {
