@@ -94,8 +94,45 @@ export type {
 export type {
   Gateway,
   GatewayRegisterRequest,
-  GatewayHeartbeatRequest,
+  GatewayRegisterResponse,
 } from './types/gateway.js';
+
+export {
+  TunnelMsgType,
+  TUNNEL_HEADER_SIZE,
+  TUNNEL_CONTROL_CHANNEL,
+  WS_GATEWAY_TUNNEL_PATH,
+  TUNNEL_PING_INTERVAL_MS,
+  TUNNEL_PONG_TIMEOUT_MS,
+  TUNNEL_RECONNECT_INITIAL_MS,
+  TUNNEL_RECONNECT_MAX_MS,
+} from './types/gateway-tunnel.js';
+
+export type {
+  TunnelHelloPayload,
+  TunnelHelloAckPayload,
+  TunnelChallengePayload,
+  TunnelExecReqPayload,
+  TunnelExecResPayload,
+  TunnelFsReqPayload,
+  TunnelFsResPayload,
+  TunnelPtyOpenPayload,
+  TunnelPtyOpenedPayload,
+  TunnelPtyResizePayload,
+  TunnelPtyExitPayload,
+  TunnelPtyErrorPayload,
+  TunnelErrorPayload,
+} from './types/gateway-tunnel.js';
+
+export {
+  encodeTunnelJson,
+  encodeTunnelRaw,
+  encodeTunnelEmpty,
+  decodeTunnelFrame,
+  parseTunnelJson,
+} from './tunnel-codec.js';
+
+export type { TunnelFrame } from './tunnel-codec.js';
 
 export type { DomainEventLog } from './types/domain-event-log.js';
 

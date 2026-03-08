@@ -1,6 +1,31 @@
-import { existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// Load .env from monorepo root (bun only auto-loads from CWD which may be packages/server)
+function loadEnvFromRoot() {
+  const __dir = dirname(fileURLToPath(import.meta.url));
+  let dir = __dir;
+  for (let i = 0; i < 5; i++) {
+    const envPath = join(dir, '.env');
+    if (existsSync(envPath)) {
+      const lines = readFileSync(envPath, 'utf-8').split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eq = trimmed.indexOf('=');
+        if (eq === -1) continue;
+        const key = trimmed.slice(0, eq).trim();
+        const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+        if (!(key in process.env)) process.env[key] = val;
+      }
+      break;
+    }
+    dir = dirname(dir);
+  }
+}
+loadEnvFromRoot();
+
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
@@ -32,18 +57,24 @@ import { ticketWsPlugin } from './infrastructure/ws/ticket-ws.js';
 import { agentWsPlugin } from './infrastructure/ws/agent-ws.js';
 import { personaWsPlugin } from './infrastructure/ws/persona-ws.js';
 import { agentEventsWsPlugin } from './infrastructure/ws/agent-events-ws.js';
+import { gatewayTunnelWsPlugin } from './infrastructure/ws/gateway-tunnel-ws.js';
 import { personaRoutes } from './infrastructure/http/persona.routes.js';
 import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
 import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.routes.js';
 import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
+import { gatewayRoutes } from './infrastructure/http/gateway.routes.js';
 import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 
 async function main() {
   const container = await createContainer();
 
-  // Discover existing fleex_ tmux sessions
-  await container.discoverSessions.execute();
+  // Discover existing fleex_ tmux sessions (may fail if no gateway connected yet)
+  try {
+    await container.discoverSessions.execute();
+  } catch {
+    container.logger.warn('Session discovery deferred — no gateway connected yet');
+  }
 
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true, credentials: true });
@@ -53,6 +84,9 @@ async function main() {
 
   // Auth routes (public — no middleware)
   await app.register(authRoutes(container));
+
+  // Gateway tunnel WebSocket (public — gateway authenticates via Ed25519 challenge)
+  await app.register(gatewayTunnelWsPlugin(container));
 
   // Auth middleware for all subsequent routes
   const authMiddleware = createAuthMiddleware(container);
@@ -73,6 +107,7 @@ async function main() {
   await app.register(agentEventsRoutes(container));
   await app.register(domainEventLogRoutes(container));
   await app.register(statisticsRoutes(container));
+  await app.register(gatewayRoutes(container));
 
   // Agent API with auth
   const authHook = createAgentAuthHook(container);
@@ -159,16 +194,11 @@ async function main() {
   await app.listen({ port, host: '0.0.0.0' });
   container.logger.info(`Fleex server started on port ${port}`);
 
-  // Verify gateway connectivity
-  try {
-    const gwRes = await fetch(`${container.gatewayUrl}/health`);
-    if (gwRes.ok) {
-      container.logger.info('Gateway connected', { gatewayUrl: container.gatewayUrl });
-    } else {
-      container.logger.warn('Gateway returned non-OK status', { gatewayUrl: container.gatewayUrl, status: gwRes.status });
-    }
-  } catch {
-    container.logger.warn('Gateway not reachable at startup', { gatewayUrl: container.gatewayUrl });
+  // Gateway connectivity: tunnel connections are accepted dynamically.
+  if (container.tunnelManager.hasConnectedGateway) {
+    container.logger.info('Gateway tunnel already connected');
+  } else {
+    container.logger.info('Waiting for gateway tunnel connections on /ws/gateway-tunnel');
   }
 
   // Graceful shutdown
@@ -180,6 +210,9 @@ async function main() {
 
     // Stop repository refresh scheduler
     container.repositoryRefreshScheduler.stop();
+
+    // Shutdown tunnel manager
+    container.tunnelManager.shutdown();
 
     // Close Fastify server
     await app.close();

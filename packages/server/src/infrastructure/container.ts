@@ -20,9 +20,11 @@ import { ReconcileWorktreeUseCase } from '../application/use-cases/reconcile-wor
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
 import type { PgUserStore } from './adapters/pg-user-store.adapter.js';
+import type { PgGatewayStore } from './adapters/pg-gateway-store.adapter.js';
 import type { SessionManager } from './auth/session-manager.js';
 import type { SupabaseUserStore } from './adapters/supabase/supabase-user-store.adapter.js';
 import type { SupabaseSessionManager } from './adapters/supabase/supabase-session-manager.adapter.js';
+import type { SupabaseGatewayStore } from './adapters/supabase/supabase-gateway-store.adapter.js';
 import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-session-from-ticket.js';
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
 import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
@@ -45,29 +47,64 @@ import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
 import { DomainEventLogEntity } from '../domain/entities/domain-event-log.entity.js';
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
-import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
-import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
-
-const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
+import { GatewayTunnelManager } from './host/gateway-tunnel-manager.js';
+import { tunnelExec, tunnelShellExec, TunnelHostFs } from './host/tunnel.js';
+import { TunnelPtyAdapter } from './host/tunnel-pty.adapter.js';
 
 export async function createContainer() {
   const logger = new PinoLoggerAdapter();
 
-  const gatewayUrl = process.env['HOST_GATEWAY_URL'] || DEFAULT_GATEWAY_URL;
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
 
-  // Gateway — always remote
-  const execFn = remoteExec(gatewayUrl);
-  const shellExecFn = remoteShellExec(gatewayUrl);
-  const hostFs = new RemoteHostFs(gatewayUrl);
-  const ptyAdapter = new RemotePtyAdapter(gatewayUrl, logger);
-
-  logger.info('Gateway configured', { gatewayUrl });
-
   // Storage driver selection via FLEEX_STORAGE_DRIVER env var
-  // Config is now created by the storage factory alongside all other stores.
   const driver = resolveStorageDriver();
   logger.info('Storage driver selected', { driver });
+
+  // Auth & multi-gateway stores (database-backed features)
+  let userStore: PgUserStore | SupabaseUserStore | null = null;
+  let sessionManager: SessionManager | SupabaseSessionManager | null = null;
+  let gatewayStore: PgGatewayStore | SupabaseGatewayStore | null = null;
+
+  if (driver === 'supabase') {
+    const supabaseUrl = process.env['FLEEX_SUPABASE_URL'];
+    const supabaseKey = process.env['FLEEX_SUPABASE_KEY'];
+    if (supabaseUrl && supabaseKey) {
+      const { SupabaseConnection } = await import('./adapters/supabase/connection.js');
+      const { SupabaseUserStore: SbUser } = await import('./adapters/supabase/supabase-user-store.adapter.js');
+      const { SupabaseSessionManager: SbSess } = await import('./adapters/supabase/supabase-session-manager.adapter.js');
+      const { SupabaseGatewayStore: SbGw } = await import('./adapters/supabase/supabase-gateway-store.adapter.js');
+
+      const conn = new SupabaseConnection(supabaseUrl, supabaseKey);
+      await conn.init();
+
+      userStore = new SbUser(conn);
+      sessionManager = new SbSess(conn);
+      gatewayStore = new SbGw(conn, logger);
+      logger.info('Supabase auth stores initialized');
+    }
+  } else if (driver === 'pgsql') {
+    const databaseUrl = process.env['DATABASE_URL'] || process.env['FLEEX_PGSQL_URL'];
+    if (databaseUrl) {
+      const { createDbPool, runMigrations } = await import('./database/db.js');
+      const { PgUserStore: PgUser } = await import('./adapters/pg-user-store.adapter.js');
+      const { SessionManager: SessMgr } = await import('./auth/session-manager.js');
+
+      const db = await createDbPool(logger);
+      await runMigrations(db, logger);
+      const { PgGatewayStore: PgGw } = await import('./adapters/pg-gateway-store.adapter.js');
+      userStore = new PgUser(db, logger);
+      sessionManager = new SessMgr(db);
+      gatewayStore = new PgGw(db, logger);
+      logger.info('PostgreSQL auth stores initialized');
+    }
+  }
+
+  // Gateway reverse-tunnel manager + tunnel adapters (tunnel-only, no HTTP fallback)
+  const tunnelManager = new GatewayTunnelManager(gatewayStore, logger);
+  const execFn = tunnelExec(tunnelManager);
+  const shellExecFn = tunnelShellExec(tunnelManager);
+  const hostFs = new TunnelHostFs(tunnelManager);
+  const ptyAdapter = new TunnelPtyAdapter(tunnelManager, logger);
 
   const {
     configStore: config,
@@ -85,40 +122,6 @@ export async function createContainer() {
 
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
-
-  // Auth & multi-gateway stores (database-backed features)
-  let userStore: PgUserStore | SupabaseUserStore | null = null;
-  let sessionManager: SessionManager | SupabaseSessionManager | null = null;
-
-  if (driver === 'supabase') {
-    const supabaseUrl = process.env['FLEEX_SUPABASE_URL'];
-    const supabaseKey = process.env['FLEEX_SUPABASE_KEY'];
-    if (supabaseUrl && supabaseKey) {
-      const { SupabaseConnection } = await import('./adapters/supabase/connection.js');
-      const { SupabaseUserStore: SbUser } = await import('./adapters/supabase/supabase-user-store.adapter.js');
-      const { SupabaseSessionManager: SbSess } = await import('./adapters/supabase/supabase-session-manager.adapter.js');
-
-      const conn = new SupabaseConnection(supabaseUrl, supabaseKey);
-      await conn.init();
-
-      userStore = new SbUser(conn);
-      sessionManager = new SbSess(conn);
-      logger.info('Supabase auth stores initialized');
-    }
-  } else if (driver === 'pgsql') {
-    const databaseUrl = process.env['DATABASE_URL'] || process.env['FLEEX_PGSQL_URL'];
-    if (databaseUrl) {
-      const { createDbPool, runMigrations } = await import('./database/db.js');
-      const { PgUserStore: PgUser } = await import('./adapters/pg-user-store.adapter.js');
-      const { SessionManager: SessMgr } = await import('./auth/session-manager.js');
-
-      const db = await createDbPool(logger);
-      await runMigrations(db, logger);
-      userStore = new PgUser(db, logger);
-      sessionManager = new SessMgr(db);
-      logger.info('PostgreSQL auth stores initialized');
-    }
-  }
 
   const namingService = new SessionNamingService();
   const groupingService = new SessionGroupingService();
@@ -203,7 +206,6 @@ export async function createContainer() {
 
   return {
     logger,
-    gatewayUrl,
     execFn,
     shellExecFn,
     hostFs,
@@ -214,6 +216,8 @@ export async function createContainer() {
     git,
     userStore,
     sessionManager,
+    gatewayStore,
+    tunnelManager,
     sessionStore,
     repositoryCache,
     githubGraphql,

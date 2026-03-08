@@ -29,8 +29,12 @@ export class JsonDomainEventLogStore implements DomainEventLogStorePort {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    await this.loadFromDisk();
-    this.initialized = true;
+    try {
+      await this.loadFromDisk();
+      this.initialized = true;
+    } catch {
+      // Gateway tunnel may not be connected yet — will retry on next operation.
+    }
   }
 
   async save(entry: DomainEventLogEntity): Promise<void> {

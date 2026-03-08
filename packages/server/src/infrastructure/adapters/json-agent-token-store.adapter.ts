@@ -30,12 +30,16 @@ export class JsonAgentTokenStore implements AgentTokenStorePort {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    const dir = join(this.homedir, FLEEX_DIR);
-    if (!(await this.hostFs.exists(dir))) {
-      await this.hostFs.mkdir(dir);
+    try {
+      const dir = join(this.homedir, FLEEX_DIR);
+      if (!(await this.hostFs.exists(dir))) {
+        await this.hostFs.mkdir(dir);
+      }
+      await this.loadFromDisk();
+      this.initialized = true;
+    } catch {
+      // Gateway tunnel may not be connected yet — will retry on next operation.
     }
-    await this.loadFromDisk();
-    this.initialized = true;
   }
 
   async getAll(): Promise<ApiTokenEntity[]> {
