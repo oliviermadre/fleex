@@ -25,7 +25,11 @@ export class SupabaseConfigAdapter implements ConfigPort {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    this.claudeCommand = await resolveClaudeCommand(this.execFn, this.hostFs, this.homedir);
+    try {
+      this.claudeCommand = await resolveClaudeCommand(this.execFn, this.hostFs, this.homedir);
+    } catch {
+      // Gateway tunnel may not be connected yet — will resolve on first use.
+    }
     await this.loadFromDb();
     this.initialized = true;
   }
@@ -63,16 +67,16 @@ export class SupabaseConfigAdapter implements ConfigPort {
   }
 
   private async migrateFromJson(): Promise<void> {
-    const jsonPath = join(this.homedir, FLEEX_DIR, CONFIG_FILE);
-    if (!(await this.hostFs.exists(jsonPath))) return;
-
     try {
+      const jsonPath = join(this.homedir, FLEEX_DIR, CONFIG_FILE);
+      if (!(await this.hostFs.exists(jsonPath))) return;
+
       const raw = await this.hostFs.readFile(jsonPath);
       const data = JSON.parse(raw) as Record<string, unknown>;
       this.applyData(data);
       await this.syncToDb();
     } catch {
-      // Ignore — use defaults
+      // Ignore — gateway may not be connected yet, or file doesn't exist.
     }
   }
 

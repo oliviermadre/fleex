@@ -25,7 +25,11 @@ export class SqliteConfigAdapter implements ConfigPort {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    this.claudeCommand = await resolveClaudeCommand(this.execFn, this.hostFs, this.homedir);
+    try {
+      this.claudeCommand = await resolveClaudeCommand(this.execFn, this.hostFs, this.homedir);
+    } catch {
+      // Gateway tunnel may not be connected yet — will resolve on first use.
+    }
     await this.loadFromDb();
     this.initialized = true;
   }
