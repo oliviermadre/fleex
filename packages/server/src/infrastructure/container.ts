@@ -24,6 +24,7 @@ import type { PgGatewayStore } from './adapters/pg-gateway-store.adapter.js';
 import type { SessionManager } from './auth/session-manager.js';
 import type { SupabaseUserStore } from './adapters/supabase/supabase-user-store.adapter.js';
 import type { SupabaseSessionManager } from './adapters/supabase/supabase-session-manager.adapter.js';
+import type { SupabaseGatewayStore } from './adapters/supabase/supabase-gateway-store.adapter.js';
 import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-session-from-ticket.js';
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
 import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
@@ -62,7 +63,7 @@ export async function createContainer() {
   // Auth & multi-gateway stores (database-backed features)
   let userStore: PgUserStore | SupabaseUserStore | null = null;
   let sessionManager: SessionManager | SupabaseSessionManager | null = null;
-  let gatewayStore: PgGatewayStore | null = null;
+  let gatewayStore: PgGatewayStore | SupabaseGatewayStore | null = null;
 
   if (driver === 'supabase') {
     const supabaseUrl = process.env['FLEEX_SUPABASE_URL'];
@@ -71,12 +72,14 @@ export async function createContainer() {
       const { SupabaseConnection } = await import('./adapters/supabase/connection.js');
       const { SupabaseUserStore: SbUser } = await import('./adapters/supabase/supabase-user-store.adapter.js');
       const { SupabaseSessionManager: SbSess } = await import('./adapters/supabase/supabase-session-manager.adapter.js');
+      const { SupabaseGatewayStore: SbGw } = await import('./adapters/supabase/supabase-gateway-store.adapter.js');
 
       const conn = new SupabaseConnection(supabaseUrl, supabaseKey);
       await conn.init();
 
       userStore = new SbUser(conn);
       sessionManager = new SbSess(conn);
+      gatewayStore = new SbGw(conn, logger);
       logger.info('Supabase auth stores initialized');
     }
   } else if (driver === 'pgsql') {

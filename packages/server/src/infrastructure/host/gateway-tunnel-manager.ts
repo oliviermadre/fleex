@@ -22,8 +22,13 @@ import {
   type TunnelPtyErrorPayload,
 } from '@fleex/shared';
 import { verify, createPublicKey } from 'node:crypto';
-import type { PgGatewayStore } from '../adapters/pg-gateway-store.adapter.js';
+import type { Gateway } from '@fleex/shared';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+
+export interface GatewayStorePort {
+  getById(id: string): Promise<Gateway | null>;
+  updateStatus(id: string, status: 'online' | 'offline'): Promise<void>;
+}
 
 function verifyEd25519(publicKeyHex: string, challengeHex: string, signatureHex: string): boolean {
   const challenge = Buffer.from(challengeHex, 'hex');
@@ -58,7 +63,7 @@ export class GatewayTunnelManager {
   private defaultGatewayId: string | null = null;
 
   constructor(
-    private readonly gatewayStore: PgGatewayStore | null,
+    private readonly gatewayStore: GatewayStorePort | null,
     private readonly logger: LoggerPort,
   ) {}
 
