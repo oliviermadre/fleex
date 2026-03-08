@@ -49,8 +49,7 @@ import { resolveStorageDriver, createStores } from './adapters/storage-factory.j
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 import { GatewayTunnelManager } from './host/gateway-tunnel-manager.js';
-import { tunnelExec, tunnelShellExec, TunnelHostFs } from './host/tunnel.js';
-import { TunnelPtyAdapter } from './host/tunnel-pty.adapter.js';
+import { hybridExec, hybridShellExec, HybridHostFs, HybridPtyAdapter } from './host/hybrid.js';
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
 
@@ -60,11 +59,11 @@ export async function createContainer() {
   const gatewayUrl = process.env['HOST_GATEWAY_URL'] || DEFAULT_GATEWAY_URL;
   const hostHomedir = process.env['HOST_HOMEDIR'] || homedir();
 
-  // Gateway — always remote
-  const execFn = remoteExec(gatewayUrl);
-  const shellExecFn = remoteShellExec(gatewayUrl);
-  const hostFs = new RemoteHostFs(gatewayUrl);
-  const ptyAdapter = new RemotePtyAdapter(gatewayUrl, logger);
+  // Gateway — HTTP fallback adapters (used when no tunnel connected)
+  const httpExecFn = remoteExec(gatewayUrl);
+  const httpShellExecFn = remoteShellExec(gatewayUrl);
+  const httpHostFs = new RemoteHostFs(gatewayUrl);
+  const httpPtyAdapter = new RemotePtyAdapter(gatewayUrl, logger);
 
   logger.info('Gateway configured', { gatewayUrl });
 
@@ -85,10 +84,7 @@ export async function createContainer() {
     agentEventStore,
     domainEventLogStore,
     kvStore,
-  } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
-
-  const tmux = new TmuxCliAdapter(execFn, logger);
-  const git = new GitCliAdapter(execFn, logger);
+  } = await createStores(driver, { execFn: httpExecFn, hostFs: httpHostFs, homedir: hostHomedir, logger });
 
   // Auth & multi-gateway stores (database-backed features)
   let userStore: PgUserStore | SupabaseUserStore | null = null;
@@ -127,8 +123,17 @@ export async function createContainer() {
     }
   }
 
-  // Gateway reverse-tunnel manager
+  // Gateway reverse-tunnel manager + hybrid adapters
+  // Hybrid adapters route through the tunnel when a gateway is connected,
+  // falling back to HTTP for backward compatibility.
   const tunnelManager = new GatewayTunnelManager(gatewayStore, logger);
+  const execFn = hybridExec(tunnelManager, httpExecFn);
+  const shellExecFn = hybridShellExec(tunnelManager, httpShellExecFn);
+  const hostFs = new HybridHostFs(tunnelManager, httpHostFs);
+  const ptyAdapter = new HybridPtyAdapter(tunnelManager, httpPtyAdapter, logger);
+
+  const tmux = new TmuxCliAdapter(execFn, logger);
+  const git = new GitCliAdapter(execFn, logger);
 
   const namingService = new SessionNamingService();
   const groupingService = new SessionGroupingService();
