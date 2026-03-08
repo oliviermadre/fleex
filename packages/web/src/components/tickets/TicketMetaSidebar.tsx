@@ -9,6 +9,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import * as api from '../../services/api';
 import { PriorityIndicator } from './PriorityIndicator';
+import { DueDateBadge } from './DueDateBadge';
+import { DueDatePickerPopover } from './DueDatePickerPopover';
 import { cn } from '../../lib/cn';
 
 // ── Collapsed sidebar tooltip (portal-based, appears to the LEFT) ──
@@ -151,6 +153,19 @@ function CollapsedTicketMetaSidebar({
           onMouseEnter={(e) => showTooltip(e, 'Priority', ticket.priority === 'none' ? 'None' : ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1))}
           onMouseLeave={hideTooltip}
         />
+
+        {/* Due date */}
+        {ticket.dueDate && (
+          <CollapsedIndicator
+            icon={<DueDateBadge dueDate={ticket.dueDate} status={ticket.status} size="sm" />}
+            onMouseEnter={(e) => {
+              const d = new Date(ticket.dueDate!);
+              const formatted = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+              showTooltip(e, 'Due date', formatted);
+            }}
+            onMouseLeave={hideTooltip}
+          />
+        )}
 
         {/* Assignee */}
         <CollapsedIndicator
@@ -447,6 +462,14 @@ function ExpandedTicketMetaSidebar({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Due date */}
+      <div>
+        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+          Due date
+        </label>
+        <DueDatePickerPopover ticket={ticket} />
       </div>
 
       {/* Assignee */}
