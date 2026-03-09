@@ -875,8 +875,8 @@ db.exec(`
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS app_config (
-    id TEXT PRIMARY KEY DEFAULT 'singleton',
-    data TEXT NOT NULL DEFAULT '{}',
+    id TEXT PRIMARY KEY DEFAULT '"'"'singleton'"'"',
+    data TEXT NOT NULL DEFAULT '"'"'{}'"'"',
     updated_at TEXT NOT NULL
   )
 `);
