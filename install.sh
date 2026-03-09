@@ -275,6 +275,35 @@ check_tool() {
   return 1
 }
 
+check_bun_version() {
+  local bun_ver
+  bun_ver="$(bun --version 2>/dev/null)" || return 0
+  local min_major=1 min_minor=2 min_patch=0
+
+  local major minor patch
+  IFS='.' read -r major minor patch <<< "$bun_ver"
+  # Strip any pre-release suffix from patch
+  patch="${patch%%[-+]*}"
+
+  if [ "$major" -gt "$min_major" ] 2>/dev/null; then
+    return 0
+  elif [ "$major" -eq "$min_major" ] && [ "$minor" -gt "$min_minor" ] 2>/dev/null; then
+    return 0
+  elif [ "$major" -eq "$min_major" ] && [ "$minor" -eq "$min_minor" ] && [ "$patch" -ge "$min_patch" ] 2>/dev/null; then
+    return 0
+  fi
+
+  warn "Bun $bun_ver is too old. Minimum required: $min_major.$min_minor.$min_patch"
+  warn "The terminal/PTY features require Bun >= $min_major.$min_minor.$min_patch for stable Bun.spawn terminal API."
+  local answer
+  answer="$(ui_prompt_yn "Upgrade bun automatically?" "y")"
+  if [ "$answer" = "y" ]; then
+    install_bun
+  else
+    die "Please upgrade bun: curl -fsSL https://bun.sh/install | bash"
+  fi
+}
+
 install_bun() {
   info "Installing bun..."
   curl -fsSL https://bun.sh/install | bash
@@ -419,6 +448,9 @@ phase_prerequisites() {
     fi
   fi
 
+  # Verify minimum bun version (>= 1.2.0 required for stable Bun.spawn terminal API)
+  check_bun_version
+
   # tmux
   if ! check_tool "tmux" "required" "Terminal multiplexer for agent sessions" ""; then
     local answer
@@ -473,17 +505,23 @@ phase_install() {
   if [ -d "$REPO_DIR/.git" ]; then
     # Update mode
     IS_FRESH_INSTALL=false
-    ui_step 1 3 "Pulling latest changes..."
+    ui_step 1 4 "Pulling latest changes..."
     (cd "$REPO_DIR" && git pull --rebase origin main 2>/dev/null || git pull origin main)
     ok "Repository updated"
 
-    ui_step 2 3 "Installing dependencies..."
+    ui_step 2 4 "Installing dependencies..."
     ui_spinner_start "Running bun install..."
     (cd "$REPO_DIR" && bun install --silent 2>/dev/null || bun install) >/dev/null 2>&1
     ui_spinner_stop
     ok "Dependencies installed"
 
-    ui_step 3 3 "Updating CLI symlink..."
+    ui_step 3 4 "Building packages..."
+    ui_spinner_start "Running bun run build..."
+    (cd "$REPO_DIR" && bun run build) >/dev/null 2>&1
+    ui_spinner_stop
+    ok "Packages built"
+
+    ui_step 4 4 "Updating CLI symlink..."
     mkdir -p "$BIN_DIR"
     chmod +x "$REPO_DIR/cli/$CLI_NAME"
     ln -sf "$REPO_DIR/cli/$CLI_NAME" "$BIN_DIR/$CLI_NAME"
@@ -494,18 +532,24 @@ phase_install() {
     # Fresh install
     IS_FRESH_INSTALL=true
 
-    ui_step 1 3 "Cloning repository..."
+    ui_step 1 4 "Cloning repository..."
     mkdir -p "$FLEEX_HOME"
     git clone "$REPO_URL" "$REPO_DIR"
     ok "Repository cloned to $REPO_DIR"
 
-    ui_step 2 3 "Installing dependencies..."
+    ui_step 2 4 "Installing dependencies..."
     ui_spinner_start "Running bun install..."
     (cd "$REPO_DIR" && bun install --silent 2>/dev/null || bun install) >/dev/null 2>&1
     ui_spinner_stop
     ok "Dependencies installed"
 
-    ui_step 3 3 "Setting up CLI..."
+    ui_step 3 4 "Building packages..."
+    ui_spinner_start "Running bun run build..."
+    (cd "$REPO_DIR" && bun run build) >/dev/null 2>&1
+    ui_spinner_stop
+    ok "Packages built"
+
+    ui_step 4 4 "Setting up CLI..."
     mkdir -p "$BIN_DIR"
     chmod +x "$REPO_DIR/cli/$CLI_NAME"
     ln -sf "$REPO_DIR/cli/$CLI_NAME" "$BIN_DIR/$CLI_NAME"

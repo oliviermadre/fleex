@@ -1,6 +1,10 @@
 {
   "name": "fleex",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0",
+    "bun": ">=1.2.0"
+  },
   "workspaces": [
     "packages/shared",
     "packages/server",
