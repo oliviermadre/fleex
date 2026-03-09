@@ -278,7 +278,7 @@ check_tool() {
 check_bun_version() {
   local bun_ver
   bun_ver="$(bun --version 2>/dev/null)" || return 0
-  local min_major=1 min_minor=2 min_patch=0
+  local min_major=1 min_minor=3 min_patch=0
 
   local major minor patch
   IFS='.' read -r major minor patch <<< "$bun_ver"
@@ -294,7 +294,7 @@ check_bun_version() {
   fi
 
   warn "Bun $bun_ver is too old. Minimum required: $min_major.$min_minor.$min_patch"
-  warn "The terminal/PTY features require Bun >= $min_major.$min_minor.$min_patch for stable Bun.spawn terminal API."
+  warn "bun install fails on Bun < $min_major.$min_minor.$min_patch — dependency resolution is broken."
   local answer
   answer="$(ui_prompt_yn "Upgrade bun automatically?" "y")"
   if [ "$answer" = "y" ]; then
