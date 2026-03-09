@@ -505,23 +505,17 @@ phase_install() {
   if [ -d "$REPO_DIR/.git" ]; then
     # Update mode
     IS_FRESH_INSTALL=false
-    ui_step 1 4 "Pulling latest changes..."
+    ui_step 1 3 "Pulling latest changes..."
     (cd "$REPO_DIR" && git pull --rebase origin main 2>/dev/null || git pull origin main)
     ok "Repository updated"
 
-    ui_step 2 4 "Installing dependencies..."
+    ui_step 2 3 "Installing dependencies..."
     ui_spinner_start "Running bun install..."
     (cd "$REPO_DIR" && bun install --silent 2>/dev/null || bun install) >/dev/null 2>&1
     ui_spinner_stop
     ok "Dependencies installed"
 
-    ui_step 3 4 "Building packages..."
-    ui_spinner_start "Running bun run build..."
-    (cd "$REPO_DIR" && bun run build) >/dev/null 2>&1
-    ui_spinner_stop
-    ok "Packages built"
-
-    ui_step 4 4 "Updating CLI symlink..."
+    ui_step 3 3 "Updating CLI symlink..."
     mkdir -p "$BIN_DIR"
     chmod +x "$REPO_DIR/cli/$CLI_NAME"
     ln -sf "$REPO_DIR/cli/$CLI_NAME" "$BIN_DIR/$CLI_NAME"
@@ -532,24 +526,18 @@ phase_install() {
     # Fresh install
     IS_FRESH_INSTALL=true
 
-    ui_step 1 4 "Cloning repository..."
+    ui_step 1 3 "Cloning repository..."
     mkdir -p "$FLEEX_HOME"
     git clone "$REPO_URL" "$REPO_DIR"
     ok "Repository cloned to $REPO_DIR"
 
-    ui_step 2 4 "Installing dependencies..."
+    ui_step 2 3 "Installing dependencies..."
     ui_spinner_start "Running bun install..."
     (cd "$REPO_DIR" && bun install --silent 2>/dev/null || bun install) >/dev/null 2>&1
     ui_spinner_stop
     ok "Dependencies installed"
 
-    ui_step 3 4 "Building packages..."
-    ui_spinner_start "Running bun run build..."
-    (cd "$REPO_DIR" && bun run build) >/dev/null 2>&1
-    ui_spinner_stop
-    ok "Packages built"
-
-    ui_step 4 4 "Setting up CLI..."
+    ui_step 3 3 "Setting up CLI..."
     mkdir -p "$BIN_DIR"
     chmod +x "$REPO_DIR/cli/$CLI_NAME"
     ln -sf "$REPO_DIR/cli/$CLI_NAME" "$BIN_DIR/$CLI_NAME"
