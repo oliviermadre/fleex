@@ -98,9 +98,21 @@ export function AgentWorktreePanel({ ticketId }: Props) {
     loadExecutions(ticketId);
   }, [ticketId, loadExecutions]);
 
+  // Reset active tab when switching to a different agent worktree
+  const prevTicketIdRef = useRef(ticketId);
+  if (prevTicketIdRef.current !== ticketId) {
+    prevTicketIdRef.current = ticketId;
+    setActiveTab(null);
+  }
+
   // Restore last active tab from store, or auto-select latest execution
   const savedActiveTab = useUIStore((s) => groupId ? s.lastActiveTabByWorktree[groupId] : undefined);
   useEffect(() => {
+    // If active tab no longer exists in available tabs, reset it
+    if (activeTab && allTabs.length > 0 && !allTabs.some((t) => tabsMatch(t, activeTab))) {
+      setActiveTab(null);
+      return;
+    }
     if (activeTab) return;
     // Try restoring from saved
     if (savedActiveTab && allTabs.length > 0) {

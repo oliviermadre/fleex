@@ -15,6 +15,7 @@ export function AgentEventStream({ executionId }: Props) {
   const subscribeExecution = useAgentEventStore((s) => s.subscribeExecution);
   const unsubscribeExecution = useAgentEventStore((s) => s.unsubscribeExecution);
   const streaming = useAgentEventStore((s) => !!s.streamingExecutionIds[executionId]);
+  const loadStatus = useAgentEventStore((s) => s.eventsLoadStatus[executionId]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,7 +40,11 @@ export function AgentEventStream({ executionId }: Props) {
     >
       {events.length === 0 ? (
         <div className="flex items-center justify-center h-full text-[var(--theme-text-faint)]">
-          Loading events...
+          {loadStatus === 'loading' || !loadStatus
+            ? 'Loading events...'
+            : loadStatus === 'error'
+              ? 'Failed to load event history — execution may have run on another gateway'
+              : 'Event history unavailable — may have been pruned or executed on another gateway'}
         </div>
       ) : (
         <div className="space-y-2">

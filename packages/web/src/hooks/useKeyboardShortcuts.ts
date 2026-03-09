@@ -289,8 +289,12 @@ export function useKeyboardShortcuts() {
 
         const nextWorktree = orderedWorktrees[nextIndex];
         if (nextWorktree) {
-          if (nextWorktree.sessions.length > 0) {
-            // Select last active tab if still present, otherwise first session
+          if (nextWorktree.agentTicketId) {
+            // Agent worktree → open agent panel (same as sidebar click)
+            selectSession(null);
+            setSelectedAgentWorktreeTicketId(nextWorktree.agentTicketId);
+          } else if (nextWorktree.sessions.length > 0) {
+            // Regular worktree → select session
             const lastActive = lastActiveTabByWorktree[nextWorktree.key];
             const targetId = (lastActive && nextWorktree.sessions.includes(lastActive))
               ? lastActive
@@ -299,10 +303,6 @@ export function useKeyboardShortcuts() {
               if (selectedAgentWorktreeTicketId) setSelectedAgentWorktreeTicketId(null);
               selectSession(targetId);
             }
-          } else if (nextWorktree.agentTicketId) {
-            // Agent-only worktree (no sessions) — open agent panel
-            selectSession(null);
-            setSelectedAgentWorktreeTicketId(nextWorktree.agentTicketId);
           }
         }
         return;

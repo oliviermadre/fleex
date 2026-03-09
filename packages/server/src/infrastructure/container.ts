@@ -199,7 +199,7 @@ export async function createContainer() {
   const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, config, hostFs, git, logger);
 
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git);
-  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore, personaStore, agentEventStore, reconcileWorktree, hostFs);
+  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore, personaStore, agentEventStore, reconcileWorktree, hostFs, config);
 
   return {
     logger,

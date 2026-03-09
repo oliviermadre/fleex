@@ -10,6 +10,8 @@ interface AgentEventState {
   executionsByPersona: Record<string, AgentExecution[]>;
   eventsByExecution: Record<string, AgentEvent[]>;
   streamingExecutionIds: Record<string, boolean>;
+  /** Tracks whether events for an execution have been loaded (or failed). */
+  eventsLoadStatus: Record<string, 'loading' | 'loaded' | 'error'>;
 
   loadExecutionsForTicket: (ticketId: string) => Promise<void>;
   loadExecutionsForPersona: (personaId: string) => Promise<void>;
@@ -25,6 +27,7 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
   executionsByPersona: {},
   eventsByExecution: {},
   streamingExecutionIds: {},
+  eventsLoadStatus: {},
 
   loadExecutionsForTicket: async (ticketId) => {
     try {
@@ -49,13 +52,20 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
   },
 
   loadEventsForExecution: async (executionId) => {
+    set((state) => ({
+      eventsLoadStatus: { ...state.eventsLoadStatus, [executionId]: 'loading' as const },
+    }));
     try {
       const events = await api.fetchEventsForExecution(executionId);
       set((state) => ({
         eventsByExecution: { ...state.eventsByExecution, [executionId]: events },
+        eventsLoadStatus: { ...state.eventsLoadStatus, [executionId]: 'loaded' as const },
       }));
     } catch (err) {
       console.error('Failed to load events for execution:', err);
+      set((state) => ({
+        eventsLoadStatus: { ...state.eventsLoadStatus, [executionId]: 'error' as const },
+      }));
     }
   },
 

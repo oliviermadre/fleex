@@ -8,6 +8,7 @@ import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { HostFs } from '../../infrastructure/host/types.js';
+import type { ConfigPort } from '../ports/config.port.js';
 import { ListSessionsUseCase } from './list-sessions.js';
 import type { EnrichClaudeActivityUseCase } from './enrich-claude-activity.js';
 import type { DiscoverExistingSessionsUseCase } from './discover-existing-sessions.js';
@@ -28,6 +29,7 @@ export class GetSessionGroupsUseCase {
     private readonly agentEventStore?: AgentEventStorePort,
     private readonly reconcileWorktree?: ReconcileWorktreeUseCase,
     private readonly hostFs?: HostFs,
+    private readonly config?: ConfigPort,
   ) {
     this.listSessions = new ListSessionsUseCase(sessionStore, tmux, logger);
   }
@@ -86,10 +88,10 @@ export class GetSessionGroupsUseCase {
   }
 
   /**
-   * Find tickets in "doing" or "reviewing" status with an agent assignee
-   * and a worktree link, then attach AgentWorktreeInfo to matching
-   * WorktreeSessionGroups. If no matching group exists (agent worktree
-   * has 0 tmux sessions), create one.
+   * Find tickets with a worktree link that have an active agent assignment
+   * (doing/reviewing + assignee) or past agent work (agentClaimedAt set),
+   * then attach AgentWorktreeInfo to matching WorktreeSessionGroups.
+   * If no matching group exists (agent worktree has 0 tmux sessions), create one.
    */
   private async injectAgentWorktreeInfo(groups: SessionGroup[]): Promise<void> {
     if (!this.ticketStore || !this.personaStore) return;
@@ -97,32 +99,37 @@ export class GetSessionGroupsUseCase {
     const allTickets = await this.ticketStore.getAllTickets();
     const agentTickets = allTickets.filter(
       (t) =>
-        (t.status === 'doing' || t.status === 'reviewing') &&
-        t.assignee &&
-        t.links.some((l) => l.type === 'worktree'),
+        t.status !== 'done' &&
+        t.links.some((l) => l.type === 'worktree') &&
+        (
+          // Active agent assignment
+          ((t.status === 'doing' || t.status === 'reviewing') && t.assignee) ||
+          // Past agent work (not done) — show if agent ever claimed
+          t.agentClaimedAt !== null
+        ),
     );
 
     if (agentTickets.length === 0) return;
 
-    // Build persona lookup
+    // Build persona lookups
     const personas = await this.personaStore.getAll();
     const personaByName = new Map(personas.map((p) => [p.name, p]));
+    const personaById = new Map(personas.map((p) => [p.id, p]));
 
     for (const ticket of agentTickets) {
       const wtLink = ticket.links.find((l) => l.type === 'worktree');
       if (!wtLink) continue;
 
-      const persona = personaByName.get(ticket.assignee!);
-      if (!persona) continue;
-
-      // Determine execution status
+      // Determine execution status and latest execution
       let executionStatus: AgentWorktreeInfo['executionStatus'] = 'idle';
       let latestExecutionId: string | null = null;
+      let latestExecution: { id: string; status: string; personaId: string } | null = null;
       if (this.agentEventStore) {
         try {
           const executions = await this.agentEventStore.getExecutionsByTicket(ticket.id);
           if (executions.length > 0) {
             const latest = executions[0]!;
+            latestExecution = latest;
             latestExecutionId = latest.id;
             executionStatus = latest.status === 'running' ? 'running'
               : latest.status === 'completed' ? 'completed'
@@ -133,6 +140,15 @@ export class GetSessionGroupsUseCase {
           // ignore event store errors
         }
       }
+
+      // Skip non-active tickets that have zero execution history
+      const isActiveAgent = (ticket.status === 'doing' || ticket.status === 'reviewing') && !!ticket.assignee;
+      if (!isActiveAgent && !latestExecution) continue;
+
+      // Resolve persona: from current assignee, or from latest execution's personaId
+      const persona = (ticket.assignee ? personaByName.get(ticket.assignee) : undefined)
+        ?? (latestExecution ? personaById.get(latestExecution.personaId) : undefined);
+      if (!persona) continue;
 
       const agentInfo: AgentWorktreeInfo = {
         ticketId: ticket.id,
@@ -161,8 +177,8 @@ export class GetSessionGroupsUseCase {
         if (found) break;
       }
 
-      // If no matching group found, create a new one
-      if (!found) {
+      // If no matching group found, create a phantom group only for active agents
+      if (!found && isActiveAgent) {
         // Determine which repo group this belongs to
         let org: string | undefined;
         let name: string | undefined;
@@ -182,6 +198,10 @@ export class GetSessionGroupsUseCase {
         }
 
         if (org && name) {
+          // Skip phantom groups for unwatched repos
+          const resolved = this.config?.get().resolvedRepositories ?? [];
+          if (!resolved.includes(`${org}/${name}`)) continue;
+
           let repoGroup = groups.find(
             (g) => g.repositoryOrg === org && g.repositoryName === name,
           );

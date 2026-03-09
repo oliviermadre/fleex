@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
 import { useCallback } from 'react';
+import { GitHubIcon } from './icons';
 
 interface Props {
   summary: RepositorySummary;
@@ -41,9 +42,19 @@ export function RepoItem({ summary }: Props) {
             <CloudDownloadIcon />
           </span>
         )}
+        <a
+          href={`https://github.com/${key}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/[0.08]"
+          onClick={(e) => e.stopPropagation()}
+          title="Open on GitHub"
+        >
+          <GitHubIcon size={12} />
+        </a>
         <span
           role="button"
-          className="ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/[0.08]"
+          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/[0.08] ml-0.5"
           onClick={handleScratchpadClick}
           title="Open scratchpad"
         >
