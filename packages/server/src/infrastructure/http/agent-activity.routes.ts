@@ -57,30 +57,27 @@ export function agentActivityRoutes(container: Container) {
       const since = request.query.since ? new Date(request.query.since) : undefined;
       const until = request.query.until ? new Date(request.query.until) : undefined;
 
-      const entries = await container.domainEventLogStore.list({
-        limit,
-        eventType: request.query.event_type,
+      const activities = await container.ticketStore.searchTicketsByActivityFilters({
         since,
         until,
+        action: request.query.event_type,
+        limit,
       });
 
       // Group by ticketId
       const ticketMap = new Map<string, { count: number; lastAt: string; eventTypes: Set<string> }>();
-      for (const entry of entries) {
-        const ticketId = entry.payload['ticketId'] as string | undefined;
-        if (!ticketId) continue;
-
-        const existing = ticketMap.get(ticketId);
-        const occurredAt = entry.occurredAt.toISOString();
+      for (const activity of activities) {
+        const existing = ticketMap.get(activity.ticketId);
+        const createdAt = activity.createdAt.toISOString();
         if (existing) {
           existing.count++;
-          if (occurredAt > existing.lastAt) existing.lastAt = occurredAt;
-          existing.eventTypes.add(entry.eventType);
+          if (createdAt > existing.lastAt) existing.lastAt = createdAt;
+          existing.eventTypes.add(activity.action);
         } else {
-          ticketMap.set(ticketId, {
+          ticketMap.set(activity.ticketId, {
             count: 1,
-            lastAt: occurredAt,
-            eventTypes: new Set([entry.eventType]),
+            lastAt: createdAt,
+            eventTypes: new Set([activity.action]),
           });
         }
       }

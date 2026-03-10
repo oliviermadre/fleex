@@ -229,6 +229,38 @@ export class PgTicketStore implements TicketStorePort {
     );
     return rows.map(rowToActivity);
   }
+
+  async searchTicketsByActivityFilters(options: {
+    since?: Date;
+    until?: Date;
+    action?: string;
+    limit?: number;
+  }): Promise<TicketActivityEntity[]> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (options.since) {
+      params.push(options.since.toISOString());
+      conditions.push(`created_at >= $${params.length}`);
+    }
+    if (options.until) {
+      params.push(options.until.toISOString());
+      conditions.push(`created_at <= $${params.length}`);
+    }
+    if (options.action) {
+      params.push(options.action);
+      conditions.push(`action = $${params.length}`);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    params.push(options.limit ?? 200);
+
+    const { rows } = await this.db.query(
+      `SELECT * FROM ticket_activities ${where} ORDER BY created_at DESC LIMIT $${params.length}`,
+      params,
+    );
+    return rows.map(rowToActivity);
+  }
 }
 
 function rowToBoard(row: Record<string, unknown>): BoardEntity {

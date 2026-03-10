@@ -360,4 +360,31 @@ export class SupabaseTicketStore implements TicketStorePort {
     if (error) throw new Error(`SupabaseTicketStore.getActivitiesByTicket failed: ${error.message}`);
     return (data as ActivityRow[]).map(activityRowToEntity);
   }
+
+  async searchTicketsByActivityFilters(options: {
+    since?: Date;
+    until?: Date;
+    action?: string;
+    limit?: number;
+  }): Promise<TicketActivityEntity[]> {
+    let query = this.conn.client
+      .from('ticket_activities')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(options.limit ?? 200);
+
+    if (options.since) {
+      query = query.gte('created_at', options.since.toISOString());
+    }
+    if (options.until) {
+      query = query.lte('created_at', options.until.toISOString());
+    }
+    if (options.action) {
+      query = query.eq('action', options.action);
+    }
+
+    const { data, error } = await query;
+    if (error) throw new Error(`SupabaseTicketStore.searchTicketsByActivityFilters failed: ${error.message}`);
+    return (data as ActivityRow[]).map(activityRowToEntity);
+  }
 }

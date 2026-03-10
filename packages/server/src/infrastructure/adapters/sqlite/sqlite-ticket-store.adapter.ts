@@ -253,6 +253,38 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     return rows.map((r) => this.toActivityEntity(r));
   }
 
+  async searchTicketsByActivityFilters(options: {
+    since?: Date;
+    until?: Date;
+    action?: string;
+    limit?: number;
+  }): Promise<TicketActivityEntity[]> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (options.since) {
+      conditions.push('created_at >= ?');
+      params.push(options.since.toISOString());
+    }
+    if (options.until) {
+      conditions.push('created_at <= ?');
+      params.push(options.until.toISOString());
+    }
+    if (options.action) {
+      conditions.push('action = ?');
+      params.push(options.action);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = options.limit ?? 200;
+    params.push(limit);
+
+    const rows = this.conn.db
+      .prepare(`SELECT * FROM ticket_activities ${where} ORDER BY created_at DESC LIMIT ?`)
+      .all(...params) as ActivityRow[];
+    return rows.map((r) => this.toActivityEntity(r));
+  }
+
   // ── Row-to-Entity mappers ──
 
   private toBoardEntity(row: BoardRow): BoardEntity {

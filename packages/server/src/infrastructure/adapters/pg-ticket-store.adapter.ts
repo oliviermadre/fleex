@@ -279,6 +279,31 @@ export class PgTicketStore implements TicketStorePort {
       .slice(0, limit);
   }
 
+  async searchTicketsByActivityFilters(options: {
+    since?: Date;
+    until?: Date;
+    action?: string;
+    limit?: number;
+  }): Promise<TicketActivityEntity[]> {
+    let filtered = this.activities;
+
+    if (options.since) {
+      const sinceTime = options.since.getTime();
+      filtered = filtered.filter((a) => a.createdAt.getTime() >= sinceTime);
+    }
+    if (options.until) {
+      const untilTime = options.until.getTime();
+      filtered = filtered.filter((a) => a.createdAt.getTime() <= untilTime);
+    }
+    if (options.action) {
+      filtered = filtered.filter((a) => a.action === options.action);
+    }
+
+    return filtered
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, options.limit ?? 200);
+  }
+
   // ── Row mapping ──
 
   private boardRowToEntity(row: BoardRow): BoardEntity {

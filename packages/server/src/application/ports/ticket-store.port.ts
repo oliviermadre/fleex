@@ -30,4 +30,10 @@ export interface TicketStorePort {
   // Activity
   saveActivity(entry: TicketActivityEntity): Promise<void>;
   getActivitiesByTicket(ticketId: string, limit?: number): Promise<TicketActivityEntity[]>;
+  searchTicketsByActivityFilters(options: {
+    since?: Date;
+    until?: Date;
+    action?: string;
+    limit?: number;
+  }): Promise<TicketActivityEntity[]>;
 }
