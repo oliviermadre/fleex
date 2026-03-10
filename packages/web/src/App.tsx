@@ -3,6 +3,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { CreateSessionModal } from './components/modals/CreateSessionModal';
 import { CommandPalette } from './components/command-palette/CommandPalette';
 import { ToastContainer } from './components/ui/ToastContainer';
+import { VersionBanner } from './components/ui/VersionBanner';
 import { RouterSync } from './router/RouterSync';
 import { useFaviconStatus } from './hooks/useFaviconStatus';
 import { useTheme } from './hooks/useTheme';
@@ -18,6 +19,7 @@ export function App() {
       <CreateSessionModal />
       <CommandPalette />
       <ToastContainer />
+      <VersionBanner />
     </BrowserRouter>
   );
 }
