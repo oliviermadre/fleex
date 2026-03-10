@@ -180,8 +180,8 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   );
 
   const ticketSessions = useMemo(
-    () => findSessionsForTicket(ticketId, tickets, sessions),
-    [ticketId, tickets, sessions],
+    () => ticket ? findSessionsForTicket(ticket, sessions) : [],
+    [ticket, sessions],
   );
 
   const openCreateModalForTicket = useUIStore((s) => s.openCreateModalForTicket);
