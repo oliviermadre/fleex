@@ -10,6 +10,7 @@ interface SmartSessionButtonProps {
   sessions: Session[];
   creating: boolean;
   onCreateSession: () => void;
+  disabled?: boolean;
   size?: 'sm' | 'md';
 }
 
@@ -66,7 +67,7 @@ const OPEN_THEME = [
   'hover:border-[var(--theme-accent)]/60 hover:bg-[var(--theme-accent)]/20',
 ].join(' ');
 
-export function SmartSessionButton({ sessions, creating, onCreateSession, size = 'sm' }: SmartSessionButtonProps) {
+export function SmartSessionButton({ sessions, creating, onCreateSession, disabled, size = 'sm' }: SmartSessionButtonProps) {
   const setFloatingSession = useUIStore((s) => s.setFloatingSession);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -111,12 +112,12 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, size =
   if (sessions.length === 0) {
     return (
       <button
-        className={cn(shell(OPEN_THEME), creating && 'pointer-events-none opacity-70')}
+        className={cn(shell(OPEN_THEME), (disabled || creating) && 'pointer-events-none opacity-50')}
         onClick={(e) => {
           e.stopPropagation();
           onCreateSession();
         }}
-        disabled={creating}
+        disabled={disabled || creating}
       >
         {creating ? (
           <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />

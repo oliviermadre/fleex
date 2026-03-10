@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
+import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
@@ -924,8 +925,7 @@ export class ExecuteAgentUseCase {
     }
 
     // Derive worktree directory name from branch
-    const branchSlug = branchName.replace(/\//g, '-');
-    const wtPath = join(repoPath, '..', `${repo}.${branchSlug}`);
+    const wtPath = join(repoPath, '..', buildWorktreeDirName(repo, branchName));
 
     // If worktree directory already exists on disk, reuse it directly
     if (existingWorktreeLink && existsSync(wtPath)) {
