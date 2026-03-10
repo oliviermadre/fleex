@@ -1273,7 +1273,7 @@ export function DashboardView() {
                                   key={t.id}
                                   ticket={t}
                                   boardLabel={board}
-                                  sessions={findSessionsForTicket(t.id, allTickets, sessions)}
+                                  sessions={findSessionsForTicket(t, sessions)}
                                   onStatusChange={handleStatusChange}
                                   onNavigate={handleTicketNavigate}
                                   onCreateSession={handleCreateSession}

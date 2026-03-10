@@ -5,13 +5,9 @@ import type { Session, Ticket, DashboardPullRequest, DashboardWorktree } from '@
  * Pattern from KanbanBoard.tsx:26-58
  */
 export function findSessionsForTicket(
-  ticketId: string,
-  tickets: Ticket[],
+  ticket: Ticket,
   sessions: Session[],
 ): Session[] {
-  const ticket = tickets.find((t) => t.id === ticketId);
-  if (!ticket) return [];
-
   const matched: Session[] = [];
 
   // Check session links
@@ -22,23 +18,38 @@ export function findSessionsForTicket(
     }
   }
 
-  // Check worktree link → match sessions by org/name + branch
+  // Check worktree link → match sessions by org/name + branch or absolute path
   const wtLink = ticket.links.find((l) => l.type === 'worktree');
   if (wtLink) {
-    const colonIdx = wtLink.ref.indexOf(':');
-    if (colonIdx > 0) {
-      const repoKey = wtLink.ref.substring(0, colonIdx);
-      const branch = wtLink.ref.substring(colonIdx + 1);
-      const [org, name] = repoKey.split('/');
+    const ref = wtLink.ref;
+
+    if (ref.startsWith('/')) {
+      // Absolute path: match sessions by cwd
       for (const s of sessions) {
         if (
           s.status === 'running' &&
-          s.repositoryOrg === org &&
-          s.repositoryName === name &&
-          s.worktreeBranch === branch &&
+          s.cwd === ref &&
           !matched.some((m) => m.id === s.id)
         ) {
           matched.push(s);
+        }
+      }
+    } else {
+      const colonIdx = ref.indexOf(':');
+      if (colonIdx > 0) {
+        const repoKey = ref.substring(0, colonIdx);
+        const branch = ref.substring(colonIdx + 1);
+        const [org, name] = repoKey.split('/');
+        for (const s of sessions) {
+          if (
+            s.status === 'running' &&
+            s.repositoryOrg === org &&
+            s.repositoryName === name &&
+            s.worktreeBranch === branch &&
+            !matched.some((m) => m.id === s.id)
+          ) {
+            matched.push(s);
+          }
         }
       }
     }

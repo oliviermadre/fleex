@@ -54,7 +54,6 @@ export function KanbanCard({
 }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const updateTicket = useTicketStore((s) => s.updateTicket);
-  const tickets = useTicketStore((s) => s.tickets);
   const sessions = useSessionStore((s) => s.sessions);
 
   const issueLinks = ticket.links.filter((l) => l.type === 'github_issue');
@@ -83,8 +82,8 @@ export function KanbanCard({
   }, [worktreeLinks, repoLinks]);
 
   const ticketSessions = useMemo(
-    () => findSessionsForTicket(ticket.id, tickets, sessions),
-    [ticket.id, tickets, sessions],
+    () => findSessionsForTicket(ticket, sessions),
+    [ticket, sessions],
   );
 
   // Time spent in current column — based on when the ticket entered this status

@@ -52,14 +52,34 @@ export class CreateSessionFromTicketUseCase {
       }
       cwd = resolved.wtPath;
     } else {
-      // Check board for repo scope
-      const board = await this.ticketStore.getBoardById(ticket.boardId);
-      if (board?.repositoryOrg && board.repositoryName) {
-        const repoPath = join(this.config.get().basePath, board.repositoryOrg, board.repositoryName);
-        // Try to create a worktree with a branch name based on ticket
+      // Resolve repo: ticket's repository link takes priority, then board config
+      let repoOrg: string | undefined;
+      let repoName: string | undefined;
+
+      const repoLink = ticket.links.find((l) => l.type === 'repository');
+      if (repoLink?.ref) {
+        const slashIdx = repoLink.ref.indexOf('/');
+        if (slashIdx > 0) {
+          repoOrg = repoLink.ref.substring(0, slashIdx);
+          repoName = repoLink.ref.substring(slashIdx + 1);
+        }
+      }
+
+      // Fall back to board's repository config
+      if (!repoOrg || !repoName) {
+        const board = await this.ticketStore.getBoardById(ticket.boardId);
+        if (board?.repositoryOrg && board.repositoryName) {
+          repoOrg = board.repositoryOrg;
+          repoName = board.repositoryName;
+        }
+      }
+
+      // Create worktree if we found a repo
+      if (repoOrg && repoName) {
+        const repoPath = join(this.config.get().basePath, repoOrg, repoName);
         const branchName = buildTicketBranchName(ticket.title, ticket.id);
         try {
-          const wtPath = join(repoPath, '..', buildWorktreeDirName(board.repositoryName, branchName));
+          const wtPath = join(repoPath, '..', buildWorktreeDirName(repoName, branchName));
           await this.createWorktree.execute(repoPath, wtPath, {
             branch: branchName,
             createNewBranch: true,
