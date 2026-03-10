@@ -19,6 +19,19 @@ function dateInputToISO(value: string): string {
   return new Date(`${value}T12:00:00`).toISOString();
 }
 
+function getTodayDateString(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getEndOfWeekDateString(): string {
+  const d = new Date();
+  const jsDay = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const daysToFriday = 4 - ((jsDay + 6) % 7);
+  d.setDate(d.getDate() + daysToFriday);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function DueDatePickerPopover({ ticket }: { ticket: Ticket }) {
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const [open, setOpen] = useState(false);
@@ -98,6 +111,20 @@ export function DueDatePickerPopover({ ticket }: { ticket: Ticket }) {
         >
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
             Due date
+          </div>
+          <div className="mb-2 flex gap-2">
+            <button
+              className="flex-1 rounded-md border border-[var(--theme-border-input)] px-2 py-1.5 text-xs text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+              onClick={() => handleDateChange(getTodayDateString())}
+            >
+              Aujourd'hui
+            </button>
+            <button
+              className="flex-1 rounded-md border border-[var(--theme-border-input)] px-2 py-1.5 text-xs text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+              onClick={() => handleDateChange(getEndOfWeekDateString())}
+            >
+              Ven.
+            </button>
           </div>
           <input
             type="date"
