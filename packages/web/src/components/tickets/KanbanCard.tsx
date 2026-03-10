@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { Ticket, BoardWithCounts } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
+import { DueDateBadge } from './DueDateBadge';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { cn } from '../../lib/cn';
@@ -278,11 +279,7 @@ export function KanbanCard({
         <div className="flex-1" />
 
         {/* Due date */}
-        {ticket.dueDate && (
-          <span>
-            {new Date(ticket.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-          </span>
-        )}
+        <DueDateBadge dueDate={ticket.dueDate} status={ticket.status} size="sm" />
 
         {/* Open Session button */}
         <button
