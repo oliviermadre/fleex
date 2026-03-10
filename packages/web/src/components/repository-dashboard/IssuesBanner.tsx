@@ -131,7 +131,7 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
       shrink: true,
       align: 'right',
       render: (row) => (
-        <span className="text-[var(--theme-text-muted)]" title={new Date(row.createdAt).toLocaleString()}>
+        <span className="text-[var(--theme-text-muted)]" title={new Date(row.createdAt).toLocaleString(undefined, { hour12: false })}>
           {formatRelativeTime(row.createdAt)}
         </span>
       ),

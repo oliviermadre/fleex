@@ -45,6 +45,7 @@ export interface AppSettings {
   customThemes: Theme[];
   sessionLayoutGroups: SessionLayoutGroup[];
   agentMaxConcurrency: number;
+  humanDisplayName: string;
 }
 
 interface SettingsState {
@@ -83,6 +84,7 @@ const defaultSettings: AppSettings = {
   customThemes: [],
   sessionLayoutGroups: [],
   agentMaxConcurrency: 1,
+  humanDisplayName: '',
 };
 
 function loadFromStorage(): AppSettings {

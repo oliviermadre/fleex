@@ -9,7 +9,7 @@ interface Props {
 
 /**
  * Animated status indicator dot.
- * - executing / working: pulsing green (ping ring)
+ * - executing / working: pulsing blue (ping ring)
  * - needs-approval: fixed amber
  * - idle / unknown: fixed gray
  */
@@ -20,8 +20,8 @@ export function StatusDot({ status, size = 'md', className }: Props) {
   if (isActive) {
     return (
       <span className={cn('relative inline-flex shrink-0', px, className)}>
-        <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400 opacity-60" />
-        <span className={cn('relative inline-flex rounded-full bg-emerald-400', px)} />
+        <span className="absolute inset-0 animate-ping rounded-full bg-blue-500 opacity-60" />
+        <span className={cn('relative inline-flex rounded-full bg-blue-500', px)} />
       </span>
     );
   }

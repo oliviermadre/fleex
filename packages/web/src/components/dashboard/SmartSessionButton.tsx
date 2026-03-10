@@ -30,7 +30,7 @@ function ChevronDownIcon() {
   );
 }
 
-// Fixed width so the button never shifts across states.
+// Min width keeps compact states stable; whitespace-nowrap prevents long labels from wrapping.
 const BUTTON_WIDTH = 'w-[108px]';
 
 /**
@@ -42,8 +42,8 @@ function statusTheme(status: DisplayStatus): string {
     case 'executing':
     case 'working':
       return [
-        'border-emerald-400/40 bg-emerald-400/10 text-emerald-400',
-        'hover:border-emerald-400/60 hover:bg-emerald-400/20',
+        'border-blue-500/40 bg-blue-500/10 text-blue-500',
+        'hover:border-blue-500/60 hover:bg-blue-500/20',
       ].join(' ');
     case 'needs-approval':
       return [
@@ -99,7 +99,7 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, size =
   // Shape shared by every state — colors come from the theme param
   const shell = (theme: string) =>
     cn(
-      'inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-md py-1 font-semibold transition-all duration-150',
+      'inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition-all duration-150',
       textSize,
       BUTTON_WIDTH,
       'border',
@@ -123,7 +123,7 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, size =
         ) : (
           <FleexIcon />
         )}
-        <span>Open</span>
+        <span>Start</span>
       </button>
     );
   }

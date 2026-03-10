@@ -13,8 +13,10 @@ import { fetchDashboard, fetchBoards, importGitHubIssue, openSessionFromTicket, 
 import { useSessionStore } from '../../stores/sessionStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { cn } from '../../lib/cn';
 import { SmartSessionButton } from './SmartSessionButton';
+import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
 import { findSessionsForTicket, findSessionsForPR, hasLocalWorktreeForPR } from './dashboard-helpers';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -63,26 +65,23 @@ function isDueDateOverdue(dateStr: string): boolean {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()) < new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-const PRIORITY_BORDER_COLOR: Record<string, string> = {
-  none: 'transparent',
-  low: '#60a5fa',
-  medium: '#fbbf24',
-  high: '#f87171',
-};
-
 const STATUS_DOT: Record<string, { color: string; pulse: boolean; label: string }> = {
+  backlog: { color: 'var(--theme-text-faint)', pulse: false, label: 'Backlog' },
+  todo: { color: '#60a5fa', pulse: false, label: 'A faire' },
   doing: { color: '#f59e0b', pulse: true, label: 'En cours' },
   reviewing: { color: '#a78bfa', pulse: false, label: 'En review' },
-  todo: { color: '#60a5fa', pulse: false, label: 'A faire' },
+  done: { color: '#22c55e', pulse: false, label: 'Done' },
 };
 
 const INLINE_STATUSES: { value: TicketStatus; label: string }[] = [
+  { value: 'backlog', label: 'Backlog' },
   { value: 'todo', label: 'A faire' },
   { value: 'doing', label: 'En cours' },
   { value: 'reviewing', label: 'En review' },
+  { value: 'done', label: 'Done' },
 ];
 
-const STATUS_ORDER: Array<'doing' | 'reviewing' | 'todo'> = ['doing', 'reviewing', 'todo'];
+const STATUS_ORDER: Array<'doing' | 'reviewing' | 'todo'> = ['todo', 'doing', 'reviewing'];
 
 // ── Inline keyframes ─────────────────────────────────────────────────────────
 
@@ -304,6 +303,7 @@ function LinkIcon() {
 
 function TicketCard({
   ticket,
+  boardLabel,
   sessions,
   onStatusChange,
   onNavigate,
@@ -311,6 +311,7 @@ function TicketCard({
   creating,
 }: {
   ticket: Ticket;
+  boardLabel?: { name: string; emoji: string };
   sessions: Session[];
   onStatusChange: (ticketId: string, newStatus: TicketStatus) => void;
   onNavigate: (ticket: Ticket) => void;
@@ -318,12 +319,13 @@ function TicketCard({
   creating: boolean;
 }) {
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
+  const updateTicket = useTicketStore.getState().updateTicket;
 
   useEffect(() => {
     if (!statusMenuOpen) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) {
         setStatusMenuOpen(false);
       }
     };
@@ -349,53 +351,27 @@ function TicketCard({
       className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150 hover:bg-[var(--theme-bg-hover)]"
       onClick={() => onNavigate(ticket)}
     >
-      {/* Priority left border indicator */}
-      <span
-        className="h-8 w-0.5 flex-shrink-0 rounded-full"
-        style={{ backgroundColor: PRIORITY_BORDER_COLOR[ticket.priority] }}
-      />
-
-      {/* Status dot with inline menu */}
-      <div className="relative flex-shrink-0" ref={menuRef}>
-        <span
-          className="inline-block h-2 w-2 cursor-pointer rounded-full"
-          style={{
-            backgroundColor: statusDot?.color ?? '#60a5fa',
-            animation: statusDot?.pulse ? 'dashPulse 2s ease-in-out infinite' : 'none',
-          }}
-          role="button"
-          tabIndex={-1}
+      {/* Priority picker + blocked lock */}
+      <div className="flex flex-shrink-0 flex-col items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <PriorityPickerPopover ticket={ticket} />
+        <button
+          className={cn(
+            'rounded transition-all',
+            ticket.blocked
+              ? 'opacity-100 text-red-500 hover:text-red-400'
+              : 'opacity-30 text-[var(--theme-text-muted)] hover:opacity-100',
+          )}
           onClick={(e) => {
             e.stopPropagation();
-            setStatusMenuOpen(!statusMenuOpen);
+            updateTicket(ticket.id, { blocked: !ticket.blocked });
           }}
-        />
-        {statusMenuOpen && (
-          <div className="absolute left-0 top-full z-50 mt-1 min-w-[120px] rounded-lg border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
-            {INLINE_STATUSES.map((s) => (
-              <button
-                key={s.value}
-                className={cn(
-                  'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-                  ticket.status === s.value && 'font-semibold text-[var(--theme-accent)]',
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (ticket.status !== s.value) {
-                    onStatusChange(ticket.id, s.value);
-                  }
-                  setStatusMenuOpen(false);
-                }}
-              >
-                <span
-                  className="inline-block h-1.5 w-1.5 rounded-full"
-                  style={{ backgroundColor: STATUS_DOT[s.value]?.color }}
-                />
-                {s.label}
-              </button>
-            ))}
-          </div>
-        )}
+          title={ticket.blocked ? 'Unblock ticket' : 'Mark as blocked'}
+        >
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
+            <rect x="3" y="7" width="10" height="8" rx="1.5" />
+            <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+          </svg>
+        </button>
       </div>
 
       {/* Content */}
@@ -404,6 +380,55 @@ function TicketCard({
           {ticket.title}
         </span>
         <div className="flex items-center gap-2 text-xs text-[var(--theme-text-muted)]">
+          {/* Status chip with dropdown */}
+          <div className="relative" ref={statusMenuRef} onClick={(e) => e.stopPropagation()}>
+            <span
+              className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+              role="button"
+              tabIndex={-1}
+              onClick={() => setStatusMenuOpen(!statusMenuOpen)}
+            >
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{
+                  backgroundColor: statusDot?.color ?? '#60a5fa',
+                  animation: statusDot?.pulse ? 'dashPulse 2s ease-in-out infinite' : 'none',
+                }}
+              />
+              {statusDot?.label ?? ticket.status}
+            </span>
+            {statusMenuOpen && (
+              <div className="absolute left-0 top-full z-50 mt-1 min-w-[120px] rounded-lg border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
+                {INLINE_STATUSES.map((s) => (
+                  <button
+                    key={s.value}
+                    className={cn(
+                      'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                      ticket.status === s.value && 'font-semibold text-[var(--theme-accent)]',
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (ticket.status !== s.value) {
+                        onStatusChange(ticket.id, s.value);
+                      }
+                      setStatusMenuOpen(false);
+                    }}
+                  >
+                    <span
+                      className="inline-block h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: STATUS_DOT[s.value]?.color }}
+                    />
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {boardLabel && (
+            <span className="truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
+              {boardLabel.emoji} {boardLabel.name}
+            </span>
+          )}
           {repoLabel && (
             <span className="truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-faint)]">
               {repoLabel}
@@ -968,11 +993,19 @@ export function DashboardView() {
   const [creatingPRSession, setCreatingPRSession] = useState<string | null>(null);
 
   // Live data from stores
+  const humanDisplayName = useSettingsStore((s) => s.settings.humanDisplayName);
   const sessions = useSessionStore((s) => s.sessions);
   const selectSession = useSessionStore((s) => s.selectSession);
   const storeTickets = useTicketStore((s) => s.tickets);
+  const boards = useTicketStore((s) => s.boards);
   const moveTicket = useTicketStore((s) => s.moveTicket);
   const addLink = useTicketStore((s) => s.addLink);
+
+  const boardMap = useMemo(() => {
+    const m = new Map<string, { name: string; emoji: string }>();
+    for (const b of boards) m.set(b.id, { name: b.name, emoji: b.emoji });
+    return m;
+  }, [boards]);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
 
   const load = useCallback(async (isRefresh = false) => {
@@ -1117,7 +1150,7 @@ export function DashboardView() {
           >
             <div className="flex flex-col gap-0.5">
               <h1 className="text-lg font-semibold text-[var(--theme-text-primary)]">
-                {getGreeting()}
+                {getGreeting()}{humanDisplayName ? ` ${humanDisplayName}` : ''}
               </h1>
               <span className="text-xs text-[var(--theme-text-muted)]">
                 {getTodayFrench()}
@@ -1205,6 +1238,7 @@ export function DashboardView() {
                               <TicketCard
                                 key={t.id}
                                 ticket={t}
+                                boardLabel={boardMap.get(t.boardId)}
                                 sessions={findSessionsForTicket(t.id, allTickets, sessions)}
                                 onStatusChange={handleStatusChange}
                                 onNavigate={handleTicketNavigate}

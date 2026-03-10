@@ -127,7 +127,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
       render: (row) => (
         <span
           className={cn('text-[var(--theme-text-muted)]', isStale(row.updatedAt) && 'text-amber-400/60')}
-          title={new Date(row.updatedAt).toLocaleString()}
+          title={new Date(row.updatedAt).toLocaleString(undefined, { hour12: false })}
         >
           {formatRelativeTime(row.updatedAt)}
         </span>

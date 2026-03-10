@@ -28,13 +28,13 @@ export function deriveDisplayStatus(session: Session): DerivedStatus {
     const activity = session.claudeActivity;
 
     if (activity === 'executing') {
-      return { label: 'Executing', status: 'executing', dotColor: 'bg-emerald-400', textColor: 'text-emerald-400', warning: false };
+      return { label: 'Executing', status: 'executing', dotColor: 'bg-blue-500', textColor: 'text-blue-500', warning: false };
     }
     if (activity === 'working') {
-      return { label: 'Working', status: 'working', dotColor: 'bg-emerald-400', textColor: 'text-emerald-400', warning: false };
+      return { label: 'Working', status: 'working', dotColor: 'bg-blue-500', textColor: 'text-blue-500', warning: false };
     }
     if (WAITING_STATUSES.includes(activity)) {
-      return { label: 'Needs Approval', status: 'needs-approval', dotColor: 'bg-amber-400', textColor: 'text-amber-400', warning: true };
+      return { label: 'Approval', status: 'needs-approval', dotColor: 'bg-amber-400', textColor: 'text-amber-400', warning: true };
     }
     if (activity === 'idle') {
       return { label: 'Idle', status: 'idle', dotColor: 'bg-[var(--theme-text-muted)]', textColor: 'text-[var(--theme-text-muted)]', warning: false };
@@ -47,7 +47,7 @@ export function deriveDisplayStatus(session: Session): DerivedStatus {
     const proc = session.foregroundProcess.split(' ')[0] ?? '';
     const shellNames = ['zsh', 'bash', 'fish', 'sh'];
     if (!shellNames.includes(proc)) {
-      return { label: 'Working', status: 'working', dotColor: 'bg-emerald-400', textColor: 'text-emerald-400', warning: false };
+      return { label: 'Working', status: 'working', dotColor: 'bg-blue-500', textColor: 'text-blue-500', warning: false };
     }
   }
 

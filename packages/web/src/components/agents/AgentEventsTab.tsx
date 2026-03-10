@@ -105,7 +105,7 @@ export function AgentEventsTab() {
                 Ticket: {exec.ticketId.slice(0, 8)}...
               </span>
               <span className="text-xs text-[var(--theme-text-faint)]">
-                {new Date(exec.startedAt).toLocaleString()}
+                {new Date(exec.startedAt).toLocaleString(undefined, { hour12: false })}
                 {' · '}{exec.eventCount} events
                 {exec.status === 'running' && (
                   <> · <span className="text-blue-400">{formatDuration(exec.startedAt)}</span></>

@@ -60,7 +60,7 @@ export function MergedPRsSection({ org, name, mergedPRs, loading }: Props) {
       render: (row) => {
         const date = row.mergedAt ?? row.updatedAt;
         return (
-          <span className="text-emerald-400/70" title={new Date(date).toLocaleString()}>
+          <span className="text-emerald-400/70" title={new Date(date).toLocaleString(undefined, { hour12: false })}>
             {formatRelativeTime(date)}
           </span>
         );
