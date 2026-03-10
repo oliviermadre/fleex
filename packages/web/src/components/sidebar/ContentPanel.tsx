@@ -47,6 +47,7 @@ export function ContentPanel() {
       {activePanel === 'tickets' && <TicketsContentPanel />}
       {activePanel === 'claude-config' && <ClaudeConfigTree />}
       {activePanel === 'agents' && <AgentListPanel />}
+      {activePanel === 'dashboard' && null}
       {activePanel === 'cluster' && null}
       {activePanel === 'scratchpads' && <ScratchpadsContent />}
       {activePanel === 'analytics' && <AnalyticsNav />}

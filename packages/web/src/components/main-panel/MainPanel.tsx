@@ -19,6 +19,7 @@ import { AgentPersonaView } from '../agents/AgentPersonaView';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { AgentWorktreePanel } from './AgentWorktreePanel';
 import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
+import { DashboardView } from '../dashboard/DashboardView';
 
 function GroupEmptyCell() {
   return (
@@ -69,6 +70,10 @@ export function MainPanel() {
   const splitSession = splitSessionId
     ? sessions.find((s) => s.id === splitSessionId) ?? null
     : null;
+
+  if (activePanel === 'dashboard') {
+    return <DashboardView />;
+  }
 
   if (activePanel === 'settings') {
     return <SettingsPanel />;

@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import type { Ticket, BoardWithCounts } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { DueDateBadge } from './DueDateBadge';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { cn } from '../../lib/cn';
@@ -52,6 +54,7 @@ export function KanbanCard({
 }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const updateTicket = useTicketStore((s) => s.updateTicket);
+  const tickets = useTicketStore((s) => s.tickets);
   const sessions = useSessionStore((s) => s.sessions);
 
   const issueLinks = ticket.links.filter((l) => l.type === 'github_issue');
@@ -79,18 +82,10 @@ export function KanbanCard({
     return null;
   }, [worktreeLinks, repoLinks]);
 
-  const hasActiveSession = useMemo(() => {
-    if (sessionLinks.length > 0) return true;
-    if (!repoWorktreeInfo) return false;
-    const [org, name] = repoWorktreeInfo.repo.split('/');
-    return sessions.some(
-      (s) =>
-        s.status === 'running' &&
-        s.repositoryOrg === org &&
-        s.repositoryName === name &&
-        s.worktreeBranch === repoWorktreeInfo.branch,
-    );
-  }, [sessionLinks, repoWorktreeInfo, sessions]);
+  const ticketSessions = useMemo(
+    () => findSessionsForTicket(ticket.id, tickets, sessions),
+    [ticket.id, tickets, sessions],
+  );
 
   // Time spent in current column — based on when the ticket entered this status
   const timeInColumn = formatTimeAgo(ticket.statusChangedAt);
@@ -282,21 +277,13 @@ export function KanbanCard({
         <DueDateBadge dueDate={ticket.dueDate} status={ticket.status} size="sm" />
 
         {/* Open Session button */}
-        <button
-          className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors hover:bg-[var(--theme-bg-overlay)]"
-          style={{ color: hasActiveSession ? '#22c55e' : 'var(--theme-text-muted)' }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenSession(ticket.id);
-          }}
-          title={hasActiveSession ? 'Open active session' : 'Start new session'}
-        >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
-            <polyline points="4.5,7 6,8.5 4.5,10" />
-          </svg>
-          {hasActiveSession ? 'Session' : 'Open'}
-        </button>
+        <span onClick={(e) => e.stopPropagation()}>
+          <SmartSessionButton
+            sessions={ticketSessions}
+            creating={false}
+            onCreateSession={() => onOpenSession(ticket.id)}
+          />
+        </span>
       </div>
     </div>
   );

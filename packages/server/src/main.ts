@@ -37,6 +37,7 @@ import { personaRoutes } from './infrastructure/http/persona.routes.js';
 import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
 import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.routes.js';
 import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
+import { dashboardRoutes } from './infrastructure/http/dashboard.routes.js';
 import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 
@@ -75,6 +76,7 @@ async function main() {
   await app.register(agentEventsRoutes(container));
   await app.register(domainEventLogRoutes(container));
   await app.register(statisticsRoutes(container));
+  await app.register(dashboardRoutes(container));
 
   // Agent API with auth
   const authHook = createAgentAuthHook(container);

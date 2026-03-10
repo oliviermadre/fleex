@@ -121,52 +121,6 @@ export function useKeyboardShortcuts() {
 
       // Alt-only combos (uses e.code for macOS Option key compatibility)
       if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
-        if (e.code === 'Digit1') {
-          e.preventDefault();
-          setActivePanel('sessions');
-          return;
-        }
-        if (e.code === 'Digit2') {
-          e.preventDefault();
-          setActivePanel('repositories');
-          return;
-        }
-        if (e.code === 'Digit3') {
-          e.preventDefault();
-          setActivePanel('tickets');
-          return;
-        }
-        if (e.code === 'Digit4') {
-          e.preventDefault();
-          setActivePanel('claude-config');
-          return;
-        }
-        if (e.code === 'Digit6') {
-          e.preventDefault();
-          setActivePanel('agents');
-          return;
-        }
-        if (e.code === 'Digit7') {
-          e.preventDefault();
-          setActivePanel('scratchpads');
-          return;
-        }
-        if (e.code === 'Digit8') {
-          e.preventDefault();
-          setActivePanel('cluster');
-          return;
-        }
-        if (e.code === 'Digit9') {
-          e.preventDefault();
-          setActivePanel('analytics');
-          return;
-        }
-        if (e.code === 'Digit0') {
-          e.preventDefault();
-          setActivePanel('settings');
-          return;
-        }
-
         // Alt+T: new system shell session
         if (e.code === 'KeyT') {
           e.preventDefault();
