@@ -202,26 +202,20 @@ export class GitCliAdapter implements GitPort {
     return { commitsAhead, commitsBehind, filesChanged, additions, deletions };
   }
 
-  async copyIgnoredFiles(sourceRepo: string, targetPath: string): Promise<void> {
-    const { stdout } = await this.execFn(
-      'git',
-      ['status', '--ignored', '--short'],
-      { cwd: sourceRepo },
-    );
+  async copyEnvFiles(sourceRepo: string, targetPath: string): Promise<void> {
+    const { stdout } = await this.execFn('find', [
+      sourceRepo, '-maxdepth', '3', '-name', '.env*', '-type', 'f',
+    ]);
 
-    const paths = stdout
-      .split('\n')
-      .filter(line => line.startsWith('!! '))
-      .map(line => line.slice(3).replace(/\/$/, ''));
+    const files = stdout.trim().split('\n').filter(f => f.length > 0);
+    if (files.length === 0) return;
 
-    if (paths.length === 0) return;
+    for (const absolutePath of files) {
+      const relative = absolutePath.slice(sourceRepo.length + 1);
+      await this.execFn('cp', [absolutePath, `${targetPath}/${relative}`]);
+    }
 
-    await this.execFn('sh', [
-      '-c',
-      `tar cf - ${paths.map(p => `'${p}'`).join(' ')} | tar xf - -C '${targetPath}'`,
-    ], { cwd: sourceRepo });
-
-    this.logger.debug('Copied gitignored files', { sourceRepo, targetPath, count: paths.length });
+    this.logger.debug('Copied env files', { sourceRepo, targetPath, files });
   }
 
   private parseRemoteUrl(url: string): { org: string; name: string } {

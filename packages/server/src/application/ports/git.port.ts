@@ -15,5 +15,5 @@ export interface GitPort {
   getDefaultBranch(repoPath: string): Promise<string>;
   fetch(repoPath: string): Promise<void>;
   getDiffStats(repoPath: string, branch: string, baseBranch?: string): Promise<DiffStats>;
-  copyIgnoredFiles(sourceRepo: string, targetPath: string): Promise<void>;
+  copyEnvFiles(sourceRepo: string, targetPath: string): Promise<void>;
 }
