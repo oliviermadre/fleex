@@ -32,7 +32,7 @@ Storage: SQLite (default), JSON, PostgreSQL
 ## Prerequisites
 
 - [git](https://git-scm.com/)
-- [bun](https://bun.sh/)
+- [bun](https://bun.sh/) v1.3.5 minimum !
 - [tmux](https://github.com/tmux/tmux)
 - [claude](https://docs.anthropic.com/en/docs/claude-cli) — Anthropic CLI
 - [gh](https://cli.github.com/) — GitHub CLI (optional, recommended)
