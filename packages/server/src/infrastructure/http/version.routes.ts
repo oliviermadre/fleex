@@ -45,6 +45,15 @@ const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
  * origin/main the current HEAD is. This works correctly regardless of
  * which branch (or worktree) the instance is running on.
  */
+function isWorktree(): boolean {
+  try {
+    const gitCommonDir = git('git rev-parse --git-common-dir');
+    return gitCommonDir !== '.git';
+  } catch {
+    return false;
+  }
+}
+
 function checkBehindOriginMain(): UpdateCheckResult {
   if (cached && Date.now() - cached.checkedAt < CACHE_TTL_MS) {
     return cached;
@@ -82,6 +91,7 @@ export function versionRoutes() {
         latestCommit,
         behindBy,
         updateAvailable: behindBy > 0,
+        isWorktree: isWorktree(),
       };
     });
   };

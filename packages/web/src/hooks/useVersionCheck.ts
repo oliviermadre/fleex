@@ -7,6 +7,7 @@ interface VersionInfo {
   latestCommit: string | null;
   behindBy: number;
   updateAvailable: boolean;
+  isWorktree: boolean;
 }
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes

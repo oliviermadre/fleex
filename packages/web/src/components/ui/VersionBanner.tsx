@@ -11,6 +11,12 @@ export function VersionBanner() {
         Fleex is {versionInfo.behindBy} commit{versionInfo.behindBy > 1 ? 's' : ''} behind{' '}
         <span className="text-blue-300 font-mono">origin/main</span>.
         {' '}Run <code className="bg-blue-900/50 px-1 rounded">fleex self-update</code> to update.
+        {versionInfo.isWorktree && (
+          <>
+            <br />
+            <span className="text-blue-500/80 italic">You're in a worktree — self-update only affects <code className="bg-blue-900/50 px-1 rounded">~/.fleex/repo</code>.</span>
+          </>
+        )}
       </span>
       <button
         className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
