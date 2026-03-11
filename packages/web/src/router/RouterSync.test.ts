@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { parseUrl, storeToUrl } from './RouterSync';
 
 describe('parseUrl', () => {
-  it('redirects / to /sessions', () => {
+  it('redirects / to /dashboard', () => {
     const result = parseUrl('/', '');
-    expect(result.redirect).toBe('/sessions');
-    expect(result.panel).toBe('sessions');
+    expect(result.redirect).toBe('/dashboard');
+    expect(result.panel).toBe('dashboard');
   });
 
   it('parses /sessions', () => {
@@ -147,10 +147,10 @@ describe('parseUrl', () => {
     expect(result.sessionId).toBeNull();
   });
 
-  it('redirects unknown routes to /sessions', () => {
+  it('redirects unknown routes to /dashboard', () => {
     const result = parseUrl('/unknown-route', '');
-    expect(result.redirect).toBe('/sessions');
-    expect(result.panel).toBe('sessions');
+    expect(result.redirect).toBe('/dashboard');
+    expect(result.panel).toBe('dashboard');
   });
 });
 

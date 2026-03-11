@@ -24,6 +24,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
+  const sessions = useSessionStore((s) => s.sessions);
   const ticket = tickets.find((t) => t.id === ticketId);
 
   const [title, setTitle] = useState('');
