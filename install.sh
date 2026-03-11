@@ -470,7 +470,7 @@ phase_prerequisites() {
 phase_install() {
   ui_section "Installation"
 
-  if [ -d "$REPO_DIR/.git" ]; then
+  if git -C "$REPO_DIR" rev-parse --git-dir &>/dev/null 2>&1; then
     # Update mode
     IS_FRESH_INSTALL=false
     ui_step 1 3 "Pulling latest changes..."

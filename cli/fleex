@@ -502,7 +502,7 @@ cmd_status() {
 
 cmd_self_update() {
   local update_dir="$DEFAULT_REPO_DIR"
-  [[ -d "$update_dir/.git" ]] || die "Default repo not found at $update_dir. Nothing to update."
+  git -C "$update_dir" rev-parse --git-dir &>/dev/null || die "Default repo not found at $update_dir. Nothing to update."
 
   info "Updating fleex..."
 
