@@ -251,10 +251,11 @@ async function createSupabaseStores(deps: {
   const { SupabaseDomainEventLogStore } = await import('./supabase/supabase-domain-event-log-store.adapter.js');
   const { SupabaseKvStoreAdapter } = await import('./supabase/supabase-kv-store.adapter.js');
 
-  const connection = new SupabaseConnection(url, key);
+  const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
+  const connection = new SupabaseConnection(url, key, dbUrl);
   await connection.init();
 
-  // Run pending migrations (tracking only — Supabase DDL is managed via SQL Editor)
+  // Run pending migrations
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
   await runPendingMigrations('supabase', connection, deps.logger);
 

@@ -44,16 +44,29 @@ export async function runPendingMigrations(
         return result.rows;
       });
     } else {
-      // Supabase: use the client to query the _migrations table
-      runner.setQueryRowsFn(async (_sql) => {
-        const conn = connection as { client: { from(table: string): { select(cols: string): { order(col: string): Promise<{ data: { name: string }[] | null; error: unknown }> } } } };
-        const { data, error } = await conn.client
-          .from('_migrations')
-          .select('name')
-          .order('name');
-        if (error) return [];
-        return data ?? [];
-      });
+      // Supabase: use direct PG connection if available, otherwise fall back to REST client
+      const conn = connection as { canExecuteDDL?: boolean; query?(text: string): Promise<{ rows: { name: string }[] }>; client: { from(table: string): { select(cols: string): { order(col: string): Promise<{ data: { name: string }[] | null; error: { code?: string; message?: string } | null }> } } } };
+      if (conn.canExecuteDDL) {
+        runner.setQueryRowsFn(async (sql) => {
+          const result = await conn.query!(sql);
+          return result.rows;
+        });
+      } else {
+        runner.setQueryRowsFn(async (_sql) => {
+          const { data, error } = await conn.client
+            .from('_migrations')
+            .select('name')
+            .order('name');
+          if (error) {
+            // Table not found — no migrations applied yet
+            if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+              return [];
+            }
+            throw new Error(`Supabase query failed: ${error.message ?? JSON.stringify(error)}`);
+          }
+          return data ?? [];
+        });
+      }
     }
   }
 
@@ -71,13 +84,8 @@ function buildContext(adapter: AdapterType, connection: unknown): MigrationConte
         const conn = connection as { query(text: string): Promise<unknown> };
         await conn.query(sql);
       } else if (adapter === 'supabase') {
-        // Supabase DDL must be run via SQL editor — we use rpc if available, otherwise skip
-        // For tracking table operations, we use the client directly
-        const conn = connection as { query?(text: string): Promise<unknown>; client: { rpc(fn: string, params: Record<string, unknown>): Promise<{ error: unknown }> } };
-        if (conn.query) {
-          await conn.query(sql);
-        }
-        // If no query method, DDL is managed externally (Supabase SQL Editor)
+        const conn = connection as { query(text: string): Promise<unknown> };
+        await conn.query(sql);
       } else if (adapter === 'json') {
         // JSON adapter: exec is a no-op (JSON migrations handle their own file I/O)
       }

@@ -524,7 +524,7 @@ cmd_self_update() {
       set +a
       FLEEX_SQLITE_PATH="${FLEEX_SQLITE_PATH:-$FLEEX_HOME/fleex.db}" \
       bun run "$update_dir/packages/server/src/infrastructure/migrations/cli-migrate.ts"
-    ) >> "$FLEEX_HOME/.logs/self-update.log" 2>&1 && ok "Migrations applied." || warn "Migration check completed (see logs for details)."
+    ) >> "$FLEEX_HOME/.logs/self-update.log" 2>&1 && ok "Migrations applied." || warn "Migration failed — check $FLEEX_HOME/.logs/self-update.log"
   fi
 
   # Ensure symlink is in place (in case user installed with an older version that copied)

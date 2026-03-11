@@ -67,8 +67,13 @@ async function main() {
       console.error('FLEEX_SUPABASE_URL and FLEEX_SUPABASE_KEY are required');
       process.exit(1);
     }
+    const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
+    if (!dbUrl) {
+      logger.warn('FLEEX_SUPABASE_DB_URL is not set — migrations require a direct PostgreSQL connection to Supabase.');
+      logger.warn('Set FLEEX_SUPABASE_DB_URL to your Supabase PostgreSQL connection string (found in Supabase Dashboard > Settings > Database).');
+    }
     const { SupabaseConnection } = await import('../adapters/supabase/connection.js');
-    const conn = new SupabaseConnection(url, key);
+    const conn = new SupabaseConnection(url, key, dbUrl);
     await conn.init();
     connection = conn;
   }
@@ -90,7 +95,7 @@ async function main() {
   // Close connections
   if (driver === 'sqlite' && connection) {
     (connection as { close(): void }).close();
-  } else if (driver === 'pgsql' && connection) {
+  } else if ((driver === 'pgsql' || driver === 'supabase') && connection) {
     await (connection as { close(): Promise<void> }).close();
   }
 
