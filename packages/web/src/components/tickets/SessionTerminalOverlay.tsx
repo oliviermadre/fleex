@@ -130,7 +130,7 @@ export const SessionTerminalOverlay = memo(function SessionTerminalOverlay({
 
   const activityColorMap: Record<string, string> = {
     working: '#3b82f6',
-    executing: '#f59e0b',
+    executing: '#3b82f6',
     waiting_tool_approval: '#f59e0b',
     waiting_user_choice: '#f59e0b',
     waiting_plan_approval: '#f59e0b',

@@ -17,6 +17,7 @@ import type {
   AgentEvent,
   DomainEventLog,
   StatisticsResponse,
+  DashboardData,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -497,6 +498,12 @@ export async function fetchEventStats(): Promise<{ totalEvents: number }> {
 }
 
 // ── Statistics ──
+
+// ── Dashboard ──
+
+export async function fetchDashboard(): Promise<DashboardData> {
+  return request<DashboardData>('/dashboard');
+}
 
 export async function fetchStatistics(params: {
   from?: string;

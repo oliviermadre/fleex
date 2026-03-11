@@ -100,6 +100,13 @@ export type {
 export type { DomainEventLog } from './types/domain-event-log.js';
 
 export type {
+  DashboardPullRequest,
+  DashboardWorktree,
+  DashboardGitHubIssue,
+  DashboardData,
+} from './types/dashboard.js';
+
+export type {
   StatisticsTimeBucket,
   AgentLeaderboardEntry,
   StatisticsSummary,

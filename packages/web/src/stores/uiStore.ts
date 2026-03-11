@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
+type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions' | 'agent-tokens';
 export type AnalyticsTab = 'audit-trail' | 'statistics';
 
@@ -84,7 +84,7 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   navCollapsed: true,
   contentPanelWidth: 320,
-  activePanel: 'sessions',
+  activePanel: 'dashboard',
   settingsTab: 'general',
   analyticsTab: 'audit-trail',
   altHeld: false,

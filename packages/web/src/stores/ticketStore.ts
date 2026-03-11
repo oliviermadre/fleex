@@ -287,9 +287,10 @@ export const useTicketStore = create<TicketState>((set, get) => ({
 
     const columns = {} as Record<TicketStatus, Ticket[]>;
     for (const s of TICKET_STATUSES) {
-      columns[s] = filtered
-        .filter((t) => t.status === s)
-        .sort((a, b) => a.position - b.position);
+      const col = filtered.filter((t) => t.status === s);
+      columns[s] = s === 'done'
+        ? col.sort((a, b) => new Date(b.statusChangedAt).getTime() - new Date(a.statusChangedAt).getTime())
+        : col.sort((a, b) => a.position - b.position);
     }
     return columns;
   },

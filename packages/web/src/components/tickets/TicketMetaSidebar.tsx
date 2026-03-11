@@ -98,12 +98,8 @@ function CollapsedIndicator({
 
 function CollapsedTicketMetaSidebar({
   ticket,
-  onOpenSession,
-  loading,
 }: {
   ticket: Ticket;
-  onOpenSession: () => void;
-  loading?: boolean;
 }) {
   const toggleTicketMetaSidebar = useUIStore((s) => s.toggleTicketMetaSidebar);
   const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedMetaTooltip();
@@ -283,21 +279,6 @@ function CollapsedTicketMetaSidebar({
         )}
       </div>
 
-      {/* Bottom action — open session */}
-      <div className="flex flex-col items-center gap-1 border-t border-[var(--theme-border)] py-2">
-        <button
-          className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--theme-accent)] text-white transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
-          onClick={onOpenSession}
-          disabled={loading}
-          title={loading ? 'Opening...' : 'Open Session'}
-          onMouseEnter={(e) => showTooltip(e, 'Action', loading ? 'Opening...' : 'Open Session')}
-          onMouseLeave={hideTooltip}
-        >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="5,3 13,8 5,13" fill="currentColor" />
-          </svg>
-        </button>
-      </div>
 
       <CollapsedMetaTooltip data={tooltip} />
     </div>
@@ -308,32 +289,24 @@ function CollapsedTicketMetaSidebar({
 
 export function TicketMetaSidebar({
   ticket,
-  onOpenSession,
-  loading,
 }: {
   ticket: Ticket;
-  onOpenSession: () => void;
-  loading?: boolean;
 }) {
   const ticketMetaSidebarCollapsed = useUIStore((s) => s.ticketMetaSidebarCollapsed);
 
   if (ticketMetaSidebarCollapsed) {
-    return <CollapsedTicketMetaSidebar ticket={ticket} onOpenSession={onOpenSession} loading={loading} />;
+    return <CollapsedTicketMetaSidebar ticket={ticket} />;
   }
 
-  return <ExpandedTicketMetaSidebar ticket={ticket} onOpenSession={onOpenSession} loading={loading} />;
+  return <ExpandedTicketMetaSidebar ticket={ticket} />;
 }
 
 // ── Expanded ticket meta sidebar ──
 
 function ExpandedTicketMetaSidebar({
   ticket,
-  onOpenSession,
-  loading,
 }: {
   ticket: Ticket;
-  onOpenSession: () => void;
-  loading?: boolean;
 }) {
   const toggleTicketMetaSidebar = useUIStore((s) => s.toggleTicketMetaSidebar);
   const updateTicket = useTicketStore((s) => s.updateTicket);
@@ -642,13 +615,6 @@ function ExpandedTicketMetaSidebar({
       {/* Actions */}
       <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-[var(--theme-border)]">
         <button
-          className="w-full rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
-          onClick={onOpenSession}
-          disabled={loading}
-        >
-          {loading ? 'Opening...' : 'Open Session'}
-        </button>
-        <button
           className="w-full rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors hover:bg-red-500/10"
           onClick={handleDelete}
         >
@@ -855,11 +821,26 @@ function RepoWorktreePicker({
         </label>
         {linkedRepo && !repoInConfig ? (
           /* Read-only: repo linked but no longer in resolved repositories */
-          <div className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
-              <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
-            </svg>
-            <span className="truncate text-xs text-[var(--theme-text-secondary)]">{linkedRepo.org}/{linkedRepo.name}</span>
+          <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+                <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
+              </svg>
+              <span className="truncate text-xs text-[var(--theme-text-secondary)]">{linkedRepo.org}/{linkedRepo.name}</span>
+            </div>
+            <button
+              className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+              onClick={async () => {
+                if (worktreeLink) await onRemoveLink(worktreeLink.id);
+                await onRemoveLink(repoLink!.id);
+              }}
+              title="Unlink repository"
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="4" x2="12" y2="12" />
+                <line x1="12" y1="4" x2="4" y2="12" />
+              </svg>
+            </button>
           </div>
         ) : repos.length === 0 ? (
           <span className="text-[10px] text-[var(--theme-text-muted)]">No repositories configured</span>
@@ -879,10 +860,10 @@ function RepoWorktreePicker({
         )}
       </div>
 
-      {/* Worktree */}
+      {/* Branch */}
       <div>
         <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Worktree
+          Branch
         </label>
         {worktreeLink ? (
           <>
@@ -895,18 +876,16 @@ function RepoWorktreePicker({
                 </svg>
                 <span className="truncate text-xs text-[var(--theme-text-primary)]">{worktreeLink.label}</span>
               </div>
-              {repoInConfig && (
-                <button
-                  className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-                  onClick={handleClearWorktree}
-                  title="Unlink worktree"
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <line x1="4" y1="4" x2="12" y2="12" />
-                    <line x1="12" y1="4" x2="4" y2="12" />
-                  </svg>
-                </button>
-              )}
+              <button
+                className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+                onClick={handleClearWorktree}
+                title="Unlink worktree"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="4" x2="12" y2="12" />
+                  <line x1="12" y1="4" x2="4" y2="12" />
+                </svg>
+              </button>
             </div>
             {!loading && !worktreeExistsLocally && (
               <div className="mt-1.5 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">

@@ -3,18 +3,8 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketNotFoundError, WorktreeError } from '../../domain/errors.js';
-import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import type { Container } from '../container.js';
-
-function buildBranchName(title: string, ticketId: string): string {
-  const slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40);
-  const short = ticketId.slice(0, 6);
-  return `ticket/${short}-${slug}`;
-}
 
 export function agentWorktreesRoutes(container: Container) {
   return async function (app: FastifyInstance) {
@@ -85,10 +75,8 @@ export function agentWorktreesRoutes(container: Container) {
         }
 
         const repoPath = join(container.config.get().basePath, repoOrg, repoName);
-        const branchName = buildBranchName(ticket.title, ticket.id);
-        const sanitized = sanitizeBranchForPath(branchName);
-        const dirName = `${repoName}.${sanitized}`;
-        const wtPath = join(repoPath, '..', dirName);
+        const branchName = buildTicketBranchName(ticket.title, ticket.id);
+        const wtPath = join(repoPath, '..', buildWorktreeDirName(repoName, branchName));
 
         const baseBranch = request.body?.baseBranch;
         await container.createWorktree.execute(repoPath, wtPath, {

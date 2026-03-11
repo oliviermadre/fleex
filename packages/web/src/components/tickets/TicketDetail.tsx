@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Session, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
 import { ticketWs } from '../../services/websocket';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -13,6 +13,8 @@ import { TicketMentions } from './TicketMentions';
 import { SessionTerminalOverlay } from './SessionTerminalOverlay';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import * as api from '../../services/api';
+import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 
 type DescriptionMode = 'write' | 'preview' | 'split';
 type MainTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity';
@@ -22,6 +24,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
+  const sessions = useSessionStore((s) => s.sessions);
   const ticket = tickets.find((t) => t.id === ticketId);
 
   const [title, setTitle] = useState('');
@@ -171,6 +174,11 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     return null;
   }, [ticket]);
 
+  const ticketSessions = useMemo(
+    () => ticket ? findSessionsForTicket(ticket, sessions) : [],
+    [ticket, sessions],
+  );
+
   const openCreateModalForTicket = useUIStore((s) => s.openCreateModalForTicket);
 
   const handleOpenSession = useCallback(async () => {
@@ -237,16 +245,23 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex flex-1 flex-col overflow-hidden p-6">
-          {/* Title */}
-          <input
-            className="w-full flex-shrink-0 bg-transparent text-lg font-semibold text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              debouncedUpdate('title', e.target.value);
-            }}
-            placeholder="Ticket title..."
-          />
+          {/* Title + Session button */}
+          <div className="flex flex-shrink-0 items-center gap-3">
+            <input
+              className="min-w-0 flex-1 bg-transparent text-lg font-semibold text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                debouncedUpdate('title', e.target.value);
+              }}
+              placeholder="Ticket title..."
+            />
+            <SmartSessionButton
+              sessions={ticketSessions}
+              creating={sessionLoading}
+              onCreateSession={handleOpenSession}
+            />
+          </div>
 
           {/* Main tabs */}
           <div className="mt-3 flex flex-shrink-0 items-center gap-1 border-b border-[var(--theme-border)]">
@@ -348,7 +363,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
         </div>
 
         {/* Meta sidebar */}
-        <TicketMetaSidebar ticket={ticket} onOpenSession={handleOpenSession} loading={sessionLoading} />
+        <TicketMetaSidebar ticket={ticket} />
       </div>
 
       {/* Session terminal overlay */}

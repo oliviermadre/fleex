@@ -3,7 +3,6 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { HotkeyBadge } from '../ui/HotkeyBadge';
 import { cn } from '../../lib/cn';
 
 function FleexLogo({ collapsed }: { collapsed: boolean }) {
@@ -40,6 +39,20 @@ export function NavSidebar() {
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
       <div className="flex flex-1 flex-col gap-1 pt-2">
+        {/* Dashboard */}
+        <NavItem
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+            </svg>
+          }
+          label="Dashboard"
+          active={activePanel === 'dashboard'}
+          collapsed={navCollapsed}
+          onClick={() => navigate('/dashboard')}
+        />
+
         {/* Branches (was Sessions) */}
         <NavItem
           icon={
@@ -54,7 +67,6 @@ export function NavSidebar() {
           active={activePanel === 'sessions'}
           collapsed={navCollapsed}
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
-          hotkey="⌥1"
           onClick={() => navigate('/sessions')}
         />
 
@@ -71,7 +83,7 @@ export function NavSidebar() {
           active={activePanel === 'repositories'}
           collapsed={navCollapsed}
           badge={repoCount > 0 ? (repoCount > 9 ? '9+' : String(repoCount)) : undefined}
-          hotkey="⌥2"
+
           onClick={() => navigate('/repositories')}
         />
         {/* Backlog (was Tickets) */}
@@ -96,7 +108,7 @@ export function NavSidebar() {
           active={activePanel === 'tickets'}
           collapsed={navCollapsed}
           badge={activeTicketCount > 0 ? (activeTicketCount > 9 ? '9+' : String(activeTicketCount)) : undefined}
-          hotkey="⌥3"
+
           onClick={() => navigate('/tickets')}
         />
 
@@ -116,7 +128,7 @@ export function NavSidebar() {
           label="Claude Config"
           active={activePanel === 'claude-config'}
           collapsed={navCollapsed}
-          hotkey="⌥4"
+
           onClick={() => navigate('/claude-config')}
         />
 
@@ -135,7 +147,7 @@ export function NavSidebar() {
           label="Agents"
           active={activePanel === 'agents'}
           collapsed={navCollapsed}
-          hotkey="⌥6"
+
           onClick={() => navigate('/agents')}
         />
 
@@ -154,7 +166,7 @@ export function NavSidebar() {
           label="Scratchpads"
           active={activePanel === 'scratchpads'}
           collapsed={navCollapsed}
-          hotkey="⌥7"
+
           onClick={() => navigate('/scratchpads')}
         />
 
@@ -170,7 +182,7 @@ export function NavSidebar() {
           label="Cluster"
           active={activePanel === 'cluster'}
           collapsed={navCollapsed}
-          hotkey="⌥8"
+
           onClick={() => navigate('/cluster')}
         />
       </div>
@@ -186,7 +198,7 @@ export function NavSidebar() {
           label="Analytics"
           active={activePanel === 'analytics'}
           collapsed={navCollapsed}
-          hotkey="⌥9"
+
           onClick={() => navigate('/analytics')}
         />
         <NavItem
@@ -199,7 +211,7 @@ export function NavSidebar() {
           label="Settings"
           active={activePanel === 'settings'}
           collapsed={navCollapsed}
-          hotkey="⌥0"
+
           onClick={() => navigate('/settings')}
         />
       </div>
@@ -237,7 +249,6 @@ function NavItem({
   active,
   collapsed,
   badge,
-  hotkey,
   onClick,
 }: {
   icon: React.ReactNode;
@@ -245,7 +256,6 @@ function NavItem({
   active: boolean;
   collapsed: boolean;
   badge?: string;
-  hotkey?: string;
   onClick: () => void;
 }) {
   return (
@@ -267,7 +277,6 @@ function NavItem({
             {badge}
           </span>
         )}
-        {hotkey && <HotkeyBadge hotkey={hotkey} position="top-left" />}
       </span>
       {!collapsed && (
         <>

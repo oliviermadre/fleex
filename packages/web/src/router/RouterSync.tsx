@@ -15,7 +15,7 @@ import { useTicketStore } from '../stores/ticketStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 
-type ActivePanel = 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
+type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
@@ -55,9 +55,14 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
 
   const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
 
-  // Root: redirect to /sessions
+  // Root: redirect to /dashboard
   if (pathname === '/') {
-    return { ...base, panel: 'sessions' as ActivePanel, redirect: '/sessions' };
+    return { ...base, panel: 'dashboard' as ActivePanel, redirect: '/dashboard' };
+  }
+
+  // Dashboard
+  if (pathname === '/dashboard') {
+    return { ...base, panel: 'dashboard' };
   }
 
   // Agent worktree within sessions panel
@@ -159,8 +164,8 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
     return { ...base, panel: 'settings', redirect: '/settings' };
   }
 
-  // Unknown route → redirect to /sessions
-  return { ...base, panel: 'sessions', redirect: '/sessions' };
+  // Unknown route → redirect to /dashboard
+  return { ...base, panel: 'dashboard', redirect: '/dashboard' };
 }
 
 // ─── Store state → URL ───────────────────────────────────────────────────────
@@ -180,6 +185,8 @@ export function storeToUrl(
   analyticsTab?: AnalyticsTab,
 ): { pathname: string; search: string } {
   switch (activePanel) {
+    case 'dashboard':
+      return { pathname: '/dashboard', search: '' };
     case 'sessions': {
       if (selectedAgentWorktreeTicketId && !selectedSessionId) {
         return { pathname: `/sessions/agent/${selectedAgentWorktreeTicketId}`, search: '' };

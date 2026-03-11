@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
+import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { GitPort } from '../ports/git.port.js';
@@ -50,9 +50,7 @@ export class ReconcileWorktreeUseCase {
   private async reconcile(org: string, repoName: string, branch: string): Promise<ReconcileResult> {
     const basePath = this.config.get().basePath;
     const repoPath = join(basePath, org, repoName);
-    const sanitized = sanitizeBranchForPath(branch);
-    const dirName = `${repoName}.${sanitized}`;
-    const wtPath = join(repoPath, '..', dirName);
+    const wtPath = join(repoPath, '..', buildWorktreeDirName(repoName, branch));
 
     // 1. Check if worktree path already exists
     try {

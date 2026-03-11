@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import type { Ticket, BoardWithCounts } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { DueDateBadge } from './DueDateBadge';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { cn } from '../../lib/cn';
@@ -79,18 +81,10 @@ export function KanbanCard({
     return null;
   }, [worktreeLinks, repoLinks]);
 
-  const hasActiveSession = useMemo(() => {
-    if (sessionLinks.length > 0) return true;
-    if (!repoWorktreeInfo) return false;
-    const [org, name] = repoWorktreeInfo.repo.split('/');
-    return sessions.some(
-      (s) =>
-        s.status === 'running' &&
-        s.repositoryOrg === org &&
-        s.repositoryName === name &&
-        s.worktreeBranch === repoWorktreeInfo.branch,
-    );
-  }, [sessionLinks, repoWorktreeInfo, sessions]);
+  const ticketSessions = useMemo(
+    () => findSessionsForTicket(ticket, sessions),
+    [ticket, sessions],
+  );
 
   // Time spent in current column — based on when the ticket entered this status
   const timeInColumn = formatTimeAgo(ticket.statusChangedAt);
@@ -142,24 +136,26 @@ export function KanbanCard({
         {/* Left column: priority indicator + blocked lock */}
         <div className="flex flex-col items-center gap-1 flex-shrink-0">
           <PriorityPickerPopover ticket={ticket} />
-          <button
-            className={cn(
-              'rounded transition-all',
-              ticket.blocked
-                ? 'opacity-100 text-red-500 hover:text-red-400'
-                : 'opacity-30 text-[var(--theme-text-muted)] hover:opacity-100',
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              updateTicket(ticket.id, { blocked: !ticket.blocked });
-            }}
-            title={ticket.blocked ? 'Unblock ticket' : 'Mark as blocked'}
-          >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
-              <rect x="3" y="7" width="10" height="8" rx="1.5" />
-              <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
-            </svg>
-          </button>
+          {ticket.status !== 'done' && (
+            <button
+              className={cn(
+                'rounded transition-all',
+                ticket.blocked
+                  ? 'opacity-100 text-red-500 hover:text-red-400'
+                  : 'opacity-30 text-[var(--theme-text-muted)] hover:opacity-100',
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                updateTicket(ticket.id, { blocked: !ticket.blocked });
+              }}
+              title={ticket.blocked ? 'Unblock ticket' : 'Mark as blocked'}
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
+                <rect x="3" y="7" width="10" height="8" rx="1.5" />
+                <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+              </svg>
+            </button>
+          )}
         </div>
         <span className="line-clamp-2 flex-1 text-sm font-medium leading-snug text-[var(--theme-text-primary)]">
           {ticket.title}
@@ -235,69 +231,67 @@ export function KanbanCard({
         </div>
       )}
 
-      {/* Bottom row: links + time + open session */}
-      <div className="mt-2.5 flex items-center gap-2.5 text-xs text-[var(--theme-text-muted)]">
-        {sessionLinks.length > 0 && (
-          <span className="flex items-center gap-1">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
-              <polyline points="4.5,7 6,8.5 4.5,10" />
-            </svg>
-            {sessionLinks.length}
+      {/* Bottom row */}
+      {ticket.status === 'done' ? (
+        <div className="mt-2.5 flex items-center justify-center text-xs text-[var(--theme-text-faint)]" title={`Done since ${new Date(ticket.statusChangedAt).toLocaleString(undefined, { hour12: false })}`}>
+          {timeInColumn} ago
+        </div>
+      ) : (
+        <div className="mt-2.5 flex items-center gap-2.5 text-xs text-[var(--theme-text-muted)]">
+          {sessionLinks.length > 0 && (
+            <span className="flex items-center gap-1">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+                <polyline points="4.5,7 6,8.5 4.5,10" />
+              </svg>
+              {sessionLinks.length}
+            </span>
+          )}
+          {ticket.assignee && (
+            ticket.assignee === 'user' ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-400" title="Me">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+                  <rect x="2" y="3" width="12" height="10" rx="1.5" />
+                  <circle cx="8" cy="7" r="1.5" />
+                  <path d="M5 12c0-1.5 1.3-2.5 3-2.5s3 1 3 2.5" />
+                </svg>
+                <span className="max-w-[70px] truncate">Me</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-400" title={`Agent: ${ticket.assignee}`}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+                  <rect x="3" y="5" width="10" height="8" rx="1.5" />
+                  <path d="M5.5 8.5h1M9.5 8.5h1" />
+                  <path d="M6 11h4" />
+                  <line x1="8" y1="5" x2="8" y2="2.5" />
+                  <circle cx="8" cy="2" r="0.75" />
+                </svg>
+                <span className="max-w-[70px] truncate">{ticket.assignee}</span>
+              </span>
+            )
+          )}
+
+          {/* Time in column */}
+          <span className="text-[var(--theme-text-faint)]" title={`In this column since ${new Date(ticket.statusChangedAt).toLocaleString(undefined, { hour12: false })}`}>
+            {timeInColumn}
           </span>
-        )}
-{ticket.assignee && (
-          ticket.assignee === 'user' ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-400" title="Me">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
-                <rect x="2" y="3" width="12" height="10" rx="1.5" />
-                <circle cx="8" cy="7" r="1.5" />
-                <path d="M5 12c0-1.5 1.3-2.5 3-2.5s3 1 3 2.5" />
-              </svg>
-              <span className="max-w-[70px] truncate">Me</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-400" title={`Agent: ${ticket.assignee}`}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
-                <rect x="3" y="5" width="10" height="8" rx="1.5" />
-                <path d="M5.5 8.5h1M9.5 8.5h1" />
-                <path d="M6 11h4" />
-                <line x1="8" y1="5" x2="8" y2="2.5" />
-                <circle cx="8" cy="2" r="0.75" />
-              </svg>
-              <span className="max-w-[70px] truncate">{ticket.assignee}</span>
-            </span>
-          )
-        )}
 
-        {/* Time in column */}
-        <span className="text-[var(--theme-text-faint)]" title={`In this column since ${new Date(ticket.statusChangedAt).toLocaleString()}`}>
-          {timeInColumn}
-        </span>
+          {/* Spacer */}
+          <div className="flex-1" />
 
-        {/* Spacer */}
-        <div className="flex-1" />
+          {/* Due date */}
+          <DueDateBadge dueDate={ticket.dueDate} status={ticket.status} size="sm" />
 
-        {/* Due date */}
-        <DueDateBadge dueDate={ticket.dueDate} status={ticket.status} size="sm" />
-
-        {/* Open Session button */}
-        <button
-          className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors hover:bg-[var(--theme-bg-overlay)]"
-          style={{ color: hasActiveSession ? '#22c55e' : 'var(--theme-text-muted)' }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenSession(ticket.id);
-          }}
-          title={hasActiveSession ? 'Open active session' : 'Start new session'}
-        >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
-            <polyline points="4.5,7 6,8.5 4.5,10" />
-          </svg>
-          {hasActiveSession ? 'Session' : 'Open'}
-        </button>
-      </div>
+          {/* Open Session button */}
+          <span onClick={(e) => e.stopPropagation()}>
+            <SmartSessionButton
+              sessions={ticketSessions}
+              creating={false}
+              onCreateSession={() => onOpenSession(ticket.id)}
+            />
+          </span>
+        </div>
+      )}
     </div>
   );
 }

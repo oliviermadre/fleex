@@ -43,6 +43,15 @@ export class CreateWorktreeUseCase {
         this.emitCreated(repoPath, existingPath, request);
         return existingPath;
       }
+      const branchExistsMatch = message.match(/branch named '([^']+)' already exists/i);
+      if (branchExistsMatch && request.createNewBranch) {
+        this.logger.info('Branch already exists, checking out existing branch', {
+          repoPath, wtPath, branch: request.branch,
+        });
+        // Retry without -b; this can itself fail (e.g. branch already checked out)
+        // so we recurse with createNewBranch=false to let the other handlers deal with it.
+        return this.execute(repoPath, wtPath, { ...request, createNewBranch: false });
+      }
       const checkedOutMatch = message.match(/is already checked out at '([^']+)'/);
       if (checkedOutMatch) {
         const existingPath = checkedOutMatch[1]!;

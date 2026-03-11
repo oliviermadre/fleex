@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import type { TicketLink } from '@fleex/shared';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -38,12 +38,6 @@ export class CreateSessionFromTicketUseCase {
       }));
     }
 
-    // Build Claude prompt from ticket content
-    let claudePrompt = ticket.title;
-    if (ticket.description) {
-      claudePrompt += `\n\n${ticket.description}`;
-    }
-
     // Determine CWD
     let cwd = this.config.get().basePath;
 
@@ -58,14 +52,34 @@ export class CreateSessionFromTicketUseCase {
       }
       cwd = resolved.wtPath;
     } else {
-      // Check board for repo scope
-      const board = await this.ticketStore.getBoardById(ticket.boardId);
-      if (board?.repositoryOrg && board.repositoryName) {
-        const repoPath = join(this.config.get().basePath, board.repositoryOrg, board.repositoryName);
-        // Try to create a worktree with a branch name based on ticket
-        const branchName = this.buildBranchName(ticket.title, ticket.id);
+      // Resolve repo: ticket's repository link takes priority, then board config
+      let repoOrg: string | undefined;
+      let repoName: string | undefined;
+
+      const repoLink = ticket.links.find((l) => l.type === 'repository');
+      if (repoLink?.ref) {
+        const slashIdx = repoLink.ref.indexOf('/');
+        if (slashIdx > 0) {
+          repoOrg = repoLink.ref.substring(0, slashIdx);
+          repoName = repoLink.ref.substring(slashIdx + 1);
+        }
+      }
+
+      // Fall back to board's repository config
+      if (!repoOrg || !repoName) {
+        const board = await this.ticketStore.getBoardById(ticket.boardId);
+        if (board?.repositoryOrg && board.repositoryName) {
+          repoOrg = board.repositoryOrg;
+          repoName = board.repositoryName;
+        }
+      }
+
+      // Create worktree if we found a repo
+      if (repoOrg && repoName) {
+        const repoPath = join(this.config.get().basePath, repoOrg, repoName);
+        const branchName = buildTicketBranchName(ticket.title, ticket.id);
         try {
-          const wtPath = join(repoPath, '..', `${board.repositoryName}.${branchName}`);
+          const wtPath = join(repoPath, '..', buildWorktreeDirName(repoName, branchName));
           await this.createWorktree.execute(repoPath, wtPath, {
             branch: branchName,
             createNewBranch: true,
@@ -86,7 +100,6 @@ export class CreateSessionFromTicketUseCase {
     const session = await this.createSession.execute({
       cwd,
       type: 'claude',
-      claudePrompt,
     });
 
     // Auto-link session to ticket
@@ -158,12 +171,10 @@ export class CreateSessionFromTicketUseCase {
               wtPath = match.path;
             } else {
               // Compute the expected path the server would have chosen
-              const sanitized = sanitizeBranchForPath(branchName);
-              wtPath = join(repoPath, '..', `${name}.${sanitized}`);
+              wtPath = join(repoPath, '..', buildWorktreeDirName(name, branchName));
             }
           } catch {
-            const sanitized = sanitizeBranchForPath(branchName);
-            wtPath = join(repoPath, '..', `${name}.${sanitized}`);
+            wtPath = join(repoPath, '..', buildWorktreeDirName(name, branchName));
           }
         }
       }
@@ -213,15 +224,5 @@ export class CreateSessionFromTicketUseCase {
     }
 
     return { wtPath, branchName };
-  }
-
-  private buildBranchName(title: string, ticketId: string): string {
-    const slug = title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40);
-    const short = ticketId.slice(0, 6);
-    return `ticket/${short}-${slug}`;
   }
 }
