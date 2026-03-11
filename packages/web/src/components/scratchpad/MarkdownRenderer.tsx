@@ -1,4 +1,4 @@
-import { useMemo, useState, Children } from 'react';
+import { memo, useMemo, useState, Children } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -88,7 +88,7 @@ const rehypePlugins: any[] = [[rehypeHighlight, { detect: true }]];
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function MarkdownRenderer({ content, onToggleCheckbox }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({ content, onToggleCheckbox }: MarkdownRendererProps) {
   const segments = useMemo(() => parseSegments(content), [content]);
 
   return (
@@ -118,7 +118,7 @@ export function MarkdownRenderer({ content, onToggleCheckbox }: MarkdownRenderer
       })}
     </div>
   );
-}
+});
 
 // ── Section renderer ──────────────────────────────────────────────────────────
 

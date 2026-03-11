@@ -22,7 +22,6 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
-  const sessions = useSessionStore((s) => s.sessions);
   const ticket = tickets.find((t) => t.id === ticketId);
 
   const [title, setTitle] = useState('');
@@ -109,6 +108,24 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     [ticketId],
   );
 
+  const handleDescToggleCheckbox = useCallback(
+    (lineIndex: number) => {
+      const lines = descriptionRef.current.split('\n');
+      const line = lines[lineIndex];
+      if (!line) return;
+      if (line.includes('[ ]')) {
+        lines[lineIndex] = line.replace('[ ]', '[x]');
+      } else if (/\[[xX]\]/.test(line)) {
+        lines[lineIndex] = line.replace(/\[[xX]\]/, '[ ]');
+      }
+      const updated = lines.join('\n');
+      setDescription(updated);
+      descriptionRef.current = updated;
+      debouncedSilentDescription(updated);
+    },
+    [debouncedSilentDescription],
+  );
+
   const debouncedUpdate = useCallback(
     (field: 'title' | 'description', value: string) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -122,6 +139,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   // Find an existing running session for this ticket
   const findSessionForTicket = useCallback((): Session | null => {
     if (!ticket) return null;
+    const sessions = useSessionStore.getState().sessions;
 
     // Check session links first
     const sessionLink = ticket.links.find((l) => l.type === 'session');
@@ -151,7 +169,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     }
 
     return null;
-  }, [ticket, sessions]);
+  }, [ticket]);
 
   const openCreateModalForTicket = useUIStore((s) => s.openCreateModalForTicket);
 
@@ -295,20 +313,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
                     {description.trim() ? (
                       <MarkdownRenderer
                         content={description}
-                        onToggleCheckbox={(lineIndex) => {
-                          const lines = description.split('\n');
-                          const line = lines[lineIndex];
-                          if (!line) return;
-                          if (line.includes('[ ]')) {
-                            lines[lineIndex] = line.replace('[ ]', '[x]');
-                          } else if (/\[[xX]\]/.test(line)) {
-                            lines[lineIndex] = line.replace(/\[[xX]\]/, '[ ]');
-                          }
-                          const updated = lines.join('\n');
-                          setDescription(updated);
-                          descriptionRef.current = updated;
-                          debouncedSilentDescription(updated);
-                        }}
+                        onToggleCheckbox={handleDescToggleCheckbox}
                       />
                     ) : (
                       <p className="text-sm italic text-[var(--theme-text-muted)]">Nothing to preview</p>

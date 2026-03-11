@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
 import { ticketWs } from '../../services/websocket';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
@@ -31,6 +31,8 @@ function typeIcon(type: string): string {
     default: return type.toUpperCase().slice(0, 4);
   }
 }
+
+const noopToggle = () => {};
 
 export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
@@ -155,7 +157,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
               {isExpanded && !contentIsUrl && (
                 <div className="border-t border-[var(--theme-border)] px-3 py-3">
                   <div className="max-h-[400px] overflow-y-auto text-sm">
-                    <MarkdownRenderer content={d.content} onToggleCheckbox={() => {}} />
+                    <MarkdownRenderer content={d.content} onToggleCheckbox={noopToggle} />
                   </div>
                 </div>
               )}

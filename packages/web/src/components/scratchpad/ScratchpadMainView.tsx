@@ -21,6 +21,11 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
 
   const { handleTyping, handlePreviewScroll } = useScrollSync(textareaRef, previewRef, true);
 
+  const handleToggleCheckbox = useCallback(
+    (lineIndex: number) => toggleCheckbox(scratchpadKey, lineIndex),
+    [scratchpadKey, toggleCheckbox],
+  );
+
   // Load on key change
   useEffect(() => {
     if (!entry.loaded) {
@@ -90,7 +95,7 @@ export function ScratchpadMainView({ scratchpadKey }: Props) {
             {entry.content.trim() ? (
               <MarkdownRenderer
                 content={entry.content}
-                onToggleCheckbox={(lineIndex) => toggleCheckbox(scratchpadKey, lineIndex)}
+                onToggleCheckbox={handleToggleCheckbox}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-[var(--theme-text-faint)] text-xs">

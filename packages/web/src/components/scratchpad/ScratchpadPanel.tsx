@@ -80,6 +80,11 @@ export function ScratchpadPanel() {
     [toggleScratchpad],
   );
 
+  const handleToggleCheckbox = useCallback(
+    (lineIndex: number) => toggleCheckbox(storeKey, lineIndex),
+    [storeKey, toggleCheckbox],
+  );
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setContent(storeKey, e.target.value);
@@ -178,7 +183,7 @@ export function ScratchpadPanel() {
                 {entry.content.trim() ? (
                   <MarkdownRenderer
                     content={entry.content}
-                    onToggleCheckbox={(lineIndex) => toggleCheckbox(storeKey, lineIndex)}
+                    onToggleCheckbox={handleToggleCheckbox}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-[var(--theme-text-faint)] text-xs">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import type { TicketComment, TicketMention, TicketWsMessage } from '@fleex/shared';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -90,7 +90,7 @@ function MentionSpan({ text, mentionId, onRemove, className }: {
 const commentRehypePlugins: any[] = [[rehypeHighlight, { detect: true }]];
 const commentRemarkPlugins = [remarkGfm];
 
-function CommentMarkdown({
+const CommentMarkdown = memo(function CommentMarkdown({
   body,
   commentId,
   mentionLookup,
@@ -264,7 +264,7 @@ function CommentMarkdown({
       {processed}
     </Markdown>
   );
-}
+});
 
 // ── Utilities ──
 
