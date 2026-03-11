@@ -1,6 +1,10 @@
 -- ============================================================================
--- Fleex – Supabase Schema
+-- Fleex – Supabase Schema (REFERENCE FILE)
 -- Run this in the Supabase SQL Editor to create all required tables and indexes.
+--
+-- NOTE: The canonical schema is now managed by the migration system at:
+--   packages/server/src/infrastructure/migrations/
+-- This file is kept as a convenience for Supabase SQL Editor users.
 -- ============================================================================
 
 -- ── Users ─────────────────────────────────────────────────────────────────

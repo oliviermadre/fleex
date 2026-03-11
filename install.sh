@@ -607,6 +607,13 @@ phase_wizard() {
   # Write config — to DB when sqlite, to config.json when json
   mkdir -p "$FLEEX_HOME"
   if [ "$storage_driver" = "sqlite" ]; then
+    # Run migrations to create all tables before writing config
+    info "Running database migrations..."
+    FLEEX_STORAGE_DRIVER="sqlite" \
+    FLEEX_SQLITE_PATH="$DB_FILE" \
+    bun run "$REPO_DIR/packages/server/src/infrastructure/migrations/cli-migrate.ts"
+    ok "Migrations applied."
+
     FLEEX_CFG_BASE_PATH="$base_path" \
     FLEEX_CFG_SHELL="$default_shell" \
     FLEEX_CFG_DISPLAY="$display_name" \
@@ -616,11 +623,6 @@ phase_wizard() {
 import { Database } from "bun:sqlite";
 const db = new Database(process.env.FLEEX_CFG_DB, { create: true });
 db.exec("PRAGMA journal_mode = WAL");
-db.exec(`CREATE TABLE IF NOT EXISTS app_config (
-  id TEXT PRIMARY KEY DEFAULT '"'"'singleton'"'"',
-  data TEXT NOT NULL DEFAULT '"'"'{}'"'"',
-  updated_at TEXT NOT NULL
-)`);
 const config = {
   basePath: process.env.FLEEX_CFG_BASE_PATH,
   defaultShell: process.env.FLEEX_CFG_SHELL,
@@ -807,6 +809,8 @@ seed_sqlite() {
   local id_board="$5"
 
   # Use bun:sqlite to create DB and seed data — all values via env vars
+  # Tables are already created by the migration runner (called in phase_wizard).
+  # Here we only seed data.
   SEED_DB="$DB_FILE" \
   SEED_MENTION="$WIZARD_MENTION_NAME" \
   SEED_NOW="$now" \
@@ -820,66 +824,6 @@ import { Database } from "bun:sqlite";
 const db = new Database(process.env.SEED_DB, { create: true });
 db.exec("PRAGMA journal_mode = WAL");
 db.exec("PRAGMA foreign_keys = ON");
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS agent_personas (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    display_name TEXT NOT NULL,
-    model TEXT NOT NULL,
-    soul_md TEXT DEFAULT "",
-    identity_md TEXT DEFAULT "",
-    memory_md TEXT DEFAULT "",
-    human_mention_name TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS boards (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    emoji TEXT NOT NULL,
-    repository_org TEXT,
-    repository_name TEXT,
-    next_display_id INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS tickets (
-    id TEXT PRIMARY KEY,
-    board_id TEXT NOT NULL,
-    display_id INTEGER NOT NULL DEFAULT 0,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL,
-    status TEXT NOT NULL,
-    priority TEXT NOT NULL,
-    position INTEGER NOT NULL,
-    tags TEXT NOT NULL,
-    links TEXT NOT NULL,
-    blocked INTEGER NOT NULL DEFAULT 0,
-    favorite INTEGER NOT NULL DEFAULT 0,
-    due_date TEXT,
-    assignee TEXT,
-    agent_claimed_at TEXT,
-    github_metadata TEXT,
-    status_changed_at TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS app_config (
-    id TEXT PRIMARY KEY DEFAULT '"'"'singleton'"'"',
-    data TEXT NOT NULL DEFAULT '"'"'{}'"'"',
-    updated_at TEXT NOT NULL
-  )
-`);
 
 const m = process.env.SEED_MENTION;
 const now = process.env.SEED_NOW;
@@ -985,6 +929,17 @@ await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n");
 # ── Phase 6: Completion ───────────────────────────────────────────────────────
 
 phase_complete_update() {
+  # Run pending database migrations for existing installs
+  if [ -f "$ENV_FILE" ]; then
+    set -a
+    . "$ENV_FILE"
+    set +a
+    info "Running database migrations..."
+    FLEEX_SQLITE_PATH="$DB_FILE" \
+    bun run "$REPO_DIR/packages/server/src/infrastructure/migrations/cli-migrate.ts" 2>&1 || true
+    ok "Migrations checked."
+  fi
+
   echo ""
   printf "${GREEN}${BOLD}"
   cat <<'DONE'

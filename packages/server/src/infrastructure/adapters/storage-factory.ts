@@ -78,6 +78,10 @@ async function createJsonStores(deps: {
   const { JsonAgentEventStore } = await import('./json-agent-event-store.adapter.js');
   const { JsonDomainEventLogStore } = await import('./json-domain-event-log-store.adapter.js');
 
+  // Run pending migrations (JSON adapter — tracking via _migrations.json)
+  const { runPendingMigrations } = await import('../migrations/run-migrations.js');
+  await runPendingMigrations('json', null, deps.logger, { homedir: deps.homedir });
+
   const configStore = new JsonConfigAdapter(deps.execFn, deps.hostFs, deps.homedir);
   await configStore.init();
   const sessionStore = new JsonSessionStore(deps.hostFs, deps.homedir, deps.logger);
@@ -140,6 +144,10 @@ async function createSqliteStores(deps: {
   const connection = new SqliteConnection(dbPath);
   await connection.init();
 
+  // Run pending migrations
+  const { runPendingMigrations } = await import('../migrations/run-migrations.js');
+  await runPendingMigrations('sqlite', connection, deps.logger);
+
   const configStore = new SqliteConfigAdapter(connection, deps.execFn, deps.hostFs, deps.homedir);
   await configStore.init();
 
@@ -187,6 +195,10 @@ async function createPgsqlStores(deps: {
 
   const connection = new PgConnection(url);
   await connection.init();
+
+  // Run pending migrations
+  const { runPendingMigrations } = await import('../migrations/run-migrations.js');
+  await runPendingMigrations('pgsql', connection, deps.logger);
 
   const configStore = new PgConfigAdapter(connection, deps.execFn, deps.hostFs, deps.homedir);
   await configStore.init();
@@ -241,6 +253,10 @@ async function createSupabaseStores(deps: {
 
   const connection = new SupabaseConnection(url, key);
   await connection.init();
+
+  // Run pending migrations (tracking only — Supabase DDL is managed via SQL Editor)
+  const { runPendingMigrations } = await import('../migrations/run-migrations.js');
+  await runPendingMigrations('supabase', connection, deps.logger);
 
   const configStore = new SupabaseConfigAdapter(connection, deps.execFn, deps.hostFs, deps.homedir);
   await configStore.init();
