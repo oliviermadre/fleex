@@ -1,5 +1,6 @@
 import type { EventBus } from './event-bus.js';
 import type { PersonaStorePort } from './ports/persona-store.port.js';
+import type { SkillStorePort } from './ports/skill-store.port.js';
 import type { TicketStorePort } from './ports/ticket-store.port.js';
 import type { MentionStorePort } from './ports/mention-store.port.js';
 import type { CommentStorePort } from './ports/comment-store.port.js';
@@ -29,6 +30,7 @@ type BroadcastFn = (type: string, data: unknown) => void;
 export interface DomainEventListenerDeps {
   eventBus: EventBus;
   personaStore: PersonaStorePort;
+  skillStore: SkillStorePort;
   ticketStore: TicketStorePort;
   mentionStore: MentionStorePort;
   commentStore: CommentStorePort;
@@ -52,6 +54,7 @@ export interface DomainEventListenerDeps {
 export class DomainEventListener {
   private ticketBroadcast: BroadcastFn = () => {};
   private personaBroadcast: BroadcastFn = () => {};
+  private skillBroadcast: BroadcastFn = () => {};
 
   constructor(private readonly deps: DomainEventListenerDeps) {}
 
@@ -62,6 +65,10 @@ export class DomainEventListener {
 
   setPersonaBroadcast(fn: BroadcastFn): void {
     this.personaBroadcast = fn;
+  }
+
+  setSkillBroadcast(fn: BroadcastFn): void {
+    this.skillBroadcast = fn;
   }
 
   /**
@@ -126,6 +133,15 @@ export class DomainEventListener {
           personaId: e.personaId,
           mentionIds: e.mentionIds,
         });
+      }
+    });
+
+    // ── Skill broadcasts ──
+    bus.on('skill.created', (e) => this.broadcastSkillEntity(e, 'skill:created'));
+    bus.on('skill.updated', (e) => this.broadcastSkillEntity(e, 'skill:updated'));
+    bus.on('skill.deleted', (e) => {
+      if (e.type === 'skill.deleted') {
+        this.skillBroadcast('skill:deleted', { id: e.skillId });
       }
     });
 
@@ -319,5 +335,11 @@ export class DomainEventListener {
     if (!('personaId' in event)) return;
     const persona = await this.deps.personaStore.getById((event as { personaId: string }).personaId);
     if (persona) this.personaBroadcast(wsType, persona.toDTO());
+  }
+
+  private async broadcastSkillEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
+    if (!('skillId' in event)) return;
+    const skill = await this.deps.skillStore.getById((event as { skillId: string }).skillId);
+    if (skill) this.skillBroadcast(wsType, skill.toDTO());
   }
 }

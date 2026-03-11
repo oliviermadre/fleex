@@ -9,7 +9,7 @@ import type {
   DashboardWorktree,
   DashboardGitHubIssue,
 } from '@fleex/shared';
-import { fetchDashboard, fetchBoards, importGitHubIssue, openSessionFromTicket, createWorktree, createSession } from '../../services/api';
+import { fetchDashboard, fetchBoards, importGitHubIssue, openSessionFromTicket, createWorktree, createSession, executeSkill } from '../../services/api';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -464,6 +464,8 @@ function TicketCard({
           creating={creating}
           onCreateSession={() => onCreateSession(ticket.id)}
           disabled={!hasRepo}
+          ticketId={ticket.id}
+          onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
         />
       </span>
     </button>

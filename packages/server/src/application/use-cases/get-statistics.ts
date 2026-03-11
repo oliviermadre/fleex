@@ -3,6 +3,7 @@ import type {
   StatisticsTimeBucket,
   StatisticsSummary,
   AgentLeaderboardEntry,
+  SkillLeaderboardEntry,
   AgentExecution,
   TicketLink,
 } from '@fleex/shared';
@@ -13,6 +14,7 @@ import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
+import type { SkillStorePort } from '../ports/skill-store.port.js';
 
 interface CacheEntry {
   data: StatisticsResponse;
@@ -30,6 +32,7 @@ export class GetStatisticsUseCase {
     private readonly agentEventStore: AgentEventStorePort,
     private readonly personaStore: PersonaStorePort,
     private readonly sessionStore: SessionStorePort,
+    private readonly skillStore?: SkillStorePort,
   ) {}
 
   async execute(params: {
@@ -93,6 +96,8 @@ export class GetStatisticsUseCase {
       ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
       : null;
 
+    const skillExecutions = filteredExecutions.filter((e) => e.mentionId.startsWith('skill:'));
+
     const summary: StatisticsSummary = {
       worktreesCreated: worktreeSessions.length,
       prsCreated: prLinks.length,
@@ -107,6 +112,7 @@ export class GetStatisticsUseCase {
       mentionsResolved: resolvedMentions.length,
       ticketsCreated: filteredTickets.length,
       ticketsCompleted: completedTickets.length,
+      skillsExecuted: skillExecutions.length,
       activeSessions: sessions.filter((s) => {
         const dto = s as unknown as Record<string, unknown>;
         return dto.status === 'active' || dto.status === 'running';
@@ -149,6 +155,7 @@ export class GetStatisticsUseCase {
         mentionsResolved: bMentions.filter((m) => m.toDTO().status === 'resolved').length,
         ticketsCreated: bTickets.length,
         ticketsCompleted: bTickets.filter((t) => t.toDTO().status === 'done').length,
+        skillsExecuted: bExecutions.filter((e) => e.mentionId.startsWith('skill:')).length,
       };
     });
 
@@ -184,6 +191,31 @@ export class GetStatisticsUseCase {
       })
       .sort((a, b) => b.spawnCount - a.spawnCount);
 
+    // Compute skill leaderboard
+    const skills = this.skillStore ? await this.skillStore.getAll() : [];
+    const skillMap = new Map(skills.map((s) => [s.id, s]));
+    const execBySkill = new Map<string, AgentExecution[]>();
+    for (const exec of skillExecutions) {
+      const skillId = exec.mentionId.replace('skill:', '');
+      const list = execBySkill.get(skillId) ?? [];
+      list.push(exec);
+      execBySkill.set(skillId, list);
+    }
+
+    const skillLeaderboard: SkillLeaderboardEntry[] = [...execBySkill.entries()]
+      .map(([skillId, execs]) => {
+        const skill = skillMap.get(skillId);
+        return {
+          skillId,
+          skillName: skill?.name ?? skillId,
+          skillDisplayName: skill?.displayName ?? skillId,
+          executionCount: execs.length,
+          completedCount: execs.filter((e) => e.status === 'completed').length,
+          failedCount: execs.filter((e) => e.status === 'failed').length,
+        };
+      })
+      .sort((a, b) => b.executionCount - a.executionCount);
+
     const result: StatisticsResponse = {
       from: params.from,
       to: params.to,
@@ -191,6 +223,7 @@ export class GetStatisticsUseCase {
       summary,
       timeSeries,
       agentLeaderboard,
+      skillLeaderboard,
     };
 
     // Cache for 60 seconds

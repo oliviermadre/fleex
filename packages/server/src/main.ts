@@ -33,7 +33,9 @@ import { ticketWsPlugin } from './infrastructure/ws/ticket-ws.js';
 import { agentWsPlugin } from './infrastructure/ws/agent-ws.js';
 import { personaWsPlugin } from './infrastructure/ws/persona-ws.js';
 import { agentEventsWsPlugin } from './infrastructure/ws/agent-events-ws.js';
+import { skillWsPlugin } from './infrastructure/ws/skill-ws.js';
 import { personaRoutes } from './infrastructure/http/persona.routes.js';
+import { skillRoutes } from './infrastructure/http/skill.routes.js';
 import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
 import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.routes.js';
 import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
@@ -73,6 +75,7 @@ async function main() {
   await app.register(agentTokenRoutes(container));
   await app.register(ticketRoutes(container));
   await app.register(personaRoutes(container));
+  await app.register(skillRoutes(container));
   await app.register(agentEventsRoutes(container));
   await app.register(domainEventLogRoutes(container));
   await app.register(statisticsRoutes(container));
@@ -99,6 +102,7 @@ async function main() {
   await app.register(agentWsPlugin(container));
   await app.register(personaWsPlugin(container));
   await app.register(agentEventsWsPlugin(container));
+  await app.register(skillWsPlugin(container));
 
   // Auto-resolve repository patterns at startup if needed
   {

@@ -190,4 +190,5 @@ export const dashboardWs = new WebSocketManager();
 export const repositoryWs = new WebSocketManager();
 export const ticketWs = new WebSocketManager();
 export const personaWs = new WebSocketManager();
+export const skillWs = new WebSocketManager();
 export const agentEventWs = new WebSocketManager();

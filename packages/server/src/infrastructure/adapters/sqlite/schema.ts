@@ -158,6 +158,21 @@ export const SQLITE_SCHEMA: string[] = [
 
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_personas_name ON agent_personas(name)`,
 
+  // ── Skills ──
+  `CREATE TABLE IF NOT EXISTS skills (
+    id TEXT PRIMARY KEY,
+    command_name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    markdown_content TEXT NOT NULL DEFAULT '',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    persona_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_command_name ON skills(command_name)`,
+  `CREATE INDEX IF NOT EXISTS idx_skills_persona_id ON skills(persona_id)`,
+
   // ── Agent Event Executions ──
   `CREATE TABLE IF NOT EXISTS agent_event_executions (
     execution_id TEXT PRIMARY KEY,

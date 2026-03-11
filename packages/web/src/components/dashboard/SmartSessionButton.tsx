@@ -4,6 +4,7 @@ import { StatusDot } from '../ui/StatusDot';
 import { deriveDisplayStatus, aggregateBranchStatus } from '../../lib/deriveStatus';
 import type { DisplayStatus } from '../../lib/deriveStatus';
 import { useUIStore } from '../../stores/uiStore';
+import { useSkillStore } from '../../stores/skillStore';
 import { cn } from '../../lib/cn';
 
 interface SmartSessionButtonProps {
@@ -12,6 +13,8 @@ interface SmartSessionButtonProps {
   onCreateSession: () => void;
   disabled?: boolean;
   size?: 'sm' | 'md';
+  ticketId?: string;
+  onExecuteSkill?: (skillId: string) => void;
 }
 
 function FleexIcon() {
@@ -67,10 +70,115 @@ const OPEN_THEME = [
   'hover:border-[var(--theme-accent)]/60 hover:bg-[var(--theme-accent)]/20',
 ].join(' ');
 
-export function SmartSessionButton({ sessions, creating, onCreateSession, disabled, size = 'sm' }: SmartSessionButtonProps) {
+function SkillWrenchIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-text-muted)]">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  );
+}
+
+/** Shared dropdown content — sessions list + skills list */
+function DropdownContent({
+  sessions,
+  enabledSkills,
+  onOpenFloating,
+  onCreateSession,
+  onExecuteSkill,
+  creating,
+  hasTicketId,
+}: {
+  sessions: Session[];
+  enabledSkills: { id: string; displayName: string; commandName: string }[];
+  onOpenFloating: (sessionId: string) => void;
+  onCreateSession: () => void;
+  onExecuteSkill?: (skillId: string) => void;
+  creating: boolean;
+  hasTicketId: boolean;
+}) {
+  return (
+    <div className="absolute right-0 top-full z-50 mt-1 min-w-[220px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl">
+      {/* Sessions group */}
+      {sessions.length > 0 && (
+        <>
+          <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">Sessions</div>
+          {sessions.map((session) => {
+            const derived = deriveDisplayStatus(session);
+            return (
+              <button
+                key={session.id}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenFloating(session.id);
+                }}
+              >
+                <StatusDot status={derived.status} size="sm" />
+                <span className="truncate text-[var(--theme-text-primary)]">
+                  {session.displayName}
+                </span>
+                <span className={cn('ml-auto whitespace-nowrap', derived.textColor)}>
+                  {derived.label}
+                </span>
+              </button>
+            );
+          })}
+        </>
+      )}
+
+      {/* New session action */}
+      <button
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
+        onClick={(e) => {
+          e.stopPropagation();
+          onCreateSession();
+        }}
+        disabled={creating}
+      >
+        {creating ? (
+          <span className="h-3 w-3 shrink-0 rounded-full border-2 border-current border-t-transparent animate-spin" />
+        ) : (
+          <FleexIcon />
+        )}
+        <span className="text-[var(--theme-accent)]">New session</span>
+      </button>
+
+      {/* Skills group */}
+      {enabledSkills.length > 0 && hasTicketId && onExecuteSkill && (
+        <>
+          <div className="mx-2 my-1 border-t border-[var(--theme-border)]" />
+          <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">Skills</div>
+          {enabledSkills.map((skill) => (
+            <button
+              key={skill.id}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
+              onClick={(e) => {
+                e.stopPropagation();
+                onExecuteSkill(skill.id);
+              }}
+            >
+              <SkillWrenchIcon />
+              <span className="truncate text-[var(--theme-text-primary)]">
+                {skill.displayName}
+              </span>
+              <span className="ml-auto text-[9px] text-[var(--theme-text-faint)]">
+                /{skill.commandName}
+              </span>
+            </button>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+export function SmartSessionButton({ sessions, creating, onCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill }: SmartSessionButtonProps) {
   const setFloatingSession = useUIStore((s) => s.setFloatingSession);
+  const skills = useSkillStore((s) => s.skills);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const enabledSkills = skills.filter((s) => s.enabled);
 
   useEffect(() => {
     if (!dropdownOpen) return;
@@ -95,6 +203,13 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
     setDropdownOpen(false);
   };
 
+  const handleExecuteSkill = onExecuteSkill
+    ? (skillId: string) => {
+        onExecuteSkill(skillId);
+        setDropdownOpen(false);
+      }
+    : undefined;
+
   const textSize = size === 'sm' ? 'text-[11px]' : 'text-xs';
 
   // Shape shared by every state — colors come from the theme param
@@ -108,8 +223,46 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
       'active:scale-[0.97]',
     );
 
-  // ── State 1: No sessions — "Open" ──
+  const hasSkills = enabledSkills.length > 0 && !!ticketId && !!onExecuteSkill;
+
+  // ── State 1: No sessions — "Start" ──
   if (sessions.length === 0) {
+    // If we have skills, show dropdown instead of direct action
+    if (hasSkills) {
+      return (
+        <div className="relative flex-shrink-0" ref={dropdownRef}>
+          <button
+            className={cn(shell(OPEN_THEME), (disabled || creating) && 'pointer-events-none opacity-50')}
+            onClick={(e) => {
+              e.stopPropagation();
+              setDropdownOpen(!dropdownOpen);
+            }}
+            disabled={disabled || creating}
+          >
+            {creating ? (
+              <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+            ) : (
+              <FleexIcon />
+            )}
+            <span>Start</span>
+            <ChevronDownIcon />
+          </button>
+
+          {dropdownOpen && (
+            <DropdownContent
+              sessions={sessions}
+              enabledSkills={enabledSkills}
+              onOpenFloating={handleOpenFloating}
+              onCreateSession={onCreateSession}
+              onExecuteSkill={handleExecuteSkill}
+              creating={creating}
+              hasTicketId={!!ticketId}
+            />
+          )}
+        </div>
+      );
+    }
+
     return (
       <button
         className={cn(shell(OPEN_THEME), (disabled || creating) && 'pointer-events-none opacity-50')}
@@ -130,7 +283,7 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
   }
 
   // ── State 2: 1 session ──
-  if (sessions.length === 1) {
+  if (sessions.length === 1 && !hasSkills) {
     const session = sessions[0]!;
     const derived = deriveDisplayStatus(session);
     return (
@@ -148,9 +301,9 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
     );
   }
 
-  // ── State 3: N sessions — aggregate + count + chevron ──
-  const aggregated = aggregateBranchStatus(sessions);
-  const theme = statusTheme(aggregated.status);
+  // ── State 3: N sessions (or 1 session + skills) — aggregate + dropdown ──
+  const aggregated = sessions.length > 0 ? aggregateBranchStatus(sessions) : null;
+  const theme = aggregated ? statusTheme(aggregated.status) : OPEN_THEME;
   return (
     <div className="relative flex-shrink-0" ref={dropdownRef}>
       <button
@@ -160,38 +313,33 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
           setDropdownOpen(!dropdownOpen);
         }}
       >
-        <StatusDot status={aggregated.status} size="sm" />
-        <span>{aggregated.label}</span>
-        <span className="rounded-full bg-current/15 px-1.5 text-[9px] font-bold leading-[16px] opacity-70">
-          {sessions.length}
-        </span>
+        {aggregated ? (
+          <>
+            <StatusDot status={aggregated.status} size="sm" />
+            <span>{aggregated.label}</span>
+            <span className="rounded-full bg-current/15 px-1.5 text-[9px] font-bold leading-[16px] opacity-70">
+              {sessions.length}
+            </span>
+          </>
+        ) : (
+          <>
+            <FleexIcon />
+            <span>Start</span>
+          </>
+        )}
         <ChevronDownIcon />
       </button>
 
       {dropdownOpen && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[220px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl">
-          {sessions.map((session) => {
-            const derived = deriveDisplayStatus(session);
-            return (
-              <button
-                key={session.id}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleOpenFloating(session.id);
-                }}
-              >
-                <StatusDot status={derived.status} size="sm" />
-                <span className="truncate text-[var(--theme-text-primary)]">
-                  {session.displayName}
-                </span>
-                <span className={cn('ml-auto whitespace-nowrap', derived.textColor)}>
-                  {derived.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <DropdownContent
+          sessions={sessions}
+          enabledSkills={enabledSkills}
+          onOpenFloating={handleOpenFloating}
+          onCreateSession={onCreateSession}
+          onExecuteSkill={handleExecuteSkill}
+          creating={creating}
+          hasTicketId={!!ticketId}
+        />
       )}
     </div>
   );

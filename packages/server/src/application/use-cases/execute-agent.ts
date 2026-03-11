@@ -20,6 +20,7 @@ import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { AutoReviewWorkflowUseCase } from './auto-review-workflow.js';
+import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { EventBus } from '../event-bus.js';
 
 interface ActiveExecution {
@@ -107,6 +108,7 @@ export class ExecuteAgentUseCase {
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
     private readonly autoReviewWorkflow: AutoReviewWorkflowUseCase,
+    private readonly skillStore?: SkillStorePort,
   ) {}
 
   /**
@@ -835,6 +837,383 @@ export class ExecuteAgentUseCase {
       // Drain queue for next item
       this.drainQueue();
     }
+  }
+
+  /**
+   * Execute a skill against a ticket.
+   * This bypasses the mention lifecycle and runs the agent with the skill's markdown as instructions.
+   */
+  async executeForSkill(skillId: string, ticketId: string): Promise<void> {
+    if (!this.skillStore) {
+      throw new Error('SkillStore not available');
+    }
+
+    const { SkillNotFoundError } = await import('../../domain/errors.js');
+    const skill = await this.skillStore.getById(skillId);
+    if (!skill) throw new SkillNotFoundError(skillId);
+
+    const persona = await this.personaStore.getById(skill.personaId);
+    if (!persona) throw new AgentPersonaNotFoundError(skill.personaId);
+
+    const humanName = this.resolveHumanMentionName(persona);
+    const executionId = randomUUID();
+
+    // 1. Post a comment announcing the skill execution
+    const { comment: announceComment } = await this.postComment.execute({
+      ticketId,
+      body: `Running skill: **${skill.displayName}**`,
+      authorName: persona.displayName || persona.name,
+      authorType: 'agent',
+      humanMentionNames: [],
+    });
+
+    if (this.eventBus) {
+      this.eventBus.emit({
+        type: 'comment.posted',
+        commentId: announceComment.id,
+        ticketId,
+        authorType: 'agent',
+        authorName: persona.displayName || persona.name,
+        createdMentions: [],
+        occurredAt: new Date(),
+      });
+    }
+
+    // 2. Ensure worktree
+    const worktreePath = await this.ensureWorktree(ticketId);
+
+    // 3. Start execution tracking
+    await this.agentEventStore.startExecution({
+      executionId,
+      personaId: persona.id,
+      ticketId,
+      mentionId: `skill:${skillId}`,
+    });
+
+    // 4. Compose prompts
+    const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
+
+    const context = await this.getTicketContext.execute({
+      ticketId,
+      agentName: persona.name,
+    });
+
+    const userPrompt = this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent);
+
+    this.logger.info('Skill execution started', {
+      executionId,
+      skillId,
+      skillName: skill.commandName,
+      persona: persona.name,
+      ticketId,
+      worktreePath,
+    });
+
+    // 5. Emit execution_start event
+    let sequence = 0;
+    const emitEvent = async (eventType: AgentEventType, data: unknown) => {
+      const event = AgentEventEntity.create({
+        executionId,
+        eventType,
+        data,
+        sequence: sequence++,
+      });
+      await this.agentEventStore.appendEvent(event);
+      this.onEvent?.(event);
+    };
+
+    await emitEvent('execution_start', {
+      executionId,
+      personaId: persona.id,
+      personaName: persona.name,
+      ticketId,
+      skillId,
+      skillName: skill.commandName,
+      model: persona.model,
+      worktreePath,
+    });
+
+    // 6. Setup timeout + abort
+    const abortController = new AbortController();
+    const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
+    const timeoutHandle = setTimeout(() => {
+      this.logger.warn('Skill execution timed out', { executionId, persona: persona.name, timeoutMs });
+      abortController.abort(new Error('timeout'));
+    }, timeoutMs);
+
+    try {
+      // 7. Call Claude Agent SDK
+      const { query } = await import('@anthropic-ai/claude-agent-sdk');
+
+      let sdkSessionId: string | undefined;
+      let resultText = '';
+      let structuredOutput: AgentStructuredOutput | null = null;
+
+      const sessionKey = `skill:${skill.commandName}:${ticketId}`;
+
+      const queryOptions: Record<string, unknown> = {
+        model: persona.model,
+        systemPrompt,
+        allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
+        maxTurns: 50,
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+        outputFormat: {
+          type: 'json_schema',
+          schema: {
+            type: 'object',
+            properties: {
+              deliverable: {
+                oneOf: [
+                  {
+                    type: 'object',
+                    properties: {
+                      title: { type: 'string' },
+                      markdown: { type: 'string' },
+                      type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url'] },
+                      status: { type: 'string', enum: ['draft', 'final'] },
+                    },
+                    required: ['title', 'markdown', 'type', 'status'],
+                  },
+                  { type: 'null' },
+                ],
+              },
+              comment: {
+                oneOf: [{ type: 'string' }, { type: 'null' }],
+              },
+              mentionStatus: {
+                type: 'string',
+                enum: ['resolved', 'waiting_for_info'],
+                default: 'resolved',
+              },
+            },
+            required: ['deliverable', 'comment'],
+          },
+        },
+      };
+
+      if (worktreePath) {
+        queryOptions['cwd'] = worktreePath;
+      }
+
+      const previousSessionId = this.sessionHistory.get(sessionKey);
+      if (previousSessionId) {
+        queryOptions['resume'] = previousSessionId;
+      }
+
+      for await (const message of query({
+        prompt: userPrompt,
+        options: queryOptions as Parameters<typeof query>[0]['options'],
+      })) {
+        if (abortController.signal.aborted) break;
+
+        const msg = message as Record<string, unknown>;
+        if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
+          sdkSessionId = msg['session_id'] as string;
+          await emitEvent('turn_start', { sessionId: sdkSessionId });
+        }
+
+        if ('result' in message) {
+          resultText = (message as { result: string }).result;
+          if (msg['structured_output']) {
+            structuredOutput = msg['structured_output'] as AgentStructuredOutput;
+          }
+          await emitEvent('message_stop', { result: resultText, subtype: msg['subtype'] as string | undefined });
+        } else {
+          await emitEvent('content_block_delta', msg);
+        }
+      }
+
+      clearTimeout(timeoutHandle);
+
+      if (abortController.signal.aborted) {
+        await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout' });
+        await this.agentEventStore.completeExecution(executionId, 'interrupted');
+        return;
+      }
+
+      // 8. Store session for potential resume
+      if (sdkSessionId) {
+        this.sessionHistory.set(sessionKey, sdkSessionId);
+        await this.agentEventStore.updateSessionId(executionId, sdkSessionId);
+      }
+
+      // 9. Process results — same as executeForMention
+      const structured = structuredOutput ?? parseAgentOutput(resultText);
+      const ticket = await this.ticketStore.getTicketById(ticketId);
+
+      await emitEvent('execution_end', {
+        status: 'completed',
+        resultLength: resultText.length,
+        structuredOutputParsed: structured !== null,
+      });
+
+      if (structured) {
+        if (structured.comment) {
+          const { comment, createdMentions } = await this.postComment.execute({
+            ticketId,
+            body: structured.comment,
+            authorName: persona.displayName || persona.name,
+            authorType: 'agent',
+            parentId: announceComment.id,
+            humanMentionNames: humanName ? [humanName] : [],
+          });
+
+          if (this.eventBus) {
+            this.eventBus.emit({
+              type: 'comment.posted',
+              commentId: comment.id,
+              ticketId,
+              authorType: 'agent',
+              authorName: persona.displayName || persona.name,
+              createdMentions: createdMentions.map((m) => ({
+                mentionId: m.id,
+                targetAgent: m.targetAgent,
+                targetType: m.targetType as 'agent' | 'human',
+              })),
+              occurredAt: new Date(),
+            });
+            for (const m of createdMentions) {
+              this.eventBus.emit({
+                type: 'mention.created',
+                mentionId: m.id,
+                ticketId,
+                targetAgent: m.targetAgent,
+                targetType: m.targetType as 'agent' | 'human',
+                sourceAgent: m.sourceAgent,
+                occurredAt: new Date(),
+              });
+            }
+          }
+
+          for (const m of createdMentions) {
+            if (m.targetType === 'human' && ticket) {
+              ticket.assign(m.targetAgent);
+              await this.ticketStore.saveTicket(ticket);
+              this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+            }
+          }
+        }
+
+        if (structured.deliverable) {
+          try {
+            const deliverable = await this.submitDeliverable.execute({
+              ticketId,
+              agentName: persona.name,
+              type: structured.deliverable.type ?? 'report',
+              title: structured.deliverable.title,
+              content: structured.deliverable.markdown,
+              status: structured.deliverable.status,
+            });
+
+            this.eventBus?.emit({
+              type: 'deliverable.created',
+              deliverableId: deliverable.id,
+              ticketId,
+              agentName: persona.name,
+              status: structured.deliverable.status as 'draft' | 'final',
+              occurredAt: new Date(),
+            });
+          } catch (delivErr) {
+            this.logger.warn('Failed to create deliverable from skill', {
+              executionId,
+              error: delivErr instanceof Error ? delivErr.message : String(delivErr),
+            });
+          }
+        }
+      } else if (resultText.length > 0) {
+        const { comment } = await this.postComment.execute({
+          ticketId,
+          body: resultText,
+          authorName: persona.displayName || persona.name,
+          authorType: 'agent',
+          parentId: announceComment.id,
+          humanMentionNames: humanName ? [humanName] : [],
+        });
+
+        if (this.eventBus) {
+          this.eventBus.emit({
+            type: 'comment.posted',
+            commentId: comment.id,
+            ticketId,
+            authorType: 'agent',
+            authorName: persona.displayName || persona.name,
+            createdMentions: [],
+            occurredAt: new Date(),
+          });
+        }
+      }
+
+      await this.agentEventStore.completeExecution(executionId, 'completed');
+
+      this.logger.info('Skill execution completed', {
+        executionId,
+        skillId,
+        persona: persona.name,
+        ticketId,
+        resultLength: resultText.length,
+      });
+    } catch (err) {
+      clearTimeout(timeoutHandle);
+      try {
+        const errorEvent = AgentEventEntity.create({
+          executionId,
+          eventType: 'error',
+          data: { error: err instanceof Error ? err.message : String(err) },
+          sequence: 999999,
+        });
+        await this.agentEventStore.appendEvent(errorEvent);
+        this.onEvent?.(errorEvent);
+        await this.agentEventStore.completeExecution(executionId, 'failed');
+      } catch {
+        // Don't mask original error
+      }
+
+      this.logger.error('Skill execution failed', {
+        executionId,
+        skillId,
+        persona: persona.name,
+        ticketId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
+  }
+
+  private composeSkillUserPrompt(
+    context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
+    skillDisplayName: string,
+    skillMarkdown: string,
+  ): string {
+    const parts: string[] = [];
+
+    parts.push(`# Ticket: ${context.ticket.title}`);
+    parts.push(`Status: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
+
+    if (context.ticket.description) {
+      parts.push(`\n## Description\n\n${context.ticket.description}`);
+    }
+
+    if (context.comments.length > 0) {
+      parts.push('\n## Comments\n');
+      for (const comment of context.comments) {
+        parts.push(`**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`);
+      }
+    }
+
+    if (context.deliverables.length > 0) {
+      parts.push('\n## Deliverables\n');
+      for (const d of context.deliverables) {
+        parts.push(`### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}\n`);
+        if (d.content) {
+          parts.push(d.content);
+        }
+      }
+    }
+
+    parts.push(`\n---\n\n# Skill Instructions: ${skillDisplayName}\n\n${skillMarkdown}`);
+
+    return parts.join('\n');
   }
 
   /**

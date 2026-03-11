@@ -103,3 +103,15 @@ export class AgentPersonaNameConflictError extends DomainError {
     super(`Agent persona name already exists: ${name}`, 'AGENT_PERSONA_NAME_CONFLICT');
   }
 }
+
+export class SkillNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Skill not found: ${id}`, 'SKILL_NOT_FOUND');
+  }
+}
+
+export class SkillCommandNameConflictError extends DomainError {
+  constructor(commandName: string) {
+    super(`Skill command name already exists: ${commandName}`, 'SKILL_COMMAND_NAME_CONFLICT');
+  }
+}
