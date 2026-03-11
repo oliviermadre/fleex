@@ -1,5 +1,4 @@
 import pg from 'pg';
-import { PG_SCHEMA } from './schema.js';
 
 const { Pool } = pg;
 
@@ -10,7 +9,8 @@ export class PgConnection {
 
   async init(): Promise<void> {
     this._pool = new Pool({ connectionString: this.connectionUrl });
-    await this._pool.query(PG_SCHEMA);
+    // Schema creation and migrations are handled by the migration runner
+    // (see infrastructure/migrations/)
   }
 
   get pool(): pg.Pool {

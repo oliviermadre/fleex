@@ -502,7 +502,7 @@ cmd_status() {
 
 cmd_self_update() {
   local update_dir="$DEFAULT_REPO_DIR"
-  [[ -d "$update_dir/.git" ]] || die "Default repo not found at $update_dir. Nothing to update."
+  git -C "$update_dir" rev-parse --git-dir &>/dev/null || die "Default repo not found at $update_dir. Nothing to update."
 
   info "Updating fleex..."
 
@@ -513,6 +513,19 @@ cmd_self_update() {
   info "Reinstalling dependencies..."
   (cd "$update_dir" && bun install) > "$FLEEX_HOME/.logs/self-update.log" 2>&1
   ok "Dependencies updated."
+
+  # Run pending database migrations
+  local env_file="$update_dir/.env"
+  if [[ -f "$env_file" ]]; then
+    info "Running database migrations..."
+    (
+      set -a
+      . "$env_file"
+      set +a
+      FLEEX_SQLITE_PATH="${FLEEX_SQLITE_PATH:-$FLEEX_HOME/fleex.db}" \
+      bun run "$update_dir/packages/server/src/infrastructure/migrations/cli-migrate.ts"
+    ) >> "$FLEEX_HOME/.logs/self-update.log" 2>&1 && ok "Migrations applied." || warn "Migration failed — check $FLEEX_HOME/.logs/self-update.log"
+  fi
 
   # Ensure symlink is in place (in case user installed with an older version that copied)
   local cli_src="$update_dir/cli/fleex"

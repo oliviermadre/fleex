@@ -98,7 +98,8 @@ export async function createContainer() {
       const { SupabaseUserStore: SbUser } = await import('./adapters/supabase/supabase-user-store.adapter.js');
       const { SupabaseSessionManager: SbSess } = await import('./adapters/supabase/supabase-session-manager.adapter.js');
 
-      const conn = new SupabaseConnection(supabaseUrl, supabaseKey);
+      const supabaseDbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
+      const conn = new SupabaseConnection(supabaseUrl, supabaseKey, supabaseDbUrl);
       await conn.init();
 
       userStore = new SbUser(conn);
