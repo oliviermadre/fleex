@@ -11,6 +11,7 @@
  *   FLEEX_PGSQL_URL       - PostgreSQL connection URL
  *   FLEEX_SUPABASE_URL    - Supabase URL
  *   FLEEX_SUPABASE_KEY    - Supabase service role key
+ *   FLEEX_SUPABASE_DB_URL - Supabase direct PostgreSQL connection string (required for migrations)
  */
 
 import type { AdapterType } from './types.js';

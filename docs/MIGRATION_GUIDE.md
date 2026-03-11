@@ -132,6 +132,14 @@ A default local user is seeded automatically:
 | `GOOGLE_CLIENT_SECRET` | For Google SSO | — | Google OAuth client secret |
 | `AUTH_CALLBACK_BASE_URL` | For SSO | `http://localhost:3000` | Public URL of the server (used to build OAuth callback URLs) |
 
+### Supabase storage (`FLEEX_STORAGE_DRIVER=supabase`)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `FLEEX_SUPABASE_URL` | Yes | — | Supabase project URL (e.g. `https://xxxx.supabase.co`) |
+| `FLEEX_SUPABASE_KEY` | Yes | — | Supabase service role key |
+| `FLEEX_SUPABASE_DB_URL` | For migrations | — | Direct PostgreSQL connection string. Required for `fleex self-update` migrations. Found in Supabase Dashboard → Settings → Database. Use the **Shared Pooler** (IPv4 compatible) connection string if the direct connection is IPv6-only |
+
 ### Host gateway (`packages/host-gateway`)
 
 | Variable | Required | Default | Description |
@@ -449,3 +457,10 @@ If the connection drops, the gateway reconnects with exponential backoff:
 - Migrations run in transactions — a failure rolls back cleanly.
 - Check the `_migrations` table to see what has been applied.
 - Manually fix the SQL issue and restart the server.
+
+### Supabase migration failures
+
+- Supabase migrations require a direct PostgreSQL connection via `FLEEX_SUPABASE_DB_URL`.
+- If you see `ENOTFOUND`, your connection string hostname cannot be resolved — use the
+  **Shared Pooler** connection string from Supabase Dashboard (IPv4 compatible).
+- Check `~/.fleex/.logs/self-update.log` for detailed error output.
