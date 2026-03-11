@@ -27,55 +27,61 @@ function getCurrentCommitHash(): string | null {
   }
 }
 
-interface GitHubCommit {
-  sha: string;
-  commit: { message: string };
+function git(cmd: string): string {
+  return execSync(cmd, { cwd: ROOT_DIR, timeout: 15000 }).toString().trim();
 }
 
-let cachedLatest: { sha: string; checkedAt: number } | null = null;
+interface UpdateCheckResult {
+  behindBy: number;
+  latestCommit: string | null;
+  checkedAt: number;
+}
+
+let cached: UpdateCheckResult | null = null;
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
-async function getLatestRemoteCommit(): Promise<string | null> {
-  if (cachedLatest && Date.now() - cachedLatest.checkedAt < CACHE_TTL_MS) {
-    return cachedLatest.sha;
+/**
+ * Uses `git fetch` + `git rev-list` to check how many commits behind
+ * origin/main the current HEAD is. This works correctly regardless of
+ * which branch (or worktree) the instance is running on.
+ */
+function checkBehindOriginMain(): UpdateCheckResult {
+  if (cached && Date.now() - cached.checkedAt < CACHE_TTL_MS) {
+    return cached;
   }
 
   try {
-    const res = await fetch(
-      'https://api.github.com/repos/oliviermadre/fleex/commits?per_page=1',
-      {
-        headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'fleex-version-check' },
-        signal: AbortSignal.timeout(5000),
-      },
-    );
-    if (!res.ok) return cachedLatest?.sha ?? null;
-    const commits: GitHubCommit[] = await res.json();
-    if (commits.length > 0) {
-      const sha = commits[0]!.sha.slice(0, 7);
-      cachedLatest = { sha, checkedAt: Date.now() };
-      return sha;
-    }
+    // Fetch latest main from origin (shallow, fast)
+    git('git fetch origin main --quiet');
+
+    // Count commits on origin/main that are NOT reachable from HEAD
+    const behindStr = git('git rev-list --count HEAD..origin/main');
+    const behindBy = parseInt(behindStr, 10) || 0;
+
+    // Get the latest commit hash on origin/main
+    const latestCommit = git('git rev-parse --short origin/main') || null;
+
+    cached = { behindBy, latestCommit, checkedAt: Date.now() };
+    return cached;
   } catch {
-    // Network error — return stale cache if available
+    // git fetch may fail (offline, no remote, etc.)
+    return cached ?? { behindBy: 0, latestCommit: null, checkedAt: Date.now() };
   }
-  return cachedLatest?.sha ?? null;
 }
 
 export function versionRoutes() {
   return async function (app: FastifyInstance) {
     app.get('/api/version', async () => {
       const localCommit = getCurrentCommitHash();
-      const latestCommit = await getLatestRemoteCommit();
-
       const currentVersion = getCurrentVersion();
-      const updateAvailable =
-        localCommit != null && latestCommit != null && localCommit !== latestCommit;
+      const { behindBy, latestCommit } = checkBehindOriginMain();
 
       return {
         version: currentVersion,
         commit: localCommit,
         latestCommit,
-        updateAvailable,
+        behindBy,
+        updateAvailable: behindBy > 0,
       };
     });
   };

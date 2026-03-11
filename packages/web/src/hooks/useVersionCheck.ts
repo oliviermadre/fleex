@@ -5,6 +5,7 @@ interface VersionInfo {
   version: string;
   commit: string | null;
   latestCommit: string | null;
+  behindBy: number;
   updateAvailable: boolean;
 }
 
