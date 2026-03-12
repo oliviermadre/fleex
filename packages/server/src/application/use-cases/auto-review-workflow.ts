@@ -57,8 +57,8 @@ export class AutoReviewWorkflowUseCase {
     if (!config.enableAutoReview) return;
 
     const ticket = await this.ticketStore.getTicketById(params.ticketId);
-    if (!ticket || ticket.status === 'reviewing' || ticket.status === 'done') {
-      return; // Already in review or done
+    if (!ticket || ticket.status === 'reviewing' || ticket.status === 'done' || ticket.status === 'cancelled') {
+      return; // Already in review, done, or cancelled
     }
 
     this.logger.info('Moving ticket to reviewing due to human mention', {
@@ -103,8 +103,8 @@ export class AutoReviewWorkflowUseCase {
     if (!config.enableAutoReview) return;
 
     const ticket = await this.ticketStore.getTicketById(params.ticketId);
-    if (!ticket || ticket.status === 'reviewing' || ticket.status === 'done') {
-      return; // Already in review or done
+    if (!ticket || ticket.status === 'reviewing' || ticket.status === 'done' || ticket.status === 'cancelled') {
+      return; // Already in review, done, or cancelled
     }
 
     // Cancel any existing pending transition
@@ -234,7 +234,7 @@ export class AutoReviewWorkflowUseCase {
 
     // Re-check ticket status
     const ticket = await this.ticketStore.getTicketById(ticketId);
-    if (!ticket || ticket.status === 'reviewing' || ticket.status === 'done') {
+    if (!ticket || ticket.status === 'reviewing' || ticket.status === 'done' || ticket.status === 'cancelled') {
       return;
     }
 

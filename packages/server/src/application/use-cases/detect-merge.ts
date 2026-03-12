@@ -33,7 +33,7 @@ export class DetectMergeUseCase {
       }
 
       for (const ticket of allMatches.values()) {
-        if (ticket.status === 'done') continue;
+        if (ticket.status === 'done' || ticket.status === 'cancelled') continue;
 
         const diff = ticket.moveTo('done');
         if (Object.keys(diff).length === 0) continue;

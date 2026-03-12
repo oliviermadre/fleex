@@ -99,7 +99,7 @@ export class GetSessionGroupsUseCase {
     const allTickets = await this.ticketStore.getAllTickets();
     const agentTickets = allTickets.filter(
       (t) =>
-        t.status !== 'done' &&
+        t.status !== 'done' && t.status !== 'cancelled' &&
         t.links.some((l) => l.type === 'worktree') &&
         (
           // Active agent assignment

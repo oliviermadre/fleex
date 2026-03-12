@@ -10,6 +10,7 @@ interface TicketFilters {
   hasSession: boolean | null;  // true=with session, false=without, null=any
   tag: string | null;
   favorite: boolean | null;
+  hideOldDoneCancelled: boolean;
 }
 
 interface TicketState {
@@ -83,7 +84,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   selectedTicketId: null,
   statusFilter: 'all',
   searchQuery: '',
-  filters: { repo: null, priority: null, hasSession: null, tag: null, favorite: null },
+  filters: { repo: null, priority: null, hasSession: null, tag: null, favorite: null, hideOldDoneCancelled: true },
 
   fetchBoards: async () => {
     const boards = await api.fetchBoards();
@@ -221,7 +222,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   setStatusFilter: (filter) => set({ statusFilter: filter }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setFilters: (partial) => set((s) => ({ filters: { ...s.filters, ...partial } })),
-  clearFilters: () => set({ filters: { repo: null, priority: null, hasSession: null, tag: null, favorite: null } }),
+  clearFilters: () => set({ filters: { repo: null, priority: null, hasSession: null, tag: null, favorite: null, hideOldDoneCancelled: true } }),
 
   ticketsByColumn: (boardId) => {
     const { tickets, searchQuery, filters } = get();
@@ -285,10 +286,19 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       filtered = filtered.filter((t) => t.favorite === filters.favorite);
     }
 
+    // Auto-hide done/cancelled tickets older than 7 days
+    if (filters.hideOldDoneCancelled) {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter((t) => {
+        if (t.status !== 'done' && t.status !== 'cancelled') return true;
+        return new Date(t.statusChangedAt).getTime() > sevenDaysAgo;
+      });
+    }
+
     const columns = {} as Record<TicketStatus, Ticket[]>;
     for (const s of TICKET_STATUSES) {
       const col = filtered.filter((t) => t.status === s);
-      columns[s] = s === 'done'
+      columns[s] = (s === 'done' || s === 'cancelled')
         ? col.sort((a, b) => new Date(b.statusChangedAt).getTime() - new Date(a.statusChangedAt).getTime())
         : col.sort((a, b) => a.position - b.position);
     }

@@ -23,7 +23,8 @@ export function FilterDropdown() {
     (filters.priority ? 1 : 0) +
     (filters.hasSession !== null ? 1 : 0) +
     (filters.tag ? 1 : 0) +
-    (filters.favorite !== null ? 1 : 0);
+    (filters.favorite !== null ? 1 : 0) +
+    (!filters.hideOldDoneCancelled ? 1 : 0);
 
   const { repos, tags } = useMemo(() => {
     const repoSet = new Set<string>();
@@ -223,6 +224,22 @@ export function FilterDropdown() {
                 </select>
               </div>
             )}
+
+            {/* Completed tickets auto-hide */}
+            <div>
+              <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Completed tickets</label>
+              <button
+                className={cn(
+                  'rounded px-2 py-1 text-[11px] transition-colors',
+                  filters.hideOldDoneCancelled
+                    ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)]'
+                    : 'bg-[var(--theme-accent)] text-white',
+                )}
+                onClick={() => setFilters({ hideOldDoneCancelled: !filters.hideOldDoneCancelled })}
+              >
+                {filters.hideOldDoneCancelled ? 'Hiding >7 days' : 'Showing all'}
+              </button>
+            </div>
           </div>
         </div>,
         document.body,

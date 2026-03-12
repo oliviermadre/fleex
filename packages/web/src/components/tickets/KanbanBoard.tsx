@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { TICKET_STATUSES } from '@fleex/shared';
 import type { TicketStatus, Session } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -18,6 +18,29 @@ export function KanbanBoard() {
 
   const [overlaySession, setOverlaySession] = useState<Session | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+
+  // Collapsed columns state with localStorage persistence
+  const COLLAPSED_STORAGE_KEY = 'fleex:collapsedColumns';
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<TicketStatus>>(() => {
+    try {
+      const stored = localStorage.getItem(COLLAPSED_STORAGE_KEY);
+      if (stored) return new Set(JSON.parse(stored) as TicketStatus[]);
+    } catch { /* ignore */ }
+    return new Set<TicketStatus>(['cancelled']);
+  });
+
+  useEffect(() => {
+    localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify([...collapsedColumns]));
+  }, [collapsedColumns]);
+
+  const toggleCollapse = useCallback((status: TicketStatus) => {
+    setCollapsedColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  }, []);
 
   const isAllBoards = selectedBoardId === null && boards.length > 1;
   const board = selectedBoardId ? boards.find((b) => b.id === selectedBoardId) ?? null : null;
@@ -128,6 +151,8 @@ export function KanbanBoard() {
             isAllBoards={isAllBoards}
             boards={isAllBoards ? boards : undefined}
             onOpenSession={handleOpenSession}
+            collapsed={collapsedColumns.has(status)}
+            onToggleCollapse={() => toggleCollapse(status)}
           />
         ))}
       </div>
