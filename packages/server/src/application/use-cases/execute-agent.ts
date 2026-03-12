@@ -857,6 +857,16 @@ export class ExecuteAgentUseCase {
 
     const humanName = this.resolveHumanMentionName(persona);
     const executionId = randomUUID();
+    const abortController = new AbortController();
+    const skillMentionKey = `skill:${skillId}`;
+
+    this.activeExecutions.set(skillMentionKey, {
+      mentionId: skillMentionKey,
+      executionId,
+      personaId: persona.id,
+      status: 'running',
+      abortController,
+    });
 
     // 1. Post a comment announcing the skill execution
     const { comment: announceComment } = await this.postComment.execute({
@@ -881,6 +891,11 @@ export class ExecuteAgentUseCase {
 
     // 2. Ensure worktree
     const worktreePath = await this.ensureWorktree(ticketId);
+    if (!worktreePath) {
+      this.logger.error('Cannot start skill execution: no worktree', { executionId, ticketId, skillId });
+      this.activeExecutions.delete(skillMentionKey);
+      return;
+    }
 
     // 3. Start execution tracking
     await this.agentEventStore.startExecution({
@@ -934,7 +949,6 @@ export class ExecuteAgentUseCase {
     });
 
     // 6. Setup timeout + abort
-    const abortController = new AbortController();
     const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
     const timeoutHandle = setTimeout(() => {
       this.logger.warn('Skill execution timed out', { executionId, persona: persona.name, timeoutMs });
@@ -992,9 +1006,7 @@ export class ExecuteAgentUseCase {
         },
       };
 
-      if (worktreePath) {
-        queryOptions['cwd'] = worktreePath;
-      }
+      queryOptions['cwd'] = worktreePath;
 
       const previousSessionId = this.sessionHistory.get(sessionKey);
       if (previousSessionId) {
@@ -1145,6 +1157,8 @@ export class ExecuteAgentUseCase {
       }
 
       await this.agentEventStore.completeExecution(executionId, 'completed');
+      this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, status: 'completed', abortController });
+      this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);
 
       this.logger.info('Skill execution completed', {
         executionId,
@@ -1169,6 +1183,8 @@ export class ExecuteAgentUseCase {
         // Don't mask original error
       }
 
+      this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, status: 'failed', abortController });
+      this.onExecutionComplete?.(persona.id, 'failed', skillMentionKey);
       this.logger.error('Skill execution failed', {
         executionId,
         skillId,
@@ -1177,6 +1193,14 @@ export class ExecuteAgentUseCase {
         error: err instanceof Error ? err.message : String(err),
       });
       throw err;
+    } finally {
+      // Clean up completed/failed executions after a delay
+      setTimeout(() => {
+        const exec = this.activeExecutions.get(skillMentionKey);
+        if (exec && exec.status !== 'running') {
+          this.activeExecutions.delete(skillMentionKey);
+        }
+      }, 30000);
     }
   }
 

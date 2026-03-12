@@ -179,11 +179,6 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     [ticket, sessions],
   );
 
-  const ticketSessions = useMemo(
-    () => ticket ? findSessionsForTicket(ticket, sessions) : [],
-    [ticket, sessions],
-  );
-
   const openCreateModalForTicket = useUIStore((s) => s.openCreateModalForTicket);
 
   const handleOpenSession = useCallback(async () => {

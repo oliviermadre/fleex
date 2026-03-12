@@ -79,14 +79,20 @@ export function skillRoutes(container: Container) {
       const skill = await container.skillStore.getById(id);
       if (!skill) throw new SkillNotFoundError(id);
 
-      await container.executeAgent.executeForSkill(id, ticketId);
-
       emit({
         type: 'skill.executed',
         skillId: id,
         personaId: skill.personaId,
         ticketId,
         occurredAt: new Date(),
+      });
+
+      // Fire-and-forget — execution runs in background like mention execution
+      container.executeAgent.executeForSkill(id, ticketId).catch((err) => {
+        container.logger.error('Skill execution failed', {
+          skillId: id, ticketId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
 
       return { status: 'started', skillId: id, ticketId };
