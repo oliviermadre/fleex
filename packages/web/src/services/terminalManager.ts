@@ -2,6 +2,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { TERMINAL_THEME, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, TERMINAL_SCROLLBACK } from '../lib/constants';
 import type { Theme } from '../lib/themes';
 import { AsmClipboardProvider } from './clipboardProvider';
@@ -41,6 +42,7 @@ class TerminalManager {
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(serializeAddon);
     terminal.loadAddon(new ClipboardAddon(undefined, clipboardProvider));
+    terminal.loadAddon(new WebLinksAddon());
 
     // Diagnostic: log OSC 52 sequences from tmux
     terminal.parser.registerOscHandler(52, (data) => {
