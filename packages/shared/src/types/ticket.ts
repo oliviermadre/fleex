@@ -1,4 +1,4 @@
-export type TicketStatus = 'backlog' | 'todo' | 'doing' | 'reviewing' | 'done';
+export type TicketStatus = 'backlog' | 'todo' | 'doing' | 'reviewing' | 'done' | 'cancelled';
 export type TicketPriority = 'none' | 'low' | 'medium' | 'high';
 export type TicketLinkType = 'github_issue' | 'github_pr' | 'worktree' | 'session' | 'repository';
 

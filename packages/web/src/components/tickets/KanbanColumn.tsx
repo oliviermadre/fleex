@@ -13,6 +13,7 @@ const COLUMN_TITLE_COLOR: Record<string, string> = {
   doing: 'text-blue-400',
   reviewing: 'text-purple-400',
   done: 'text-green-400',
+  cancelled: 'text-red-400/70',
 };
 
 const COLUMN_BADGE_COLOR: Record<string, string> = {
@@ -21,6 +22,7 @@ const COLUMN_BADGE_COLOR: Record<string, string> = {
   doing: 'text-blue-400 bg-blue-400/10',
   reviewing: 'text-purple-400 bg-purple-400/10',
   done: 'text-green-400 bg-green-400/10',
+  cancelled: 'text-red-400/70 bg-red-400/10',
 };
 
 export function KanbanColumn({
@@ -30,6 +32,8 @@ export function KanbanColumn({
   isAllBoards,
   boards,
   onOpenSession,
+  collapsed,
+  onToggleCollapse,
 }: {
   status: TicketStatus;
   tickets: Ticket[];
@@ -37,6 +41,8 @@ export function KanbanColumn({
   isAllBoards?: boolean;
   boards?: BoardWithCounts[];
   onOpenSession: (ticketId: string) => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   // Index where the drop indicator should appear (-1 = none, 0..tickets.length)
@@ -125,6 +131,42 @@ export function KanbanColumn({
     }
   }, [tickets, status, dropIndex]);
 
+  if (collapsed) {
+    return (
+      <div
+        className={cn(
+          'flex w-11 flex-shrink-0 flex-col items-center border-l border-[var(--theme-border)]',
+          dragOver && 'ring-2 ring-inset ring-[var(--theme-accent)]/50',
+        )}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Expand button */}
+        <button
+          className="flex w-full items-center justify-center py-2 text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)]"
+          onClick={onToggleCollapse}
+          title={`Expand ${TICKET_STATUS_LABELS[status]}`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+        {/* Badge */}
+        <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', COLUMN_BADGE_COLOR[status])}>
+          {tickets.length}
+        </span>
+        {/* Vertical label */}
+        <span
+          className={cn('mt-3 text-xs font-bold uppercase tracking-wider', COLUMN_TITLE_COLOR[status])}
+          style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+        >
+          {TICKET_STATUS_LABELS[status]}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -143,12 +185,25 @@ export function KanbanColumn({
         <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', COLUMN_BADGE_COLOR[status])}>
           {tickets.length}
         </span>
+        {onToggleCollapse && (
+          <button
+            className="ml-auto flex items-center justify-center text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)]"
+            onClick={onToggleCollapse}
+            title={`Collapse ${TICKET_STATUS_LABELS[status]}`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+        )}
       </div>
 
-      {/* Inline card creator at top */}
-      <div className="px-3 py-1.5">
-        <InlineCardCreator boardId={boardId} status={status} />
-      </div>
+      {/* Inline card creator at top (not for cancelled) */}
+      {status !== 'cancelled' && (
+        <div className="px-3 py-1.5">
+          <InlineCardCreator boardId={boardId} status={status} />
+        </div>
+      )}
 
       {/* Cards */}
       <div ref={listRef} className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-2">
