@@ -34,6 +34,9 @@ import { GetTicketContextUseCase } from '../application/use-cases/get-ticket-con
 import { CreatePersonaUseCase } from '../application/use-cases/create-persona.js';
 import { UpdatePersonaUseCase } from '../application/use-cases/update-persona.js';
 import { DeletePersonaUseCase } from '../application/use-cases/delete-persona.js';
+import { CreateSkillUseCase } from '../application/use-cases/create-skill.js';
+import { UpdateSkillUseCase } from '../application/use-cases/update-skill.js';
+import { DeleteSkillUseCase } from '../application/use-cases/delete-skill.js';
 import { ExecuteAgentUseCase } from '../application/use-cases/execute-agent.js';
 import { WakeWaitingAgentsUseCase } from '../application/use-cases/wake-waiting-agents.js';
 import { AutoReviewWorkflowUseCase } from '../application/use-cases/auto-review-workflow.js';
@@ -80,6 +83,7 @@ export async function createContainer() {
     personaStore,
     agentEventStore,
     domainEventLogStore,
+    skillStore,
     kvStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
@@ -156,8 +160,14 @@ export async function createContainer() {
   const createPersona = new CreatePersonaUseCase(personaStore, logger);
   const updatePersona = new UpdatePersonaUseCase(personaStore, logger);
   const deletePersona = new DeletePersonaUseCase(personaStore, logger);
+
+  // Skill CRUD use cases
+  const createSkill = new CreateSkillUseCase(skillStore, personaStore, logger);
+  const updateSkill = new UpdateSkillUseCase(skillStore, personaStore, logger);
+  const deleteSkill = new DeleteSkillUseCase(skillStore, logger);
+
   const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore, config, logger);
-  const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger, autoReviewWorkflow);
+  const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
@@ -166,6 +176,7 @@ export async function createContainer() {
   const domainEventListener = new DomainEventListener({
     eventBus,
     personaStore,
+    skillStore,
     ticketStore,
     mentionStore,
     commentStore,
@@ -246,6 +257,10 @@ export async function createContainer() {
     createPersona,
     updatePersona,
     deletePersona,
+    skillStore,
+    createSkill,
+    updateSkill,
+    deleteSkill,
     executeAgent,
     wakeWaitingAgents,
     autoReviewWorkflow,
@@ -257,6 +272,7 @@ export async function createContainer() {
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     agentBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     personaBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
+    skillBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     agentEventBroadcast: ((_msg: unknown) => {}) as (msg: unknown) => void,
     jsonlFileWatcher: undefined,
   };

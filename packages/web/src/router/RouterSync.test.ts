@@ -156,95 +156,95 @@ describe('parseUrl', () => {
 
 describe('storeToUrl', () => {
   it('generates /sessions when no session selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/sessions');
     expect(url.search).toBe('');
   });
 
   it('generates /sessions/:id when session selected', () => {
-    const url = storeToUrl('sessions', 'abc123', null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl('sessions', 'abc123', null, null, null, null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/sessions/abc123');
     expect(url.search).toBe('');
   });
 
   it('generates /sessions/:id?split=:splitId when split active', () => {
-    const url = storeToUrl('sessions', 'abc123', 'def456', null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl('sessions', 'abc123', 'def456', null, null, null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/sessions/abc123');
     expect(url.search).toBe('?split=def456');
   });
 
   it('generates /repositories when no repo selected', () => {
-    const url = storeToUrl('repositories', null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl('repositories', null, null, null, null, null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/repositories');
   });
 
   it('generates /repositories/:key when repo selected', () => {
-    const url = storeToUrl('repositories', null, null, 'myorg/myrepo', null, null, null, null, 'config', 'general');
+    const url = storeToUrl('repositories', null, null, 'myorg/myrepo', null, null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/repositories/myorg/myrepo');
   });
 
   it('generates /tickets/board/all when all boards', () => {
-    const url = storeToUrl('tickets', null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl('tickets', null, null, null, null, null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/tickets/board/all');
   });
 
   it('generates /tickets/board/:id when board selected', () => {
-    const url = storeToUrl('tickets', null, null, null, 'board-123', null, null, null, 'config', 'general');
+    const url = storeToUrl('tickets', null, null, null, 'board-123', null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/tickets/board/board-123');
   });
 
   it('generates /tickets/board/:boardId/ticket/:ticketId when ticket selected', () => {
-    const url = storeToUrl('tickets', null, null, null, 'board-123', 'ticket-456', null, null, 'config', 'general');
+    const url = storeToUrl('tickets', null, null, null, 'board-123', 'ticket-456', null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/tickets/board/board-123/ticket/ticket-456');
   });
 
   it('generates /agents when no persona selected', () => {
-    const url = storeToUrl('agents', null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl('agents', null, null, null, null, null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/agents');
   });
 
   it('generates /agents/:id when persona selected', () => {
-    const url = storeToUrl('agents', null, null, null, null, null, null, 'persona-123', 'config', 'general');
+    const url = storeToUrl('agents', null, null, null, null, null, null, 'persona-123', null, 'config', 'general');
     expect(url.pathname).toBe('/agents/persona-123');
   });
 
   it('generates /agents/:id/:tab when non-config tab active', () => {
-    const url = storeToUrl('agents', null, null, null, null, null, null, 'persona-123', 'soul', 'general');
+    const url = storeToUrl('agents', null, null, null, null, null, null, 'persona-123', null, 'soul', 'general');
     expect(url.pathname).toBe('/agents/persona-123/soul');
   });
 
   it('generates /scratchpads/global for global scratchpad', () => {
-    const url = storeToUrl('scratchpads', null, null, null, null, null, '__global__', null, 'config', 'general');
+    const url = storeToUrl('scratchpads', null, null, null, null, null, '__global__', null, null, 'config', 'general');
     expect(url.pathname).toBe('/scratchpads/global');
   });
 
   it('generates /scratchpads/:org/:name for repo scratchpad', () => {
-    const url = storeToUrl('scratchpads', null, null, null, null, null, 'myorg/myrepo', null, 'config', 'general');
+    const url = storeToUrl('scratchpads', null, null, null, null, null, 'myorg/myrepo', null, null, 'config', 'general');
     expect(url.pathname).toBe('/scratchpads/myorg/myrepo');
   });
 
   it('generates /settings/:tab', () => {
-    const url = storeToUrl('settings', null, null, null, null, null, null, null, 'config', 'appearance');
+    const url = storeToUrl('settings', null, null, null, null, null, null, null, null, 'config', 'appearance');
     expect(url.pathname).toBe('/settings/appearance');
   });
 
   it('generates /claude-config', () => {
-    const url = storeToUrl('claude-config', null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl('claude-config', null, null, null, null, null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/claude-config');
   });
 
   it('generates /cluster', () => {
-    const url = storeToUrl('cluster', null, null, null, null, null, null, null, 'config', 'general');
+    const url = storeToUrl('cluster', null, null, null, null, null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/cluster');
   });
 
   it('generates /sessions/agent/:ticketId when agent worktree selected', () => {
-    const url = storeToUrl('sessions', null, null, null, null, null, null, null, 'config', 'general', 'ticket-123');
+    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', 'ticket-123');
     expect(url.pathname).toBe('/sessions/agent/ticket-123');
   });
 
   it('prefers session over agent worktree when both set', () => {
-    const url = storeToUrl('sessions', 'abc123', null, null, null, null, null, null, 'config', 'general', 'ticket-123');
+    const url = storeToUrl('sessions', 'abc123', null, null, null, null, null, null, null, 'config', 'general', 'ticket-123');
     expect(url.pathname).toBe('/sessions/abc123');
   });
 });

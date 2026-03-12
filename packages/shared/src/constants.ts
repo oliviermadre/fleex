@@ -64,6 +64,9 @@ export const WS_PERSONA_PATH = '/ws/personas';
 // Agent Events
 export const WS_AGENT_EVENTS_PATH = '/ws/agent-events';
 
+// Skills
+export const WS_SKILL_PATH = '/ws/skills';
+
 // Auto-review workflow activity actions
 export const AUTO_REVIEW_ACTIVITY_ACTIONS = [
   'moved_to_review_via_human_mention',

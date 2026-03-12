@@ -260,6 +260,8 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
               sessions={ticketSessions}
               creating={sessionLoading}
               onCreateSession={handleOpenSession}
+              ticketId={ticketId}
+              onExecuteSkill={(skillId) => api.executeSkill(skillId, ticketId).catch(console.error)}
             />
           </div>
 

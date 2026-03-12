@@ -84,6 +84,14 @@ export type {
 } from './types/agent-persona.js';
 
 export type {
+  Skill,
+  CreateSkillRequest,
+  UpdateSkillRequest,
+  SkillWsMessageType,
+  SkillWsMessage,
+} from './types/skill.js';
+
+export type {
   AgentExecution,
   AgentEventType,
   AgentEvent,
@@ -109,6 +117,7 @@ export type {
 export type {
   StatisticsTimeBucket,
   AgentLeaderboardEntry,
+  SkillLeaderboardEntry,
   StatisticsSummary,
   StatisticsResponse,
 } from './types/statistics.js';
@@ -158,4 +167,5 @@ export {
   TICKET_PRIORITIES,
   WS_PERSONA_PATH,
   WS_AGENT_EVENTS_PATH,
+  WS_SKILL_PATH,
 } from './constants.js';

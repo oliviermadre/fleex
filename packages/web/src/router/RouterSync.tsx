@@ -14,6 +14,7 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useTicketStore } from '../stores/ticketStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
+import { useSkillStore } from '../stores/skillStore';
 
 type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
 
@@ -44,6 +45,7 @@ interface ParsedUrl {
   scratchpadKey: string | null;
   personaId: string | null;
   personaTab: PersonaTab | null;
+  skillId: string | null;
   settingsTab: SettingsTab | null;
   analyticsTab: AnalyticsTab | null;
   agentWorktreeTicketId: string | null;
@@ -53,7 +55,7 @@ interface ParsedUrl {
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
-  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
+  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
 
   // Root: redirect to /dashboard
   if (pathname === '/') {
@@ -103,6 +105,12 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   // Claude Config
   if (pathname === '/claude-config') {
     return { ...base, panel: 'claude-config' };
+  }
+
+  // Agents — skill routes
+  const skillMatch = pathname.match(/^\/agents\/skill\/([^/]+)$/);
+  if (skillMatch) {
+    return { ...base, panel: 'agents', skillId: skillMatch[1]! };
   }
 
   // Agents — more specific patterns first
@@ -179,6 +187,7 @@ export function storeToUrl(
   selectedTicketId: string | null,
   selectedScratchpadKey: string | null,
   selectedPersonaId: string | null,
+  selectedSkillId: string | null,
   personaTab: PersonaTab,
   settingsTab: SettingsTab,
   selectedAgentWorktreeTicketId?: string | null,
@@ -218,6 +227,9 @@ export function storeToUrl(
     case 'claude-config':
       return { pathname: '/claude-config', search: '' };
     case 'agents': {
+      if (selectedSkillId) {
+        return { pathname: `/agents/skill/${selectedSkillId}`, search: '' };
+      }
       if (selectedPersonaId) {
         if (personaTab !== 'config') {
           return { pathname: `/agents/${selectedPersonaId}/${personaTab}`, search: '' };
@@ -283,6 +295,9 @@ export function RouterSync() {
   const selectPersona = useAgentPersonaStore((s) => s.selectPersona);
   const personaTab = useAgentPersonaStore((s) => s.activeTab);
   const setPersonaTab = useAgentPersonaStore((s) => s.setActiveTab);
+
+  const selectedSkillId = useSkillStore((s) => s.selectedSkillId);
+  const selectSkill = useSkillStore((s) => s.selectSkill);
 
   // Track whether we're currently syncing from URL to prevent circular updates
   const syncingFromUrl = useRef(false);
@@ -370,13 +385,27 @@ export function RouterSync() {
       }
     }
 
-    // Update agent persona selection
+    // Update agent persona / skill selection
     if (parsed.panel === 'agents') {
-      if (parsed.personaId !== selectedPersonaId) {
-        selectPersona(parsed.personaId);
-      }
-      if (parsed.personaTab && parsed.personaTab !== personaTab) {
-        setPersonaTab(parsed.personaTab);
+      if (parsed.skillId) {
+        // Skill selected — clear persona selection
+        if (parsed.skillId !== selectedSkillId) {
+          selectSkill(parsed.skillId);
+        }
+        if (selectedPersonaId) {
+          selectPersona(null);
+        }
+      } else {
+        // Persona selected — clear skill selection
+        if (parsed.personaId !== selectedPersonaId) {
+          selectPersona(parsed.personaId);
+        }
+        if (selectedSkillId) {
+          selectSkill(null);
+        }
+        if (parsed.personaTab && parsed.personaTab !== personaTab) {
+          setPersonaTab(parsed.personaTab);
+        }
       }
     }
 
@@ -410,6 +439,7 @@ export function RouterSync() {
       selectedTicketId,
       selectedScratchpadKey,
       selectedPersonaId,
+      selectedSkillId,
       personaTab,
       settingsTab,
       selectedAgentWorktreeTicketId,
@@ -434,6 +464,7 @@ export function RouterSync() {
     selectedTicketId,
     selectedScratchpadKey,
     selectedPersonaId,
+    selectedSkillId,
     personaTab,
     settingsTab,
     selectedAgentWorktreeTicketId,

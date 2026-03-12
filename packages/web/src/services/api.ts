@@ -445,6 +445,39 @@ export async function fetchAgentStatus(id: string): Promise<{ running: boolean; 
   return request<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>(`/personas/${encodeURIComponent(id)}/status`);
 }
 
+// ── Skills API ──
+
+export async function fetchSkills(): Promise<import('@fleex/shared').Skill[]> {
+  return request<import('@fleex/shared').Skill[]>('/skills');
+}
+
+export async function fetchEnabledSkills(): Promise<import('@fleex/shared').Skill[]> {
+  return request<import('@fleex/shared').Skill[]>('/skills/enabled');
+}
+
+export async function fetchSkill(id: string): Promise<import('@fleex/shared').Skill> {
+  return request<import('@fleex/shared').Skill>(`/skills/${encodeURIComponent(id)}`);
+}
+
+export async function createSkill(req: import('@fleex/shared').CreateSkillRequest): Promise<import('@fleex/shared').Skill> {
+  return request<import('@fleex/shared').Skill>('/skills', { method: 'POST', body: JSON.stringify(req) });
+}
+
+export async function updateSkill(id: string, req: import('@fleex/shared').UpdateSkillRequest): Promise<import('@fleex/shared').Skill> {
+  return request<import('@fleex/shared').Skill>(`/skills/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+}
+
+export async function deleteSkill(id: string): Promise<void> {
+  await request<void>(`/skills/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function executeSkill(id: string, ticketId: string): Promise<{ status: string; skillId: string; ticketId: string }> {
+  return request<{ status: string; skillId: string; ticketId: string }>(`/skills/${encodeURIComponent(id)}/execute`, {
+    method: 'POST',
+    body: JSON.stringify({ ticketId }),
+  });
+}
+
 // Claude Usage API
 
 export async function fetchClaudeUsage(force = false): Promise<ClaudeUsage | null> {

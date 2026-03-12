@@ -6,6 +6,7 @@ import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { executeSkill } from '../../services/api';
 import { cn } from '../../lib/cn';
 
 const PRIORITY_BORDER: Record<string, string> = {
@@ -277,6 +278,8 @@ export function KanbanCard({
               sessions={ticketSessions}
               creating={false}
               onCreateSession={() => onOpenSession(ticket.id)}
+              ticketId={ticket.id}
+              onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
             />
           </span>
         </div>

@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useSkillStore } from '../../stores/skillStore';
 import { useUIStore } from '../../stores/uiStore';
 import { CreateAgentModal } from './CreateAgentModal';
+import { CreateSkillModal } from './CreateSkillModal';
 import { cn } from '../../lib/cn';
 
 export function AgentListPanel() {
@@ -12,8 +14,13 @@ export function AgentListPanel() {
   const executionStatuses = useAgentPersonaStore((s) => s.executionStatuses);
   const deletePersona = useAgentPersonaStore((s) => s.deletePersona);
   const toggleContentPanel = useUIStore((s) => s.toggleContentPanel);
+  const skills = useSkillStore((s) => s.skills);
+  const selectedSkillId = useSkillStore((s) => s.selectedSkillId);
+  const selectSkill = useSkillStore((s) => s.selectSkill);
+  const deleteSkill = useSkillStore((s) => s.deleteSkill);
   const [modalOpen, setModalOpen] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [skillModalOpen, setSkillModalOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ id: string; kind: 'persona' | 'skill'; x: number; y: number } | null>(null);
 
   return (
     <div className="flex h-full flex-col">
@@ -46,6 +53,10 @@ export function AgentListPanel() {
 
       {/* List */}
       <div className="flex-1 overflow-y-auto pb-2">
+        {/* Agents section header */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">Agents</span>
+        </div>
         {personas.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center text-[var(--theme-text-muted)]">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
@@ -83,7 +94,7 @@ export function AgentListPanel() {
                 onClick={() => navigate(`/agents/${persona.id}`, { replace: true })}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  setContextMenu({ id: persona.id, x: e.clientX, y: e.clientY });
+                  setContextMenu({ id: persona.id, kind: 'persona', x: e.clientX, y: e.clientY });
                 }}
               >
                 {/* Status dot */}
@@ -112,6 +123,75 @@ export function AgentListPanel() {
             );
           })
         )}
+
+        {/* Skills section header */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">Skills</span>
+          <button
+            onClick={() => setSkillModalOpen(true)}
+            className="flex h-5 w-5 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+            title="Create skill"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="8" y1="3" x2="8" y2="13" />
+              <line x1="3" y1="8" x2="13" y2="8" />
+            </svg>
+          </button>
+        </div>
+
+        {skills.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 px-4 py-6 text-center text-[var(--theme-text-muted)]">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+            </svg>
+            <p className="text-xs">No skills yet</p>
+            <button
+              onClick={() => setSkillModalOpen(true)}
+              className="text-xs text-[var(--theme-accent)] hover:underline"
+            >
+              Create your first skill
+            </button>
+          </div>
+        ) : (
+          skills.map((skill) => {
+            const isSelected = selectedSkillId === skill.id;
+
+            return (
+              <button
+                key={skill.id}
+                className={cn(
+                  'flex min-w-0 w-full items-center gap-3 py-2.5 pl-6 pr-3 text-left transition-colors border-l-2',
+                  isSelected
+                    ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
+                    : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
+                )}
+                onClick={() => {
+                  selectSkill(skill.id);
+                  navigate(`/agents/skill/${skill.id}`, { replace: true });
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({ id: skill.id, kind: 'skill', x: e.clientX, y: e.clientY });
+                }}
+              >
+                <span
+                  className={cn(
+                    'h-2 w-2 shrink-0 rounded-full',
+                    skill.enabled ? 'bg-green-400' : 'bg-[var(--theme-text-faint)]',
+                  )}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+                    {skill.displayName}
+                  </div>
+                  <div className="truncate text-xs text-[var(--theme-text-muted)]">
+                    /{skill.commandName}
+                  </div>
+                </div>
+              </button>
+            );
+          })
+        )}
       </div>
 
       {/* Context menu */}
@@ -125,7 +205,11 @@ export function AgentListPanel() {
             <button
               className="flex w-full items-center gap-2 px-4 py-1.5 text-xs text-red-400 hover:bg-[var(--theme-bg-hover)]"
               onClick={() => {
-                deletePersona(contextMenu.id);
+                if (contextMenu.kind === 'persona') {
+                  deletePersona(contextMenu.id);
+                } else {
+                  deleteSkill(contextMenu.id);
+                }
                 setContextMenu(null);
               }}
             >
@@ -136,6 +220,7 @@ export function AgentListPanel() {
       )}
 
       <CreateAgentModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <CreateSkillModal open={skillModalOpen} onClose={() => setSkillModalOpen(false)} />
     </div>
   );
 }

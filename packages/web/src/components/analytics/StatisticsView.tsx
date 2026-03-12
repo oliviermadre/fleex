@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { StatisticsResponse, StatisticsTimeBucket, AgentLeaderboardEntry } from '@fleex/shared';
+import type { StatisticsResponse, StatisticsTimeBucket, AgentLeaderboardEntry, SkillLeaderboardEntry } from '@fleex/shared';
 import { useStatisticsStore } from '../../stores/statisticsStore';
 import { cn } from '../../lib/cn';
 
@@ -160,6 +160,7 @@ const METRICS: { key: keyof StatisticsTimeBucket; label: string; color: string }
   { key: 'commentsCreated', label: 'Comments', color: '#8b5cf6' },
   { key: 'mentionsCreated', label: 'Mentions', color: '#10b981' },
   { key: 'deliverablesCreated', label: 'Deliverables', color: '#eab308' },
+  { key: 'skillsExecuted', label: 'Skills', color: '#ec4899' },
 ];
 
 function TimeSeriesChart({ data }: { data: StatisticsTimeBucket[] }) {
@@ -225,6 +226,54 @@ function AgentLeaderboard({ entries }: { entries: AgentLeaderboardEntry[] }) {
               </td>
               <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
                 {entry.avgDurationMs != null ? formatDuration(entry.avgDurationMs) : '—'}
+              </td>
+              <td className="py-2 text-right tabular-nums text-sm text-green-400">
+                {entry.completedCount}
+              </td>
+              <td className="py-2 text-right tabular-nums text-sm text-red-400">
+                {entry.failedCount}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Skill Leaderboard ──
+
+function SkillLeaderboard({ entries }: { entries: SkillLeaderboardEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
+        <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Skill Leaderboard</h3>
+        <p className="mt-4 text-center text-xs text-[var(--theme-text-faint)]">No skill executions yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
+      <h3 className="mb-3 text-sm font-semibold text-[var(--theme-text-primary)]">Skill Leaderboard</h3>
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-[var(--theme-border)]">
+            <th className="pb-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Skill</th>
+            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Executions</th>
+            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Done</th>
+            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Failed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry, i) => (
+            <tr key={entry.skillId} className="border-b border-[var(--theme-border)] last:border-0">
+              <td className="py-2 text-sm text-[var(--theme-text-primary)]">
+                <span className="mr-2 text-[var(--theme-text-faint)]">#{i + 1}</span>
+                {entry.skillDisplayName}
+              </td>
+              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
+                {entry.executionCount}
               </td>
               <td className="py-2 text-right tabular-nums text-sm text-green-400">
                 {entry.completedCount}
@@ -332,6 +381,11 @@ export function StatisticsView() {
                 value={data.summary.avgAgentDurationMs != null ? formatDuration(data.summary.avgAgentDurationMs) : '—'}
                 label="Avg Duration"
               />
+              <StatCard
+                icon={<SkillIcon />}
+                value={data.summary.skillsExecuted}
+                label="Skills Executed"
+              />
             </div>
 
             {/* Time Series */}
@@ -339,6 +393,9 @@ export function StatisticsView() {
 
             {/* Agent Leaderboard */}
             <AgentLeaderboard entries={data.agentLeaderboard} />
+
+            {/* Skill Leaderboard */}
+            <SkillLeaderboard entries={data.skillLeaderboard} />
           </div>
         )}
 
@@ -422,6 +479,14 @@ function DurationIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function SkillIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   );
 }

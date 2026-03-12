@@ -162,6 +162,30 @@ export interface PersonaExecutionStartedEvent extends DomainEvent {
   mentionIds: string[];
 }
 
+// ── Skill events ──
+
+export interface SkillCreatedEvent extends DomainEvent {
+  type: 'skill.created';
+  skillId: string;
+}
+
+export interface SkillUpdatedEvent extends DomainEvent {
+  type: 'skill.updated';
+  skillId: string;
+}
+
+export interface SkillDeletedEvent extends DomainEvent {
+  type: 'skill.deleted';
+  skillId: string;
+}
+
+export interface SkillExecutedEvent extends DomainEvent {
+  type: 'skill.executed';
+  skillId: string;
+  personaId: string;
+  ticketId: string;
+}
+
 // ── Worktree events ──
 
 export interface WorktreeCreatedEvent extends DomainEvent {
@@ -215,6 +239,10 @@ export type AnyDomainEvent =
   | PersonaUpdatedEvent
   | PersonaDeletedEvent
   | PersonaExecutionStartedEvent
+  | SkillCreatedEvent
+  | SkillUpdatedEvent
+  | SkillDeletedEvent
+  | SkillExecutedEvent
   | WorktreeCreatedEvent
   | SessionCreatedEvent
   | SessionRenamedEvent

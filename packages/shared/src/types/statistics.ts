@@ -12,6 +12,7 @@ export interface StatisticsTimeBucket {
   readonly mentionsResolved: number;
   readonly ticketsCreated: number;
   readonly ticketsCompleted: number;
+  readonly skillsExecuted: number;
 }
 
 export interface AgentLeaderboardEntry {
@@ -38,6 +39,7 @@ export interface StatisticsSummary {
   readonly mentionsResolved: number;
   readonly ticketsCreated: number;
   readonly ticketsCompleted: number;
+  readonly skillsExecuted: number;
   readonly activeSessions: number;
 }
 
@@ -48,4 +50,14 @@ export interface StatisticsResponse {
   readonly summary: StatisticsSummary;
   readonly timeSeries: StatisticsTimeBucket[];
   readonly agentLeaderboard: AgentLeaderboardEntry[];
+  readonly skillLeaderboard: SkillLeaderboardEntry[];
+}
+
+export interface SkillLeaderboardEntry {
+  readonly skillId: string;
+  readonly skillName: string;
+  readonly skillDisplayName: string;
+  readonly executionCount: number;
+  readonly completedCount: number;
+  readonly failedCount: number;
 }

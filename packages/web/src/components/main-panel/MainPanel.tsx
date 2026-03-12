@@ -16,7 +16,9 @@ import { KanbanBoard } from '../tickets/KanbanBoard';
 import { TicketDetail } from '../tickets/TicketDetail';
 import { useTicketStore } from '../../stores/ticketStore';
 import { AgentPersonaView } from '../agents/AgentPersonaView';
+import { SkillEditor } from '../agents/SkillEditor';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useSkillStore } from '../../stores/skillStore';
 import { AgentWorktreePanel } from './AgentWorktreePanel';
 import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { DashboardView } from '../dashboard/DashboardView';
@@ -67,6 +69,7 @@ export function MainPanel() {
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
   const selectedTicketId = useTicketStore((s) => s.selectedTicketId);
+  const selectedSkillId = useSkillStore((s) => s.selectedSkillId);
   const splitSession = splitSessionId
     ? sessions.find((s) => s.id === splitSessionId) ?? null
     : null;
@@ -93,6 +96,9 @@ export function MainPanel() {
   }
 
   if (activePanel === 'agents') {
+    if (selectedSkillId) {
+      return <SkillEditor />;
+    }
     return <AgentPersonaView />;
   }
 

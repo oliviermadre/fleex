@@ -9,6 +9,7 @@ import type { AgentEventStorePort } from '../../application/ports/agent-event-st
 import type { DomainEventLogStorePort } from '../../application/ports/domain-event-log-store.port.js';
 import type { ConfigPort } from '../../application/ports/config.port.js';
 import type { KvStorePort } from '../../application/ports/kv-store.port.js';
+import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
@@ -25,6 +26,7 @@ export interface StorageStores {
   personaStore: PersonaStorePort;
   agentEventStore: AgentEventStorePort;
   domainEventLogStore: DomainEventLogStorePort;
+  skillStore: SkillStorePort;
   kvStore: KvStorePort | null;
 }
 
@@ -77,6 +79,7 @@ async function createJsonStores(deps: {
   const { JsonPersonaStore } = await import('./json-persona-store.adapter.js');
   const { JsonAgentEventStore } = await import('./json-agent-event-store.adapter.js');
   const { JsonDomainEventLogStore } = await import('./json-domain-event-log-store.adapter.js');
+  const { JsonSkillStore } = await import('./json-skill-store.adapter.js');
 
   // Run pending migrations (JSON adapter — tracking via _migrations.json)
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
@@ -102,8 +105,10 @@ async function createJsonStores(deps: {
   await agentEventStore.init();
   const domainEventLogStore = new JsonDomainEventLogStore(deps.hostFs, deps.homedir, deps.logger);
   await domainEventLogStore.init();
+  const skillStore = new JsonSkillStore(deps.hostFs, deps.homedir, deps.logger);
+  await skillStore.init();
 
-  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, kvStore: null };
+  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, kvStore: null };
 }
 
 async function createJsonSessionStore(deps: {
@@ -139,6 +144,7 @@ async function createSqliteStores(deps: {
   const { SqliteAgentEventStoreAdapter } = await import('./sqlite/sqlite-agent-event-store.adapter.js');
   const { SqliteDomainEventLogStoreAdapter } = await import('./sqlite/sqlite-domain-event-log-store.adapter.js');
   const { SqliteKvStoreAdapter } = await import('./sqlite/sqlite-kv-store.adapter.js');
+  const { SqliteSkillStoreAdapter } = await import('./sqlite/sqlite-skill-store.adapter.js');
 
   const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
   const connection = new SqliteConnection(dbPath);
@@ -166,6 +172,7 @@ async function createSqliteStores(deps: {
     personaStore: new SqlitePersonaStoreAdapter(connection),
     agentEventStore,
     domainEventLogStore: new SqliteDomainEventLogStoreAdapter(connection),
+    skillStore: new SqliteSkillStoreAdapter(connection),
     kvStore: new SqliteKvStoreAdapter(connection),
   };
 }
@@ -192,6 +199,7 @@ async function createPgsqlStores(deps: {
   const { PgAgentEventStore } = await import('./pgsql/pg-agent-event-store.adapter.js');
   const { PgDomainEventLogStore } = await import('./pgsql/pg-domain-event-log-store.adapter.js');
   const { PgKvStoreAdapter } = await import('./pgsql/pg-kv-store.adapter.js');
+  const { PgSkillStore } = await import('./pgsql/pg-skill-store.adapter.js');
 
   const connection = new PgConnection(url);
   await connection.init();
@@ -221,6 +229,7 @@ async function createPgsqlStores(deps: {
     personaStore: new PgPersonaStore(connection),
     agentEventStore,
     domainEventLogStore,
+    skillStore: new PgSkillStore(connection),
     kvStore: new PgKvStoreAdapter(connection),
   };
 }
@@ -250,6 +259,7 @@ async function createSupabaseStores(deps: {
   const { SupabaseAgentEventStore } = await import('./supabase/supabase-agent-event-store.adapter.js');
   const { SupabaseDomainEventLogStore } = await import('./supabase/supabase-domain-event-log-store.adapter.js');
   const { SupabaseKvStoreAdapter } = await import('./supabase/supabase-kv-store.adapter.js');
+  const { SupabaseSkillStore } = await import('./supabase/supabase-skill-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
   const connection = new SupabaseConnection(url, key, dbUrl);
@@ -277,6 +287,7 @@ async function createSupabaseStores(deps: {
     personaStore: new SupabasePersonaStore(connection),
     agentEventStore,
     domainEventLogStore: new SupabaseDomainEventLogStore(connection),
+    skillStore: new SupabaseSkillStore(connection),
     kvStore: new SupabaseKvStoreAdapter(connection),
   };
 }
