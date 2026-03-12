@@ -1,5 +1,6 @@
 import type { Migration } from './types.js';
 import migration001 from './migrations/001_initial_schema.js';
+import migration002 from './migrations/002_add_skills_table.js';
 
 /**
  * Ordered array of all migrations.
@@ -7,4 +8,5 @@ import migration001 from './migrations/001_initial_schema.js';
  */
 export const allMigrations: Migration[] = [
   migration001,
+  migration002,
 ];

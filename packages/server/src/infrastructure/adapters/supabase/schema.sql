@@ -213,6 +213,23 @@ CREATE TABLE IF NOT EXISTS agent_personas (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_personas_name ON agent_personas(name);
 
+-- ── Skills ──────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS skills (
+  id                TEXT PRIMARY KEY,
+  command_name      TEXT NOT NULL UNIQUE,
+  name              TEXT NOT NULL,
+  display_name      TEXT NOT NULL,
+  markdown_content  TEXT NOT NULL DEFAULT '',
+  enabled           BOOLEAN NOT NULL DEFAULT TRUE,
+  persona_id        TEXT NOT NULL,
+  created_at        TIMESTAMPTZ NOT NULL,
+  updated_at        TIMESTAMPTZ NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_command_name ON skills(command_name);
+CREATE INDEX IF NOT EXISTS idx_skills_persona_id ON skills(persona_id);
+
 -- ── Agent Event Executions ────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS agent_event_executions (
@@ -273,9 +290,11 @@ CREATE POLICY "service_role_mentions"          ON mentions          FOR ALL USIN
 CREATE POLICY "service_role_deliverables"      ON deliverables      FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_agent_personas"   ON agent_personas    FOR ALL USING (true) WITH CHECK (true);
 
+ALTER TABLE skills                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_event_executions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE domain_event_log      ENABLE ROW LEVEL SECURITY;
 
+CREATE POLICY "service_role_skills"                  ON skills                FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_agent_event_executions" ON agent_event_executions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_domain_event_log"       ON domain_event_log      FOR ALL USING (true) WITH CHECK (true);
 
