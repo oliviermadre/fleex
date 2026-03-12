@@ -889,12 +889,10 @@ export class ExecuteAgentUseCase {
       });
     }
 
-    // 2. Ensure worktree
+    // 2. Try to resolve worktree (optional for skills — many don't need file access)
     const worktreePath = await this.ensureWorktree(ticketId);
     if (!worktreePath) {
-      this.logger.error('Cannot start skill execution: no worktree', { executionId, ticketId, skillId });
-      this.activeExecutions.delete(skillMentionKey);
-      return;
+      this.logger.info('Skill execution proceeding without worktree', { executionId, ticketId, skillId });
     }
 
     // 3. Start execution tracking
@@ -1006,7 +1004,9 @@ export class ExecuteAgentUseCase {
         },
       };
 
-      queryOptions['cwd'] = worktreePath;
+      if (worktreePath) {
+        queryOptions['cwd'] = worktreePath;
+      }
 
       const previousSessionId = this.sessionHistory.get(sessionKey);
       if (previousSessionId) {
