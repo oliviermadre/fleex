@@ -275,6 +275,20 @@ check_tool() {
   return 1
 }
 
+# Bash 3.x-compatible semver comparison: returns 0 if $1 >= $2
+version_gte() {
+  local IFS=.
+  local i a=($1) b=($2)
+  for ((i=0; i<${#b[@]}; i++)); do
+    local va="${a[i]:-0}" vb="${b[i]:-0}"
+    if (( va > vb )); then return 0; fi
+    if (( va < vb )); then return 1; fi
+  done
+  return 0
+}
+
+MIN_BUN_VERSION="1.3.5"
+
 install_bun() {
   info "Installing bun..."
   curl -fsSL https://bun.sh/install | bash
@@ -284,6 +298,15 @@ install_bun() {
     die "Failed to install bun. Please install manually: https://bun.sh"
   fi
   ok "bun $(bun --version) installed"
+}
+
+upgrade_bun() {
+  info "Upgrading bun..."
+  bun upgrade
+  if ! command -v bun >/dev/null 2>&1; then
+    die "Failed to upgrade bun. Please upgrade manually: bun upgrade"
+  fi
+  ok "bun upgraded to $(bun --version)"
 }
 
 install_tmux() {
@@ -416,6 +439,20 @@ phase_prerequisites() {
       install_bun
     else
       die "bun is required to continue. Install: https://bun.sh"
+    fi
+  fi
+
+  # bun version check (>= 1.3.5 required for Bun.spawn terminal support)
+  local bun_ver
+  bun_ver="$(bun --version 2>/dev/null)"
+  if ! version_gte "$bun_ver" "$MIN_BUN_VERSION"; then
+    warn "bun $bun_ver is too old — fleex requires bun >= $MIN_BUN_VERSION"
+    local answer
+    answer="$(ui_prompt_yn "Upgrade bun automatically?" "y")"
+    if [ "$answer" = "y" ]; then
+      upgrade_bun
+    else
+      die "bun >= $MIN_BUN_VERSION is required (for Bun.spawn terminal support). Upgrade: bun upgrade"
     fi
   fi
 

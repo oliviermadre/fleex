@@ -58,9 +58,30 @@ ensure_dirs() {
   mkdir -p "$INSTANCE_RUN" "$INSTANCE_LOG"
 }
 
+# ── Version helpers ───────────────────────────────────────────────────────────
+# Bash 3.x-compatible semver comparison: returns 0 if $1 >= $2
+version_gte() {
+  local IFS=.
+  local i a=($1) b=($2)
+  for ((i=0; i<${#b[@]}; i++)); do
+    local va="${a[i]:-0}" vb="${b[i]:-0}"
+    if (( va > vb )); then return 0; fi
+    if (( va < vb )); then return 1; fi
+  done
+  return 0
+}
+
+MIN_BUN_VERSION="1.3.5"
+
 # ── Prerequisite checks ───────────────────────────────────────────────────────
 check_bun() {
   command -v bun >/dev/null 2>&1 || die "bun is required but not installed. Install it: https://bun.sh"
+  local bun_ver
+  bun_ver="$(bun --version 2>/dev/null)"
+  if ! version_gte "$bun_ver" "$MIN_BUN_VERSION"; then
+    die "bun $bun_ver is too old. fleex requires bun >= $MIN_BUN_VERSION (for Bun.spawn terminal support).
+  Upgrade: bun upgrade"
+  fi
 }
 
 check_repo() {
@@ -148,6 +169,37 @@ _kill_tree() {
     _kill_tree "$child" "$sig"
   done
   kill -"$sig" "$pid" 2>/dev/null || true
+}
+
+# ── Health check ──────────────────────────────────────────────────────────────
+# Polls an HTTP endpoint until it responds 2xx, or times out.
+# Usage: _wait_for_service <name> <url> <pid> <logfile> <timeout_secs>
+_wait_for_service() {
+  local name="$1" url="$2" pid="$3" logfile="$4" timeout="${5:-15}"
+  local elapsed=0
+  while (( elapsed < timeout )); do
+    # If process died, fail immediately
+    if ! kill -0 "$pid" 2>/dev/null; then
+      err "$name exited unexpectedly. Last 15 lines of log:"
+      tail -15 "$logfile" 2>/dev/null | while IFS= read -r line; do
+        printf "  ${DIM}%s${NC}\n" "$line"
+      done
+      return 1
+    fi
+    # Probe the endpoint
+    local code
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$url" 2>/dev/null || echo "000")"
+    if [[ "$code" =~ ^2 ]]; then
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  err "$name did not become healthy within ${timeout}s (last HTTP $code). Last 15 lines of log:"
+  tail -15 "$logfile" 2>/dev/null | while IFS= read -r line; do
+    printf "  ${DIM}%s${NC}\n" "$line"
+  done
+  return 1
 }
 
 # ── Commands ───────────────────────────────────────────────────────────────────
@@ -249,10 +301,29 @@ JSON
 
   set +m
 
-  sleep 1
+  # Health check: wait for all services to respond
+  info "Waiting for services to become healthy..."
+  local health_ok=true
+
+  _wait_for_service "gateway" "http://localhost:$PORT_GATEWAY/health" \
+    "$(cat "$(pid_file gateway)")" "$(log_file gateway)" 15 || health_ok=false
+
+  if $health_ok; then
+    _wait_for_service "server" "http://localhost:$PORT_SERVER/health" \
+      "$(cat "$(pid_file server)")" "$(log_file server)" 15 || health_ok=false
+  fi
+
+  if $health_ok; then
+    _wait_for_service "web" "http://localhost:$PORT_WEB/" \
+      "$(cat "$(pid_file web)")" "$(log_file web)" 15 || health_ok=false
+  fi
 
   echo ""
-  ok "Stack started! [$INSTANCE_SLUG]"
+  if $health_ok; then
+    ok "Stack started! [$INSTANCE_SLUG]"
+  else
+    warn "Stack started with issues — some services may not be healthy. [$INSTANCE_SLUG]"
+  fi
   echo ""
   printf "  ${CYAN}%-10s${NC} ${DIM}%-30s${NC} %s\n" "Service" "URL" "Log"
   printf "  ${CYAN}%-10s${NC} %-30s ${DIM}%s${NC}\n" "gateway" "http://localhost:$PORT_GATEWAY" "$(log_file gateway)"
@@ -556,6 +627,105 @@ cmd_logs() {
   fi
 }
 
+cmd_doctor() {
+  echo ""
+  printf "  ${BOLD}fleex doctor${NC}\n"
+  echo ""
+
+  local all_ok=true
+
+  # bun
+  if command -v bun >/dev/null 2>&1; then
+    local bun_ver
+    bun_ver="$(bun --version 2>/dev/null)"
+    if version_gte "$bun_ver" "$MIN_BUN_VERSION"; then
+      printf "  ${GREEN}✓${NC} bun $bun_ver (>= $MIN_BUN_VERSION)\n"
+    else
+      printf "  ${RED}✗${NC} bun $bun_ver — too old, need >= $MIN_BUN_VERSION. Run: ${BOLD}bun upgrade${NC}\n"
+      all_ok=false
+    fi
+  else
+    printf "  ${RED}✗${NC} bun not found. Install: https://bun.sh\n"
+    all_ok=false
+  fi
+
+  # tmux
+  if command -v tmux >/dev/null 2>&1; then
+    printf "  ${GREEN}✓${NC} tmux $(tmux -V 2>/dev/null | awk '{print $2}')\n"
+  else
+    printf "  ${RED}✗${NC} tmux not found\n"
+    all_ok=false
+  fi
+
+  # claude
+  if command -v claude >/dev/null 2>&1; then
+    printf "  ${GREEN}✓${NC} claude CLI installed\n"
+  else
+    printf "  ${RED}✗${NC} claude CLI not found. Install: npm install -g @anthropic-ai/claude-code\n"
+    all_ok=false
+  fi
+
+  # gh
+  if command -v gh >/dev/null 2>&1; then
+    printf "  ${GREEN}✓${NC} gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')\n"
+  else
+    printf "  ${YELLOW}○${NC} gh not found (optional)\n"
+  fi
+
+  # Repo
+  if [[ -d "$REPO_DIR/packages" ]]; then
+    printf "  ${GREEN}✓${NC} repo found at $REPO_DIR\n"
+  else
+    printf "  ${RED}✗${NC} repo not found at $REPO_DIR\n"
+    all_ok=false
+  fi
+
+  # node_modules
+  if [[ -d "$REPO_DIR/node_modules" ]]; then
+    printf "  ${GREEN}✓${NC} node_modules installed\n"
+  else
+    printf "  ${YELLOW}○${NC} node_modules missing — run: ${BOLD}cd $REPO_DIR && bun install${NC}\n"
+  fi
+
+  # Service health (only if instance is running)
+  echo ""
+  if load_ports 2>/dev/null; then
+    printf "  ${BOLD}Services [$INSTANCE_SLUG]:${NC}\n"
+    for svc in "${SERVICES[@]}"; do
+      local port url
+      case "$svc" in
+        gateway) port="$PORT_GATEWAY"; url="http://localhost:$port/health" ;;
+        server)  port="$PORT_SERVER";  url="http://localhost:$port/health" ;;
+        web)     port="$PORT_WEB";     url="http://localhost:$port/" ;;
+      esac
+
+      if ! is_running "$svc"; then
+        printf "  ${DIM}○${NC} $svc — not running\n"
+        continue
+      fi
+
+      local code
+      code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$url" 2>/dev/null || echo "000")"
+      if [[ "$code" =~ ^2 ]]; then
+        printf "  ${GREEN}✓${NC} $svc — healthy (HTTP $code on :$port)\n"
+      else
+        printf "  ${RED}✗${NC} $svc — unhealthy (HTTP $code on :$port)\n"
+        all_ok=false
+      fi
+    done
+  else
+    printf "  ${DIM}No running instance found for $INSTANCE_SLUG${NC}\n"
+  fi
+
+  echo ""
+  if $all_ok; then
+    printf "  ${GREEN}${BOLD}All checks passed.${NC}\n"
+  else
+    printf "  ${YELLOW}${BOLD}Some checks failed — see above.${NC}\n"
+  fi
+  echo ""
+}
+
 cmd_help() {
   cat <<EOF
 
@@ -573,6 +743,7 @@ cmd_help() {
     ${CYAN}restart${NC}       Restart the current instance
     ${CYAN}status${NC}        Show status of all instances
     ${CYAN}logs${NC} [svc]    Tail logs (all services, or a specific one)
+    ${CYAN}doctor${NC}        Check system health and prerequisites
     ${CYAN}self-update${NC}   Pull latest code and update CLI
     ${CYAN}help${NC}          Show this help message
 
@@ -624,6 +795,7 @@ main() {
     restart)     cmd_restart "$@" ;;
     status)      cmd_status "$@" ;;
     logs)        cmd_logs "$@" ;;
+    doctor)      cmd_doctor "$@" ;;
     self-update) cmd_self_update "$@" ;;
     help|--help|-h) cmd_help ;;
     *)

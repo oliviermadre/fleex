@@ -59,8 +59,6 @@ export function KanbanCard({
   const issueLinks = ticket.links.filter((l) => l.type === 'github_issue');
   const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
   const worktreeLinks = ticket.links.filter((l) => l.type === 'worktree');
-  const sessionLinks = ticket.links.filter((l) => l.type === 'session');
-
   const repoLinks = ticket.links.filter((l) => l.type === 'repository');
 
   const repoWorktreeInfo = useMemo(() => {
@@ -238,15 +236,6 @@ export function KanbanCard({
         </div>
       ) : (
         <div className="mt-2.5 flex items-center gap-2.5 text-xs text-[var(--theme-text-muted)]">
-          {sessionLinks.length > 0 && (
-            <span className="flex items-center gap-1">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
-                <polyline points="4.5,7 6,8.5 4.5,10" />
-              </svg>
-              {sessionLinks.length}
-            </span>
-          )}
           {ticket.assignee && (
             ticket.assignee === 'user' ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-400" title="Me">
