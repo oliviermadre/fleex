@@ -1,7 +1,12 @@
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { DashboardPullRequest, DashboardWorktree, DashboardGitHubIssue, DashboardData, PullRequest, GitHubIssue } from '@fleex/shared';
+import { BoardEntity } from '../../domain/entities/board.entity.js';
 import type { Container } from '../container.js';
+
+const PR_BACKFILL_BOARD_NAME = 'PR Backfill';
+const TO_REVIEW_BOARD_NAME = 'To Review';
 
 export function dashboardRoutes(container: Container) {
   return async function (app: FastifyInstance) {
@@ -26,20 +31,21 @@ export function dashboardRoutes(container: Container) {
           container.ticketStore.getAllTickets(),
         ]);
 
-        // Build a Map of github_issue refs → ticketId for hasLocalTicket + linkedTicketId
+        // Build maps from ticket links → ticketId
         const localIssueMap = new Map<string, string>();
+        const localPRMap = new Map<string, string>();
+        const worktreeBranchMap = new Map<string, string>();
         for (const ticket of allTickets) {
           for (const link of ticket.links) {
             if (link.type === 'github_issue') {
               localIssueMap.set(link.ref, ticket.id);
+            } else if (link.type === 'github_pr') {
+              localPRMap.set(link.ref, ticket.id);
+            } else if (link.type === 'worktree') {
+              worktreeBranchMap.set(link.ref, ticket.id);
             }
           }
         }
-
-        // Active tickets (todo, doing, reviewing)
-        const activeTickets = allTickets
-          .filter((t) => t.status === 'todo' || t.status === 'doing' || t.status === 'reviewing')
-          .map((t) => t.toDTO());
 
         // Fetch PRs, issues, worktrees per repo in parallel
         const myPullRequests: DashboardPullRequest[] = [];
@@ -149,8 +155,82 @@ export function dashboardRoutes(container: Container) {
           }),
         );
 
+        // ── PR ticket backfill ──────────────────────────────────────────────
+        // Find-or-create dedicated boards for PR backfill
+        const allBoards = await container.ticketStore.getAllBoards();
+        const findOrCreateBoard = async (boardName: string, emoji: string): Promise<string> => {
+          const existing = allBoards.find((b) => b.name === boardName);
+          if (existing) return existing.id;
+          const board = BoardEntity.create({ id: randomUUID(), name: boardName, emoji });
+          await container.ticketStore.saveBoard(board);
+          allBoards.push(board); // keep in sync for subsequent lookups
+          return board.id;
+        };
+
+        // Eagerly resolve boards only for roles that have unlinked PRs
+        const hasUnlinkedAuthorPR = myPullRequests.some((pr) => {
+          const prRef = `${pr.org}/${pr.name}#${pr.number}`;
+          const wtRef = `${pr.org}/${pr.name}:${pr.headRefName}`;
+          return !localPRMap.has(prRef) && !worktreeBranchMap.has(wtRef);
+        });
+        const hasUnlinkedReviewPR = reviewRequests.some((pr) => {
+          const prRef = `${pr.org}/${pr.name}#${pr.number}`;
+          const wtRef = `${pr.org}/${pr.name}:${pr.headRefName}`;
+          return !localPRMap.has(prRef) && !worktreeBranchMap.has(wtRef);
+        });
+
+        const [prBackfillBoardId, toReviewBoardId] = await Promise.all([
+          hasUnlinkedAuthorPR ? findOrCreateBoard(PR_BACKFILL_BOARD_NAME, '🔀') : Promise.resolve(undefined),
+          hasUnlinkedReviewPR ? findOrCreateBoard(TO_REVIEW_BOARD_NAME, '👀') : Promise.resolve(undefined),
+        ]);
+
+        const backfillPR = async (pr: DashboardPullRequest, role: 'author' | 'reviewer') => {
+          const prRef = `${pr.org}/${pr.name}#${pr.number}`;
+          const wtRef = `${pr.org}/${pr.name}:${pr.headRefName}`;
+
+          // Already linked?
+          const existingId = localPRMap.get(prRef) ?? worktreeBranchMap.get(wtRef);
+          if (existingId) {
+            pr.linkedTicketId = existingId;
+            return;
+          }
+
+          const boardId = role === 'reviewer' ? toReviewBoardId : prBackfillBoardId;
+          if (!boardId) return;
+
+          try {
+            const ticket = await container.backfillPRTicket.execute({
+              org: pr.org,
+              name: pr.name,
+              prNumber: pr.number,
+              prTitle: pr.title,
+              headRefName: pr.headRefName,
+              prUrl: `https://github.com/${pr.org}/${pr.name}/pull/${pr.number}`,
+              boardId,
+              role,
+            });
+            pr.linkedTicketId = ticket.id;
+            // Update maps so duplicates within the same request are avoided
+            localPRMap.set(prRef, ticket.id);
+            worktreeBranchMap.set(wtRef, ticket.id);
+          } catch (err) {
+            container.logger.warn('PR ticket backfill failed', { prRef, error: String(err) });
+          }
+        };
+
+        await Promise.all([
+          ...myPullRequests.map((pr) => backfillPR(pr, 'author')),
+          ...reviewRequests.map((pr) => backfillPR(pr, 'reviewer')),
+        ]);
+
+        // Re-compute activeTickets to include newly backfilled tickets
+        const allTicketsAfterBackfill = await container.ticketStore.getAllTickets();
+        const activeTicketsFinal = allTicketsAfterBackfill
+          .filter((t) => t.status === 'todo' || t.status === 'doing' || t.status === 'reviewing')
+          .map((t) => t.toDTO());
+
         const data: DashboardData = {
-          activeTickets,
+          activeTickets: activeTicketsFinal,
           myPullRequests,
           reviewRequests,
           assignedIssues,

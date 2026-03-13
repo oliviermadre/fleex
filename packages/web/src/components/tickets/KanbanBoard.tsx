@@ -3,6 +3,7 @@ import { TICKET_STATUSES } from '@fleex/shared';
 import type { TicketStatus, Session } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { fetchBulkPRStates } from '../../services/api';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanHeader } from './KanbanHeader';
 import { SessionTerminalOverlay } from './SessionTerminalOverlay';
@@ -18,6 +19,19 @@ export function KanbanBoard() {
 
   const [overlaySession, setOverlaySession] = useState<Session | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+  const [prStates, setPrStates] = useState<Record<string, string>>({});
+
+  // Fetch live PR states for all visible tickets with github_pr links
+  useEffect(() => {
+    const prRefs = new Set<string>();
+    for (const ticket of tickets) {
+      for (const link of ticket.links) {
+        if (link.type === 'github_pr') prRefs.add(link.ref);
+      }
+    }
+    if (prRefs.size === 0) return;
+    fetchBulkPRStates([...prRefs]).then(setPrStates).catch(() => {});
+  }, [tickets]);
 
   // Collapsed columns state with localStorage persistence
   const COLLAPSED_STORAGE_KEY = 'fleex:collapsedColumns';
@@ -153,6 +167,7 @@ export function KanbanBoard() {
             onOpenSession={handleOpenSession}
             collapsed={collapsedColumns.has(status)}
             onToggleCollapse={() => toggleCollapse(status)}
+            prStates={prStates}
           />
         ))}
       </div>

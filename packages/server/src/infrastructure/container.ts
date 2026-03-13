@@ -27,6 +27,7 @@ import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
 import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
 import { ImportGitHubIssueUseCase } from '../application/use-cases/import-github-issue.js';
+import { BackfillPRTicketUseCase } from '../application/use-cases/backfill-pr-ticket.js';
 import { PostCommentUseCase } from '../application/use-cases/post-comment.js';
 import { ResolveMentionUseCase } from '../application/use-cases/resolve-mention.js';
 import { SubmitDeliverableUseCase } from '../application/use-cases/submit-deliverable.js';
@@ -149,6 +150,7 @@ export async function createContainer() {
     ticketStore, createSession, createWorktreeUC, git, config, logger,
   );
   const importGitHubIssue = new ImportGitHubIssueUseCase(ticketStore, githubGraphql, logger);
+  const backfillPRTicket = new BackfillPRTicketUseCase(ticketStore, logger);
 
   // Agent collaboration use cases
   const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore, logger);
@@ -246,6 +248,7 @@ export async function createContainer() {
     detectMerge,
     createSessionFromTicket,
     importGitHubIssue,
+    backfillPRTicket,
     commentStore,
     mentionStore,
     deliverableStore,

@@ -316,6 +316,46 @@ export function ticketRoutes(container: Container) {
       },
     );
 
+    // Fetch live PR states for a ticket's github_pr links
+    app.get<{ Params: { id: string } }>(
+      '/api/tickets/:id/pr-states',
+      async (request) => {
+        const ticket = await container.ticketStore.getTicketById(request.params.id);
+        if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+        const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+        if (prLinks.length === 0) return {};
+
+        const prs = prLinks.map((link) => {
+          const match = link.ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
+          if (!match) return null;
+          return { org: match[1]!, name: match[2]!, number: parseInt(match[3]!, 10) };
+        }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+        const stateMap = await container.githubGraphql.fetchPRStates(prs);
+        // Return as plain object: { "org/name#123": "OPEN", ... }
+        return Object.fromEntries(stateMap);
+      },
+    );
+
+    // Bulk fetch PR states from refs (e.g. ["org/name#123", ...])
+    app.post<{ Body: { refs: string[] } }>(
+      '/api/pr-states',
+      async (request) => {
+        const { refs } = request.body;
+        if (!refs || refs.length === 0) return {};
+
+        const prs = refs.map((ref) => {
+          const match = ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
+          if (!match) return null;
+          return { org: match[1]!, name: match[2]!, number: parseInt(match[3]!, 10) };
+        }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+        const stateMap = await container.githubGraphql.fetchPRStates(prs);
+        return Object.fromEntries(stateMap);
+      },
+    );
+
     // Batch reorder
     app.post<{ Body: { updates: { id: string; status: TicketStatus; position: number }[] } }>(
       '/api/tickets/reorder',

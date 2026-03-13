@@ -200,7 +200,7 @@ function CollapsedTicketMetaSidebar({
         {prLinks.length > 0 && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-purple-400">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-green-400">
                 <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
               </svg>
             }
@@ -315,6 +315,14 @@ function ExpandedTicketMetaSidebar({
   const removeLink = useTicketStore((s) => s.removeLink);
   const syncGithubIssue = useTicketStore((s) => s.syncGithubIssue);
   const boards = useTicketStore((s) => s.boards);
+
+  // Fetch live PR states from GitHub on mount / ticket change
+  const [prStates, setPrStates] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+    if (prLinks.length === 0) return;
+    api.fetchPRStates(ticket.id).then(setPrStates).catch(() => {});
+  }, [ticket.id]);
 
   const handleStatusChange = (status: TicketStatus) => {
     updateTicket(ticket.id, { status });
@@ -474,30 +482,12 @@ function ExpandedTicketMetaSidebar({
       />
 
       {/* Pull Requests */}
-      {ticket.links.filter((l) => l.type === 'github_pr').length > 0 && (
-        <div>
-          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-            Pull Request
-          </label>
-          <div className="flex flex-col gap-1.5">
-            {ticket.links.filter((l) => l.type === 'github_pr').map((pr) => (
-              <a
-                key={pr.id}
-                href={pr.url ?? undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 rounded-md border border-purple-500/20 bg-purple-500/[0.06] px-2 py-1.5 text-xs transition-colors hover:bg-purple-500/[0.12]"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-purple-400">
-                  <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
-                </svg>
-                <span className="font-medium text-purple-400">{pr.label}</span>
-                <span className="ml-auto text-[10px] text-[var(--theme-text-faint)]">{pr.ref}</span>
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
+      <PRLinkPicker
+        ticket={ticket}
+        prStates={prStates}
+        onAddLink={(link) => addLink(ticket.id, link)}
+        onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
+      />
 
       {/* Tags */}
       <div>
@@ -1105,6 +1095,156 @@ function GitHubIssuePicker({
           + Link GitHub issue
         </button>
       )}
+    </div>
+  );
+}
+
+// ── PR Link Picker ──
+
+const GITHUB_PR_RE = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/;
+
+function PRLinkPicker({
+  ticket,
+  prStates,
+  onAddLink,
+  onRemoveLink,
+}: {
+  ticket: Ticket;
+  prStates: Record<string, string>;
+  onAddLink: (link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
+  onRemoveLink: (linkId: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [urlValue, setUrlValue] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+
+  const handleSave = async () => {
+    const trimmed = urlValue.trim();
+    setError(null);
+
+    if (!trimmed) {
+      setEditing(false);
+      return;
+    }
+
+    const match = trimmed.match(GITHUB_PR_RE);
+    if (!match) {
+      setError('Invalid GitHub PR URL (e.g. https://github.com/org/repo/pull/123)');
+      return;
+    }
+
+    const [, org, name, num] = match as RegExpMatchArray & [string, string, string, string];
+    const prNumber = parseInt(num, 10);
+    const ref = `${org}/${name}#${prNumber}`;
+    const label = `#${prNumber}`;
+
+    // Don't add duplicate
+    if (prLinks.some((l) => l.ref === ref)) {
+      setError('This PR is already linked');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await onAddLink({ type: 'github_pr', ref, label, url: trimmed });
+      setEditing(false);
+      setUrlValue('');
+    } catch {
+      setError('Failed to save link');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+        Pull Request
+      </label>
+      <div className="flex flex-col gap-1.5">
+        {prLinks.map((pr) => {
+          const state = prStates[pr.ref];
+          const isMerged = state === 'MERGED';
+          const isClosed = state === 'CLOSED';
+          const colorClass = isMerged
+            ? 'border-purple-500/20 bg-purple-500/[0.06] hover:bg-purple-500/[0.12]'
+            : isClosed
+              ? 'border-red-500/20 bg-red-500/[0.06] hover:bg-red-500/[0.12]'
+              : 'border-green-500/20 bg-green-500/[0.06] hover:bg-green-500/[0.12]';
+          const textClass = isMerged ? 'text-purple-400' : isClosed ? 'text-red-400' : 'text-green-400';
+          return (
+            <div key={pr.id} className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors ${colorClass}`}>
+              <a
+                href={pr.url ?? undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-w-0 flex-1 items-center gap-2"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className={`flex-shrink-0 ${textClass}`}>
+                  <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
+                </svg>
+                <span className={`font-medium ${textClass}`}>{pr.label}</span>
+                <span className="truncate text-[10px] text-[var(--theme-text-faint)]">{pr.ref}</span>
+              </a>
+              <button
+                className="flex-shrink-0 rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+                onClick={() => onRemoveLink(pr.id)}
+                title="Remove PR link"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="4" x2="12" y2="12" />
+                  <line x1="12" y1="4" x2="4" y2="12" />
+                </svg>
+              </button>
+            </div>
+          );
+        })}
+
+        {editing ? (
+          <div className="flex flex-col gap-1.5">
+            <input
+              autoFocus
+              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
+              placeholder="https://github.com/org/repo/pull/123"
+              value={urlValue}
+              onChange={(e) => { setUrlValue(e.target.value); setError(null); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSave();
+                if (e.key === 'Escape') { setEditing(false); setUrlValue(''); setError(null); }
+              }}
+              disabled={loading}
+            />
+            {error && (
+              <span className="text-[10px] text-[var(--theme-danger)]">{error}</span>
+            )}
+            <div className="flex gap-1">
+              <button
+                className="rounded-md bg-[var(--theme-accent)] px-2 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
+                onClick={handleSave}
+                disabled={loading}
+              >
+                {loading ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                className="rounded-md bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+                onClick={() => { setEditing(false); setUrlValue(''); setError(null); }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="w-full rounded-md border border-dashed border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:border-[var(--theme-border-input)] hover:text-[var(--theme-text-secondary)]"
+            onClick={() => setEditing(true)}
+          >
+            + Link PR
+          </button>
+        )}
+      </div>
     </div>
   );
 }

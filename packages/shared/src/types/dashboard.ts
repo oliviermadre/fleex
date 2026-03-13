@@ -4,6 +4,7 @@ import type { PullRequest, Worktree, GitHubIssue } from './repository.js';
 export interface DashboardPullRequest extends PullRequest {
   readonly org: string;
   readonly name: string;
+  linkedTicketId?: string;
 }
 
 export interface DashboardWorktree extends Worktree {

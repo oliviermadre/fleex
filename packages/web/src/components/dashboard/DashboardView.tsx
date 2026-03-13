@@ -310,6 +310,7 @@ function TicketCard({
   onCreateSession,
   creating,
   hasRepo,
+  pullRequests,
 }: {
   ticket: Ticket;
   boardLabel?: { name: string; emoji: string };
@@ -319,6 +320,7 @@ function TicketCard({
   onCreateSession: (ticketId: string) => void;
   creating: boolean;
   hasRepo: boolean;
+  pullRequests: DashboardPullRequest[];
 }) {
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement>(null);
@@ -345,6 +347,17 @@ function TicketCard({
   // Extract branch from worktree link
   const wtLink = ticket.links.find((l) => l.type === 'worktree');
   const branchName = wtLink ? wtLink.ref.split(':')[1] : null;
+
+  // Match PR for this ticket's worktree branch
+  const ticketPR = useMemo(() => {
+    if (!wtLink) return null;
+    const [orgName, branch] = wtLink.ref.split(':');
+    if (!orgName || !branch) return null;
+    const [org, name] = orgName.split('/');
+    return pullRequests.find(
+      (pr) => pr.org === org && pr.name === name && pr.headRefName === branch,
+    ) ?? null;
+  }, [wtLink, pullRequests]);
 
   const statusDot = STATUS_DOT[ticket.status];
 
@@ -440,6 +453,24 @@ function TicketCard({
             <span className="truncate font-mono text-[10px] text-[var(--theme-text-faint)]">
               {branchName}
             </span>
+          )}
+          {ticketPR && (
+            <a
+              href={`https://github.com/${ticketPR.org}/${ticketPR.name}/pull/${ticketPR.number}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                'shrink-0 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium',
+                ticketPR.state === 'merged'
+                  ? 'bg-purple-500/15 text-purple-400 hover:bg-purple-500 hover:text-white'
+                  : 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)] hover:bg-[var(--theme-accent)] hover:text-white'
+              )}
+              onClick={(e) => e.stopPropagation()}
+              title={ticketPR.title}
+            >
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z" /></svg>
+              #{ticketPR.number}
+            </a>
           )}
           {ticket.dueDate && (
             <span
@@ -661,12 +692,16 @@ function PRRow({
   worktrees,
   onCreateSession,
   creating,
+  ticketId,
+  onExecuteSkill,
 }: {
   pr: DashboardPullRequest;
   sessions: Session[];
   worktrees: DashboardWorktree[];
   onCreateSession: (pr: DashboardPullRequest) => void;
   creating: boolean;
+  ticketId?: string;
+  onExecuteSkill?: (skillId: string) => void;
 }) {
   const navigate = useNavigate();
   const hasWorktree = hasLocalWorktreeForPR(pr, worktrees);
@@ -733,6 +768,8 @@ function PRRow({
             sessions={sessions}
             creating={creating}
             onCreateSession={() => onCreateSession(pr)}
+            ticketId={ticketId}
+            onExecuteSkill={onExecuteSkill}
           />
         </span>
       </div>
@@ -908,6 +945,7 @@ function PRSection({
   onCreateSession,
   creatingPR,
   emptyMessage,
+  onExecuteSkill,
 }: {
   title: string;
   dotColor: string;
@@ -918,6 +956,7 @@ function PRSection({
   onCreateSession: (pr: DashboardPullRequest) => void;
   creatingPR: string | null;
   emptyMessage: string;
+  onExecuteSkill?: (skillId: string, ticketId: string) => void;
 }) {
   const [repoFilter, setRepoFilter] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest'>('recent');
@@ -994,6 +1033,10 @@ function PRSection({
                       worktrees={worktrees}
                       onCreateSession={onCreateSession}
                       creating={creatingPR === `${pr.org}/${pr.name}#${pr.number}`}
+                      ticketId={pr.linkedTicketId}
+                      onExecuteSkill={pr.linkedTicketId && onExecuteSkill
+                        ? (skillId: string) => onExecuteSkill(skillId, pr.linkedTicketId!)
+                        : undefined}
                     />
                   ))}
                 </div>
@@ -1168,6 +1211,10 @@ export function DashboardView() {
   const unimportedIssues = data?.assignedIssues.filter((i: DashboardGitHubIssue) => !i.hasLocalTicket) ?? [];
   const importedIssues = data?.assignedIssues.filter((i: DashboardGitHubIssue) => i.hasLocalTicket) ?? [];
   const totalIssues = data?.assignedIssues.length ?? 0;
+  const allPullRequests = useMemo(
+    () => [...(data?.myPullRequests ?? []), ...(data?.reviewRequests ?? [])],
+    [data?.myPullRequests, data?.reviewRequests],
+  );
 
   return (
     <>
@@ -1281,6 +1328,7 @@ export function DashboardView() {
                                   onCreateSession={handleCreateSession}
                                   creating={creatingSession === t.id}
                                   hasRepo={hasRepo}
+                                  pullRequests={allPullRequests}
                                 />
                               );
                             })}
@@ -1343,6 +1391,7 @@ export function DashboardView() {
                   onCreateSession={handleCreatePRSession}
                   creatingPR={creatingPRSession}
                   emptyMessage="Aucune PR ouverte. Ship it !"
+                  onExecuteSkill={(skillId, ticketId) => executeSkill(skillId, ticketId).catch(console.error)}
                 />
                 <PRSection
                   title="Reviews"
@@ -1354,6 +1403,7 @@ export function DashboardView() {
                   onCreateSession={handleCreatePRSession}
                   creatingPR={creatingPRSession}
                   emptyMessage="Personne a besoin de ton avis. Enfin, pour l'instant."
+                  onExecuteSkill={(skillId, ticketId) => executeSkill(skillId, ticketId).catch(console.error)}
                 />
               </div>
 

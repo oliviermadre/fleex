@@ -48,10 +48,12 @@ export function KanbanCard({
   ticket,
   board,
   onOpenSession,
+  prStates,
 }: {
   ticket: Ticket;
   board?: BoardWithCounts | null;
   onOpenSession: (ticketId: string) => void;
+  prStates?: Record<string, string>;
 }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const updateTicket = useTicketStore((s) => s.updateTicket);
@@ -198,21 +200,31 @@ export function KanbanCard({
       {/* PR badges */}
       {prLinks.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {prLinks.map((pr) => (
+          {prLinks.map((pr) => {
+            const state = prStates?.[pr.ref];
+            const isMerged = state === 'MERGED';
+            const isClosed = state === 'CLOSED';
+            const bgClass = isMerged
+              ? 'bg-purple-500/15 text-purple-400 hover:bg-purple-500/25'
+              : isClosed
+                ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
+                : 'bg-green-500/15 text-green-400 hover:bg-green-500/25';
+            return (
             <a
               key={pr.id}
               href={pr.url ?? undefined}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 rounded-full bg-purple-500/15 px-2 py-0.5 text-[11px] font-medium text-purple-400 hover:bg-purple-500/25 transition-colors"
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${bgClass}`}
             >
               <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
                 <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
               </svg>
               {pr.label}
             </a>
-          ))}
+            );
+          })}
         </div>
       )}
 

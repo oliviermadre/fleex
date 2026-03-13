@@ -362,6 +362,19 @@ export async function syncGithubIssue(ticketId: string): Promise<import('@fleex/
   });
 }
 
+export async function fetchPRStates(ticketId: string): Promise<Record<string, string>> {
+  return request<Record<string, string>>(`/tickets/${encodeURIComponent(ticketId)}/pr-states`);
+}
+
+export async function fetchBulkPRStates(refs: string[]): Promise<Record<string, string>> {
+  if (refs.length === 0) return {};
+  return request<Record<string, string>>('/pr-states', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refs }),
+  });
+}
+
 // ── Ticket Mentions API ──
 
 export async function fetchTicketMentions(ticketId: string): Promise<import('@fleex/shared').TicketMention[]> {

@@ -130,6 +130,43 @@ export class GitHubGraphQLAdapter {
     };
   }
 
+  /**
+   * Fetch the state of multiple PRs in a single GraphQL call.
+   * Returns a map of "org/name#number" → "OPEN" | "MERGED" | "CLOSED".
+   */
+  async fetchPRStates(prs: { org: string; name: string; number: number }[]): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    if (prs.length === 0) return result;
+
+    const prQueries = prs.map((pr, idx) => {
+      return `pr${idx}: repository(owner: "${pr.org}", name: "${pr.name}") {
+      pullRequest(number: ${pr.number}) { state }
+    }`;
+    });
+
+    try {
+      const query = `{ ${prQueries.join('\n')} }`;
+      const { stdout } = await this.execFn('gh', [
+        'api', 'graphql',
+        '-f', `query=${query}`,
+        '--jq', '.data',
+      ], { timeout: 15_000 });
+
+      const data = JSON.parse(stdout) as Record<string, { pullRequest: { state: string } | null } | null>;
+      prs.forEach((pr, idx) => {
+        const entry = data[`pr${idx}`];
+        const state = entry?.pullRequest?.state;
+        if (state) {
+          result.set(`${pr.org}/${pr.name}#${pr.number}`, state);
+        }
+      });
+    } catch (err) {
+      this.logger.warn('Failed to fetch PR states', { error: String(err) });
+    }
+
+    return result;
+  }
+
   async getRateLimit(): Promise<RateLimitInfo> {
     try {
       const { stdout } = await this.execFn('gh', [
