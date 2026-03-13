@@ -2,6 +2,8 @@ import { memo, useMemo, useState, Children } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Components } from 'react-markdown';
 
 interface MarkdownRendererProps {
@@ -83,8 +85,21 @@ function parseSegments(content: string): Segment[] {
 // without a language specifier, so we can reliably distinguish block vs inline
 // code in the `code` component override.
 const remarkPlugins = [remarkGfm];
+
+const sanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    img: [...(defaultSchema.attributes?.img ?? []), 'width', 'height'],
+  },
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
+    ...['details', 'summary'].filter((t) => !defaultSchema.tagNames?.includes(t)),
+  ],
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const rehypePlugins: any[] = [[rehypeHighlight, { detect: true }]];
+const rehypePlugins: any[] = [rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeHighlight, { detect: true }]];
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -342,9 +357,15 @@ function MarkdownSection({
     ),
 
     // ── Images ───────────────────────────────────────────────────────────────
-    img: ({ src, alt }) => (
-      <img src={src} alt={alt ?? ''} className="max-w-full rounded-md my-2" loading="lazy" />
-    ),
+    img: ({ src, alt }) => {
+      // Proxy GitHub user-attachment images through the backend to avoid auth issues
+      const proxiedSrc = src?.startsWith('https://github.com/user-attachments/')
+        ? `/api/github-image/${src.replace('https://github.com/', '')}`
+        : src;
+      return (
+        <img src={proxiedSrc} alt={alt ?? ''} className="max-w-full rounded-md my-2" loading="lazy" />
+      );
+    },
   };
 
   return (
