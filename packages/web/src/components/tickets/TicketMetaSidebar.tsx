@@ -65,6 +65,24 @@ const STATUS_COLORS: Record<string, string> = {
   done: 'bg-green-400',
 };
 
+const NANO_KANBAN_COLORS: Record<string, { text: string; bg: string; bar: string }> = {
+  backlog:   { text: 'text-[var(--theme-text-muted)]', bg: 'bg-[var(--theme-bg-overlay)]',  bar: 'bg-[var(--theme-text-muted)]' },
+  todo:      { text: 'text-orange-400',                bg: 'bg-orange-400/15',               bar: 'bg-orange-400' },
+  doing:     { text: 'text-blue-400',                  bg: 'bg-blue-400/15',                 bar: 'bg-blue-400' },
+  reviewing: { text: 'text-purple-400',                bg: 'bg-purple-400/15',               bar: 'bg-purple-400' },
+  done:      { text: 'text-green-400',                 bg: 'bg-green-400/15',                bar: 'bg-green-400' },
+  cancelled: { text: 'text-red-400/70',                bg: 'bg-red-400/10',                  bar: 'bg-red-400/70' },
+};
+
+const NANO_KANBAN_ABBREVS: Record<string, string> = {
+  backlog: 'BKLG',
+  todo: 'TODO',
+  doing: 'DOING',
+  reviewing: 'REVW',
+  done: 'DONE',
+  cancelled: 'CNCL',
+};
+
 // ── Collapsed indicator item ──
 
 function CollapsedIndicator({
@@ -378,26 +396,53 @@ function ExpandedTicketMetaSidebar({
       </button>
 
       <div className="flex flex-1 flex-col gap-5 p-4 overflow-y-auto">
-      {/* Status */}
+      {/* Status — Nano Kanban */}
       <div>
         <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
           Status
         </label>
-        <div className="flex flex-wrap gap-1">
-          {(TICKET_STATUSES as readonly TicketStatus[]).map((s) => (
-            <button
-              key={s}
-              className={cn(
-                'rounded-md px-2 py-1 text-[10px] font-medium transition-colors',
-                ticket.status === s
-                  ? 'bg-[var(--theme-accent)] text-white'
-                  : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
-              )}
-              onClick={() => handleStatusChange(s)}
-            >
-              {TICKET_STATUS_LABELS[s]}
-            </button>
-          ))}
+        <div className="flex overflow-hidden rounded-md border border-[var(--theme-border)]">
+          {(TICKET_STATUSES as readonly TicketStatus[]).map((s) => {
+            const active = ticket.status === s;
+            const colors = NANO_KANBAN_COLORS[s] ?? NANO_KANBAN_COLORS.backlog!;
+            return (
+              <button
+                key={s}
+                title={TICKET_STATUS_LABELS[s]}
+                className={cn(
+                  'group relative flex flex-1 flex-col items-center gap-1 pb-1.5 pt-0 transition-colors',
+                  active ? colors.bg : 'hover:bg-[var(--theme-bg-hover)]',
+                )}
+                onClick={() => handleStatusChange(s)}
+              >
+                {/* Top bar */}
+                <div
+                  className={cn(
+                    'w-full transition-all',
+                    active ? cn('h-[3px]', colors.bar) : cn('h-[2px] opacity-60', colors.bar),
+                  )}
+                />
+                {/* Vertical abbreviated label */}
+                <div className="flex flex-col items-center gap-px">
+                  {(NANO_KANBAN_ABBREVS[s] ?? s.slice(0, 4).toUpperCase()).split('').map((ch, i) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        'text-[8px] font-bold leading-none transition-colors',
+                        active ? colors.text : 'text-gray-400 group-hover:text-gray-300',
+                      )}
+                    >
+                      {ch}
+                    </span>
+                  ))}
+                </div>
+                {/* Active dot */}
+                {active && (
+                  <div className={cn('h-1 w-1 rounded-full', colors.bar)} />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
