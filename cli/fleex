@@ -585,6 +585,10 @@ cmd_self_update() {
   (cd "$update_dir" && bun install) > "$FLEEX_HOME/.logs/self-update.log" 2>&1
   ok "Dependencies updated."
 
+  info "Building packages..."
+  (cd "$update_dir" && bun run build) >> "$FLEEX_HOME/.logs/self-update.log" 2>&1
+  ok "Build complete."
+
   # Run pending database migrations
   local env_file="$update_dir/.env"
   if [[ -f "$env_file" ]]; then
