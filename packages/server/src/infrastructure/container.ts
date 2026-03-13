@@ -214,6 +214,7 @@ export async function createContainer() {
 
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git);
   const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore, personaStore, agentEventStore, reconcileWorktree, hostFs, config);
+  getSessionGroups.subscribeToEvents(eventBus);
 
   return {
     logger,

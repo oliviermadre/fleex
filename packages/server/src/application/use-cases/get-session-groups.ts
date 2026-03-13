@@ -13,9 +13,21 @@ import { ListSessionsUseCase } from './list-sessions.js';
 import type { EnrichClaudeActivityUseCase } from './enrich-claude-activity.js';
 import type { DiscoverExistingSessionsUseCase } from './discover-existing-sessions.js';
 import type { ReconcileWorktreeUseCase } from './reconcile-worktree.js';
+import type { EventBus } from '../event-bus.js';
+
+/** Cached result of the expensive agent worktree data (tickets + personas + executions). */
+interface AgentWorktreeCache {
+  agentInfoByBranch: Map<string, AgentWorktreeInfo>;
+  phantomGroups: Array<{ org: string; name: string; branch: string; path: string; agentInfo: AgentWorktreeInfo }>;
+  resolvedRepos: string[];
+}
 
 export class GetSessionGroupsUseCase {
   private readonly listSessions: ListSessionsUseCase;
+
+  /** Cached agent worktree data — invalidated by domain events. */
+  private agentWorktreeCache: AgentWorktreeCache | null = null;
+  private agentWorktreeDirty = true;
 
   constructor(
     private readonly sessionStore: SessionStorePort,
@@ -32,6 +44,28 @@ export class GetSessionGroupsUseCase {
     private readonly config?: ConfigPort,
   ) {
     this.listSessions = new ListSessionsUseCase(sessionStore, tmux, logger);
+  }
+
+  /**
+   * Subscribe to domain events that should invalidate the agent worktree cache.
+   * Call this once after the event bus is available.
+   */
+  subscribeToEvents(eventBus: EventBus): void {
+    const invalidate = () => { this.agentWorktreeDirty = true; };
+
+    // Ticket changes affect agent worktree info
+    eventBus.on('ticket.created', invalidate);
+    eventBus.on('ticket.updated', invalidate);
+    eventBus.on('ticket.moved', invalidate);
+    eventBus.on('ticket.deleted', invalidate);
+
+    // Persona changes affect name/displayName lookups
+    eventBus.on('persona.created', invalidate);
+    eventBus.on('persona.updated', invalidate);
+    eventBus.on('persona.deleted', invalidate);
+
+    // Execution start/completion changes execution status
+    eventBus.on('persona.execution_started', invalidate);
   }
 
   async execute(): Promise<SessionGroup[]> {
@@ -88,39 +122,39 @@ export class GetSessionGroupsUseCase {
   }
 
   /**
-   * Find tickets with a worktree link that have an active agent assignment
-   * (doing/reviewing + assignee) or past agent work (agentClaimedAt set),
-   * then attach AgentWorktreeInfo to matching WorktreeSessionGroups.
-   * If no matching group exists (agent worktree has 0 tmux sessions), create one.
+   * Refresh the agent worktree cache by querying tickets, personas, and executions.
+   * Only called when the cache is dirty (invalidated by domain events).
    */
-  private async injectAgentWorktreeInfo(groups: SessionGroup[]): Promise<void> {
-    if (!this.ticketStore || !this.personaStore) return;
+  private async refreshAgentWorktreeCache(): Promise<AgentWorktreeCache> {
+    const ticketStore = this.ticketStore!;
+    const personaStore = this.personaStore!;
 
-    const allTickets = await this.ticketStore.getAllTickets();
+    const [allTickets, personas] = await Promise.all([
+      ticketStore.getAllTickets(),
+      personaStore.getAll(),
+    ]);
+
     const agentTickets = allTickets.filter(
       (t) =>
         t.status !== 'done' && t.status !== 'cancelled' &&
         t.links.some((l) => l.type === 'worktree') &&
         (
-          // Active agent assignment
           ((t.status === 'doing' || t.status === 'reviewing') && t.assignee) ||
-          // Past agent work (not done) — show if agent ever claimed
           t.agentClaimedAt !== null
         ),
     );
 
-    if (agentTickets.length === 0) return;
-
-    // Build persona lookups
-    const personas = await this.personaStore.getAll();
     const personaByName = new Map(personas.map((p) => [p.name, p]));
     const personaById = new Map(personas.map((p) => [p.id, p]));
+
+    const agentInfoByBranch = new Map<string, AgentWorktreeInfo>();
+    const phantomGroups: AgentWorktreeCache['phantomGroups'] = [];
+    const resolved = this.config?.get().resolvedRepositories ?? [];
 
     for (const ticket of agentTickets) {
       const wtLink = ticket.links.find((l) => l.type === 'worktree');
       if (!wtLink) continue;
 
-      // Determine execution status and latest execution
       let executionStatus: AgentWorktreeInfo['executionStatus'] = 'idle';
       let latestExecutionId: string | null = null;
       let latestExecution: { id: string; status: string; personaId: string } | null = null;
@@ -141,11 +175,9 @@ export class GetSessionGroupsUseCase {
         }
       }
 
-      // Skip non-active tickets that have zero execution history
       const isActiveAgent = (ticket.status === 'doing' || ticket.status === 'reviewing') && !!ticket.assignee;
       if (!isActiveAgent && !latestExecution) continue;
 
-      // Resolve persona: from current assignee, or from latest execution's personaId
       const persona = (ticket.assignee ? personaByName.get(ticket.assignee) : undefined)
         ?? (latestExecution ? personaById.get(latestExecution.personaId) : undefined);
       if (!persona) continue;
@@ -161,35 +193,19 @@ export class GetSessionGroupsUseCase {
         latestExecutionId,
       };
 
-      // Find matching worktree group by branch label
       const branch = wtLink.label;
-      let found = false;
+      agentInfoByBranch.set(branch, agentInfo);
 
-      for (const group of groups) {
-        for (const wt of group.worktrees) {
-          if (wt.branch === branch) {
-            // Attach agent info to existing group (cast to mutable)
-            (wt as { agentWorktree?: AgentWorktreeInfo }).agentWorktree = agentInfo;
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
-      }
-
-      // If no matching group found, create a phantom group only for active agents
-      if (!found && isActiveAgent) {
-        // Determine which repo group this belongs to
+      // Prepare phantom group data for active agents
+      if (isActiveAgent) {
         let org: string | undefined;
         let name: string | undefined;
 
-        // Try repository link first
         const repoLink = ticket.links.find((l) => l.type === 'repository');
         if (repoLink) {
           [org, name] = repoLink.ref.split('/');
         }
 
-        // Fallback: parse repo from worktree link ref (format: "org/repo:branch")
         if (!org || !name) {
           const colonIdx = wtLink.ref.indexOf(':');
           if (colonIdx > 0) {
@@ -197,27 +213,67 @@ export class GetSessionGroupsUseCase {
           }
         }
 
-        if (org && name) {
-          // Skip phantom groups for unwatched repos
-          const resolved = this.config?.get().resolvedRepositories ?? [];
-          if (!resolved.includes(`${org}/${name}`)) continue;
-
-          let repoGroup = groups.find(
-            (g) => g.repositoryOrg === org && g.repositoryName === name,
-          );
-          if (!repoGroup) {
-            repoGroup = { repositoryOrg: org, repositoryName: name, worktrees: [] };
-            groups.push(repoGroup);
-          }
-          const newWt: WorktreeSessionGroup = {
+        if (org && name && resolved.includes(`${org}/${name}`)) {
+          phantomGroups.push({
+            org,
+            name,
             branch,
             path: wtLink.url ?? wtLink.ref,
-            sessions: [],
-            agentWorktree: agentInfo,
-          };
-          (repoGroup.worktrees as WorktreeSessionGroup[]).push(newWt);
+            agentInfo,
+          });
         }
       }
+    }
+
+    return { agentInfoByBranch, phantomGroups, resolvedRepos: resolved };
+  }
+
+  /**
+   * Inject cached agent worktree info into session groups.
+   * Only re-queries Supabase when the cache has been invalidated by domain events.
+   */
+  private async injectAgentWorktreeInfo(groups: SessionGroup[]): Promise<void> {
+    if (!this.ticketStore || !this.personaStore) return;
+
+    // Refresh cache only if dirty
+    if (this.agentWorktreeDirty || !this.agentWorktreeCache) {
+      this.agentWorktreeCache = await this.refreshAgentWorktreeCache();
+      this.agentWorktreeDirty = false;
+    }
+
+    const cache = this.agentWorktreeCache;
+    if (cache.agentInfoByBranch.size === 0) return;
+
+    // Attach agent info to matching worktree groups by branch
+    const matchedBranches = new Set<string>();
+    for (const group of groups) {
+      for (const wt of group.worktrees) {
+        const agentInfo = cache.agentInfoByBranch.get(wt.branch);
+        if (agentInfo) {
+          (wt as { agentWorktree?: AgentWorktreeInfo }).agentWorktree = agentInfo;
+          matchedBranches.add(wt.branch);
+        }
+      }
+    }
+
+    // Create phantom groups for unmatched active agents
+    for (const phantom of cache.phantomGroups) {
+      if (matchedBranches.has(phantom.branch)) continue;
+
+      let repoGroup = groups.find(
+        (g) => g.repositoryOrg === phantom.org && g.repositoryName === phantom.name,
+      );
+      if (!repoGroup) {
+        repoGroup = { repositoryOrg: phantom.org, repositoryName: phantom.name, worktrees: [] };
+        groups.push(repoGroup);
+      }
+      const newWt: WorktreeSessionGroup = {
+        branch: phantom.branch,
+        path: phantom.path,
+        sessions: [],
+        agentWorktree: phantom.agentInfo,
+      };
+      (repoGroup.worktrees as WorktreeSessionGroup[]).push(newWt);
     }
   }
 
