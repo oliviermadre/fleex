@@ -16,4 +16,5 @@ export interface GitPort {
   fetch(repoPath: string): Promise<void>;
   getDiffStats(repoPath: string, branch: string, baseBranch?: string): Promise<DiffStats>;
   copyEnvFiles(sourceRepo: string, targetPath: string): Promise<void>;
+  repairWorktrees(repoPath: string): Promise<void>;
 }

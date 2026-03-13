@@ -71,6 +71,20 @@ export class CreateWorktreeUseCase {
         this.emitCreated(repoPath, wtPath, request);
         return null;
       }
+      const dirExistsMatch = message.match(/'([^']+)' already exists/);
+      if (dirExistsMatch) {
+        const existingPath = dirExistsMatch[1]!;
+        this.logger.info('Worktree directory already exists, repairing and reusing', {
+          repoPath, existingPath, branch: request.branch,
+        });
+        try {
+          await this.git.repairWorktrees(repoPath);
+        } catch {
+          this.logger.warn('Worktree repair failed, continuing anyway', { repoPath, existingPath });
+        }
+        this.emitCreated(repoPath, existingPath, request);
+        return existingPath;
+      }
       throw new WorktreeError(`Failed to create worktree: ${message}`);
     }
   }

@@ -202,6 +202,11 @@ export class GitCliAdapter implements GitPort {
     return { commitsAhead, commitsBehind, filesChanged, additions, deletions };
   }
 
+  async repairWorktrees(repoPath: string): Promise<void> {
+    await this.execFn('git', ['worktree', 'repair'], { cwd: repoPath });
+    this.logger.debug('Worktree repair completed', { repoPath });
+  }
+
   async copyEnvFiles(sourceRepo: string, targetPath: string): Promise<void> {
     const { stdout } = await this.execFn('find', [
       sourceRepo, '-maxdepth', '3', '-name', '.env*', '-type', 'f',
