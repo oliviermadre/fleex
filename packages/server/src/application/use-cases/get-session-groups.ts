@@ -19,7 +19,6 @@ import type { EventBus } from '../event-bus.js';
 interface AgentWorktreeCache {
   agentInfoByBranch: Map<string, AgentWorktreeInfo>;
   phantomGroups: Array<{ org: string; name: string; branch: string; path: string; agentInfo: AgentWorktreeInfo }>;
-  resolvedRepos: string[];
 }
 
 export class GetSessionGroupsUseCase {
@@ -28,6 +27,7 @@ export class GetSessionGroupsUseCase {
   /** Cached agent worktree data — invalidated by domain events. */
   private agentWorktreeCache: AgentWorktreeCache | null = null;
   private agentWorktreeDirty = true;
+  private _eventsSubscribed = false;
 
   constructor(
     private readonly sessionStore: SessionStorePort,
@@ -48,9 +48,12 @@ export class GetSessionGroupsUseCase {
 
   /**
    * Subscribe to domain events that should invalidate the agent worktree cache.
-   * Call this once after the event bus is available.
+   * Safe to call multiple times — subsequent calls are no-ops.
    */
   subscribeToEvents(eventBus: EventBus): void {
+    if (this._eventsSubscribed) return;
+    this._eventsSubscribed = true;
+
     const invalidate = () => { this.agentWorktreeDirty = true; };
 
     // Ticket changes affect agent worktree info
@@ -66,6 +69,8 @@ export class GetSessionGroupsUseCase {
 
     // Execution start/completion changes execution status
     eventBus.on('persona.execution_started', invalidate);
+    eventBus.on('persona.execution_completed', invalidate);
+    eventBus.on('persona.execution_failed', invalidate);
   }
 
   async execute(): Promise<SessionGroup[]> {
@@ -225,7 +230,7 @@ export class GetSessionGroupsUseCase {
       }
     }
 
-    return { agentInfoByBranch, phantomGroups, resolvedRepos: resolved };
+    return { agentInfoByBranch, phantomGroups };
   }
 
   /**
