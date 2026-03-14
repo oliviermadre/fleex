@@ -98,8 +98,6 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   selectSession: (id) => {
     set({ selectedSessionId: id, splitSessionId: null, focusedPane: 'primary', selectedGroupId: null, activeGroupCellIndex: null });
-    // Clear floating overlay so re-attaching to main panel works correctly
-    useUIStore.getState().setFloatingSession(null);
   },
 
   openSplit: (id) =>
