@@ -10,7 +10,7 @@ import { TicketActivityTimeline } from './TicketActivityTimeline';
 import { TicketComments } from './TicketComments';
 import { TicketDeliverables } from './TicketDeliverables';
 import { TicketMentions } from './TicketMentions';
-import { SessionTerminalOverlay } from './SessionTerminalOverlay';
+import { TerminalOverlay } from '../main-panel/FloatingSessionOverlay';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import * as api from '../../services/api';
 import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
@@ -375,8 +375,8 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
 
       {/* Session terminal overlay */}
       {overlaySession && (
-        <SessionTerminalOverlay
-          session={overlaySession}
+        <TerminalOverlay
+          sessionId={overlaySession.id}
           onClose={() => setOverlaySession(null)}
         />
       )}

@@ -6,7 +6,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { fetchBulkPRStates } from '../../services/api';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanHeader } from './KanbanHeader';
-import { SessionTerminalOverlay } from './SessionTerminalOverlay';
+import { TerminalOverlay } from '../main-panel/FloatingSessionOverlay';
 
 export function KanbanBoard() {
   const rawBoards = useTicketStore((s) => s.boards);
@@ -181,8 +181,8 @@ export function KanbanBoard() {
 
       {/* Session terminal overlay */}
       {overlaySession && (
-        <SessionTerminalOverlay
-          session={overlaySession}
+        <TerminalOverlay
+          sessionId={overlaySession.id}
           onClose={() => setOverlaySession(null)}
         />
       )}

@@ -12,16 +12,17 @@ const MIN_HEIGHT = 300;
 const DEFAULT_WIDTH = 800;
 const DEFAULT_HEIGHT = 500;
 
-const FloatingSessionOverlayInner = memo(function FloatingSessionOverlayInner({
+export const TerminalOverlay = memo(function TerminalOverlay({
   sessionId,
+  onClose,
 }: {
   sessionId: string;
+  onClose: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   useTerminal(sessionId, containerRef);
 
-  const setFloatingSession = useUIStore((s) => s.setFloatingSession);
   const sessions = useSessionStore((s) => s.sessions);
   const session = sessions.find((s) => s.id === sessionId) ?? null;
 
@@ -32,10 +33,6 @@ const FloatingSessionOverlayInner = memo(function FloatingSessionOverlayInner({
     (s) => s.settings.sessionDisplayNames[sessionId],
   );
 
-  const onClose = useCallback(() => {
-    setFloatingSession(null);
-  }, [setFloatingSession]);
-
   // Focus terminal when overlay opens
   useEffect(() => {
     const inst = terminalManager.get(sessionId);
@@ -43,19 +40,6 @@ const FloatingSessionOverlayInner = memo(function FloatingSessionOverlayInner({
       setTimeout(() => inst.terminal.focus(), 100);
     }
   }, [sessionId]);
-
-  // Escape closes overlay (capture phase to take priority over other handlers)
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [onClose]);
 
   // Drag state
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
@@ -156,8 +140,7 @@ const FloatingSessionOverlayInner = memo(function FloatingSessionOverlayInner({
   const cwdDisplay = session.cwd.replace(/^\/Users\/[^/]+/, '~');
 
   return createPortal(
-    // No backdrop — this overlay must not block interaction with the rest of the UI
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, pointerEvents: 'none' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, pointerEvents: 'none' }}>
       {/* Floating panel */}
       <div
         ref={panelRef}
@@ -172,9 +155,11 @@ const FloatingSessionOverlayInner = memo(function FloatingSessionOverlayInner({
           borderRadius: 8,
           overflow: 'hidden',
           pointerEvents: 'auto',
-          border: '1px solid var(--theme-border)',
-          boxShadow: '0 24px 80px rgba(0, 0, 0, 0.6), 0 0 40px rgba(59, 130, 246, 0.05)',
-          background: 'var(--theme-bg-base)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          boxShadow: '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 40px rgba(59, 130, 246, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.12)',
+          background: 'rgba(10, 10, 15, 0.45)',
+          backdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
+          WebkitBackdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
         }}
       >
         {/* Title bar */}
@@ -186,8 +171,8 @@ const FloatingSessionOverlayInner = memo(function FloatingSessionOverlayInner({
             gap: 8,
             padding: '0 12px',
             cursor: 'grab',
-            borderBottom: '1px solid var(--theme-border)',
-            background: 'var(--theme-bg-surface)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+            background: 'rgba(255, 255, 255, 0.08)',
             flexShrink: 0,
             userSelect: 'none',
           }}
@@ -288,7 +273,7 @@ const FloatingSessionOverlayInner = memo(function FloatingSessionOverlayInner({
               (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-muted)';
               (e.currentTarget as HTMLElement).style.background = 'transparent';
             }}
-            title="Close overlay (Esc) — session keeps running"
+            title="Close overlay — session keeps running"
           >
             &times;
           </button>
@@ -332,8 +317,8 @@ const FloatingSessionOverlayInner = memo(function FloatingSessionOverlayInner({
             alignItems: 'center',
             gap: 8,
             padding: '0 12px',
-            borderTop: '1px solid var(--theme-border)',
-            background: 'var(--theme-bg-surface)',
+            borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+            background: 'rgba(255, 255, 255, 0.08)',
             fontSize: 10,
             color: 'var(--theme-text-muted)',
             flexShrink: 0,
@@ -355,9 +340,6 @@ const FloatingSessionOverlayInner = memo(function FloatingSessionOverlayInner({
               {session.repositoryOrg}/{session.repositoryName} &rarr; {session.worktreeBranch}
             </span>
           )}
-
-          <div style={{ flex: 1 }} />
-          <span style={{ color: 'var(--theme-text-faint)', fontSize: 9 }}>Esc to close overlay</span>
         </div>
 
         {/* Resize handle */}
@@ -383,12 +365,17 @@ const FloatingSessionOverlayInner = memo(function FloatingSessionOverlayInner({
 
 /**
  * Global floating session overlay — renders via portal so it persists across all view switches.
- * Reads `floatingSessionId` from uiStore. No backdrop; does not block UI interaction.
+ * Reads `floatingSessionId` from uiStore.
  */
 export function FloatingSessionOverlay() {
   const floatingSessionId = useUIStore((s) => s.floatingSessionId);
+  const setFloatingSession = useUIStore((s) => s.setFloatingSession);
+
+  const onClose = useCallback(() => {
+    setFloatingSession(null);
+  }, [setFloatingSession]);
 
   if (!floatingSessionId) return null;
 
-  return <FloatingSessionOverlayInner sessionId={floatingSessionId} />;
+  return <TerminalOverlay sessionId={floatingSessionId} onClose={onClose} />;
 }
