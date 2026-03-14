@@ -5,7 +5,7 @@ import { TICKET_STATUSES } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError } from '../../domain/errors.js';
+import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, ForbiddenError } from '../../domain/errors.js';
 import type { MentionStatus } from '@fleex/shared';
 import type { Container } from '../container.js';
 
@@ -522,6 +522,35 @@ export function ticketRoutes(container: Container) {
         }
 
         return reply.code(201).send(comment.toDTO());
+      },
+    );
+
+    app.delete<{ Params: { id: string; commentId: string } }>(
+      '/api/tickets/:id/comments/:commentId',
+      async (request, reply) => {
+        const comment = await container.commentStore.getById(request.params.commentId);
+        if (!comment) throw new CommentNotFoundError(request.params.commentId);
+
+        if (comment.authorType !== 'user') {
+          throw new ForbiddenError('Only user-authored comments can be deleted via this route');
+        }
+
+        const mentions = await container.mentionStore.getByComment(comment.id);
+        for (const m of mentions) {
+          if (m.status !== 'resolved') {
+            m.resolve();
+            await container.mentionStore.save(m);
+          }
+        }
+
+        await container.commentStore.remove(comment.id);
+        emit({
+          type: 'comment.deleted',
+          commentId: comment.id,
+          ticketId: comment.ticketId,
+          occurredAt: new Date(),
+        });
+        return reply.code(204).send();
       },
     );
   };

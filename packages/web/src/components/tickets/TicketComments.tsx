@@ -421,6 +421,11 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
               return [...prev, m];
             });
           }
+        } else if (msg.type === 'comment:deleted') {
+          const d = msg.data as { id: string; ticketId: string };
+          if (d.ticketId === ticketId) {
+            setComments((prev) => prev.filter((c) => c.id !== d.id));
+          }
         } else if (msg.type === 'mention:deleted') {
           const d = msg.data as { id: string; ticketId: string };
           if (d.ticketId === ticketId) {
@@ -442,6 +447,16 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [comments.length]);
+
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    try {
+      await api.deleteTicketComment(ticketId, commentId);
+      // WS comment:deleted will update the list; optimistically remove too
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+    } catch {
+      // ignore — comment stays visible on failure
+    }
+  }, [ticketId]);
 
   const handleRemoveMention = useCallback(async (mentionId: string) => {
     try {
@@ -578,7 +593,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         ) : (
           <div className="divide-y divide-[var(--theme-border)]/50">
             {comments.map((c) => (
-              <div key={c.id} className="px-1 py-3 first:pt-0">
+              <div key={c.id} className="group relative px-1 py-3 first:pt-0">
                 {/* Header: author + timestamp */}
                 <div className="mb-1.5 flex items-center gap-2">
                   <span
@@ -602,6 +617,18 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                   mentionLookup={mentionLookup}
                   onRemoveMention={handleRemoveMention}
                 />
+                {/* Delete button — user comments only */}
+                {c.authorType === 'user' && (
+                  <button
+                    className="absolute right-2 top-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/20 text-[var(--theme-text-faint)] hover:text-red-400"
+                    onClick={() => handleDeleteComment(c.id)}
+                    title="Delete comment"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
               </div>
             ))}
             <div ref={listEndRef} />
