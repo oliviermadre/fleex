@@ -2,7 +2,7 @@ import type { Session } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { SessionPane } from './SessionPane';
+import { UnifiedWorktreePanel } from './UnifiedWorktreePanel';
 import { EmptyState } from './EmptyState';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { RepositoryDashboard } from '../repository-dashboard/RepositoryDashboard';
@@ -16,9 +16,7 @@ import { TicketDetail } from '../tickets/TicketDetail';
 import { useTicketStore } from '../../stores/ticketStore';
 import { AgentPersonaView } from '../agents/AgentPersonaView';
 import { SkillEditor } from '../agents/SkillEditor';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSkillStore } from '../../stores/skillStore';
-import { AgentWorktreePanel } from './AgentWorktreePanel';
 import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { DashboardView } from '../dashboard/DashboardView';
 
@@ -39,8 +37,8 @@ interface GroupCellProps {
 function GroupCell({ session, focused, onFocus }: GroupCellProps) {
   if (!session) return <GroupEmptyCell />;
   return (
-    <SessionPane
-      session={session}
+    <UnifiedWorktreePanel
+      entry={{ kind: 'session', sessionId: session.id }}
       focused={focused}
       isSplit={true}
       onFocus={onFocus}
@@ -112,9 +110,9 @@ export function MainPanel() {
     return <RepositoryDashboard repoKey={selectedRepoKey} />;
   }
 
-  // Agent worktree view (handles both executions and shell sessions)
+  // Agent worktree view — unified panel with ticket context
   if (activePanel === 'sessions' && selectedAgentWorktreeTicketId) {
-    return <AgentWorktreePanel ticketId={selectedAgentWorktreeTicketId} />;
+    return <UnifiedWorktreePanel entry={{ kind: 'agent', ticketId: selectedAgentWorktreeTicketId }} focused />;
   }
 
   // Grouped view
@@ -182,19 +180,19 @@ export function MainPanel() {
     return <EmptyState />;
   }
 
-  // Split view: two panes side by side
+  // Split view: two unified panels side by side
   if (splitSession) {
     return (
       <div className="flex flex-1 flex-row overflow-hidden">
-        <SessionPane
-          session={selectedSession}
+        <UnifiedWorktreePanel
+          entry={{ kind: 'session', sessionId: selectedSession.id }}
           focused={focusedPane === 'primary'}
           isSplit={true}
           onFocus={() => setFocusedPane('primary')}
         />
         <div className="w-px bg-[var(--theme-border)]" />
-        <SessionPane
-          session={splitSession}
+        <UnifiedWorktreePanel
+          entry={{ kind: 'session', sessionId: splitSession.id }}
           focused={focusedPane === 'split'}
           isSplit={true}
           onFocus={() => setFocusedPane('split')}
@@ -205,11 +203,9 @@ export function MainPanel() {
 
   // Single pane view
   return (
-    <SessionPane
-      session={selectedSession}
+    <UnifiedWorktreePanel
+      entry={{ kind: 'session', sessionId: selectedSession.id }}
       focused={true}
-      isSplit={false}
-      onFocus={() => {}}
     />
   );
 }
