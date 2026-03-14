@@ -65,19 +65,19 @@ const STATUS_COLORS: Record<string, string> = {
   done: 'bg-green-400',
 };
 
-const NANO_KANBAN_COLORS: Record<string, { text: string; bg: string; bar: string }> = {
-  backlog:   { text: 'text-[var(--theme-text-muted)]', bg: 'bg-[var(--theme-bg-overlay)]',  bar: 'bg-[var(--theme-text-muted)]' },
-  todo:      { text: 'text-orange-400',                bg: 'bg-orange-400/15',               bar: 'bg-orange-400' },
-  doing:     { text: 'text-blue-400',                  bg: 'bg-blue-400/15',                 bar: 'bg-blue-400' },
-  reviewing: { text: 'text-purple-400',                bg: 'bg-purple-400/15',               bar: 'bg-purple-400' },
-  done:      { text: 'text-green-400',                 bg: 'bg-green-400/15',                bar: 'bg-green-400' },
-  cancelled: { text: 'text-red-400/70',                bg: 'bg-red-400/10',                  bar: 'bg-red-400/70' },
+const NANO_KANBAN_COLORS: Record<string, { text: string; bg: string; bar: string; hoverBg: string; hoverText: string }> = {
+  backlog:   { text: 'text-[var(--theme-text-muted)]', bg: 'bg-[var(--theme-bg-overlay)]',  bar: 'bg-[var(--theme-text-muted)]', hoverBg: 'hover:bg-[var(--theme-bg-hover)]',   hoverText: 'group-hover:text-gray-300' },
+  todo:      { text: 'text-orange-400',                bg: 'bg-orange-400/15',               bar: 'bg-orange-400',                hoverBg: 'hover:bg-orange-400/15',              hoverText: 'group-hover:text-orange-400' },
+  doing:     { text: 'text-blue-400',                  bg: 'bg-blue-400/15',                 bar: 'bg-blue-400',                  hoverBg: 'hover:bg-blue-400/15',                hoverText: 'group-hover:text-blue-400' },
+  reviewing: { text: 'text-purple-400',                bg: 'bg-purple-400/15',               bar: 'bg-purple-400',                hoverBg: 'hover:bg-purple-400/15',              hoverText: 'group-hover:text-purple-400' },
+  done:      { text: 'text-green-400',                 bg: 'bg-green-400/15',                bar: 'bg-green-400',                 hoverBg: 'hover:bg-green-400/15',               hoverText: 'group-hover:text-green-400' },
+  cancelled: { text: 'text-red-400/70',                bg: 'bg-red-400/10',                  bar: 'bg-red-400/70',                hoverBg: 'hover:bg-red-400/10',                 hoverText: 'group-hover:text-red-400/70' },
 };
 
 const NANO_KANBAN_ABBREVS: Record<string, string> = {
   backlog: 'BKLG',
   todo: 'TODO',
-  doing: 'DOING',
+  doing: 'DOIN',
   reviewing: 'REVW',
   done: 'DONE',
   cancelled: 'CNCL',
@@ -411,7 +411,7 @@ function ExpandedTicketMetaSidebar({
                 title={TICKET_STATUS_LABELS[s]}
                 className={cn(
                   'group relative flex flex-1 flex-col items-center gap-1 pb-1.5 pt-0 transition-colors',
-                  active ? colors.bg : 'hover:bg-[var(--theme-bg-hover)]',
+                  active ? colors.bg : colors.hoverBg,
                 )}
                 onClick={() => handleStatusChange(s)}
               >
@@ -429,17 +429,13 @@ function ExpandedTicketMetaSidebar({
                       key={i}
                       className={cn(
                         'text-[8px] font-bold leading-none transition-colors',
-                        active ? colors.text : 'text-gray-400 group-hover:text-gray-300',
+                        active ? colors.text : cn('text-gray-400', colors.hoverText),
                       )}
                     >
                       {ch}
                     </span>
                   ))}
                 </div>
-                {/* Active dot */}
-                {active && (
-                  <div className={cn('h-1 w-1 rounded-full', colors.bar)} />
-                )}
               </button>
             );
           })}

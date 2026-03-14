@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { Session, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
+import type { Session, TicketComment, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
 import { ticketWs } from '../../services/websocket';
-import { useTicketStore } from '../../stores/ticketStore';
+import { useTicketStore, type TicketTab } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
 import { TicketDetailHeader } from './TicketDetailHeader';
@@ -17,23 +17,24 @@ import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 
 type DescriptionMode = 'write' | 'preview' | 'split';
-type MainTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity';
 
 export function TicketDetail({ ticketId }: { ticketId: string }) {
   const tickets = useTicketStore((s) => s.tickets);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
+  const mainTab = useTicketStore((s) => s.ticketTab);
+  const setMainTab = useTicketStore((s) => s.setTicketTab);
   const sessions = useSessionStore((s) => s.sessions);
   const ticket = tickets.find((t) => t.id === ticketId);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [descMode, setDescMode] = useState<DescriptionMode>('split');
-  const [mainTab, setMainTab] = useState<MainTab>('comments');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [overlaySession, setOverlaySession] = useState<Session | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [commentCount, setCommentCount] = useState(0);
   const [deliverableCount, setDeliverableCount] = useState(0);
   const [mentionCount, setMentionCount] = useState(0);
 
@@ -50,8 +51,9 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     }
   }, [ticket?.id]); // Reset on ticket change, not on every ticket update
 
-  // Fetch deliverable & mention counts
+  // Fetch comment, deliverable & mention counts
   useEffect(() => {
+    api.fetchTicketComments(ticketId).then((c) => setCommentCount(c.length)).catch(() => {});
     api.fetchTicketDeliverables(ticketId).then((d) => setDeliverableCount(d.length)).catch(() => {});
     api.fetchTicketMentions(ticketId).then((m) => setMentionCount(m.length)).catch(() => {});
   }, [ticketId]);
@@ -62,7 +64,10 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     const unsub = ticketWs.onMessage((buf: ArrayBuffer) => {
       try {
         const msg = JSON.parse(decoder.decode(buf)) as TicketWsMessage;
-        if (msg.type === 'deliverable:created') {
+        if (msg.type === 'comment:created') {
+          const c = msg.data as TicketComment;
+          if (c.ticketId === ticketId) setCommentCount((n) => n + 1);
+        } else if (msg.type === 'deliverable:created') {
           const d = msg.data as TicketDeliverable;
           if (d.ticketId === ticketId) setDeliverableCount((c) => c + 1);
         } else if (msg.type === 'mention:created') {
@@ -231,9 +236,9 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     );
   }
 
-  const mainTabs: { key: MainTab; label: string }[] = [
+  const mainTabs: { key: TicketTab; label: string }[] = [
     { key: 'description', label: 'Description' },
-    { key: 'comments', label: 'Comments' },
+    { key: 'comments', label: `Comments${commentCount > 0 ? ` (${commentCount})` : ''}` },
     { key: 'mentions', label: `Mentions${mentionCount > 0 ? ` (${mentionCount})` : ''}` },
     { key: 'deliverables', label: `Deliverables${deliverableCount > 0 ? ` (${deliverableCount})` : ''}` },
     { key: 'activity', label: 'Activity' },

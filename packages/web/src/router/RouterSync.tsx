@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useUIStore, type SettingsTab, type AnalyticsTab } from '../stores/uiStore';
 import { useSessionStore } from '../stores/sessionStore';
-import { useTicketStore } from '../stores/ticketStore';
+import { useTicketStore, VALID_TICKET_TABS, type TicketTab } from '../stores/ticketStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { useSkillStore } from '../stores/skillStore';
@@ -42,6 +42,7 @@ interface ParsedUrl {
   /** undefined = "no board preference in URL", null = "all boards", string = specific board */
   boardId: string | null | undefined;
   ticketId: string | null;
+  ticketTab: TicketTab | null;
   scratchpadKey: string | null;
   personaId: string | null;
   personaTab: PersonaTab | null;
@@ -55,7 +56,7 @@ interface ParsedUrl {
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
-  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
+  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
 
   // Root: redirect to /dashboard
   if (pathname === '/') {
@@ -89,9 +90,12 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   }
 
   // Tickets — order matters: more specific patterns first
-  const ticketBoardTicketMatch = pathname.match(/^\/tickets\/board\/([^/]+)\/ticket\/([^/]+)$/);
+  const ticketBoardTicketMatch = pathname.match(/^\/tickets\/board\/([^/]+)\/ticket\/([^/]+)(?:\/([^/]+))?$/);
   if (ticketBoardTicketMatch) {
-    return { ...base, panel: 'tickets', boardId: ticketBoardTicketMatch[1]!, ticketId: ticketBoardTicketMatch[2]! };
+    const rawBoard = ticketBoardTicketMatch[1]!;
+    const rawTab = ticketBoardTicketMatch[3] as TicketTab | undefined;
+    const ticketTab = rawTab && VALID_TICKET_TABS.includes(rawTab) ? rawTab : null;
+    return { ...base, panel: 'tickets', boardId: rawBoard === 'all' ? null : rawBoard, ticketId: ticketBoardTicketMatch[2]!, ticketTab };
   }
   const ticketBoardMatch = pathname.match(/^\/tickets\/board\/([^/]+)$/);
   if (ticketBoardMatch) {
@@ -192,6 +196,7 @@ export function storeToUrl(
   settingsTab: SettingsTab,
   selectedAgentWorktreeTicketId?: string | null,
   analyticsTab?: AnalyticsTab,
+  ticketTab?: TicketTab,
 ): { pathname: string; search: string } {
   switch (activePanel) {
     case 'dashboard':
@@ -213,12 +218,16 @@ export function storeToUrl(
       return { pathname: '/repositories', search: '' };
     }
     case 'tickets': {
+      const tabSuffix = selectedTicketId && ticketTab && ticketTab !== 'description' ? `/${ticketTab}` : '';
       if (selectedBoardId === null) {
+        if (selectedTicketId) {
+          return { pathname: `/tickets/board/all/ticket/${selectedTicketId}${tabSuffix}`, search: '' };
+        }
         return { pathname: '/tickets/board/all', search: '' };
       }
       if (selectedBoardId) {
         if (selectedTicketId) {
-          return { pathname: `/tickets/board/${selectedBoardId}/ticket/${selectedTicketId}`, search: '' };
+          return { pathname: `/tickets/board/${selectedBoardId}/ticket/${selectedTicketId}${tabSuffix}`, search: '' };
         }
         return { pathname: `/tickets/board/${selectedBoardId}`, search: '' };
       }
@@ -286,6 +295,8 @@ export function RouterSync() {
   const selectBoard = useTicketStore((s) => s.selectBoard);
   const selectedTicketId = useTicketStore((s) => s.selectedTicketId);
   const selectTicket = useTicketStore((s) => s.selectTicket);
+  const ticketTab = useTicketStore((s) => s.ticketTab);
+  const setTicketTab = useTicketStore((s) => s.setTicketTab);
 
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
   const setSelectedScratchpadKey = useScratchpadStore((s) => s.setSelectedScratchpadKey);
@@ -370,6 +381,9 @@ export function RouterSync() {
       if (parsed.ticketId !== selectedTicketId) {
         selectTicket(parsed.ticketId);
       }
+      if (parsed.ticketTab && parsed.ticketTab !== ticketTab) {
+        setTicketTab(parsed.ticketTab);
+      }
     }
 
     // Update scratchpad selection
@@ -444,6 +458,7 @@ export function RouterSync() {
       settingsTab,
       selectedAgentWorktreeTicketId,
       analyticsTab,
+      ticketTab,
     );
 
     const currentPath = location.pathname;
@@ -469,6 +484,7 @@ export function RouterSync() {
     settingsTab,
     selectedAgentWorktreeTicketId,
     analyticsTab,
+    ticketTab,
     // Don't include location to avoid re-triggering on our own navigate calls
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
