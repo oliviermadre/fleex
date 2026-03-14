@@ -414,6 +414,11 @@ export async function postTicketComment(ticketId: string, body: string): Promise
   });
 }
 
+export async function deleteTicketComment(ticketId: string, commentId: string): Promise<void> {
+  const res = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}/comments/${encodeURIComponent(commentId)}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed to delete comment: ${res.statusText}`);
+}
+
 // ── Agent Tokens API ──
 
 export async function fetchAgentTokens(): Promise<import('@fleex/shared').AgentToken[]> {
