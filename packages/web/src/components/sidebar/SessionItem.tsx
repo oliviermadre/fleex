@@ -37,9 +37,10 @@ export function SessionItem({ session }: Props) {
     (isSplit && focusedPane === 'split')
   );
 
-  const floatingSessionId = useUIStore((s) => s.floatingSessionId);
-  const setFloatingSession = useUIStore((s) => s.setFloatingSession);
-  const isFloating = floatingSessionId === session.id;
+  const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
+  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
+  const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
+  const isFloating = floatingSessionIds.includes(session.id);
 
   const removeSession = useSessionStore((s) => s.removeSession);
   const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
@@ -215,7 +216,7 @@ export function SessionItem({ session }: Props) {
         )}
         onClick={(e) => {
           e.stopPropagation();
-          setFloatingSession(isFloating ? null : session.id);
+          isFloating ? removeFloatingSession(session.id) : addFloatingSession(session.id);
         }}
         onDoubleClick={(e) => e.stopPropagation()}
         title={isFloating ? 'Re-attach to main panel' : 'Detach to floating overlay'}

@@ -4,7 +4,6 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { SessionPane } from './SessionPane';
 import { EmptyState } from './EmptyState';
-import { FloatingSessionHint } from './FloatingSessionHint';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { RepositoryDashboard } from '../repository-dashboard/RepositoryDashboard';
 import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
@@ -35,12 +34,10 @@ interface GroupCellProps {
   session: Session | null;
   focused: boolean;
   onFocus: () => void;
-  floatingSessionId: string | null;
 }
 
-function GroupCell({ session, focused, onFocus, floatingSessionId }: GroupCellProps) {
+function GroupCell({ session, focused, onFocus }: GroupCellProps) {
   if (!session) return <GroupEmptyCell />;
-  if (session.id === floatingSessionId) return <FloatingSessionHint session={session} />;
   return (
     <SessionPane
       session={session}
@@ -63,7 +60,6 @@ export function MainPanel() {
   const setActiveGroupCellIndex = useSessionStore((s) => s.setActiveGroupCellIndex);
   const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
 
-  const floatingSessionId = useUIStore((s) => s.floatingSessionId);
   const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
@@ -136,14 +132,12 @@ export function MainPanel() {
               session={cellSessions[0] ?? null}
               focused={activeGroupCellIndex === null ? true : activeGroupCellIndex === 0}
               onFocus={() => setActiveGroupCellIndex(0)}
-              floatingSessionId={floatingSessionId}
             />
             <div className="w-px bg-[var(--theme-border)]" />
             <GroupCell
               session={cellSessions[1] ?? null}
               focused={activeGroupCellIndex === null ? false : activeGroupCellIndex === 1}
               onFocus={() => setActiveGroupCellIndex(1)}
-              floatingSessionId={floatingSessionId}
             />
           </div>
         );
@@ -157,14 +151,12 @@ export function MainPanel() {
               session={cellSessions[0] ?? null}
               focused={activeGroupCellIndex === null ? false : activeGroupCellIndex === 0}
               onFocus={() => setActiveGroupCellIndex(0)}
-              floatingSessionId={floatingSessionId}
             />
             <div className="w-px bg-[var(--theme-border)]" />
             <GroupCell
               session={cellSessions[1] ?? null}
               focused={activeGroupCellIndex === null ? false : activeGroupCellIndex === 1}
               onFocus={() => setActiveGroupCellIndex(1)}
-              floatingSessionId={floatingSessionId}
             />
           </div>
           <div className="h-px bg-[var(--theme-border)]" />
@@ -173,14 +165,12 @@ export function MainPanel() {
               session={cellSessions[2] ?? null}
               focused={activeGroupCellIndex === null ? false : activeGroupCellIndex === 2}
               onFocus={() => setActiveGroupCellIndex(2)}
-              floatingSessionId={floatingSessionId}
             />
             <div className="w-px bg-[var(--theme-border)]" />
             <GroupCell
               session={cellSessions[3] ?? null}
               focused={activeGroupCellIndex === null ? false : activeGroupCellIndex === 3}
               onFocus={() => setActiveGroupCellIndex(3)}
-              floatingSessionId={floatingSessionId}
             />
           </div>
         </div>
@@ -192,37 +182,23 @@ export function MainPanel() {
     return <EmptyState />;
   }
 
-  // Guard: if the selected session is floating, show hint instead of the terminal
-  // (avoids double xterm.js attach conflict — DOM node can only be in one container)
-  if (selectedSession.id === floatingSessionId) {
-    return <FloatingSessionHint session={selectedSession} />;
-  }
-
   // Split view: two panes side by side
   if (splitSession) {
     return (
       <div className="flex flex-1 flex-row overflow-hidden">
-        {selectedSession.id === floatingSessionId ? (
-          <FloatingSessionHint session={selectedSession} />
-        ) : (
-          <SessionPane
-            session={selectedSession}
-            focused={focusedPane === 'primary'}
-            isSplit={true}
-            onFocus={() => setFocusedPane('primary')}
-          />
-        )}
+        <SessionPane
+          session={selectedSession}
+          focused={focusedPane === 'primary'}
+          isSplit={true}
+          onFocus={() => setFocusedPane('primary')}
+        />
         <div className="w-px bg-[var(--theme-border)]" />
-        {splitSession.id === floatingSessionId ? (
-          <FloatingSessionHint session={splitSession} />
-        ) : (
-          <SessionPane
-            session={splitSession}
-            focused={focusedPane === 'split'}
-            isSplit={true}
-            onFocus={() => setFocusedPane('split')}
-          />
-        )}
+        <SessionPane
+          session={splitSession}
+          focused={focusedPane === 'split'}
+          isSplit={true}
+          onFocus={() => setFocusedPane('split')}
+        />
       </div>
     );
   }

@@ -5,6 +5,7 @@ import { terminalManager } from '../../services/terminalManager';
 import { useUIStore } from '../../stores/uiStore';
 import { SessionHeader, SessionTabs } from './SessionHeader';
 import { TopToolbar } from './TopToolbar';
+import { FloatingSessionHint } from './FloatingSessionHint';
 import { cn } from '../../lib/cn';
 
 interface Props {
@@ -16,14 +17,15 @@ interface Props {
 
 export const SessionPane = memo(function SessionPane({ session, focused, isSplit, onFocus }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  useTerminal(session.id, containerRef);
+  const isFloating = useUIStore((s) => s.floatingSessionIds.includes(session.id));
+  useTerminal(isFloating ? null : session.id, containerRef);
 
   // Move xterm.js DOM focus when this pane becomes focused
   useEffect(() => {
-    if (focused) {
+    if (focused && !isFloating) {
       terminalManager.get(session.id)?.terminal.focus();
     }
-  }, [focused, session.id]);
+  }, [focused, isFloating, session.id]);
 
   // Track last active tab per worktree (including system shells) + global last active session
   const setLastActiveTab = useUIStore((s) => s.setLastActiveTab);
@@ -49,10 +51,14 @@ export const SessionPane = memo(function SessionPane({ session, focused, isSplit
       <TopToolbar session={session} />
       <SessionHeader session={session} splitFocused={isSplit && focused} />
       <SessionTabs currentSession={session} />
-      <div
-        ref={containerRef}
-        className="xterm-container flex-1"
-      />
+      {isFloating ? (
+        <FloatingSessionHint session={session} />
+      ) : (
+        <div
+          ref={containerRef}
+          className="xterm-container flex-1"
+        />
+      )}
     </div>
   );
 });

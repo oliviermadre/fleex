@@ -72,9 +72,11 @@ interface UIState {
   lastActiveSessionId: string | null;
   setLastActiveSession: (id: string) => void;
 
-  // Floating session overlay
-  floatingSessionId: string | null;
-  setFloatingSession: (id: string | null) => void;
+  // Floating session overlays (ordered — last = top z-index)
+  floatingSessionIds: string[];
+  addFloatingSession: (id: string) => void;
+  removeFloatingSession: (id: string) => void;
+  bringToFront: (id: string) => void;
 
   // Agent worktree view (ticket-based)
   selectedAgentWorktreeTicketId: string | null;
@@ -98,7 +100,7 @@ export const useUIStore = create<UIState>((set) => ({
   lastActiveTabByWorktree: {},
   ticketMetaSidebarCollapsed: false,
   lastActiveSessionId: null,
-  floatingSessionId: null,
+  floatingSessionIds: [],
   selectedAgentWorktreeTicketId: null,
 
   toggleScratchpad: () =>
@@ -162,7 +164,26 @@ export const useUIStore = create<UIState>((set) => ({
 
   setLastActiveSession: (id) => set({ lastActiveSessionId: id }),
 
-  setFloatingSession: (id) => set({ floatingSessionId: id }),
+  addFloatingSession: (id) =>
+    set((state) => ({
+      floatingSessionIds: [
+        ...state.floatingSessionIds.filter((sid) => sid !== id),
+        id,
+      ],
+    })),
+
+  removeFloatingSession: (id) =>
+    set((state) => ({
+      floatingSessionIds: state.floatingSessionIds.filter((sid) => sid !== id),
+    })),
+
+  bringToFront: (id) =>
+    set((state) => ({
+      floatingSessionIds: [
+        ...state.floatingSessionIds.filter((sid) => sid !== id),
+        id,
+      ],
+    })),
 
   setSelectedAgentWorktreeTicketId: (id) => set({ selectedAgentWorktreeTicketId: id }),
 }));

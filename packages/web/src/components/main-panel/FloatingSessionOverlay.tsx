@@ -15,9 +15,15 @@ const DEFAULT_HEIGHT = 500;
 export const TerminalOverlay = memo(function TerminalOverlay({
   sessionId,
   onClose,
+  zIndex = 50,
+  initialOffset = 0,
+  onFocus,
 }: {
   sessionId: string;
   onClose: () => void;
+  zIndex?: number;
+  initialOffset?: number;
+  onFocus?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -47,14 +53,14 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
   const resizeRef = useRef({ resizing: false, startX: 0, startY: 0, startW: 0, startH: 0 });
 
-  // Center on first render
+  // Center on first render (with cascade offset)
   useEffect(() => {
     if (position !== null) return;
     setPosition({
-      x: Math.max(0, (window.innerWidth - DEFAULT_WIDTH) / 2),
-      y: Math.max(0, (window.innerHeight - DEFAULT_HEIGHT) / 2 - 40),
+      x: Math.max(0, (window.innerWidth - DEFAULT_WIDTH) / 2 + initialOffset),
+      y: Math.max(0, (window.innerHeight - DEFAULT_HEIGHT) / 2 - 40 + initialOffset),
     });
-  }, [position]);
+  }, [position, initialOffset]);
 
   const effectivePos = position ?? { x: 0, y: 0 };
 
@@ -140,10 +146,11 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   const cwdDisplay = session.cwd.replace(/^\/Users\/[^/]+/, '~');
 
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, zIndex: 50, pointerEvents: 'none' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex, pointerEvents: 'none' }}>
       {/* Floating panel */}
       <div
         ref={panelRef}
+        onMouseDown={onFocus}
         style={{
           position: 'absolute',
           left: effectivePos.x,
@@ -199,24 +206,14 @@ export const TerminalOverlay = memo(function TerminalOverlay({
               whiteSpace: 'nowrap',
             }}
           >
-            {session.displayName || displayName || session.tmuxName}
+            {session.worktreeBranch
+              ? `${session.repositoryOrg}/${session.repositoryName} \u2192 ${session.worktreeBranch} \u2192 ${session.displayName || displayName || session.tmuxName}`
+              : session.displayName || displayName || session.tmuxName}
           </span>
 
-          <span
-            style={{
-              fontSize: 9,
-              padding: '1px 6px',
-              borderRadius: 3,
-              backgroundColor: isRobot ? 'rgba(59, 130, 246, 0.15)' : 'rgba(107, 114, 128, 0.25)',
-              color: isRobot ? '#60a5fa' : 'var(--theme-text-secondary)',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-            }}
-          >
-            {isRobot ? 'Claude' : 'Shell'}
-          </span>
+          <div style={{ flex: 1 }} />
 
-          {isRobot && activity !== 'idle' && (
+          {isRobot && (
             <span
               style={{
                 fontSize: 9,
@@ -226,27 +223,12 @@ export const TerminalOverlay = memo(function TerminalOverlay({
                 color: activityColor,
                 fontWeight: 600,
                 textTransform: 'uppercase',
+                flexShrink: 0,
               }}
             >
               {activity.replace(/_/g, ' ')}
             </span>
           )}
-
-          <div style={{ flex: 1 }} />
-
-          <span
-            style={{
-              color: 'var(--theme-text-muted)',
-              fontSize: 10,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              maxWidth: 200,
-            }}
-            title={session.cwd}
-          >
-            {cwdDisplay}
-          </span>
 
           <button
             onClick={(e) => { e.stopPropagation(); onClose(); }}
@@ -326,20 +308,28 @@ export const TerminalOverlay = memo(function TerminalOverlay({
         >
           <span
             style={{
+              overflow: 'hidden',
+              textOverflow: 'clip',
+              whiteSpace: 'nowrap',
+            }}
+            title={session.cwd}
+          >
+            {cwdDisplay}
+          </span>
+
+          <div style={{ flex: 1 }} />
+
+          <span
+            style={{
               width: 6,
               height: 6,
               borderRadius: '50%',
               backgroundColor: statusDotColor,
               display: 'inline-block',
+              flexShrink: 0,
             }}
           />
-          <span>{connectionStatus}</span>
-
-          {session.worktreeBranch && (
-            <span style={{ color: 'var(--theme-text-faint)' }}>
-              {session.repositoryOrg}/{session.repositoryName} &rarr; {session.worktreeBranch}
-            </span>
-          )}
+          <span style={{ flexShrink: 0 }}>{connectionStatus}</span>
         </div>
 
         {/* Resize handle */}
@@ -365,17 +355,27 @@ export const TerminalOverlay = memo(function TerminalOverlay({
 
 /**
  * Global floating session overlay — renders via portal so it persists across all view switches.
- * Reads `floatingSessionId` from uiStore.
+ * Reads `floatingSessionIds` from uiStore and renders one TerminalOverlay per id.
  */
 export function FloatingSessionOverlay() {
-  const floatingSessionId = useUIStore((s) => s.floatingSessionId);
-  const setFloatingSession = useUIStore((s) => s.setFloatingSession);
+  const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
+  const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
+  const bringToFront = useUIStore((s) => s.bringToFront);
 
-  const onClose = useCallback(() => {
-    setFloatingSession(null);
-  }, [setFloatingSession]);
+  if (floatingSessionIds.length === 0) return null;
 
-  if (!floatingSessionId) return null;
-
-  return <TerminalOverlay sessionId={floatingSessionId} onClose={onClose} />;
+  return (
+    <>
+      {floatingSessionIds.map((id, index) => (
+        <TerminalOverlay
+          key={id}
+          sessionId={id}
+          onClose={() => removeFloatingSession(id)}
+          zIndex={50 + index}
+          initialOffset={index * 30}
+          onFocus={() => bringToFront(id)}
+        />
+      ))}
+    </>
+  );
 }

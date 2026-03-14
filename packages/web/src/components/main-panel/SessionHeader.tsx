@@ -17,9 +17,10 @@ interface Props {
 }
 
 export function SessionHeader({ session, splitFocused }: Props) {
-  const floatingSessionId = useUIStore((s) => s.floatingSessionId);
-  const setFloatingSession = useUIStore((s) => s.setFloatingSession);
-  const isFloating = floatingSessionId === session.id;
+  const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
+  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
+  const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
+  const isFloating = floatingSessionIds.includes(session.id);
 
   const repoKey = session.repositoryOrg && session.repositoryName
     ? `${session.repositoryOrg}/${session.repositoryName}`
@@ -97,7 +98,7 @@ export function SessionHeader({ session, splitFocused }: Props) {
               ? 'text-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
               : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-accent)] bg-transparent hover:bg-[var(--theme-bg-hover)]'
           )}
-          onClick={() => setFloatingSession(isFloating ? null : session.id)}
+          onClick={() => isFloating ? removeFloatingSession(session.id) : addFloatingSession(session.id)}
           title={isFloating ? 'Re-attach to main panel' : 'Detach to floating overlay'}
         >
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">

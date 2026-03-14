@@ -173,7 +173,7 @@ function DropdownContent({
 }
 
 export function SmartSessionButton({ sessions, creating, onCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill }: SmartSessionButtonProps) {
-  const setFloatingSession = useUIStore((s) => s.setFloatingSession);
+  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const skills = useSkillStore((s) => s.skills);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -199,7 +199,7 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
   }, [dropdownOpen]);
 
   const handleOpenFloating = (sessionId: string) => {
-    setFloatingSession(sessionId);
+    addFloatingSession(sessionId);
     setDropdownOpen(false);
   };
 

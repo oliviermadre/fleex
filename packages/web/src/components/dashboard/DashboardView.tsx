@@ -1075,7 +1075,7 @@ export function DashboardView() {
     return m;
   }, [boards]);
   const setActivePanel = useUIStore((s) => s.setActivePanel);
-  const setFloatingSession = useUIStore((s) => s.setFloatingSession);
+  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -1106,7 +1106,7 @@ export function DashboardView() {
       const tryOpen = () => {
         const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
         if (session) {
-          setFloatingSession(sessionId);
+          addFloatingSession(sessionId);
           setCreatingSession(null);
         } else {
           setTimeout(tryOpen, 300);
@@ -1116,7 +1116,7 @@ export function DashboardView() {
     } catch {
       setCreatingSession(null);
     }
-  }, [creatingSession, setFloatingSession]);
+  }, [creatingSession, addFloatingSession]);
 
   const handleStatusChange = useCallback(async (ticketId: string, newStatus: TicketStatus) => {
     try {

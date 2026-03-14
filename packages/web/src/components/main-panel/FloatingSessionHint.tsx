@@ -10,7 +10,7 @@ interface Props {
  * Clicking re-attaches the session to the main panel.
  */
 export function FloatingSessionHint({ session }: Props) {
-  const setFloatingSession = useUIStore((s) => s.setFloatingSession);
+  const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
 
   const displayName = session.displayName || session.tmuxName;
 
@@ -44,7 +44,7 @@ export function FloatingSessionHint({ session }: Props) {
 
       <button
         className="rounded px-3 py-1.5 text-xs font-medium transition-colors bg-[var(--theme-bg-hover)] hover:bg-[var(--theme-accent-muted)] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] border border-[var(--theme-border)]"
-        onClick={() => setFloatingSession(null)}
+        onClick={() => removeFloatingSession(session.id)}
       >
         Re-attach to main panel
       </button>
