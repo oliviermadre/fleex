@@ -1,6 +1,16 @@
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { Ticket } from '@fleex/shared';
+import { cn } from '../../lib/cn';
 import { useTicketStore } from '../../stores/ticketStore';
+
+const STATUS_BADGE_COLOR: Record<string, string> = {
+  backlog: 'text-[var(--theme-text-muted)] bg-[var(--theme-bg-overlay)]',
+  todo: 'text-orange-400 bg-orange-400/10',
+  doing: 'text-blue-400 bg-blue-400/10',
+  reviewing: 'text-purple-400 bg-purple-400/10',
+  done: 'text-green-400 bg-green-400/10',
+  cancelled: 'text-red-400/70 bg-red-400/10',
+};
 
 export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
@@ -17,7 +27,7 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
         </svg>
       </button>
 
-      <span className="rounded-full bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] font-medium text-[var(--theme-text-secondary)]">
+      <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', STATUS_BADGE_COLOR[ticket.status] ?? 'text-[var(--theme-text-secondary)] bg-[var(--theme-bg-overlay)]')}>
         {TICKET_STATUS_LABELS[ticket.status]}
       </span>
 
