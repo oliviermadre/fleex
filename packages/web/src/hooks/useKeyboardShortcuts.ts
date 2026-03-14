@@ -6,6 +6,7 @@ import { useClaudeConfigStore } from '../stores/claudeConfigStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
 import * as api from '../services/api';
 import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
+import { floatingPositionRegistry } from '../components/main-panel/FloatingSessionOverlay';
 
 export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
@@ -29,6 +30,9 @@ export function useKeyboardShortcuts() {
   const lastActiveTabByWorktree = useUIStore((s) => s.lastActiveTabByWorktree);
   const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
   const setSelectedAgentWorktreeTicketId = useUIStore((s) => s.setSelectedAgentWorktreeTicketId);
+  const focusedFloatingSessionId = useUIStore((s) => s.focusedFloatingSessionId);
+  const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
+  const bringToFront = useUIStore((s) => s.bringToFront);
   const claudeConfigSaveFile = useClaudeConfigStore((s) => s.saveFile);
   const scratchpadOpen = useUIStore((s) => s.scratchpadOpen);
   const togglePreview = useScratchpadStore((s) => s.togglePreview);
@@ -185,6 +189,58 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Cmd+Shift+Arrow: spatial navigation between floating overlays
+      if (meta && e.shiftKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && focusedFloatingSessionId && floatingSessionIds.length > 1) {
+        const currentRect = floatingPositionRegistry.get(focusedFloatingSessionId);
+        if (currentRect) {
+          const currentCenterX = currentRect.x + currentRect.width / 2;
+          const currentCenterY = currentRect.y + currentRect.height / 2;
+
+          const isHorizontal = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
+          let bestId: string | null = null;
+          let bestDist = Infinity;
+
+          for (const otherId of floatingSessionIds) {
+            if (otherId === focusedFloatingSessionId) continue;
+            const rect = floatingPositionRegistry.get(otherId);
+            if (!rect) continue;
+
+            const cx = rect.x + rect.width / 2;
+            const cy = rect.y + rect.height / 2;
+
+            // Filter by direction
+            const inDirection =
+              (e.key === 'ArrowUp' && cy < currentCenterY) ||
+              (e.key === 'ArrowDown' && cy > currentCenterY) ||
+              (e.key === 'ArrowLeft' && cx < currentCenterX) ||
+              (e.key === 'ArrowRight' && cx > currentCenterX);
+
+            if (!inDirection) continue;
+
+            // Weighted distance: heavily penalize off-axis deviation so
+            // left/right prefers same row, up/down prefers same column
+            const dx = cx - currentCenterX;
+            const dy = cy - currentCenterY;
+            const dist = isHorizontal
+              ? Math.abs(dx) + Math.abs(dy) * 3
+              : Math.abs(dy) + Math.abs(dx) * 3;
+            if (dist < bestDist) {
+              bestDist = dist;
+              bestId = otherId;
+            }
+          }
+
+          if (bestId) {
+            e.preventDefault();
+            bringToFront(bestId);
+            return;
+          }
+        }
+        // No candidate in that direction — don't fall through to main panel nav
+        e.preventDefault();
+        return;
+      }
+
       // Cmd+Shift+Left/Right: cycle focus in grouped panes
       if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedGroupId) {
         e.preventDefault();
@@ -265,5 +321,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSessionToGroup, setSessionGroups]);
+  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSessionToGroup, setSessionGroups, focusedFloatingSessionId, floatingSessionIds, bringToFront]);
 }

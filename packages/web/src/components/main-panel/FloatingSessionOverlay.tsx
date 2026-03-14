@@ -12,18 +12,31 @@ const MIN_HEIGHT = 300;
 const DEFAULT_WIDTH = 800;
 const DEFAULT_HEIGHT = 500;
 
+// Position registry for spatial keyboard navigation between floating overlays
+export const floatingPositionRegistry = new Map<string, { x: number; y: number; width: number; height: number }>();
+
+/** Clamp position so the panel stays fully within the viewport */
+function clampPosition(x: number, y: number, w: number, h: number): { x: number; y: number } {
+  return {
+    x: Math.max(0, Math.min(x, window.innerWidth - w)),
+    y: Math.max(0, Math.min(y, window.innerHeight - h)),
+  };
+}
+
 export const TerminalOverlay = memo(function TerminalOverlay({
   sessionId,
   onClose,
   zIndex = 50,
   initialOffset = 0,
   onFocus,
+  isFocused = false,
 }: {
   sessionId: string;
   onClose: () => void;
   zIndex?: number;
   initialOffset?: number;
   onFocus?: () => void;
+  isFocused?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -56,13 +69,32 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   // Center on first render (with cascade offset)
   useEffect(() => {
     if (position !== null) return;
-    setPosition({
-      x: Math.max(0, (window.innerWidth - DEFAULT_WIDTH) / 2 + initialOffset),
-      y: Math.max(0, (window.innerHeight - DEFAULT_HEIGHT) / 2 - 40 + initialOffset),
-    });
+    const rawX = (window.innerWidth - DEFAULT_WIDTH) / 2 + initialOffset;
+    const rawY = (window.innerHeight - DEFAULT_HEIGHT) / 2 - 40 + initialOffset;
+    setPosition(clampPosition(rawX, rawY, DEFAULT_WIDTH, DEFAULT_HEIGHT));
   }, [position, initialOffset]);
 
   const effectivePos = position ?? { x: 0, y: 0 };
+
+  // Re-clamp when window resizes (e.g. user shrinks the browser)
+  useEffect(() => {
+    function handleWindowResize() {
+      setPosition((prev) => prev ? clampPosition(prev.x, prev.y, size.width, size.height) : prev);
+    }
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, [size.width, size.height]);
+
+  // Sync position registry for spatial keyboard navigation
+  useEffect(() => {
+    floatingPositionRegistry.set(sessionId, {
+      x: effectivePos.x,
+      y: effectivePos.y,
+      width: size.width,
+      height: size.height,
+    });
+    return () => { floatingPositionRegistry.delete(sessionId); };
+  }, [sessionId, effectivePos.x, effectivePos.y, size.width, size.height]);
 
   // Title bar drag handlers
   const handleTitleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -77,10 +109,9 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     };
     const handleMove = (me: MouseEvent) => {
       if (!dragRef.current.dragging) return;
-      setPosition({
-        x: dragRef.current.startPosX + (me.clientX - dragRef.current.startX),
-        y: dragRef.current.startPosY + (me.clientY - dragRef.current.startY),
-      });
+      const rawX = dragRef.current.startPosX + (me.clientX - dragRef.current.startX);
+      const rawY = dragRef.current.startPosY + (me.clientY - dragRef.current.startY);
+      setPosition(clampPosition(rawX, rawY, size.width, size.height));
     };
     const handleUp = () => {
       dragRef.current.dragging = false;
@@ -89,7 +120,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     };
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
-  }, [effectivePos]);
+  }, [effectivePos, size]);
 
   // Resize handle
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -105,9 +136,14 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     };
     const handleMove = (me: MouseEvent) => {
       if (!resizeRef.current.resizing) return;
-      const newW = Math.max(MIN_WIDTH, resizeRef.current.startW + (me.clientX - resizeRef.current.startX));
-      const newH = Math.max(MIN_HEIGHT, resizeRef.current.startH + (me.clientY - resizeRef.current.startY));
+      const rawW = Math.max(MIN_WIDTH, resizeRef.current.startW + (me.clientX - resizeRef.current.startX));
+      const rawH = Math.max(MIN_HEIGHT, resizeRef.current.startH + (me.clientY - resizeRef.current.startY));
+      // Cap size so the panel doesn't extend beyond viewport
+      const newW = Math.min(rawW, window.innerWidth);
+      const newH = Math.min(rawH, window.innerHeight);
       setSize({ width: newW, height: newH });
+      // Nudge position if resize pushed the panel out of bounds
+      setPosition((prev) => prev ? clampPosition(prev.x, prev.y, newW, newH) : prev);
       terminalManager.resize(sessionId);
     };
     const handleUp = () => {
@@ -150,6 +186,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
       {/* Floating panel */}
       <div
         ref={panelRef}
+        data-floating-panel
         onMouseDown={onFocus}
         style={{
           position: 'absolute',
@@ -162,8 +199,13 @@ export const TerminalOverlay = memo(function TerminalOverlay({
           borderRadius: 8,
           overflow: 'hidden',
           pointerEvents: 'auto',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          boxShadow: '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 40px rgba(59, 130, 246, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.12)',
+          border: isFocused
+            ? '1px solid rgba(255, 255, 255, 0.3)'
+            : '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: isFocused
+            ? '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(59, 130, 246, 0.3), 0 0 40px rgba(59, 130, 246, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15)'
+            : '0 24px 80px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+          transition: 'border 0.15s ease, box-shadow 0.15s ease',
           background: 'rgba(10, 10, 15, 0.45)',
           backdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
           WebkitBackdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
@@ -359,8 +401,22 @@ export const TerminalOverlay = memo(function TerminalOverlay({
  */
 export function FloatingSessionOverlay() {
   const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
+  const focusedFloatingSessionId = useUIStore((s) => s.focusedFloatingSessionId);
   const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
   const bringToFront = useUIStore((s) => s.bringToFront);
+  const clearFloatingFocus = useUIStore((s) => s.clearFloatingFocus);
+
+  // Click-outside detection: clear focus when clicking outside all floating panels
+  useEffect(() => {
+    function handleMouseDown(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-floating-panel]')) {
+        clearFloatingFocus();
+      }
+    }
+    window.addEventListener('mousedown', handleMouseDown);
+    return () => window.removeEventListener('mousedown', handleMouseDown);
+  }, [clearFloatingFocus]);
 
   if (floatingSessionIds.length === 0) return null;
 
@@ -374,6 +430,7 @@ export function FloatingSessionOverlay() {
           zIndex={50 + index}
           initialOffset={index * 30}
           onFocus={() => bringToFront(id)}
+          isFocused={focusedFloatingSessionId === id}
         />
       ))}
     </>
