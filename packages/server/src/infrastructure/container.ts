@@ -39,8 +39,10 @@ import { CreateSkillUseCase } from '../application/use-cases/create-skill.js';
 import { UpdateSkillUseCase } from '../application/use-cases/update-skill.js';
 import { DeleteSkillUseCase } from '../application/use-cases/delete-skill.js';
 import { ExecuteAgentUseCase } from '../application/use-cases/execute-agent.js';
+import { ReconcileWorkspacesUseCase } from '../application/use-cases/reconcile-workspaces.js';
 import { WakeWaitingAgentsUseCase } from '../application/use-cases/wake-waiting-agents.js';
 import { AutoReviewWorkflowUseCase } from '../application/use-cases/auto-review-workflow.js';
+import { RepoPathResolver } from '../domain/services/repo-path-resolver.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
@@ -86,10 +88,12 @@ export async function createContainer() {
     domainEventLogStore,
     skillStore,
     kvStore,
+    workspaceStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
+  const repoPathResolver = new RepoPathResolver(hostFs.exists.bind(hostFs));
 
   // Auth stores (database-backed features)
   let userStore: PgUserStore | SupabaseUserStore | null = null;
@@ -147,6 +151,7 @@ export async function createContainer() {
   const detectMerge = new DetectMergeUseCase(ticketStore, logger);
   const createSessionFromTicket = new CreateSessionFromTicketUseCase(
     ticketStore, createSession, createWorktreeUC, git, config, logger,
+    repoPathResolver, workspaceStore, hostFs,
   );
   const importGitHubIssue = new ImportGitHubIssueUseCase(ticketStore, githubGraphql, logger);
   const backfillPRTicket = new BackfillPRTicketUseCase(ticketStore, logger);
@@ -168,7 +173,7 @@ export async function createContainer() {
   const deleteSkill = new DeleteSkillUseCase(skillStore, logger);
 
   const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore, config, logger);
-  const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);
+  const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore, repoPathResolver);
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
@@ -202,14 +207,16 @@ export async function createContainer() {
     return domainEventLogStore.save(entry);
   });
 
+  const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, config, hostFs, git, logger, repoPathResolver);
+  const reconcileWorkspaces = new ReconcileWorkspacesUseCase(workspaceStore, repoPathResolver, createWorktreeUC, git, config, hostFs, logger);
+
   // Wire eventBus (avoids circular constructor dep)
   createWorktreeUC.eventBus = eventBus;
   executeAgent.eventBus = eventBus;
+  reconcileWorkspaces.eventBus = eventBus;
 
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
-
-  const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, config, hostFs, git, logger);
 
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git);
   const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore, personaStore, agentEventStore, reconcileWorktree, hostFs, config);
@@ -222,6 +229,8 @@ export async function createContainer() {
     hostFs,
     hostHomedir,
     config,
+    repoPathResolver,
+    workspaceStore,
     tmux,
     pty: ptyAdapter,
     git,
@@ -269,6 +278,7 @@ export async function createContainer() {
     agentEventStore,
     domainEventLogStore,
     kvStore,
+    reconcileWorkspaces,
     eventBus,
     domainEventListener,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

@@ -74,16 +74,27 @@ export function agentWorktreesRoutes(container: Container) {
           throw new WorktreeError('No repository found on ticket or board');
         }
 
-        const repoPath = join(container.config.get().basePath, repoOrg, repoName);
+        const basePath = container.config.get().basePath;
+        const resolved = await container.repoPathResolver.resolve(basePath, repoOrg, repoName);
+        const repoPath = resolved?.repoPath ?? join(basePath, repoOrg, repoName);
+        const envSourcePath = resolved?.envSourcePath;
         const branchName = buildTicketBranchName(ticket.title, ticket.id);
-        const wtPath = join(repoPath, '..', buildWorktreeDirName(repoName, branchName));
+
+        let wtPath: string;
+        if (resolved?.mode === 'bare') {
+          wtPath = join(basePath, 'workspaces', ticket.id, repoOrg, repoName);
+          // Ensure parent dirs
+          try { await container.hostFs.mkdir(join(basePath, 'workspaces', ticket.id, repoOrg)); } catch { /* ok */ }
+        } else {
+          wtPath = join(repoPath, '..', buildWorktreeDirName(repoName, branchName));
+        }
 
         const baseBranch = request.body?.baseBranch;
         await container.createWorktree.execute(repoPath, wtPath, {
           branch: branchName,
           createNewBranch: true,
           ...(baseBranch ? { baseBranch } : {}),
-        });
+        }, envSourcePath);
 
         const linkId = randomUUID();
         ticket.addLink('worktree', wtPath, branchName, null, linkId);

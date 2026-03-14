@@ -186,6 +186,20 @@ export interface SkillExecutedEvent extends DomainEvent {
   ticketId: string;
 }
 
+// ── Workspace events ──
+
+export interface WorkspaceCreatedEvent extends DomainEvent {
+  type: 'workspace.created';
+  ticketId: string;
+  repos: Array<{ org: string; name: string; branch: string }>;
+}
+
+export interface WorkspaceReconciledEvent extends DomainEvent {
+  type: 'workspace.reconciled';
+  ticketId: string;
+  status: 'ok' | 'repaired' | 'orphaned';
+}
+
 // ── Worktree events ──
 
 export interface WorktreeCreatedEvent extends DomainEvent {
@@ -243,6 +257,8 @@ export type AnyDomainEvent =
   | SkillUpdatedEvent
   | SkillDeletedEvent
   | SkillExecutedEvent
+  | WorkspaceCreatedEvent
+  | WorkspaceReconciledEvent
   | WorktreeCreatedEvent
   | SessionCreatedEvent
   | SessionRenamedEvent

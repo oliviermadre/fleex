@@ -4,6 +4,7 @@ export interface Repository {
   readonly path: string;
   readonly defaultBranch: string;
   readonly remote: string;
+  readonly mode: 'regular' | 'bare';
 }
 
 export interface Worktree {
@@ -19,6 +20,7 @@ export interface GitRemoteInfo {
   readonly remote: string;
   readonly branch: string;
   readonly isWorktree: boolean;
+  readonly isBare: boolean;
   readonly mainWorktreePath: string;
 }
 

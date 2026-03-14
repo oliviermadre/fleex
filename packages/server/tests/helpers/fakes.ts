@@ -1,10 +1,11 @@
 import type { TmuxPort, TmuxSessionInfo } from '../../src/application/ports/tmux.port.js';
 import type { SessionStorePort } from '../../src/application/ports/session-store.port.js';
 import type { GitPort } from '../../src/application/ports/git.port.js';
+import type { WorkspaceStorePort } from '../../src/application/ports/workspace-store.port.js';
 import type { ConfigPort, AppConfig } from '../../src/application/ports/config.port.js';
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
 import type { HostFs } from '../../src/infrastructure/host/types.js';
-import type { DiffStats, GitRemoteInfo, Worktree } from '@fleex/shared';
+import type { DiffStats, GitRemoteInfo, Worktree, Workspace } from '@fleex/shared';
 import { SessionEntity } from '../../src/domain/entities.js';
 
 export class FakeTmuxPort implements TmuxPort {
@@ -122,6 +123,8 @@ export class FakeGitPort implements GitPort {
     return { commitsAhead: 0, commitsBehind: 0, filesChanged: 0, additions: 0, deletions: 0 };
   }
   async copyEnvFiles(): Promise<void> {}
+  async repairWorktrees(): Promise<void> {}
+  async cloneBare(): Promise<void> {}
 }
 
 export class FakeConfigPort implements ConfigPort {
@@ -204,5 +207,27 @@ export class FakeHostFs implements HostFs {
 
   async readTail(): Promise<string> {
     return '';
+  }
+
+  async appendFile(): Promise<void> {}
+}
+
+export class FakeWorkspaceStore implements WorkspaceStorePort {
+  private workspaces = new Map<string, Workspace>();
+
+  async save(workspace: Workspace): Promise<void> {
+    this.workspaces.set(workspace.ticketId, workspace);
+  }
+
+  async remove(ticketId: string): Promise<void> {
+    this.workspaces.delete(ticketId);
+  }
+
+  async getByTicketId(ticketId: string): Promise<Workspace | null> {
+    return this.workspaces.get(ticketId) ?? null;
+  }
+
+  async getAll(): Promise<Workspace[]> {
+    return Array.from(this.workspaces.values());
   }
 }

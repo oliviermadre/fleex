@@ -50,6 +50,23 @@ async function main() {
   // Discover existing fleex_ tmux sessions
   await container.discoverSessions.execute();
 
+  // Reconcile workspaces (repair missing worktrees on machine change)
+  try {
+    const wsResult = await container.reconcileWorkspaces.execute();
+    if (wsResult.repaired > 0 || wsResult.orphaned.length > 0) {
+      container.logger.info('Workspace reconciliation completed', {
+        total: wsResult.total,
+        ok: wsResult.ok,
+        repaired: wsResult.repaired,
+        orphaned: wsResult.orphaned,
+      });
+    }
+  } catch (err) {
+    container.logger.warn('Workspace reconciliation failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true, credentials: true });
   await app.register(websocket);

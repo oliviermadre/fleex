@@ -10,6 +10,7 @@ import type { DomainEventLogStorePort } from '../../application/ports/domain-eve
 import type { ConfigPort } from '../../application/ports/config.port.js';
 import type { KvStorePort } from '../../application/ports/kv-store.port.js';
 import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
+import type { WorkspaceStorePort } from '../../application/ports/workspace-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
@@ -28,6 +29,7 @@ export interface StorageStores {
   domainEventLogStore: DomainEventLogStorePort;
   skillStore: SkillStorePort;
   kvStore: KvStorePort | null;
+  workspaceStore: WorkspaceStorePort;
 }
 
 export function resolveStorageDriver(): StorageDriver {
@@ -49,17 +51,18 @@ export async function createStores(
     return createJsonStores(deps);
   }
 
-  // Sessions are always stored locally (JSON) — they are ephemeral tmux data,
-  // not ticketing data. Using a remote store causes network-race flickering.
+  // Sessions and workspaces are always stored locally (JSON) — they are ephemeral
+  // tmux data / local filesystem state, not ticketing data.
   const sessionStore = await createJsonSessionStore(deps);
+  const workspaceStore = await createJsonWorkspaceStore(deps);
 
   switch (driver) {
     case 'sqlite':
-      return { sessionStore, ...(await createSqliteStores(deps)) };
+      return { sessionStore, workspaceStore, ...(await createSqliteStores(deps)) };
     case 'pgsql':
-      return { sessionStore, ...(await createPgsqlStores(deps)) };
+      return { sessionStore, workspaceStore, ...(await createPgsqlStores(deps)) };
     case 'supabase':
-      return { sessionStore, ...(await createSupabaseStores(deps)) };
+      return { sessionStore, workspaceStore, ...(await createSupabaseStores(deps)) };
   }
 }
 
@@ -80,6 +83,7 @@ async function createJsonStores(deps: {
   const { JsonAgentEventStore } = await import('./json-agent-event-store.adapter.js');
   const { JsonDomainEventLogStore } = await import('./json-domain-event-log-store.adapter.js');
   const { JsonSkillStore } = await import('./json-skill-store.adapter.js');
+  const { JsonWorkspaceStore } = await import('./json-workspace-store.adapter.js');
 
   // Run pending migrations (JSON adapter — tracking via _migrations.json)
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
@@ -107,8 +111,10 @@ async function createJsonStores(deps: {
   await domainEventLogStore.init();
   const skillStore = new JsonSkillStore(deps.hostFs, deps.homedir, deps.logger);
   await skillStore.init();
+  const workspaceStore = new JsonWorkspaceStore(deps.hostFs, deps.homedir, deps.logger);
+  await workspaceStore.init();
 
-  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, kvStore: null };
+  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, kvStore: null, workspaceStore };
 }
 
 async function createJsonSessionStore(deps: {
@@ -122,7 +128,18 @@ async function createJsonSessionStore(deps: {
   return store;
 }
 
-type NonSessionStores = Omit<StorageStores, 'sessionStore'>;
+async function createJsonWorkspaceStore(deps: {
+  hostFs: HostFs;
+  homedir: string;
+  logger: LoggerPort;
+}): Promise<WorkspaceStorePort> {
+  const { JsonWorkspaceStore } = await import('./json-workspace-store.adapter.js');
+  const store = new JsonWorkspaceStore(deps.hostFs, deps.homedir, deps.logger);
+  await store.init();
+  return store;
+}
+
+type NonSessionStores = Omit<StorageStores, 'sessionStore' | 'workspaceStore'>;
 
 async function createSqliteStores(deps: {
   execFn: ExecFn;

@@ -22,6 +22,7 @@ import type { LoggerPort } from '../ports/logger.port.js';
 import type { AutoReviewWorkflowUseCase } from './auto-review-workflow.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { EventBus } from '../event-bus.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 
 interface ActiveExecution {
   mentionId: string;
@@ -109,6 +110,7 @@ export class ExecuteAgentUseCase {
     private readonly logger: LoggerPort,
     private readonly autoReviewWorkflow: AutoReviewWorkflowUseCase,
     private readonly skillStore?: SkillStorePort,
+    private readonly repoPathResolver?: RepoPathResolver,
   ) {}
 
   /**
@@ -1307,7 +1309,15 @@ export class ExecuteAgentUseCase {
 
     if (!org || !repo) return null;
 
-    const repoPath = join(this.config.get().basePath, org, repo);
+    const basePath = this.config.get().basePath;
+
+    // Use resolver if available
+    const resolved = this.repoPathResolver
+      ? await this.repoPathResolver.resolve(basePath, org, repo)
+      : null;
+
+    let repoPath = resolved?.repoPath ?? join(basePath, org, repo);
+    const envSourcePath = resolved?.envSourcePath;
 
     // Ensure repo is cloned locally
     if (!existsSync(repoPath)) {
@@ -1328,7 +1338,9 @@ export class ExecuteAgentUseCase {
     }
 
     // Derive worktree directory name from branch
-    const wtPath = join(repoPath, '..', buildWorktreeDirName(repo, branchName));
+    const wtPath = resolved?.mode === 'bare'
+      ? join(basePath, 'workspaces', ticketId, org, repo)
+      : join(repoPath, '..', buildWorktreeDirName(repo, branchName));
 
     // If worktree directory already exists on disk, reuse it directly
     if (existingWorktreeLink && existsSync(wtPath)) {
@@ -1343,7 +1355,7 @@ export class ExecuteAgentUseCase {
       const existingPath = await this.createWorktree.execute(repoPath, wtPath, {
         branch: branchName,
         createNewBranch,
-      });
+      }, envSourcePath);
       const worktreePath = existingPath ?? wtPath;
 
       // If this is a new worktree (no link yet), add the link to the ticket

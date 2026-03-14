@@ -17,16 +17,32 @@ export class GitCliAdapter implements GitPort {
       { cwd },
     );
 
+    const remote = remoteUrl.trim();
+    const { org, name } = this.parseRemoteUrl(remote);
+
+    // Detect if bare repository
+    let isBare = false;
+    try {
+      const { stdout: bareOut } = await this.execFn(
+        'git',
+        ['rev-parse', '--is-bare-repository'],
+        { cwd },
+      );
+      isBare = bareOut.trim() === 'true';
+    } catch {
+      // ignore
+    }
+
+    if (isBare) {
+      return { org, name, remote, branch: '', isWorktree: false, isBare: true, mainWorktreePath: cwd };
+    }
+
     const { stdout: branchOut } = await this.execFn(
       'git',
       ['branch', '--show-current'],
       { cwd },
     );
-
-    const remote = remoteUrl.trim();
     const branch = branchOut.trim();
-
-    const { org, name } = this.parseRemoteUrl(remote);
 
     // Detect if we're in a worktree
     let isWorktree = false;
@@ -55,7 +71,7 @@ export class GitCliAdapter implements GitPort {
       // ignore
     }
 
-    return { org, name, remote, branch, isWorktree, mainWorktreePath };
+    return { org, name, remote, branch, isWorktree, isBare: false, mainWorktreePath };
   }
 
   async listBranches(repoPath: string): Promise<string[]> {
@@ -205,6 +221,11 @@ export class GitCliAdapter implements GitPort {
   async repairWorktrees(repoPath: string): Promise<void> {
     await this.execFn('git', ['worktree', 'repair'], { cwd: repoPath });
     this.logger.debug('Worktree repair completed', { repoPath });
+  }
+
+  async cloneBare(remote: string, targetPath: string): Promise<void> {
+    await this.execFn('git', ['clone', '--bare', remote, targetPath], { timeout: 120_000 });
+    this.logger.debug('Bare clone completed', { remote, targetPath });
   }
 
   async copyEnvFiles(sourceRepo: string, targetPath: string): Promise<void> {

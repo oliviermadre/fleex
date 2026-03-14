@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { GitPort } from '../ports/git.port.js';
@@ -28,6 +29,7 @@ export class ReconcileWorktreeUseCase {
     private readonly hostFs: HostFs,
     private readonly git: GitPort,
     private readonly logger: LoggerPort,
+    private readonly repoPathResolver?: RepoPathResolver,
   ) {}
 
   async execute(org: string, repoName: string, branch: string): Promise<ReconcileResult> {
@@ -49,8 +51,19 @@ export class ReconcileWorktreeUseCase {
 
   private async reconcile(org: string, repoName: string, branch: string): Promise<ReconcileResult> {
     const basePath = this.config.get().basePath;
-    const repoPath = join(basePath, org, repoName);
-    const wtPath = join(repoPath, '..', buildWorktreeDirName(repoName, branch));
+
+    // Use resolver if available, fallback to direct path
+    const resolved = this.repoPathResolver
+      ? await this.repoPathResolver.resolve(basePath, org, repoName)
+      : null;
+
+    const repoPath = resolved?.repoPath ?? join(basePath, org, repoName);
+    const envSourcePath = resolved?.envSourcePath;
+
+    // In bare mode, worktrees go as siblings of the bare repo under org/
+    const wtPath = resolved?.mode === 'bare'
+      ? join(basePath, org, buildWorktreeDirName(repoName, branch))
+      : join(repoPath, '..', buildWorktreeDirName(repoName, branch));
 
     // 1. Check if worktree path already exists
     try {
@@ -76,7 +89,7 @@ export class ReconcileWorktreeUseCase {
       const existingPath = await this.createWorktree.execute(repoPath, wtPath, {
         branch,
         createNewBranch: false,
-      });
+      }, envSourcePath);
       // createWorktree returns null on success, or an existing path if reused
       const finalPath = existingPath ?? wtPath;
       this.logger.info('Reconciled worktree', { org, repoName, branch, path: finalPath });
@@ -91,7 +104,7 @@ export class ReconcileWorktreeUseCase {
           branch,
           createNewBranch: true,
           baseBranch: 'origin/main',
-        });
+        }, envSourcePath);
         const finalPath = existingPath ?? wtPath;
         this.logger.info('Reconciled worktree (new branch from origin/main)', { org, repoName, branch, path: finalPath });
         return { path: finalPath, status: 'created' };

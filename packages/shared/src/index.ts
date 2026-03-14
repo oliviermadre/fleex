@@ -99,6 +99,8 @@ export type {
   AgentEventWsMessage,
 } from './types/agent-event.js';
 
+export type { Workspace, WorkspaceRepo } from './types/workspace.js';
+
 export type { DomainEventLog } from './types/domain-event-log.js';
 
 export type {

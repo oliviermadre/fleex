@@ -12,7 +12,7 @@ export class CreateWorktreeUseCase {
     private readonly logger: LoggerPort,
   ) {}
 
-  async execute(repoPath: string, wtPath: string, request: CreateWorktreeRequest): Promise<string | null> {
+  async execute(repoPath: string, wtPath: string, request: CreateWorktreeRequest, envSourcePath?: string): Promise<string | null> {
     try {
       await this.git.fetch(repoPath);
     } catch {
@@ -28,7 +28,7 @@ export class CreateWorktreeUseCase {
         request.baseBranch,
       );
       this.logger.info('Worktree created', { repoPath, wtPath, branch: request.branch });
-      await this.copyEnvFiles(repoPath, wtPath);
+      await this.copyEnvFiles(envSourcePath ?? repoPath, wtPath);
       this.emitCreated(repoPath, wtPath, request);
       return null;
     } catch (err) {
@@ -50,7 +50,7 @@ export class CreateWorktreeUseCase {
         });
         // Retry without -b; this can itself fail (e.g. branch already checked out)
         // so we recurse with createNewBranch=false to let the other handlers deal with it.
-        return this.execute(repoPath, wtPath, { ...request, createNewBranch: false });
+        return this.execute(repoPath, wtPath, { ...request, createNewBranch: false }, envSourcePath);
       }
       const checkedOutMatch = message.match(/is already checked out at '([^']+)'/);
       if (checkedOutMatch) {
@@ -67,7 +67,7 @@ export class CreateWorktreeUseCase {
           request.baseBranch,
         );
         this.logger.info('Worktree replaced', { repoPath, wtPath, branch: request.branch });
-        await this.copyEnvFiles(repoPath, wtPath);
+        await this.copyEnvFiles(envSourcePath ?? repoPath, wtPath);
         this.emitCreated(repoPath, wtPath, request);
         return null;
       }
