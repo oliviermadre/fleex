@@ -29,6 +29,7 @@ export type RefreshInterval = 60000 | 120000 | 300000 | 600000 | 1800000 | 36000
 export type RepositoryWsMessageType =
   | 'repo:summaries-updated'
   | 'repo:dashboard-updated'
+  | 'repo:pulls-updated'
   | 'repo:refresh-started'
   | 'repo:refresh-complete'
   | 'repo:rate-limit-warning';

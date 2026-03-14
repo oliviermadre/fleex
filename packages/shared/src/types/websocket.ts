@@ -1,4 +1,5 @@
 import type { SessionGroup } from './session.js';
+import type { ClaudeUsage } from './claude-usage.js';
 
 // Binary protocol message types (byte[0] prefix)
 export const ClientMessageType = {
@@ -21,7 +22,8 @@ export type ServerMessageType = (typeof ServerMessageType)[keyof typeof ServerMe
 export type DashboardMessage =
   | SessionsUpdatedMessage
   | SessionCreatedMessage
-  | SessionRemovedMessage;
+  | SessionRemovedMessage
+  | UsageUpdatedMessage;
 
 export interface SessionsUpdatedMessage {
   readonly type: 'sessions:updated';
@@ -36,4 +38,9 @@ export interface SessionCreatedMessage {
 export interface SessionRemovedMessage {
   readonly type: 'session:removed';
   readonly data: { sessionId: string };
+}
+
+export interface UsageUpdatedMessage {
+  readonly type: 'usage:updated';
+  readonly data: ClaudeUsage;
 }

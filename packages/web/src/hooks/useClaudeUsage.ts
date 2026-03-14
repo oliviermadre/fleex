@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { ClaudeUsage } from '@fleex/shared';
-import { CLAUDE_USAGE_CACHE_TTL_MS } from '@fleex/shared';
+import type { ClaudeUsage, DashboardMessage } from '@fleex/shared';
 import { fetchClaudeUsage } from '../services/api';
+import { dashboardWs } from '../services/websocket';
 
 export function useClaudeUsage() {
   const [usage, setUsage] = useState<ClaudeUsage | null>(null);
@@ -21,13 +21,33 @@ export function useClaudeUsage() {
   useEffect(() => {
     mountedRef.current = true;
 
+    // Initial fetch
     load();
 
-    const interval = setInterval(load, CLAUDE_USAGE_CACHE_TTL_MS);
+    // Listen for server-pushed usage updates via dashboard WS
+    const handleMessage = (data: ArrayBuffer) => {
+      try {
+        const text = new TextDecoder().decode(data);
+        const msg = JSON.parse(text) as DashboardMessage;
+        if (msg.type === 'usage:updated' && mountedRef.current) {
+          setUsage(msg.data);
+          setLoading(false);
+        }
+      } catch {
+        // ignore non-JSON frames
+      }
+    };
+
+    // Re-fetch on reconnect
+    const handleOpen = () => { load(); };
+
+    const unsubMessage = dashboardWs.onMessage(handleMessage);
+    const unsubOpen = dashboardWs.onOpen(handleOpen);
 
     return () => {
       mountedRef.current = false;
-      clearInterval(interval);
+      unsubMessage();
+      unsubOpen();
     };
   }, [load]);
 
