@@ -140,6 +140,15 @@ export class RepositoryRefreshScheduler {
       }
 
       this.broadcast('repo:summaries-updated', summaries);
+
+      // Broadcast PR data per repo so clients don't need to poll
+      for (const [key, result] of batchResults) {
+        const [org, name] = key.split('/');
+        if (org && name) {
+          this.broadcast('repo:pulls-updated', { org, name, pulls: result.pulls });
+        }
+      }
+
       this.broadcast('repo:refresh-complete', { timestamp: now });
     } finally {
       this.refreshing = false;

@@ -96,6 +96,10 @@ export function agentEventsWsPlugin(container: Container) {
     container.executeAgent.onExecutionComplete = (personaId, status, _mentionId) => {
       const type = status === 'completed' ? 'persona:execution_completed' : 'persona:execution_failed';
       container.personaBroadcast(type, { personaId });
+
+      // Emit domain event so the agent worktree cache is invalidated on execution completion
+      const domainEventType = status === 'completed' ? 'persona.execution_completed' : 'persona.execution_failed';
+      container.eventBus.emit({ type: domainEventType, personaId, occurredAt: new Date() });
     };
 
     // Wire ticket update broadcast from agent execution

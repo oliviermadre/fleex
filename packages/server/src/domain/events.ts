@@ -162,6 +162,16 @@ export interface PersonaExecutionStartedEvent extends DomainEvent {
   mentionIds: string[];
 }
 
+export interface PersonaExecutionCompletedEvent extends DomainEvent {
+  type: 'persona.execution_completed';
+  personaId: string;
+}
+
+export interface PersonaExecutionFailedEvent extends DomainEvent {
+  type: 'persona.execution_failed';
+  personaId: string;
+}
+
 // ── Skill events ──
 
 export interface SkillCreatedEvent extends DomainEvent {
@@ -239,6 +249,8 @@ export type AnyDomainEvent =
   | PersonaUpdatedEvent
   | PersonaDeletedEvent
   | PersonaExecutionStartedEvent
+  | PersonaExecutionCompletedEvent
+  | PersonaExecutionFailedEvent
   | SkillCreatedEvent
   | SkillUpdatedEvent
   | SkillDeletedEvent

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PullRequest } from '@fleex/shared';
+import type { PullRequest, RepositoryWsMessage } from '@fleex/shared';
 import { fetchPullRequests } from '../services/api';
 import { useSessionStore } from './sessionStore';
 
@@ -8,6 +8,7 @@ interface PullRequestState {
   pullsByRepo: Record<string, Record<string, PullRequest>>;
   fetchPullsForRepo: (org: string, name: string, force?: boolean) => Promise<void>;
   refreshAllPulls: () => Promise<void>;
+  handleWsMessage: (msg: RepositoryWsMessage) => void;
 }
 
 export const usePullRequestStore = create<PullRequestState>((set, get) => ({
@@ -43,5 +44,21 @@ export const usePullRequestStore = create<PullRequestState>((set, get) => ({
       promises.push(get().fetchPullsForRepo(group.repositoryOrg, group.repositoryName, true));
     }
     await Promise.all(promises);
+  },
+
+  handleWsMessage: (msg) => {
+    if (msg.type === 'repo:pulls-updated') {
+      const { org, name, pulls } = msg.data as { org: string; name: string; pulls: PullRequest[] };
+      const byBranch: Record<string, PullRequest> = {};
+      for (const pr of pulls) {
+        byBranch[pr.headRefName] = pr;
+      }
+      set((state) => ({
+        pullsByRepo: {
+          ...state.pullsByRepo,
+          [`${org}/${name}`]: byBranch,
+        },
+      }));
+    }
   },
 }));

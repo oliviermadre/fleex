@@ -4,7 +4,6 @@ import { useSessions } from '../../hooks/useSessions';
 import { useRepositoryDashboard } from '../../hooks/useRepositoryDashboard';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useHotkeyReveal } from '../../hooks/useHotkeyReveal';
-import { usePullRequestPolling } from '../../hooks/usePullRequestPolling';
 import { useTickets } from '../../hooks/useTickets';
 import { useAgentPersonas } from '../../hooks/useAgentPersonas';
 import { useSkills } from '../../hooks/useSkills';
@@ -28,7 +27,6 @@ export function AppLayout() {
   useRepositoryDashboard();
   useKeyboardShortcuts();
   useHotkeyReveal();
-  usePullRequestPolling();
   useTickets();
   useAgentPersonas();
   useSkills();

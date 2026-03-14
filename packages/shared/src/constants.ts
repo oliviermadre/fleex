@@ -10,7 +10,7 @@ export const WS_DASHBOARD_PATH = '/ws/dashboard';
 
 export const API_BASE = '/api';
 
-export const DASHBOARD_BROADCAST_INTERVAL_MS = 1000;
+export const DASHBOARD_BROADCAST_INTERVAL_MS = 5000;
 export const RESIZE_DEBOUNCE_MS = 100;
 export const STALE_TERMINAL_EVICTION_MS = 10 * 60 * 1000; // 10 minutes
 
