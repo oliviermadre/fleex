@@ -91,7 +91,7 @@ export async function createContainer() {
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
 
-  // Auth & multi-gateway stores (database-backed features)
+  // Auth stores (database-backed features)
   let userStore: PgUserStore | SupabaseUserStore | null = null;
   let sessionManager: SessionManager | SupabaseSessionManager | null = null;
 
@@ -114,12 +114,11 @@ export async function createContainer() {
   } else if (driver === 'pgsql') {
     const databaseUrl = process.env['DATABASE_URL'] || process.env['FLEEX_PGSQL_URL'];
     if (databaseUrl) {
-      const { createDbPool, runMigrations } = await import('./database/db.js');
+      const { createDbPool } = await import('./database/db.js');
       const { PgUserStore: PgUser } = await import('./adapters/pg-user-store.adapter.js');
       const { SessionManager: SessMgr } = await import('./auth/session-manager.js');
 
       const db = await createDbPool(logger);
-      await runMigrations(db, logger);
       userStore = new PgUser(db, logger);
       sessionManager = new SessMgr(db);
       logger.info('PostgreSQL auth stores initialized');

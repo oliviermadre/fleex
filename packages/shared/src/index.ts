@@ -99,12 +99,6 @@ export type {
   AgentEventWsMessage,
 } from './types/agent-event.js';
 
-export type {
-  Gateway,
-  GatewayRegisterRequest,
-  GatewayHeartbeatRequest,
-} from './types/gateway.js';
-
 export type { DomainEventLog } from './types/domain-event-log.js';
 
 export type {
