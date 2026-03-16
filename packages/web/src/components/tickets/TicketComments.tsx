@@ -6,6 +6,7 @@ import rehypeHighlight from 'rehype-highlight';
 import type { Components } from 'react-markdown';
 import { ticketWs } from '../../services/websocket';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
 
@@ -364,6 +365,28 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
   );
 
+  // Agent "is working" indicator
+  const executionsByTicket = useAgentEventStore((s) => s.executionsByTicket);
+  const loadExecutionsForTicket = useAgentEventStore((s) => s.loadExecutionsForTicket);
+  const subscribeTicket = useAgentEventStore((s) => s.subscribeTicket);
+  const unsubscribeTicket = useAgentEventStore((s) => s.unsubscribeTicket);
+
+  useEffect(() => {
+    loadExecutionsForTicket(ticketId);
+    subscribeTicket(ticketId);
+    return () => { unsubscribeTicket(ticketId); };
+  }, [ticketId, loadExecutionsForTicket, subscribeTicket, unsubscribeTicket]);
+
+  const runningAgents = useMemo(() => {
+    const execs = executionsByTicket[ticketId] ?? [];
+    return execs
+      .filter((e) => e.status === 'running')
+      .map((e) => {
+        const persona = personas.find((p) => p.id === e.personaId);
+        return persona?.displayName || persona?.name || 'Agent';
+      });
+  }, [executionsByTicket, ticketId, personas]);
+
   const allMentionOptions = useMemo<MentionOption[]>(() => {
     const opts: MentionOption[] = personas.map((p) => ({
       insertText: `@agent:${p.name}`,
@@ -627,6 +650,16 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </button>
+              </div>
+            ))}
+            {runningAgents.map((name) => (
+              <div key={name} className="flex items-center gap-2 px-1 py-3">
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
+                </span>
+                <span className="text-xs text-purple-400">
+                  {name} is working…
+                </span>
               </div>
             ))}
             <div ref={listEndRef} />

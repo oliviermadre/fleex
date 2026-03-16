@@ -4,6 +4,7 @@ import * as api from '../services/api';
 import { agentEventWs } from '../services/websocket';
 
 const subscribedExecutionIds = new Set<string>();
+const subscribedTicketIds = new Set<string>();
 
 interface AgentEventState {
   executionsByTicket: Record<string, AgentExecution[]>;
@@ -18,6 +19,8 @@ interface AgentEventState {
   loadEventsForExecution: (executionId: string) => Promise<void>;
   subscribeExecution: (executionId: string) => void;
   unsubscribeExecution: (executionId: string) => void;
+  subscribeTicket: (ticketId: string) => void;
+  unsubscribeTicket: (ticketId: string) => void;
   resubscribeAll: () => void;
   handleWsEvent: (msg: { type: string; data: unknown }) => void;
 }
@@ -81,9 +84,24 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
     agentEventWs.sendJson({ action: 'unsubscribe', executionId });
   },
 
+  subscribeTicket: (ticketId) => {
+    if (subscribedTicketIds.has(ticketId)) return;
+    subscribedTicketIds.add(ticketId);
+    agentEventWs.sendJson({ action: 'subscribe', ticketId });
+  },
+
+  unsubscribeTicket: (ticketId) => {
+    if (!subscribedTicketIds.has(ticketId)) return;
+    subscribedTicketIds.delete(ticketId);
+    agentEventWs.sendJson({ action: 'unsubscribe', ticketId });
+  },
+
   resubscribeAll: () => {
     for (const executionId of subscribedExecutionIds) {
       agentEventWs.sendJson({ action: 'subscribe', executionId });
+    }
+    for (const ticketId of subscribedTicketIds) {
+      agentEventWs.sendJson({ action: 'subscribe', ticketId });
     }
   },
 
@@ -100,6 +118,35 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
             ? state.streamingExecutionIds
             : { ...state.streamingExecutionIds, [event.executionId]: true },
         };
+
+        // When execution starts, add a new execution entry to executionsByTicket
+        if (event.eventType === 'execution_start') {
+          const eventData = event.data as Record<string, unknown> | undefined;
+          const ticketId = eventData?.['ticketId'] as string | undefined;
+          const personaId = eventData?.['personaId'] as string | undefined;
+          const mentionId = eventData?.['mentionId'] as string | undefined;
+          if (ticketId && personaId) {
+            const existing = state.executionsByTicket[ticketId] ?? [];
+            if (!existing.some((e) => e.id === event.executionId)) {
+              const newExec: AgentExecution = {
+                id: event.executionId,
+                personaId,
+                ticketId,
+                mentionId: mentionId ?? '',
+                eventCount: 1,
+                status: 'running',
+                startedAt: event.createdAt,
+                completedAt: null,
+                lastEventAt: event.createdAt,
+              };
+              next.executionsByTicket = {
+                ...state.executionsByTicket,
+                ...next.executionsByTicket,
+                [ticketId]: [...existing, newExec],
+              };
+            }
+          }
+        }
 
         // When execution ends, update the execution record in-place so the UI
         // reflects the final status (badge, timer, cancel button) without reload.
