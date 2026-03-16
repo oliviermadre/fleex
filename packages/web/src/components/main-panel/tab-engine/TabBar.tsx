@@ -88,6 +88,7 @@ function TabItem({ tab, isActive, onSelect, onClose, onRename, drag }: TabItemPr
             : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
         )}
         onClick={() => { if (!editing) onSelect(); }}
+        onMouseDown={(e) => { if (e.button === 1 && tab.capabilities.closable && onClose) { e.preventDefault(); onClose(); } }}
         onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
       >
         {/* Kind icon */}
