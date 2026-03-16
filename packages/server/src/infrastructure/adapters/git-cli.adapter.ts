@@ -212,20 +212,31 @@ export class GitCliAdapter implements GitPort {
     this.logger.debug('Worktree prune completed', { repoPath });
   }
 
-  async copyEnvFiles(sourceRepo: string, targetPath: string): Promise<void> {
-    const { stdout } = await this.execFn('find', [
-      sourceRepo, '-maxdepth', '3', '-name', '.env*', '-type', 'f',
-    ]);
+  private static readonly IGNORED_DIRS = [
+    'node_modules/', '.next/', 'dist/', 'build/', 'vendor/',
+    '.cache/', '.turbo/', '.nuxt/', '.output/', '__pycache__/',
+  ];
 
-    const files = stdout.trim().split('\n').filter(f => f.length > 0);
+  async copyIgnoredFiles(sourceRepo: string, targetPath: string): Promise<void> {
+    const { stdout } = await this.execFn(
+      'git', ['ls-files', '--others', '--ignored', '--exclude-standard'],
+      { cwd: sourceRepo },
+    );
+
+    const files = stdout.trim().split('\n')
+      .filter(f => f.length > 0)
+      .filter(f => !GitCliAdapter.IGNORED_DIRS.some(dir => f.includes(dir)));
+
     if (files.length === 0) return;
 
-    for (const absolutePath of files) {
-      const relative = absolutePath.slice(sourceRepo.length + 1);
-      await this.execFn('cp', [absolutePath, `${targetPath}/${relative}`]);
+    for (const relative of files) {
+      const destFile = `${targetPath}/${relative}`;
+      const destDir = destFile.slice(0, destFile.lastIndexOf('/'));
+      await this.execFn('mkdir', ['-p', destDir]);
+      await this.execFn('cp', [`${sourceRepo}/${relative}`, destFile]);
     }
 
-    this.logger.debug('Copied env files', { sourceRepo, targetPath, files });
+    this.logger.debug('Copied ignored files', { sourceRepo, targetPath, count: files.length });
   }
 
   private parseRemoteUrl(url: string): { org: string; name: string } {

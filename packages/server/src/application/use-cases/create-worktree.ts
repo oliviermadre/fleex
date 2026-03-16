@@ -28,7 +28,7 @@ export class CreateWorktreeUseCase {
         request.baseBranch,
       );
       this.logger.info('Worktree created', { repoPath, wtPath, branch: request.branch });
-      await this.copyEnvFiles(repoPath, wtPath);
+      await this.copyIgnoredFiles(repoPath, wtPath);
       this.emitCreated(repoPath, wtPath, request);
       return null;
     } catch (err) {
@@ -46,7 +46,7 @@ export class CreateWorktreeUseCase {
             repoPath, wtPath, request.branch, request.createNewBranch, request.baseBranch,
           );
           this.logger.info('Worktree created after pruning stale entry', { repoPath, wtPath });
-          await this.copyEnvFiles(repoPath, wtPath);
+          await this.copyIgnoredFiles(repoPath, wtPath);
           this.emitCreated(repoPath, wtPath, request);
           return null;
         } catch {
@@ -84,7 +84,7 @@ export class CreateWorktreeUseCase {
           request.baseBranch,
         );
         this.logger.info('Worktree replaced', { repoPath, wtPath, branch: request.branch });
-        await this.copyEnvFiles(repoPath, wtPath);
+        await this.copyIgnoredFiles(repoPath, wtPath);
         this.emitCreated(repoPath, wtPath, request);
         return null;
       }
@@ -105,7 +105,7 @@ export class CreateWorktreeUseCase {
             repoPath, wtPath, request.branch, request.createNewBranch, request.baseBranch,
           );
           this.logger.info('Worktree created after repair and prune', { repoPath, wtPath });
-          await this.copyEnvFiles(repoPath, wtPath);
+          await this.copyIgnoredFiles(repoPath, wtPath);
           this.emitCreated(repoPath, wtPath, request);
           return null;
         } catch {
@@ -129,12 +129,12 @@ export class CreateWorktreeUseCase {
     });
   }
 
-  private async copyEnvFiles(repoPath: string, wtPath: string): Promise<void> {
+  private async copyIgnoredFiles(repoPath: string, wtPath: string): Promise<void> {
     try {
-      await this.git.copyEnvFiles(repoPath, wtPath);
-      this.logger.info('Copied env files to worktree', { repoPath, wtPath });
+      await this.git.copyIgnoredFiles(repoPath, wtPath);
+      this.logger.info('Copied ignored files to worktree', { repoPath, wtPath });
     } catch {
-      this.logger.warn('Failed to copy env files to worktree', { repoPath, wtPath });
+      this.logger.warn('Failed to copy ignored files to worktree', { repoPath, wtPath });
     }
   }
 }
