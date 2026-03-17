@@ -1,7 +1,6 @@
 import { useMemo, useCallback, useEffect } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useUIStore } from '../../stores/uiStore';
 import { useWorktreeContext, type WorktreeEntry } from '../../hooks/useWorktreeContext';
 import { TopToolbar } from './TopToolbar';
 import { WorktreeHeader } from './tab-engine/WorktreeHeader';
@@ -47,13 +46,6 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
   const activeSession = activeSessionId
     ? sessions.find((s) => s.id === activeSessionId) ?? null
     : null;
-
-  // Last active tab tracking per worktree
-  const setLastActiveTab = useUIStore((s) => s.setLastActiveTab);
-  useEffect(() => {
-    if (!engine.activeTab || !groupId) return;
-    setLastActiveTab(groupId, engine.activeTab.key);
-  }, [engine.activeTab, groupId, setLastActiveTab]);
 
   // Worktree availability
   const isUnavailable = worktree?.worktreeStatus === 'repo_missing' || worktree?.worktreeStatus === 'unavailable';

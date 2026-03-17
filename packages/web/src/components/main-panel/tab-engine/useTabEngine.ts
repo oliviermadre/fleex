@@ -56,12 +56,13 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
   // — Active tab state —
   const [activeTab, setActiveTabRaw] = useState<TabDescriptor | null>(null);
 
-  // Persist last active tab per worktree
+  // Persist last active tab per worktree (only if tab belongs to current group)
   const setLastActiveTab = useUIStore((s) => s.setLastActiveTab);
   useEffect(() => {
     if (!activeTab || !groupId) return;
+    if (!orderedTabs.some((t) => t.key === activeTab.key)) return;
     setLastActiveTab(groupId, activeTab.key);
-  }, [activeTab, groupId, setLastActiveTab]);
+  }, [activeTab, groupId, setLastActiveTab, orderedTabs]);
 
   // Auto-restore or auto-select when tabs change
   const savedActiveKey = useUIStore((s) => groupId ? s.lastActiveTabByWorktree[groupId] : undefined);
