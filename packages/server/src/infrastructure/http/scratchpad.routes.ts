@@ -8,7 +8,7 @@ const SCRATCHPADS_SUBDIR = 'scratchpads';
 
 const KV_GLOBAL = 'scratchpad:__global__';
 function kvKey(org: string, name: string): string {
-  return `scratchpad:${org}/${name}`;
+  return `scratchpad:${org.toLowerCase()}/${name.toLowerCase()}`;
 }
 
 export function scratchpadRoutes(container: Container) {
@@ -58,6 +58,16 @@ export function scratchpadRoutes(container: Container) {
         if (kvStore) {
           const content = await kvStore.get(kvKey(org, name));
           if (content !== null) return { content };
+          // Lazy migration: check case-variant key (e.g. ODYS-TRAVEL vs odys-travel)
+          const rawKey = `scratchpad:${org}/${name}`;
+          if (rawKey !== kvKey(org, name)) {
+            const rawContent = await kvStore.get(rawKey);
+            if (rawContent) {
+              await kvStore.set(kvKey(org, name), rawContent);
+              await kvStore.delete(rawKey);
+              return { content: rawContent };
+            }
+          }
           // Lazy migration: check filesystem fallback
           const repoFilePath = join(scratchpadsDir, org, `${name}.md`);
           if (await hostFs.exists(repoFilePath)) {
