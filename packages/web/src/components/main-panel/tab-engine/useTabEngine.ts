@@ -212,5 +212,10 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
     }
   }, []);
 
-  return { orderedTabs, activeTab, setActiveTab, drag, closeTab, renameTab };
+  // Always resolve activeTab from orderedTabs so meta stays fresh
+  const resolvedActiveTab = activeTab
+    ? orderedTabs.find((t) => t.key === activeTab.key) ?? activeTab
+    : null;
+
+  return { orderedTabs, activeTab: resolvedActiveTab, setActiveTab, drag, closeTab, renameTab };
 }

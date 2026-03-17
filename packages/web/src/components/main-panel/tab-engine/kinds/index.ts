@@ -9,4 +9,4 @@ import './execution';
 // Re-export builders for convenience
 export { buildShellTab } from './shell';
 export { buildClaudeTab } from './claude';
-export { buildExecutionTab } from './execution';
+export { buildExecutionTab, buildAgentTab } from './execution';

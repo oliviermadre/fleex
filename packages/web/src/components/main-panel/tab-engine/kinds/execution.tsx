@@ -1,6 +1,6 @@
 import type { AgentExecution } from '@fleex/shared';
 import { cn } from '../../../../lib/cn';
-import { AgentEventStream } from '../../AgentEventStream';
+import { AgentExecutionsPanel } from '../../AgentExecutionsPanel';
 import { registerTabKind } from '../registry';
 import type { TabDescriptor, TabIconProps, TabContentProps, TabStatusProps } from '../types';
 
@@ -23,16 +23,17 @@ const STATUS_BG: Record<string, string> = {
 };
 
 function ExecutionStatus({ tab }: TabStatusProps) {
-  const status = tab.meta.executionStatus as string | undefined;
-  const bg = (status && STATUS_BG[status]) || 'bg-[var(--theme-text-faint)]';
+  // Show running status if any execution is running
+  const hasRunning = tab.meta.hasRunning as boolean | undefined;
+  const bg = hasRunning ? STATUS_BG['running'] : STATUS_BG['completed'] ?? 'bg-[var(--theme-text-faint)]';
   return <span className={cn('w-1.5 h-1.5 rounded-full', bg)} />;
 }
 
 // ——— Content ———
 
 function ExecutionContent({ tab }: TabContentProps) {
-  const executionId = tab.meta.executionId as string;
-  return <AgentEventStream executionId={executionId} />;
+  const executions = tab.meta.executions as AgentExecution[];
+  return <AgentExecutionsPanel executions={executions} />;
 }
 
 // ——— Registration ———
@@ -42,11 +43,27 @@ registerTabKind('execution', {
   Content: ExecutionContent,
   StatusIndicator: ExecutionStatus,
   defaultCapabilities: { closable: false, renamable: false, orderable: true },
-  // Executions cannot be closed or renamed — no onClose/onRename needed
 });
 
 // ——— Builder ———
 
+/** Build one tab per agent (persona), containing all its executions. */
+export function buildAgentTab(personaId: string, personaName: string, executions: AgentExecution[]): TabDescriptor {
+  const hasRunning = executions.some((e) => e.status === 'running');
+  return {
+    key: `a:${personaId}`,
+    kind: 'execution',
+    label: `${personaName} (${executions.length})`,
+    capabilities: { closable: false, renamable: false, orderable: true },
+    meta: {
+      personaId,
+      executions,
+      hasRunning,
+    },
+  };
+}
+
+/** @deprecated Use buildAgentTab instead. Kept for backward compatibility. */
 export function buildExecutionTab(execution: AgentExecution): TabDescriptor {
   const time = new Date(execution.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return {

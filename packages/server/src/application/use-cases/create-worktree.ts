@@ -37,11 +37,23 @@ export class CreateWorktreeUseCase {
       const reuseMatch = message.match(/is already used by worktree at '([^']+)'/);
       if (reuseMatch) {
         const existingPath = reuseMatch[1]!;
-        this.logger.info('Branch already checked out, reusing existing worktree', {
+        this.logger.info('Worktree path claimed in use, pruning stale entries', {
           repoPath, existingPath, branch: request.branch,
         });
-        this.emitCreated(repoPath, existingPath, request);
-        return existingPath;
+        try {
+          await this.git.pruneWorktrees(repoPath);
+          await this.git.createWorktree(
+            repoPath, wtPath, request.branch, request.createNewBranch, request.baseBranch,
+          );
+          this.logger.info('Worktree created after pruning stale entry', { repoPath, wtPath });
+          await this.copyEnvFiles(repoPath, wtPath);
+          this.emitCreated(repoPath, wtPath, request);
+          return null;
+        } catch {
+          this.logger.info('Worktree still valid after prune, reusing', { repoPath, existingPath });
+          this.emitCreated(repoPath, existingPath, request);
+          return existingPath;
+        }
       }
       const branchExistsMatch = message.match(/branch named '([^']+)' already exists/i);
       if (branchExistsMatch && request.createNewBranch) {
@@ -58,7 +70,12 @@ export class CreateWorktreeUseCase {
         this.logger.info('Branch already checked out elsewhere, replacing worktree', {
           repoPath, existingPath, wtPath, branch: request.branch,
         });
-        await this.git.removeWorktree(repoPath, existingPath);
+        await this.git.pruneWorktrees(repoPath);
+        try {
+          await this.git.removeWorktree(repoPath, existingPath);
+        } catch {
+          this.logger.warn('Could not remove stale worktree, continuing after prune', { existingPath });
+        }
         await this.git.createWorktree(
           repoPath,
           wtPath,
@@ -74,16 +91,28 @@ export class CreateWorktreeUseCase {
       const dirExistsMatch = message.match(/'([^']+)' already exists/);
       if (dirExistsMatch) {
         const existingPath = dirExistsMatch[1]!;
-        this.logger.info('Worktree directory already exists, repairing and reusing', {
+        this.logger.info('Worktree directory already exists, repairing and pruning', {
           repoPath, existingPath, branch: request.branch,
         });
         try {
           await this.git.repairWorktrees(repoPath);
+          await this.git.pruneWorktrees(repoPath);
         } catch {
-          this.logger.warn('Worktree repair failed, continuing anyway', { repoPath, existingPath });
+          this.logger.warn('Worktree repair/prune failed, continuing anyway', { repoPath, existingPath });
         }
-        this.emitCreated(repoPath, existingPath, request);
-        return existingPath;
+        try {
+          await this.git.createWorktree(
+            repoPath, wtPath, request.branch, request.createNewBranch, request.baseBranch,
+          );
+          this.logger.info('Worktree created after repair and prune', { repoPath, wtPath });
+          await this.copyEnvFiles(repoPath, wtPath);
+          this.emitCreated(repoPath, wtPath, request);
+          return null;
+        } catch {
+          this.logger.info('Worktree directory still valid, reusing', { repoPath, existingPath });
+          this.emitCreated(repoPath, existingPath, request);
+          return existingPath;
+        }
       }
       throw new WorktreeError(`Failed to create worktree: ${message}`);
     }

@@ -207,6 +207,11 @@ export class GitCliAdapter implements GitPort {
     this.logger.debug('Worktree repair completed', { repoPath });
   }
 
+  async pruneWorktrees(repoPath: string): Promise<void> {
+    await this.execFn('git', ['worktree', 'prune'], { cwd: repoPath });
+    this.logger.debug('Worktree prune completed', { repoPath });
+  }
+
   async copyEnvFiles(sourceRepo: string, targetPath: string): Promise<void> {
     const { stdout } = await this.execFn('find', [
       sourceRepo, '-maxdepth', '3', '-name', '.env*', '-type', 'f',

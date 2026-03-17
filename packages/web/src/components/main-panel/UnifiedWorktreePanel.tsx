@@ -1,6 +1,7 @@
 import { useMemo, useCallback, useEffect } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useWorktreeContext, type WorktreeEntry } from '../../hooks/useWorktreeContext';
 import { TopToolbar } from './TopToolbar';
 import { WorktreeHeader } from './tab-engine/WorktreeHeader';
@@ -12,7 +13,7 @@ import * as api from '../../services/api';
 
 // Side-effect: register all tab kinds
 import './tab-engine/kinds';
-import { buildShellTab, buildClaudeTab, buildExecutionTab } from './tab-engine/kinds';
+import { buildShellTab, buildClaudeTab, buildAgentTab } from './tab-engine/kinds';
 
 interface Props {
   entry: WorktreeEntry;
@@ -28,15 +29,30 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
   const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
   const basePath = useSettingsStore((s) => s.settings.basePath);
+  const personas = useAgentPersonaStore((s) => s.personas);
 
-  // Build tab descriptors from sessions + executions
+  // Build tab descriptors from sessions + executions (grouped by agent)
   const allTabs = useMemo<TabDescriptor[]>(() => {
     const sessionTabs = sessions.map((s) =>
       s.type === 'shell' ? buildShellTab(s) : buildClaudeTab(s),
     );
-    const executionTabs = executions.map((e) => buildExecutionTab(e));
-    return [...sessionTabs, ...executionTabs];
-  }, [sessions, executions]);
+
+    // Group executions by personaId → 1 tab per agent
+    const byPersona = new Map<string, typeof executions>();
+    for (const exec of executions) {
+      const list = byPersona.get(exec.personaId);
+      if (list) list.push(exec);
+      else byPersona.set(exec.personaId, [exec]);
+    }
+
+    const agentTabs = Array.from(byPersona.entries()).map(([personaId, execs]) => {
+      const persona = personas.find((p) => p.id === personaId);
+      const name = persona?.displayName || persona?.name || 'Agent';
+      return buildAgentTab(personaId, name, execs);
+    });
+
+    return [...sessionTabs, ...agentTabs];
+  }, [sessions, executions, personas]);
 
   // Tab engine manages ordering, active tab, DnD, keyboard nav
   const engine = useTabEngine(groupId, allTabs);
