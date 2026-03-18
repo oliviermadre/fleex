@@ -1,21 +1,13 @@
 import { memo, useRef, useEffect, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useTerminal } from '../../hooks/useTerminal';
-import { useTerminalStore } from '../../stores/terminalStore';
-import { terminalManager } from '../../services/terminalManager';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { useUIStore } from '../../stores/uiStore';
-import { useSessionStore } from '../../stores/sessionStore';
+import type { TicketDeliverable } from '@fleex/shared';
+import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 
-const MIN_WIDTH = 480;
-const MIN_HEIGHT = 300;
-const DEFAULT_WIDTH = 800;
+const MIN_WIDTH = 400;
+const MIN_HEIGHT = 250;
+const DEFAULT_WIDTH = 650;
 const DEFAULT_HEIGHT = 500;
 
-// Position registry for spatial keyboard navigation between floating overlays
-export const floatingPositionRegistry = new Map<string, { x: number; y: number; width: number; height: number }>();
-
-/** Clamp position so the panel stays fully within the viewport */
 function clampPosition(x: number, y: number, w: number, h: number): { x: number; y: number } {
   return {
     x: Math.max(0, Math.min(x, window.innerWidth - w)),
@@ -23,44 +15,47 @@ function clampPosition(x: number, y: number, w: number, h: number): { x: number;
   };
 }
 
-export const TerminalOverlay = memo(function TerminalOverlay({
-  sessionId,
+function relativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function typeIcon(type: string): string {
+  switch (type) {
+    case 'prd': return 'PRD';
+    case 'spec': return 'SPEC';
+    case 'url': return 'URL';
+    case 'pr': return 'PR';
+    case 'plan': return 'PLAN';
+    default: return type.toUpperCase().slice(0, 4);
+  }
+}
+
+const noopToggle = () => {};
+
+export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
+  deliverable,
   onClose,
-  zIndex = 50,
+  zIndex = 45,
   initialOffset = 0,
   onFocus,
   isFocused = false,
 }: {
-  sessionId: string;
+  deliverable: TicketDeliverable;
   onClose: () => void;
   zIndex?: number;
   initialOffset?: number;
   onFocus?: () => void;
   isFocused?: boolean;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  useTerminal(sessionId, containerRef);
-
-  const sessions = useSessionStore((s) => s.sessions);
-  const session = sessions.find((s) => s.id === sessionId) ?? null;
-
-  const connectionStatus = useTerminalStore(
-    (s) => s.connectionStatus[sessionId] ?? 'disconnected',
-  );
-  const displayName = useSettingsStore(
-    (s) => s.settings.sessionDisplayNames[sessionId],
-  );
-
-  // Focus terminal when overlay opens
-  useEffect(() => {
-    const inst = terminalManager.get(sessionId);
-    if (inst) {
-      setTimeout(() => inst.terminal.focus(), 100);
-    }
-  }, [sessionId]);
-
-  // Drag state
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [size, setSize] = useState({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT });
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
@@ -76,7 +71,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
 
   const effectivePos = position ?? { x: 0, y: 0 };
 
-  // Re-clamp when window resizes (e.g. user shrinks the browser)
+  // Re-clamp on window resize
   useEffect(() => {
     function handleWindowResize() {
       setPosition((prev) => prev ? clampPosition(prev.x, prev.y, size.width, size.height) : prev);
@@ -85,18 +80,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     return () => window.removeEventListener('resize', handleWindowResize);
   }, [size.width, size.height]);
 
-  // Sync position registry for spatial keyboard navigation
-  useEffect(() => {
-    floatingPositionRegistry.set(sessionId, {
-      x: effectivePos.x,
-      y: effectivePos.y,
-      width: size.width,
-      height: size.height,
-    });
-    return () => { floatingPositionRegistry.delete(sessionId); };
-  }, [sessionId, effectivePos.x, effectivePos.y, size.width, size.height]);
-
-  // Title bar drag handlers
+  // Drag handlers
   const handleTitleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -122,7 +106,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     window.addEventListener('mouseup', handleUp);
   }, [effectivePos, size]);
 
-  // Resize handle
+  // Resize handlers
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -138,54 +122,23 @@ export const TerminalOverlay = memo(function TerminalOverlay({
       if (!resizeRef.current.resizing) return;
       const rawW = Math.max(MIN_WIDTH, resizeRef.current.startW + (me.clientX - resizeRef.current.startX));
       const rawH = Math.max(MIN_HEIGHT, resizeRef.current.startH + (me.clientY - resizeRef.current.startY));
-      // Cap size so the panel doesn't extend beyond viewport
       const newW = Math.min(rawW, window.innerWidth);
       const newH = Math.min(rawH, window.innerHeight);
       setSize({ width: newW, height: newH });
-      // Nudge position if resize pushed the panel out of bounds
       setPosition((prev) => prev ? clampPosition(prev.x, prev.y, newW, newH) : prev);
-      terminalManager.resize(sessionId);
     };
     const handleUp = () => {
       resizeRef.current.resizing = false;
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
-      terminalManager.resize(sessionId);
     };
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
-  }, [size, sessionId]);
-
-  if (!session) return null;
-
-  const isRobot = session.type === 'claude';
-  const activity = session.claudeActivity ?? 'idle';
-
-  const activityColorMap: Record<string, string> = {
-    working: '#3b82f6',
-    executing: '#3b82f6',
-    waiting_tool_approval: '#f59e0b',
-    waiting_user_choice: '#f59e0b',
-    waiting_plan_approval: '#f59e0b',
-    idle: '#6b7280',
-    unknown: '#6b7280',
-  };
-  const activityColor = activityColorMap[activity] ?? '#6b7280';
-
-  const statusDotColorMap: Record<string, string> = {
-    connecting: '#f59e0b',
-    connected: '#22c55e',
-    disconnected: '#6b7280',
-  };
-  const statusDotColor = statusDotColorMap[connectionStatus] ?? '#6b7280';
-
-  const cwdDisplay = session.cwd.replace(/^\/Users\/[^/]+/, '~');
+  }, [size]);
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex, pointerEvents: 'none' }}>
-      {/* Floating panel */}
       <div
-        ref={panelRef}
         data-floating-panel
         onMouseDown={onFocus}
         style={{
@@ -196,7 +149,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
           height: size.height,
           display: 'flex',
           flexDirection: 'column',
-          borderRadius: 8,
+          borderRadius: 12,
           overflow: 'hidden',
           pointerEvents: 'auto',
           border: isFocused
@@ -227,16 +180,20 @@ export const TerminalOverlay = memo(function TerminalOverlay({
           }}
           onMouseDown={handleTitleMouseDown}
         >
-          <div
+          <span
             style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              backgroundColor: activityColor,
-              boxShadow: `0 0 4px ${activityColor}`,
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: '0.05em',
+              padding: '1px 6px',
+              borderRadius: 3,
+              backgroundColor: 'var(--theme-accent-muted)',
+              color: 'var(--theme-accent)',
               flexShrink: 0,
             }}
-          />
+          >
+            {typeIcon(deliverable.type)}
+          </span>
 
           <span
             style={{
@@ -248,29 +205,31 @@ export const TerminalOverlay = memo(function TerminalOverlay({
               whiteSpace: 'nowrap',
             }}
           >
-            {session.worktreeBranch
-              ? `${session.repositoryOrg}/${session.repositoryName} \u2192 ${session.worktreeBranch} \u2192 ${session.displayName || displayName || session.tmuxName}`
-              : session.displayName || displayName || session.tmuxName}
+            {deliverable.title}
           </span>
 
-          <div style={{ flex: 1 }} />
-
-          {isRobot && (
+          {deliverable.version > 1 && (
+            <span style={{ fontSize: 10, color: 'var(--theme-text-faint)', flexShrink: 0 }}>
+              v{deliverable.version}
+            </span>
+          )}
+          {deliverable.status === 'draft' && (
             <span
               style={{
-                fontSize: 9,
-                padding: '1px 6px',
-                borderRadius: 3,
-                backgroundColor: `${activityColor}22`,
-                color: activityColor,
-                fontWeight: 600,
-                textTransform: 'uppercase',
+                fontSize: 10,
+                fontWeight: 500,
+                padding: '0 6px',
+                borderRadius: 9999,
+                backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                color: '#facc15',
                 flexShrink: 0,
               }}
             >
-              {activity.replace(/_/g, ' ')}
+              draft
             </span>
           )}
+
+          <div style={{ flex: 1 }} />
 
           <button
             onClick={(e) => { e.stopPropagation(); onClose(); }}
@@ -297,41 +256,19 @@ export const TerminalOverlay = memo(function TerminalOverlay({
               (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-muted)';
               (e.currentTarget as HTMLElement).style.background = 'transparent';
             }}
-            title="Close overlay — session keeps running"
+            title="Close floating deliverable"
           >
             &times;
           </button>
         </div>
 
-        {/* Disconnected bar */}
-        {connectionStatus === 'disconnected' && (
-          <div
-            style={{
-              padding: '6px 12px',
-              background: 'rgba(245, 158, 11, 0.12)',
-              borderBottom: '1px solid rgba(245, 158, 11, 0.25)',
-              color: '#f59e0b',
-              fontSize: 11,
-              fontWeight: 600,
-              textAlign: 'center',
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}
-            onClick={() => {
-              const el = containerRef.current;
-              if (el) terminalManager.attach(sessionId, el);
-            }}
-          >
-            Disconnected — click to reconnect
-          </div>
-        )}
-
-        {/* Terminal area */}
+        {/* Content */}
         <div
-          ref={containerRef}
-          className="xterm-container"
-          style={{ flex: 1, minHeight: 0, background: '#1a1d23' }}
-        />
+          className="deliverable-overlay-content"
+          style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 20px' }}
+        >
+          <MarkdownRenderer content={deliverable.content} onToggleCheckbox={noopToggle} />
+        </div>
 
         {/* Status bar */}
         <div
@@ -348,30 +285,9 @@ export const TerminalOverlay = memo(function TerminalOverlay({
             flexShrink: 0,
           }}
         >
-          <span
-            style={{
-              overflow: 'hidden',
-              textOverflow: 'clip',
-              whiteSpace: 'nowrap',
-            }}
-            title={session.cwd}
-          >
-            {cwdDisplay}
-          </span>
-
-          <div style={{ flex: 1 }} />
-
-          <span
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              backgroundColor: statusDotColor,
-              display: 'inline-block',
-              flexShrink: 0,
-            }}
-          />
-          <span style={{ flexShrink: 0 }}>{connectionStatus}</span>
+          <span style={{ color: '#c084fc' }}>{deliverable.agentName}</span>
+          <span>&middot;</span>
+          <span>{relativeTime(deliverable.createdAt)}</span>
         </div>
 
         {/* Resize handle */}
@@ -394,46 +310,3 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     document.body,
   );
 });
-
-/**
- * Global floating session overlay — renders via portal so it persists across all view switches.
- * Reads `floatingSessionIds` from uiStore and renders one TerminalOverlay per id.
- */
-export function FloatingSessionOverlay() {
-  const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
-  const floatingPanelOrder = useUIStore((s) => s.floatingPanelOrder);
-  const focusedFloatingPanelId = useUIStore((s) => s.focusedFloatingPanelId);
-  const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
-  const bringToFront = useUIStore((s) => s.bringToFront);
-  const clearFloatingPanelFocus = useUIStore((s) => s.clearFloatingPanelFocus);
-
-  // Click-outside detection: clear focus when clicking outside all floating panels
-  useEffect(() => {
-    function handleMouseDown(e: MouseEvent) {
-      const target = e.target as HTMLElement;
-      if (!target.closest('[data-floating-panel]')) {
-        clearFloatingPanelFocus();
-      }
-    }
-    window.addEventListener('mousedown', handleMouseDown);
-    return () => window.removeEventListener('mousedown', handleMouseDown);
-  }, [clearFloatingPanelFocus]);
-
-  if (floatingSessionIds.length === 0) return null;
-
-  return (
-    <>
-      {floatingSessionIds.map((id, index) => (
-        <TerminalOverlay
-          key={id}
-          sessionId={id}
-          onClose={() => removeFloatingSession(id)}
-          zIndex={45 + Math.max(0, floatingPanelOrder.indexOf(id))}
-          initialOffset={index * 30}
-          onFocus={() => bringToFront(id)}
-          isFocused={focusedFloatingPanelId === id}
-        />
-      ))}
-    </>
-  );
-}

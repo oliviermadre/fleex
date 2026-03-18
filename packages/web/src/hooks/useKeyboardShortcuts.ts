@@ -30,7 +30,7 @@ export function useKeyboardShortcuts() {
   const lastActiveTabByWorktree = useUIStore((s) => s.lastActiveTabByWorktree);
   const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
   const setSelectedAgentWorktreeTicketId = useUIStore((s) => s.setSelectedAgentWorktreeTicketId);
-  const focusedFloatingSessionId = useUIStore((s) => s.focusedFloatingSessionId);
+  const focusedFloatingPanelId = useUIStore((s) => s.focusedFloatingPanelId);
   const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
   const bringToFront = useUIStore((s) => s.bringToFront);
   const claudeConfigSaveFile = useClaudeConfigStore((s) => s.saveFile);
@@ -190,8 +190,8 @@ export function useKeyboardShortcuts() {
       }
 
       // Cmd+Shift+Arrow: spatial navigation between floating overlays
-      if (meta && e.shiftKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && focusedFloatingSessionId && floatingSessionIds.length > 1) {
-        const currentRect = floatingPositionRegistry.get(focusedFloatingSessionId);
+      if (meta && e.shiftKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && focusedFloatingPanelId && floatingSessionIds.length > 1) {
+        const currentRect = floatingPositionRegistry.get(focusedFloatingPanelId);
         if (currentRect) {
           const currentCenterX = currentRect.x + currentRect.width / 2;
           const currentCenterY = currentRect.y + currentRect.height / 2;
@@ -201,7 +201,7 @@ export function useKeyboardShortcuts() {
           let bestDist = Infinity;
 
           for (const otherId of floatingSessionIds) {
-            if (otherId === focusedFloatingSessionId) continue;
+            if (otherId === focusedFloatingPanelId) continue;
             const rect = floatingPositionRegistry.get(otherId);
             if (!rect) continue;
 
@@ -321,5 +321,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSessionToGroup, setSessionGroups, focusedFloatingSessionId, floatingSessionIds, bringToFront]);
+  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSessionToGroup, setSessionGroups, focusedFloatingPanelId, floatingSessionIds, bringToFront]);
 }

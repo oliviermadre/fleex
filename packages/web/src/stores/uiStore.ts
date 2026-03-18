@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { TicketDeliverable } from '@fleex/shared';
 
 type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions' | 'agent-tokens';
@@ -72,13 +73,36 @@ interface UIState {
   lastActiveSessionId: string | null;
   setLastActiveSession: (id: string) => void;
 
-  // Floating session overlays (ordered — last = top z-index)
+  // Unified floating panel z-order (sessions + deliverables share one stack)
+  floatingPanelOrder: string[];  // ordered IDs — last = top z-index
+  focusedFloatingPanelId: string | null;
+  bringFloatingPanelToFront: (id: string) => void;
+  clearFloatingPanelFocus: () => void;
+
+  // Floating session overlays
   floatingSessionIds: string[];
-  focusedFloatingSessionId: string | null;
   addFloatingSession: (id: string) => void;
   removeFloatingSession: (id: string) => void;
+  /** @deprecated use bringFloatingPanelToFront */
   bringToFront: (id: string) => void;
+  /** @deprecated use clearFloatingPanelFocus */
   clearFloatingFocus: () => void;
+
+  // Deliverable zen overlay
+  deliverableOverlay: TicketDeliverable | null;
+  openDeliverableOverlay: (d: TicketDeliverable) => void;
+  closeDeliverableOverlay: () => void;
+
+  // Floating deliverables
+  floatingDeliverableIds: string[];
+  floatingDeliverables: Record<string, TicketDeliverable>;
+  addFloatingDeliverable: (d: TicketDeliverable) => void;
+  removeFloatingDeliverable: (id: string) => void;
+  updateFloatingDeliverable: (d: TicketDeliverable) => void;
+  /** @deprecated use bringFloatingPanelToFront */
+  bringDeliverableToFront: (id: string) => void;
+  /** @deprecated use clearFloatingPanelFocus */
+  clearFloatingDeliverableFocus: () => void;
 
   // Agent worktree view (ticket-based)
   selectedAgentWorktreeTicketId: string | null;
@@ -102,8 +126,12 @@ export const useUIStore = create<UIState>((set) => ({
   lastActiveTabByWorktree: {},
   ticketMetaSidebarCollapsed: false,
   lastActiveSessionId: null,
+  floatingPanelOrder: [],
+  focusedFloatingPanelId: null,
   floatingSessionIds: [],
-  focusedFloatingSessionId: null,
+  deliverableOverlay: null,
+  floatingDeliverableIds: [],
+  floatingDeliverables: {},
   selectedAgentWorktreeTicketId: null,
 
   toggleScratchpad: () =>
@@ -167,24 +195,43 @@ export const useUIStore = create<UIState>((set) => ({
 
   setLastActiveSession: (id) => set({ lastActiveSessionId: id }),
 
+  // Unified z-order actions
+  bringFloatingPanelToFront: (id) =>
+    set((state) => ({
+      floatingPanelOrder: [
+        ...state.floatingPanelOrder.filter((pid) => pid !== id),
+        id,
+      ],
+      focusedFloatingPanelId: id,
+    })),
+
+  clearFloatingPanelFocus: () => set({ focusedFloatingPanelId: null }),
+
+  // Session floating actions (also maintain unified order)
   addFloatingSession: (id) =>
     set((state) => ({
       floatingSessionIds: [
         ...state.floatingSessionIds.filter((sid) => sid !== id),
         id,
       ],
-      focusedFloatingSessionId: id,
+      floatingPanelOrder: [
+        ...state.floatingPanelOrder.filter((pid) => pid !== id),
+        id,
+      ],
+      focusedFloatingPanelId: id,
     })),
 
   removeFloatingSession: (id) =>
     set((state) => {
       const remaining = state.floatingSessionIds.filter((sid) => sid !== id);
+      const newOrder = state.floatingPanelOrder.filter((pid) => pid !== id);
       return {
         floatingSessionIds: remaining,
-        focusedFloatingSessionId:
-          state.focusedFloatingSessionId === id
-            ? (remaining.length > 0 ? remaining[remaining.length - 1] : null)
-            : state.focusedFloatingSessionId,
+        floatingPanelOrder: newOrder,
+        focusedFloatingPanelId:
+          state.focusedFloatingPanelId === id
+            ? (newOrder.length > 0 ? newOrder[newOrder.length - 1] : null)
+            : state.focusedFloatingPanelId,
       };
     }),
 
@@ -194,10 +241,69 @@ export const useUIStore = create<UIState>((set) => ({
         ...state.floatingSessionIds.filter((sid) => sid !== id),
         id,
       ],
-      focusedFloatingSessionId: id,
+      floatingPanelOrder: [
+        ...state.floatingPanelOrder.filter((pid) => pid !== id),
+        id,
+      ],
+      focusedFloatingPanelId: id,
     })),
 
-  clearFloatingFocus: () => set({ focusedFloatingSessionId: null }),
+  clearFloatingFocus: () => set({ focusedFloatingPanelId: null }),
+
+  openDeliverableOverlay: (d) => set({ deliverableOverlay: d }),
+  closeDeliverableOverlay: () => set({ deliverableOverlay: null }),
+
+  // Deliverable floating actions (also maintain unified order)
+  addFloatingDeliverable: (d) =>
+    set((state) => ({
+      floatingDeliverableIds: [
+        ...state.floatingDeliverableIds.filter((id) => id !== d.id),
+        d.id,
+      ],
+      floatingDeliverables: { ...state.floatingDeliverables, [d.id]: d },
+      floatingPanelOrder: [
+        ...state.floatingPanelOrder.filter((pid) => pid !== d.id),
+        d.id,
+      ],
+      focusedFloatingPanelId: d.id,
+    })),
+
+  removeFloatingDeliverable: (id) =>
+    set((state) => {
+      const remaining = state.floatingDeliverableIds.filter((sid) => sid !== id);
+      const { [id]: _, ...rest } = state.floatingDeliverables;
+      const newOrder = state.floatingPanelOrder.filter((pid) => pid !== id);
+      return {
+        floatingDeliverableIds: remaining,
+        floatingDeliverables: rest,
+        floatingPanelOrder: newOrder,
+        focusedFloatingPanelId:
+          state.focusedFloatingPanelId === id
+            ? (newOrder.length > 0 ? newOrder[newOrder.length - 1] : null)
+            : state.focusedFloatingPanelId,
+      };
+    }),
+
+  updateFloatingDeliverable: (d) =>
+    set((state) => {
+      if (!state.floatingDeliverables[d.id]) return state;
+      return { floatingDeliverables: { ...state.floatingDeliverables, [d.id]: d } };
+    }),
+
+  bringDeliverableToFront: (id) =>
+    set((state) => ({
+      floatingDeliverableIds: [
+        ...state.floatingDeliverableIds.filter((sid) => sid !== id),
+        id,
+      ],
+      floatingPanelOrder: [
+        ...state.floatingPanelOrder.filter((pid) => pid !== id),
+        id,
+      ],
+      focusedFloatingPanelId: id,
+    })),
+
+  clearFloatingDeliverableFocus: () => set({ focusedFloatingPanelId: null }),
 
   setSelectedAgentWorktreeTicketId: (id) => set({ selectedAgentWorktreeTicketId: id }),
 }));

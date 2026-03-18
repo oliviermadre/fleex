@@ -17,6 +17,7 @@ import { ResizeHandle } from './ResizeHandle';
 import { ScratchpadPanel } from '../scratchpad/ScratchpadPanel';
 import { ScratchpadHint } from '../scratchpad/ScratchpadHint';
 import { FloatingSessionOverlay } from '../main-panel/FloatingSessionOverlay';
+import { FloatingDeliverableOverlay } from '../tickets/FloatingDeliverableOverlay';
 
 const NAV_COLLAPSED_WIDTH = 55;
 const NAV_EXPANDED_WIDTH = 200;
@@ -73,6 +74,7 @@ export function AppLayout() {
       <ScratchpadPanel />
       <ScratchpadHint />
       <FloatingSessionOverlay />
+      <FloatingDeliverableOverlay />
     </div>
   );
 }
