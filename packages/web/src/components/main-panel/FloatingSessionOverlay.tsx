@@ -52,12 +52,16 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     (s) => s.settings.sessionDisplayNames[sessionId],
   );
 
-  // Focus terminal when overlay opens
+  // Enable floating mode (transparent bg, no WebGL) and focus terminal
   useEffect(() => {
+    terminalManager.setFloatingMode(sessionId, true);
     const inst = terminalManager.get(sessionId);
     if (inst) {
       setTimeout(() => inst.terminal.focus(), 100);
     }
+    return () => {
+      terminalManager.setFloatingMode(sessionId, false);
+    };
   }, [sessionId]);
 
   // Drag state
@@ -330,7 +334,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
         <div
           ref={containerRef}
           className="xterm-container"
-          style={{ flex: 1, minHeight: 0, background: '#1a1d23' }}
+          style={{ flex: 1, minHeight: 0 }}
         />
 
         {/* Status bar */}

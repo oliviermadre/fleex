@@ -15,6 +15,8 @@ interface TerminalInstance {
   serializedBuffer: string | null;
   sessionId: string;
   lastActiveAt: number;
+  webglAddon: import('@xterm/addon-webgl').WebglAddon | null;
+  isFloating: boolean;
 }
 
 class TerminalManager {
@@ -31,6 +33,7 @@ class TerminalManager {
       fontSize: TERMINAL_FONT_SIZE,
       scrollback: TERMINAL_SCROLLBACK,
       cursorBlink: true,
+      allowTransparency: true,
       allowProposedApi: true,
       macOptionClickForcesSelection: true,
     });
@@ -81,7 +84,7 @@ class TerminalManager {
       return true;
     });
 
-    this.terminals.set(sessionId, {
+    const instance: TerminalInstance = {
       terminal,
       fitAddon,
       serializeAddon,
@@ -89,9 +92,12 @@ class TerminalManager {
       serializedBuffer: null,
       sessionId,
       lastActiveAt: Date.now(),
-    });
+      webglAddon: null,
+      isFloating: false,
+    };
+    this.terminals.set(sessionId, instance);
 
-    this.loadWebGL(terminal);
+    this.loadWebGL(instance);
 
     return terminal;
   }
@@ -189,14 +195,52 @@ class TerminalManager {
     }
   }
 
-  private async loadWebGL(terminal: Terminal): Promise<void> {
+  /**
+   * Toggle floating mode: dispose WebGL and use transparent background,
+   * or restore WebGL with opaque background.
+   */
+  setFloatingMode(sessionId: string, floating: boolean): void {
+    const instance = this.terminals.get(sessionId);
+    if (!instance || instance.isFloating === floating) return;
+    instance.isFloating = floating;
+
+    if (floating) {
+      // Dispose WebGL so the canvas renderer respects allowTransparency
+      if (instance.webglAddon) {
+        try { instance.webglAddon.dispose(); } catch { /* ignore */ }
+        instance.webglAddon = null;
+      }
+      // Set transparent background
+      instance.terminal.options.theme = {
+        ...instance.terminal.options.theme,
+        background: '#00000000',
+      };
+    } else {
+      // Restore opaque background
+      instance.terminal.options.theme = {
+        ...instance.terminal.options.theme,
+        background: this.currentTerminalTheme.background,
+      };
+      // Reload WebGL
+      this.loadWebGL(instance);
+    }
+
+    // Re-fit after renderer change
+    try { instance.fitAddon.fit(); } catch { /* ignore */ }
+  }
+
+  private async loadWebGL(instance: TerminalInstance): Promise<void> {
+    // Don't load WebGL in floating mode (canvas renderer needed for transparency)
+    if (instance.isFloating) return;
     try {
       const { WebglAddon } = await import('@xterm/addon-webgl');
       const webgl = new WebglAddon();
       webgl.onContextLoss(() => {
         webgl.dispose();
+        instance.webglAddon = null;
       });
-      terminal.loadAddon(webgl);
+      instance.terminal.loadAddon(webgl);
+      instance.webglAddon = webgl;
     } catch {
       // WebGL not available, fallback to canvas renderer
     }

@@ -49,6 +49,11 @@ html, body {
   padding: 4px 8px;
 }
 
+/* Let liquid glass show through floating terminal overlays */
+[data-floating-panel] .xterm-viewport {
+  background-color: transparent !important;
+}
+
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
