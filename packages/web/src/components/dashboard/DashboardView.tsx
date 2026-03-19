@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import type {
   Ticket,
   TicketStatus,
+  TicketPriority,
   Session,
+  BoardWithCounts,
   DashboardData,
   DashboardPullRequest,
   DashboardWorktree,
   DashboardGitHubIssue,
 } from '@fleex/shared';
+import { TICKET_PRIORITIES } from '@fleex/shared';
 import { fetchDashboard, fetchBoards, importGitHubIssue, openSessionFromTicket, createWorktree, createSession, executeSkill } from '../../services/api';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -17,6 +21,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { cn } from '../../lib/cn';
 import { SmartSessionButton } from './SmartSessionButton';
 import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
+import { PriorityIndicator } from '../tickets/PriorityIndicator';
 import { findSessionsForTicket, findSessionsForPR, hasLocalWorktreeForPR } from './dashboard-helpers';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1052,6 +1057,235 @@ function PRSection({
   );
 }
 
+// ── Dashboard Filter Types ───────────────────────────────────────────────────
+
+interface DashboardFilters {
+  boardId: string | null;
+  priority: TicketPriority | null;
+  hasPR: boolean | null;
+  blocked: boolean | null;
+}
+
+const EMPTY_FILTERS: DashboardFilters = { boardId: null, priority: null, hasPR: null, blocked: null };
+
+// ── Dashboard Filter Popover ─────────────────────────────────────────────────
+
+function DashboardFilterPopover({
+  filters,
+  setFilters,
+  boards,
+  allTickets,
+  pullRequests,
+}: {
+  filters: DashboardFilters;
+  setFilters: React.Dispatch<React.SetStateAction<DashboardFilters>>;
+  boards: BoardWithCounts[];
+  allTickets: Ticket[];
+  pullRequests: DashboardPullRequest[];
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const activeCount =
+    (filters.boardId ? 1 : 0) +
+    (filters.priority ? 1 : 0) +
+    (filters.hasPR !== null ? 1 : 0) +
+    (filters.blocked !== null ? 1 : 0);
+
+  // Derive which boards actually have active tickets
+  const boardOptions = useMemo(() => {
+    const ids = new Set(allTickets.map((t) => t.boardId));
+    return boards.filter((b) => ids.has(b.id));
+  }, [allTickets, boards]);
+
+  // Check if any ticket has a matching PR
+  const hasPRData = useMemo(() => {
+    return allTickets.some((t) => {
+      const wtLink = t.links.find((l) => l.type === 'worktree');
+      if (!wtLink) return false;
+      const [orgName, branch] = wtLink.ref.split(':');
+      if (!orgName || !branch) return false;
+      const [org, name] = orgName.split('/');
+      return pullRequests.some((pr) => pr.org === org && pr.name === name && pr.headRefName === branch);
+    });
+  }, [allTickets, pullRequests]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleMouseDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  const rect = buttonRef.current?.getBoundingClientRect();
+  const update = (partial: Partial<DashboardFilters>) => setFilters((prev) => ({ ...prev, ...partial }));
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        className={cn(
+          'relative flex h-8 w-8 items-center justify-center rounded-md transition-colors',
+          activeCount > 0
+            ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'
+            : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
+          open && 'bg-[var(--theme-bg-hover)]',
+        )}
+        onClick={() => setOpen(!open)}
+        title="Filter tickets"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="1 1 15 1 9 8 9 13 7 15 7 8 1 1" />
+        </svg>
+        {activeCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--theme-accent)] text-[9px] font-bold text-white">
+            {activeCount}
+          </span>
+        )}
+      </button>
+
+      {open && rect && createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-50 w-[260px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4 shadow-xl"
+          style={{ right: window.innerWidth - rect.right, top: rect.bottom + 4 }}
+        >
+          {/* Header */}
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Filters</span>
+            {activeCount > 0 && (
+              <button
+                className="text-xs text-[var(--theme-accent)] transition-colors hover:underline"
+                onClick={() => setFilters(EMPTY_FILTERS)}
+              >
+                Clear all ({activeCount})
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3.5">
+            {/* Board */}
+            {boardOptions.length > 1 && (
+              <div>
+                <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Board</label>
+                <select
+                  className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+                  value={filters.boardId ?? ''}
+                  onChange={(e) => update({ boardId: e.target.value || null })}
+                >
+                  <option value="">All boards</option>
+                  {boardOptions.map((b) => (
+                    <option key={b.id} value={b.id}>{b.emoji} {b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Priority */}
+            <div>
+              <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Priority</label>
+              <div className="flex flex-wrap gap-1">
+                <button
+                  className={cn(
+                    'rounded px-2 py-1 text-[11px] transition-colors',
+                    !filters.priority
+                      ? 'bg-[var(--theme-accent)] text-white'
+                      : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                  )}
+                  onClick={() => update({ priority: null })}
+                >
+                  All
+                </button>
+                {(TICKET_PRIORITIES as readonly TicketPriority[]).map((p) => (
+                  <button
+                    key={p}
+                    className={cn(
+                      'flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors',
+                      filters.priority === p
+                        ? 'bg-[var(--theme-accent)] text-white'
+                        : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                    )}
+                    onClick={() => update({ priority: p })}
+                  >
+                    <PriorityIndicator priority={p} />
+                    {p === 'none' ? 'None' : p.charAt(0).toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Has PR */}
+            {hasPRData && (
+              <div>
+                <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Pull Request</label>
+                <div className="flex gap-1">
+                  {([
+                    { label: 'All', value: null },
+                    { label: 'Has PR', value: true },
+                    { label: 'No PR', value: false },
+                  ] as const).map((opt) => (
+                    <button
+                      key={String(opt.value)}
+                      className={cn(
+                        'rounded px-2 py-1 text-[11px] transition-colors',
+                        filters.hasPR === opt.value
+                          ? 'bg-[var(--theme-accent)] text-white'
+                          : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                      )}
+                      onClick={() => update({ hasPR: opt.value })}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Blocked */}
+            <div>
+              <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Blocked</label>
+              <div className="flex gap-1">
+                {([
+                  { label: 'All', value: null },
+                  { label: 'Blocked', value: true },
+                  { label: 'Not blocked', value: false },
+                ] as const).map((opt) => (
+                  <button
+                    key={String(opt.value)}
+                    className={cn(
+                      'rounded px-2 py-1 text-[11px] transition-colors',
+                      filters.blocked === opt.value
+                        ? 'bg-[var(--theme-accent)] text-white'
+                        : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                    )}
+                    onClick={() => update({ blocked: opt.value })}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export function DashboardView() {
@@ -1062,6 +1296,8 @@ export function DashboardView() {
   const [creatingSession, setCreatingSession] = useState<string | null>(null);
   const [importingIssue, setImportingIssue] = useState<string | null>(null);
   const [creatingPRSession, setCreatingPRSession] = useState<string | null>(null);
+  const [dashFilters, setDashFilters] = useState<DashboardFilters>(EMPTY_FILTERS);
+  const [dashSearch, setDashSearch] = useState('');
 
   // Live data from stores
   const humanDisplayName = useSettingsStore((s) => s.settings.humanDisplayName);
@@ -1086,6 +1322,10 @@ export function DashboardView() {
     try {
       const result = await fetchDashboard();
       setData(result);
+      // Seed ticket store so inline updates (priority, blocked) are reflected live
+      if (useTicketStore.getState().tickets.length === 0 && result.activeTickets.length > 0) {
+        useTicketStore.setState({ tickets: result.activeTickets });
+      }
     } catch {
       // toast handled by api layer
     } finally {
@@ -1098,8 +1338,15 @@ export function DashboardView() {
     load();
   }, [load]);
 
-  // Use store tickets when available (live), fall back to dashboard data
-  const allTickets = storeTickets.length > 0 ? storeTickets : (data?.activeTickets ?? []);
+  // Merge live store updates on top of dashboard data (which contains all boards).
+  // The store may only have a subset (current board), so we use dashboard as base.
+  const allTickets = useMemo(() => {
+    const base = data?.activeTickets ?? [];
+    if (storeTickets.length === 0) return base;
+    // Build a map of store tickets for O(1) lookup
+    const storeMap = new Map(storeTickets.map((t) => [t.id, t]));
+    return base.map((t) => storeMap.get(t.id) ?? t);
+  }, [data?.activeTickets, storeTickets]);
 
   const handleCreateSession = useCallback(async (ticketId: string) => {
     if (creatingSession) return;
@@ -1201,16 +1448,48 @@ export function DashboardView() {
     }
   }, [creatingPRSession, data?.activeWorktrees, selectSession, setActivePanel]);
 
+  // Active tickets with dashboard filters applied
+  const ACTIVE_STATUSES: TicketStatus[] = ['todo', 'doing', 'reviewing'];
+  const activeTickets = useMemo(() => {
+    let filtered = allTickets.filter((t) => ACTIVE_STATUSES.includes(t.status));
+    if (dashFilters.boardId) {
+      filtered = filtered.filter((t) => t.boardId === dashFilters.boardId);
+    }
+    if (dashFilters.priority) {
+      filtered = filtered.filter((t) => t.priority === dashFilters.priority);
+    }
+    if (dashFilters.hasPR !== null) {
+      const prs = [...(data?.myPullRequests ?? []), ...(data?.reviewRequests ?? [])];
+      filtered = filtered.filter((t) => {
+        const wtLink = t.links.find((l) => l.type === 'worktree');
+        if (!wtLink) return !dashFilters.hasPR;
+        const [orgName, branch] = wtLink.ref.split(':');
+        if (!orgName || !branch) return !dashFilters.hasPR;
+        const [org, name] = orgName.split('/');
+        const has = prs.some((pr) => pr.org === org && pr.name === name && pr.headRefName === branch);
+        return dashFilters.hasPR ? has : !has;
+      });
+    }
+    if (dashFilters.blocked !== null) {
+      filtered = filtered.filter((t) => t.blocked === dashFilters.blocked);
+    }
+    if (dashSearch) {
+      const q = dashSearch.toLowerCase();
+      filtered = filtered.filter((t) => t.title.toLowerCase().includes(q));
+    }
+    return filtered;
+  }, [allTickets, dashFilters, dashSearch, data?.myPullRequests, data?.reviewRequests]);
+
   // Group tickets by status
   const ticketsByStatus = data
     ? STATUS_ORDER.reduce<Record<string, Ticket[]>>((acc, status) => {
-        const filtered = data.activeTickets.filter((t: Ticket) => t.status === status);
+        const filtered = activeTickets.filter((t: Ticket) => t.status === status);
         if (filtered.length > 0) acc[status] = filtered;
         return acc;
       }, {})
     : {};
 
-  const totalActiveTickets = data?.activeTickets.length ?? 0;
+  const totalActiveTickets = activeTickets.length;
   const unimportedIssues = data?.assignedIssues.filter((i: DashboardGitHubIssue) => !i.hasLocalTicket) ?? [];
   const importedIssues = data?.assignedIssues.filter((i: DashboardGitHubIssue) => i.hasLocalTicket) ?? [];
   const totalIssues = data?.assignedIssues.length ?? 0;
@@ -1286,6 +1565,30 @@ export function DashboardView() {
                   dotColor="#f59e0b"
                   title="Mon travail"
                   count={totalActiveTickets}
+                  toolbar={
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative">
+                        <svg className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)]" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="7" cy="7" r="5" />
+                          <line x1="11" y1="11" x2="14" y2="14" />
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Rechercher..."
+                          value={dashSearch}
+                          onChange={(e) => setDashSearch(e.target.value)}
+                          className="h-7 w-36 rounded-md border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] pl-7 pr-2 text-[11px] text-[var(--theme-text-primary)] placeholder-[var(--theme-text-faint)] transition-colors focus:border-[var(--theme-accent)] focus:outline-none"
+                        />
+                      </div>
+                      <DashboardFilterPopover
+                        filters={dashFilters}
+                        setFilters={setDashFilters}
+                        boards={boards}
+                        allTickets={allTickets}
+                        pullRequests={[...(data?.myPullRequests ?? []), ...(data?.reviewRequests ?? [])]}
+                      />
+                    </div>
+                  }
                 />
                 {totalActiveTickets === 0 ? (
                   <EmptyState
