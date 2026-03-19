@@ -7,6 +7,7 @@ import { DataTable, type Column } from '../ui/DataTable';
 import { DiffStatsBadge } from '../ui/DiffStatsBadge';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
+import { notifyHookStarted } from '../../lib/hookResultToast';
 
 interface Props {
   org: string;
@@ -61,12 +62,13 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
       if (existingWt) {
         cwd = existingWt.path;
       } else {
-        const { path } = await api.createWorktree(org, name, {
+        const result = await api.createWorktree(org, name, {
           branch: pr.headRefName,
           createNewBranch: false,
           prNumber: pr.number,
         });
-        cwd = path;
+        cwd = result.path;
+        notifyHookStarted(result.hookStarted);
       }
       const session = await api.createSession({ type, cwd });
       selectSession(session.id);

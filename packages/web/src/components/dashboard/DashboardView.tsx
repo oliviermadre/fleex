@@ -22,6 +22,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
+import { notifyHookStarted } from '../../lib/hookResultToast';
 import { SmartSessionButton } from './SmartSessionButton';
 import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
 import { PriorityIndicator } from '../tickets/PriorityIndicator';
@@ -1459,12 +1460,13 @@ export function DashboardView() {
       if (existingWt) {
         cwd = existingWt.path;
       } else {
-        const { path } = await createWorktree(pr.org, pr.name, {
+        const result = await createWorktree(pr.org, pr.name, {
           branch: pr.headRefName,
           createNewBranch: false,
           prNumber: pr.number,
         });
-        cwd = path;
+        cwd = result.path;
+        notifyHookStarted(result.hookStarted);
       }
       const session = await createSession({ type: 'claude', cwd });
       selectSession(session.id);

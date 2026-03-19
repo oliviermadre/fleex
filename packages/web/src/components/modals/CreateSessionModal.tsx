@@ -16,6 +16,7 @@ import * as api from '../../services/api';
 import type { CheckCwdResult } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { formatAge } from '../../lib/formatAge';
+import { notifyHookStarted } from '../../lib/hookResultToast';
 
 type WorktreeMode = 'main' | 'existing' | 'pr' | 'issue' | 'new';
 
@@ -428,6 +429,7 @@ export function CreateSessionModal() {
             prNumber: pr.number,
           });
           cwd = result.path;
+          notifyHookStarted(result.hookStarted);
           break;
         }
         case 'issue': {
@@ -446,6 +448,7 @@ export function CreateSessionModal() {
             issueNumber: issue.number,
           });
           cwd = result.path;
+          notifyHookStarted(result.hookStarted);
           break;
         }
         case 'new': {
@@ -454,6 +457,7 @@ export function CreateSessionModal() {
             createNewBranch: true,
           });
           cwd = result.path;
+          notifyHookStarted(result.hookStarted);
           break;
         }
       }

@@ -1,4 +1,4 @@
-import type { MentionTargetType } from '@fleex/shared';
+import type { MentionTargetType, HookResult } from '@fleex/shared';
 
 // ── Base ──
 
@@ -230,6 +230,7 @@ export interface WorktreeCreatedEvent extends DomainEvent {
   worktreePath: string;
   branch: string;
   isNewBranch: boolean;
+  hookResult?: HookResult;
 }
 
 // ── Session events ──

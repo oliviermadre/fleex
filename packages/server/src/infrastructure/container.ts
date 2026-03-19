@@ -214,8 +214,10 @@ export async function createContainer() {
     return domainEventLogStore.save(entry);
   });
 
-  // Wire eventBus (avoids circular constructor dep)
+  // Wire eventBus + config (avoids circular constructor dep)
   createWorktreeUC.eventBus = eventBus;
+  createWorktreeUC.configPort = config;
+  createWorktreeUC.execFn = execFn;
   executeAgent.eventBus = eventBus;
   runPanel.eventBus = eventBus;
 

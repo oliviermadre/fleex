@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { WorktreeGroup } from './WorktreeGroup';
 import { GitHubIcon } from './icons';
 import { cn } from '../../lib/cn';
+import { RepoConfigPanel } from '../repository-dashboard/RepoConfigPanel';
 
 export type FlowType = 'manual' | 'agentic';
 
@@ -23,6 +24,7 @@ export function RepositoryGroup({ group, flowType }: Props) {
   const wtOrder = useSettingsStore((s) => s.settings.worktreeOrder[groupId]);
   const setWorktreeOrder = useSettingsStore((s) => s.setWorktreeOrder);
 
+  const [configOpen, setConfigOpen] = useState(false);
   const [dragOverBranch, setDragOverBranch] = useState<string | null>(null);
   const [dropEdge, setDropEdge] = useState<'top' | 'bottom'>('bottom');
   const draggedBranchRef = useRef<string | null>(null);
@@ -121,6 +123,20 @@ export function RepositoryGroup({ group, flowType }: Props) {
             className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] p-0.5 rounded hover:bg-white/[0.08] transition-colors"
             onClick={(e) => {
               e.stopPropagation();
+              setConfigOpen(true);
+            }}
+            title="Configure repository"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="8" cy="8" r="2.5" />
+              <path d="M6.5 1.5h3l.4 1.8a5.5 5.5 0 011.3.7l1.7-.6 1.5 2.6-1.3 1.2a5.5 5.5 0 010 1.6l1.3 1.2-1.5 2.6-1.7-.6a5.5 5.5 0 01-1.3.7l-.4 1.8h-3l-.4-1.8a5.5 5.5 0 01-1.3-.7l-1.7.6-1.5-2.6 1.3-1.2a5.5 5.5 0 010-1.6L1.6 6l1.5-2.6 1.7.6a5.5 5.5 0 011.3-.7l.4-1.8z" />
+            </svg>
+          </span>
+          <span
+            role="button"
+            className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] p-0.5 rounded hover:bg-white/[0.08] transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
               openScratchpadForRepo(groupId);
             }}
             title="Open scratchpad"
@@ -170,6 +186,12 @@ export function RepositoryGroup({ group, flowType }: Props) {
             </div>
           );
         })}
+      <RepoConfigPanel
+        org={group.repositoryOrg}
+        name={group.repositoryName}
+        open={configOpen}
+        onClose={() => setConfigOpen(false)}
+      />
     </div>
   );
 }

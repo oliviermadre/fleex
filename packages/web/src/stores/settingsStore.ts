@@ -22,6 +22,11 @@ export interface WorktreeAction {
   actionValue: string;
 }
 
+export interface RepoConfig {
+  postCheckoutHook?: string; // multiline shell script, empty = disabled
+  hookTimeoutSeconds?: number; // default 60
+}
+
 export type SessionLayoutType = '1x2' | '2x2';
 
 export interface SessionLayoutGroup {
@@ -46,6 +51,7 @@ export interface AppSettings {
   sessionLayoutGroups: SessionLayoutGroup[];
   agentMaxConcurrency: number;
   humanDisplayName: string;
+  repoConfigs: Record<string, RepoConfig>; // key = "org/name"
 }
 
 interface SettingsState {
@@ -65,6 +71,8 @@ interface SettingsState {
   addLayoutGroup: (type: SessionLayoutType) => string;
   removeLayoutGroup: (id: string) => void;
   bindLayoutGroupCell: (groupId: string, cellIndex: number, sessionId: string | null) => void;
+  getRepoConfig: (org: string, name: string) => RepoConfig;
+  setRepoConfig: (org: string, name: string, config: RepoConfig) => void;
 }
 
 const STORAGE_KEY = 'fleex-settings';
@@ -85,6 +93,7 @@ const defaultSettings: AppSettings = {
   sessionLayoutGroups: [],
   agentMaxConcurrency: 1,
   humanDisplayName: '',
+  repoConfigs: {},
 };
 
 function loadFromStorage(): AppSettings {
@@ -310,6 +319,25 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return { ...g, cells };
     });
     const updated = { ...current, sessionLayoutGroups };
+    set({ settings: updated });
+    saveToStorage(updated);
+    fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => { /* ignore */ });
+  },
+
+  getRepoConfig: (org, name) => {
+    const key = `${org}/${name}`;
+    return get().settings.repoConfigs[key] ?? {};
+  },
+
+  setRepoConfig: (org, name, config) => {
+    const key = `${org}/${name}`;
+    const current = get().settings;
+    const repoConfigs = { ...current.repoConfigs, [key]: config };
+    const updated = { ...current, repoConfigs };
     set({ settings: updated });
     saveToStorage(updated);
     fetch(`${API_URL}/config`, {

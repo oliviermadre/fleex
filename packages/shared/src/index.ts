@@ -22,6 +22,8 @@ export type {
   Worktree,
   GitRemoteInfo,
   CreateWorktreeRequest,
+  HookResult,
+  CreateWorktreeResponse,
   PullRequest,
   DiffStats,
   GitHubIssue,

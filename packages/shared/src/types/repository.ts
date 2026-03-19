@@ -30,6 +30,19 @@ export interface CreateWorktreeRequest {
   readonly issueNumber?: number;
 }
 
+export interface HookResult {
+  readonly ran: boolean;
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly durationMs: number;
+}
+
+export interface CreateWorktreeResponse {
+  readonly path: string;
+  readonly hookStarted?: boolean;
+}
+
 export interface PullRequest {
   readonly number: number;
   readonly title: string;
