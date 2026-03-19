@@ -362,9 +362,12 @@ function TicketCard({
   const statusDot = STATUS_DOT[ticket.status];
 
   return (
-    <button
-      className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150 hover:bg-[var(--theme-bg-hover)]"
+    <div
+      role="button"
+      tabIndex={0}
+      className="group flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150 hover:bg-[var(--theme-bg-hover)]"
       onClick={() => onNavigate(ticket)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate(ticket); } }}
     >
       {/* Priority picker + blocked lock */}
       <div className="flex flex-shrink-0 flex-col items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -499,7 +502,7 @@ function TicketCard({
           onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
         />
       </span>
-    </button>
+    </div>
   );
 }
 
