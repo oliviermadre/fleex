@@ -102,6 +102,7 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
     const handler = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
       if (!meta || !e.shiftKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+      if (useUIStore.getState().focusedFloatingPanelId) return;
       if (orderedTabs.length <= 1 || !activeTab) return;
       e.preventDefault();
       const idx = orderedTabs.findIndex((t) => t.key === activeTab.key);
