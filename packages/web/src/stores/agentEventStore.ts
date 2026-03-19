@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AgentExecution, AgentEvent } from '@fleex/shared';
 import * as api from '../services/api';
-import { agentEventWs } from '../services/websocket';
+import { appWs } from '../services/websocket';
 
 const subscribedExecutionIds = new Set<string>();
 const subscribedTicketIds = new Set<string>();
@@ -75,33 +75,33 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
   subscribeExecution: (executionId) => {
     if (subscribedExecutionIds.has(executionId)) return;
     subscribedExecutionIds.add(executionId);
-    agentEventWs.sendJson({ action: 'subscribe', executionId });
+    appWs.sendChannel('agent-events',{ action: 'subscribe', executionId });
   },
 
   unsubscribeExecution: (executionId) => {
     if (!subscribedExecutionIds.has(executionId)) return;
     subscribedExecutionIds.delete(executionId);
-    agentEventWs.sendJson({ action: 'unsubscribe', executionId });
+    appWs.sendChannel('agent-events',{ action: 'unsubscribe', executionId });
   },
 
   subscribeTicket: (ticketId) => {
     if (subscribedTicketIds.has(ticketId)) return;
     subscribedTicketIds.add(ticketId);
-    agentEventWs.sendJson({ action: 'subscribe', ticketId });
+    appWs.sendChannel('agent-events',{ action: 'subscribe', ticketId });
   },
 
   unsubscribeTicket: (ticketId) => {
     if (!subscribedTicketIds.has(ticketId)) return;
     subscribedTicketIds.delete(ticketId);
-    agentEventWs.sendJson({ action: 'unsubscribe', ticketId });
+    appWs.sendChannel('agent-events',{ action: 'unsubscribe', ticketId });
   },
 
   resubscribeAll: () => {
     for (const executionId of subscribedExecutionIds) {
-      agentEventWs.sendJson({ action: 'subscribe', executionId });
+      appWs.sendChannel('agent-events',{ action: 'subscribe', executionId });
     }
     for (const ticketId of subscribedTicketIds) {
-      agentEventWs.sendJson({ action: 'subscribe', ticketId });
+      appWs.sendChannel('agent-events',{ action: 'subscribe', ticketId });
     }
   },
 
@@ -176,7 +176,7 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
       // Auto-subscribe to new executions so the events tab updates live
       if (event.eventType === 'execution_start' && !subscribedExecutionIds.has(event.executionId)) {
         subscribedExecutionIds.add(event.executionId);
-        agentEventWs.sendJson({ action: 'subscribe', executionId: event.executionId });
+        appWs.sendChannel('agent-events',{ action: 'subscribe', executionId: event.executionId });
       }
     }
   },

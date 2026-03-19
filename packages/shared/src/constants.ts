@@ -5,7 +5,14 @@ export const FLEEX_CLAUDE_PREFIX = 'fleex_claude_';
 export const DEFAULT_COLS = 120;
 export const DEFAULT_ROWS = 30;
 
+export const WS_PATH = '/ws';
+
+// Channels multiplexed over the single WS connection
+export type WsChannel = 'dashboard' | 'repositories' | 'tickets' | 'personas' | 'skills' | 'agent-events';
+
+/** @deprecated Use WS_PATH — terminal is now multiplexed as binary frames */
 export const WS_TERMINAL_PATH = '/ws/terminal';
+/** @deprecated Use WS_PATH */
 export const WS_DASHBOARD_PATH = '/ws/dashboard';
 
 export const API_BASE = '/api';
@@ -16,7 +23,11 @@ export const STALE_TERMINAL_EVICTION_MS = 10 * 60 * 1000; // 10 minutes
 
 export const WS_RECONNECT_INITIAL_MS = 1000;
 export const WS_RECONNECT_MAX_MS = 30000;
-export const WS_RECONNECT_MAX_ATTEMPTS = 10;
+export const WS_RECONNECT_MAX_ATTEMPTS = Infinity;
+
+export const WS_PING_INTERVAL_MS = 25_000;
+export const WS_STALENESS_CHECK_INTERVAL_MS = 35_000;
+export const WS_STALENESS_TIMEOUT_MS = 45_000;
 
 export const SESSION_HASH_LENGTH = 8;
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Session, TicketComment, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
-import { ticketWs } from '../../services/websocket';
+import { appWs } from '../../services/websocket';
 import { useTicketStore, type TicketTab } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -60,10 +60,9 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
 
   // Track deliverable & mention counts via WebSocket
   useEffect(() => {
-    const decoder = new TextDecoder();
-    const unsub = ticketWs.onMessage((buf: ArrayBuffer) => {
+    const unsub = appWs.onChannel('tickets', (raw) => {
       try {
-        const msg = JSON.parse(decoder.decode(buf)) as TicketWsMessage;
+        const msg = raw as TicketWsMessage;
         if (msg.type === 'comment:created') {
           const c = msg.data as TicketComment;
           if (c.ticketId === ticketId) setCommentCount((n) => n + 1);

@@ -4,7 +4,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import type { Components } from 'react-markdown';
-import { ticketWs } from '../../services/websocket';
+import { appWs } from '../../services/websocket';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -419,10 +419,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const mentionLookup = useMemo(() => buildMentionLookup(mentions), [mentions]);
 
   useEffect(() => {
-    const decoder = new TextDecoder();
-    const unsub = ticketWs.onMessage((buf: ArrayBuffer) => {
+    const unsub = appWs.onChannel('tickets', (raw) => {
       try {
-        const msg = JSON.parse(decoder.decode(buf)) as TicketWsMessage;
+        const msg = raw as TicketWsMessage;
         if (msg.type === 'comment:created') {
           const comment = msg.data as TicketComment;
           if (comment.ticketId === ticketId) {

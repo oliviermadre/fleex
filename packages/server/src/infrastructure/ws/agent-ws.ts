@@ -3,6 +3,7 @@ import type { WebSocket } from 'ws';
 import { WS_AGENT_PATH } from '@fleex/shared';
 import { ApiTokenEntity } from '../../domain/entities/api-token.entity.js';
 import type { Container } from '../container.js';
+import type { WsHeartbeat } from './ws-heartbeat.js';
 
 interface AgentClient {
   socket: WebSocket;
@@ -10,7 +11,7 @@ interface AgentClient {
   subscribedTickets: Set<string>;
 }
 
-export function agentWsPlugin(container: Container) {
+export function agentWsPlugin(container: Container, heartbeat: WsHeartbeat) {
   return async function (app: FastifyInstance) {
     const clients = new Map<WebSocket, AgentClient>();
 
@@ -41,6 +42,12 @@ export function agentWsPlugin(container: Container) {
         subscribedTickets: new Set(),
       };
       clients.set(ws, client);
+      heartbeat.register(ws);
+
+      ws.on('error', (err) => {
+        container.logger.error('WS error on /ws/agents', { error: String(err) });
+        ws.terminate();
+      });
 
       // Handle subscription messages from the agent
       ws.on('message', (raw) => {
@@ -62,6 +69,7 @@ export function agentWsPlugin(container: Container) {
 
       ws.on('close', () => {
         clients.delete(ws);
+        heartbeat.unregister(ws);
       });
     });
 

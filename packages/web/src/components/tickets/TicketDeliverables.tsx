@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
-import { ticketWs } from '../../services/websocket';
+import { appWs } from '../../services/websocket';
 import { useUIStore } from '../../stores/uiStore';
 import { DeliverableReadingOverlay } from './DeliverableReadingOverlay';
 import * as api from '../../services/api';
@@ -46,10 +46,9 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
 
   // Real-time updates
   useEffect(() => {
-    const decoder = new TextDecoder();
-    const unsub = ticketWs.onMessage((buf: ArrayBuffer) => {
+    const unsub = appWs.onChannel('tickets', (raw) => {
       try {
-        const msg = JSON.parse(decoder.decode(buf)) as TicketWsMessage;
+        const msg = raw as TicketWsMessage;
         if (msg.type === 'deliverable:created') {
           const d = msg.data as TicketDeliverable;
           if (d.ticketId === ticketId) {

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { TicketWsMessage } from '@fleex/shared';
-import { ticketWs } from '../services/websocket';
+import { appWs } from '../services/websocket';
 import { useTicketStore } from '../stores/ticketStore';
 
 export function useTickets() {
@@ -21,15 +21,8 @@ export function useTickets() {
 
   // Handle WebSocket messages
   useEffect(() => {
-    const decoder = new TextDecoder();
-    const unsub = ticketWs.onMessage((buf: ArrayBuffer) => {
-      try {
-        const text = decoder.decode(buf);
-        const msg = JSON.parse(text) as TicketWsMessage;
-        handleWsMessage(msg);
-      } catch {
-        // ignore malformed messages
-      }
+    const unsub = appWs.onChannel('tickets', (msg) => {
+      handleWsMessage(msg as TicketWsMessage);
     });
     return unsub;
   }, [handleWsMessage]);
