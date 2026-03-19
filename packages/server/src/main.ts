@@ -26,14 +26,9 @@ import { agentWorktreesRoutes } from './infrastructure/http/agent-worktrees.rout
 import { agentActivityRoutes } from './infrastructure/http/agent-activity.routes.js';
 import { createAgentAuthHook } from './infrastructure/http/agent-auth.hook.js';
 import { registerErrorHandler } from './infrastructure/http/error-handler.js';
-import { terminalWsPlugin } from './infrastructure/ws/terminal-ws.js';
-import { dashboardWsPlugin } from './infrastructure/ws/dashboard-ws.js';
-import { repositoryWsPlugin } from './infrastructure/ws/repository-ws.js';
-import { ticketWsPlugin } from './infrastructure/ws/ticket-ws.js';
 import { agentWsPlugin } from './infrastructure/ws/agent-ws.js';
-import { personaWsPlugin } from './infrastructure/ws/persona-ws.js';
-import { agentEventsWsPlugin } from './infrastructure/ws/agent-events-ws.js';
-import { skillWsPlugin } from './infrastructure/ws/skill-ws.js';
+import { unifiedWsPlugin } from './infrastructure/ws/unified-ws.js';
+import { WsHeartbeat } from './infrastructure/ws/ws-heartbeat.js';
 import { personaRoutes } from './infrastructure/http/persona.routes.js';
 import { skillRoutes } from './infrastructure/http/skill.routes.js';
 import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
@@ -97,14 +92,9 @@ async function main() {
   }, { prefix: '/api/agents/v1' });
 
   // Register WebSocket handlers
-  await app.register(terminalWsPlugin(container));
-  await app.register(dashboardWsPlugin(container, container.jsonlFileWatcher));
-  await app.register(repositoryWsPlugin(container));
-  await app.register(ticketWsPlugin(container));
-  await app.register(agentWsPlugin(container));
-  await app.register(personaWsPlugin(container));
-  await app.register(agentEventsWsPlugin(container));
-  await app.register(skillWsPlugin(container));
+  const heartbeat = new WsHeartbeat();
+  await app.register(unifiedWsPlugin(container, container.jsonlFileWatcher, heartbeat));
+  await app.register(agentWsPlugin(container, heartbeat));
 
   // Auto-resolve repository patterns at startup if needed
   {
@@ -190,6 +180,9 @@ async function main() {
 
     // Stop repository refresh scheduler
     container.repositoryRefreshScheduler.stop();
+
+    // Stop WebSocket heartbeat
+    heartbeat.stop();
 
     // Close Fastify server
     await app.close();

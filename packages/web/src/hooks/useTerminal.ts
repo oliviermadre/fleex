@@ -1,20 +1,18 @@
-import { useEffect, useRef, useCallback } from 'react';
-import { DEFAULT_COLS, DEFAULT_ROWS, RESIZE_DEBOUNCE_MS, ServerMessageType, WS_TERMINAL_PATH } from '@fleex/shared';
+import { useEffect, useCallback } from 'react';
+import { DEFAULT_COLS, DEFAULT_ROWS, RESIZE_DEBOUNCE_MS, ServerMessageType } from '@fleex/shared';
 import { terminalManager } from '../services/terminalManager';
-import { WebSocketManager } from '../services/websocket';
+import { appWs } from '../services/websocket';
 import { useTerminalStore } from '../stores/terminalStore';
-import { WS_BASE_URL } from '../lib/constants';
 
 export function useTerminal(sessionId: string | null, containerRef: React.RefObject<HTMLElement | null>) {
   const setConnectionStatus = useTerminalStore((s) => s.setConnectionStatus);
-  const wsRef = useRef<WebSocketManager | null>(null);
 
   const handleResize = useCallback(() => {
     if (!sessionId) return;
     terminalManager.resize(sessionId);
     const instance = terminalManager.get(sessionId);
-    if (instance && wsRef.current) {
-      wsRef.current.sendResize(instance.terminal.cols, instance.terminal.rows);
+    if (instance) {
+      appWs.sendResize(sessionId, instance.terminal.cols, instance.terminal.rows);
     }
   }, [sessionId]);
 
@@ -22,10 +20,6 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
     if (!sessionId || !containerRef.current) return;
 
     const container = containerRef.current;
-
-    // Create per-instance WebSocket connection
-    const ws = new WebSocketManager();
-    wsRef.current = ws;
 
     // Create terminal if not exists, then attach to this container
     terminalManager.create(sessionId);
@@ -36,8 +30,8 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
     const cols = instance?.terminal.cols ?? DEFAULT_COLS;
     const rows = instance?.terminal.rows ?? DEFAULT_ROWS;
 
-    // Register message handler BEFORE connecting (avoid race condition)
-    const unsubMessage = ws.onMessage((data: ArrayBuffer) => {
+    // Register binary handler for terminal output
+    const unsubBinary = appWs.onTerminal(sessionId, (data: ArrayBuffer) => {
       const view = new Uint8Array(data);
       if (view.length === 0) return;
 
@@ -64,32 +58,36 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
         const button = e.deltaY < 0 ? 64 : 65;
         const seq = `\x1b[<${button};1;1M`;
         for (let i = 0; i < lines; i++) {
-          ws.sendInput(seq);
+          appWs.sendInput(sessionId, seq);
         }
         return true;
       });
     }
 
-    // Pipe terminal input to this pane's WebSocket
+    // Pipe terminal input to WebSocket
     const onDataDisposable = instance?.terminal.onData((data: string) => {
-      ws.sendInput(data);
+      appWs.sendInput(sessionId, data);
     });
 
-    // Handle connection status
-    const unsubOpen = ws.onOpen(() => {
+    // Handle open — send ATTACH (re-attach on reconnect too)
+    const sendAttach = () => {
       setConnectionStatus(sessionId, 'connecting');
       const inst = terminalManager.get(sessionId);
       if (inst) {
-        ws.sendAttach(sessionId, inst.terminal.cols, inst.terminal.rows);
+        appWs.sendAttach(sessionId, inst.terminal.cols, inst.terminal.rows);
       }
-    });
+    };
 
-    const unsubClose = ws.onClose(() => {
+    const unsubOpen = appWs.onOpen(sendAttach);
+
+    const unsubClose = appWs.onClose(() => {
       setConnectionStatus(sessionId, 'disconnected');
     });
 
-    // Connect WebSocket and send attach
-    ws.connect(`${WS_BASE_URL}${WS_TERMINAL_PATH}`);
+    // If already connected, send attach immediately
+    if (appWs.connected) {
+      sendAttach();
+    }
     setConnectionStatus(sessionId, 'connecting');
 
     // Resize with debounce using ResizeObserver
@@ -103,13 +101,11 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
     return () => {
       observer.disconnect();
       if (resizeTimer) clearTimeout(resizeTimer);
-      unsubMessage();
+      unsubBinary();
       unsubOpen();
       unsubClose();
       onDataDisposable?.dispose();
-      ws.sendDetach();
-      ws.disconnect();
-      wsRef.current = null;
+      appWs.sendDetach(sessionId); // detach but don't disconnect — shared connection
       terminalManager.detach(sessionId);
     };
   }, [sessionId, containerRef, handleResize, setConnectionStatus]);

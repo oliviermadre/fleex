@@ -1,9 +1,7 @@
 import { useEffect } from 'react';
-import { WS_PERSONA_PATH } from '@fleex/shared';
 import type { PersonaWsMessage } from '@fleex/shared';
-import { personaWs } from '../services/websocket';
+import { appWs } from '../services/websocket';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
-import { WS_BASE_URL } from '../lib/constants';
 
 export function useAgentPersonas() {
   const loadPersonas = useAgentPersonaStore((s) => s.loadPersonas);
@@ -17,26 +15,17 @@ export function useAgentPersonas() {
   }, [loadPersonas]);
 
   useEffect(() => {
-    personaWs.connect(`${WS_BASE_URL}${WS_PERSONA_PATH}`);
-
-    const unsub = personaWs.onMessage((buf) => {
-      try {
-        const text = new TextDecoder().decode(buf);
-        const msg = JSON.parse(text) as PersonaWsMessage;
-        handleWsMessage(msg);
-      } catch {
-        // ignore non-JSON messages
-      }
+    const unsub = appWs.onChannel('personas', (msg) => {
+      handleWsMessage(msg as PersonaWsMessage);
     });
 
-    const unsubOpen = personaWs.onOpen(() => {
+    const unsubOpen = appWs.onOpen(() => {
       refreshAllStatuses();
     });
 
     return () => {
       unsub();
       unsubOpen();
-      personaWs.disconnect();
     };
   }, [handleWsMessage, refreshAllStatuses]);
 }

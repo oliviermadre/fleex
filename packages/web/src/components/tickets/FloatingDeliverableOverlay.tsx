@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
-import { ticketWs } from '../../services/websocket';
+import { appWs } from '../../services/websocket';
 import { FloatingDeliverablePanel } from './FloatingDeliverablePanel';
 
 export function FloatingDeliverableOverlay() {
@@ -28,10 +28,9 @@ export function FloatingDeliverableOverlay() {
 
   // WebSocket listener: keep floating deliverables content fresh
   useEffect(() => {
-    const decoder = new TextDecoder();
-    const unsub = ticketWs.onMessage((buf: ArrayBuffer) => {
+    const unsub = appWs.onChannel('tickets', (raw) => {
       try {
-        const msg = JSON.parse(decoder.decode(buf)) as TicketWsMessage;
+        const msg = raw as TicketWsMessage;
         if (msg.type === 'deliverable:updated') {
           const d = msg.data as TicketDeliverable;
           updateFloatingDeliverable(d);

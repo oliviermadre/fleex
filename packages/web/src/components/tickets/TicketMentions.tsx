@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { TicketMention, MentionStatus, TicketWsMessage } from '@fleex/shared';
-import { ticketWs } from '../../services/websocket';
+import { appWs } from '../../services/websocket';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import * as api from '../../services/api';
@@ -126,10 +126,9 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
 
   // Real-time updates
   useEffect(() => {
-    const decoder = new TextDecoder();
-    const unsub = ticketWs.onMessage((buf: ArrayBuffer) => {
+    const unsub = appWs.onChannel('tickets', (raw) => {
       try {
-        const msg = JSON.parse(decoder.decode(buf)) as TicketWsMessage;
+        const msg = raw as TicketWsMessage;
         if (msg.type === 'mention:created') {
           const m = msg.data as TicketMention;
           if (m.ticketId === ticketId) {

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { RepositoryWsMessage } from '@fleex/shared';
 import { useRepositoryDashboardStore } from '../stores/repositoryDashboardStore';
-import { repositoryWs } from '../services/websocket';
+import { appWs } from '../services/websocket';
 import * as api from '../services/api';
 
 export function useRepositoryDashboard() {
@@ -16,27 +16,18 @@ export function useRepositoryDashboard() {
       .then((data) => setGithubUser(data.login))
       .catch(() => {});
 
-    // Subscribe to repository WebSocket updates
     const handleOpen = () => {
       fetchSummaries();
     };
 
-    const handleMessage = (data: ArrayBuffer) => {
-      try {
-        const text = new TextDecoder().decode(data);
-        const msg = JSON.parse(text) as RepositoryWsMessage;
-        handleWsMessage(msg);
-      } catch {
-        // Not a valid JSON text frame, ignore
-      }
-    };
-
-    const unsubOpen = repositoryWs.onOpen(handleOpen);
-    const unsubMessage = repositoryWs.onMessage(handleMessage);
+    const unsubOpen = appWs.onOpen(handleOpen);
+    const unsubChannel = appWs.onChannel('repositories', (msg) => {
+      handleWsMessage(msg as RepositoryWsMessage);
+    });
 
     return () => {
       unsubOpen();
-      unsubMessage();
+      unsubChannel();
     };
   }, [fetchSummaries, handleWsMessage, setGithubUser]);
 }
