@@ -121,7 +121,8 @@ export class FakeGitPort implements GitPort {
   async getDiffStats(): Promise<DiffStats> {
     return { commitsAhead: 0, commitsBehind: 0, filesChanged: 0, additions: 0, deletions: 0 };
   }
-  async copyEnvFiles(): Promise<void> {}
+  async copyIgnoredFiles(): Promise<void> {}
+  async pruneWorktrees(): Promise<void> {}
 }
 
 export class FakeConfigPort implements ConfigPort {
