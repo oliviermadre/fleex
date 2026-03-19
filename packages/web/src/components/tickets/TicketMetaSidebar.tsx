@@ -122,19 +122,26 @@ function CollapsedTicketMetaSidebar({
   const toggleTicketMetaSidebar = useUIStore((s) => s.toggleTicketMetaSidebar);
   const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedMetaTooltip();
 
-  const worktreeLink = ticket.links.find((l) => l.type === 'worktree');
-  const repoLink = ticket.links.find((l) => l.type === 'repository');
+  const worktreeLinks = useMemo(() => ticket.links.filter((l) => l.type === 'worktree'), [ticket.links]);
+  const repoLinks = useMemo(() => ticket.links.filter((l) => l.type === 'repository'), [ticket.links]);
   const issueLink = ticket.links.find((l) => l.type === 'github_issue');
-  const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+  const prLinks = useMemo(() => ticket.links.filter((l) => l.type === 'github_pr'), [ticket.links]);
 
-  const linkedRepoLabel = useMemo(() => {
-    if (repoLink) return repoLink.ref;
-    if (worktreeLink) {
-      const colonIdx = worktreeLink.ref.indexOf(':');
-      return colonIdx > 0 ? worktreeLink.ref.substring(0, colonIdx) : worktreeLink.ref;
+  const linkedRepoLabels = useMemo(() => {
+    const labels: string[] = [];
+    const seen = new Set<string>();
+    for (const rl of repoLinks) {
+      if (!seen.has(rl.ref)) { seen.add(rl.ref); labels.push(rl.ref); }
     }
-    return null;
-  }, [repoLink, worktreeLink]);
+    for (const wl of worktreeLinks) {
+      const colonIdx = wl.ref.indexOf(':');
+      if (colonIdx > 0) {
+        const key = wl.ref.substring(0, colonIdx);
+        if (!seen.has(key)) { seen.add(key); labels.push(key); }
+      }
+    }
+    return labels;
+  }, [repoLinks, worktreeLinks]);
 
   return (
     <div className="flex w-10 flex-shrink-0 flex-col items-center border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
@@ -228,29 +235,43 @@ function CollapsedTicketMetaSidebar({
         )}
 
         {/* Repository */}
-        {linkedRepoLabel && (
+        {linkedRepoLabels.length > 0 && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-faint)]">
-                <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
-              </svg>
+              <div className="relative">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-faint)]">
+                  <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
+                </svg>
+                {linkedRepoLabels.length > 1 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-3 w-3 items-center justify-center rounded-full bg-[var(--theme-accent)] text-[7px] font-bold text-white">
+                    {linkedRepoLabels.length}
+                  </span>
+                )}
+              </div>
             }
-            onMouseEnter={(e) => showTooltip(e, 'Repository', linkedRepoLabel)}
+            onMouseEnter={(e) => showTooltip(e, 'Repository', linkedRepoLabels.join(', '))}
             onMouseLeave={hideTooltip}
           />
         )}
 
         {/* Worktree */}
-        {worktreeLink && (
+        {worktreeLinks.length > 0 && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
-                <circle cx="5" cy="3.5" r="1.5" />
-                <circle cx="8" cy="12.5" r="1.5" />
-                <line x1="5" y1="5" x2="8" y2="11" />
-              </svg>
+              <div className="relative">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
+                  <circle cx="5" cy="3.5" r="1.5" />
+                  <circle cx="8" cy="12.5" r="1.5" />
+                  <line x1="5" y1="5" x2="8" y2="11" />
+                </svg>
+                {worktreeLinks.length > 1 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-3 w-3 items-center justify-center rounded-full bg-[var(--theme-accent)] text-[7px] font-bold text-white">
+                    {worktreeLinks.length}
+                  </span>
+                )}
+              </div>
             }
-            onMouseEnter={(e) => showTooltip(e, 'Worktree', worktreeLink.label)}
+            onMouseEnter={(e) => showTooltip(e, 'Worktrees', worktreeLinks.map((wl) => wl.label).join(', '))}
             onMouseLeave={hideTooltip}
           />
         )}
@@ -356,30 +377,33 @@ function ExpandedTicketMetaSidebar({
     }
   };
 
-  // Derive current repo from repository links or worktree links
-  const worktreeLink = ticket.links.find((l) => l.type === 'worktree');
-  const repoLink = ticket.links.find((l) => l.type === 'repository');
-  const linkedRepo = useMemo(() => {
-    // Repository link takes priority (explicit selection)
-    if (repoLink) {
-      const slashIdx = repoLink.ref.indexOf('/');
-      if (slashIdx > 0) {
-        return { org: repoLink.ref.substring(0, slashIdx), name: repoLink.ref.substring(slashIdx + 1) };
+  // Derive current repos from repository links and worktree links
+  // Memoize the filtered arrays to prevent re-render loops in children
+  const worktreeLinks = useMemo(() => ticket.links.filter((l) => l.type === 'worktree'), [ticket.links]);
+  const repoLinks = useMemo(() => ticket.links.filter((l) => l.type === 'repository'), [ticket.links]);
+  const linkedRepos = useMemo(() => {
+    const repos: Array<{ org: string; name: string; linkId?: string }> = [];
+    const seen = new Set<string>();
+    for (const rl of repoLinks) {
+      const slashIdx = rl.ref.indexOf('/');
+      if (slashIdx > 0 && !seen.has(rl.ref)) {
+        seen.add(rl.ref);
+        repos.push({ org: rl.ref.substring(0, slashIdx), name: rl.ref.substring(slashIdx + 1), linkId: rl.id });
       }
     }
-    // Fallback: derive from worktree link (ref format: "org/name:branch")
-    if (worktreeLink) {
-      const colonIdx = worktreeLink.ref.indexOf(':');
+    for (const wl of worktreeLinks) {
+      const colonIdx = wl.ref.indexOf(':');
       if (colonIdx > 0) {
-        const repoKey = worktreeLink.ref.substring(0, colonIdx);
-        const slashIdx = repoKey.indexOf('/');
-        if (slashIdx > 0) {
-          return { org: repoKey.substring(0, slashIdx), name: repoKey.substring(slashIdx + 1) };
+        const key = wl.ref.substring(0, colonIdx);
+        if (!seen.has(key)) {
+          seen.add(key);
+          const si = key.indexOf('/');
+          if (si > 0) repos.push({ org: key.substring(0, si), name: key.substring(si + 1) });
         }
       }
     }
-    return null;
-  }, [repoLink, worktreeLink]);
+    return repos;
+  }, [repoLinks, worktreeLinks]);
 
   return (
     <div className="flex w-[280px] flex-shrink-0 flex-col border-l border-[var(--theme-border)] overflow-y-auto">
@@ -514,10 +538,10 @@ function ExpandedTicketMetaSidebar({
       )}
 
       {/* Repository & Worktree */}
-      <RepoWorktreePicker
-        linkedRepo={linkedRepo}
-        worktreeLink={worktreeLink ?? null}
-        repoLink={repoLink ?? null}
+      <MultiRepoWorktreePicker
+        linkedRepos={linkedRepos}
+        worktreeLinks={worktreeLinks}
+        repoLinks={repoLinks}
         onAddLink={(link) => addLink(ticket.id, link)}
         onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
       />
@@ -657,8 +681,8 @@ function ExpandedTicketMetaSidebar({
   );
 }
 
-// ── Repository & Worktree Picker ──
-// Uses resolvedRepositories from settings and fetches worktrees from filesystem via API.
+// ── Multi-Repository & Worktree Picker ──
+// Supports N repositories linked to a single ticket.
 
 interface WorktreeOption {
   org: string;
@@ -668,43 +692,25 @@ interface WorktreeOption {
   isMain: boolean;
 }
 
-function RepoWorktreePicker({
-  linkedRepo,
-  worktreeLink,
-  repoLink,
+type TicketLink = Ticket['links'][number];
+
+function MultiRepoWorktreePicker({
+  linkedRepos,
+  worktreeLinks,
+  repoLinks,
   onAddLink,
   onRemoveLink,
 }: {
-  linkedRepo: { org: string; name: string } | null;
-  worktreeLink: Ticket['links'][number] | null;
-  repoLink: Ticket['links'][number] | null;
+  linkedRepos: Array<{ org: string; name: string; linkId?: string }>;
+  worktreeLinks: TicketLink[];
+  repoLinks: TicketLink[];
   onAddLink: (link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   onRemoveLink: (linkId: string) => Promise<void>;
 }) {
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
   const summaries = useRepositoryDashboardStore((s) => s.summaries);
-  const [selectedRepo, setSelectedRepo] = useState<string | null>(
-    linkedRepo ? `${linkedRepo.org}/${linkedRepo.name}` : null,
-  );
   const [worktrees, setWorktrees] = useState<WorktreeOption[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // True when the linked worktree is present in the fetched worktree list
-  const worktreeExistsLocally = useMemo(() => {
-    if (!worktreeLink || loading) return true; // no warning while loading or no link
-    const ref = worktreeLink.ref;
-    if (ref.startsWith('/')) {
-      // Absolute path format (written by agents/API)
-      return worktrees.some((wt) => wt.path === ref);
-    }
-    // UI format: "org/name:branch"
-    const colonIdx = ref.indexOf(':');
-    if (colonIdx > 0) {
-      const branch = ref.substring(colonIdx + 1);
-      return worktrees.some((wt) => wt.branch === branch);
-    }
-    return true;
-  }, [worktreeLink, worktrees, loading]);
 
   // Parse resolved repositories into { org, name, key } objects
   const repos = useMemo(() => {
@@ -720,197 +726,194 @@ function RepoWorktreePicker({
       .sort((a, b) => a.key.toLowerCase().localeCompare(b.key.toLowerCase()));
   }, [resolvedRepositories]);
 
-  // Effective repo (from linked worktree or manual selection)
-  const effectiveRepo = linkedRepo ? `${linkedRepo.org}/${linkedRepo.name}` : selectedRepo;
+  // Stable string key for linked repos (avoids array identity issues)
+  const linkedKeysStr = useMemo(() => linkedRepos.map((r) => `${r.org}/${r.name}`).sort().join(','), [linkedRepos]);
+  const linkedKeys = useMemo(() => new Set(linkedKeysStr.split(',').filter(Boolean)), [linkedKeysStr]);
+  const availableRepos = useMemo(() => repos.filter((r) => !linkedKeys.has(r.key)), [repos, linkedKeys]);
 
-  // Whether the linked repo exists in the current configuration
-  const repoInConfig = effectiveRepo ? repos.some((r) => r.key === effectiveRepo) : false;
+  // Track last-fetched key to avoid redundant fetches
+  const lastFetchKeyRef = useRef('');
+  const summariesRef = useRef(summaries);
+  summariesRef.current = summaries;
 
-  // Fetch worktrees from filesystem when repo selection changes
-  const fetchWorktreesForRepos = useCallback(async (repoList: { org: string; name: string; key: string }[]) => {
-    // Only fetch worktrees for repos that are cloned locally
-    const clonedRepos = repoList.filter((r) => summaries[r.key]?.isClonedLocally !== false);
-    if (clonedRepos.length === 0) {
-      setWorktrees([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const results: WorktreeOption[] = [];
-      await Promise.all(
-        clonedRepos.map(async (repo) => {
-          try {
-            const wts: Worktree[] = await api.fetchWorktrees(repo.org, repo.name);
-            for (const wt of wts) {
-              if (!wt.isBare) {
-                results.push({
-                  org: repo.org,
-                  name: repo.name,
-                  branch: wt.branch,
-                  path: wt.path,
-                  isMain: wt.isMain,
-                });
-              }
-            }
-          } catch {
-            // Skip repos that fail to fetch (e.g. not cloned yet)
-          }
-        }),
-      );
-      setWorktrees(results);
-    } finally {
-      setLoading(false);
-    }
-  }, [summaries]);
-
-  // Whether the effective repo is known to not be cloned locally
-  const effectiveRepoNotCloned = effectiveRepo ? summaries[effectiveRepo]?.isClonedLocally === false : false;
-
-  // Sort worktrees by branch name for display
-  const sortedWorktrees = useMemo(
-    () => [...worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase())),
-    [worktrees],
-  );
-
+  // Fetch worktrees from filesystem — only when the set of repos actually changes
   useEffect(() => {
     if (repos.length === 0) {
       setWorktrees([]);
       return;
     }
-    if (effectiveRepo) {
-      // Skip fetching entirely if the selected repo isn't cloned
-      if (summaries[effectiveRepo]?.isClonedLocally === false) {
-        setWorktrees([]);
-        return;
-      }
-      const match = repos.filter((r) => r.key === effectiveRepo);
-      fetchWorktreesForRepos(match.length > 0 ? match : repos);
-    } else {
-      fetchWorktreesForRepos(repos);
-    }
-  }, [repos, effectiveRepo, fetchWorktreesForRepos, summaries]);
 
-  const handleRepoChange = async (value: string) => {
-    if (value === '__all__') {
-      setSelectedRepo(null);
-      // Remove repository link if one exists
-      if (repoLink) {
-        await onRemoveLink(repoLink.id);
+    const repoList = linkedKeys.size > 0
+      ? repos.filter((r) => linkedKeys.has(r.key))
+      : repos;
+    const targetRepos = repoList.length > 0 ? repoList : repos;
+
+    // Build a stable key for the fetch
+    const fetchKey = targetRepos.map((r) => r.key).sort().join(',');
+    if (fetchKey === lastFetchKeyRef.current) return;
+    lastFetchKeyRef.current = fetchKey;
+
+    const clonedRepos = targetRepos.filter((r) => summariesRef.current[r.key]?.isClonedLocally !== false);
+    if (clonedRepos.length === 0) {
+      setWorktrees([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const results: WorktreeOption[] = [];
+        await Promise.all(
+          clonedRepos.map(async (repo) => {
+            try {
+              const wts: import('@fleex/shared').Worktree[] = await api.fetchWorktrees(repo.org, repo.name);
+              for (const wt of wts) {
+                if (!wt.isBare) {
+                  results.push({ org: repo.org, name: repo.name, branch: wt.branch, path: wt.path, isMain: wt.isMain });
+                }
+              }
+            } catch { /* skip */ }
+          }),
+        );
+        if (!cancelled) setWorktrees(results);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      if (worktreeLink) {
-        await onRemoveLink(worktreeLink.id);
+    })();
+    return () => { cancelled = true; };
+  }, [repos, linkedKeysStr, linkedKeys]);
+
+  // Get worktree branch for a linked repo from worktree links
+  const getBranchForRepo = useCallback((org: string, name: string): string | null => {
+    const prefix = `${org}/${name}:`;
+    for (const wl of worktreeLinks) {
+      if (wl.ref.startsWith(prefix)) {
+        return wl.ref.substring(prefix.length);
       }
+    }
+    return null;
+  }, [worktreeLinks]);
+
+  // Get worktree link IDs for a specific repo
+  const getWorktreeLinkIdsForRepo = useCallback((org: string, name: string): string[] => {
+    const prefix = `${org}/${name}:`;
+    return worktreeLinks.filter((wl) => wl.ref.startsWith(prefix)).map((wl) => wl.id);
+  }, [worktreeLinks]);
+
+  const handleAddRepo = async (value: string) => {
+    if (!value) return;
+    await onAddLink({ type: 'repository', ref: value, label: value });
+  };
+
+  const handleRemoveRepo = async (org: string, name: string, linkId?: string) => {
+    // Remove repo link
+    if (linkId) {
+      await onRemoveLink(linkId);
     } else {
-      setSelectedRepo(value);
-      // Remove old repository link, then save new one
-      if (repoLink) {
-        await onRemoveLink(repoLink.id);
-      }
-      await onAddLink({ type: 'repository', ref: value, label: value });
-      // Remove worktree link if repo changed
-      if (worktreeLink && linkedRepo && `${linkedRepo.org}/${linkedRepo.name}` !== value) {
-        await onRemoveLink(worktreeLink.id);
-      }
+      const rl = repoLinks.find((l) => l.ref === `${org}/${name}`);
+      if (rl) await onRemoveLink(rl.id);
+    }
+    // Remove matching worktree links
+    const wtLinkIds = getWorktreeLinkIdsForRepo(org, name);
+    for (const id of wtLinkIds) {
+      await onRemoveLink(id);
     }
   };
 
   const handleWorktreeSelect = async (wt: WorktreeOption) => {
-    if (worktreeLink) {
-      await onRemoveLink(worktreeLink.id);
+    const repoKey = `${wt.org}/${wt.name}`;
+    // Remove existing worktree links for this repo
+    const existingWtIds = getWorktreeLinkIdsForRepo(wt.org, wt.name);
+    for (const id of existingWtIds) {
+      await onRemoveLink(id);
     }
-    // Remove repository link — worktree link implies the repo
-    if (repoLink) {
-      await onRemoveLink(repoLink.id);
-    }
-    const ref = `${wt.org}/${wt.name}:${wt.branch}`;
+    // Remove repository link for this repo (worktree implies repo)
+    const rl = repoLinks.find((l) => l.ref === repoKey);
+    if (rl) await onRemoveLink(rl.id);
+    // Add worktree link
+    const ref = `${repoKey}:${wt.branch}`;
     await onAddLink({ type: 'worktree', ref, label: wt.branch });
-    // Auto-set local repo state
-    setSelectedRepo(`${wt.org}/${wt.name}`);
   };
 
-  const handleClearWorktree = async () => {
-    if (worktreeLink) {
-      // Derive the repo from the worktree being cleared
-      const colonIdx = worktreeLink.ref.indexOf(':');
-      const repoKey = colonIdx > 0 ? worktreeLink.ref.substring(0, colonIdx) : null;
-
-      await onRemoveLink(worktreeLink.id);
-
-      // Re-add a repository link if none exists (preserve the repo selection)
-      if (!repoLink && repoKey) {
-        await onAddLink({ type: 'repository', ref: repoKey, label: repoKey });
-      }
+  const handleClearWorktree = async (org: string, name: string) => {
+    const repoKey = `${org}/${name}`;
+    const wtLinkIds = getWorktreeLinkIdsForRepo(org, name);
+    for (const id of wtLinkIds) {
+      await onRemoveLink(id);
+    }
+    // Re-add repository link to preserve repo selection
+    const hasRepoLink = repoLinks.some((l) => l.ref === repoKey);
+    if (!hasRepoLink) {
+      await onAddLink({ type: 'repository', ref: repoKey, label: repoKey });
     }
   };
 
-  return (
-    <>
-      {/* Repository */}
-      <div>
-        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Repository
-        </label>
-        {linkedRepo && !repoInConfig ? (
-          /* Read-only: repo linked but no longer in resolved repositories */
-          <div className="flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
-                <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
-              </svg>
-              <span className="truncate text-xs text-[var(--theme-text-secondary)]">{linkedRepo.org}/{linkedRepo.name}</span>
-            </div>
-            <button
-              className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-              onClick={async () => {
-                if (worktreeLink) await onRemoveLink(worktreeLink.id);
-                await onRemoveLink(repoLink!.id);
-              }}
-              title="Unlink repository"
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="4" y1="4" x2="12" y2="12" />
-                <line x1="12" y1="4" x2="4" y2="12" />
-              </svg>
-            </button>
-          </div>
-        ) : repos.length === 0 ? (
-          <span className="text-[10px] text-[var(--theme-text-muted)]">No repositories configured</span>
-        ) : (
-          <select
-            className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
-            value={effectiveRepo ?? '__all__'}
-            onChange={(e) => handleRepoChange(e.target.value)}
-          >
-            <option value="__all__">All repositories</option>
-            {repos.map((r) => (
-              <option key={r.key} value={r.key}>
-                {r.org}/{r.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
+  // Sort worktrees for display
+  const sortedWorktrees = useMemo(
+    () => [...worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase())),
+    [worktrees],
+  );
 
-      {/* Branch */}
-      <div>
-        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Branch
-        </label>
-        {worktreeLink ? (
-          <>
+  // Pre-compute single-repo values (hooks must be unconditional)
+  const firstWorktreeLink = worktreeLinks[0] ?? null;
+  const firstRepoLink = repoLinks[0] ?? null;
+  const worktreeExistsLocally = useMemo(() => {
+    if (!firstWorktreeLink || loading) return true;
+    const ref = firstWorktreeLink.ref;
+    if (ref.startsWith('/')) {
+      return worktrees.some((wt) => wt.path === ref);
+    }
+    const colonIdx = ref.indexOf(':');
+    if (colonIdx > 0) {
+      const branch = ref.substring(colonIdx + 1);
+      return worktrees.some((wt) => wt.branch === branch);
+    }
+    return true;
+  }, [firstWorktreeLink, worktrees, loading]);
+
+  // ── Single-repo fast path (backward compatible) ──
+  if (linkedRepos.length <= 1) {
+    const linkedRepo = linkedRepos[0] ?? null;
+    const effectiveRepo = linkedRepo ? `${linkedRepo.org}/${linkedRepo.name}` : null;
+    const repoInConfig = effectiveRepo ? repos.some((r) => r.key === effectiveRepo) : false;
+    const effectiveRepoNotCloned = effectiveRepo ? summaries[effectiveRepo]?.isClonedLocally === false : false;
+
+    const handleSingleRepoChange = async (value: string) => {
+      if (value === '__all__') {
+        if (firstRepoLink) await onRemoveLink(firstRepoLink.id);
+        if (firstWorktreeLink) await onRemoveLink(firstWorktreeLink.id);
+      } else {
+        if (firstRepoLink) await onRemoveLink(firstRepoLink.id);
+        await onAddLink({ type: 'repository', ref: value, label: value });
+        if (firstWorktreeLink && linkedRepo && `${linkedRepo.org}/${linkedRepo.name}` !== value) {
+          await onRemoveLink(firstWorktreeLink.id);
+        }
+      }
+    };
+
+    return (
+      <>
+        {/* Repository */}
+        <div>
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            Repository
+          </label>
+          {linkedRepo && !repoInConfig ? (
             <div className="flex items-center gap-2">
               <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-[var(--theme-text-muted)]">
-                  <circle cx="5" cy="3.5" r="1.5" />
-                  <circle cx="8" cy="12.5" r="1.5" />
-                  <line x1="5" y1="5" x2="8" y2="11" />
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+                  <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
                 </svg>
-                <span className="truncate text-xs text-[var(--theme-text-primary)]">{worktreeLink.label}</span>
+                <span className="truncate text-xs text-[var(--theme-text-secondary)]">{linkedRepo.org}/{linkedRepo.name}</span>
               </div>
               <button
                 className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-                onClick={handleClearWorktree}
-                title="Unlink worktree"
+                onClick={async () => {
+                  if (firstWorktreeLink) await onRemoveLink(firstWorktreeLink.id);
+                  if (firstRepoLink) await onRemoveLink(firstRepoLink.id);
+                }}
+                title="Unlink repository"
               >
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <line x1="4" y1="4" x2="12" y2="12" />
@@ -918,46 +921,167 @@ function RepoWorktreePicker({
                 </svg>
               </button>
             </div>
-            {!loading && !worktreeExistsLocally && (
-              <div className="mt-1.5 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="mt-0.5 flex-shrink-0 text-amber-400">
-                  <path d="M8.22 1.754a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575L6.457 1.047zM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm.25-5.25a.75.75 0 0 0-1.5 0v2.5a.75.75 0 0 0 1.5 0v-2.5z" />
-                </svg>
-                <span className="text-[10px] leading-tight text-amber-300">
-                  Worktree not found locally — it will be auto-created when you open a session.
-                </span>
+          ) : repos.length === 0 ? (
+            <span className="text-[10px] text-[var(--theme-text-muted)]">No repositories configured</span>
+          ) : (
+            <select
+              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+              value={effectiveRepo ?? '__all__'}
+              onChange={(e) => handleSingleRepoChange(e.target.value)}
+            >
+              <option value="__all__">All repositories</option>
+              {repos.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.org}/{r.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {/* Add another repo (transitions to multi-repo) */}
+          {effectiveRepo && availableRepos.length > 0 && (
+            <select
+              className="mt-1 w-full rounded-md border border-dashed border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
+              value=""
+              onChange={(e) => {
+                if (e.target.value) handleAddRepo(e.target.value);
+                e.target.value = '';
+              }}
+            >
+              <option value="">+ Add repository</option>
+              {availableRepos.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.org}/{r.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Branch */}
+        <div>
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            Branch
+          </label>
+          {firstWorktreeLink ? (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+                    <circle cx="5" cy="3.5" r="1.5" />
+                    <circle cx="8" cy="12.5" r="1.5" />
+                    <line x1="5" y1="5" x2="8" y2="11" />
+                  </svg>
+                  <span className="truncate text-xs text-[var(--theme-text-primary)]">{firstWorktreeLink.label}</span>
+                </div>
+                <button
+                  className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+                  onClick={() => linkedRepo ? handleClearWorktree(linkedRepo.org, linkedRepo.name) : undefined}
+                  title="Unlink worktree"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="4" y1="4" x2="12" y2="12" />
+                    <line x1="12" y1="4" x2="4" y2="12" />
+                  </svg>
+                </button>
               </div>
-            )}
-          </>
-        ) : loading ? (
-          <span className="text-[10px] text-[var(--theme-text-muted)]">Loading worktrees...</span>
-        ) : effectiveRepoNotCloned ? (
-          <span className="text-[10px] text-[var(--theme-text-muted)]">Repository not cloned locally</span>
-        ) : sortedWorktrees.length === 0 ? (
-          <span className="text-[10px] text-[var(--theme-text-muted)]">No worktrees found</span>
-        ) : (
+              {!loading && !worktreeExistsLocally && (
+                <div className="mt-1.5 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="mt-0.5 flex-shrink-0 text-amber-400">
+                    <path d="M8.22 1.754a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575L6.457 1.047zM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm.25-5.25a.75.75 0 0 0-1.5 0v2.5a.75.75 0 0 0 1.5 0v-2.5z" />
+                  </svg>
+                  <span className="text-[10px] leading-tight text-amber-300">
+                    Worktree not found locally — it will be auto-created when you open a session.
+                  </span>
+                </div>
+              )}
+            </>
+          ) : loading ? (
+            <span className="text-[10px] text-[var(--theme-text-muted)]">Loading worktrees...</span>
+          ) : effectiveRepoNotCloned ? (
+            <span className="text-[10px] text-[var(--theme-text-muted)]">Repository not cloned locally</span>
+          ) : sortedWorktrees.length === 0 ? (
+            <span className="text-[10px] text-[var(--theme-text-muted)]">No worktrees found</span>
+          ) : (
+            <select
+              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+              value=""
+              onChange={(e) => {
+                const idx = parseInt(e.target.value, 10);
+                const wt = sortedWorktrees[idx];
+                if (wt) handleWorktreeSelect(wt);
+              }}
+            >
+              <option value="" disabled>Select a worktree...</option>
+              {sortedWorktrees.map((wt, i) => {
+                const prefix = !effectiveRepo ? `${wt.org}/${wt.name} · ` : '';
+                return (
+                  <option key={`${wt.org}/${wt.name}:${wt.branch}`} value={i}>
+                    {prefix}{wt.branch}
+                  </option>
+                );
+              })}
+            </select>
+          )}
+        </div>
+      </>
+    );
+  }
+
+  // ── Multi-repo view (>= 2 repos) ──
+  return (
+    <div>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+        Repositories
+      </label>
+      <div className="flex flex-col gap-1.5">
+        {linkedRepos.map((repo) => {
+          const repoKey = `${repo.org}/${repo.name}`;
+          const branch = getBranchForRepo(repo.org, repo.name);
+          return (
+            <div key={repoKey} className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+                <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
+              </svg>
+              <span className="truncate text-[10px] font-medium text-[var(--theme-text-primary)]">{repoKey}</span>
+              {branch && (
+                <span className="ml-auto truncate text-[9px] text-[var(--theme-text-muted)]" title={branch}>
+                  {branch}
+                </span>
+              )}
+              <button
+                className="ml-1 flex-shrink-0 rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+                onClick={() => handleRemoveRepo(repo.org, repo.name, repo.linkId)}
+                title="Remove repository"
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="4" x2="12" y2="12" />
+                  <line x1="12" y1="4" x2="4" y2="12" />
+                </svg>
+              </button>
+            </div>
+          );
+        })}
+
+        {/* Add repository dropdown */}
+        {availableRepos.length > 0 && (
           <select
-            className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+            className="w-full rounded-md border border-dashed border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
             value=""
             onChange={(e) => {
-              const idx = parseInt(e.target.value, 10);
-              const wt = sortedWorktrees[idx];
-              if (wt) handleWorktreeSelect(wt);
+              if (e.target.value) handleAddRepo(e.target.value);
+              e.target.value = '';
             }}
           >
-            <option value="" disabled>Select a worktree...</option>
-            {sortedWorktrees.map((wt, i) => {
-              const prefix = !effectiveRepo ? `${wt.org}/${wt.name} · ` : '';
-              return (
-                <option key={`${wt.org}/${wt.name}:${wt.branch}`} value={i}>
-                  {prefix}{wt.branch}
-                </option>
-              );
-            })}
+            <option value="">+ Add repository</option>
+            {availableRepos.map((r) => (
+              <option key={r.key} value={r.key}>
+                {r.org}/{r.name}
+              </option>
+            ))}
           </select>
         )}
       </div>
-    </>
+    </div>
   );
 }
 

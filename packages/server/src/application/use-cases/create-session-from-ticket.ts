@@ -32,16 +32,18 @@ export class CreateSessionFromTicketUseCase {
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) throw new TicketNotFoundError(ticketId);
 
-    // Move ticket to doing
-    const moveDiff = ticket.moveTo('doing');
-    if (Object.keys(moveDiff).length > 0) {
-      await this.ticketStore.saveActivity(TicketActivityEntity.create({
-        id: randomUUID(),
-        ticketId: ticket.id,
-        action: 'moved',
-        changes: moveDiff,
-        source: 'web',
-      }));
+    // Move ticket to doing only if it's in a pre-doing status
+    if (ticket.status === 'backlog' || ticket.status === 'todo') {
+      const moveDiff = ticket.moveTo('doing');
+      if (Object.keys(moveDiff).length > 0) {
+        await this.ticketStore.saveActivity(TicketActivityEntity.create({
+          id: randomUUID(),
+          ticketId: ticket.id,
+          action: 'moved',
+          changes: moveDiff,
+          source: 'web',
+        }));
+      }
     }
 
     // Determine CWD
@@ -105,8 +107,19 @@ export class CreateSessionFromTicketUseCase {
         }
 
         if (firstWtPath) {
-          cwd = firstWtPath;
-          ticket.addLink('worktree', firstWtPath, branchName, null, randomUUID());
+          // Session starts at ticket workspace level, not inside a specific repo
+          cwd = join(this.config.get().basePath, 'workspaces', ticketId);
+
+          // Add one worktree link per repo (org/name:branch format)
+          for (const repoInfo of workspaceRepos) {
+            const ref = `${repoInfo.org}/${repoInfo.name}:${repoInfo.branch}`;
+            ticket.addLink('worktree', ref, repoInfo.branch, null, randomUUID());
+          }
+
+          // Remove repository links — worktree links now imply the repos
+          for (const repoLink of repoLinks) {
+            ticket.removeLink(repoLink.id);
+          }
         }
 
         // Persist workspace if multi-repo
@@ -161,18 +174,11 @@ export class CreateSessionFromTicketUseCase {
     const mode = resolved?.mode ?? 'regular';
     const envSourcePath = resolved?.envSourcePath;
 
-    let wtPath: string;
-    if (mode === 'bare') {
-      // Bare mode: worktrees go under workspaces/{ticketId}/{org}/{name}
-      wtPath = join(basePath, 'workspaces', ticketId, org, name);
-      // Ensure parent dirs exist
-      if (this.hostFs) {
-        const parentDir = join(basePath, 'workspaces', ticketId, org);
-        try { await this.hostFs.mkdir(parentDir); } catch { /* may already exist */ }
-      }
-    } else {
-      // Regular mode: sibling directory
-      wtPath = join(repoPath, '..', buildWorktreeDirName(name, branchName));
+    // Always use workspaces/{ticketId}/{org}/{name} — consistent for bare & regular
+    const wtPath = join(basePath, 'workspaces', ticketId, org, name);
+    if (this.hostFs) {
+      const parentDir = join(basePath, 'workspaces', ticketId, org);
+      try { await this.hostFs.mkdir(parentDir); } catch { /* may already exist */ }
     }
 
     await this.createWorktree.execute(repoPath, wtPath, {

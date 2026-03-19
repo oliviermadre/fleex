@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
+type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'workspace';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions' | 'agent-tokens';
 export type AnalyticsTab = 'audit-trail' | 'statistics';
 
@@ -83,6 +83,10 @@ interface UIState {
   // Agent worktree view (ticket-based)
   selectedAgentWorktreeTicketId: string | null;
   setSelectedAgentWorktreeTicketId: (id: string | null) => void;
+
+  // Workspace view (ticket-based)
+  selectedWorkspaceTicketId: string | null;
+  setSelectedWorkspaceTicketId: (id: string | null) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -105,6 +109,7 @@ export const useUIStore = create<UIState>((set) => ({
   floatingSessionIds: [],
   focusedFloatingSessionId: null,
   selectedAgentWorktreeTicketId: null,
+  selectedWorkspaceTicketId: null,
 
   toggleScratchpad: () =>
     set((state) => ({
@@ -200,4 +205,6 @@ export const useUIStore = create<UIState>((set) => ({
   clearFloatingFocus: () => set({ focusedFloatingSessionId: null }),
 
   setSelectedAgentWorktreeTicketId: (id) => set({ selectedAgentWorktreeTicketId: id }),
+
+  setSelectedWorkspaceTicketId: (id) => set({ selectedWorkspaceTicketId: id }),
 }));

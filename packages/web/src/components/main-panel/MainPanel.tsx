@@ -1,4 +1,4 @@
-import type { Session } from '@fleex/shared';
+import type { Session, Ticket } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -19,6 +19,49 @@ import { SkillEditor } from '../agents/SkillEditor';
 import { useSkillStore } from '../../stores/skillStore';
 import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { DashboardView } from '../dashboard/DashboardView';
+import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
+import { Button } from '../ui/Button';
+import * as api from '../../services/api';
+import { useState } from 'react';
+
+function WorkspaceNoSession({ ticket }: { ticket: Ticket | undefined }) {
+  const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
+  const fetchTickets = useTicketStore((s) => s.fetchTickets);
+  const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
+  const [loading, setLoading] = useState(false);
+
+  const handleStartWork = async () => {
+    if (!ticket || loading) return;
+    setLoading(true);
+    try {
+      await openSessionFromTicket(ticket.id);
+      await Promise.all([
+        api.fetchSessionGroups().then(setSessionGroups).catch(() => {}),
+        fetchTickets(),
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 text-[var(--theme-text-muted)]">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
+        <rect x="2" y="7" width="20" height="14" rx="2" />
+        <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+      </svg>
+      {ticket && (
+        <p className="max-w-xs text-center text-sm font-medium text-[var(--theme-text-secondary)]">
+          #{ticket.displayId} {ticket.title}
+        </p>
+      )}
+      <p className="text-sm">No active session for this ticket</p>
+      <Button variant="primary" size="sm" onClick={handleStartWork} disabled={loading}>
+        {loading ? 'Starting…' : 'Start Work'}
+      </Button>
+    </div>
+  );
+}
 
 function GroupEmptyCell() {
   return (
@@ -59,14 +102,28 @@ export function MainPanel() {
   const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
 
   const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
+  const selectedWorkspaceTicketId = useUIStore((s) => s.selectedWorkspaceTicketId);
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
   const selectedTicketId = useTicketStore((s) => s.selectedTicketId);
+  const tickets = useTicketStore((s) => s.tickets);
   const selectedSkillId = useSkillStore((s) => s.selectedSkillId);
   const splitSession = splitSessionId
     ? sessions.find((s) => s.id === splitSessionId) ?? null
     : null;
+
+  if (activePanel === 'workspace') {
+    if (selectedWorkspaceTicketId) {
+      const ticket = tickets.find((t) => t.id === selectedWorkspaceTicketId);
+      const linkedSessions = ticket ? findSessionsForTicket(ticket, sessions) : [];
+      if (linkedSessions.length > 0) {
+        return <UnifiedWorktreePanel entry={{ kind: 'session', sessionId: linkedSessions[0]!.id }} focused />;
+      }
+      return <WorkspaceNoSession ticket={ticket} />;
+    }
+    return <EmptyState />;
+  }
 
   if (activePanel === 'dashboard') {
     return <DashboardView />;

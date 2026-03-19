@@ -11,6 +11,7 @@ import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { SidebarHeader } from './SidebarHeader';
 import { SessionGroups } from './SessionGroups';
+import { WorkspaceGroups } from './WorkspaceGroups';
 import { SettingsNav } from '../settings/SettingsNav';
 import { AnalyticsNav } from '../analytics/AnalyticsNav';
 import { RepositoriesContent } from './RepositoriesContent';
@@ -36,6 +37,7 @@ export function ContentPanel() {
     if (activePanel === 'scratchpads') return <CollapsedScratchpadsPanel />;
     if (activePanel === 'analytics') return <CollapsedAnalyticsPanel />;
     if (activePanel === 'settings') return <CollapsedSettingsPanel />;
+    if (activePanel === 'workspace') return <CollapsedWorkspacePanel />;
     // cluster or unknown — just show expand button
     return <CollapsedShell />;
   }
@@ -52,6 +54,7 @@ export function ContentPanel() {
       {activePanel === 'scratchpads' && <ScratchpadsContent />}
       {activePanel === 'analytics' && <AnalyticsNav />}
       {activePanel === 'settings' && <SettingsNav />}
+      {activePanel === 'workspace' && <WorkspaceContent />}
     </div>
   );
 }
@@ -61,6 +64,34 @@ function BranchesContent() {
     <>
       <SidebarHeader />
       <SessionGroups />
+    </>
+  );
+}
+
+function WorkspaceSidebarHeader() {
+  const toggleContentPanel = useUIStore((s) => s.toggleContentPanel);
+  return (
+    <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
+      <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Work</span>
+      <button
+        onClick={toggleContentPanel}
+        className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+        title="Collapse panel"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+          <line x1="6" y1="1.5" x2="6" y2="14.5" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+function WorkspaceContent() {
+  return (
+    <>
+      <WorkspaceSidebarHeader />
+      <WorkspaceGroups />
     </>
   );
 }
@@ -896,6 +927,66 @@ const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ReactNode }[
     </svg>
   )},
 ];
+
+// ═══════════════════════════════════════════════
+// ── 9. Collapsed Workspace panel ──
+// ═══════════════════════════════════════════════
+
+function CollapsedWorkspacePanel() {
+  const navigate = useNavigate();
+  const tickets = useTicketStore((s) => s.tickets);
+  const selectedWorkspaceTicketId = useUIStore((s) => s.selectedWorkspaceTicketId);
+  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+
+  const workspaceTickets = useMemo(
+    () =>
+      tickets.filter(
+        (t) =>
+          (t.status === 'doing' || t.status === 'reviewing') &&
+          t.links.some((l) => l.type === 'worktree'),
+      ),
+    [tickets],
+  );
+
+  return (
+    <CollapsedShell>
+      <div className="flex-1 overflow-y-auto w-full">
+        {workspaceTickets.length === 0 ? (
+          <div className="flex items-center justify-center py-6">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
+              <rect x="2" y="7" width="20" height="14" rx="2" />
+              <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+            </svg>
+          </div>
+        ) : workspaceTickets.map((ticket) => {
+          const isSelected = selectedWorkspaceTicketId === ticket.id;
+          return (
+            <CollapsedRow
+              key={ticket.id}
+              isSelected={isSelected}
+              onClick={() => navigate(`/workspace/ticket/${ticket.id}`, { replace: true })}
+              onMouseEnter={(e) => showTooltip(e, `#${ticket.displayId} ${ticket.title}`, ticket.status)}
+              onMouseLeave={hideTooltip}
+              icon={
+                <span className={cn(
+                  'text-[10px] font-bold leading-none',
+                  isSelected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
+                )}>
+                  #{ticket.displayId}
+                </span>
+              }
+            />
+          );
+        })}
+      </div>
+      <CollapsedTooltip data={tooltip} />
+    </CollapsedShell>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// ── 8. Collapsed Settings panel ──
+// ═══════════════════════════════════════════════
 
 function CollapsedSettingsPanel() {
   const navigate = useNavigate();

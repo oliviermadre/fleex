@@ -144,7 +144,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     [ticketId, updateTicket],
   );
 
-  // Find an existing running session for this ticket
+  // Find an existing running session for this ticket (iterates ALL worktree links)
   const findSessionForTicket = useCallback((): Session | null => {
     if (!ticket) return null;
     const sessions = useSessionStore.getState().sessions;
@@ -156,9 +156,8 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
       if (session) return session;
     }
 
-    // Check worktree link and find matching session
-    const wtLink = ticket.links.find((l) => l.type === 'worktree');
-    if (wtLink) {
+    // Check ALL worktree links and find matching session
+    for (const wtLink of ticket.links.filter((l) => l.type === 'worktree')) {
       const colonIdx = wtLink.ref.indexOf(':');
       if (colonIdx > 0) {
         const repoKey = wtLink.ref.substring(0, colonIdx);
@@ -196,9 +195,11 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
       return;
     }
 
-    // If ticket has a worktree link → auto-create via API (existing behavior)
-    const wtLink = ticket.links.find((l) => l.type === 'worktree');
-    if (wtLink) {
+    const repoLinksArr = ticket.links.filter((l) => l.type === 'repository');
+    const wtLinksArr = ticket.links.filter((l) => l.type === 'worktree');
+
+    // If worktree links exist, or 2+ repo links → backend-driven workspace creation
+    if (wtLinksArr.length > 0 || repoLinksArr.length >= 2) {
       setSessionLoading(true);
       try {
         const { sessionId } = await openSessionFromTicket(ticketId);
@@ -218,12 +219,11 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
       return;
     }
 
-    // No worktree → open CreateSessionModal with prefilled context
-    const repoLink = ticket.links.find((l) => l.type === 'repository');
+    // Single or no repo → open CreateSessionModal with prefilled context
     const prompt = [ticket.title, ticket.description].filter(Boolean).join('\n\n');
     openCreateModalForTicket({
       ticketId: ticket.id,
-      repo: repoLink?.ref ?? null,
+      repo: repoLinksArr[0]?.ref ?? null,
       prompt,
     });
   }, [ticket, ticketId, findSessionForTicket, openSessionFromTicket, openCreateModalForTicket]);

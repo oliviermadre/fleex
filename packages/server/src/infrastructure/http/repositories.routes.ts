@@ -256,14 +256,17 @@ export function repositoryRoutes(container: Container) {
     app.get('/api/repositories/summaries', async () => {
       const configuredRepos = getConfiguredRepos(container);
       const summaries: RepositorySummary[] = [];
+      const basePath = container.config.get().basePath;
 
       for (const { org, name } of configuredRepos) {
         const key = `${org}/${name}`;
-        const repoPath = await resolveRepoPath(container, org, name);
+        const resolved = await container.repoPathResolver.resolve(basePath, org, name);
+        const repoPath = resolved?.repoPath ?? `${basePath}/${org}/${name}`;
         const isClonedLocally = await container.hostFs.exists(repoPath);
+        const mode = resolved?.mode ?? (isClonedLocally ? 'regular' as const : undefined);
         const cached = container.repositoryCache.get<RepositorySummary>(`summary:${key}`);
         if (cached) {
-          summaries.push({ ...cached.data, isClonedLocally });
+          summaries.push({ ...cached.data, isClonedLocally, mode });
         } else {
           summaries.push({
             org,
@@ -275,6 +278,7 @@ export function repositoryRoutes(container: Container) {
             recentlyMergedPRsCount: 0,
             lastFetchedAt: null,
             isClonedLocally,
+            mode,
           });
         }
       }

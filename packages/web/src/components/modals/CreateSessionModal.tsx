@@ -68,6 +68,7 @@ export function CreateSessionModal() {
   const [checkingCwd, setCheckingCwd] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [cloneError, setCloneError] = useState('');
+  const [bareClone, setBareClone] = useState(false);
 
   // Refs for focus management
   const modeContainerRef = useRef<HTMLDivElement>(null);
@@ -541,7 +542,7 @@ export function CreateSessionModal() {
     setCloneError('');
 
     try {
-      await api.cloneRepo(org, name);
+      await api.cloneRepo(org, name, bareClone || undefined);
       // Clone succeeded — mark cwd as existing and load worktrees
       setCwdCheckResult({ exists: true });
       fetchWorktrees(org, name).catch(() => {});
@@ -579,6 +580,7 @@ export function CreateSessionModal() {
     setDiffStatsByBranch({});
     setCwdCheckResult(null);
     setCloneError('');
+    setBareClone(false);
     appliedTicketContextRef.current = null;
   };
 
@@ -673,6 +675,10 @@ export function CreateSessionModal() {
             <div className="text-[var(--theme-text-secondary)]">
               Target: <span className="font-mono text-xs">{(cwdCheckResult as { exists: false; remote: string; targetPath: string }).targetPath}</span>
             </div>
+            <label className="mt-2 flex items-center gap-2 text-xs text-[var(--theme-text-secondary)]">
+              <input type="checkbox" checked={bareClone} onChange={(e) => setBareClone(e.target.checked)} />
+              Clone as bare repository (recommended for worktree workflows)
+            </label>
           </div>
         )}
 

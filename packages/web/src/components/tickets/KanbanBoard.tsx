@@ -59,7 +59,7 @@ export function KanbanBoard() {
   const isAllBoards = selectedBoardId === null && boards.length > 1;
   const board = selectedBoardId ? boards.find((b) => b.id === selectedBoardId) ?? null : null;
 
-  // Find an existing running session for a ticket's worktree
+  // Find an existing running session for a ticket's worktree (iterates ALL worktree links)
   const findSessionForTicket = useCallback((ticketId: string): Session | null => {
     const ticket = tickets.find((t) => t.id === ticketId);
     if (!ticket) return null;
@@ -71,9 +71,8 @@ export function KanbanBoard() {
       if (session) return session;
     }
 
-    // Check worktree link and find matching session
-    const wtLink = ticket.links.find((l) => l.type === 'worktree');
-    if (wtLink) {
+    // Check ALL worktree links and find matching session
+    for (const wtLink of ticket.links.filter((l) => l.type === 'worktree')) {
       const colonIdx = wtLink.ref.indexOf(':');
       if (colonIdx > 0) {
         const repoKey = wtLink.ref.substring(0, colonIdx);

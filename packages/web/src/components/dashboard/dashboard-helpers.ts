@@ -18,9 +18,8 @@ export function findSessionsForTicket(
     }
   }
 
-  // Check worktree link → match sessions by org/name + branch or absolute path
-  const wtLink = ticket.links.find((l) => l.type === 'worktree');
-  if (wtLink) {
+  // Check ALL worktree links → match sessions by org/name + branch or absolute path
+  for (const wtLink of ticket.links.filter((l) => l.type === 'worktree')) {
     const ref = wtLink.ref;
 
     if (ref.startsWith('/')) {

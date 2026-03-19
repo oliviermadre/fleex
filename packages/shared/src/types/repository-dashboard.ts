@@ -10,6 +10,7 @@ export interface RepositorySummary {
   readonly recentlyMergedPRsCount: number;
   readonly lastFetchedAt: string | null;
   readonly isClonedLocally?: boolean;
+  readonly mode?: 'regular' | 'bare';
 }
 
 export interface RepositoryDashboardData {

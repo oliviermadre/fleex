@@ -35,6 +35,9 @@ export function NavSidebar() {
   const repoCount = Object.keys(summaries).length;
   const tickets = useTicketStore((s) => s.tickets);
   const activeTicketCount = tickets.filter((t) => t.status === 'doing' || t.status === 'reviewing').length;
+  const workspaceTicketCount = tickets.filter(
+    (t) => (t.status === 'doing' || t.status === 'reviewing') && t.links.some((l) => l.type === 'worktree'),
+  ).length;
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
@@ -68,6 +71,21 @@ export function NavSidebar() {
           collapsed={navCollapsed}
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
           onClick={() => navigate('/sessions')}
+        />
+
+        {/* Work */}
+        <NavItem
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="7" width="20" height="14" rx="2" />
+              <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+            </svg>
+          }
+          label="Work"
+          active={activePanel === 'workspace'}
+          collapsed={navCollapsed}
+          badge={workspaceTicketCount > 0 ? (workspaceTicketCount > 9 ? '9+' : String(workspaceTicketCount)) : undefined}
+          onClick={() => navigate('/workspace')}
         />
 
         {/* Repositories */}

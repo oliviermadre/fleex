@@ -142,10 +142,12 @@ export async function checkRepoCwd(org: string, name: string): Promise<CheckCwdR
   );
 }
 
-export async function cloneRepo(org: string, name: string): Promise<{ success: boolean }> {
-  return request<{ success: boolean }>('/repositories/clone', {
+export async function cloneRepo(
+  org: string, name: string, bare?: boolean,
+): Promise<{ success: boolean; mode?: string; path?: string }> {
+  return request<{ success: boolean; mode?: string; path?: string }>('/repositories/clone', {
     method: 'POST',
-    body: JSON.stringify({ org, name }),
+    body: JSON.stringify({ org, name, bare }),
   });
 }
 
@@ -348,6 +350,12 @@ export async function fetchTicketActivity(id: string): Promise<import('@fleex/sh
 
 export async function openSessionFromTicket(id: string): Promise<{ sessionId: string }> {
   return request<{ sessionId: string }>(`/tickets/${encodeURIComponent(id)}/open-session`, { method: 'POST' });
+}
+
+export async function fetchWorkspace(ticketId: string): Promise<import('@fleex/shared').Workspace | null> {
+  try {
+    return await request<import('@fleex/shared').Workspace>(`/tickets/${encodeURIComponent(ticketId)}/workspace`);
+  } catch { return null; }
 }
 
 export async function importGitHubIssue(org: string, name: string, issueNumber: number, boardId: string): Promise<import('@fleex/shared').Ticket> {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { TicketStatus, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest } from '@fleex/shared';
+import type { TicketStatus, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, WorkspaceRepo } from '@fleex/shared';
 import { TICKET_STATUSES } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
@@ -210,6 +211,58 @@ export function ticketRoutes(container: Container) {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
+        // If adding a repository link and a workspace already exists, create the worktree now
+        if (request.body.type === 'repository' && request.body.ref.includes('/')) {
+          const workspace = await container.workspaceStore.getByTicketId(ticket.id);
+          if (workspace && workspace.repos.length > 0) {
+            const slashIdx = request.body.ref.indexOf('/');
+            const org = request.body.ref.substring(0, slashIdx);
+            const name = request.body.ref.substring(slashIdx + 1);
+            const branchName = workspace.repos[0]!.branch;
+            const basePath = container.config.get().basePath;
+
+            const resolved = await container.repoPathResolver.resolve(basePath, org, name);
+            const repoPath = resolved?.repoPath ?? join(basePath, org, name);
+            const wtPath = join(basePath, 'workspaces', ticket.id, org, name);
+
+            try {
+              const parentDir = join(basePath, 'workspaces', ticket.id, org);
+              try { await container.hostFs.mkdir(parentDir); } catch { /* already exists */ }
+
+              await container.createWorktree.execute(repoPath, wtPath, {
+                branch: branchName,
+                createNewBranch: true,
+              }, resolved?.envSourcePath);
+
+              // Save repo to workspace
+              const updatedWorkspace = {
+                ...workspace,
+                repos: [...workspace.repos, { org, name, branch: branchName, bare: resolved?.mode === 'bare' } as WorkspaceRepo],
+              };
+              await container.workspaceStore.save(updatedWorkspace);
+
+              // Add worktree link instead of repository link
+              const ref = `${org}/${name}:${branchName}`;
+              const link = ticket.addLink('worktree', ref, branchName, null, randomUUID());
+              await container.ticketStore.saveTicket(ticket);
+              await container.ticketStore.saveActivity(TicketActivityEntity.create({
+                id: randomUUID(),
+                ticketId: ticket.id,
+                action: 'linked',
+                changes: { link: { from: null, to: link } },
+                source: 'web',
+              }));
+              emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
+              return link;
+            } catch (err) {
+              container.logger.warn('Failed to create worktree when adding repo to workspace', {
+                ticketId: ticket.id, org, name, error: err instanceof Error ? err.message : String(err),
+              });
+              // Fall through to add a plain repository link
+            }
+          }
+        }
+
         const link = ticket.addLink(
           request.body.type as Parameters<TicketEntity['addLink']>[0],
           request.body.ref,
@@ -238,6 +291,41 @@ export function ticketRoutes(container: Container) {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
+        // If removing a worktree link and a workspace exists, clean up the worktree
+        const linkToRemove = ticket.links.find((l) => l.id === request.params.linkId);
+        if (linkToRemove?.type === 'worktree' && linkToRemove.ref.includes(':')) {
+          const workspace = await container.workspaceStore.getByTicketId(ticket.id);
+          if (workspace) {
+            const colonIdx = linkToRemove.ref.indexOf(':');
+            const repoKey = linkToRemove.ref.substring(0, colonIdx);
+            const slashIdx = repoKey.indexOf('/');
+            if (slashIdx > 0) {
+              const org = repoKey.substring(0, slashIdx);
+              const name = repoKey.substring(slashIdx + 1);
+              const basePath = container.config.get().basePath;
+              const wtPath = join(basePath, 'workspaces', ticket.id, org, name);
+
+              try {
+                const resolved = await container.repoPathResolver.resolve(basePath, org, name);
+                const repoPath = resolved?.repoPath ?? join(basePath, org, name);
+                await container.git.removeWorktree(repoPath, wtPath);
+              } catch (err) {
+                container.logger.warn('Failed to remove worktree when removing repo from workspace', {
+                  ticketId: ticket.id, org, name, error: err instanceof Error ? err.message : String(err),
+                });
+              }
+
+              // Update workspace
+              const updatedRepos = workspace.repos.filter((r) => !(r.org === org && r.name === name));
+              if (updatedRepos.length === 0) {
+                await container.workspaceStore.remove(ticket.id);
+              } else {
+                await container.workspaceStore.save({ ...workspace, repos: updatedRepos });
+              }
+            }
+          }
+        }
+
         const removed = ticket.removeLink(request.params.linkId);
         if (removed) {
           await container.ticketStore.saveTicket(ticket);
@@ -258,6 +346,13 @@ export function ticketRoutes(container: Container) {
     // Activity
     app.get<{ Params: { id: string } }>('/api/tickets/:id/activity', async (request) => {
       return (await container.ticketStore.getActivitiesByTicket(request.params.id)).map((a) => a.toDTO());
+    });
+
+    // Workspace for a ticket
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/workspace', async (request, reply) => {
+      const workspace = await container.workspaceStore.getByTicketId(request.params.id);
+      if (!workspace) return reply.code(404).send({ error: 'No workspace found for this ticket' });
+      return workspace;
     });
 
     // Workflow: open session from ticket

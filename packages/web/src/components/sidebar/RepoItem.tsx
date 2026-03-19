@@ -42,6 +42,11 @@ export function RepoItem({ summary }: Props) {
             <CloudDownloadIcon />
           </span>
         )}
+        {summary.mode === 'bare' && (
+          <span className="ml-1 flex-shrink-0 rounded bg-purple-500/15 px-1 py-0.5 text-[8px] font-bold uppercase text-purple-400" title="Bare repository">
+            bare
+          </span>
+        )}
         <a
           href={`https://github.com/${key}`}
           target="_blank"
