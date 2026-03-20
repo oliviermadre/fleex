@@ -64,7 +64,7 @@ export function dashboardRoutes(container: Container) {
                 'pr', 'list',
                 '--repo', `${org}/${name}`,
                 '--state', 'open',
-                '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt',
+                '--json', 'number,title,headRefName,author,assignees,reviewRequests,createdAt,updatedAt',
                 '--limit', '50',
               ], { timeout: 15_000 }),
               container.execFn('gh', [
@@ -88,6 +88,7 @@ export function dashboardRoutes(container: Container) {
                 const rawPRs = JSON.parse(prsResult.value.stdout) as {
                   number: number; title: string; headRefName: string;
                   author: { login: string }; assignees: { login: string }[];
+                  reviewRequests: { login: string }[];
                   createdAt: string; updatedAt: string;
                 }[];
 
@@ -107,7 +108,10 @@ export function dashboardRoutes(container: Container) {
 
                   if (pr.author.login === githubUser) {
                     myPullRequests.push(mapped);
-                  } else if (pr.assignees.some((a) => a.login === githubUser)) {
+                  } else if (
+                    pr.assignees.some((a) => a.login === githubUser) ||
+                    pr.reviewRequests?.some((r) => r.login === githubUser)
+                  ) {
                     reviewRequests.push(mapped);
                   }
                 }

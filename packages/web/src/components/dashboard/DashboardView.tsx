@@ -945,6 +945,7 @@ function PRToolbar({
 
 function PRSection({
   title,
+  subtitle,
   dotColor,
   prs,
   sessions,
@@ -956,6 +957,7 @@ function PRSection({
   onExecuteSkill,
 }: {
   title: string;
+  subtitle?: string;
   dotColor: string;
   prs: DashboardPullRequest[];
   sessions: Session[];
@@ -1004,6 +1006,7 @@ function PRSection({
       <SectionHeader
         dotColor={dotColor}
         title={title}
+        subtitle={subtitle}
         count={prs.length}
         toolbar={prs.length > 0 ? (
           <PRToolbar
@@ -1689,6 +1692,7 @@ export function DashboardView() {
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                 <PRSection
                   title="Pull Requests"
+                  subtitle="Open PRs you authored"
                   dotColor="#22c55e"
                   prs={data.myPullRequests}
                   sessions={sessions}
@@ -1701,6 +1705,7 @@ export function DashboardView() {
                 />
                 <PRSection
                   title="Reviews"
+                  subtitle="Open PRs where you are an assignee or a requested reviewer"
                   dotColor="#a78bfa"
                   prs={data.reviewRequests}
                   sessions={sessions}
