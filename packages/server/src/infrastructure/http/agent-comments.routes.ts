@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { MentionTargetType } from '@fleex/shared';
 import { TicketNotFoundError, CommentNotFoundError, ForbiddenError } from '../../domain/errors.js';
 import type { Container } from '../container.js';
 
@@ -121,7 +122,7 @@ export function agentCommentsRoutes(container: Container) {
       const { randomUUID } = await import('node:crypto');
       const { TicketMentionEntity } = await import('../../domain/entities/ticket-mention.entity.js');
       const { humanMentionName } = container.config.get();
-      const newlyCreatedMentions: Array<{ mentionId: string; targetAgent: string; targetType: 'agent' | 'human' }> = [];
+      const newlyCreatedMentions: Array<{ mentionId: string; targetAgent: string; targetType: MentionTargetType }> = [];
 
       for (const target of newMentionNames) {
         if (!oldMentions.has(target) && target !== agentName) {
