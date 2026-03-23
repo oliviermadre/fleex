@@ -115,3 +115,15 @@ export class SkillCommandNameConflictError extends DomainError {
     super(`Skill command name already exists: ${commandName}`, 'SKILL_COMMAND_NAME_CONFLICT');
   }
 }
+
+export class PanelNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Panel not found: ${id}`, 'PANEL_NOT_FOUND');
+  }
+}
+
+export class PanelNameConflictError extends DomainError {
+  constructor(name: string) {
+    super(`Panel name already exists: ${name}`, 'PANEL_NAME_CONFLICT');
+  }
+}

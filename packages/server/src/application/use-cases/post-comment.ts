@@ -55,6 +55,22 @@ export class PostCommentUseCase {
       createdMentions.push(mention);
     }
 
+    // Create mentions for @panel:xxx found in the body
+    const panelMentions = TicketCommentEntity.extractPanelMentions(params.body);
+    for (const panelName of panelMentions) {
+      if (panelName === params.authorName) continue; // don't self-mention
+      const mention = TicketMentionEntity.create({
+        id: randomUUID(),
+        ticketId: params.ticketId,
+        commentId: comment.id,
+        targetAgent: panelName,
+        sourceAgent: params.authorName,
+        targetType: 'panel',
+      });
+      await this.mentionStore.save(mention);
+      createdMentions.push(mention);
+    }
+
     // Create mentions for human @mentions (tracked but never auto-executed)
     if (params.humanMentionNames && params.humanMentionNames.length > 0) {
       const humanMentions = TicketCommentEntity.extractHumanMentions(

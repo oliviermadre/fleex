@@ -186,6 +186,30 @@ export interface SkillExecutedEvent extends DomainEvent {
   ticketId: string;
 }
 
+// ── Panel events ──
+
+export interface PanelCreatedEvent extends DomainEvent {
+  type: 'panel.created';
+  panelId: string;
+}
+
+export interface PanelUpdatedEvent extends DomainEvent {
+  type: 'panel.updated';
+  panelId: string;
+}
+
+export interface PanelDeletedEvent extends DomainEvent {
+  type: 'panel.deleted';
+  panelId: string;
+}
+
+export interface PanelExecutedEvent extends DomainEvent {
+  type: 'panel.executed';
+  panelId: string;
+  panelName: string;
+  ticketId: string;
+}
+
 // ── Worktree events ──
 
 export interface WorktreeCreatedEvent extends DomainEvent {
@@ -243,6 +267,10 @@ export type AnyDomainEvent =
   | SkillUpdatedEvent
   | SkillDeletedEvent
   | SkillExecutedEvent
+  | PanelCreatedEvent
+  | PanelUpdatedEvent
+  | PanelDeletedEvent
+  | PanelExecutedEvent
   | WorktreeCreatedEvent
   | SessionCreatedEvent
   | SessionRenamedEvent

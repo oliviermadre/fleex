@@ -152,7 +152,7 @@ export interface TicketComment {
 
 export type MentionStatus = 'pending' | 'acknowledged' | 'resolved' | 'waiting_for_info';
 
-export type MentionTargetType = 'agent' | 'human';
+export type MentionTargetType = 'agent' | 'human' | 'panel';
 
 export interface TicketMention {
   readonly id: string;
