@@ -496,6 +496,35 @@ export async function executeSkill(id: string, ticketId: string): Promise<{ stat
   });
 }
 
+// ── Panels API ──
+
+export async function fetchPanels(): Promise<import('@fleex/shared').Panel[]> {
+  return request<import('@fleex/shared').Panel[]>('/panels');
+}
+
+export async function fetchPanel(id: string): Promise<import('@fleex/shared').Panel> {
+  return request<import('@fleex/shared').Panel>(`/panels/${encodeURIComponent(id)}`);
+}
+
+export async function createPanel(req: import('@fleex/shared').CreatePanelRequest): Promise<import('@fleex/shared').Panel> {
+  return request<import('@fleex/shared').Panel>('/panels', { method: 'POST', body: JSON.stringify(req) });
+}
+
+export async function updatePanel(id: string, req: import('@fleex/shared').UpdatePanelRequest): Promise<import('@fleex/shared').Panel> {
+  return request<import('@fleex/shared').Panel>(`/panels/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+}
+
+export async function deletePanel(id: string): Promise<void> {
+  await request<void>(`/panels/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function executePanel(id: string, ticketId: string, topic?: string): Promise<{ status: string; panelId: string; ticketId: string }> {
+  return request<{ status: string; panelId: string; ticketId: string }>(`/panels/${encodeURIComponent(id)}/execute`, {
+    method: 'POST',
+    body: JSON.stringify({ ticketId, topic }),
+  });
+}
+
 // Claude Usage API
 
 export async function fetchClaudeUsage(force = false): Promise<ClaudeUsage | null> {
