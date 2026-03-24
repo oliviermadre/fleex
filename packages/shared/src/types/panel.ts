@@ -16,6 +16,7 @@ export interface Panel {
   readonly members: PanelMember[];
   readonly orchestratorPrompt: string; // system prompt for the synthesizer
   readonly orchestratorModel: string; // model for the orchestrator (e.g., 'claude-opus-4-5-20250929')
+  readonly orchestratorPersonaId: string | null; // optional persona for synthesis (uses soul/identity/memory)
   readonly defaultMemberModel: string; // fallback model for members when 'inherited' and persona has none
   readonly enabled: boolean;
   readonly createdAt: string;
@@ -29,6 +30,7 @@ export interface CreatePanelRequest {
   readonly members: PanelMember[];
   readonly orchestratorPrompt?: string;
   readonly orchestratorModel?: string;
+  readonly orchestratorPersonaId?: string | null;
   readonly defaultMemberModel?: string;
   readonly enabled?: boolean;
 }
@@ -40,6 +42,7 @@ export interface UpdatePanelRequest {
   readonly members?: PanelMember[];
   readonly orchestratorPrompt?: string;
   readonly orchestratorModel?: string;
+  readonly orchestratorPersonaId?: string | null;
   readonly defaultMemberModel?: string;
   readonly enabled?: boolean;
 }

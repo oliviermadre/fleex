@@ -1,16 +1,21 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { PanelNotFoundError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import type { PanelEntity } from '../../domain/entities/panel.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { PanelStorePort } from '../ports/panel-store.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
+import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
 import type { GetTicketContextUseCase } from './get-ticket-context.js';
+import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { EventBus } from '../event-bus.js';
 
 interface MemberResponse {
@@ -32,8 +37,6 @@ export interface PanelResult {
   durationMs: number;
 }
 
-const DEFAULT_MEMBER_TIMEOUT_MS = 60_000; // 60s per member
-
 export class RunPanelUseCase {
   public eventBus: EventBus | null = null;
 
@@ -45,6 +48,8 @@ export class RunPanelUseCase {
     private readonly postComment: PostCommentUseCase,
     private readonly submitDeliverable: SubmitDeliverableUseCase,
     private readonly getTicketContext: GetTicketContextUseCase,
+    private readonly createWorktree: CreateWorktreeUseCase,
+    private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
   ) {}
 
@@ -123,22 +128,33 @@ export class RunPanelUseCase {
       });
     }
 
-    // 5. Load all member personas
+    // 5. Ensure worktree exists (create on-the-fly if needed, same as agent execution)
+    const worktreePath = await this.ensureWorktree(params.ticketId);
+
+    if (worktreePath) {
+      this.logger.info('Panel has worktree access', { panelName: panel.name, worktreePath });
+    } else {
+      this.logger.warn('Panel has NO worktree — agents will not have code access', { panelName: panel.name });
+    }
+
+    // 6. Load all member personas
     const memberPersonas = await this.loadMemberPersonas(panel);
 
-    // 6. Query all members in parallel via Messages API
-    const memberResponses = await this.queryMembersInParallel(
+    // 7. Query all members in parallel
+    const memberResponses = await this.queryAllMembers(
       panel,
       memberPersonas,
       topic,
       ticketContext,
+      worktreePath,
     );
 
-    // 7. Generate synthesis via Messages API
+    // 8. Generate synthesis
     const synthesis = await this.generateSynthesis(
       panel,
       topic,
       memberResponses,
+      worktreePath,
     );
 
     const durationMs = Date.now() - startTime;
@@ -235,12 +251,35 @@ export class RunPanelUseCase {
       source: 'api',
     }));
 
+    const respondedMembers = memberResponses.filter((r) => !r.error && r.response).length;
+    const failedMemberCount = memberResponses.filter((r) => r.error || !r.response).length;
+    const panelStatus = respondedMembers > 0 ? 'completed' as const : 'failed' as const;
+
+    // 12. Emit panel.executed domain event
+    if (this.eventBus) {
+      this.eventBus.emit({
+        type: 'panel.executed',
+        panelId: panel.id,
+        panelName: panel.name,
+        panelDisplayName: panel.displayName,
+        ticketId: params.ticketId,
+        status: panelStatus,
+        durationMs,
+        memberCount: memberResponses.length,
+        respondedMembers,
+        failedMembers: failedMemberCount,
+        occurredAt: new Date(),
+      });
+    }
+
     this.logger.info('Panel execution completed', {
       panelName: panel.name,
       ticketId: params.ticketId,
+      status: panelStatus,
       durationMs,
       memberCount: memberResponses.length,
-      failedMembers: memberResponses.filter((r) => r.error).length,
+      respondedMembers,
+      failedMembers: failedMemberCount,
     });
 
     return result;
@@ -262,40 +301,122 @@ export class RunPanelUseCase {
     return personas;
   }
 
-  private async queryMembersInParallel(
+  private async queryAllMembers(
     panel: PanelEntity,
     memberPersonas: Map<string, AgentPersonaEntity>,
     topic: string,
     ticketContext: string,
+    worktreePath: string | null,
   ): Promise<MemberResponse[]> {
+    const CONCURRENCY = 3;
     const sortedMembers = [...panel.members].sort((a, b) => a.order - b.order);
+    const results: MemberResponse[] = [];
 
-    const promises = sortedMembers.map(async (member) => {
-      const persona = memberPersonas.get(member.personaId);
-      if (!persona) {
-        return {
-          personaName: member.personaId,
-          personaDisplayName: 'Unknown',
-          emoji: '❓',
-          response: '',
-          model: '',
-          durationMs: 0,
-          error: `Persona not found: ${member.personaId}`,
-        } satisfies MemberResponse;
+    for (let i = 0; i < sortedMembers.length; i += CONCURRENCY) {
+      const batch = sortedMembers.slice(i, i + CONCURRENCY);
+      this.logger.info('Panel member batch starting', {
+        panelName: panel.name,
+        batch: batch.map((m) => memberPersonas.get(m.personaId)?.name ?? m.personaId),
+        batchIndex: Math.floor(i / CONCURRENCY) + 1,
+        totalBatches: Math.ceil(sortedMembers.length / CONCURRENCY),
+        hasWorktree: !!worktreePath,
+      });
+
+      const batchResults = await Promise.all(
+        batch.map(async (member) => {
+          const persona = memberPersonas.get(member.personaId);
+          if (!persona) {
+            return {
+              personaName: member.personaId,
+              personaDisplayName: 'Unknown',
+              emoji: '❓',
+              response: '',
+              model: '',
+              durationMs: 0,
+              error: `Persona not found: ${member.personaId}`,
+            } satisfies MemberResponse;
+          }
+
+          const model = member.modelOverride === 'inherited'
+            ? (persona.model || panel.defaultMemberModel)
+            : member.modelOverride;
+
+          const identityEmoji = this.extractEmojiFromIdentity(persona.identityMd);
+          const response = await this.queryMember(persona, model, topic, ticketContext, identityEmoji, worktreePath);
+
+          this.logger.info('Panel member completed', {
+            persona: persona.name,
+            model,
+            responseLength: response.response.length,
+            hasError: !!response.error,
+            durationMs: response.durationMs,
+          });
+
+          return response;
+        }),
+      );
+      results.push(...batchResults);
+
+      // Pause between batches
+      if (i + CONCURRENCY < sortedMembers.length) {
+        await new Promise((r) => setTimeout(r, 2000));
       }
+    }
 
-      // Resolve model: explicit override > persona model > default
-      const model = member.modelOverride === 'inherited'
-        ? (persona.model || panel.defaultMemberModel)
-        : member.modelOverride;
+    return results;
+  }
 
-      // Build the persona's display info from IDENTITY.md
-      const identityEmoji = this.extractEmojiFromIdentity(persona.identityMd);
+  private async querySDK(
+    prompt: string,
+    options: {
+      model: string;
+      systemPrompt?: string;
+      cwd?: string | null;
+      maxTurns?: number;
+    },
+  ): Promise<string> {
+    const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
-      return this.queryMember(persona, model, topic, ticketContext, identityEmoji);
+    const queryOptions: Record<string, unknown> = {
+      model: options.model,
+      systemPrompt: options.systemPrompt,
+      maxTurns: options.maxTurns ?? 1,
+      allowedTools: ['Read', 'Bash', 'Glob', 'Grep'],
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+    };
+
+    if (options.cwd) {
+      queryOptions['cwd'] = options.cwd;
+    }
+
+    let resultText = '';
+    let messageCount = 0;
+    for await (const message of query({
+      prompt,
+      options: queryOptions as Parameters<typeof query>[0]['options'],
+    })) {
+      messageCount++;
+      const msg = message as Record<string, unknown>;
+      if (messageCount <= 3 || 'result' in message) {
+        this.logger.debug('SDK message', {
+          type: msg['type'],
+          subtype: msg['subtype'],
+          hasResult: 'result' in message,
+          messageCount,
+        });
+      }
+      if ('result' in message) {
+        resultText = (message as { result: string }).result;
+      }
+    }
+    this.logger.info('SDK query done', {
+      model: options.model,
+      messageCount,
+      resultLength: resultText.length,
+      hasCwd: !!options.cwd,
     });
-
-    return Promise.all(promises);
+    return resultText;
   }
 
   private async queryMember(
@@ -304,6 +425,7 @@ export class RunPanelUseCase {
     topic: string,
     ticketContext: string,
     emoji: string,
+    worktreePath: string | null,
   ): Promise<MemberResponse> {
     const startTime = Date.now();
 
@@ -314,13 +436,17 @@ export class RunPanelUseCase {
     if (persona.memoryMd) systemParts.push(persona.memoryMd);
     const systemPrompt = systemParts.join('\n\n---\n\n');
 
+    const codeAccessInstructions = worktreePath
+      ? `\n\nYou have access to the codebase. Use Read, Grep, Glob to inspect relevant files. You can run \`gh pr view\` or \`gh pr diff\` via Bash to review the PR if one exists. Ground your analysis in the actual code.`
+      : '';
+
     const userPrompt = `# Panel Discussion Topic
 
 **Subject:** ${topic}
 
 ## Ticket Context
 
-${ticketContext}
+${ticketContext}${codeAccessInstructions}
 
 ---
 
@@ -330,38 +456,21 @@ Raise the key points from your area of expertise.
 If you disagree with the approach, explain why and propose alternatives.`;
 
     try {
-      const Anthropic = (await import('@anthropic-ai/sdk')).default;
-      const client = new Anthropic();
+      const resultText = await this.querySDK(userPrompt, {
+        model,
+        systemPrompt: systemPrompt || undefined,
+        cwd: worktreePath,
+        maxTurns: worktreePath ? 150 : 10,
+      });
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), DEFAULT_MEMBER_TIMEOUT_MS);
-
-      try {
-        const message = await client.messages.create({
-          model,
-          max_tokens: 1500,
-          system: systemPrompt || undefined,
-          messages: [{ role: 'user', content: userPrompt }],
-        }, { signal: controller.signal });
-
-        clearTimeout(timeout);
-
-        const responseText = message.content
-          .filter((block) => block.type === 'text')
-          .map((block) => (block as { type: 'text'; text: string }).text)
-          .join('\n');
-
-        return {
-          personaName: persona.name,
-          personaDisplayName: persona.displayName || persona.name,
-          emoji,
-          response: responseText,
-          model,
-          durationMs: Date.now() - startTime,
-        };
-      } finally {
-        clearTimeout(timeout);
-      }
+      return {
+        personaName: persona.name,
+        personaDisplayName: persona.displayName || persona.name,
+        emoji,
+        response: resultText,
+        model,
+        durationMs: Date.now() - startTime,
+      };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.logger.error('Panel member query failed', {
@@ -386,6 +495,7 @@ If you disagree with the approach, explain why and propose alternatives.`;
     panel: PanelEntity,
     topic: string,
     memberResponses: MemberResponse[],
+    worktreePath: string | null,
   ): Promise<string> {
     const validResponses = memberResponses.filter((r) => !r.error && r.response);
 
@@ -394,51 +504,56 @@ If you disagree with the approach, explain why and propose alternatives.`;
     }
 
     const responsesText = validResponses
-      .map((r) => `### ${r.emoji} ${r.personaDisplayName}\n\n${r.response}`)
+      .map((r) => `## ${r.emoji} ${r.personaDisplayName}\n\n${r.response}`)
       .join('\n\n---\n\n');
 
-    const synthesisPrompt = `You are synthesizing the opinions from a panel discussion on the following topic:
+    // Orchestrator persona system prompt
+    let orchestratorSystemPrompt: string | undefined;
+    if (panel.orchestratorPersonaId) {
+      const orchestratorPersona = await this.personaStore.getById(panel.orchestratorPersonaId);
+      if (orchestratorPersona) {
+        const parts: string[] = [];
+        if (orchestratorPersona.soulMd) parts.push(orchestratorPersona.soulMd);
+        if (orchestratorPersona.identityMd) parts.push(orchestratorPersona.identityMd);
+        if (orchestratorPersona.memoryMd) parts.push(orchestratorPersona.memoryMd);
+        if (parts.length > 0) {
+          orchestratorSystemPrompt = parts.join('\n\n---\n\n');
+        }
+      }
+    }
+
+    const synthesisPrompt = `# Panel Discussion — ${panel.displayName}
 
 **Topic:** ${topic}
 
-Here are the expert opinions:
+## Expert Opinions
 
 ${responsesText}
 
-${panel.orchestratorPrompt ? `\nAdditional orchestrator instructions:\n${panel.orchestratorPrompt}\n` : ''}
+---
 
-Generate a structured synthesis in markdown with:
-1. **Points of consensus** — What do the experts agree on?
-2. **Points of divergence & identified risks** — Where do opinions differ? What risks were raised?
-3. **Final recommendation** — Your decision-oriented recommendation
-4. **Concrete next steps** — Actionable items
+${panel.orchestratorPrompt ? `${panel.orchestratorPrompt}\n\n` : ''}Synthesize the expert opinions above in markdown:
+1. **Points of consensus**
+2. **Points of divergence & identified risks**
+3. **Final recommendation**
+4. **Concrete next steps**
 
-Be concise and decision-oriented. Write in the same language as the panel members' responses.
-Format the output as a clean markdown section starting with the panel name.`;
+Be concise and decision-oriented. Write in the same language as the panel members' responses.`;
 
     try {
-      const Anthropic = (await import('@anthropic-ai/sdk')).default;
-      const client = new Anthropic();
-
-      const message = await client.messages.create({
+      const resultText = await this.querySDK(synthesisPrompt, {
         model: panel.orchestratorModel,
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: synthesisPrompt }],
+        systemPrompt: orchestratorSystemPrompt,
+        cwd: worktreePath,
       });
 
-      const synthesisText = message.content
-        .filter((block) => block.type === 'text')
-        .map((block) => (block as { type: 'text'; text: string }).text)
-        .join('\n');
-
-      return `**🏛️ ${panel.displayName} — Synthesis**\n\n${synthesisText}`;
+      return `**🏛️ ${panel.displayName} — Synthesis**\n\n${resultText}`;
     } catch (err) {
       this.logger.error('Panel synthesis generation failed', {
         panelName: panel.name,
         error: err instanceof Error ? err.message : String(err),
       });
 
-      // Fallback: list responses without synthesis
       return `**🏛️ ${panel.displayName} — Synthesis (auto-generated)**\n\n⚠️ Synthesis generation failed. Individual member responses are available in the full transcript deliverable.\n\n${validResponses.map((r) => `- **${r.emoji} ${r.personaDisplayName}** responded (${r.durationMs}ms)`).join('\n')}`;
     }
   }
@@ -525,14 +640,119 @@ Format the output as a clean markdown section starting with the panel name.`;
   }
 
   private extractEmojiFromIdentity(identityMd: string): string {
-    // Try to extract emoji from IDENTITY.md (common pattern: "Emoji : 🔨")
     const emojiMatch = identityMd.match(/emoji\s*[:：]\s*(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)/iu);
     if (emojiMatch) return emojiMatch[1]!;
-
-    // Try to find any emoji at the start of a line
     const lineEmoji = identityMd.match(/^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)/mu);
     if (lineEmoji) return lineEmoji[1]!;
-
     return '💬';
+  }
+
+  /**
+   * Ensure a worktree exists for the ticket (same logic as ExecuteAgentUseCase).
+   * Creates the worktree on-the-fly if it doesn't exist yet.
+   */
+  private async ensureWorktree(ticketId: string): Promise<string | null> {
+    const ticket = await this.ticketStore.getTicketById(ticketId);
+    if (!ticket) return null;
+
+    const board = await this.ticketStore.getBoardById(ticket.boardId);
+    const existingWorktreeLink = ticket.links.find((l) => l.type === 'worktree');
+
+    let org: string | null = null;
+    let repo: string | null = null;
+    let branchName: string;
+    let createNewBranch: boolean;
+
+    if (existingWorktreeLink) {
+      if (existingWorktreeLink.ref.includes(':')) {
+        const [orgRepo, branch] = existingWorktreeLink.ref.split(':');
+        const [linkOrg, linkRepo] = orgRepo!.split('/');
+        org = linkOrg!;
+        repo = linkRepo!;
+        branchName = branch!;
+      } else {
+        branchName = existingWorktreeLink.label || existingWorktreeLink.ref;
+        const repoLink = ticket.links.find((l) => l.type === 'repository');
+        if (repoLink && repoLink.ref.includes('/')) {
+          const [linkOrg, linkRepo] = repoLink.ref.split('/');
+          org = linkOrg!;
+          repo = linkRepo!;
+        } else {
+          org = board?.repositoryOrg ?? null;
+          repo = board?.repositoryName ?? null;
+        }
+      }
+      createNewBranch = false;
+    } else {
+      const repoLink = ticket.links.find((l) => l.type === 'repository');
+      if (repoLink && repoLink.ref.includes('/')) {
+        const [linkOrg, linkRepo] = repoLink.ref.split('/');
+        org = linkOrg!;
+        repo = linkRepo!;
+      } else {
+        org = board?.repositoryOrg ?? null;
+        repo = board?.repositoryName ?? null;
+      }
+      if (!org || !repo) return null;
+      const slug = ticket.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40);
+      branchName = `agent/${ticket.displayId}-${slug}`;
+      createNewBranch = true;
+    }
+
+    if (!org || !repo) return null;
+
+    const repoPath = join(this.config.get().basePath, org, repo);
+
+    // Ensure repo is cloned locally
+    if (!existsSync(repoPath)) {
+      this.logger.info('Cloning repository for panel worktree', { ticketId, repoPath, org, name: repo });
+      try {
+        const { execSync } = await import('node:child_process');
+        execSync(`git clone git@github.com:${org}/${repo}.git ${repoPath}`, { timeout: 120_000 });
+      } catch (err) {
+        this.logger.error('Failed to clone repository for panel', {
+          ticketId, repoPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return null;
+      }
+    }
+
+    const wtPath = join(repoPath, '..', buildWorktreeDirName(repo, branchName));
+
+    // Reuse existing worktree if on disk
+    if (existingWorktreeLink && existsSync(wtPath)) {
+      this.logger.info('Panel worktree ready (reused)', { ticketId, worktreePath: wtPath, branchName });
+      return wtPath;
+    }
+
+    // Create worktree
+    try {
+      const existingPath = await this.createWorktree.execute(repoPath, wtPath, {
+        branch: branchName,
+        createNewBranch,
+      });
+      const worktreePath = existingPath ?? wtPath;
+
+      if (!existingWorktreeLink) {
+        const ref = `${org}/${repo}:${branchName}`;
+        ticket.addLink('worktree', ref, branchName, worktreePath, randomUUID());
+        await this.ticketStore.saveTicket(ticket);
+        this.eventBus?.emit({ type: 'ticket.updated', ticketId, changes: {}, occurredAt: new Date() });
+      }
+
+      this.logger.info('Panel worktree ready', { ticketId, worktreePath, branchName, reused: !!existingWorktreeLink });
+      return worktreePath;
+    } catch (err) {
+      this.logger.error('Failed to ensure panel worktree', {
+        ticketId, branchName, wtPath,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
   }
 }

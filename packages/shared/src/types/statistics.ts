@@ -13,6 +13,7 @@ export interface StatisticsTimeBucket {
   readonly ticketsCreated: number;
   readonly ticketsCompleted: number;
   readonly skillsExecuted: number;
+  readonly panelsExecuted: number;
 }
 
 export interface AgentLeaderboardEntry {
@@ -40,6 +41,7 @@ export interface StatisticsSummary {
   readonly ticketsCreated: number;
   readonly ticketsCompleted: number;
   readonly skillsExecuted: number;
+  readonly panelsExecuted: number;
   readonly activeSessions: number;
 }
 
@@ -51,6 +53,7 @@ export interface StatisticsResponse {
   readonly timeSeries: StatisticsTimeBucket[];
   readonly agentLeaderboard: AgentLeaderboardEntry[];
   readonly skillLeaderboard: SkillLeaderboardEntry[];
+  readonly panelLeaderboard: PanelLeaderboardEntry[];
 }
 
 export interface SkillLeaderboardEntry {
@@ -60,4 +63,15 @@ export interface SkillLeaderboardEntry {
   readonly executionCount: number;
   readonly completedCount: number;
   readonly failedCount: number;
+}
+
+export interface PanelLeaderboardEntry {
+  readonly panelId: string;
+  readonly panelName: string;
+  readonly panelDisplayName: string;
+  readonly executionCount: number;
+  readonly completedCount: number;
+  readonly failedCount: number;
+  readonly avgDurationMs: number | null;
+  readonly avgRespondedMembers: number | null;
 }

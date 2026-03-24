@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { TicketDeliverable } from '@fleex/shared';
 
 type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
-export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions' | 'agent-tokens' | 'panels';
+export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'worktree-actions' | 'agent-tokens';
 export type AnalyticsTab = 'audit-trail' | 'statistics';
 
 interface UIState {

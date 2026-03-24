@@ -11,6 +11,7 @@ interface PanelRow {
   members: PanelMember[] | string;
   orchestrator_prompt: string;
   orchestrator_model: string;
+  orchestrator_persona_id: string | null;
   default_member_model: string;
   enabled: boolean;
   created_at: string;
@@ -33,6 +34,7 @@ function rowToEntity(r: PanelRow): PanelEntity {
     members,
     r.orchestrator_prompt ?? '',
     r.orchestrator_model ?? 'claude-sonnet-4-5-20250929',
+    r.orchestrator_persona_id ?? null,
     r.default_member_model ?? 'claude-sonnet-4-5-20250929',
     r.enabled,
     new Date(r.created_at),
@@ -91,6 +93,7 @@ export class SupabasePanelStore implements PanelStorePort {
       members: panel.members,
       orchestrator_prompt: panel.orchestratorPrompt,
       orchestrator_model: panel.orchestratorModel,
+      orchestrator_persona_id: panel.orchestratorPersonaId,
       default_member_model: panel.defaultMemberModel,
       enabled: panel.enabled,
       created_at: panel.createdAt.toISOString(),

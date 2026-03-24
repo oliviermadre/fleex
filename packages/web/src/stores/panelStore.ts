@@ -38,7 +38,9 @@ export const usePanelStore = create<PanelState>((set, get) => ({
 
   createPanel: async (req) => {
     const panel = await api.createPanel(req);
-    // WS broadcast will add it to the list
+    set((state) => ({
+      panels: [...state.panels, panel],
+    }));
     return panel;
   },
 

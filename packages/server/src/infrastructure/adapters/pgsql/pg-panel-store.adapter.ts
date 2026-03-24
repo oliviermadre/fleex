@@ -32,12 +32,12 @@ export class PgPanelStore implements PanelStorePort {
     await this.db.query(
       `INSERT INTO panels (
         id, name, display_name, description, members, orchestrator_prompt,
-        orchestrator_model, default_member_model, enabled, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        orchestrator_model, orchestrator_persona_id, default_member_model, enabled, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       ON CONFLICT (id) DO UPDATE SET
         name = $2, display_name = $3, description = $4, members = $5,
-        orchestrator_prompt = $6, orchestrator_model = $7, default_member_model = $8,
-        enabled = $9, created_at = $10, updated_at = $11`,
+        orchestrator_prompt = $6, orchestrator_model = $7, orchestrator_persona_id = $8,
+        default_member_model = $9, enabled = $10, created_at = $11, updated_at = $12`,
       [
         panel.id,
         panel.name,
@@ -46,6 +46,7 @@ export class PgPanelStore implements PanelStorePort {
         JSON.stringify(panel.members),
         panel.orchestratorPrompt,
         panel.orchestratorModel,
+        panel.orchestratorPersonaId,
         panel.defaultMemberModel,
         panel.enabled,
         panel.createdAt.toISOString(),
@@ -75,6 +76,7 @@ function rowToPanel(row: Record<string, unknown>): PanelEntity {
     members,
     (row.orchestrator_prompt as string) ?? '',
     (row.orchestrator_model as string) ?? 'claude-sonnet-4-5-20250929',
+    (row.orchestrator_persona_id as string) ?? null,
     (row.default_member_model as string) ?? 'claude-sonnet-4-5-20250929',
     row.enabled as boolean,
     new Date(row.created_at as string),

@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSkillStore } from '../../stores/skillStore';
+import { usePanelStore } from '../../stores/panelStore';
 import { useUIStore } from '../../stores/uiStore';
 import { CreateAgentModal } from './CreateAgentModal';
 import { CreateSkillModal } from './CreateSkillModal';
+import { CreatePanelModal } from './CreatePanelModal';
 import { cn } from '../../lib/cn';
 
 export function AgentListPanel() {
@@ -18,9 +20,20 @@ export function AgentListPanel() {
   const selectedSkillId = useSkillStore((s) => s.selectedSkillId);
   const selectSkill = useSkillStore((s) => s.selectSkill);
   const deleteSkill = useSkillStore((s) => s.deleteSkill);
+  const panels = usePanelStore((s) => s.panels);
+  const selectedPanelId = usePanelStore((s) => s.selectedPanelId);
+  const panelsLoaded = usePanelStore((s) => s.loaded);
+  const loadPanels = usePanelStore((s) => s.loadPanels);
+  const deletePanelAction = usePanelStore((s) => s.deletePanel);
+  const selectPanel = usePanelStore((s) => s.selectPanel);
   const [modalOpen, setModalOpen] = useState(false);
   const [skillModalOpen, setSkillModalOpen] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ id: string; kind: 'persona' | 'skill'; x: number; y: number } | null>(null);
+  const [panelModalOpen, setPanelModalOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ id: string; kind: 'persona' | 'skill' | 'panel'; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!panelsLoaded) loadPanels();
+  }, [panelsLoaded, loadPanels]);
 
   return (
     <div className="flex h-full flex-col">
@@ -192,6 +205,81 @@ export function AgentListPanel() {
             );
           })
         )}
+
+        {/* Panels section header */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">Panels</span>
+          <button
+            onClick={() => setPanelModalOpen(true)}
+            className="flex h-5 w-5 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+            title="Create panel"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="8" y1="3" x2="8" y2="13" />
+              <line x1="3" y1="8" x2="13" y2="8" />
+            </svg>
+          </button>
+        </div>
+
+        {panels.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 px-4 py-6 text-center text-[var(--theme-text-muted)]">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <p className="text-xs">No panels yet</p>
+            <button
+              onClick={() => setPanelModalOpen(true)}
+              className="text-xs text-[var(--theme-accent)] hover:underline"
+            >
+              Create your first panel
+            </button>
+          </div>
+        ) : (
+          panels.map((panel) => {
+            const isSelected = selectedPanelId === panel.id;
+
+            return (
+              <button
+                key={panel.id}
+                className={cn(
+                  'flex min-w-0 w-full items-center gap-3 py-2.5 pl-6 pr-3 text-left transition-colors border-l-2',
+                  isSelected
+                    ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
+                    : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
+                )}
+                onClick={() => {
+                  selectPanel(panel.id);
+                  navigate(`/agents/panel/${panel.id}`, { replace: true });
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({ id: panel.id, kind: 'panel', x: e.clientX, y: e.clientY });
+                }}
+              >
+                <span
+                  className={cn(
+                    'h-2 w-2 shrink-0 rounded-full',
+                    panel.enabled ? 'bg-green-400' : 'bg-[var(--theme-text-faint)]',
+                  )}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+                    {panel.displayName}
+                  </div>
+                  <div className="truncate text-xs text-[var(--theme-text-muted)]">
+                    @panel:{panel.name}
+                  </div>
+                </div>
+                <span className="shrink-0 rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--theme-text-muted)]">
+                  {panel.members.length}m
+                </span>
+              </button>
+            );
+          })
+        )}
       </div>
 
       {/* Context menu */}
@@ -207,8 +295,10 @@ export function AgentListPanel() {
               onClick={() => {
                 if (contextMenu.kind === 'persona') {
                   deletePersona(contextMenu.id);
-                } else {
+                } else if (contextMenu.kind === 'skill') {
                   deleteSkill(contextMenu.id);
+                } else {
+                  deletePanelAction(contextMenu.id);
                 }
                 setContextMenu(null);
               }}
@@ -221,6 +311,7 @@ export function AgentListPanel() {
 
       <CreateAgentModal open={modalOpen} onClose={() => setModalOpen(false)} />
       <CreateSkillModal open={skillModalOpen} onClose={() => setSkillModalOpen(false)} />
+      <CreatePanelModal open={panelModalOpen} onClose={() => setPanelModalOpen(false)} />
     </div>
   );
 }

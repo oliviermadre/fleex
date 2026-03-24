@@ -207,7 +207,13 @@ export interface PanelExecutedEvent extends DomainEvent {
   type: 'panel.executed';
   panelId: string;
   panelName: string;
+  panelDisplayName: string;
   ticketId: string;
+  status: 'completed' | 'failed';
+  durationMs: number;
+  memberCount: number;
+  respondedMembers: number;
+  failedMembers: number;
 }
 
 // ── Worktree events ──

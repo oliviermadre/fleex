@@ -402,6 +402,10 @@ export async function fetchTicketDeliverables(ticketId: string): Promise<import(
   return request<import('@fleex/shared').TicketDeliverable[]>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
 }
 
+export async function deleteDeliverable(ticketId: string, deliverableId: string): Promise<void> {
+  await request<void>(`/tickets/${encodeURIComponent(ticketId)}/deliverables/${encodeURIComponent(deliverableId)}`, { method: 'DELETE' });
+}
+
 // ── Ticket Comments API ──
 
 export async function fetchTicketComments(ticketId: string): Promise<import('@fleex/shared').TicketComment[]> {

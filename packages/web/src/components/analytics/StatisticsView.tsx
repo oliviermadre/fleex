@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { StatisticsResponse, StatisticsTimeBucket, AgentLeaderboardEntry, SkillLeaderboardEntry } from '@fleex/shared';
+import type { StatisticsResponse, StatisticsTimeBucket, AgentLeaderboardEntry, SkillLeaderboardEntry, PanelLeaderboardEntry } from '@fleex/shared';
 import { useStatisticsStore } from '../../stores/statisticsStore';
 import { cn } from '../../lib/cn';
 
@@ -289,6 +289,62 @@ function SkillLeaderboard({ entries }: { entries: SkillLeaderboardEntry[] }) {
   );
 }
 
+// ── Panel Leaderboard ──
+
+function PanelLeaderboard({ entries }: { entries: PanelLeaderboardEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
+        <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Panel Leaderboard</h3>
+        <p className="mt-4 text-center text-xs text-[var(--theme-text-faint)]">No panel executions yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
+      <h3 className="mb-3 text-sm font-semibold text-[var(--theme-text-primary)]">Panel Leaderboard</h3>
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-[var(--theme-border)]">
+            <th className="pb-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Panel</th>
+            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Runs</th>
+            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Done</th>
+            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Failed</th>
+            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Avg Duration</th>
+            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Avg Members</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry, i) => (
+            <tr key={entry.panelId} className="border-b border-[var(--theme-border)] last:border-0">
+              <td className="py-2 text-sm text-[var(--theme-text-primary)]">
+                <span className="mr-2 text-[var(--theme-text-faint)]">#{i + 1}</span>
+                {entry.panelDisplayName}
+              </td>
+              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
+                {entry.executionCount}
+              </td>
+              <td className="py-2 text-right tabular-nums text-sm text-green-400">
+                {entry.completedCount}
+              </td>
+              <td className="py-2 text-right tabular-nums text-sm text-red-400">
+                {entry.failedCount}
+              </td>
+              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
+                {entry.avgDurationMs != null ? formatDuration(entry.avgDurationMs) : '—'}
+              </td>
+              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
+                {entry.avgRespondedMembers != null ? entry.avgRespondedMembers : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const s = Math.round(ms / 1000);
@@ -396,6 +452,9 @@ export function StatisticsView() {
 
             {/* Skill Leaderboard */}
             <SkillLeaderboard entries={data.skillLeaderboard} />
+
+            {/* Panel Leaderboard */}
+            <PanelLeaderboard entries={data.panelLeaderboard} />
           </div>
         )}
 

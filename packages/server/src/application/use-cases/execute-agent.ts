@@ -448,7 +448,7 @@ export class ExecuteAgentUseCase {
         model: persona.model,
         systemPrompt,
         allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
-        maxTurns: 50,
+        maxTurns: 150,
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         outputFormat: {
@@ -967,7 +967,7 @@ export class ExecuteAgentUseCase {
         model: persona.model,
         systemPrompt,
         allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
-        maxTurns: 50,
+        maxTurns: 150,
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         outputFormat: {

@@ -15,6 +15,7 @@ import { useTicketStore, VALID_TICKET_TABS, type TicketTab } from '../stores/tic
 import { useScratchpadStore } from '../stores/scratchpadStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { useSkillStore } from '../stores/skillStore';
+import { usePanelStore } from '../stores/panelStore';
 
 type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
 
@@ -47,6 +48,7 @@ interface ParsedUrl {
   personaId: string | null;
   personaTab: PersonaTab | null;
   skillId: string | null;
+  panelId: string | null;
   settingsTab: SettingsTab | null;
   analyticsTab: AnalyticsTab | null;
   agentWorktreeTicketId: string | null;
@@ -56,7 +58,7 @@ interface ParsedUrl {
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
-  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
+  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
 
   // Root: redirect to /dashboard
   if (pathname === '/') {
@@ -109,6 +111,12 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   // Claude Config
   if (pathname === '/claude-config') {
     return { ...base, panel: 'claude-config' };
+  }
+
+  // Agents — panel routes
+  const panelMatch = pathname.match(/^\/agents\/panel\/([^/]+)$/);
+  if (panelMatch) {
+    return { ...base, panel: 'agents', panelId: panelMatch[1]! };
   }
 
   // Agents — skill routes
@@ -197,6 +205,7 @@ export function storeToUrl(
   selectedAgentWorktreeTicketId?: string | null,
   analyticsTab?: AnalyticsTab,
   ticketTab?: TicketTab,
+  selectedPanelId?: string | null,
 ): { pathname: string; search: string } {
   switch (activePanel) {
     case 'dashboard':
@@ -236,6 +245,9 @@ export function storeToUrl(
     case 'claude-config':
       return { pathname: '/claude-config', search: '' };
     case 'agents': {
+      if (selectedPanelId) {
+        return { pathname: `/agents/panel/${selectedPanelId}`, search: '' };
+      }
       if (selectedSkillId) {
         return { pathname: `/agents/skill/${selectedSkillId}`, search: '' };
       }
@@ -309,6 +321,8 @@ export function RouterSync() {
 
   const selectedSkillId = useSkillStore((s) => s.selectedSkillId);
   const selectSkill = useSkillStore((s) => s.selectSkill);
+  const selectedPanelId = usePanelStore((s) => s.selectedPanelId);
+  const selectPanel = usePanelStore((s) => s.selectPanel);
 
   // Track whether we're currently syncing from URL to prevent circular updates
   const syncingFromUrl = useRef(false);
@@ -399,24 +413,29 @@ export function RouterSync() {
       }
     }
 
-    // Update agent persona / skill selection
+    // Update agent persona / skill / panel selection
     if (parsed.panel === 'agents') {
-      if (parsed.skillId) {
-        // Skill selected — clear persona selection
+      if (parsed.panelId) {
+        // Panel selected — clear persona and skill selection
+        if (parsed.panelId !== selectedPanelId) {
+          selectPanel(parsed.panelId);
+        }
+        if (selectedPersonaId) selectPersona(null);
+        if (selectedSkillId) selectSkill(null);
+      } else if (parsed.skillId) {
+        // Skill selected — clear persona and panel selection
         if (parsed.skillId !== selectedSkillId) {
           selectSkill(parsed.skillId);
         }
-        if (selectedPersonaId) {
-          selectPersona(null);
-        }
+        if (selectedPersonaId) selectPersona(null);
+        if (selectedPanelId) selectPanel(null);
       } else {
-        // Persona selected — clear skill selection
+        // Persona selected — clear skill and panel selection
         if (parsed.personaId !== selectedPersonaId) {
           selectPersona(parsed.personaId);
         }
-        if (selectedSkillId) {
-          selectSkill(null);
-        }
+        if (selectedSkillId) selectSkill(null);
+        if (selectedPanelId) selectPanel(null);
         if (parsed.personaTab && parsed.personaTab !== personaTab) {
           setPersonaTab(parsed.personaTab);
         }
@@ -459,6 +478,7 @@ export function RouterSync() {
       selectedAgentWorktreeTicketId,
       analyticsTab,
       ticketTab,
+      selectedPanelId,
     );
 
     const currentPath = location.pathname;
@@ -485,6 +505,7 @@ export function RouterSync() {
     selectedAgentWorktreeTicketId,
     analyticsTab,
     ticketTab,
+    selectedPanelId,
     // Don't include location to avoid re-triggering on our own navigate calls
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);

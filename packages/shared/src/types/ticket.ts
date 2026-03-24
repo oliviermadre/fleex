@@ -215,7 +215,8 @@ export type TicketWsMessageType =
   | 'mention:waiting_for_info'
   | 'mention:deleted'
   | 'deliverable:created'
-  | 'deliverable:updated';
+  | 'deliverable:updated'
+  | 'deliverable:deleted';
 
 export interface TicketWsMessage {
   readonly type: TicketWsMessageType;

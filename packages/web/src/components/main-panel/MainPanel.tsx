@@ -16,7 +16,9 @@ import { TicketDetail } from '../tickets/TicketDetail';
 import { useTicketStore } from '../../stores/ticketStore';
 import { AgentPersonaView } from '../agents/AgentPersonaView';
 import { SkillEditor } from '../agents/SkillEditor';
+import { PanelDetailView } from '../agents/PanelDetailView';
 import { useSkillStore } from '../../stores/skillStore';
+import { usePanelStore } from '../../stores/panelStore';
 import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { DashboardView } from '../dashboard/DashboardView';
 
@@ -64,6 +66,7 @@ export function MainPanel() {
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
   const selectedTicketId = useTicketStore((s) => s.selectedTicketId);
   const selectedSkillId = useSkillStore((s) => s.selectedSkillId);
+  const selectedPanelId = usePanelStore((s) => s.selectedPanelId);
   const splitSession = splitSessionId
     ? sessions.find((s) => s.id === splitSessionId) ?? null
     : null;
@@ -90,6 +93,9 @@ export function MainPanel() {
   }
 
   if (activePanel === 'agents') {
+    if (selectedPanelId) {
+      return <PanelDetailView />;
+    }
     if (selectedSkillId) {
       return <SkillEditor />;
     }

@@ -11,6 +11,7 @@ interface PanelRow {
   members: string; // JSON
   orchestrator_prompt: string;
   orchestrator_model: string;
+  orchestrator_persona_id: string | null;
   default_member_model: string;
   enabled: number;
   created_at: string;
@@ -52,10 +53,10 @@ export class SqlitePanelStoreAdapter implements PanelStorePort {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO panels
         (id, name, display_name, description, members, orchestrator_prompt,
-         orchestrator_model, default_member_model, enabled, created_at, updated_at)
+         orchestrator_model, orchestrator_persona_id, default_member_model, enabled, created_at, updated_at)
       VALUES
         (@id, @name, @display_name, @description, @members, @orchestrator_prompt,
-         @orchestrator_model, @default_member_model, @enabled, @created_at, @updated_at)
+         @orchestrator_model, @orchestrator_persona_id, @default_member_model, @enabled, @created_at, @updated_at)
     `);
 
     stmt.run({
@@ -66,6 +67,7 @@ export class SqlitePanelStoreAdapter implements PanelStorePort {
       members: JSON.stringify(panel.members),
       orchestrator_prompt: panel.orchestratorPrompt,
       orchestrator_model: panel.orchestratorModel,
+      orchestrator_persona_id: panel.orchestratorPersonaId,
       default_member_model: panel.defaultMemberModel,
       enabled: panel.enabled ? 1 : 0,
       created_at: panel.createdAt.toISOString(),
@@ -93,6 +95,7 @@ export class SqlitePanelStoreAdapter implements PanelStorePort {
       members,
       row.orchestrator_prompt,
       row.orchestrator_model,
+      row.orchestrator_persona_id ?? null,
       row.default_member_model,
       row.enabled === 1,
       new Date(row.created_at),

@@ -122,6 +122,7 @@ export type {
   StatisticsTimeBucket,
   AgentLeaderboardEntry,
   SkillLeaderboardEntry,
+  PanelLeaderboardEntry,
   StatisticsSummary,
   StatisticsResponse,
 } from './types/statistics.js';

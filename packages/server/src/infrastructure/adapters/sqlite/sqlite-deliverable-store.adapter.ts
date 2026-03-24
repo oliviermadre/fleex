@@ -65,6 +65,10 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
     });
   }
 
+  async remove(id: string): Promise<void> {
+    this.conn.db.prepare('DELETE FROM deliverables WHERE id = ?').run(id);
+  }
+
   private toEntity(row: DeliverableRow): TicketDeliverableEntity {
     return new TicketDeliverableEntity(
       row.id,
