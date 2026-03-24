@@ -5,7 +5,7 @@ import { TICKET_STATUSES } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError } from '../../domain/errors.js';
+import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionStatus } from '@fleex/shared';
 import type { Container } from '../container.js';
 
@@ -463,6 +463,24 @@ export function ticketRoutes(container: Container) {
 
       const deliverables = await container.deliverableStore.getByTicket(request.params.id);
       return deliverables.map((d) => d.toDTO());
+    });
+
+    app.delete<{
+      Params: { id: string; delivId: string };
+    }>('/api/tickets/:id/deliverables/:delivId', async (request, reply) => {
+      const deliverable = await container.deliverableStore.getById(request.params.delivId);
+      if (!deliverable) throw new DeliverableNotFoundError(request.params.delivId);
+
+      await container.deliverableStore.remove(request.params.delivId);
+
+      container.eventBus.emit({
+        type: 'deliverable.deleted',
+        deliverableId: request.params.delivId,
+        ticketId: request.params.id,
+        occurredAt: new Date(),
+      });
+
+      return reply.code(204).send();
     });
 
     // ── Comments (web) ──

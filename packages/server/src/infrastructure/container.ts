@@ -41,6 +41,10 @@ import { DeleteSkillUseCase } from '../application/use-cases/delete-skill.js';
 import { ExecuteAgentUseCase } from '../application/use-cases/execute-agent.js';
 import { WakeWaitingAgentsUseCase } from '../application/use-cases/wake-waiting-agents.js';
 import { AutoReviewWorkflowUseCase } from '../application/use-cases/auto-review-workflow.js';
+import { CreatePanelUseCase } from '../application/use-cases/create-panel.js';
+import { UpdatePanelUseCase } from '../application/use-cases/update-panel.js';
+import { DeletePanelUseCase } from '../application/use-cases/delete-panel.js';
+import { RunPanelUseCase } from '../application/use-cases/run-panel.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
@@ -85,6 +89,7 @@ export async function createContainer() {
     agentEventStore,
     domainEventLogStore,
     skillStore,
+    panelStore,
     kvStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
@@ -167,6 +172,12 @@ export async function createContainer() {
   const updateSkill = new UpdateSkillUseCase(skillStore, personaStore, logger);
   const deleteSkill = new DeleteSkillUseCase(skillStore, logger);
 
+  // Panel CRUD use cases
+  const createPanel = new CreatePanelUseCase(panelStore, personaStore, logger);
+  const updatePanel = new UpdatePanelUseCase(panelStore, personaStore, logger);
+  const deletePanel = new DeletePanelUseCase(panelStore, logger);
+  const runPanel = new RunPanelUseCase(panelStore, personaStore, mentionStore, ticketStore, postComment, submitDeliverable, getTicketContext, createWorktreeUC, config, logger);
+
   const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore, config, logger);
   const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);
 
@@ -185,6 +196,7 @@ export async function createContainer() {
     autoReviewWorkflow,
     executeAgent,
     wakeWaitingAgents,
+    runPanel,
     logger,
   });
   domainEventListener.register();
@@ -205,6 +217,7 @@ export async function createContainer() {
   // Wire eventBus (avoids circular constructor dep)
   createWorktreeUC.eventBus = eventBus;
   executeAgent.eventBus = eventBus;
+  runPanel.eventBus = eventBus;
 
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
@@ -266,6 +279,11 @@ export async function createContainer() {
     executeAgent,
     wakeWaitingAgents,
     autoReviewWorkflow,
+    panelStore,
+    createPanel,
+    updatePanel,
+    deletePanel,
+    runPanel,
     agentEventStore,
     domainEventLogStore,
     kvStore,

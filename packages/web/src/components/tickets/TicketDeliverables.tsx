@@ -63,6 +63,11 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
             setDeliverables((prev) => prev.map((x) => (x.id === d.id ? d : x)));
             updateFloatingDeliverable(d);
           }
+        } else if (msg.type === 'deliverable:deleted') {
+          const { deliverableId, ticketId: tid } = msg.data as { deliverableId: string; ticketId: string };
+          if (tid === ticketId) {
+            setDeliverables((prev) => prev.filter((x) => x.id !== deliverableId));
+          }
         }
       } catch {
         // ignore
@@ -101,62 +106,82 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
               className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]"
             >
               {/* Header row — always visible */}
-              <button
-                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--theme-bg-surface-hover)]"
-                onClick={() => {
-                  if (contentIsUrl) {
-                    window.open(d.content.trim(), '_blank', 'noopener');
-                  } else if (isFloating) {
-                    bringDeliverableToFront(d.id);
-                  } else {
-                    openDeliverableOverlay(d);
-                  }
-                }}
-              >
-                {/* Type badge */}
-                <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-[var(--theme-accent)]">
-                  {typeIcon(d.type)}
-                </span>
+              <div className="group/deliv flex items-center">
+                <button
+                  className="flex flex-1 items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--theme-bg-surface-hover)]"
+                  onClick={() => {
+                    if (contentIsUrl) {
+                      window.open(d.content.trim(), '_blank', 'noopener');
+                    } else if (isFloating) {
+                      bringDeliverableToFront(d.id);
+                    } else {
+                      openDeliverableOverlay(d);
+                    }
+                  }}
+                >
+                  {/* Type badge */}
+                  <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-[var(--theme-accent)]">
+                    {typeIcon(d.type)}
+                  </span>
 
-                {/* Title + meta */}
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">
-                      {d.title}
-                    </span>
-                    {d.status === 'draft' && (
-                      <span className="flex-shrink-0 rounded-full bg-yellow-500/15 px-1.5 py-px text-[10px] font-medium text-yellow-400">
-                        draft
+                  {/* Title + meta */}
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">
+                        {d.title}
                       </span>
-                    )}
-                    {d.version > 1 && (
-                      <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]">
-                        v{d.version}
-                      </span>
-                    )}
+                      {d.status === 'draft' && (
+                        <span className="flex-shrink-0 rounded-full bg-yellow-500/15 px-1.5 py-px text-[10px] font-medium text-yellow-400">
+                          draft
+                        </span>
+                      )}
+                      {d.version > 1 && (
+                        <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]">
+                          v{d.version}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10px] text-[var(--theme-text-faint)]">
+                      <span className="text-purple-400">{d.agentName}</span>
+                      <span>&middot;</span>
+                      <span>{relativeTime(d.createdAt)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[10px] text-[var(--theme-text-faint)]">
-                    <span className="text-purple-400">{d.agentName}</span>
-                    <span>&middot;</span>
-                    <span>{relativeTime(d.createdAt)}</span>
-                  </div>
-                </div>
 
-                {/* Right side indicator */}
-                {contentIsUrl ? (
-                  <svg className="h-3.5 w-3.5 flex-shrink-0 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  {/* Right side indicator */}
+                  {contentIsUrl ? (
+                    <svg className="h-3.5 w-3.5 flex-shrink-0 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  ) : isFloating ? (
+                    <svg className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                    </svg>
+                  ) : (
+                    <svg className="h-3.5 w-3.5 flex-shrink-0 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  )}
+                </button>
+
+                {/* Delete button — visible on hover */}
+                <button
+                  className="mr-2 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded opacity-0 transition-all hover:bg-red-500/15 hover:text-red-400 group-hover/deliv:opacity-100 text-[var(--theme-text-faint)]"
+                  title="Delete deliverable"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await api.deleteDeliverable(ticketId, d.id);
+                      setDeliverables((prev) => prev.filter((x) => x.id !== d.id));
+                    } catch { /* ignore */ }
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="4" y1="4" x2="12" y2="12" />
+                    <line x1="12" y1="4" x2="4" y2="12" />
                   </svg>
-                ) : isFloating ? (
-                  <svg className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                  </svg>
-                ) : (
-                  <svg className="h-3.5 w-3.5 flex-shrink-0 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                )}
-              </button>
+                </button>
+              </div>
             </div>
           );
         })}

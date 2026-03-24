@@ -69,6 +69,9 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
         } else if (msg.type === 'deliverable:created') {
           const d = msg.data as TicketDeliverable;
           if (d.ticketId === ticketId) setDeliverableCount((c) => c + 1);
+        } else if (msg.type === 'deliverable:deleted') {
+          const { ticketId: tid } = msg.data as { ticketId: string };
+          if (tid === ticketId) setDeliverableCount((c) => Math.max(0, c - 1));
         } else if (msg.type === 'mention:created') {
           const m = msg.data as TicketMention;
           if (m.ticketId === ticketId) setMentionCount((c) => c + 1);

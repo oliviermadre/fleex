@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { FLEEX_DIR } from '@fleex/shared';
-import type { MentionStatus } from '@fleex/shared';
+import type { MentionStatus, MentionTargetType } from '@fleex/shared';
 import { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -12,7 +12,7 @@ interface SerializedMention {
   commentId: string;
   targetAgent: string;
   sourceAgent: string;
-  targetType?: 'agent' | 'human';
+  targetType?: MentionTargetType;
   status: MentionStatus;
   resolvedAt: string | null;
   resolvedCommentId: string | null;

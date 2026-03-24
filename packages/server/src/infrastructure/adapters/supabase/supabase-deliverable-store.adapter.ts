@@ -79,4 +79,12 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     });
     if (error) throw new Error(`SupabaseDeliverableStore.save failed: ${error.message}`);
   }
+
+  async remove(id: string): Promise<void> {
+    const { error } = await this.conn.client
+      .from('deliverables')
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error(`SupabaseDeliverableStore.remove failed: ${error.message}`);
+  }
 }

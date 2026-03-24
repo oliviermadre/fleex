@@ -9,6 +9,7 @@ import type { LoggerPort } from './ports/logger.port.js';
 import type { AutoReviewWorkflowUseCase } from './use-cases/auto-review-workflow.js';
 import type { ExecuteAgentUseCase } from './use-cases/execute-agent.js';
 import type { WakeWaitingAgentsUseCase } from './use-cases/wake-waiting-agents.js';
+import type { RunPanelUseCase } from './use-cases/run-panel.js';
 import type {
   AnyDomainEvent,
   CommentPostedEvent,
@@ -38,6 +39,7 @@ export interface DomainEventListenerDeps {
   autoReviewWorkflow: AutoReviewWorkflowUseCase;
   executeAgent: ExecuteAgentUseCase;
   wakeWaitingAgents: WakeWaitingAgentsUseCase;
+  runPanel: RunPanelUseCase;
   logger: LoggerPort;
 }
 
@@ -148,6 +150,9 @@ export class DomainEventListener {
     // ── Cross-cutting: Auto-trigger agents when mentioned ──
     bus.on('mention.created', (e) => this.handleAutoTriggerAgent(e as MentionCreatedEvent));
 
+    // ── Cross-cutting: Auto-trigger panels when mentioned ──
+    bus.on('mention.created', (e) => this.handleAutoTriggerPanel(e as MentionCreatedEvent));
+
     // ── Cross-cutting: Auto-review workflow ──
     bus.on('comment.posted', (e) => this.handleCommentPostedWorkflow(e as CommentPostedEvent));
     bus.on('comment.updated', (e) => this.handleCommentUpdatedWorkflow(e as CommentUpdatedEvent));
@@ -185,6 +190,24 @@ export class DomainEventListener {
     if (persona) {
       this.deps.executeAgent.execute(persona.id).catch(() => {});
     }
+  }
+
+  // ── Auto-trigger panel execution ──
+
+  private async handleAutoTriggerPanel(event: MentionCreatedEvent): Promise<void> {
+    if (event.targetType !== 'panel') return;
+
+    this.deps.runPanel.execute({
+      panelName: event.targetAgent,
+      ticketId: event.ticketId,
+      mentionId: event.mentionId,
+    }).catch((err) => {
+      this.deps.logger.error('Panel auto-trigger failed', {
+        panelName: event.targetAgent,
+        ticketId: event.ticketId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
   }
 
   // ── Comment posted workflow: handle mentions for auto-review ──

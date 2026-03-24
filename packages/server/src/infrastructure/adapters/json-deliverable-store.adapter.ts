@@ -57,6 +57,11 @@ export class JsonDeliverableStore implements DeliverableStorePort {
     await this.syncToDisk();
   }
 
+  async remove(id: string): Promise<void> {
+    this.deliverables.delete(id);
+    await this.syncToDisk();
+  }
+
   private async loadFromDisk(): Promise<void> {
     if (!(await this.hostFs.exists(this.filePath))) return;
     try {

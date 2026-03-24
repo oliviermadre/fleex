@@ -92,6 +92,16 @@ export type {
 } from './types/skill.js';
 
 export type {
+  PanelMemberModelConfig,
+  PanelMember,
+  Panel,
+  CreatePanelRequest,
+  UpdatePanelRequest,
+  PanelWsMessageType,
+  PanelWsMessage,
+} from './types/panel.js';
+
+export type {
   AgentExecution,
   AgentEventType,
   AgentEvent,
@@ -112,6 +122,7 @@ export type {
   StatisticsTimeBucket,
   AgentLeaderboardEntry,
   SkillLeaderboardEntry,
+  PanelLeaderboardEntry,
   StatisticsSummary,
   StatisticsResponse,
 } from './types/statistics.js';

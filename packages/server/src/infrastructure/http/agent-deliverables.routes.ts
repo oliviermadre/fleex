@@ -99,5 +99,24 @@ export function agentDeliverablesRoutes(container: Container) {
 
       return deliverable.toDTO();
     });
+
+    // Delete a deliverable
+    app.delete<{
+      Params: { id: string; delivId: string };
+    }>('/tickets/:id/deliverables/:delivId', async (request, reply) => {
+      const deliverable = await container.deliverableStore.getById(request.params.delivId);
+      if (!deliverable) throw new DeliverableNotFoundError(request.params.delivId);
+
+      await container.deliverableStore.remove(request.params.delivId);
+
+      emit({
+        type: 'deliverable.deleted',
+        deliverableId: request.params.delivId,
+        ticketId: request.params.id,
+        occurredAt: new Date(),
+      });
+
+      return reply.code(204).send();
+    });
   };
 }

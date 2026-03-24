@@ -402,6 +402,10 @@ export async function fetchTicketDeliverables(ticketId: string): Promise<import(
   return request<import('@fleex/shared').TicketDeliverable[]>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
 }
 
+export async function deleteDeliverable(ticketId: string, deliverableId: string): Promise<void> {
+  await request<void>(`/tickets/${encodeURIComponent(ticketId)}/deliverables/${encodeURIComponent(deliverableId)}`, { method: 'DELETE' });
+}
+
 // ── Ticket Comments API ──
 
 export async function fetchTicketComments(ticketId: string): Promise<import('@fleex/shared').TicketComment[]> {
@@ -493,6 +497,35 @@ export async function executeSkill(id: string, ticketId: string): Promise<{ stat
   return request<{ status: string; skillId: string; ticketId: string }>(`/skills/${encodeURIComponent(id)}/execute`, {
     method: 'POST',
     body: JSON.stringify({ ticketId }),
+  });
+}
+
+// ── Panels API ──
+
+export async function fetchPanels(): Promise<import('@fleex/shared').Panel[]> {
+  return request<import('@fleex/shared').Panel[]>('/panels');
+}
+
+export async function fetchPanel(id: string): Promise<import('@fleex/shared').Panel> {
+  return request<import('@fleex/shared').Panel>(`/panels/${encodeURIComponent(id)}`);
+}
+
+export async function createPanel(req: import('@fleex/shared').CreatePanelRequest): Promise<import('@fleex/shared').Panel> {
+  return request<import('@fleex/shared').Panel>('/panels', { method: 'POST', body: JSON.stringify(req) });
+}
+
+export async function updatePanel(id: string, req: import('@fleex/shared').UpdatePanelRequest): Promise<import('@fleex/shared').Panel> {
+  return request<import('@fleex/shared').Panel>(`/panels/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+}
+
+export async function deletePanel(id: string): Promise<void> {
+  await request<void>(`/panels/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function executePanel(id: string, ticketId: string, topic?: string): Promise<{ status: string; panelId: string; ticketId: string }> {
+  return request<{ status: string; panelId: string; ticketId: string }>(`/panels/${encodeURIComponent(id)}/execute`, {
+    method: 'POST',
+    body: JSON.stringify({ ticketId, topic }),
   });
 }
 

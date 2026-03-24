@@ -55,6 +55,10 @@ export class PgDeliverableStore implements DeliverableStorePort {
       ],
     );
   }
+
+  async remove(id: string): Promise<void> {
+    await this.db.query('DELETE FROM deliverables WHERE id = $1', [id]);
+  }
 }
 
 function rowToDeliverable(row: Record<string, unknown>): TicketDeliverableEntity {

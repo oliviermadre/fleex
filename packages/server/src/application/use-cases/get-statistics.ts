@@ -4,6 +4,7 @@ import type {
   StatisticsSummary,
   AgentLeaderboardEntry,
   SkillLeaderboardEntry,
+  PanelLeaderboardEntry,
   AgentExecution,
   TicketLink,
 } from '@fleex/shared';
@@ -15,6 +16,7 @@ import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
+import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
 
 interface CacheEntry {
   data: StatisticsResponse;
@@ -33,6 +35,7 @@ export class GetStatisticsUseCase {
     private readonly personaStore: PersonaStorePort,
     private readonly sessionStore: SessionStorePort,
     private readonly skillStore?: SkillStorePort,
+    private readonly domainEventLogStore?: DomainEventLogStorePort,
   ) {}
 
   async execute(params: {
@@ -113,6 +116,7 @@ export class GetStatisticsUseCase {
       ticketsCreated: filteredTickets.length,
       ticketsCompleted: completedTickets.length,
       skillsExecuted: skillExecutions.length,
+      panelsExecuted: 0, // Will be updated after panel events are fetched
       activeSessions: sessions.filter((s) => {
         const dto = s as unknown as Record<string, unknown>;
         return dto.status === 'active' || dto.status === 'running';
@@ -156,6 +160,7 @@ export class GetStatisticsUseCase {
         ticketsCreated: bTickets.length,
         ticketsCompleted: bTickets.filter((t) => t.toDTO().status === 'done').length,
         skillsExecuted: bExecutions.filter((e) => e.mentionId.startsWith('skill:')).length,
+        panelsExecuted: 0, // Panel events are in domain log, not in agent executions
       };
     });
 
@@ -216,14 +221,69 @@ export class GetStatisticsUseCase {
       })
       .sort((a, b) => b.executionCount - a.executionCount);
 
+    // Compute panel leaderboard from domain event log
+    let panelLeaderboard: PanelLeaderboardEntry[] = [];
+    let panelExecutionCount = 0;
+    if (this.domainEventLogStore) {
+      const panelEvents = await this.domainEventLogStore.list({
+        limit: 1000,
+        eventType: 'panel.executed',
+        since: from,
+        until: to,
+      });
+      panelExecutionCount = panelEvents.length;
+
+      const execByPanel = new Map<string, Array<{ status: string; durationMs: number; respondedMembers: number }>>();
+      for (const event of panelEvents) {
+        const p = event.payload;
+        const panelId = (p['panelId'] as string) ?? 'unknown';
+        const list = execByPanel.get(panelId) ?? [];
+        list.push({
+          status: (p['status'] as string) ?? 'completed',
+          durationMs: (p['durationMs'] as number) ?? 0,
+          respondedMembers: (p['respondedMembers'] as number) ?? 0,
+        });
+        execByPanel.set(panelId, list);
+      }
+
+      panelLeaderboard = [...execByPanel.entries()]
+        .map(([panelId, execs]) => {
+          const firstEvent = panelEvents.find((e) => e.payload['panelId'] === panelId);
+          const eventData = firstEvent?.payload;
+          const completed = execs.filter((e) => e.status === 'completed');
+          const durations = completed.map((e) => e.durationMs).filter((d) => d > 0);
+          const responded = completed.map((e) => e.respondedMembers);
+
+          return {
+            panelId,
+            panelName: (eventData?.['panelName'] as string) ?? panelId,
+            panelDisplayName: (eventData?.['panelDisplayName'] as string) ?? panelId,
+            executionCount: execs.length,
+            completedCount: completed.length,
+            failedCount: execs.filter((e) => e.status === 'failed').length,
+            avgDurationMs: durations.length > 0
+              ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+              : null,
+            avgRespondedMembers: responded.length > 0
+              ? Math.round((responded.reduce((a, b) => a + b, 0) / responded.length) * 10) / 10
+              : null,
+          };
+        })
+        .sort((a, b) => b.executionCount - a.executionCount);
+    }
+
+    // Update panelsExecuted in summary now that we have the count
+    const updatedSummary = { ...summary, panelsExecuted: panelExecutionCount };
+
     const result: StatisticsResponse = {
       from: params.from,
       to: params.to,
       granularity: params.granularity,
-      summary,
+      summary: updatedSummary,
       timeSeries,
       agentLeaderboard,
       skillLeaderboard,
+      panelLeaderboard,
     };
 
     // Cache for 60 seconds

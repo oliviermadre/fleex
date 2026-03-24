@@ -173,6 +173,22 @@ export const SQLITE_SCHEMA: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_command_name ON skills(command_name)`,
   `CREATE INDEX IF NOT EXISTS idx_skills_persona_id ON skills(persona_id)`,
 
+  // ── Panels ──
+  `CREATE TABLE IF NOT EXISTS panels (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    members TEXT NOT NULL DEFAULT '[]',
+    orchestrator_prompt TEXT NOT NULL DEFAULT '',
+    orchestrator_model TEXT NOT NULL DEFAULT 'claude-sonnet-4-5-20250929',
+    default_member_model TEXT NOT NULL DEFAULT 'claude-sonnet-4-5-20250929',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_panels_name ON panels(name)`,
+
   // ── Agent Event Executions ──
   `CREATE TABLE IF NOT EXISTS agent_event_executions (
     execution_id TEXT PRIMARY KEY,

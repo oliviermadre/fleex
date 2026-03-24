@@ -1,6 +1,7 @@
 import type { TicketComment, CommentVisibility } from '@fleex/shared';
 
 const AGENT_MENTION_PATTERN = /@agent:([a-zA-Z0-9_-]+)/g;
+const PANEL_MENTION_PATTERN = /@panel:([a-zA-Z0-9_-]+)/g;
 const HUMAN_MENTION_PATTERN = /@([a-zA-Z0-9_-]+)/g;
 
 export class TicketCommentEntity {
@@ -49,6 +50,17 @@ export class TicketCommentEntity {
     const matches = new Set<string>();
     for (const match of body.matchAll(AGENT_MENTION_PATTERN)) {
       // Skip struck-through mentions: ~~@agent:name~~
+      const prefix = match.index! >= 2 ? body.substring(match.index! - 2, match.index!) : '';
+      if (prefix === '~~') continue;
+      matches.add(match[1]!);
+    }
+    return Array.from(matches);
+  }
+
+  static extractPanelMentions(body: string): string[] {
+    const matches = new Set<string>();
+    for (const match of body.matchAll(PANEL_MENTION_PATTERN)) {
+      // Skip struck-through mentions: ~~@panel:name~~
       const prefix = match.index! >= 2 ? body.substring(match.index! - 2, match.index!) : '';
       if (prefix === '~~') continue;
       matches.add(match[1]!);
