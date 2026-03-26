@@ -7,6 +7,7 @@ import { fetchBulkPRStates } from '../../services/api';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanHeader } from './KanbanHeader';
 import { TerminalOverlay } from '../main-panel/FloatingSessionOverlay';
+import { useUnreadStore } from '../../stores/unreadStore';
 
 export function KanbanBoard() {
   const rawBoards = useTicketStore((s) => s.boards);
@@ -16,6 +17,10 @@ export function KanbanBoard() {
   const tickets = useTicketStore((s) => s.tickets);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const sessions = useSessionStore((s) => s.sessions);
+  const loadUnreadCounts = useUnreadStore((s) => s.loadUnreadCounts);
+
+  // Load unread counts on mount and when tickets change
+  useEffect(() => { loadUnreadCounts(); }, [tickets.length, loadUnreadCounts]);
 
   const [overlaySession, setOverlaySession] = useState<Session | null>(null);
   const [loading, setLoading] = useState<string | null>(null);

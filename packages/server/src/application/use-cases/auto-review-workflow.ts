@@ -9,12 +9,6 @@ interface ReviewWorkflowConfig {
   // Default human reviewer when no specific human mentioned
   defaultReviewer: string;
 
-  // Delay before auto-transitioning to review (prevents race conditions)
-  autoReviewDelayMs: number;
-
-  // Board-specific QA agent (optional)
-  qaAgentName?: string;
-
   // Auto-block tickets when agents wait for info
   autoBlockOnWaiting: boolean;
 
@@ -23,8 +17,6 @@ interface ReviewWorkflowConfig {
 }
 
 export class AutoReviewWorkflowUseCase {
-  private pendingTransitions = new Map<string, NodeJS.Timeout>();
-
   /** Set by WS plugin to broadcast ticket updates in real-time */
   public onTicketUpdate: ((type: string, data: unknown) => void) | null = null;
 
@@ -39,15 +31,14 @@ export class AutoReviewWorkflowUseCase {
     const configData = this.config.get();
     return {
       defaultReviewer: configData.humanMentionName || configData.humanDisplayName || 'nas',
-      autoReviewDelayMs: 30000, // 30 seconds
-      qaAgentName: undefined, // TODO: Add to board config later
       autoBlockOnWaiting: true,
       enableAutoReview: true,
     };
   }
 
   /**
-   * Rule 1A: Handle human mention in comment - immediate transition to reviewing
+   * Rule 1A: Handle human mention in comment - immediate transition to reviewing.
+   * This is the only auto-transition that remains — explicit human @mention is intentional.
    */
   async handleHumanMention(params: {
     ticketId: string;
@@ -66,9 +57,6 @@ export class AutoReviewWorkflowUseCase {
       mentionedHuman: params.mentionedHuman,
       currentStatus: ticket.status,
     });
-
-    // Cancel any pending auto-review transitions
-    this.cancelPendingTransition(params.ticketId);
 
     // Move to reviewing and assign to human
     const diff = ticket.moveTo('reviewing');
@@ -93,105 +81,47 @@ export class AutoReviewWorkflowUseCase {
   }
 
   /**
-   * Rule 1B & 1C: Handle agent work completion - delayed transition to reviewing
+   * Handle agent work completion — log only, no status transition.
+   * Status changes are manual only; agents never move tickets.
    */
   async handleAgentWorkCompletion(params: {
     ticketId: string;
     completedAgentName: string;
   }): Promise<void> {
-    const config = this.getWorkflowConfig();
-    if (!config.enableAutoReview) return;
-
-    const ticket = await this.ticketStore.getTicketById(params.ticketId);
-    if (!ticket || ticket.status === 'reviewing' || ticket.status === 'done' || ticket.status === 'cancelled') {
-      return; // Already in review, done, or cancelled
-    }
-
-    // Cancel any existing pending transition
-    this.cancelPendingTransition(params.ticketId);
-
-    this.logger.info('Scheduling auto-review check after agent completion', {
+    this.logger.info('Agent work completed (no auto-transition)', {
       ticketId: params.ticketId,
       completedAgent: params.completedAgentName,
-      delayMs: config.autoReviewDelayMs,
     });
-
-    // Schedule the transition with delay to allow for cascading mentions
-    const timeout = setTimeout(async () => {
-      try {
-        await this.checkAndTransitionToReview(params.ticketId, params.completedAgentName);
-      } catch (error) {
-        this.logger.error('Failed to auto-transition ticket to review', {
-          ticketId: params.ticketId,
-          error: String(error),
-        });
-      } finally {
-        this.pendingTransitions.delete(params.ticketId);
-      }
-    }, config.autoReviewDelayMs);
-
-    this.pendingTransitions.set(params.ticketId, timeout);
   }
 
   /**
-   * Rule 2A & 2B: Handle agent mention while in reviewing - back to doing
+   * Handle agent mention while in reviewing — log only, no status transition.
+   * Status changes are manual only; agents never move tickets.
    */
   async handleAgentMentionInReview(params: {
     ticketId: string;
     mentionedAgent: string;
   }): Promise<void> {
-    const config = this.getWorkflowConfig();
-    if (!config.enableAutoReview) return;
-
-    const ticket = await this.ticketStore.getTicketById(params.ticketId);
-    if (!ticket || ticket.status !== 'reviewing') {
-      return; // Not in reviewing status
-    }
-
-    this.logger.info('Moving ticket from reviewing back to doing due to agent mention', {
+    this.logger.info('Agent mentioned in reviewing ticket (no auto-transition)', {
       ticketId: params.ticketId,
       mentionedAgent: params.mentionedAgent,
-    });
-
-    // Move back to doing and assign to mentioned agent
-    const diff = ticket.moveTo('doing');
-    const assignDiff = ticket.assign(params.mentionedAgent);
-    ticket.blocked = false; // Clear blocked flag
-
-    await this.ticketStore.saveTicket(ticket);
-    this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
-      ticketId: params.ticketId,
-      action: 'moved_from_review_to_doing',
-      changes: { ...diff, ...assignDiff, blocked: { from: true, to: false } },
-      actorType: 'agent',
-      actorName: 'system',
-      source: 'api',
-    }));
-
-    this.logger.info('Ticket moved from reviewing to doing', {
-      ticketId: params.ticketId,
-      assignedTo: params.mentionedAgent,
     });
   }
 
   /**
-   * Handle deliverable creation - check for final status
+   * Handle deliverable creation — log only, no status transition.
+   * Status changes are manual only; agents never move tickets.
    */
   async handleDeliverableCreated(params: {
     ticketId: string;
     agentName: string;
     status: 'draft' | 'final';
   }): Promise<void> {
-    if (params.status === 'final') {
-      // Treat final deliverable as work completion
-      await this.handleAgentWorkCompletion({
-        ticketId: params.ticketId,
-        completedAgentName: params.agentName,
-      });
-    }
-    // Draft deliverables don't trigger auto-review
+    this.logger.info('Deliverable created (no auto-transition)', {
+      ticketId: params.ticketId,
+      agentName: params.agentName,
+      status: params.status,
+    });
   }
 
   /**
@@ -227,66 +157,6 @@ export class AutoReviewWorkflowUseCase {
         agentName: params.agentName,
       });
     }
-  }
-
-  private async checkAndTransitionToReview(ticketId: string, completedAgentName: string): Promise<void> {
-    const config = this.getWorkflowConfig();
-
-    // Re-check ticket status
-    const ticket = await this.ticketStore.getTicketById(ticketId);
-    if (!ticket || ticket.status === 'reviewing' || ticket.status === 'done' || ticket.status === 'cancelled') {
-      return;
-    }
-
-    // Check for pending agent mentions (excluding the completed agent)
-    const pendingMentions = await this.mentionStore.getByTicket(ticketId);
-    const hasPendingAgentWork = pendingMentions.some(
-      (mention) =>
-        mention.targetType === 'agent' &&
-        (mention.status === 'pending' || mention.status === 'acknowledged') &&
-        mention.targetAgent !== completedAgentName
-    );
-
-    if (hasPendingAgentWork) {
-      this.logger.info('Skipping auto-review due to pending agent work', {
-        ticketId,
-        pendingAgents: pendingMentions
-          .filter(m => m.targetType === 'agent' && (m.status === 'pending' || m.status === 'acknowledged'))
-          .map(m => m.targetAgent),
-      });
-      return;
-    }
-
-    this.logger.info('Auto-transitioning ticket to review', {
-      ticketId,
-      completedAgent: completedAgentName,
-    });
-
-    // Choose reviewer: QA agent if configured, otherwise default human
-    const reviewer = config.qaAgentName || config.defaultReviewer;
-    const isQaReview = Boolean(config.qaAgentName);
-
-    // Move to reviewing and assign
-    const diff = ticket.moveTo('reviewing');
-    const assignDiff = ticket.assign(reviewer);
-
-    await this.ticketStore.saveTicket(ticket);
-    this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
-      ticketId,
-      action: isQaReview ? 'moved_to_qa_review_auto' : 'moved_to_review_auto',
-      changes: { ...diff, ...assignDiff },
-      actorType: 'agent',
-      actorName: 'system',
-      source: 'api',
-    }));
-
-    this.logger.info('Ticket auto-transitioned to review', {
-      ticketId,
-      assignedTo: reviewer,
-      reviewType: isQaReview ? 'qa' : 'human',
-    });
   }
 
   /**
@@ -335,25 +205,5 @@ export class AutoReviewWorkflowUseCase {
         resolvedCount: unresolved.length,
       });
     }
-  }
-
-  private cancelPendingTransition(ticketId: string): void {
-    const pendingTimeout = this.pendingTransitions.get(ticketId);
-    if (pendingTimeout) {
-      clearTimeout(pendingTimeout);
-      this.pendingTransitions.delete(ticketId);
-      this.logger.debug('Cancelled pending auto-review transition', { ticketId });
-    }
-  }
-
-  /**
-   * Cleanup method - should be called on service shutdown
-   */
-  cleanup(): void {
-    for (const [ticketId, timeout] of this.pendingTransitions) {
-      clearTimeout(timeout);
-      this.logger.debug('Cleaned up pending transition', { ticketId });
-    }
-    this.pendingTransitions.clear();
   }
 }

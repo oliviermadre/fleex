@@ -4,6 +4,7 @@ import { appWs } from '../../services/websocket';
 import { useTicketStore, type TicketTab } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useUnreadStore } from '../../stores/unreadStore';
 import { TicketDetailHeader } from './TicketDetailHeader';
 import { TicketMetaSidebar } from './TicketMetaSidebar';
 import { TicketActivityTimeline } from './TicketActivityTimeline';
@@ -238,11 +239,20 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     );
   }
 
+  const unread = useUnreadStore((s) => s.getUnread(ticketId));
+
+  const commentLabel = commentCount > 0
+    ? `Comments (${unread.unreadComments > 0 ? `${unread.unreadComments} new` : commentCount})`
+    : 'Comments';
+  const deliverableLabel = deliverableCount > 0
+    ? `Deliverables (${unread.unreadDeliverables > 0 ? `${unread.unreadDeliverables} new` : deliverableCount})`
+    : 'Deliverables';
+
   const mainTabs: { key: TicketTab; label: string }[] = [
     { key: 'description', label: 'Description' },
-    { key: 'comments', label: `Comments${commentCount > 0 ? ` (${commentCount})` : ''}` },
+    { key: 'comments', label: commentLabel },
     { key: 'mentions', label: `Mentions${mentionCount > 0 ? ` (${mentionCount})` : ''}` },
-    { key: 'deliverables', label: `Deliverables${deliverableCount > 0 ? ` (${deliverableCount})` : ''}` },
+    { key: 'deliverables', label: deliverableLabel },
     { key: 'activity', label: 'Activity' },
   ];
 

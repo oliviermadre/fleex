@@ -567,5 +567,121 @@ export function ticketRoutes(container: Container) {
         return reply.code(204).send();
       },
     );
+
+    // ── Read Cursors (unread tracking via KvStore) ──
+
+    /** Get read cursors for a specific ticket (comments only — deliverables use per-item seen state) */
+    app.get<{ Params: { id: string } }>(
+      '/api/tickets/:id/read-cursors',
+      async (request) => {
+        if (!container.kvStore) return { ticketId: request.params.id, commentLastSeenAt: null };
+        const commentCursor = await container.kvStore.get(`read_cursor:comment:${request.params.id}`);
+        return {
+          ticketId: request.params.id,
+          commentLastSeenAt: commentCursor,
+        };
+      },
+    );
+
+    /** Update read cursors for a specific ticket (comments only) */
+    app.patch<{
+      Params: { id: string };
+      Body: { commentLastSeenAt?: string };
+    }>(
+      '/api/tickets/:id/read-cursors',
+      async (request, reply) => {
+        if (!container.kvStore) return reply.code(204).send();
+        const { commentLastSeenAt } = request.body;
+        if (commentLastSeenAt !== undefined) {
+          await container.kvStore.set(`read_cursor:comment:${request.params.id}`, commentLastSeenAt);
+        }
+        return reply.code(204).send();
+      },
+    );
+
+    // ── Deliverable Seen State (per-deliverable, not cursor-based) ──
+
+    /** Get seen deliverable IDs for a ticket */
+    app.get<{ Params: { id: string } }>(
+      '/api/tickets/:id/seen-deliverables',
+      async (request) => {
+        if (!container.kvStore) return [];
+        const raw = await container.kvStore.get(`seen_deliverables:${request.params.id}`);
+        return raw ? JSON.parse(raw) as string[] : [];
+      },
+    );
+
+    /** Toggle a deliverable's seen state */
+    app.patch<{
+      Params: { id: string };
+      Body: { deliverableId: string; seen: boolean };
+    }>(
+      '/api/tickets/:id/seen-deliverables',
+      async (request, reply) => {
+        if (!container.kvStore) return reply.code(204).send();
+        const { deliverableId, seen } = request.body;
+        const key = `seen_deliverables:${request.params.id}`;
+        const raw = await container.kvStore.get(key);
+        const seenIds: string[] = raw ? JSON.parse(raw) : [];
+        const set = new Set(seenIds);
+        if (seen) {
+          set.add(deliverableId);
+        } else {
+          set.delete(deliverableId);
+        }
+        await container.kvStore.set(key, JSON.stringify([...set]));
+        return reply.code(204).send();
+      },
+    );
+
+    /** Bulk query: unread counts for all tickets */
+    app.get('/api/tickets/unread-counts', async () => {
+      if (!container.kvStore) return [];
+      const [commentCursors, seenDeliverableEntries] = await Promise.all([
+        container.kvStore.listByPrefix('read_cursor:comment:'),
+        container.kvStore.listByPrefix('seen_deliverables:'),
+      ]);
+
+      // Build maps
+      const commentMap = new Map<string, string>();
+      for (const { key, value } of commentCursors) {
+        const ticketId = key.replace('read_cursor:comment:', '');
+        commentMap.set(ticketId, value);
+      }
+      const seenDeliverableMap = new Map<string, Set<string>>();
+      for (const { key, value } of seenDeliverableEntries) {
+        const ticketId = key.replace('seen_deliverables:', '');
+        try {
+          seenDeliverableMap.set(ticketId, new Set(JSON.parse(value) as string[]));
+        } catch {
+          seenDeliverableMap.set(ticketId, new Set());
+        }
+      }
+
+      // Collect all ticket IDs that have any tracking
+      const ticketIds = new Set([...commentMap.keys(), ...seenDeliverableMap.keys()]);
+
+      const results: { ticketId: string; unreadComments: number; unreadDeliverables: number }[] = [];
+      for (const ticketId of ticketIds) {
+        const commentCursor = commentMap.get(ticketId) ?? null;
+        const seenSet = seenDeliverableMap.get(ticketId) ?? new Set<string>();
+
+        const [comments, deliverables] = await Promise.all([
+          container.commentStore.getByTicket(ticketId),
+          container.deliverableStore.getByTicket(ticketId),
+        ]);
+
+        const unreadComments = commentCursor
+          ? comments.filter((c) => c.createdAt > new Date(commentCursor)).length
+          : comments.length;
+        const unreadDeliverables = deliverables.filter((d) => !seenSet.has(d.id)).length;
+
+        if (unreadComments > 0 || unreadDeliverables > 0) {
+          results.push({ ticketId, unreadComments, unreadDeliverables });
+        }
+      }
+
+      return results;
+    });
   };
 }

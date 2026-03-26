@@ -9,6 +9,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { usePanelStore } from '../../stores/panelStore';
+import { useUnreadStore } from '../../stores/unreadStore';
 import * as api from '../../services/api';
 
 /**
@@ -445,10 +446,20 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     );
   }, [acOpen, acQuery, allMentionOptions]);
 
+  // Read cursor for "new messages" line
+  const loadCursors = useUnreadStore((s) => s.loadCursors);
+  const markCommentsRead = useUnreadStore((s) => s.markCommentsRead);
+  const cursorsByTicket = useUnreadStore((s) => s.cursorsByTicket);
+  const commentLastSeenAt = cursorsByTicket[ticketId]?.commentLastSeenAt ?? null;
+  const listContainerRef = useRef<HTMLDivElement>(null);
+  // When user option+clicks to pin cursor, suppress auto-mark-read
+  const cursorPinnedRef = useRef(false);
+
   useEffect(() => {
     api.fetchTicketComments(ticketId).then(setComments).catch(() => {});
     api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
-  }, [ticketId]);
+    loadCursors(ticketId).catch(() => {});
+  }, [ticketId, loadCursors]);
 
   const mentionLookup = useMemo(() => buildMentionLookup(mentions), [mentions]);
 
@@ -503,6 +514,45 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [comments.length]);
+
+  // Auto-mark comments as read when scrolled to the bottom.
+  // Skipped when the cursor is pinned (user option+clicked to set a manual cursor).
+  useEffect(() => {
+    const container = listContainerRef.current;
+    if (!container) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (cursorPinnedRef.current) return; // user pinned the cursor, don't auto-advance
+        if (entry?.isIntersecting && comments.length > 0) {
+          const lastComment = comments[comments.length - 1];
+          if (lastComment && (!commentLastSeenAt || lastComment.createdAt > commentLastSeenAt)) {
+            markCommentsRead(ticketId, lastComment.createdAt).catch(() => {});
+          }
+        }
+      },
+      { root: container.parentElement, threshold: 0.5 },
+    );
+    const sentinel = listEndRef.current;
+    if (sentinel) observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [comments, commentLastSeenAt, ticketId, markCommentsRead]);
+
+  // Reset pin when navigating to a different ticket
+  useEffect(() => {
+    cursorPinnedRef.current = false;
+  }, [ticketId]);
+
+  // Option+click (Alt+click) on a comment to pin read cursor just before that comment
+  const handleCommentClick = useCallback((e: React.MouseEvent, comment: TicketComment) => {
+    if (e.altKey) {
+      e.preventDefault();
+      cursorPinnedRef.current = true; // prevent auto-mark from overriding
+      // Set cursor to the previous comment's timestamp so the "new messages" line appears above the clicked one
+      const idx = comments.findIndex((c) => c.id === comment.id);
+      const cursorTimestamp = idx > 0 ? comments[idx - 1]!.createdAt : new Date(0).toISOString();
+      markCommentsRead(ticketId, cursorTimestamp).catch(() => {});
+    }
+  }, [ticketId, markCommentsRead, comments]);
 
   const handleDeleteComment = useCallback(async (commentId: string) => {
     try {
@@ -638,7 +688,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       {/* Comment list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={listContainerRef}>
         {comments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <p className="text-sm text-[var(--theme-text-muted)]">No comments yet</p>
@@ -648,8 +698,23 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           </div>
         ) : (
           <div className="divide-y divide-[var(--theme-border)]/50">
-            {comments.map((c) => (
-              <div key={c.id} className="group relative px-1 py-3 first:pt-0">
+            {comments.map((c, idx) => {
+              // Show "New messages" divider before the first unseen comment
+              const prevComment = idx > 0 ? comments[idx - 1] : null;
+              const showNewLine = commentLastSeenAt != null
+                && c.createdAt > commentLastSeenAt
+                && (prevComment == null || prevComment.createdAt <= commentLastSeenAt);
+
+              return (
+                <div key={c.id}>
+                  {showNewLine && (
+                    <div className="flex items-center gap-2 px-1 py-2">
+                      <div className="h-px flex-1 bg-red-500/60" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-red-400">New messages</span>
+                      <div className="h-px flex-1 bg-red-500/60" />
+                    </div>
+                  )}
+                  <div className="group relative px-1 py-3 first:pt-0" onClick={(e) => handleCommentClick(e, c)}>
                 {/* Header: author + timestamp */}
                 <div className="mb-1.5 flex items-center gap-2">
                   <span
@@ -684,7 +749,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                     </svg>
                   </button>
               </div>
-            ))}
+                </div>
+              );
+            })}
             {runningAgents.map((name) => (
               <div key={name} className="flex items-center gap-2 px-1 py-3">
                 <span className="flex items-center gap-1">

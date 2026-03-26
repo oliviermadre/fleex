@@ -3,6 +3,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useUnreadStore } from '../../stores/unreadStore';
 import { cn } from '../../lib/cn';
 
 function FleexLogo({ collapsed }: { collapsed: boolean }) {
@@ -35,6 +36,7 @@ export function NavSidebar() {
   const repoCount = Object.keys(summaries).length;
   const tickets = useTicketStore((s) => s.tickets);
   const activeTicketCount = tickets.filter((t) => t.status === 'doing' || t.status === 'reviewing').length;
+  const totalUnread = useUnreadStore((s) => s.totalUnread);
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
@@ -51,6 +53,7 @@ export function NavSidebar() {
           active={activePanel === 'dashboard'}
           collapsed={navCollapsed}
           onClick={() => navigate('/dashboard')}
+          badge={totalUnread > 0 ? (totalUnread > 9 ? '9+' : String(totalUnread)) : undefined}
         />
 
         {/* Branches (was Sessions) */}

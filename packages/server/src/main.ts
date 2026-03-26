@@ -177,9 +177,6 @@ async function main() {
   const shutdown = async () => {
     container.logger.info('Shutting down server...');
 
-    // Cleanup auto-review workflow
-    container.autoReviewWorkflow.cleanup();
-
     // Stop repository refresh scheduler
     container.repositoryRefreshScheduler.stop();
 

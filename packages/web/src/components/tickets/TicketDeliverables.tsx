@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
 import { appWs } from '../../services/websocket';
 import { useUIStore } from '../../stores/uiStore';
+import { useUnreadStore } from '../../stores/unreadStore';
 import { DeliverableReadingOverlay } from './DeliverableReadingOverlay';
 import * as api from '../../services/api';
 
@@ -40,9 +41,33 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const bringDeliverableToFront = useUIStore((s) => s.bringDeliverableToFront);
   const updateFloatingDeliverable = useUIStore((s) => s.updateFloatingDeliverable);
 
+  const isDeliverableSeen = useUnreadStore((s) => s.isDeliverableSeen);
+  const toggleDeliverableSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
+  const loadSeenDeliverables = useUnreadStore((s) => s.loadSeenDeliverables);
+
+  const handleOpenDeliverable = useCallback((d: TicketDeliverable) => {
+    // Mark as seen when opening
+    if (!isDeliverableSeen(ticketId, d.id)) {
+      toggleDeliverableSeen(ticketId, d.id, true).catch(() => {});
+    }
+    if (isUrl(d.content)) {
+      window.open(d.content.trim(), '_blank', 'noopener');
+    } else if (floatingDeliverableIds.includes(d.id)) {
+      bringDeliverableToFront(d.id);
+    } else {
+      openDeliverableOverlay(d);
+    }
+  }, [ticketId, isDeliverableSeen, toggleDeliverableSeen, floatingDeliverableIds, bringDeliverableToFront, openDeliverableOverlay]);
+
+  // Toggle read/unread for a single deliverable
+  const handleToggleRead = useCallback((d: TicketDeliverable, isSeen: boolean) => {
+    toggleDeliverableSeen(ticketId, d.id, !isSeen).catch(() => {});
+  }, [ticketId, toggleDeliverableSeen]);
+
   useEffect(() => {
     api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
-  }, [ticketId]);
+    loadSeenDeliverables(ticketId);
+  }, [ticketId, loadSeenDeliverables]);
 
   // Real-time updates
   useEffect(() => {
@@ -100,6 +125,8 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
           const contentIsUrl = isUrl(d.content);
           const isFloating = floatingDeliverableIds.includes(d.id);
 
+          const isSeen = isDeliverableSeen(ticketId, d.id);
+
           return (
             <div
               key={d.id}
@@ -107,18 +134,28 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
             >
               {/* Header row — always visible */}
               <div className="group/deliv flex items-center">
+                {/* Read/unread toggle */}
                 <button
-                  className="flex flex-1 items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--theme-bg-surface-hover)]"
-                  onClick={() => {
-                    if (contentIsUrl) {
-                      window.open(d.content.trim(), '_blank', 'noopener');
-                    } else if (isFloating) {
-                      bringDeliverableToFront(d.id);
-                    } else {
-                      openDeliverableOverlay(d);
-                    }
-                  }}
+                  className={`ml-2 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded transition-all ${
+                    !isSeen
+                      ? 'text-[var(--theme-accent)] opacity-100'
+                      : 'text-[var(--theme-text-faint)] opacity-0 group-hover/deliv:opacity-60 hover:!opacity-100'
+                  }`}
+                  onClick={(e) => { e.stopPropagation(); handleToggleRead(d, isSeen); }}
+                  title={isSeen ? 'Mark as unread' : 'Mark as read'}
                 >
+                  {!isSeen ? (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="5" /></svg>
+                  ) : (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="5" cy="5" r="4" /></svg>
+                  )}
+                </button>
+
+                <button
+                  className="flex flex-1 items-center gap-3 px-2 py-2.5 text-left transition-colors hover:bg-[var(--theme-bg-surface-hover)]"
+                  onClick={() => handleOpenDeliverable(d)}
+                >
+
                   {/* Type badge */}
                   <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-[var(--theme-accent)]">
                     {typeIcon(d.type)}

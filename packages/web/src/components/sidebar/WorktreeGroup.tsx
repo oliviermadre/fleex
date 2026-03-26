@@ -17,14 +17,17 @@ const AGENT_STATUS_STYLE: Record<string, { dot: string; text: string; label: str
   idle: { dot: 'bg-[var(--theme-text-faint)]', text: 'text-[var(--theme-text-faint)]', label: 'Idle' },
 };
 
+import type { FlowType } from './RepositoryGroup';
+
 interface Props {
   worktree: WorktreeSessionGroup;
   repoGroupId: string;
   repositoryOrg: string;
   repositoryName: string;
+  flowType?: FlowType;
 }
 
-export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repositoryName }: Props) {
+export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repositoryName, flowType }: Props) {
   const navigate = useNavigate();
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const repoKey = `${repositoryOrg}/${repositoryName}`;
@@ -79,10 +82,24 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
           )}
           onClick={handleBranchClick}
         >
-          {/* Row 1: Branch name + PR badge */}
+          {/* Row 1: Title — ticket title if linked, otherwise branch name */}
           <div className="flex items-center gap-1.5">
-            <GitForkIcon size={14} className="shrink-0 text-[var(--theme-text-secondary)]" />
-            <span className="truncate text-sm font-semibold font-mono text-[var(--theme-text-primary)]">{worktree.branch}</span>
+            {(agentInfo?.ticketTitle ?? linkedTicket?.title) ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-text-secondary)]">
+                  <rect x="2" y="2" width="12" height="12" rx="2" />
+                  <path d="M5 6h6M5 9h4" />
+                </svg>
+                <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">
+                  {agentInfo?.ticketTitle ?? linkedTicket?.title}
+                </span>
+              </>
+            ) : (
+              <>
+                <GitForkIcon size={14} className="shrink-0 text-[var(--theme-text-secondary)]" />
+                <span className="truncate text-sm font-semibold font-mono text-[var(--theme-text-primary)]">{worktree.branch}</span>
+              </>
+            )}
             {pr && (
               <a
                 href={`https://github.com/${repositoryOrg}/${repositoryName}/pull/${pr.number}`}
@@ -113,16 +130,7 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
             <span className="ml-auto shrink-0 text-xs text-[var(--theme-text-faint)]">{worktree.sessions.length}</span>
           </div>
 
-          {/* Row 3: Ticket description (if linked) */}
-          {linkedTicket && (
-            <div className="flex items-center gap-1 pl-5">
-              <span className="truncate text-xs text-[var(--theme-text-faint)]">
-                # {linkedTicket.title}
-              </span>
-            </div>
-          )}
-
-          {/* Row 4: Agent indicator (if agent worktree) */}
+          {/* Row 3: Agent indicator (if agent worktree) */}
           {agentInfo && (
             <div className="flex items-center gap-1.5 pl-5">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-violet-400">

@@ -183,12 +183,6 @@ export class TicketEntity {
     this.agentClaimedAt = new Date();
     diff['agentClaimedAt'] = { from: null, to: this.agentClaimedAt.toISOString() };
 
-    if (this.status === 'backlog' || this.status === 'todo') {
-      diff['status'] = { from: this.status, to: 'doing' };
-      this.status = 'doing';
-      this.statusChangedAt = new Date();
-    }
-
     this.updatedAt = new Date();
     return diff;
   }

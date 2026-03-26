@@ -6,11 +6,14 @@ import { WorktreeGroup } from './WorktreeGroup';
 import { GitHubIcon } from './icons';
 import { cn } from '../../lib/cn';
 
+export type FlowType = 'manual' | 'agentic';
+
 interface Props {
   group: SessionGroup;
+  flowType?: FlowType;
 }
 
-export function RepositoryGroup({ group }: Props) {
+export function RepositoryGroup({ group, flowType }: Props) {
   const groupId = `${group.repositoryOrg}/${group.repositoryName}`;
   const collapsedGroups = useUIStore((s) => s.collapsedGroups);
   const toggleGroup = useUIStore((s) => s.toggleGroup);
@@ -159,6 +162,7 @@ export function RepositoryGroup({ group }: Props) {
                 repoGroupId={groupId}
                 repositoryOrg={group.repositoryOrg}
                 repositoryName={group.repositoryName}
+                flowType={flowType}
               />
               {isOver && dropEdge === 'bottom' && (
                 <div className="absolute bottom-0 left-4 right-2 z-10 h-0.5 rounded bg-[var(--theme-accent)]" />

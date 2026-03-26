@@ -18,6 +18,9 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useUnreadStore } from '../../stores/unreadStore';
+import { useAgentEventStore } from '../../stores/agentEventStore';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
 import { SmartSessionButton } from './SmartSessionButton';
 import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
@@ -1307,6 +1310,28 @@ export function DashboardView() {
   const sessions = useSessionStore((s) => s.sessions);
   const selectSession = useSessionStore((s) => s.selectSession);
   const storeTickets = useTicketStore((s) => s.tickets);
+
+  // Unread & agent activity
+  const totalUnread = useUnreadStore((s) => s.totalUnread);
+  const loadUnreadCounts = useUnreadStore((s) => s.loadUnreadCounts);
+  const executionsByTicket = useAgentEventStore((s) => s.executionsByTicket);
+  const personas = useAgentPersonaStore((s) => s.personas);
+
+  useEffect(() => { loadUnreadCounts(); }, [loadUnreadCounts]);
+
+  // Build recent agent activity from all executions
+  const recentActivity = useMemo(() => {
+    const allExecs = Object.values(executionsByTicket).flat();
+    return [...allExecs]
+      .filter((e) => e.status !== 'running')
+      .sort((a, b) => new Date(b.completedAt ?? b.startedAt).getTime() - new Date(a.completedAt ?? a.startedAt).getTime())
+      .slice(0, 10)
+      .map((e) => {
+        const persona = personas.find((p) => p.id === e.personaId);
+        const ticket = storeTickets.find((t) => t.id === e.ticketId);
+        return { ...e, personaName: persona?.displayName ?? persona?.name ?? 'Agent', ticketTitle: ticket?.title ?? `#${ticket?.displayId ?? '?'}` };
+      });
+  }, [executionsByTicket, personas, storeTickets]);
   const boards = useTicketStore((s) => s.boards);
   const moveTicket = useTicketStore((s) => s.moveTicket);
   const addLink = useTicketStore((s) => s.addLink);
@@ -1561,6 +1586,52 @@ export function DashboardView() {
           {/* ── Loaded content ── */}
           {data && (
             <div className="flex flex-col gap-5">
+
+              {/* ── AGENT ACTIVITY ── */}
+              {(recentActivity.length > 0 || totalUnread > 0) && (
+                <SectionShell delay={0}>
+                  <SectionHeader
+                    dotColor="#a78bfa"
+                    title="Agent Activity"
+                    count={totalUnread}
+                    subtitle={totalUnread > 0 ? `${totalUnread} unread` : undefined}
+                  />
+                  {recentActivity.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      {recentActivity.map((a) => (
+                        <button
+                          key={a.id}
+                          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
+                          onClick={() => {
+                            const ticket = storeTickets.find((t) => t.id === a.ticketId);
+                            if (ticket) {
+                              navigate('/tickets');
+                              setTimeout(() => useTicketStore.getState().selectTicket(ticket.id), 100);
+                            }
+                          }}
+                        >
+                          <span className={cn(
+                            'h-1.5 w-1.5 flex-shrink-0 rounded-full',
+                            a.status === 'completed' ? 'bg-green-400' : a.status === 'failed' ? 'bg-red-400' : 'bg-yellow-400',
+                          )} />
+                          <span className="font-medium text-purple-400">{a.personaName}</span>
+                          <span className="text-[var(--theme-text-muted)]">
+                            {a.status === 'completed' ? 'finished' : a.status === 'failed' ? 'failed' : 'interrupted'}
+                          </span>
+                          <span className="min-w-0 truncate text-[var(--theme-text-secondary)]">{a.ticketTitle}</span>
+                          <span className="ml-auto flex-shrink-0 text-[var(--theme-text-faint)]">
+                            {timeAgo(a.completedAt ?? a.startedAt)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[var(--theme-text-muted)]">
+                      {totalUnread} unread items across your tickets
+                    </p>
+                  )}
+                </SectionShell>
+              )}
 
               {/* ── MY WORK ── */}
               <SectionShell delay={0}>
