@@ -28,6 +28,183 @@ warn()  { printf "${YELLOW}[fleex]${NC} %s\n" "$*"; }
 err()   { printf "${RED}[fleex]${NC} %s\n" "$*" >&2; }
 die()   { err "$@"; exit 1; }
 
+# ── API helpers ───────────────────────────────────────────────────────────────
+
+_check_jq() {
+  command -v jq >/dev/null 2>&1 || die "jq is required for ticket commands. Install it: https://formulae.brew.sh/formula/jq"
+}
+
+_api_base() {
+  load_ports || die "Stack not running. Start it with: fleex start"
+  echo "http://localhost:$PORT_SERVER"
+}
+
+_api_get() {
+  local url="$1"
+  local response http_code body
+  response="$(curl -s -w '\n%{http_code}' --max-time 10 "$url" 2>/dev/null)" || die "API request failed: GET $url (connection error)"
+  http_code="$(echo "$response" | tail -1)"
+  body="$(echo "$response" | sed '$d')"
+  if [[ ! "$http_code" =~ ^2 ]]; then
+    local msg
+    msg="$(echo "$body" | jq -r '.message // .error // empty' 2>/dev/null || true)"
+    die "API error (HTTP $http_code): ${msg:-$body}"
+  fi
+  echo "$body"
+}
+
+_api_post() {
+  local url="$1" body="$2"
+  local response http_code resp_body
+  response="$(curl -s -w '\n%{http_code}' --max-time 10 -X POST -H "Content-Type: application/json" -d "$body" "$url" 2>/dev/null)" \
+    || die "API request failed: POST $url (connection error)"
+  http_code="$(echo "$response" | tail -1)"
+  resp_body="$(echo "$response" | sed '$d')"
+  if [[ ! "$http_code" =~ ^2 ]]; then
+    local msg
+    msg="$(echo "$resp_body" | jq -r '.message // .error // empty' 2>/dev/null || true)"
+    die "API error (HTTP $http_code): ${msg:-$resp_body}"
+  fi
+  echo "$resp_body"
+}
+
+_api_patch() {
+  local url="$1" body="$2"
+  local response http_code resp_body
+  response="$(curl -s -w '\n%{http_code}' --max-time 10 -X PATCH -H "Content-Type: application/json" -d "$body" "$url" 2>/dev/null)" \
+    || die "API request failed: PATCH $url (connection error)"
+  http_code="$(echo "$response" | tail -1)"
+  resp_body="$(echo "$response" | sed '$d')"
+  if [[ ! "$http_code" =~ ^2 ]]; then
+    local msg
+    msg="$(echo "$resp_body" | jq -r '.message // .error // empty' 2>/dev/null || true)"
+    die "API error (HTTP $http_code): ${msg:-$resp_body}"
+  fi
+  echo "$resp_body"
+}
+
+_api_delete() {
+  local url="$1"
+  local http_code
+  http_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X DELETE "$url" 2>/dev/null)" \
+    || die "API request failed: DELETE $url (connection error)"
+  if [[ ! "$http_code" =~ ^2 ]]; then
+    die "API error (HTTP $http_code)"
+  fi
+}
+
+# ── Ticket resolution helpers ─────────────────────────────────────────────────
+
+# Resolve a display ID or UUID to a ticket UUID.
+# Usage: _resolve_ticket_id <input> [board_id]
+_resolve_ticket_id() {
+  local input="${1#\#}"  # strip leading # if present
+  local board_id="${2:-}"
+  local base; base="$(_api_base)"
+
+  # UUID detection
+  if [[ "$input" == *-* && ${#input} -ge 36 ]]; then
+    echo "$input"
+    return
+  fi
+
+  # Must be numeric displayId
+  if ! [[ "$input" =~ ^[0-9]+$ ]]; then
+    die "Invalid ticket ID: $input (use a display ID number or UUID)"
+  fi
+
+  local url="$base/api/tickets"
+  [[ -n "$board_id" ]] && url="$url?boardId=$board_id"
+
+  local tickets; tickets="$(_api_get "$url")"
+
+  local matches; matches="$(echo "$tickets" | jq --argjson did "$input" '[.[] | select(.displayId == $did)]')"
+  local count; count="$(echo "$matches" | jq 'length')"
+
+  if [[ "$count" -eq 0 ]]; then
+    die "No ticket found with display ID #$input"
+  elif [[ "$count" -eq 1 ]]; then
+    echo "$matches" | jq -r '.[0].id'
+    return
+  fi
+
+  # Multiple matches — fetch boards to show names
+  local boards; boards="$(_api_get "$base/api/boards")"
+
+  err "There are $count tickets with the id $input, consider using the --board flag"
+  printf "${BLUE}[fleex]${NC} Tickets found:\n" >&2
+  echo "$matches" | jq -r --argjson boards "$boards" '
+    .[] | . as $t |
+    ($boards | map(select(.id == $t.boardId)) | .[0].name // "Unknown") as $boardName |
+    "- \($t.title) - Board \($boardName) (uuid = \($t.boardId))"
+  ' | while IFS= read -r line; do
+    printf "  %s\n" "$line" >&2
+  done
+  exit 1
+}
+
+# Resolve board ID: if specified use it, if only one board auto-select, otherwise error.
+_resolve_board_id() {
+  local specified="$1"
+  local base; base="$(_api_base)"
+
+  if [[ -n "$specified" ]]; then
+    echo "$specified"
+    return
+  fi
+
+  local boards; boards="$(_api_get "$base/api/boards")"
+  local count; count="$(echo "$boards" | jq 'length')"
+
+  if [[ "$count" -eq 0 ]]; then
+    die "No boards found. Create one in the web UI first."
+  elif [[ "$count" -eq 1 ]]; then
+    echo "$boards" | jq -r '.[0].id'
+    return
+  fi
+
+  err "Multiple boards found. Specify one with --board ID:"
+  echo "$boards" | jq -r '.[] | "  \(.id)  \(.emoji) \(.name)"' >&2
+  exit 1
+}
+
+# Measure the terminal display width of a string (handles emoji/unicode)
+_display_width() {
+  python3 -c "
+import unicodedata, sys
+s = sys.argv[1]
+w = 0
+for ch in s:
+    cat = unicodedata.category(ch)
+    if cat in ('Mn', 'Me', 'Cf'):
+        pass
+    elif unicodedata.east_asian_width(ch) in ('W', 'F'):
+        w += 2
+    else:
+        w += 1
+print(w)
+" "$1"
+}
+
+# Return the ANSI color code for a ticket status
+_status_color_code() {
+  case "$1" in
+    done)      printf "%s" "$GREEN" ;;
+    doing)     printf "%s" "$YELLOW" ;;
+    reviewing) printf "%s" "$CYAN" ;;
+    todo)      printf "%s" "$BLUE" ;;
+    cancelled) printf "%s" "$RED" ;;
+    backlog)   printf "%s" "$DIM" ;;
+    *)         ;;
+  esac
+}
+
+# Print a status string with color applied
+_status_color() {
+  local color; color="$(_status_color_code "$1")"
+  printf "%s%s%s" "$color" "$1" "$NC"
+}
+
 # ── Instance detection (worktree-aware) ────────────────────────────────────────
 #
 # If CWD is inside a git worktree that contains packages/server, use it.
@@ -669,6 +846,14 @@ cmd_doctor() {
     all_ok=false
   fi
 
+  # jq
+  if command -v jq >/dev/null 2>&1; then
+    printf "  ${GREEN}✓${NC} jq $(jq --version 2>/dev/null)\n"
+  else
+    printf "  ${RED}✗${NC} jq not found (required for ticket commands)\n"
+    all_ok=false
+  fi
+
   # gh
   if command -v gh >/dev/null 2>&1; then
     printf "  ${GREEN}✓${NC} gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')\n"
@@ -730,6 +915,513 @@ cmd_doctor() {
   echo ""
 }
 
+# ── Ticket commands ────────────────────────────────────────────────────────────
+
+VALID_STATUSES="backlog todo doing reviewing done cancelled"
+VALID_PRIORITIES="none low medium high"
+
+cmd_ticket() {
+  _check_jq
+  local subcmd="${1:-list}"
+  shift 2>/dev/null || true
+
+  case "$subcmd" in
+    list|ls)       _ticket_list "$@" ;;
+    show|view)     _ticket_show "$@" ;;
+    create|new)    _ticket_create "$@" ;;
+    update|edit)   _ticket_update "$@" ;;
+    move|mv)       _ticket_move "$@" ;;
+    delete|rm)     _ticket_delete "$@" ;;
+    boards)        _ticket_boards "$@" ;;
+    comment)       _ticket_comment "$@" ;;
+    comments)      _ticket_comments "$@" ;;
+    help|--help|-h) _ticket_help ;;
+    *)
+      err "Unknown ticket command: $subcmd"
+      _ticket_help
+      exit 1
+      ;;
+  esac
+}
+
+_ticket_list() {
+  local board_id="" status="" tag=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --board)  board_id="${2:?Missing value for --board}"; shift 2 ;;
+      --status) status="${2:?Missing value for --status}"; shift 2 ;;
+      --tag)    tag="${2:?Missing value for --tag}"; shift 2 ;;
+      *) die "Unknown option: $1" ;;
+    esac
+  done
+
+  local base; base="$(_api_base)"
+  local url="$base/api/tickets"
+  local sep="?"
+  if [[ -n "$board_id" ]]; then url="$url${sep}boardId=$board_id"; sep="&"; fi
+  if [[ -n "$board_id" && -n "$status" ]]; then url="$url${sep}status=$status"; sep="&"; fi
+  if [[ -n "$tag" ]]; then url="$url${sep}tag=$tag"; sep="&"; fi
+
+  local tickets; tickets="$(_api_get "$url")"
+
+  # Server only filters by status when boardId is set, so filter client-side otherwise
+  if [[ -n "$status" && -z "$board_id" ]]; then
+    tickets="$(echo "$tickets" | jq --arg s "$status" '[.[] | select(.status == $s)]')"
+  fi
+
+  local count; count="$(echo "$tickets" | jq 'length')"
+
+  if [[ "$count" -eq 0 ]]; then
+    info "No tickets found."
+    return
+  fi
+
+  # When showing tickets across boards, add a Board column and sort by board then displayId
+  local show_board=false
+  if [[ -z "$board_id" ]]; then
+    show_board=true
+  fi
+
+  echo ""
+  if $show_board; then
+    local boards; boards="$(_api_get "$base/api/boards")"
+    # Sort by board name then displayId, join board name
+    tickets="$(echo "$tickets" | jq --argjson boards "$boards" '
+      [.[] | . as $t |
+        ($boards | map(select(.id == $t.boardId)) | .[0].name // "Unknown") as $boardName |
+        . + {boardName: $boardName}
+      ] | sort_by(.boardName, .displayId)
+    ')"
+
+    printf "  ${BOLD}%-6s %-22s %-11s %-8s %-12s %s${NC}\n" "#" "Board" "Status" "Prio" "Assignee" "Title"
+    printf "  %-6s %-22s %-11s %-8s %-12s %s\n" "──────" "──────────────────────" "───────────" "────────" "────────────" "──────────────────────────────"
+
+    echo "$tickets" | jq -r '.[] | "\(.displayId)\t\(.boardName)\t\(.status)\t\(.priority)\t\(.assignee // "-")\t\(.title)"' | \
+    while IFS=$'\t' read -r did board_name status_val prio assignee title; do
+      local padded_status; printf -v padded_status "%-11s" "$status_val"
+      local color; color="$(_status_color_code "$status_val")"
+      printf "  %-6s %-22s %s%s%s %-8s %-12s %s\n" "#$did" "$board_name" "$color" "$padded_status" "$NC" "$prio" "$assignee" "$title"
+    done
+  else
+    # Single board: sort by displayId, no board column
+    tickets="$(echo "$tickets" | jq 'sort_by(.displayId)')"
+
+    printf "  ${BOLD}%-6s %-11s %-8s %-12s %s${NC}\n" "#" "Status" "Prio" "Assignee" "Title"
+    printf "  %-6s %-11s %-8s %-12s %s\n" "──────" "───────────" "────────" "────────────" "──────────────────────────────"
+
+    echo "$tickets" | jq -r '.[] | "\(.displayId)\t\(.status)\t\(.priority)\t\(.assignee // "-")\t\(.title)"' | \
+    while IFS=$'\t' read -r did status_val prio assignee title; do
+      local padded_status; printf -v padded_status "%-11s" "$status_val"
+      local color; color="$(_status_color_code "$status_val")"
+      printf "  %-6s %s%s%s %-8s %-12s %s\n" "#$did" "$color" "$padded_status" "$NC" "$prio" "$assignee" "$title"
+    done
+  fi
+  echo ""
+  info "$count ticket(s)"
+}
+
+_ticket_show() {
+  local ticket_id="" board_id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --board) board_id="${2:?Missing value for --board}"; shift 2 ;;
+      *)
+        if [[ -z "$ticket_id" ]]; then
+          ticket_id="$1"; shift
+        else
+          die "Unknown option: $1"
+        fi
+        ;;
+    esac
+  done
+
+  [[ -n "$ticket_id" ]] || die "Usage: fleex ticket show <id> [--board ID]"
+
+  local uuid; uuid="$(_resolve_ticket_id "$ticket_id" "$board_id")"
+  local base; base="$(_api_base)"
+  local ticket; ticket="$(_api_get "$base/api/tickets/$uuid")"
+
+  local title status_val priority assignee tags did description created updated due_date blocked favorite
+  title="$(echo "$ticket" | jq -r '.title')"
+  status_val="$(echo "$ticket" | jq -r '.status')"
+  priority="$(echo "$ticket" | jq -r '.priority')"
+  assignee="$(echo "$ticket" | jq -r '.assignee // "-"')"
+  tags="$(echo "$ticket" | jq -r '(.tags // []) | if length == 0 then "-" else join(", ") end')"
+  did="$(echo "$ticket" | jq -r '.displayId')"
+  description="$(echo "$ticket" | jq -r '.description // ""')"
+  created="$(echo "$ticket" | jq -r '.createdAt // "-"')"
+  updated="$(echo "$ticket" | jq -r '.updatedAt // "-"')"
+  due_date="$(echo "$ticket" | jq -r '.dueDate // "-"')"
+  blocked="$(echo "$ticket" | jq -r '.blocked')"
+  favorite="$(echo "$ticket" | jq -r '.favorite')"
+
+  local colored_status; colored_status="$(_status_color "$status_val")"
+
+  echo ""
+  printf "  ${BOLD}Ticket #%s${NC}  %s | %s\n" "$did" "$colored_status" "$priority"
+  printf "  %s\n" "─────────────────────────────────────────────────────────"
+  printf "  ${BOLD}Title:${NC}       %s\n" "$title"
+  printf "  ${BOLD}Assignee:${NC}    %s\n" "$assignee"
+  printf "  ${BOLD}Tags:${NC}        %s\n" "$tags"
+  printf "  ${BOLD}Blocked:${NC}     %s\n" "$blocked"
+  printf "  ${BOLD}Favorite:${NC}    %s\n" "$favorite"
+  printf "  ${BOLD}Due:${NC}         %s\n" "$due_date"
+  printf "  ${BOLD}Created:${NC}     %s\n" "$created"
+  printf "  ${BOLD}Updated:${NC}     %s\n" "$updated"
+  printf "  ${BOLD}UUID:${NC}        ${DIM}%s${NC}\n" "$uuid"
+
+  if [[ -n "$description" && "$description" != "null" && "$description" != "" ]]; then
+    echo ""
+    printf "  ${BOLD}Description:${NC}\n"
+    echo "$description" | while IFS= read -r line; do
+      printf "    %s\n" "$line"
+    done
+  fi
+
+  # Show links if any
+  local links_count; links_count="$(echo "$ticket" | jq '(.links // []) | length')"
+  if [[ "$links_count" -gt 0 ]]; then
+    echo ""
+    printf "  ${BOLD}Links:${NC}\n"
+    echo "$ticket" | jq -r '(.links // [])[] | "    [\(.type)] \(.label) \(.url // .ref // "")"'
+  fi
+
+  echo ""
+}
+
+_ticket_create() {
+  local board_id="" title="" description="" priority="" status="" tags=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --board)       board_id="${2:?Missing value for --board}"; shift 2 ;;
+      --title)       title="${2:?Missing value for --title}"; shift 2 ;;
+      --description) description="${2:?Missing value for --description}"; shift 2 ;;
+      --priority)    priority="${2:?Missing value for --priority}"; shift 2 ;;
+      --status)      status="${2:?Missing value for --status}"; shift 2 ;;
+      --tag)         tags+=("${2:?Missing value for --tag}"); shift 2 ;;
+      *) die "Unknown option: $1" ;;
+    esac
+  done
+
+  [[ -n "$title" ]] || die "Usage: fleex ticket create --title \"...\" [--board ID] [--description \"...\"] [--priority P] [--status S] [--tag T]"
+
+  board_id="$(_resolve_board_id "$board_id")"
+
+  if [[ -n "$status" ]] && ! echo "$VALID_STATUSES" | grep -qw "$status"; then
+    die "Invalid status: $status (valid: $VALID_STATUSES)"
+  fi
+  if [[ -n "$priority" ]] && ! echo "$VALID_PRIORITIES" | grep -qw "$priority"; then
+    die "Invalid priority: $priority (valid: $VALID_PRIORITIES)"
+  fi
+
+  local base; base="$(_api_base)"
+
+  # Build JSON body
+  local body
+  body="$(jq -n \
+    --arg boardId "$board_id" \
+    --arg title "$title" \
+    --arg description "$description" \
+    --arg priority "$priority" \
+    --arg status "$status" \
+    --argjson tags "$(printf '%s\n' "${tags[@]+"${tags[@]}"}" | jq -R . | jq -s .)" \
+    '{boardId: $boardId, title: $title} +
+     (if $description != "" then {description: $description} else {} end) +
+     (if $priority != "" then {priority: $priority} else {} end) +
+     (if $status != "" then {status: $status} else {} end) +
+     (if ($tags | length) > 0 and ($tags | .[0] != "") then {tags: $tags} else {} end)'
+  )"
+
+  local result; result="$(_api_post "$base/api/tickets" "$body")"
+  local did; did="$(echo "$result" | jq -r '.displayId')"
+  local result_title; result_title="$(echo "$result" | jq -r '.title')"
+  local result_status; result_status="$(echo "$result" | jq -r '.status')"
+
+  ok "Created ticket #$did: $result_title ($result_status)"
+}
+
+_ticket_update() {
+  local ticket_id="" board_id="" title="" description="" status="" priority="" assignee=""
+  local has_updates=false
+
+  # First positional arg is the ticket ID
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+    ticket_id="$1"; shift
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --board)       board_id="${2:?Missing value for --board}"; shift 2 ;;
+      --title)       title="${2:?Missing value for --title}"; has_updates=true; shift 2 ;;
+      --description) description="${2:?Missing value for --description}"; has_updates=true; shift 2 ;;
+      --status)      status="${2:?Missing value for --status}"; has_updates=true; shift 2 ;;
+      --priority)    priority="${2:?Missing value for --priority}"; has_updates=true; shift 2 ;;
+      --assignee)    assignee="${2:?Missing value for --assignee}"; has_updates=true; shift 2 ;;
+      *) die "Unknown option: $1" ;;
+    esac
+  done
+
+  [[ -n "$ticket_id" ]] || die "Usage: fleex ticket update <id> [--title \"...\"] [--status S] [--priority P] [--assignee NAME]"
+  $has_updates || die "No updates specified. Use --title, --description, --status, --priority, or --assignee."
+
+  if [[ -n "$status" ]] && ! echo "$VALID_STATUSES" | grep -qw "$status"; then
+    die "Invalid status: $status (valid: $VALID_STATUSES)"
+  fi
+  if [[ -n "$priority" ]] && ! echo "$VALID_PRIORITIES" | grep -qw "$priority"; then
+    die "Invalid priority: $priority (valid: $VALID_PRIORITIES)"
+  fi
+
+  local uuid; uuid="$(_resolve_ticket_id "$ticket_id" "$board_id")"
+  local base; base="$(_api_base)"
+
+  local body
+  body="$(jq -n \
+    --arg title "$title" \
+    --arg description "$description" \
+    --arg status "$status" \
+    --arg priority "$priority" \
+    --arg assignee "$assignee" \
+    '(if $title != "" then {title: $title} else {} end) +
+     (if $description != "" then {description: $description} else {} end) +
+     (if $status != "" then {status: $status} else {} end) +
+     (if $priority != "" then {priority: $priority} else {} end) +
+     (if $assignee != "" then {assignee: $assignee} else {} end)'
+  )"
+
+  local result; result="$(_api_patch "$base/api/tickets/$uuid" "$body")"
+  local did; did="$(echo "$result" | jq -r '.displayId')"
+  local result_title; result_title="$(echo "$result" | jq -r '.title')"
+
+  ok "Updated ticket #$did: $result_title"
+}
+
+_ticket_move() {
+  local ticket_id="" board_id="" target_status=""
+
+  # Parse: <id> <status> [--board ID]
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --board) board_id="${2:?Missing value for --board}"; shift 2 ;;
+      *)
+        if [[ -z "$ticket_id" ]]; then
+          ticket_id="$1"
+        elif [[ -z "$target_status" ]]; then
+          target_status="$1"
+        else
+          die "Unknown option: $1"
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  [[ -n "$ticket_id" && -n "$target_status" ]] || die "Usage: fleex ticket move <id> <status> [--board ID]"
+
+  if ! echo "$VALID_STATUSES" | grep -qw "$target_status"; then
+    die "Invalid status: $target_status (valid: $VALID_STATUSES)"
+  fi
+
+  local uuid; uuid="$(_resolve_ticket_id "$ticket_id" "$board_id")"
+  local base; base="$(_api_base)"
+
+  local body; body="$(jq -n --arg status "$target_status" '{status: $status}')"
+  local result; result="$(_api_post "$base/api/tickets/$uuid/move" "$body")"
+  local did; did="$(echo "$result" | jq -r '.displayId')"
+  local new_status; new_status="$(echo "$result" | jq -r '.status')"
+
+  ok "Moved ticket #$did to $new_status"
+}
+
+_ticket_delete() {
+  local ticket_id="" board_id="" force=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --board) board_id="${2:?Missing value for --board}"; shift 2 ;;
+      -f|--force) force=true; shift ;;
+      *)
+        if [[ -z "$ticket_id" ]]; then
+          ticket_id="$1"; shift
+        else
+          die "Unknown option: $1"
+        fi
+        ;;
+    esac
+  done
+
+  [[ -n "$ticket_id" ]] || die "Usage: fleex ticket delete <id> [-f] [--board ID]"
+
+  local uuid; uuid="$(_resolve_ticket_id "$ticket_id" "$board_id")"
+  local base; base="$(_api_base)"
+
+  if ! $force; then
+    # Fetch ticket title for confirmation
+    local ticket; ticket="$(_api_get "$base/api/tickets/$uuid")"
+    local title; title="$(echo "$ticket" | jq -r '.title')"
+    local did; did="$(echo "$ticket" | jq -r '.displayId')"
+
+    printf "${YELLOW}[fleex]${NC} Delete ticket #%s \"%s\"? [y/N] " "$did" "$title"
+    local confirm
+    read -r confirm
+    if [[ ! "$confirm" =~ ^[yY] ]]; then
+      info "Cancelled."
+      return
+    fi
+  fi
+
+  _api_delete "$base/api/tickets/$uuid"
+  ok "Deleted ticket"
+}
+
+_ticket_boards() {
+  local base; base="$(_api_base)"
+  local boards; boards="$(_api_get "$base/api/boards")"
+  local count; count="$(echo "$boards" | jq 'length')"
+
+  if [[ "$count" -eq 0 ]]; then
+    info "No boards found."
+    return
+  fi
+
+  echo ""
+  printf "  ${BOLD}%-26s %7s %6s %6s %6s %6s %6s  %s${NC}\n" "Board" "Backlog" "Todo" "Doing" "Review" "Done" "Canc." "ID"
+  printf "  %-26s %7s %6s %6s %6s %6s %6s  %s\n" "──────────────────────────" "───────" "──────" "──────" "──────" "──────" "──────" "────────────────────────────────────"
+
+  echo "$boards" | jq -r '.[] |
+    "\(.emoji) \(.name)\t\(.ticketCounts.backlog // 0)\t\(.ticketCounts.todo // 0)\t\(.ticketCounts.doing // 0)\t\(.ticketCounts.reviewing // 0)\t\(.ticketCounts.done // 0)\t\(.ticketCounts.cancelled // 0)\t\(.id)"
+  ' | while IFS=$'\t' read -r label cnt_backlog cnt_todo cnt_doing cnt_reviewing cnt_done cnt_cancelled bid; do
+    local dw; dw="$(_display_width "$label")"
+    local pad=$(( 26 - dw ))
+    (( pad < 0 )) && pad=0
+    printf "  %s%*s %7s %6s %6s %6s %6s %6s  ${DIM}%s${NC}\n" "$label" "$pad" "" "$cnt_backlog" "$cnt_todo" "$cnt_doing" "$cnt_reviewing" "$cnt_done" "$cnt_cancelled" "$bid"
+  done
+  echo ""
+}
+
+_ticket_comment() {
+  local ticket_id="" board_id="" body=""
+
+  # Parse: <id> "body" [--board ID]
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --board) board_id="${2:?Missing value for --board}"; shift 2 ;;
+      *)
+        if [[ -z "$ticket_id" ]]; then
+          ticket_id="$1"
+        elif [[ -z "$body" ]]; then
+          body="$1"
+        else
+          die "Unknown option: $1"
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  [[ -n "$ticket_id" && -n "$body" ]] || die "Usage: fleex ticket comment <id> \"body\" [--board ID]"
+
+  local uuid; uuid="$(_resolve_ticket_id "$ticket_id" "$board_id")"
+  local base; base="$(_api_base)"
+
+  local json_body; json_body="$(jq -n --arg body "$body" '{body: $body}')"
+  _api_post "$base/api/tickets/$uuid/comments" "$json_body" > /dev/null
+
+  ok "Comment added to ticket #$ticket_id"
+}
+
+_ticket_comments() {
+  local ticket_id="" board_id=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --board) board_id="${2:?Missing value for --board}"; shift 2 ;;
+      *)
+        if [[ -z "$ticket_id" ]]; then
+          ticket_id="$1"; shift
+        else
+          die "Unknown option: $1"
+        fi
+        ;;
+    esac
+  done
+
+  [[ -n "$ticket_id" ]] || die "Usage: fleex ticket comments <id> [--board ID]"
+
+  local uuid; uuid="$(_resolve_ticket_id "$ticket_id" "$board_id")"
+  local base; base="$(_api_base)"
+
+  local comments; comments="$(_api_get "$base/api/tickets/$uuid/comments")"
+  local count; count="$(echo "$comments" | jq 'length')"
+
+  if [[ "$count" -eq 0 ]]; then
+    info "No comments on this ticket."
+    return
+  fi
+
+  echo ""
+  echo "$comments" | jq -r '.[] |
+    "\(.authorType)\t\(.authorName)\t\(.createdAt)\t\(.body)"
+  ' | while IFS=$'\t' read -r author_type author_name created_at body; do
+    local color="$NC"
+    [[ "$author_type" == "agent" ]] && color="$CYAN"
+    [[ "$author_type" == "user" ]] && color="$GREEN"
+
+    printf "  ${color}${BOLD}%s${NC} ${DIM}(%s)${NC}  ${DIM}%s${NC}\n" "$author_name" "$author_type" "$created_at"
+    echo "$body" | while IFS= read -r line; do
+      printf "    %s\n" "$line"
+    done
+    echo ""
+  done
+}
+
+_ticket_help() {
+  cat <<EOF
+
+  ${BOLD}${CYAN}fleex ticket${NC} — Manage tickets from the CLI
+
+  ${BOLD}${YELLOW}Commands:${NC}
+    ${CYAN}list${NC} [--board ID] [--status S] [--tag T]     List tickets
+    ${CYAN}show${NC} <id> [--board ID]                       Show ticket details
+    ${CYAN}create${NC} --title "..." [--board ID] [opts]     Create a ticket
+    ${CYAN}update${NC} <id> [--title "..."] [--status S]     Update a ticket
+    ${CYAN}move${NC} <id> <status> [--board ID]              Change ticket status
+    ${CYAN}delete${NC} <id> [-f] [--board ID]                Delete a ticket
+    ${CYAN}boards${NC}                                       List boards
+    ${CYAN}comment${NC} <id> "body" [--board ID]             Add a comment
+    ${CYAN}comments${NC} <id> [--board ID]                   List comments
+
+  ${BOLD}${YELLOW}Aliases:${NC}
+    ls=list, new=create, edit=update, mv=move, rm=delete, view=show
+
+  ${BOLD}${YELLOW}Ticket ID:${NC}
+    Use a display ID (e.g. ${GREEN}42${NC} or ${GREEN}#42${NC}) or a full UUID.
+    If multiple boards have the same display ID, use ${GREEN}--board ID${NC} to disambiguate.
+
+  ${BOLD}${YELLOW}Statuses:${NC} backlog, todo, doing, reviewing, done, cancelled
+  ${BOLD}${YELLOW}Priorities:${NC} none, low, medium, high
+
+  ${BOLD}${YELLOW}Create options:${NC}
+    --board ID          Board to create in (auto-detected if only one)
+    --title "..."       Ticket title (required)
+    --description "..." Ticket description
+    --priority P        Priority: none, low, medium, high
+    --status S          Initial status (default: backlog)
+    --tag T             Add a tag (repeatable)
+
+  ${BOLD}${YELLOW}Examples:${NC}
+    ${GREEN}fleex ticket list${NC}                          All tickets
+    ${GREEN}fleex ticket list --status doing${NC}           In-progress tickets
+    ${GREEN}fleex ticket show 42${NC}                       Show ticket #42
+    ${GREEN}fleex ticket show 1 --board <uuid>${NC}         Show #1 on specific board
+    ${GREEN}fleex ticket create --title "Fix bug"${NC}      Create (auto board)
+    ${GREEN}fleex ticket move 42 done${NC}                  Mark #42 as done
+    ${GREEN}fleex ticket update 42 --priority high${NC}     Set priority
+    ${GREEN}fleex ticket comment 42 "Looks good"${NC}       Add comment
+    ${GREEN}fleex ticket delete 42 -f${NC}                  Delete without confirm
+
+EOF
+}
+
 cmd_help() {
   cat <<EOF
 
@@ -747,6 +1439,7 @@ cmd_help() {
     ${CYAN}restart${NC}       Restart the current instance
     ${CYAN}status${NC}        Show status of all instances
     ${CYAN}logs${NC} [svc]    Tail logs (all services, or a specific one)
+    ${CYAN}ticket${NC} <cmd>   Manage tickets (list, show, create, update, move, ...)
     ${CYAN}doctor${NC}        Check system health and prerequisites
     ${CYAN}self-update${NC}   Pull latest code and update CLI
     ${CYAN}help${NC}          Show this help message
@@ -799,6 +1492,7 @@ main() {
     restart)     cmd_restart "$@" ;;
     status)      cmd_status "$@" ;;
     logs)        cmd_logs "$@" ;;
+    ticket|t)    cmd_ticket "$@" ;;
     doctor)      cmd_doctor "$@" ;;
     self-update) cmd_self_update "$@" ;;
     help|--help|-h) cmd_help ;;
