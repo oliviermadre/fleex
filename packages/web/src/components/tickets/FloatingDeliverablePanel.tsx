@@ -1,19 +1,13 @@
-import { memo, useRef, useEffect, useCallback, useState } from 'react';
+import { memo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { TicketDeliverable } from '@fleex/shared';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 250;
 const DEFAULT_WIDTH = 650;
 const DEFAULT_HEIGHT = 500;
-
-function clampPosition(x: number, y: number, w: number, h: number): { x: number; y: number } {
-  return {
-    x: Math.max(0, Math.min(x, window.innerWidth - w)),
-    y: Math.max(0, Math.min(y, window.innerHeight - h)),
-  };
-}
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -56,29 +50,15 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
   onFocus?: () => void;
   isFocused?: boolean;
 }) {
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
-  const [size, setSize] = useState({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT });
+  const { size, effectivePos, setPosition, handleResizeMouseDown } = useFloatingResize({
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
+    defaultWidth: DEFAULT_WIDTH,
+    defaultHeight: DEFAULT_HEIGHT,
+    initialOffset,
+  });
+
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
-  const resizeRef = useRef({ resizing: false, startX: 0, startY: 0, startW: 0, startH: 0 });
-
-  // Center on first render (with cascade offset)
-  useEffect(() => {
-    if (position !== null) return;
-    const rawX = (window.innerWidth - DEFAULT_WIDTH) / 2 + initialOffset;
-    const rawY = (window.innerHeight - DEFAULT_HEIGHT) / 2 - 40 + initialOffset;
-    setPosition(clampPosition(rawX, rawY, DEFAULT_WIDTH, DEFAULT_HEIGHT));
-  }, [position, initialOffset]);
-
-  const effectivePos = position ?? { x: 0, y: 0 };
-
-  // Re-clamp on window resize
-  useEffect(() => {
-    function handleWindowResize() {
-      setPosition((prev) => prev ? clampPosition(prev.x, prev.y, size.width, size.height) : prev);
-    }
-    window.addEventListener('resize', handleWindowResize);
-    return () => window.removeEventListener('resize', handleWindowResize);
-  }, [size.width, size.height]);
 
   // Drag handlers
   const handleTitleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -104,37 +84,7 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
     };
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
-  }, [effectivePos, size]);
-
-  // Resize handlers
-  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    resizeRef.current = {
-      resizing: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      startW: size.width,
-      startH: size.height,
-    };
-    const handleMove = (me: MouseEvent) => {
-      if (!resizeRef.current.resizing) return;
-      const rawW = Math.max(MIN_WIDTH, resizeRef.current.startW + (me.clientX - resizeRef.current.startX));
-      const rawH = Math.max(MIN_HEIGHT, resizeRef.current.startH + (me.clientY - resizeRef.current.startY));
-      const newW = Math.min(rawW, window.innerWidth);
-      const newH = Math.min(rawH, window.innerHeight);
-      setSize({ width: newW, height: newH });
-      setPosition((prev) => prev ? clampPosition(prev.x, prev.y, newW, newH) : prev);
-    };
-    const handleUp = () => {
-      resizeRef.current.resizing = false;
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-  }, [size]);
+  }, [effectivePos, size, setPosition]);
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex, pointerEvents: 'none' }}>
@@ -290,22 +240,42 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
           <span>{relativeTime(deliverable.createdAt)}</span>
         </div>
 
-        {/* Resize handle */}
-        <div
-          style={{ position: 'absolute', bottom: 0, right: 0, width: 16, height: 16, cursor: 'se-resize' }}
-          onMouseDown={handleResizeMouseDown}
-        >
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 10 10"
-            fill="none"
-            style={{ position: 'absolute', bottom: 3, right: 3 }}
-          >
-            <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="var(--theme-border)" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-        </div>
       </div>
+
+      {/* Edge resize handles */}
+      <div style={{ position: 'absolute', top: effectivePos.y - 3, left: effectivePos.x + 8, width: size.width - 16, height: 6, cursor: 'n-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('n')} />
+      <div style={{ position: 'absolute', top: effectivePos.y + size.height - 3, left: effectivePos.x + 8, width: size.width - 16, height: 6, cursor: 's-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('s')} />
+      <div style={{ position: 'absolute', top: effectivePos.y + 8, left: effectivePos.x - 3, width: 6, height: size.height - 16, cursor: 'w-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('w')} />
+      <div style={{ position: 'absolute', top: effectivePos.y + 8, left: effectivePos.x + size.width - 3, width: 6, height: size.height - 16, cursor: 'e-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('e')} />
+
+      {/* Corner resize handles */}
+      {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
+        <div
+          key={corner}
+          style={{
+            position: 'absolute',
+            top: corner.includes('n') ? effectivePos.y - 4 : effectivePos.y + size.height - 8,
+            left: corner.includes('w') ? effectivePos.x - 4 : effectivePos.x + size.width - 8,
+            width: 12,
+            height: 12,
+            cursor: `${corner}-resize`,
+            pointerEvents: 'auto',
+          }}
+          onMouseDown={handleResizeMouseDown(corner)}
+        >
+          {corner === 'se' && (
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+              style={{ position: 'absolute', bottom: 1, right: 1 }}
+            >
+              <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="var(--theme-border)" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          )}
+        </div>
+      ))}
     </div>,
     document.body,
   );
