@@ -139,6 +139,12 @@ export interface DeliverableUpdatedEvent extends DomainEvent {
   newStatus: string;
 }
 
+export interface DeliverableDeletedEvent extends DomainEvent {
+  type: 'deliverable.deleted';
+  deliverableId: string;
+  ticketId: string;
+}
+
 // ── Persona events ──
 
 export interface PersonaCreatedEvent extends DomainEvent {
@@ -265,6 +271,7 @@ export type AnyDomainEvent =
   | MentionDeletedEvent
   | DeliverableCreatedEvent
   | DeliverableUpdatedEvent
+  | DeliverableDeletedEvent
   | PersonaCreatedEvent
   | PersonaUpdatedEvent
   | PersonaDeletedEvent
