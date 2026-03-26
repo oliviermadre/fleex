@@ -84,15 +84,7 @@ export function panelRoutes(container: Container) {
       const panel = await container.panelStore.getById(id);
       if (!panel) throw new PanelNotFoundError(id);
 
-      emit({
-        type: 'panel.executed',
-        panelId: id,
-        panelName: panel.name,
-        ticketId,
-        occurredAt: new Date(),
-      });
-
-      // Fire-and-forget — execution runs in background
+      // Fire-and-forget — execution runs in background (panel.executed event emitted by run-panel use case on completion)
       container.runPanel.execute({
         panelName: panel.name,
         ticketId,
