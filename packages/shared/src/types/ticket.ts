@@ -200,6 +200,16 @@ export interface TicketUnreadCounts {
   readonly unreadDeliverables: number;
 }
 
+// ── Summaries ──
+
+export interface TicketSummaryRef {
+  readonly ticketId: string;
+  readonly ticketTitle: string;
+  readonly ticketStatus: TicketStatus;
+  readonly content: string;
+  readonly updatedAt: string;
+}
+
 // ── Context ──
 
 export interface TicketContext {
@@ -211,6 +221,7 @@ export interface TicketContext {
   };
   readonly deliverables: TicketDeliverable[];
   readonly activity: TicketActivity[];
+  readonly relevantSummaries: TicketSummaryRef[];
 }
 
 // ── WebSocket ──

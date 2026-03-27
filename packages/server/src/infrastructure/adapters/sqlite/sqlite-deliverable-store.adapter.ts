@@ -40,6 +40,20 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
     return rows.map((r) => this.toEntity(r));
   }
 
+  async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
+    const row = this.conn.db
+      .prepare('SELECT * FROM deliverables WHERE ticket_id = ? AND type = ? LIMIT 1')
+      .get(ticketId, type) as DeliverableRow | undefined;
+    return row ? this.toEntity(row) : null;
+  }
+
+  async getAllByType(type: string): Promise<TicketDeliverableEntity[]> {
+    const rows = this.conn.db
+      .prepare('SELECT * FROM deliverables WHERE type = ? ORDER BY created_at ASC')
+      .all(type) as DeliverableRow[];
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async save(deliverable: TicketDeliverableEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO deliverables

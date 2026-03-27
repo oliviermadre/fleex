@@ -10,6 +10,7 @@ import type { AutoReviewWorkflowUseCase } from './use-cases/auto-review-workflow
 import type { ExecuteAgentUseCase } from './use-cases/execute-agent.js';
 import type { WakeWaitingAgentsUseCase } from './use-cases/wake-waiting-agents.js';
 import type { RunPanelUseCase } from './use-cases/run-panel.js';
+import type { GenerateTicketSummaryUseCase } from './use-cases/generate-ticket-summary.js';
 import type {
   AnyDomainEvent,
   CommentPostedEvent,
@@ -40,6 +41,7 @@ export interface DomainEventListenerDeps {
   executeAgent: ExecuteAgentUseCase;
   wakeWaitingAgents: WakeWaitingAgentsUseCase;
   runPanel: RunPanelUseCase;
+  generateTicketSummary: GenerateTicketSummaryUseCase;
   logger: LoggerPort;
 }
 
@@ -164,6 +166,10 @@ export class DomainEventListener {
     // ── Cross-cutting: Auto-resolve all mentions when ticket → done ──
     bus.on('ticket.moved', (e) => this.handleTicketMovedToDone(e as TicketMovedEvent));
     bus.on('ticket.updated', (e) => this.handleTicketUpdatedToDone(e as TicketUpdatedEvent));
+
+    // ── Cross-cutting: Auto-generate ticket summary on close ──
+    bus.on('ticket.moved', (e) => this.handleTicketClosedForSummary(e as TicketMovedEvent));
+    bus.on('ticket.updated', (e) => this.handleTicketUpdatedClosedForSummary(e as TicketUpdatedEvent));
 
     // ── Cross-cutting: Wake waiting agents on new content ──
     bus.on('comment.posted', (e) => this.handleWakeWaitingOnComment(e as CommentPostedEvent));
@@ -311,6 +317,37 @@ export class DomainEventListener {
 
   private async handleWakeWaitingOnDeliverable(event: DeliverableCreatedEvent): Promise<void> {
     await this.deps.wakeWaitingAgents.execute(event.ticketId, event.agentName);
+  }
+
+  // ── Auto-generate ticket summary on close ──
+
+  private handleTicketClosedForSummary(event: TicketMovedEvent): void {
+    if (event.toStatus === 'done' || event.toStatus === 'cancelled') {
+      this.deps.generateTicketSummary.execute({
+        ticketId: event.ticketId,
+        status: event.toStatus as 'done' | 'cancelled',
+      }).catch((err) => {
+        this.deps.logger.error('Ticket summary generation failed', {
+          ticketId: event.ticketId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+  }
+
+  private handleTicketUpdatedClosedForSummary(event: TicketUpdatedEvent): void {
+    const statusChange = event.changes['status'];
+    if (statusChange && (statusChange.to === 'done' || statusChange.to === 'cancelled')) {
+      this.deps.generateTicketSummary.execute({
+        ticketId: event.ticketId,
+        status: statusChange.to as 'done' | 'cancelled',
+      }).catch((err) => {
+        this.deps.logger.error('Ticket summary generation failed', {
+          ticketId: event.ticketId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
   }
 
   // ── Auto-resolve human mentions when human posts ──

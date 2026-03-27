@@ -4,6 +4,7 @@ import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
+import type { GetRelevantSummariesUseCase } from './get-relevant-summaries.js';
 
 export class GetTicketContextUseCase {
   constructor(
@@ -11,6 +12,7 @@ export class GetTicketContextUseCase {
     private readonly commentStore: CommentStorePort,
     private readonly mentionStore: MentionStorePort,
     private readonly deliverableStore: DeliverableStorePort,
+    private readonly getRelevantSummaries?: GetRelevantSummariesUseCase,
   ) {}
 
   async execute(params: {
@@ -43,6 +45,16 @@ export class GetTicketContextUseCase {
     // Get activity
     const activity = await this.ticketStore.getActivitiesByTicket(params.ticketId, activityLimit);
 
+    // Get relevant summaries from past tickets
+    let relevantSummaries: Awaited<ReturnType<GetRelevantSummariesUseCase['execute']>> = [];
+    if (this.getRelevantSummaries) {
+      try {
+        relevantSummaries = await this.getRelevantSummaries.execute({ ticketId: params.ticketId });
+      } catch {
+        // Non-critical — proceed without summaries
+      }
+    }
+
     return {
       ticket: ticket.toDTO(),
       comments: visibleComments.map((c) => c.toDTO()),
@@ -52,6 +64,7 @@ export class GetTicketContextUseCase {
       },
       deliverables: deliverables.map((d) => d.toDTO()),
       activity: activity.map((a) => a.toDTO()),
+      relevantSummaries,
     };
   }
 }
