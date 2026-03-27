@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import type { SessionGroup, Session, TicketLink, RepositorySummary } from '@fleex/shared';
+import type { SessionGroup, Session, WorktreeSessionGroup, TicketLink, RepositorySummary } from '@fleex/shared';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -328,7 +328,7 @@ function CollapsedBranchesPanel() {
   const systemSessions: Session[] = useMemo(() => {
     const ungrouped = sessionGroups.find((g) => isSystemGroup(g.repositoryOrg, g.repositoryName));
     if (!ungrouped) return [];
-    return ungrouped.worktrees.flatMap((wt) => wt.sessions);
+    return ungrouped.worktrees.flatMap((wt: WorktreeSessionGroup) => wt.sessions);
   }, [sessionGroups]);
 
   const repoGroups = useMemo(() => {
@@ -366,7 +366,7 @@ function CollapsedBranchesPanel() {
     return sorted.filter(filter).map((wt) => {
       const worktreeKey = `${groupId}:${wt.branch}`;
       const status = aggregateBranchStatus(wt.sessions);
-      const isSelected = wt.sessions.some((s) => s.id === selectedSessionId);
+      const isSelected = wt.sessions.some((s: Session) => s.id === selectedSessionId);
       return (
         <CollapsedWorktreeItem
           key={`${groupId}:${wt.branch}`}

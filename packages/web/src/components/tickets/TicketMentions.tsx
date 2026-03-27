@@ -70,7 +70,7 @@ function StatusDropdown({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const cfg = STATUS_CONFIG[currentStatus];
+  const cfg = STATUS_CONFIG[currentStatus]!;
 
   return (
     <div ref={ref} className="relative">
@@ -88,7 +88,7 @@ function StatusDropdown({
       {open && (
         <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
           {STATUS_ORDER.map((s) => {
-            const sc = STATUS_CONFIG[s];
+            const sc = STATUS_CONFIG[s]!;
             return (
               <button
                 key={s}

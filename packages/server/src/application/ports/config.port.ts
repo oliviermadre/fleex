@@ -1,3 +1,8 @@
+export interface RepoConfig {
+  postCheckoutHook?: string; // multiline shell script, empty = disabled
+  hookTimeoutSeconds?: number; // default 60
+}
+
 export interface AppConfig {
   basePath: string;
   defaultShell: string;
@@ -9,6 +14,7 @@ export interface AppConfig {
   repositories?: string[];
   resolvedRepositories?: string[];
   resolvedAt?: string;
+  repoConfigs?: Record<string, RepoConfig>; // key = "org/name"
 }
 
 export interface ConfigPort {

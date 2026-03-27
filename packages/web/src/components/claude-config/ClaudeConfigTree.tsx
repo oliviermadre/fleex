@@ -115,7 +115,7 @@ function TreeNode({ entry, depth }: { entry: ClaudeConfigTreeEntry; depth: numbe
           </svg>
           <span className="truncate">{entry.name}</span>
         </button>
-        {isExpanded && entry.children?.map((child) => (
+        {isExpanded && entry.children?.map((child: ClaudeConfigTreeEntry) => (
           <TreeNode key={child.relativePath} entry={child} depth={depth + 1} />
         ))}
         {isExpanded && showInlineInput && (

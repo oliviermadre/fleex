@@ -21,7 +21,7 @@ export function ticketRoutes(container: Container) {
       return Promise.all(boards.map(async (b): Promise<BoardWithCounts> => {
         const tickets = await container.ticketStore.getTicketsByBoard(b.id);
         const ticketCounts = {} as Record<TicketStatus, number>;
-        for (const s of TICKET_STATUSES) {
+        for (const s of TICKET_STATUSES as readonly TicketStatus[]) {
           ticketCounts[s] = tickets.filter((t) => t.status === s).length;
         }
         return { ...b.toDTO(), ticketCounts };

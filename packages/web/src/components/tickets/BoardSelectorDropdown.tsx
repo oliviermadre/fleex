@@ -22,7 +22,7 @@ export function BoardSelectorDropdown() {
   const totalCount = isAllBoards
     ? tickets.length
     : selectedBoard
-      ? Object.values(selectedBoard.ticketCounts).reduce((sum: number, c: number) => sum + c, 0)
+      ? (Object.values(selectedBoard.ticketCounts) as number[]).reduce((sum, c) => sum + c, 0)
       : tickets.length;
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export function BoardSelectorDropdown() {
         )}
 
         <span className="rounded-full bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-xs font-medium text-[var(--theme-text-muted)]">
-          {totalCount}
+          {totalCount as number}
         </span>
 
         {/* Chevron */}
@@ -127,7 +127,7 @@ export function BoardSelectorDropdown() {
 
           {/* Board list */}
           {boards.map((b) => {
-            const count = Object.values(b.ticketCounts).reduce((sum: number, c: number) => sum + c, 0);
+            const count = (Object.values(b.ticketCounts) as number[]).reduce((sum, c) => sum + c, 0);
             return (
               <button
                 key={b.id}
@@ -143,7 +143,7 @@ export function BoardSelectorDropdown() {
                   <span>{b.emoji}</span>
                   <span className="font-medium">{b.name}</span>
                 </span>
-                <span className="text-xs text-[var(--theme-text-muted)]">{count}</span>
+                <span className="text-xs text-[var(--theme-text-muted)]">{count as number}</span>
               </button>
             );
           })}

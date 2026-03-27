@@ -12,14 +12,15 @@ export function sessionRoutes(container: Container) {
     });
 
     app.post<{ Body: CreateSessionRequest }>('/api/sessions', async (request, reply) => {
-      const cwdExists = await container.hostFs.exists(request.body.cwd);
+      const body = request.body as CreateSessionRequest;
+      const cwdExists = await container.hostFs.exists(body.cwd);
       if (!cwdExists) {
         return reply.code(422).send({
           code: 'CWD_NOT_FOUND',
-          message: `Directory not found: ${request.body.cwd}`,
+          message: `Directory not found: ${body.cwd}`,
         });
       }
-      const session = await container.createSession.execute(request.body);
+      const session = await container.createSession.execute(body);
       emit({
         type: 'session.created',
         sessionId: session.id,

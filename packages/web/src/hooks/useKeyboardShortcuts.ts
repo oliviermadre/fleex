@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import type { Session, WorktreeSessionGroup } from '@fleex/shared';
 import { useUIStore } from '../stores/uiStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -55,7 +56,7 @@ export function useKeyboardShortcuts() {
       (g) => g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped'
     );
     if (systemGroup) {
-      const allSystemSessions = systemGroup.worktrees.flatMap((wt) => wt.sessions);
+      const allSystemSessions = systemGroup.worktrees.flatMap((wt: WorktreeSessionGroup) => wt.sessions);
       const sysSessOrder = sessionOrder[SYSTEM_GROUP_ID];
       const sortedSystemSessions = sysSessOrder && sysSessOrder.length > 0
         ? [...allSystemSessions].sort((a, b) => {
@@ -64,7 +65,7 @@ export function useKeyboardShortcuts() {
           })
         : allSystemSessions;
       if (sortedSystemSessions.length > 0) {
-        entries.push({ key: SYSTEM_GROUP_ID, sessions: sortedSystemSessions.map((s) => s.id) });
+        entries.push({ key: SYSTEM_GROUP_ID, sessions: sortedSystemSessions.map((s: Session) => s.id) });
       }
     }
 
@@ -103,7 +104,7 @@ export function useKeyboardShortcuts() {
             })
           : wt.sessions;
         if (sortedSessions.length > 0 || wt.agentWorktree) {
-          entries.push({ key: wtGroupId, sessions: sortedSessions.map((s) => s.id), agentTicketId: wt.agentWorktree?.ticketId });
+          entries.push({ key: wtGroupId, sessions: sortedSessions.map((s: Session) => s.id), agentTicketId: wt.agentWorktree?.ticketId });
         }
       }
     };

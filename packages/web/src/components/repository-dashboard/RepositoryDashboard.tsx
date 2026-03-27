@@ -5,9 +5,10 @@ import { IssuesBanner } from './IssuesBanner';
 import { PullRequestsSection } from './PullRequestsSection';
 import { MergedPRsSection } from './MergedPRsSection';
 import { WorktreesSection } from './WorktreesSection';
+import { RepoConfigPanel } from './RepoConfigPanel';
 import { cn } from '../../lib/cn';
 
-type Tab = 'pulls' | 'issues' | 'worktrees' | 'merged';
+type Tab = 'pulls' | 'issues' | 'worktrees' | 'merged' | 'settings';
 
 interface Props {
   repoKey: string;
@@ -34,16 +35,17 @@ export function RepositoryDashboard({ repoKey }: Props) {
 
   const openPRs = data?.openPullRequests ?? [];
   const issues = data?.openIssues ?? [];
-  const worktrees = (data?.worktrees ?? []).filter((wt) => !wt.isBare);
+  const worktrees = (data?.worktrees ?? []).filter((wt: { isBare: boolean }) => !wt.isBare);
   const mergedPRs = data?.recentlyMergedPullRequests ?? [];
 
   if (!org || !name) return null;
 
-  const tabs: { key: Tab; label: string; count: number }[] = [
+  const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'pulls', label: 'Pull Requests', count: openPRs.length },
     { key: 'issues', label: 'Issues', count: issues.length },
     { key: 'worktrees', label: 'Worktrees', count: worktrees.length },
     { key: 'merged', label: 'Merged', count: mergedPRs.length },
+    { key: 'settings', label: 'Settings' },
   ];
 
   return (
@@ -72,16 +74,18 @@ export function RepositoryDashboard({ repoKey }: Props) {
             onClick={() => setActiveTab(tab.key)}
           >
             {tab.label}
-            <span
-              className={cn(
-                'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
-                activeTab === tab.key
-                  ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]'
-                  : 'bg-[var(--theme-bg-surface)] text-[var(--theme-text-muted)]',
-              )}
-            >
-              {tab.count}
-            </span>
+            {tab.count !== undefined && (
+              <span
+                className={cn(
+                  'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                  activeTab === tab.key
+                    ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]'
+                    : 'bg-[var(--theme-bg-surface)] text-[var(--theme-text-muted)]',
+                )}
+              >
+                {tab.count}
+              </span>
+            )}
             {activeTab === tab.key && (
               <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-[var(--theme-accent)]" />
             )}
@@ -126,6 +130,9 @@ export function RepositoryDashboard({ repoKey }: Props) {
             mergedPRs={mergedPRs}
             loading={isLoading}
           />
+        )}
+        {activeTab === 'settings' && (
+          <RepoConfigPanel org={org} name={name} />
         )}
       </div>
     </div>

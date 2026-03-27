@@ -6,6 +6,7 @@ import { WorktreeGroup } from './WorktreeGroup';
 import { GitHubIcon } from './icons';
 import { cn } from '../../lib/cn';
 
+
 export type FlowType = 'manual' | 'agentic';
 
 interface Props {

@@ -6,6 +6,7 @@ import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardSto
 import { DataTable, type Column } from '../ui/DataTable';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
+import { notifyHookStarted } from '../../lib/hookResultToast';
 
 interface Props {
   org: string;
@@ -78,11 +79,13 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
     setCreating((prev) => new Set(prev).add(issue.number));
     try {
       const branch = `issue-${issue.number}-${slugify(issue.title)}`;
-      const { path: cwd } = await api.createWorktree(org, name, {
+      const result = await api.createWorktree(org, name, {
         branch,
         createNewBranch: true,
         issueNumber: issue.number,
       });
+      const cwd = result.path;
+      notifyHookStarted(result.hookStarted);
 
       if (type === 'claude') {
         const detail = await api.fetchIssueDetail(org, name, issue.number);

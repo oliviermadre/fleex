@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { DiffStats, GitHubIssue, PullRequest, Worktree } from '@fleex/shared';
+import type { DiffStats, GitHubIssue, PullRequest, TicketLink, Worktree } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -16,6 +16,7 @@ import * as api from '../../services/api';
 import type { CheckCwdResult } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { formatAge } from '../../lib/formatAge';
+import { notifyHookStarted } from '../../lib/hookResultToast';
 
 type WorktreeMode = 'main' | 'existing' | 'pr' | 'issue' | 'new';
 
@@ -428,6 +429,7 @@ export function CreateSessionModal() {
             prNumber: pr.number,
           });
           cwd = result.path;
+          notifyHookStarted(result.hookStarted);
           break;
         }
         case 'issue': {
@@ -446,6 +448,7 @@ export function CreateSessionModal() {
             issueNumber: issue.number,
           });
           cwd = result.path;
+          notifyHookStarted(result.hookStarted);
           break;
         }
         case 'new': {
@@ -454,6 +457,7 @@ export function CreateSessionModal() {
             createNewBranch: true,
           });
           cwd = result.path;
+          notifyHookStarted(result.hookStarted);
           break;
         }
       }
@@ -513,7 +517,7 @@ export function CreateSessionModal() {
 
           // Remove the repository link since worktree link now implies the repo
           const currentTicket = ticketStoreTickets.find((t) => t.id === ticketId);
-          const existingRepoLink = currentTicket?.links.find((l) => l.type === 'repository');
+          const existingRepoLink = currentTicket?.links.find((l: TicketLink) => l.type === 'repository');
           if (existingRepoLink) {
             removeTicketLink(ticketId, existingRepoLink.id).catch(() => {});
           }

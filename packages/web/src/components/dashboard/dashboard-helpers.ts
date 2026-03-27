@@ -1,4 +1,4 @@
-import type { Session, Ticket, DashboardPullRequest, DashboardWorktree } from '@fleex/shared';
+import type { Session, Ticket, TicketLink, DashboardPullRequest, DashboardWorktree } from '@fleex/shared';
 
 /**
  * Find all running sessions associated with a ticket via session or worktree links.
@@ -19,7 +19,7 @@ export function findSessionsForTicket(
   }
 
   // Check worktree link → match sessions by org/name + branch or absolute path
-  const wtLink = ticket.links.find((l) => l.type === 'worktree');
+  const wtLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
   if (wtLink) {
     const ref = wtLink.ref;
 

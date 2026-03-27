@@ -5,6 +5,7 @@ import type {
   Repository,
   Worktree,
   CreateWorktreeRequest,
+  CreateWorktreeResponse,
   PullRequest,
   GitHubIssue,
   GitHubIssueDetail,
@@ -92,8 +93,8 @@ export async function createWorktree(
   org: string,
   name: string,
   req: CreateWorktreeRequest
-): Promise<{ path: string }> {
-  return request<{ path: string }>(
+): Promise<CreateWorktreeResponse> {
+  return request<CreateWorktreeResponse>(
     `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`,
     { method: 'POST', body: JSON.stringify(req) }
   );

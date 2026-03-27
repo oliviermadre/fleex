@@ -124,7 +124,7 @@ describe('AutoReviewWorkflowUseCase', () => {
   });
 
   describe('handleAgentWorkCompletion', () => {
-    it('should schedule auto-review transition after delay', async () => {
+    it('should log only and not transition ticket status', async () => {
       // Arrange
       const ticketId = randomUUID();
       const ticket = TicketEntity.create({
@@ -136,11 +136,6 @@ describe('AutoReviewWorkflowUseCase', () => {
       });
 
       vi.mocked(ticketStore.getTicketById).mockResolvedValue(ticket);
-      vi.mocked(mentionStore.getByTicket).mockResolvedValue([]);
-      vi.mocked(ticketStore.saveTicket).mockResolvedValue();
-      vi.mocked(ticketStore.saveActivity).mockResolvedValue();
-
-      vi.useFakeTimers();
 
       // Act
       await useCase.handleAgentWorkCompletion({
@@ -148,23 +143,13 @@ describe('AutoReviewWorkflowUseCase', () => {
         completedAgentName: 'test-agent',
       });
 
-      // Fast-forward time to trigger the timeout
-      vi.advanceTimersByTime(30000);
-
-      // Wait for async operations to complete
-      await new Promise(resolve => process.nextTick(resolve));
-
-      // Assert
-      expect(ticket.status).toBe('reviewing');
-      expect(ticket.assignee).toBe('nas');
-      expect(ticketStore.saveTicket).toHaveBeenCalledWith(ticket);
-      expect(ticketStore.saveActivity).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'moved_to_review_auto',
-        }),
+      // Assert — no auto-transition, status stays as-is
+      expect(ticket.status).toBe('doing');
+      expect(ticketStore.saveTicket).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        'Agent work completed (no auto-transition)',
+        expect.objectContaining({ ticketId }),
       );
-
-      vi.useRealTimers();
     });
 
     it('should not auto-transition if pending agent work exists', async () => {
@@ -190,28 +175,20 @@ describe('AutoReviewWorkflowUseCase', () => {
       vi.mocked(ticketStore.getTicketById).mockResolvedValue(ticket);
       vi.mocked(mentionStore.getByTicket).mockResolvedValue([pendingMention]);
 
-      vi.useFakeTimers();
-
       // Act
       await useCase.handleAgentWorkCompletion({
         ticketId,
         completedAgentName: 'test-agent',
       });
 
-      // Fast-forward time
-      vi.advanceTimersByTime(30000);
-      await new Promise(resolve => process.nextTick(resolve));
-
       // Assert
       expect(ticket.status).toBe('doing'); // Should not change
       expect(ticketStore.saveTicket).not.toHaveBeenCalled();
-
-      vi.useRealTimers();
     });
   });
 
   describe('handleAgentMentionInReview', () => {
-    it('should move ticket from reviewing back to doing', async () => {
+    it('should log only and not move ticket from reviewing', async () => {
       // Arrange
       const ticketId = randomUUID();
       const ticket = TicketEntity.create({
@@ -223,8 +200,6 @@ describe('AutoReviewWorkflowUseCase', () => {
       });
 
       vi.mocked(ticketStore.getTicketById).mockResolvedValue(ticket);
-      vi.mocked(ticketStore.saveTicket).mockResolvedValue();
-      vi.mocked(ticketStore.saveActivity).mockResolvedValue();
 
       // Act
       await useCase.handleAgentMentionInReview({
@@ -232,15 +207,12 @@ describe('AutoReviewWorkflowUseCase', () => {
         mentionedAgent: 'test-agent',
       });
 
-      // Assert
-      expect(ticket.status).toBe('doing');
-      expect(ticket.assignee).toBe('test-agent');
-      expect(ticket.blocked).toBe(false);
-      expect(ticketStore.saveTicket).toHaveBeenCalledWith(ticket);
-      expect(ticketStore.saveActivity).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'moved_from_review_to_doing',
-        }),
+      // Assert — no auto-transition, status stays as-is
+      expect(ticket.status).toBe('reviewing');
+      expect(ticketStore.saveTicket).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        'Agent mentioned in reviewing ticket (no auto-transition)',
+        expect.objectContaining({ ticketId }),
       );
     });
 
@@ -270,7 +242,7 @@ describe('AutoReviewWorkflowUseCase', () => {
   });
 
   describe('handleDeliverableCreated', () => {
-    it('should trigger auto-review for final deliverable', async () => {
+    it('should log only and not transition for final deliverable', async () => {
       // Arrange
       const ticketId = randomUUID();
       const ticket = TicketEntity.create({
@@ -282,11 +254,6 @@ describe('AutoReviewWorkflowUseCase', () => {
       });
 
       vi.mocked(ticketStore.getTicketById).mockResolvedValue(ticket);
-      vi.mocked(mentionStore.getByTicket).mockResolvedValue([]);
-      vi.mocked(ticketStore.saveTicket).mockResolvedValue();
-      vi.mocked(ticketStore.saveActivity).mockResolvedValue();
-
-      vi.useFakeTimers();
 
       // Act
       await useCase.handleDeliverableCreated({
@@ -295,15 +262,13 @@ describe('AutoReviewWorkflowUseCase', () => {
         status: 'final',
       });
 
-      // Fast-forward time
-      vi.advanceTimersByTime(30000);
-      await new Promise(resolve => process.nextTick(resolve));
-
-      // Assert
-      expect(ticket.status).toBe('reviewing');
-      expect(ticketStore.saveTicket).toHaveBeenCalledWith(ticket);
-
-      vi.useRealTimers();
+      // Assert — no auto-transition
+      expect(ticket.status).toBe('doing');
+      expect(ticketStore.saveTicket).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        'Deliverable created (no auto-transition)',
+        expect.objectContaining({ ticketId, status: 'final' }),
+      );
     });
 
     it('should not trigger auto-review for draft deliverable', async () => {
@@ -319,52 +284,6 @@ describe('AutoReviewWorkflowUseCase', () => {
 
       // Assert
       expect(ticketStore.getTicketById).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('cleanup', () => {
-    it('should clear all pending transitions', async () => {
-      // Arrange
-      const ticketId = randomUUID();
-      const ticket = TicketEntity.create({
-        id: ticketId,
-        boardId: randomUUID(),
-        displayId: 1,
-        title: 'Test Ticket',
-        status: 'doing',
-      });
-
-      vi.mocked(ticketStore.getTicketById).mockResolvedValue(ticket);
-      vi.mocked(mentionStore.getByTicket).mockResolvedValue([]);
-      vi.mocked(ticketStore.saveTicket).mockResolvedValue();
-      vi.mocked(ticketStore.saveActivity).mockResolvedValue();
-
-      vi.useFakeTimers();
-
-      // Schedule a transition
-      await useCase.handleAgentWorkCompletion({
-        ticketId,
-        completedAgentName: 'test-agent',
-      });
-
-      // Clear the mock call counts from the initial setup
-      vi.mocked(ticketStore.getTicketById).mockClear();
-      vi.mocked(ticketStore.saveTicket).mockClear();
-      vi.mocked(ticketStore.saveActivity).mockClear();
-
-      // Act - cleanup should cancel the pending timeout
-      useCase.cleanup();
-
-      // Fast-forward time - the delayed execution should not happen
-      vi.advanceTimersByTime(30000);
-      await new Promise(resolve => process.nextTick(resolve));
-
-      // Assert - no delayed operations should have been called after cleanup
-      expect(ticketStore.getTicketById).not.toHaveBeenCalled();
-      expect(ticketStore.saveTicket).not.toHaveBeenCalled();
-      expect(ticketStore.saveActivity).not.toHaveBeenCalled();
-
-      vi.useRealTimers();
     });
   });
 });

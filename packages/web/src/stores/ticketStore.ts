@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Board, BoardWithCounts, Ticket, TicketStatus, TicketPriority, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@fleex/shared';
+import type { Board, BoardWithCounts, Ticket, TicketLink, TicketStatus, TicketPriority, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@fleex/shared';
 import { TICKET_STATUSES } from '@fleex/shared';
 import * as api from '../services/api';
 import { useSessionStore } from './sessionStore';
@@ -58,14 +58,14 @@ interface TicketState {
 
 /** Extract repo/branch info from a ticket's worktree or repository links. */
 function getTicketRepoWorktreeInfo(t: Ticket): { repo: string; branch: string | null } | null {
-  const wtLink = t.links.find((l) => l.type === 'worktree');
+  const wtLink = t.links.find((l: TicketLink) => l.type === 'worktree');
   if (wtLink) {
     const colonIdx = wtLink.ref.indexOf(':');
     if (colonIdx > 0) {
       return { repo: wtLink.ref.substring(0, colonIdx), branch: wtLink.ref.substring(colonIdx + 1) };
     }
   }
-  const repoLink = t.links.find((l) => l.type === 'repository');
+  const repoLink = t.links.find((l: TicketLink) => l.type === 'repository');
   if (repoLink) {
     return { repo: repoLink.ref, branch: null };
   }
@@ -181,7 +181,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     await api.removeTicketLink(ticketId, linkId);
     set((s) => ({
       tickets: s.tickets.map((t) =>
-        t.id === ticketId ? { ...t, links: t.links.filter((l) => l.id !== linkId) } : t,
+        t.id === ticketId ? { ...t, links: t.links.filter((l: TicketLink) => l.id !== linkId) } : t,
       ),
     }));
   },
@@ -243,7 +243,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter((t) =>
         t.title.toLowerCase().includes(q) ||
-        t.tags.some((tag) => tag.toLowerCase().includes(q)),
+        t.tags.some((tag: string) => tag.toLowerCase().includes(q)),
       );
     }
 
@@ -251,7 +251,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     if (filters.repo) {
       const repoKey = filters.repo;
       filtered = filtered.filter((t) =>
-        t.links.some((l) =>
+        t.links.some((l: TicketLink) =>
           (l.type === 'worktree' && l.ref.startsWith(repoKey + ':')) ||
           (l.type === 'repository' && l.ref === repoKey),
         ),
@@ -267,7 +267,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     if (filters.hasSession !== null) {
       const runningSessions = useSessionStore.getState().sessions;
       filtered = filtered.filter((t) => {
-        let has = t.links.some((l) => l.type === 'session');
+        let has = t.links.some((l: TicketLink) => l.type === 'session');
         if (!has) {
           const repoInfo = getTicketRepoWorktreeInfo(t);
           if (repoInfo) {
@@ -306,7 +306,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     }
 
     const columns = {} as Record<TicketStatus, Ticket[]>;
-    for (const s of TICKET_STATUSES) {
+    for (const s of TICKET_STATUSES as readonly TicketStatus[]) {
       const col = filtered.filter((t) => t.status === s);
       columns[s] = (s === 'done' || s === 'cancelled')
         ? col.sort((a, b) => new Date(b.statusChangedAt).getTime() - new Date(a.statusChangedAt).getTime())

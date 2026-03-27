@@ -52,8 +52,11 @@ export function repositoryRoutes(container: Container) {
           dirName = `${request.params.name}.${sanitized}`;
         }
         const wtPath = join(repoPath, '..', dirName);
-        const existingPath = await container.createWorktree.execute(repoPath, wtPath, request.body);
-        return reply.code(201).send({ path: existingPath ?? wtPath });
+        const result = await container.createWorktree.executeWithHook(repoPath, wtPath, request.body);
+        return reply.code(201).send({
+          path: result.existingPath ?? wtPath,
+          hookStarted: result.hookStarted,
+        });
       },
     );
 

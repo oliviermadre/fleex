@@ -17,6 +17,14 @@ interface ExecutionIndex {
   completedAt: string | null;
   lastEventAt: string | null;
   sdkSessionId?: string | null;
+  model?: string;
+  effectiveMode?: string;
+  durationMs?: number;
+  costUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
 }
 
 export class JsonAgentEventStore implements AgentEventStorePort {

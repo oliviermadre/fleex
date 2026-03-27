@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { Session, TicketComment, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
+import type { Session, TicketLink, TicketComment, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
 import { appWs } from '../../services/websocket';
 import { useTicketStore, type TicketTab } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -153,14 +153,14 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     const sessions = useSessionStore.getState().sessions;
 
     // Check session links first
-    const sessionLink = ticket.links.find((l) => l.type === 'session');
+    const sessionLink = ticket.links.find((l: TicketLink) => l.type === 'session');
     if (sessionLink) {
       const session = sessions.find((s) => s.id === sessionLink.ref && s.status === 'running');
       if (session) return session;
     }
 
     // Check worktree link and find matching session
-    const wtLink = ticket.links.find((l) => l.type === 'worktree');
+    const wtLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
     if (wtLink) {
       const colonIdx = wtLink.ref.indexOf(':');
       if (colonIdx > 0) {
@@ -200,7 +200,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     }
 
     // If ticket has a worktree link → auto-create via API (existing behavior)
-    const wtLink = ticket.links.find((l) => l.type === 'worktree');
+    const wtLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
     if (wtLink) {
       setSessionLoading(true);
       try {
@@ -222,7 +222,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     }
 
     // No worktree → open CreateSessionModal with prefilled context
-    const repoLink = ticket.links.find((l) => l.type === 'repository');
+    const repoLink = ticket.links.find((l: TicketLink) => l.type === 'repository');
     const prompt = [ticket.title, ticket.description].filter(Boolean).join('\n\n');
     openCreateModalForTicket({
       ticketId: ticket.id,
