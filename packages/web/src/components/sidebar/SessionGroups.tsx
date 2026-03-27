@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import type { Session, SessionGroup } from '@fleex/shared';
+import type { Session, SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -26,9 +26,9 @@ function partitionByFlow(groups: SessionGroup[]): {
   let agenticWorktreeCount = 0;
 
   for (const group of groups) {
-    const manualWorktrees = group.worktrees.filter((wt) => wt.sessions.length > 0);
+    const manualWorktrees = group.worktrees.filter((wt: WorktreeSessionGroup) => wt.sessions.length > 0);
     const agenticWorktrees = group.worktrees.filter(
-      (wt) => wt.sessions.length === 0 && wt.agentWorktree != null
+      (wt: WorktreeSessionGroup) => wt.sessions.length === 0 && wt.agentWorktree != null
     );
 
     if (manualWorktrees.length > 0) {
@@ -110,7 +110,7 @@ export function SessionGroups() {
       isSystemGroup(g.repositoryOrg, g.repositoryName)
     );
     if (!ungrouped) return [];
-    return ungrouped.worktrees.flatMap((wt) => wt.sessions);
+    return ungrouped.worktrees.flatMap((wt: WorktreeSessionGroup) => wt.sessions);
   }, [sessionGroups]);
 
   const repoGroups = useMemo(() => {

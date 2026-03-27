@@ -140,12 +140,13 @@ export function AgentExecutionsPanel({ executions }: Props) {
 }
 
 function StatusBadge({ status }: { status: AgentExecution['status'] }) {
-  const config = ({
+  const statusMap = {
     running: { bg: 'bg-blue-500/15', text: 'text-blue-400', label: 'Running' },
     completed: { bg: 'bg-green-500/15', text: 'text-green-400', label: 'Completed' },
     failed: { bg: 'bg-red-500/15', text: 'text-red-400', label: 'Failed' },
     interrupted: { bg: 'bg-yellow-500/15', text: 'text-yellow-400', label: 'Interrupted' },
-  } as const)[status];
+  } as const;
+  const config = statusMap[status as keyof typeof statusMap];
 
   return (
     <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium', config.bg, config.text)}>

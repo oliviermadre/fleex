@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { TICKET_STATUSES } from '@fleex/shared';
-import type { TicketStatus, Session } from '@fleex/shared';
+import type { TicketLink, TicketStatus, Session } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { fetchBulkPRStates } from '../../services/api';
@@ -70,14 +70,14 @@ export function KanbanBoard() {
     if (!ticket) return null;
 
     // Check session links first
-    const sessionLink = ticket.links.find((l) => l.type === 'session');
+    const sessionLink = ticket.links.find((l: TicketLink) => l.type === 'session');
     if (sessionLink) {
       const session = sessions.find((s) => s.id === sessionLink.ref && s.status === 'running');
       if (session) return session;
     }
 
     // Check worktree link and find matching session
-    const wtLink = ticket.links.find((l) => l.type === 'worktree');
+    const wtLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
     if (wtLink) {
       const colonIdx = wtLink.ref.indexOf(':');
       if (colonIdx > 0) {

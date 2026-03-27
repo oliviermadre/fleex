@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { DiffStats, GitHubIssue, PullRequest, Worktree } from '@fleex/shared';
+import type { DiffStats, GitHubIssue, PullRequest, TicketLink, Worktree } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -517,7 +517,7 @@ export function CreateSessionModal() {
 
           // Remove the repository link since worktree link now implies the repo
           const currentTicket = ticketStoreTickets.find((t) => t.id === ticketId);
-          const existingRepoLink = currentTicket?.links.find((l) => l.type === 'repository');
+          const existingRepoLink = currentTicket?.links.find((l: TicketLink) => l.type === 'repository');
           if (existingRepoLink) {
             removeTicketLink(ticketId, existingRepoLink.id).catch(() => {});
           }

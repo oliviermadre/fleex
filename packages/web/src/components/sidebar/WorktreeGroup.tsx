@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { WorktreeSessionGroup, TicketLink } from '@fleex/shared';
+import type { Session, WorktreeSessionGroup, TicketLink } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -52,7 +52,7 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
   const isAgentSelected = agentInfo && selectedAgentWorktreeTicketId === agentInfo.ticketId;
 
   // Is this branch selected (any session in it is selected, or agent worktree is selected)?
-  const isSelected = worktree.sessions.some((s) => s.id === selectedSessionId) || !!isAgentSelected;
+  const isSelected = worktree.sessions.some((s: Session) => s.id === selectedSessionId) || !!isAgentSelected;
 
   const handleBranchClick = () => {
     // Agent worktree → always open agent panel (handles sessions + executions)
@@ -64,7 +64,7 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
     if (worktree.sessions.length === 0) return;
     // Navigate to last active tab if it still exists, otherwise first session
     const lastSessionId = lastActiveTab?.startsWith('s:') ? lastActiveTab.slice(2) : lastActiveTab;
-    const targetId = lastSessionId && worktree.sessions.some((s) => s.id === lastSessionId)
+    const targetId = lastSessionId && worktree.sessions.some((s: Session) => s.id === lastSessionId)
       ? lastSessionId
       : worktree.sessions[0]!.id;
     navigate(`/sessions/${targetId}`, { replace: true });

@@ -111,7 +111,7 @@ export function RefreshControl({
 
         {dropdownOpen && (
           <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
-            {REPO_REFRESH_INTERVALS.map((ms) => (
+            {REPO_REFRESH_INTERVALS.map((ms: number) => (
               <button
                 key={ms}
                 className={cn(

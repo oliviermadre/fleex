@@ -1006,6 +1006,13 @@ export class ExecuteAgentUseCase {
       let sdkSessionId: string | undefined;
       let resultText = '';
       let structuredOutput: AgentStructuredOutput | null = null;
+      let sdkDurationMs: number | undefined;
+      let sdkCostUsd: number | undefined;
+      let sdkInputTokens: number | undefined;
+      let sdkOutputTokens: number | undefined;
+      let sdkCacheReadTokens: number | undefined;
+      let sdkCacheCreationTokens: number | undefined;
+      const effectiveMode = 'edit' as const;
 
       const sessionKey = `skill:${skill.commandName}:${ticketId}`;
 
@@ -1076,6 +1083,25 @@ export class ExecuteAgentUseCase {
           if (msg['structured_output']) {
             structuredOutput = msg['structured_output'] as AgentStructuredOutput;
           }
+
+          // Capture SDK instrumentation data from result message
+          if (typeof msg['duration_ms'] === 'number') sdkDurationMs = msg['duration_ms'] as number;
+          if (typeof msg['total_cost_usd'] === 'number') sdkCostUsd = msg['total_cost_usd'] as number;
+          const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;
+          if (modelUsage) {
+            let totalIn = 0, totalOut = 0, totalCacheRead = 0, totalCacheCreation = 0;
+            for (const mu of Object.values(modelUsage)) {
+              totalIn += mu['inputTokens'] ?? 0;
+              totalOut += mu['outputTokens'] ?? 0;
+              totalCacheRead += mu['cacheReadInputTokens'] ?? 0;
+              totalCacheCreation += mu['cacheCreationInputTokens'] ?? 0;
+            }
+            sdkInputTokens = totalIn;
+            sdkOutputTokens = totalOut;
+            sdkCacheReadTokens = totalCacheRead;
+            sdkCacheCreationTokens = totalCacheCreation;
+          }
+
           await emitEvent('message_stop', { result: resultText, subtype: msg['subtype'] as string | undefined });
         } else {
           await emitEvent('content_block_delta', msg);

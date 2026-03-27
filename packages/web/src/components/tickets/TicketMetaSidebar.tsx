@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { Ticket, TicketStatus, TicketPriority, Worktree, GitHubIssueMetadata } from '@fleex/shared';
+import type { Ticket, TicketLink, TicketStatus, TicketPriority, Worktree, GitHubIssueMetadata } from '@fleex/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
@@ -122,10 +122,10 @@ function CollapsedTicketMetaSidebar({
   const toggleTicketMetaSidebar = useUIStore((s) => s.toggleTicketMetaSidebar);
   const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedMetaTooltip();
 
-  const worktreeLink = ticket.links.find((l) => l.type === 'worktree');
-  const repoLink = ticket.links.find((l) => l.type === 'repository');
-  const issueLink = ticket.links.find((l) => l.type === 'github_issue');
-  const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+  const worktreeLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
+  const repoLink = ticket.links.find((l: TicketLink) => l.type === 'repository');
+  const issueLink = ticket.links.find((l: TicketLink) => l.type === 'github_issue');
+  const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
 
   const linkedRepoLabel = useMemo(() => {
     if (repoLink) return repoLink.ref;
@@ -222,7 +222,7 @@ function CollapsedTicketMetaSidebar({
                 <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
               </svg>
             }
-            onMouseEnter={(e) => showTooltip(e, 'Pull Request', prLinks.map((p) => p.label).join(', '))}
+            onMouseEnter={(e) => showTooltip(e, 'Pull Request', prLinks.map((p: TicketLink) => p.label).join(', '))}
             onMouseLeave={hideTooltip}
           />
         )}
@@ -337,7 +337,7 @@ function ExpandedTicketMetaSidebar({
   // Fetch live PR states from GitHub on mount / ticket change
   const [prStates, setPrStates] = useState<Record<string, string>>({});
   useEffect(() => {
-    const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+    const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
     if (prLinks.length === 0) return;
     api.fetchPRStates(ticket.id).then(setPrStates).catch(() => {});
   }, [ticket.id]);
@@ -357,8 +357,8 @@ function ExpandedTicketMetaSidebar({
   };
 
   // Derive current repo from repository links or worktree links
-  const worktreeLink = ticket.links.find((l) => l.type === 'worktree');
-  const repoLink = ticket.links.find((l) => l.type === 'repository');
+  const worktreeLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
+  const repoLink = ticket.links.find((l: TicketLink) => l.type === 'repository');
   const linkedRepo = useMemo(() => {
     // Repository link takes priority (explicit selection)
     if (repoLink) {
@@ -424,7 +424,7 @@ function ExpandedTicketMetaSidebar({
                 />
                 {/* Vertical abbreviated label */}
                 <div className="flex flex-col items-center gap-px">
-                  {(NANO_KANBAN_ABBREVS[s] ?? s.slice(0, 4).toUpperCase()).split('').map((ch, i) => (
+                  {(NANO_KANBAN_ABBREVS[s] ?? s.slice(0, 4).toUpperCase()).split('').map((ch: string, i: number) => (
                     <span
                       key={i}
                       className={cn(
@@ -606,14 +606,14 @@ function ExpandedTicketMetaSidebar({
       </div>
 
       {/* Other Links (non-worktree, non-repository, non-PR) */}
-      {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').length > 0 && (
+      {ticket.links.filter((l: TicketLink) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').length > 0 && (
 
         <div>
           <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
             Links
           </label>
           <div className="flex flex-col gap-1">
-            {ticket.links.filter((l) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').map((link) => (
+            {ticket.links.filter((l: TicketLink) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').map((link: TicketLink) => (
               <div key={link.id} className="flex items-center gap-2 text-xs">
                 <span className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9px] font-medium text-[var(--theme-text-muted)]">
                   {link.type.replace('_', ' ')}
@@ -982,7 +982,7 @@ function GitHubIssuePicker({
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const issueLink = ticket.links.find((l) => l.type === 'github_issue');
+  const issueLink = ticket.links.find((l: TicketLink) => l.type === 'github_issue');
 
   const handleSave = async () => {
     const trimmed = urlValue.trim();
@@ -1160,7 +1160,7 @@ function PRLinkPicker({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+  const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
 
   const handleSave = async () => {
     const trimmed = urlValue.trim();
@@ -1183,7 +1183,7 @@ function PRLinkPicker({
     const label = `#${prNumber}`;
 
     // Don't add duplicate
-    if (prLinks.some((l) => l.ref === ref)) {
+    if (prLinks.some((l: TicketLink) => l.ref === ref)) {
       setError('This PR is already linked');
       return;
     }
@@ -1206,7 +1206,7 @@ function PRLinkPicker({
         Pull Request
       </label>
       <div className="flex flex-col gap-1.5">
-        {prLinks.map((pr) => {
+        {prLinks.map((pr: TicketLink) => {
           const state = prStates[pr.ref];
           const isMerged = state === 'MERGED';
           const isClosed = state === 'CLOSED';
@@ -1323,13 +1323,13 @@ function GitHubMetadataSection({ metadata }: { metadata: GitHubIssueMetadata }) 
   ];
 
   if (metadata.assignees.length > 0) {
-    rows.push(['Assignees', <span>{metadata.assignees.map((a) => `@${a}`).join(', ')}</span>]);
+    rows.push(['Assignees', <span>{metadata.assignees.map((a: string) => `@${a}`).join(', ')}</span>]);
   }
 
   if (metadata.labels.length > 0) {
     rows.push(['Labels', (
       <div className="flex flex-wrap gap-0.5">
-        {metadata.labels.map((l) => (
+        {metadata.labels.map((l: string) => (
           <span key={l} className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9px]">{l}</span>
         ))}
       </div>

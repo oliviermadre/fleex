@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import type {
   Ticket,
+  TicketLink,
   TicketStatus,
   TicketPriority,
   Session,
@@ -346,7 +347,7 @@ function TicketCard({
     return () => document.removeEventListener('mousedown', handler);
   }, [statusMenuOpen]);
 
-  const repoLink = ticket.links.find((l) => l.type === 'repository' || l.type === 'worktree');
+  const repoLink = ticket.links.find((l: TicketLink) => l.type === 'repository' || l.type === 'worktree');
   const repoLabel = repoLink
     ? repoLink.type === 'worktree'
       ? repoLink.ref.split(':')[0]
@@ -354,7 +355,7 @@ function TicketCard({
     : null;
 
   // Extract branch from worktree link
-  const wtLink = ticket.links.find((l) => l.type === 'worktree');
+  const wtLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
   const branchName = wtLink ? wtLink.ref.split(':')[1] : null;
 
   // Match PR for this ticket's worktree branch
@@ -1109,7 +1110,7 @@ function DashboardFilterPopover({
   // Check if any ticket has a matching PR
   const hasPRData = useMemo(() => {
     return allTickets.some((t) => {
-      const wtLink = t.links.find((l) => l.type === 'worktree');
+      const wtLink = t.links.find((l: TicketLink) => l.type === 'worktree');
       if (!wtLink) return false;
       const [orgName, branch] = wtLink.ref.split(':');
       if (!orgName || !branch) return false;
@@ -1373,8 +1374,8 @@ export function DashboardView() {
     const base = data?.activeTickets ?? [];
     if (storeTickets.length === 0) return base;
     // Build a map of store tickets for O(1) lookup
-    const storeMap = new Map(storeTickets.map((t) => [t.id, t]));
-    return base.map((t) => storeMap.get(t.id) ?? t);
+    const storeMap = new Map(storeTickets.map((t: Ticket) => [t.id, t]));
+    return base.map((t: Ticket) => storeMap.get(t.id) ?? t);
   }, [data?.activeTickets, storeTickets]);
 
   const handleCreateSession = useCallback(async (ticketId: string) => {
@@ -1454,7 +1455,7 @@ export function DashboardView() {
     try {
       // Check if worktree already exists
       const existingWt = data?.activeWorktrees.find(
-        (wt) => wt.branch === pr.headRefName && wt.org === pr.org && wt.name === pr.name,
+        (wt: DashboardWorktree) => wt.branch === pr.headRefName && wt.org === pr.org && wt.name === pr.name,
       );
       let cwd: string;
       if (existingWt) {
@@ -1481,17 +1482,17 @@ export function DashboardView() {
   // Active tickets with dashboard filters applied
   const ACTIVE_STATUSES: TicketStatus[] = ['todo', 'doing', 'reviewing'];
   const activeTickets = useMemo(() => {
-    let filtered = allTickets.filter((t) => ACTIVE_STATUSES.includes(t.status));
+    let filtered = allTickets.filter((t: Ticket) => ACTIVE_STATUSES.includes(t.status));
     if (dashFilters.boardId) {
-      filtered = filtered.filter((t) => t.boardId === dashFilters.boardId);
+      filtered = filtered.filter((t: Ticket) => t.boardId === dashFilters.boardId);
     }
     if (dashFilters.priority) {
-      filtered = filtered.filter((t) => t.priority === dashFilters.priority);
+      filtered = filtered.filter((t: Ticket) => t.priority === dashFilters.priority);
     }
     if (dashFilters.hasPR !== null) {
       const prs = [...(data?.myPullRequests ?? []), ...(data?.reviewRequests ?? [])];
-      filtered = filtered.filter((t) => {
-        const wtLink = t.links.find((l) => l.type === 'worktree');
+      filtered = filtered.filter((t: Ticket) => {
+        const wtLink = t.links.find((l: TicketLink) => l.type === 'worktree');
         if (!wtLink) return !dashFilters.hasPR;
         const [orgName, branch] = wtLink.ref.split(':');
         if (!orgName || !branch) return !dashFilters.hasPR;
@@ -1501,11 +1502,11 @@ export function DashboardView() {
       });
     }
     if (dashFilters.blocked !== null) {
-      filtered = filtered.filter((t) => t.blocked === dashFilters.blocked);
+      filtered = filtered.filter((t: Ticket) => t.blocked === dashFilters.blocked);
     }
     if (dashSearch) {
       const q = dashSearch.toLowerCase();
-      filtered = filtered.filter((t) => t.title.toLowerCase().includes(q));
+      filtered = filtered.filter((t: Ticket) => t.title.toLowerCase().includes(q));
     }
     return filtered;
   }, [allTickets, dashFilters, dashSearch, data?.myPullRequests, data?.reviewRequests]);
@@ -1697,7 +1698,7 @@ export function DashboardView() {
                           <div className="flex flex-col">
                             {tickets.map((t: Ticket) => {
                               const board = boardMap.get(t.boardId);
-                              const hasRepo = !!t.links.find(l => l.type === 'repository' || l.type === 'worktree')
+                              const hasRepo = !!t.links.find((l: TicketLink) => l.type === 'repository' || l.type === 'worktree')
                                 || !!(board?.repositoryOrg && board?.repositoryName);
                               return (
                                 <TicketCard

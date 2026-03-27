@@ -25,11 +25,11 @@ function filterKilledSessions(groups: SessionGroup[]): SessionGroup[] {
     .map((g) => ({
       ...g,
       worktrees: g.worktrees
-        .map((wt) => ({
+        .map((wt: WorktreeSessionGroup) => ({
           ...wt,
-          sessions: wt.sessions.filter((s) => !recentlyKilled.has(s.id)),
+          sessions: wt.sessions.filter((s: Session) => !recentlyKilled.has(s.id)),
         }))
-        .filter((wt) => wt.sessions.length > 0 || wt.agentWorktree),
+        .filter((wt: WorktreeSessionGroup) => wt.sessions.length > 0 || wt.agentWorktree),
     }))
     .filter((g) => g.worktrees.length > 0);
 }
@@ -134,10 +134,10 @@ export const useSessionStore = create<SessionState>((set) => ({
         if (group.repositoryOrg !== targetOrg || group.repositoryName !== targetName) return group;
         return {
           ...group,
-          worktrees: group.worktrees.map((wt) => {
+          worktrees: group.worktrees.map((wt: WorktreeSessionGroup) => {
             if (wt.branch !== targetBranch) return wt;
             // Skip if session already in this worktree
-            if (wt.sessions.some((s) => s.id === session.id)) {
+            if (wt.sessions.some((s: Session) => s.id === session.id)) {
               injected = true;
               return wt;
             }

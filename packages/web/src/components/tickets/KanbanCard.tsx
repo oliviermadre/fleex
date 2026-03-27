@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Ticket, BoardWithCounts } from '@fleex/shared';
+import type { Ticket, TicketLink, BoardWithCounts } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { DueDateBadge } from './DueDateBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
@@ -61,10 +61,10 @@ export function KanbanCard({
   const sessions = useSessionStore((s) => s.sessions);
   const unread = useUnreadStore((s) => s.getUnread(ticket.id));
 
-  const issueLinks = ticket.links.filter((l) => l.type === 'github_issue');
-  const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
-  const worktreeLinks = ticket.links.filter((l) => l.type === 'worktree');
-  const repoLinks = ticket.links.filter((l) => l.type === 'repository');
+  const issueLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_issue');
+  const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
+  const worktreeLinks = ticket.links.filter((l: TicketLink) => l.type === 'worktree');
+  const repoLinks = ticket.links.filter((l: TicketLink) => l.type === 'repository');
 
   const repoWorktreeInfo = useMemo(() => {
     const wtLink = worktreeLinks[0];
@@ -202,7 +202,7 @@ export function KanbanCard({
       {/* PR badges */}
       {prLinks.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {prLinks.map((pr) => {
+          {prLinks.map((pr: TicketLink) => {
             const state = prStates?.[pr.ref];
             const isMerged = state === 'MERGED';
             const isClosed = state === 'CLOSED';
@@ -233,7 +233,7 @@ export function KanbanCard({
       {/* Tags */}
       {ticket.tags.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {ticket.tags.slice(0, 3).map((tag) => (
+          {ticket.tags.slice(0, 3).map((tag: string) => (
             <span
               key={tag}
               className="rounded bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[11px] text-[var(--theme-text-muted)]"
