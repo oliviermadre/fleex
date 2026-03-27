@@ -294,12 +294,22 @@ function CollapsedSystemItem({
   );
 }
 
+/** Mini horizontal line divider for collapsed sidebar */
+function CollapsedSectionDivider() {
+  return (
+    <div className="relative flex w-full items-center px-4 py-1.5 mt-1">
+      <div className="h-px flex-1 bg-[var(--theme-border)]" />
+    </div>
+  );
+}
+
 function CollapsedBranchesPanel() {
   const navigate = useNavigate();
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const lastActiveTabByWorktree = useUIStore((s) => s.lastActiveTabByWorktree);
-  const collapsedGroups = useUIStore((s) => s.collapsedGroups);
+  const manualFlowCollapsed = useUIStore((s) => s.manualFlowCollapsed);
+  const agenticFlowCollapsed = useUIStore((s) => s.agenticFlowCollapsed);
   const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
   const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
   const tickets = useTicketStore((s) => s.tickets);
@@ -321,11 +331,11 @@ function CollapsedBranchesPanel() {
     return ungrouped.worktrees.flatMap((wt) => wt.sessions);
   }, [sessionGroups]);
 
-  const sortedRepoGroups: SessionGroup[] = useMemo(() => {
-    const repoGroups = sessionGroups.filter((g) => !isSystemGroup(g.repositoryOrg, g.repositoryName));
-    if (repoOrder.length === 0) return repoGroups;
+  const repoGroups = useMemo(() => {
+    const groups = sessionGroups.filter((g) => !isSystemGroup(g.repositoryOrg, g.repositoryName));
+    if (repoOrder.length === 0) return groups;
     const orderMap = new Map(repoOrder.map((id, i) => [id, i]));
-    return [...repoGroups].sort((a, b) => {
+    return [...groups].sort((a, b) => {
       const aId = `${a.repositoryOrg}/${a.repositoryName}`;
       const bId = `${b.repositoryOrg}/${b.repositoryName}`;
       return (orderMap.get(aId) ?? Infinity) - (orderMap.get(bId) ?? Infinity);
@@ -342,76 +352,57 @@ function CollapsedBranchesPanel() {
   const systemStatus = useMemo(() => aggregateBranchStatus(systemSessions), [systemSessions]);
   const systemSelected = systemSessions.some((s) => s.id === selectedSessionId);
 
+  // Render worktrees from a group, filtered by predicate
+  const renderWorktrees = (group: SessionGroup, filter: (wt: SessionGroup['worktrees'][0]) => boolean) => {
+    const groupId = `${group.repositoryOrg}/${group.repositoryName}`;
+    const wtOrder = worktreeOrder[groupId];
+    const sorted = wtOrder && wtOrder.length > 0
+      ? [...group.worktrees].sort((a, b) => {
+          const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
+          return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
+        })
+      : [...group.worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()));
+
+    return sorted.filter(filter).map((wt) => {
+      const worktreeKey = `${groupId}:${wt.branch}`;
+      const status = aggregateBranchStatus(wt.sessions);
+      const isSelected = wt.sessions.some((s) => s.id === selectedSessionId);
+      return (
+        <CollapsedWorktreeItem
+          key={`${groupId}:${wt.branch}`}
+          status={status.status}
+          isSelected={isSelected}
+          hasTicket={worktreeHasTicket.has(worktreeKey)}
+          onClick={() => navigateToWorktree(worktreeKey, wt.sessions)}
+          onMouseEnter={(e) => showTooltip(e, wt.branch, groupId)}
+          onMouseLeave={hideTooltip}
+        />
+      );
+    });
+  };
+
   return (
     <CollapsedShell>
       <div className="flex-1 overflow-y-auto w-full">
+        {/* System section */}
+        <CollapsedSectionDivider />
         {systemSessions.length > 0 && (
-          <div className="my-1.5">
-            <div className="relative flex w-full items-center gap-1.5 px-4 py-2">
-              <div className="invisible flex w-full items-center gap-1.5">
-                <svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 1l5 4-5 4V1z" /></svg>
-                <span className="text-[11px] font-bold uppercase tracking-wider">&nbsp;</span>
-              </div>
-              <div className="absolute inset-x-4 top-1/2 h-px bg-[var(--theme-border)]" />
-            </div>
-            {!collapsedGroups.has('_system') && (
-              <CollapsedSystemItem
-                status={systemStatus.status}
-                isSelected={systemSelected}
-                onClick={() => navigateToWorktree('_system', systemSessions)}
-                onMouseEnter={(e) => showTooltip(e, 'Shells', `${systemSessions.length} session${systemSessions.length !== 1 ? 's' : ''}`)}
-                onMouseLeave={hideTooltip}
-              />
-            )}
-          </div>
+          <CollapsedSystemItem
+            status={systemStatus.status}
+            isSelected={systemSelected}
+            onClick={() => navigateToWorktree('_system', systemSessions)}
+            onMouseEnter={(e) => showTooltip(e, 'Shells', `${systemSessions.length} session${systemSessions.length !== 1 ? 's' : ''}`)}
+            onMouseLeave={hideTooltip}
+          />
         )}
 
-        {sortedRepoGroups.map((group) => {
-          const groupId = `${group.repositoryOrg}/${group.repositoryName}`;
-          const isGroupCollapsed = collapsedGroups.has(groupId);
+        {/* Manual Flow section */}
+        <CollapsedSectionDivider />
+        {!manualFlowCollapsed && repoGroups.map((group) => renderWorktrees(group, (wt) => wt.sessions.length > 0))}
 
-          return (
-            <div key={groupId} className="my-1.5">
-              <div className="relative flex w-full items-center gap-1.5 px-4 py-2">
-                <div className="invisible flex w-full items-center gap-1.5">
-                  <svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 1l5 4-5 4V1z" /></svg>
-                  <span className="text-[11px] font-bold uppercase tracking-wider">&nbsp;</span>
-                  <span className="ml-auto flex items-center gap-1"><svg width="14" height="14" /><svg width="14" height="14" /></span>
-                </div>
-                <div className="absolute inset-x-4 top-1/2 h-px bg-[var(--theme-border)]" />
-              </div>
-
-              {!isGroupCollapsed &&
-                (() => {
-                  const wtOrder = worktreeOrder[groupId];
-                  const sorted = wtOrder && wtOrder.length > 0
-                    ? [...group.worktrees].sort((a, b) => {
-                        const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
-                        return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
-                      })
-                    : [...group.worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()));
-
-                  return sorted.map((wt) => {
-                    const worktreeKey = `${groupId}:${wt.branch}`;
-                    const status = aggregateBranchStatus(wt.sessions);
-                    const isSelected = wt.sessions.some((s) => s.id === selectedSessionId);
-
-                    return (
-                      <CollapsedWorktreeItem
-                        key={wt.branch}
-                        status={status.status}
-                        isSelected={isSelected}
-                        hasTicket={worktreeHasTicket.has(worktreeKey)}
-                        onClick={() => navigateToWorktree(worktreeKey, wt.sessions)}
-                        onMouseEnter={(e) => showTooltip(e, wt.branch, groupId)}
-                        onMouseLeave={hideTooltip}
-                      />
-                    );
-                  });
-                })()}
-            </div>
-          );
-        })}
+        {/* Agentic Flow section */}
+        <CollapsedSectionDivider />
+        {!agenticFlowCollapsed && repoGroups.map((group) => renderWorktrees(group, (wt) => wt.sessions.length === 0 && wt.agentWorktree != null))}
       </div>
       <CollapsedTooltip data={tooltip} />
     </CollapsedShell>

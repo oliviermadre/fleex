@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
-import type { Session, WorktreeSessionGroup, Ticket, PullRequest } from '@fleex/shared';
+import { useMemo, useCallback } from 'react';
+import type { Session, WorktreeSessionGroup, Ticket, PullRequest, TicketStatus } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { useUIStore } from '../../../stores/uiStore';
+import { useTicketStore } from '../../../stores/ticketStore';
 import { usePullRequestStore } from '../../../stores/pullRequestStore';
 import { deriveDisplayStatus } from '../../../lib/deriveStatus';
 import { StatusDot } from '../../ui/StatusDot';
+import { NanoKanban } from '../../tickets/NanoKanban';
 
 interface Props {
   worktree: WorktreeSessionGroup | null;
@@ -60,6 +62,11 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
   const isFloating = activeSession ? floatingSessionIds.includes(activeSession.id) : false;
+  const updateTicket = useTicketStore((s) => s.updateTicket);
+
+  const handleStatusChange = useCallback((status: TicketStatus) => {
+    if (ticket) updateTicket(ticket.id, { status });
+  }, [ticket, updateTicket]);
 
   const status = useMemo(
     () => (activeSession ? deriveDisplayStatus(activeSession) : null),
@@ -140,6 +147,13 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
       )}
 
       <div className="ml-auto flex items-center gap-2">
+        {/* Nano kanban status picker (when linked to a ticket) */}
+        {ticket && (
+          <div className="w-[100px] shrink-0">
+            <NanoKanban status={ticket.status} onStatusChange={handleStatusChange} size="sm" />
+          </div>
+        )}
+
         {/* Floating session toggle (when a session is active) */}
         {activeSession && (
           <button

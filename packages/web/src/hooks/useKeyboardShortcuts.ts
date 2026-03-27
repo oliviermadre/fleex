@@ -41,14 +41,16 @@ export function useKeyboardShortcuts() {
   const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
   const sessionOrder = useSettingsStore((s) => s.settings.sessionOrder);
   const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
+  const manualFlowCollapsed = useUIStore((s) => s.manualFlowCollapsed);
+  const agenticFlowCollapsed = useUIStore((s) => s.agenticFlowCollapsed);
 
   // Build a flat list of worktrees in visual (sidebar) order.
-  // Each entry has a key (for lastActiveTabByWorktree) and session IDs in tab bar order.
-  // System "Shells" worktree comes first, then repo worktrees in sidebar order.
+  // Order: System shells → manual worktrees → agentic worktrees.
+  // Collapsed sections are skipped.
   const orderedWorktrees = useMemo(() => {
     const entries: Array<{ key: string; sessions: string[]; agentTicketId?: string }> = [];
 
-    // System sessions first (ungrouped)
+    // 1. System sessions first (ungrouped)
     const systemGroup = sessionGroups.find(
       (g) => g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped'
     );
@@ -66,7 +68,7 @@ export function useKeyboardShortcuts() {
       }
     }
 
-    // Repo groups in sidebar order
+    // Repo groups sorted
     const repoSessionGroups = sessionGroups.filter(
       (g) => !(g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped')
     );
@@ -79,7 +81,8 @@ export function useKeyboardShortcuts() {
       return (orderMap.get(aId) ?? Infinity) - (orderMap.get(bId) ?? Infinity);
     });
 
-    for (const group of sortedGroups) {
+    // Helper to add worktrees from a group
+    const addWorktrees = (group: typeof sortedGroups[0], filter: (wt: typeof group.worktrees[0]) => boolean) => {
       const repoId = `${group.repositoryOrg}/${group.repositoryName}`;
       const wtOrder = worktreeOrder[repoId];
       const sortedWts = wtOrder && wtOrder.length > 0
@@ -90,6 +93,7 @@ export function useKeyboardShortcuts() {
         : [...group.worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()));
 
       for (const wt of sortedWts) {
+        if (!filter(wt)) continue;
         const wtGroupId = `${repoId}:${wt.branch}`;
         const sessOrder = sessionOrder[wtGroupId];
         const sortedSessions = sessOrder && sessOrder.length > 0
@@ -102,10 +106,24 @@ export function useKeyboardShortcuts() {
           entries.push({ key: wtGroupId, sessions: sortedSessions.map((s) => s.id), agentTicketId: wt.agentWorktree?.ticketId });
         }
       }
+    };
+
+    // 2. Manual worktrees (has tmux sessions) — skip if collapsed
+    if (!manualFlowCollapsed) {
+      for (const group of sortedGroups) {
+        addWorktrees(group, (wt) => wt.sessions.length > 0);
+      }
+    }
+
+    // 3. Agentic worktrees (agent-only, no tmux) — skip if collapsed
+    if (!agenticFlowCollapsed) {
+      for (const group of sortedGroups) {
+        addWorktrees(group, (wt) => wt.sessions.length === 0 && wt.agentWorktree != null);
+      }
     }
 
     return entries;
-  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder]);
+  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder, manualFlowCollapsed, agenticFlowCollapsed]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {

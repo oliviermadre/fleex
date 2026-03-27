@@ -69,6 +69,8 @@ export type {
   TicketMention,
   TicketDeliverable,
   TicketContext,
+  TicketReadCursors,
+  TicketUnreadCounts,
   TicketWsMessageType,
   TicketWsMessage,
 } from './types/ticket.js';

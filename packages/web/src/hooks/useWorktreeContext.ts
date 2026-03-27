@@ -1,5 +1,5 @@
 import { useMemo, useEffect } from 'react';
-import type { Session, WorktreeSessionGroup, Ticket, AgentExecution } from '@fleex/shared';
+import type { Session, WorktreeSessionGroup, Ticket, AgentExecution, TicketLink } from '@fleex/shared';
 import { useSessionStore } from '../stores/sessionStore';
 import { useTicketStore } from '../stores/ticketStore';
 import { useAgentEventStore } from '../stores/agentEventStore';
@@ -76,8 +76,14 @@ export function useWorktreeContext(entry: WorktreeEntry): WorktreeContext {
       if (group.repositoryOrg === targetOrg && group.repositoryName === targetName) {
         for (const wt of group.worktrees) {
           if (wt.branch === targetBranch) {
-            const tId = wt.agentWorktree?.ticketId ?? null;
-            const ticket = tId ? (tickets.find((t) => t.id === tId) ?? null) : null;
+            // Try agent worktree ticket first, then fall back to worktree link
+            const worktreeRef = `${targetOrg}/${targetName}:${wt.branch}`;
+            let tId = wt.agentWorktree?.ticketId ?? null;
+            let ticket: Ticket | null = tId ? (tickets.find((t) => t.id === tId) ?? null) : null;
+            if (!ticket) {
+              ticket = tickets.find((t) => t.links.some((l: TicketLink) => l.type === 'worktree' && l.ref === worktreeRef)) ?? null;
+              tId = ticket?.id ?? null;
+            }
             return {
               worktree: wt,
               repoOrg: targetOrg,

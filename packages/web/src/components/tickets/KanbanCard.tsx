@@ -6,6 +6,7 @@ import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useUnreadStore } from '../../stores/unreadStore';
 import { executeSkill } from '../../services/api';
 import { cn } from '../../lib/cn';
 
@@ -58,6 +59,7 @@ export function KanbanCard({
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const sessions = useSessionStore((s) => s.sessions);
+  const unread = useUnreadStore((s) => s.getUnread(ticket.id));
 
   const issueLinks = ticket.links.filter((l) => l.type === 'github_issue');
   const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
@@ -271,6 +273,20 @@ export function KanbanCard({
                 <span className="max-w-[70px] truncate">{ticket.assignee}</span>
               </span>
             )
+          )}
+
+          {/* Unread badges */}
+          {unread.unreadComments > 0 && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--theme-accent)]/15 px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-accent)]" title={`${unread.unreadComments} unread comments`}>
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" /></svg>
+              {unread.unreadComments}
+            </span>
+          )}
+          {unread.unreadDeliverables > 0 && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-medium text-orange-400" title={`${unread.unreadDeliverables} unseen deliverables`}>
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1h8a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm1 3h6M5 7h6M5 10h4" /></svg>
+              {unread.unreadDeliverables}
+            </span>
           )}
 
           {/* Time in column */}

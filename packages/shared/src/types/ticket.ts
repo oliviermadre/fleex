@@ -187,6 +187,19 @@ export interface TicketDeliverable {
   readonly updatedAt: string;
 }
 
+// ── Read Cursors ──
+
+export interface TicketReadCursors {
+  readonly ticketId: string;
+  readonly commentLastSeenAt: string | null;
+}
+
+export interface TicketUnreadCounts {
+  readonly ticketId: string;
+  readonly unreadComments: number;
+  readonly unreadDeliverables: number;
+}
+
 // ── Context ──
 
 export interface TicketContext {

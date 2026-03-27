@@ -429,6 +429,32 @@ export async function deleteTicketComment(ticketId: string, commentId: string): 
   if (!res.ok) throw new Error(`Failed to delete comment: ${res.statusText}`);
 }
 
+// ── Read Cursors API ──
+
+export async function fetchReadCursors(ticketId: string): Promise<import('@fleex/shared').TicketReadCursors> {
+  return request<import('@fleex/shared').TicketReadCursors>(`/tickets/${encodeURIComponent(ticketId)}/read-cursors`);
+}
+
+export async function updateReadCursors(ticketId: string, cursors: { commentLastSeenAt?: string }): Promise<void> {
+  await request<void>(`/tickets/${encodeURIComponent(ticketId)}/read-cursors`, {
+    method: 'PATCH', body: JSON.stringify(cursors),
+  });
+}
+
+export async function fetchSeenDeliverables(ticketId: string): Promise<string[]> {
+  return request<string[]>(`/tickets/${encodeURIComponent(ticketId)}/seen-deliverables`);
+}
+
+export async function toggleDeliverableSeen(ticketId: string, deliverableId: string, seen: boolean): Promise<void> {
+  await request<void>(`/tickets/${encodeURIComponent(ticketId)}/seen-deliverables`, {
+    method: 'PATCH', body: JSON.stringify({ deliverableId, seen }),
+  });
+}
+
+export async function fetchUnreadCounts(): Promise<import('@fleex/shared').TicketUnreadCounts[]> {
+  return request<import('@fleex/shared').TicketUnreadCounts[]>('/tickets/unread-counts');
+}
+
 // ── Agent Tokens API ──
 
 export async function fetchAgentTokens(): Promise<import('@fleex/shared').AgentToken[]> {

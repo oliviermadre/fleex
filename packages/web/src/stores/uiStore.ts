@@ -107,6 +107,12 @@ interface UIState {
   // Agent worktree view (ticket-based)
   selectedAgentWorktreeTicketId: string | null;
   setSelectedAgentWorktreeTicketId: (id: string | null) => void;
+
+  // Sidebar section collapse
+  manualFlowCollapsed: boolean;
+  toggleManualFlow: () => void;
+  agenticFlowCollapsed: boolean;
+  toggleAgenticFlow: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -133,6 +139,8 @@ export const useUIStore = create<UIState>((set) => ({
   floatingDeliverableIds: [],
   floatingDeliverables: {},
   selectedAgentWorktreeTicketId: null,
+  manualFlowCollapsed: false,
+  agenticFlowCollapsed: true,
 
   toggleScratchpad: () =>
     set((state) => ({
@@ -306,4 +314,10 @@ export const useUIStore = create<UIState>((set) => ({
   clearFloatingDeliverableFocus: () => set({ focusedFloatingPanelId: null }),
 
   setSelectedAgentWorktreeTicketId: (id) => set({ selectedAgentWorktreeTicketId: id }),
+
+  toggleManualFlow: () =>
+    set((state) => ({ manualFlowCollapsed: !state.manualFlowCollapsed })),
+
+  toggleAgenticFlow: () =>
+    set((state) => ({ agenticFlowCollapsed: !state.agenticFlowCollapsed })),
 }));
