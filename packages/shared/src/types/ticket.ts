@@ -154,6 +154,8 @@ export type MentionStatus = 'pending' | 'acknowledged' | 'resolved' | 'waiting_f
 
 export type MentionTargetType = 'agent' | 'human' | 'panel';
 
+export type MentionExecutionMode = 'talk' | 'plan' | 'edit';
+
 export interface TicketMention {
   readonly id: string;
   readonly ticketId: string;
@@ -161,6 +163,7 @@ export interface TicketMention {
   readonly targetAgent: string;
   readonly sourceAgent: string;
   readonly targetType: MentionTargetType;
+  readonly executionMode: MentionExecutionMode;
   readonly status: MentionStatus;
   readonly resolvedAt: string | null;
   readonly resolvedCommentId: string | null;

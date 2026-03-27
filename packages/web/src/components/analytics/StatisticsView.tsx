@@ -210,6 +210,8 @@ function AgentLeaderboard({ entries }: { entries: AgentLeaderboardEntry[] }) {
             <th className="pb-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Agent</th>
             <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Spawns</th>
             <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Avg Duration</th>
+            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Cost</th>
+            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Avg Tokens</th>
             <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Done</th>
             <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Failed</th>
           </tr>
@@ -226,6 +228,12 @@ function AgentLeaderboard({ entries }: { entries: AgentLeaderboardEntry[] }) {
               </td>
               <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
                 {entry.avgDurationMs != null ? formatDuration(entry.avgDurationMs) : '—'}
+              </td>
+              <td className="py-2 text-right tabular-nums text-sm text-amber-400">
+                {entry.totalCostUsd > 0 ? `$${entry.totalCostUsd.toFixed(2)}` : '—'}
+              </td>
+              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
+                {entry.avgInputTokens != null ? `${Math.round(entry.avgInputTokens / 1000)}k→${Math.round((entry.avgOutputTokens ?? 0) / 1000)}k` : '—'}
               </td>
               <td className="py-2 text-right tabular-nums text-sm text-green-400">
                 {entry.completedCount}
@@ -354,6 +362,73 @@ function formatDuration(ms: number): string {
   return `${m}m${rem > 0 ? ` ${rem}s` : ''}`;
 }
 
+// ── Cost Bar Chart (stacked per agent) ──
+
+const AGENT_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899', '#ef4444', '#06b6d4', '#84cc16'];
+
+function CostBarChart({ data }: { data: StatisticsTimeBucket[] }) {
+  if (data.length === 0) return null;
+
+  // Collect all unique agent names across all buckets
+  const agentSet = new Set<string>();
+  for (const d of data) {
+    for (const name of Object.keys(d.costByAgent ?? {})) agentSet.add(name);
+  }
+  const agents = [...agentSet];
+  if (agents.length === 0) return null;
+
+  const height = 220;
+  const legendH = 24;
+  const chartH = height - 30 - legendH;
+  const maxVal = Math.max(...data.map((d) => d.totalCostUsd), 0.01);
+  const barWidth = Math.max(4, Math.min(40, (600 - data.length * 2) / data.length));
+  const width = data.length * (barWidth + 2) + 40;
+
+  return (
+    <div>
+      <svg width="100%" height={height - legendH} viewBox={`0 0 ${width} ${height - legendH}`} preserveAspectRatio="xMinYMid meet">
+        {data.map((d, i) => {
+          const x = 30 + i * (barWidth + 2);
+          let offsetY = 0;
+          const costs = d.costByAgent ?? {};
+          return (
+            <g key={i}>
+              {agents.map((agent, ai) => {
+                const val = costs[agent] ?? 0;
+                if (val === 0) return null;
+                const segH = (val / maxVal) * chartH;
+                const y = height - legendH - 20 - offsetY - segH;
+                offsetY += segH;
+                return (
+                  <rect key={agent} x={x} y={y} width={barWidth} height={segH} fill={AGENT_COLORS[ai % AGENT_COLORS.length]} opacity={0.85}>
+                    <title>{`${agent}: $${val.toFixed(4)}`}</title>
+                  </rect>
+                );
+              })}
+              {(i === 0 || i === data.length - 1 || i % Math.max(1, Math.floor(data.length / 6)) === 0) && (
+                <text x={x + barWidth / 2} y={height - legendH - 4} textAnchor="middle" fontSize="9" fill="var(--theme-text-faint)">
+                  {d.date.slice(5)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        <text x="0" y="12" fontSize="9" fill="var(--theme-text-faint)">${maxVal.toFixed(2)}</text>
+        <text x="0" y={height - legendH - 22} fontSize="9" fill="var(--theme-text-faint)">$0</text>
+      </svg>
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 mt-2">
+        {agents.map((agent, i) => (
+          <div key={agent} className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: AGENT_COLORS[i % AGENT_COLORS.length] }} />
+            <span className="text-[10px] text-[var(--theme-text-secondary)]">{agent}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Statistics View ──
 
 export function StatisticsView() {
@@ -442,10 +517,34 @@ export function StatisticsView() {
                 value={data.summary.skillsExecuted}
                 label="Skills Executed"
               />
+              <StatCard
+                icon={<CostIcon />}
+                value={data.summary.totalCostUsd > 0 ? `$${data.summary.totalCostUsd.toFixed(2)}` : '$0'}
+                label="Total Cost"
+              />
+              <StatCard
+                icon={<TokenIcon />}
+                value={data.summary.totalInputTokens + data.summary.totalOutputTokens > 0
+                  ? `${Math.round((data.summary.totalInputTokens + data.summary.totalOutputTokens) / 1000)}k`
+                  : '0'}
+                label="Total Tokens"
+              />
             </div>
 
             {/* Time Series */}
             <TimeSeriesChart data={data.timeSeries} />
+
+            {/* Cost Over Time */}
+            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Cost Over Time</h3>
+                <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: '#f59e0b30', color: '#f59e0b', border: '1px solid #f59e0b40' }}>USD</span>
+              </div>
+              {data.timeSeries.some((b) => b.totalCostUsd > 0)
+                ? <CostBarChart data={data.timeSeries} />
+                : <p className="py-8 text-center text-xs text-[var(--theme-text-faint)]">No cost data yet — run an agent to start tracking</p>
+              }
+            </div>
 
             {/* Agent Leaderboard */}
             <AgentLeaderboard entries={data.agentLeaderboard} />
@@ -546,6 +645,22 @@ function SkillIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  );
+}
+
+function CostIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  );
+}
+
+function TokenIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
     </svg>
   );
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CommentVisibility } from '@fleex/shared';
+import type { CommentVisibility, MentionExecutionMode } from '@fleex/shared';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
@@ -25,6 +25,7 @@ export class PostCommentUseCase {
     privateRecipients?: string[];
     parentId?: string | null;
     humanMentionNames?: string[];
+    executionMode?: MentionExecutionMode;
   }): Promise<{ comment: TicketCommentEntity; createdMentions: TicketMentionEntity[] }> {
     const comment = TicketCommentEntity.create({
       id: randomUUID(),
@@ -40,35 +41,43 @@ export class PostCommentUseCase {
     await this.commentStore.save(comment);
 
     // Create mentions for each @agent:xxx found in the body
-    const createdMentions: TicketMentionEntity[] = [];
-    for (const targetAgent of comment.mentions) {
-      if (targetAgent === params.authorName) continue; // don't self-mention
-      const mention = TicketMentionEntity.create({
-        id: randomUUID(),
-        ticketId: params.ticketId,
-        commentId: comment.id,
-        targetAgent,
-        sourceAgent: params.authorName,
-        targetType: 'agent',
-      });
-      await this.mentionStore.save(mention);
-      createdMentions.push(mention);
-    }
+    // Phase 1: agent-authored comments do NOT create actionable mentions (no chaining)
+    const isAgentAuthored = params.authorType === 'agent';
+    const mentionMode = params.executionMode ?? 'plan';
 
-    // Create mentions for @panel:xxx found in the body
-    const panelMentions = TicketCommentEntity.extractPanelMentions(params.body);
-    for (const panelName of panelMentions) {
-      if (panelName === params.authorName) continue; // don't self-mention
-      const mention = TicketMentionEntity.create({
-        id: randomUUID(),
-        ticketId: params.ticketId,
-        commentId: comment.id,
-        targetAgent: panelName,
-        sourceAgent: params.authorName,
-        targetType: 'panel',
-      });
-      await this.mentionStore.save(mention);
-      createdMentions.push(mention);
+    const createdMentions: TicketMentionEntity[] = [];
+    if (!isAgentAuthored) {
+      for (const targetAgent of comment.mentions) {
+        if (targetAgent === params.authorName) continue; // don't self-mention
+        const mention = TicketMentionEntity.create({
+          id: randomUUID(),
+          ticketId: params.ticketId,
+          commentId: comment.id,
+          targetAgent,
+          sourceAgent: params.authorName,
+          targetType: 'agent',
+          executionMode: mentionMode,
+        });
+        await this.mentionStore.save(mention);
+        createdMentions.push(mention);
+      }
+
+      // Create mentions for @panel:xxx found in the body
+      const panelMentions = TicketCommentEntity.extractPanelMentions(params.body);
+      for (const panelName of panelMentions) {
+        if (panelName === params.authorName) continue; // don't self-mention
+        const mention = TicketMentionEntity.create({
+          id: randomUUID(),
+          ticketId: params.ticketId,
+          commentId: comment.id,
+          targetAgent: panelName,
+          sourceAgent: params.authorName,
+          targetType: 'panel',
+          executionMode: mentionMode,
+        });
+        await this.mentionStore.save(mention);
+        createdMentions.push(mention);
+      }
     }
 
     // Create mentions for human @mentions (tracked but never auto-executed)

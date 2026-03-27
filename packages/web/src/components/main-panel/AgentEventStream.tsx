@@ -255,9 +255,11 @@ function EventBlock({ event }: { event: AgentEvent }) {
       const personaName = data?.['personaName'] as string ?? 'Agent';
       const model = data?.['model'] as string ?? '';
       const execId = data?.['executionId'] as string ?? '';
+      const effectiveMode = data?.['effectiveMode'] as string | undefined;
       const resumeSessionId = data?.['resumeSessionId'] as string | null;
       const sdkSessionId = data?.['sdkSessionId'] as string | null; // backfilled for old events
       const ctx = data?.['context'] as Record<string, unknown> | undefined;
+      const modeBadge = effectiveMode === 'talk' ? '🗣 talk' : effectiveMode === 'plan' ? '📋 plan' : effectiveMode === 'edit' ? '📝 edit' : null;
       return (
         <div className="py-1 space-y-1">
           <div className="flex items-center gap-2 text-[var(--theme-accent)]">
@@ -265,6 +267,11 @@ function EventBlock({ event }: { event: AgentEvent }) {
             <span className="text-xs text-[var(--theme-text-secondary)]">
               {personaName} ({model})
             </span>
+            {modeBadge && (
+              <span className="rounded-full bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-secondary)]">
+                {modeBadge}
+              </span>
+            )}
           </div>
           <div className="text-xs text-[var(--theme-text-faint)] pl-4 space-y-0.5">
             {execId && (
@@ -307,12 +314,28 @@ function EventBlock({ event }: { event: AgentEvent }) {
     }
     case 'execution_end': {
       const status = data?.['status'] as string ?? 'unknown';
+      const endMode = data?.['effectiveMode'] as string | undefined;
+      const durationMs = data?.['durationMs'] as number | undefined;
+      const costUsd = data?.['costUsd'] as number | undefined;
+      const inputTokens = data?.['inputTokens'] as number | undefined;
+      const outputTokens = data?.['outputTokens'] as number | undefined;
+      const endModeBadge = endMode === 'talk' ? '🗣' : endMode === 'plan' ? '📋' : endMode === 'edit' ? '📝' : '';
       return (
-        <div className={cn(
-          'flex items-center gap-2 py-1 font-bold',
-          status === 'completed' ? 'text-green-400' : 'text-red-400'
-        )}>
-          {status === 'completed' ? '✓ Execution completed' : '✗ Execution failed'}
+        <div className="py-1 space-y-0.5">
+          <div className={cn(
+            'flex items-center gap-2 font-bold',
+            status === 'completed' ? 'text-green-400' : 'text-red-400'
+          )}>
+            {status === 'completed' ? '✓ Execution completed' : '✗ Execution failed'}
+            {endModeBadge && <span className="text-xs font-normal text-[var(--theme-text-faint)]">{endModeBadge}</span>}
+          </div>
+          {(durationMs || costUsd || inputTokens) && (
+            <div className="text-[10px] text-[var(--theme-text-faint)] pl-4 flex gap-3">
+              {durationMs != null && <span>{(durationMs / 1000).toFixed(1)}s</span>}
+              {inputTokens != null && outputTokens != null && <span>{inputTokens.toLocaleString()}→{outputTokens.toLocaleString()} tokens</span>}
+              {costUsd != null && <span>${costUsd.toFixed(4)}</span>}
+            </div>
+          )}
         </div>
       );
     }

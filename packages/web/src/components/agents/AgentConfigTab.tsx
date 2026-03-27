@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import type { AgentPersona } from '@fleex/shared';
+import type { AgentPersona, ExecutionMode } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 
 interface AgentConfigTabProps {
@@ -12,12 +12,14 @@ export function AgentConfigTab({ persona }: AgentConfigTabProps) {
   const [name, setName] = useState(persona.name);
   const [displayName, setDisplayName] = useState(persona.displayName);
   const [model, setModel] = useState(persona.model);
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>(persona.executionMode);
   const [humanMentionName, setHumanMentionName] = useState(persona.humanMentionName ?? '');
 
   useEffect(() => {
     setName(persona.name);
     setDisplayName(persona.displayName);
     setModel(persona.model);
+    setExecutionMode(persona.executionMode);
     setHumanMentionName(persona.humanMentionName ?? '');
   }, [persona]);
 
@@ -87,6 +89,29 @@ export function AgentConfigTab({ persona }: AgentConfigTabProps) {
           <option value="claude-opus-4-6">Claude Opus 4.6</option>
           <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
         </select>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-[var(--theme-text-muted)]">
+          Execution Mode
+        </label>
+        <select
+          value={executionMode}
+          onChange={(e) => {
+            const val = e.target.value as ExecutionMode;
+            setExecutionMode(val);
+            save({ executionMode: val });
+          }}
+          className="w-full max-w-sm rounded border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 py-2 text-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
+        >
+          <option value="claude_code">Claude Code</option>
+          <option value="message">Message</option>
+        </select>
+        <p className="mt-1 text-xs text-[var(--theme-text-faint)]">
+          {executionMode === 'claude_code'
+            ? 'Full filesystem access, tools, worktree — for coding tasks'
+            : 'Fast completion, no tools — for analysis, review, opinions'}
+        </p>
       </div>
 
       <div>

@@ -80,11 +80,22 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     }
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted'): Promise<void> {
+  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
+    model?: string; effectiveMode?: string; durationMs?: number; costUsd?: number;
+    inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
+  }): Promise<void> {
     const entry = this.index.find((e) => e.id === executionId);
     if (entry) {
       entry.status = status;
       entry.completedAt = new Date().toISOString();
+      if (metrics?.model) entry.model = metrics.model;
+      if (metrics?.effectiveMode) entry.effectiveMode = metrics.effectiveMode;
+      if (metrics?.durationMs != null) entry.durationMs = metrics.durationMs;
+      if (metrics?.costUsd != null) entry.costUsd = metrics.costUsd;
+      if (metrics?.inputTokens != null) entry.inputTokens = metrics.inputTokens;
+      if (metrics?.outputTokens != null) entry.outputTokens = metrics.outputTokens;
+      if (metrics?.cacheReadTokens != null) entry.cacheReadTokens = metrics.cacheReadTokens;
+      if (metrics?.cacheCreationTokens != null) entry.cacheCreationTokens = metrics.cacheCreationTokens;
       await this.syncIndex();
     }
   }

@@ -46,10 +46,20 @@ export class PgAgentEventStore implements AgentEventStorePort {
     );
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted'): Promise<void> {
+  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
+    model?: string; effectiveMode?: string; durationMs?: number; costUsd?: number;
+    inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
+  }): Promise<void> {
     await this.db.query(
-      'UPDATE agent_event_executions SET status = $1, completed_at = $2 WHERE execution_id = $3',
-      [status, new Date().toISOString(), executionId],
+      `UPDATE agent_event_executions SET status = $1, completed_at = $2,
+       model = COALESCE($3, model), effective_mode = COALESCE($4, effective_mode),
+       duration_ms = COALESCE($5, duration_ms), cost_usd = COALESCE($6, cost_usd),
+       input_tokens = COALESCE($7, input_tokens), output_tokens = COALESCE($8, output_tokens),
+       cache_read_tokens = COALESCE($9, cache_read_tokens), cache_creation_tokens = COALESCE($10, cache_creation_tokens)
+       WHERE execution_id = $11`,
+      [status, new Date().toISOString(), metrics?.model ?? null, metrics?.effectiveMode ?? null,
+       metrics?.durationMs ?? null, metrics?.costUsd ?? null, metrics?.inputTokens ?? null,
+       metrics?.outputTokens ?? null, metrics?.cacheReadTokens ?? null, metrics?.cacheCreationTokens ?? null, executionId],
     );
   }
 
@@ -149,5 +159,13 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     completedAt: (row.completed_at as string) ?? null,
     lastEventAt: (row.last_event_at as string) ?? null,
     sdkSessionId: (row.sdk_session_id as string) ?? null,
+    model: (row.model as string) ?? null,
+    effectiveMode: (row.effective_mode as string) ?? null,
+    durationMs: (row.duration_ms as number) ?? null,
+    costUsd: (row.cost_usd as number) ?? null,
+    inputTokens: (row.input_tokens as number) ?? null,
+    outputTokens: (row.output_tokens as number) ?? null,
+    cacheReadTokens: (row.cache_read_tokens as number) ?? null,
+    cacheCreationTokens: (row.cache_creation_tokens as number) ?? null,
   };
 }

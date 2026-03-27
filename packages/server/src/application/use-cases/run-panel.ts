@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { PanelNotFoundError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import type { PanelEntity } from '../../domain/entities/panel.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
@@ -17,6 +18,18 @@ import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
 import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { EventBus } from '../event-bus.js';
+import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
+import type { MentionExecutionMode } from '@fleex/shared';
+import { buildSdkOptions } from '../utils/build-sdk-options.js';
+
+interface SdkMetrics {
+  durationMs?: number;
+  costUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+}
 
 interface MemberResponse {
   personaName: string;
@@ -39,6 +52,7 @@ export interface PanelResult {
 
 export class RunPanelUseCase {
   public eventBus: EventBus | null = null;
+  public onEvent: ((event: AgentEventEntity) => void) | null = null;
 
   constructor(
     private readonly panelStore: PanelStorePort,
@@ -49,6 +63,7 @@ export class RunPanelUseCase {
     private readonly submitDeliverable: SubmitDeliverableUseCase,
     private readonly getTicketContext: GetTicketContextUseCase,
     private readonly createWorktree: CreateWorktreeUseCase,
+    private readonly agentEventStore: AgentEventStorePort,
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
   ) {}
@@ -128,25 +143,31 @@ export class RunPanelUseCase {
       });
     }
 
-    // 5. Ensure worktree exists (create on-the-fly if needed, same as agent execution)
-    const worktreePath = await this.ensureWorktree(params.ticketId);
+    // 5. Ensure worktree exists (skip for message mode)
+    let worktreePath: string | null = null;
+    if (panel.executionMode !== 'message') {
+      worktreePath = await this.ensureWorktree(params.ticketId);
 
-    if (worktreePath) {
-      this.logger.info('Panel has worktree access', { panelName: panel.name, worktreePath });
-    } else {
-      this.logger.warn('Panel has NO worktree — agents will not have code access', { panelName: panel.name });
+      if (worktreePath) {
+        this.logger.info('Panel has worktree access', { panelName: panel.name, worktreePath });
+      } else {
+        this.logger.warn('Panel has NO worktree — agents will not have code access', { panelName: panel.name });
+      }
     }
 
     // 6. Load all member personas
     const memberPersonas = await this.loadMemberPersonas(panel);
 
     // 7. Query all members in parallel
+    const panelMentionId = params.mentionId ?? `panel:${panel.id}:${randomUUID().slice(0, 8)}`;
     const memberResponses = await this.queryAllMembers(
       panel,
       memberPersonas,
       topic,
       ticketContext,
       worktreePath,
+      params.ticketId,
+      panelMentionId,
     );
 
     // 8. Generate synthesis
@@ -155,6 +176,8 @@ export class RunPanelUseCase {
       topic,
       memberResponses,
       worktreePath,
+      params.ticketId,
+      panelMentionId,
     );
 
     const durationMs = Date.now() - startTime;
@@ -307,6 +330,8 @@ export class RunPanelUseCase {
     topic: string,
     ticketContext: string,
     worktreePath: string | null,
+    ticketId: string,
+    mentionId: string,
   ): Promise<MemberResponse[]> {
     const CONCURRENCY = 3;
     const sortedMembers = [...panel.members].sort((a, b) => a.order - b.order);
@@ -342,7 +367,8 @@ export class RunPanelUseCase {
             : member.modelOverride;
 
           const identityEmoji = this.extractEmojiFromIdentity(persona.identityMd);
-          const response = await this.queryMember(persona, model, topic, ticketContext, identityEmoji, worktreePath);
+          const panelMode: MentionExecutionMode = panel.executionMode === 'message' ? 'talk' : 'edit';
+          const response = await this.queryMember(persona, model, topic, ticketContext, identityEmoji, worktreePath, panelMode, ticketId, mentionId);
 
           this.logger.info('Panel member completed', {
             persona: persona.name,
@@ -373,25 +399,27 @@ export class RunPanelUseCase {
       systemPrompt?: string;
       cwd?: string | null;
       maxTurns?: number;
+      effectiveMode?: MentionExecutionMode;
     },
-  ): Promise<string> {
+  ): Promise<{ text: string; metrics: SdkMetrics }> {
     const { query } = await import('@anthropic-ai/claude-agent-sdk');
+    const mode = options.effectiveMode ?? 'edit';
 
-    const queryOptions: Record<string, unknown> = {
+    const queryOptions = buildSdkOptions(mode, {
       model: options.model,
-      systemPrompt: options.systemPrompt,
-      maxTurns: options.maxTurns ?? 1,
-      allowedTools: ['Read', 'Bash', 'Glob', 'Grep'],
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
-    };
+      systemPrompt: options.systemPrompt ?? '',
+      cwd: options.cwd,
+    });
 
-    if (options.cwd) {
-      queryOptions['cwd'] = options.cwd;
+    // For non-talk modes, override maxTurns if explicitly provided
+    if (mode !== 'talk' && options.maxTurns !== undefined) {
+      queryOptions.maxTurns = options.maxTurns;
     }
 
     let resultText = '';
     let messageCount = 0;
+    const metrics: SdkMetrics = {};
+
     for await (const message of query({
       prompt,
       options: queryOptions as Parameters<typeof query>[0]['options'],
@@ -408,15 +436,33 @@ export class RunPanelUseCase {
       }
       if ('result' in message) {
         resultText = (message as { result: string }).result;
+        // Capture instrumentation from SDK result message
+        if (typeof msg['duration_ms'] === 'number') metrics.durationMs = msg['duration_ms'] as number;
+        if (typeof msg['total_cost_usd'] === 'number') metrics.costUsd = msg['total_cost_usd'] as number;
+        const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;
+        if (modelUsage) {
+          let totalIn = 0, totalOut = 0, totalCacheRead = 0, totalCacheCreation = 0;
+          for (const mu of Object.values(modelUsage)) {
+            totalIn += mu['inputTokens'] ?? 0;
+            totalOut += mu['outputTokens'] ?? 0;
+            totalCacheRead += mu['cacheReadInputTokens'] ?? 0;
+            totalCacheCreation += mu['cacheCreationInputTokens'] ?? 0;
+          }
+          metrics.inputTokens = totalIn;
+          metrics.outputTokens = totalOut;
+          metrics.cacheReadTokens = totalCacheRead;
+          metrics.cacheCreationTokens = totalCacheCreation;
+        }
       }
     }
     this.logger.info('SDK query done', {
       model: options.model,
+      mode,
       messageCount,
       resultLength: resultText.length,
-      hasCwd: !!options.cwd,
+      costUsd: metrics.costUsd,
     });
-    return resultText;
+    return { text: resultText, metrics };
   }
 
   private async queryMember(
@@ -426,8 +472,29 @@ export class RunPanelUseCase {
     ticketContext: string,
     emoji: string,
     worktreePath: string | null,
+    effectiveMode: MentionExecutionMode,
+    ticketId: string,
+    mentionId: string,
   ): Promise<MemberResponse> {
     const startTime = Date.now();
+    const executionId = randomUUID();
+
+    // Track execution + emit event for real-time UI
+    await this.agentEventStore.startExecution({
+      executionId,
+      personaId: persona.id,
+      ticketId,
+      mentionId,
+    });
+
+    const startEvent = AgentEventEntity.create({
+      executionId,
+      eventType: 'execution_start',
+      data: { executionId, personaId: persona.id, personaName: persona.name, ticketId, mentionId, model },
+      sequence: 0,
+    });
+    await this.agentEventStore.appendEvent(startEvent);
+    this.onEvent?.(startEvent);
 
     // Build system prompt from persona's soul + identity + memory
     const systemParts: string[] = [];
@@ -456,18 +523,34 @@ Raise the key points from your area of expertise.
 If you disagree with the approach, explain why and propose alternatives.`;
 
     try {
-      const resultText = await this.querySDK(userPrompt, {
+      const { text, metrics } = await this.querySDK(userPrompt, {
         model,
         systemPrompt: systemPrompt || undefined,
         cwd: worktreePath,
         maxTurns: worktreePath ? 150 : 10,
+        effectiveMode,
       });
+
+      await this.agentEventStore.completeExecution(executionId, 'completed', {
+        model,
+        effectiveMode,
+        ...metrics,
+      });
+
+      const endEvent = AgentEventEntity.create({
+        executionId,
+        eventType: 'execution_end',
+        data: { status: 'completed', ticketId, effectiveMode, model, ...metrics },
+        sequence: 1,
+      });
+      await this.agentEventStore.appendEvent(endEvent);
+      this.onEvent?.(endEvent);
 
       return {
         personaName: persona.name,
         personaDisplayName: persona.displayName || persona.name,
         emoji,
-        response: resultText,
+        response: text,
         model,
         durationMs: Date.now() - startTime,
       };
@@ -478,6 +561,17 @@ If you disagree with the approach, explain why and propose alternatives.`;
         model,
         error: errorMsg,
       });
+
+      await this.agentEventStore.completeExecution(executionId, 'failed', { model, effectiveMode });
+
+      const failEvent = AgentEventEntity.create({
+        executionId,
+        eventType: 'execution_end',
+        data: { status: 'failed', ticketId, effectiveMode, model, error: errorMsg },
+        sequence: 1,
+      });
+      await this.agentEventStore.appendEvent(failEvent);
+      this.onEvent?.(failEvent);
 
       return {
         personaName: persona.name,
@@ -496,6 +590,8 @@ If you disagree with the approach, explain why and propose alternatives.`;
     topic: string,
     memberResponses: MemberResponse[],
     worktreePath: string | null,
+    ticketId: string,
+    mentionId: string,
   ): Promise<string> {
     const validResponses = memberResponses.filter((r) => !r.error && r.response);
 
@@ -540,19 +636,39 @@ ${panel.orchestratorPrompt ? `${panel.orchestratorPrompt}\n\n` : ''}Synthesize t
 
 Be concise and decision-oriented. Write in the same language as the panel members' responses.`;
 
+    const executionId = randomUUID();
+    const orchestratorPersonaId = panel.orchestratorPersonaId ?? `orchestrator:${panel.id}`;
+    const effectiveMode: MentionExecutionMode = panel.executionMode === 'message' ? 'talk' : 'edit';
+
+    await this.agentEventStore.startExecution({
+      executionId,
+      personaId: orchestratorPersonaId,
+      ticketId,
+      mentionId,
+    });
+
     try {
-      const resultText = await this.querySDK(synthesisPrompt, {
+      const { text, metrics } = await this.querySDK(synthesisPrompt, {
         model: panel.orchestratorModel,
         systemPrompt: orchestratorSystemPrompt,
         cwd: worktreePath,
+        effectiveMode,
       });
 
-      return `**🏛️ ${panel.displayName} — Synthesis**\n\n${resultText}`;
+      await this.agentEventStore.completeExecution(executionId, 'completed', {
+        model: panel.orchestratorModel,
+        effectiveMode,
+        ...metrics,
+      });
+
+      return `**🏛️ ${panel.displayName} — Synthesis**\n\n${text}`;
     } catch (err) {
       this.logger.error('Panel synthesis generation failed', {
         panelName: panel.name,
         error: err instanceof Error ? err.message : String(err),
       });
+
+      await this.agentEventStore.completeExecution(executionId, 'failed', { model: panel.orchestratorModel, effectiveMode });
 
       return `**🏛️ ${panel.displayName} — Synthesis (auto-generated)**\n\n⚠️ Synthesis generation failed. Individual member responses are available in the full transcript deliverable.\n\n${validResponses.map((r) => `- **${r.emoji} ${r.personaDisplayName}** responded (${r.durationMs}ms)`).join('\n')}`;
     }

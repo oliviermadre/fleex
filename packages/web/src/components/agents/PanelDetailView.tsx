@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { PanelMember } from '@fleex/shared';
+import type { ExecutionMode, PanelMember } from '@fleex/shared';
 import { usePanelStore } from '../../stores/panelStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
@@ -45,6 +45,7 @@ export function PanelDetailView() {
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [description, setDescription] = useState('');
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('claude_code');
   const [orchestratorModel, setOrchestratorModel] = useState('claude-sonnet-4-6');
   const [defaultMemberModel, setDefaultMemberModel] = useState('claude-sonnet-4-6');
   const [orchestratorPrompt, setOrchestratorPrompt] = useState('');
@@ -60,6 +61,7 @@ export function PanelDetailView() {
       setName(panel.name);
       setDisplayName(panel.displayName);
       setDescription(panel.description ?? '');
+      setExecutionMode(panel.executionMode);
       setOrchestratorModel(panel.orchestratorModel);
       setDefaultMemberModel(panel.defaultMemberModel);
       setOrchestratorPrompt(panel.orchestratorPrompt ?? '');
@@ -94,6 +96,7 @@ export function PanelDetailView() {
         name: name.trim(),
         displayName: displayName.trim(),
         description: description.trim(),
+        executionMode,
         members,
         orchestratorModel,
         orchestratorPersonaId,
@@ -222,6 +225,23 @@ export function PanelDetailView() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-[var(--theme-text-secondary)]">Execution Mode</label>
+            <select
+              className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+              value={executionMode}
+              onChange={(e) => setExecutionMode(e.target.value as ExecutionMode)}
+            >
+              <option value="claude_code">Claude Code</option>
+              <option value="message">Message</option>
+            </select>
+            <p className="text-xs text-[var(--theme-text-muted)]">
+              {executionMode === 'claude_code'
+                ? 'Members have full filesystem access, tools, and worktree — for code-grounded analysis'
+                : 'Fast completion, no tools — for opinions, reviews, and discussion-only panels'}
+            </p>
           </div>
 
           <div className="flex flex-col gap-1.5">

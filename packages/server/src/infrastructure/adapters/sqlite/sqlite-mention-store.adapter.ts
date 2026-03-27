@@ -10,6 +10,7 @@ interface MentionRow {
   target_agent: string;
   source_agent: string;
   target_type: string | null;
+  execution_mode: string;
   status: string;
   resolved_at: string | null;
   resolved_comment_id: string | null;
@@ -72,10 +73,10 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
   async save(mention: TicketMentionEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO mentions
-        (id, ticket_id, comment_id, target_agent, source_agent, target_type, status,
+        (id, ticket_id, comment_id, target_agent, source_agent, target_type, execution_mode, status,
          resolved_at, resolved_comment_id, resolved_deliverable_id, created_at)
       VALUES
-        (@id, @ticket_id, @comment_id, @target_agent, @source_agent, @target_type, @status,
+        (@id, @ticket_id, @comment_id, @target_agent, @source_agent, @target_type, @execution_mode, @status,
          @resolved_at, @resolved_comment_id, @resolved_deliverable_id, @created_at)
     `);
 
@@ -86,6 +87,7 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
       target_agent: mention.targetAgent,
       source_agent: mention.sourceAgent,
       target_type: mention.targetType,
+      execution_mode: mention.executionMode,
       status: mention.status,
       resolved_at: mention.resolvedAt?.toISOString() ?? null,
       resolved_comment_id: mention.resolvedCommentId,
@@ -106,6 +108,7 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
       row.target_agent,
       row.source_agent,
       (row.target_type as 'agent' | 'human') ?? 'agent',
+      (row.execution_mode as 'talk' | 'plan' | 'edit') ?? 'plan',
       row.status as MentionStatus,
       row.resolved_at ? new Date(row.resolved_at) : null,
       row.resolved_comment_id,

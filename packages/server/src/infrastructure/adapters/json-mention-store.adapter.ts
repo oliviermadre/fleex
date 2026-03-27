@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { FLEEX_DIR } from '@fleex/shared';
-import type { MentionStatus, MentionTargetType } from '@fleex/shared';
+import type { MentionExecutionMode, MentionStatus, MentionTargetType } from '@fleex/shared';
 import { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -13,6 +13,7 @@ interface SerializedMention {
   targetAgent: string;
   sourceAgent: string;
   targetType?: MentionTargetType;
+  executionMode?: MentionExecutionMode;
   status: MentionStatus;
   resolvedAt: string | null;
   resolvedCommentId: string | null;
@@ -94,6 +95,7 @@ export class JsonMentionStore implements MentionStorePort {
         this.mentions.set(m.id, new TicketMentionEntity(
           m.id, m.ticketId, m.commentId, m.targetAgent, m.sourceAgent,
           m.targetType ?? 'agent',
+          m.executionMode ?? 'plan',
           m.status, m.resolvedAt ? new Date(m.resolvedAt) : null,
           m.resolvedCommentId, m.resolvedDeliverableId,
           new Date(m.createdAt),
@@ -112,7 +114,7 @@ export class JsonMentionStore implements MentionStorePort {
       const data: SerializedMention[] = Array.from(this.mentions.values()).map((m) => ({
         id: m.id, ticketId: m.ticketId, commentId: m.commentId,
         targetAgent: m.targetAgent, sourceAgent: m.sourceAgent,
-        targetType: m.targetType,
+        targetType: m.targetType, executionMode: m.executionMode,
         status: m.status, resolvedAt: m.resolvedAt?.toISOString() ?? null,
         resolvedCommentId: m.resolvedCommentId,
         resolvedDeliverableId: m.resolvedDeliverableId,

@@ -7,6 +7,7 @@ interface PersonaRow {
   name: string;
   display_name: string;
   model: string;
+  execution_mode: string;
   soul_md: string;
   identity_md: string;
   memory_md: string;
@@ -21,6 +22,7 @@ function rowToEntity(r: PersonaRow): AgentPersonaEntity {
     r.name,
     r.display_name,
     r.model,
+    (r.execution_mode ?? 'claude_code') as 'claude_code' | 'message',
     r.soul_md ?? '',
     r.identity_md ?? '',
     r.memory_md ?? '',
@@ -68,6 +70,7 @@ export class SupabasePersonaStore implements PersonaStorePort {
       name: persona.name,
       display_name: persona.displayName,
       model: persona.model,
+      execution_mode: persona.executionMode,
       soul_md: persona.soulMd,
       identity_md: persona.identityMd,
       memory_md: persona.memoryMd,

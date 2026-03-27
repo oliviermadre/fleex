@@ -412,9 +412,15 @@ export async function fetchTicketComments(ticketId: string): Promise<import('@fl
   return request<import('@fleex/shared').TicketComment[]>(`/tickets/${encodeURIComponent(ticketId)}/comments`);
 }
 
-export async function postTicketComment(ticketId: string, body: string): Promise<import('@fleex/shared').TicketComment> {
+export async function postTicketComment(ticketId: string, body: string, executionMode?: import('@fleex/shared').MentionExecutionMode): Promise<import('@fleex/shared').TicketComment> {
   return request<import('@fleex/shared').TicketComment>(`/tickets/${encodeURIComponent(ticketId)}/comments`, {
-    method: 'POST', body: JSON.stringify({ body }),
+    method: 'POST', body: JSON.stringify({ body, executionMode }),
+  });
+}
+
+export async function updateMentionExecutionMode(mentionId: string, executionMode: import('@fleex/shared').MentionExecutionMode): Promise<import('@fleex/shared').TicketMention> {
+  return request<import('@fleex/shared').TicketMention>(`/mentions/${encodeURIComponent(mentionId)}/execution-mode`, {
+    method: 'PATCH', body: JSON.stringify({ executionMode }),
   });
 }
 

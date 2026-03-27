@@ -25,24 +25,26 @@ export class PgPersonaStore implements PersonaStorePort {
   async save(persona: AgentPersonaEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO agent_personas (
-        id, name, display_name, model, soul_md, identity_md, memory_md,
+        id, name, display_name, model, execution_mode, soul_md, identity_md, memory_md,
         human_mention_name, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       ON CONFLICT (id) DO UPDATE SET
         name = $2,
         display_name = $3,
         model = $4,
-        soul_md = $5,
-        identity_md = $6,
-        memory_md = $7,
-        human_mention_name = $8,
-        created_at = $9,
-        updated_at = $10`,
+        execution_mode = $5,
+        soul_md = $6,
+        identity_md = $7,
+        memory_md = $8,
+        human_mention_name = $9,
+        created_at = $10,
+        updated_at = $11`,
       [
         persona.id,
         persona.name,
         persona.displayName,
         persona.model,
+        persona.executionMode,
         persona.soulMd,
         persona.identityMd,
         persona.memoryMd,
@@ -64,6 +66,7 @@ function rowToPersona(row: Record<string, unknown>): AgentPersonaEntity {
     row.name as string,
     row.display_name as string,
     row.model as string,
+    ((row.execution_mode as string) ?? 'claude_code') as 'claude_code' | 'message',
     (row.soul_md as string) ?? '',
     (row.identity_md as string) ?? '',
     (row.memory_md as string) ?? '',

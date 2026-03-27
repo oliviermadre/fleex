@@ -9,6 +9,14 @@ export interface AgentExecution {
   readonly completedAt: string | null;
   readonly lastEventAt: string | null;
   readonly sdkSessionId?: string | null;
+  readonly model?: string | null;
+  readonly effectiveMode?: string | null;
+  readonly durationMs?: number | null;
+  readonly costUsd?: number | null;
+  readonly inputTokens?: number | null;
+  readonly outputTokens?: number | null;
+  readonly cacheReadTokens?: number | null;
+  readonly cacheCreationTokens?: number | null;
 }
 
 export type AgentEventType =

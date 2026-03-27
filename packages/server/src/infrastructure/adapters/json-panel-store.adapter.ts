@@ -11,6 +11,7 @@ interface SerializedPanel {
   name: string;
   displayName: string;
   description: string;
+  executionMode?: string;
   members: PanelMember[];
   orchestratorPrompt: string;
   orchestratorModel: string;
@@ -80,6 +81,7 @@ export class JsonPanelStore implements PanelStorePort {
       for (const p of data) {
         this.panels.set(p.id, new PanelEntity(
           p.id, p.name, p.displayName, p.description,
+          (p.executionMode ?? 'claude_code') as 'claude_code' | 'message',
           p.members, p.orchestratorPrompt, p.orchestratorModel,
           p.orchestratorPersonaId ?? null, p.defaultMemberModel, p.enabled,
           new Date(p.createdAt), new Date(p.updatedAt),
@@ -97,6 +99,7 @@ export class JsonPanelStore implements PanelStorePort {
     try {
       const data: SerializedPanel[] = Array.from(this.panels.values()).map((p) => ({
         id: p.id, name: p.name, displayName: p.displayName, description: p.description,
+        executionMode: p.executionMode,
         members: p.members, orchestratorPrompt: p.orchestratorPrompt,
         orchestratorModel: p.orchestratorModel, orchestratorPersonaId: p.orchestratorPersonaId,
         defaultMemberModel: p.defaultMemberModel,

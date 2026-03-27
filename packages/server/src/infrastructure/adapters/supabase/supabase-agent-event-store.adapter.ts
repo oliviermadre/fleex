@@ -19,6 +19,14 @@ interface ExecutionRow {
   completed_at: string | null;
   sdk_session_id: string | null;
   last_event_at: string | null;
+  model: string | null;
+  effective_mode: string | null;
+  duration_ms: number | null;
+  cost_usd: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_creation_tokens: number | null;
 }
 
 export class SupabaseAgentEventStore implements AgentEventStorePort {
@@ -75,10 +83,22 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     }
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted'): Promise<void> {
+  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
+    model?: string; effectiveMode?: string; durationMs?: number; costUsd?: number;
+    inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
+  }): Promise<void> {
+    const update: Record<string, unknown> = { status, completed_at: new Date().toISOString() };
+    if (metrics?.model) update.model = metrics.model;
+    if (metrics?.effectiveMode) update.effective_mode = metrics.effectiveMode;
+    if (metrics?.durationMs != null) update.duration_ms = metrics.durationMs;
+    if (metrics?.costUsd != null) update.cost_usd = metrics.costUsd;
+    if (metrics?.inputTokens != null) update.input_tokens = metrics.inputTokens;
+    if (metrics?.outputTokens != null) update.output_tokens = metrics.outputTokens;
+    if (metrics?.cacheReadTokens != null) update.cache_read_tokens = metrics.cacheReadTokens;
+    if (metrics?.cacheCreationTokens != null) update.cache_creation_tokens = metrics.cacheCreationTokens;
     const { error } = await this.conn.client
       .from('agent_event_executions')
-      .update({ status, completed_at: new Date().toISOString() })
+      .update(update)
       .eq('execution_id', executionId);
     if (error) throw new Error(`SupabaseAgentEventStore.completeExecution failed: ${error.message}`);
   }
@@ -193,5 +213,13 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     completedAt: row.completed_at,
     lastEventAt: row.last_event_at ?? null,
     sdkSessionId: row.sdk_session_id,
+    model: row.model ?? null,
+    effectiveMode: row.effective_mode ?? null,
+    durationMs: row.duration_ms ?? null,
+    costUsd: row.cost_usd ?? null,
+    inputTokens: row.input_tokens ?? null,
+    outputTokens: row.output_tokens ?? null,
+    cacheReadTokens: row.cache_read_tokens ?? null,
+    cacheCreationTokens: row.cache_creation_tokens ?? null,
   };
 }
