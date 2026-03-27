@@ -45,6 +45,8 @@ import { CreatePanelUseCase } from '../application/use-cases/create-panel.js';
 import { UpdatePanelUseCase } from '../application/use-cases/update-panel.js';
 import { DeletePanelUseCase } from '../application/use-cases/delete-panel.js';
 import { RunPanelUseCase } from '../application/use-cases/run-panel.js';
+import { GenerateTicketSummaryUseCase } from '../application/use-cases/generate-ticket-summary.js';
+import { GetRelevantSummariesUseCase } from '../application/use-cases/get-relevant-summaries.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
@@ -160,7 +162,8 @@ export async function createContainer() {
   const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore, logger);
   const resolveMention = new ResolveMentionUseCase(mentionStore, ticketStore, logger);
   const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore, logger);
-  const getTicketContext = new GetTicketContextUseCase(ticketStore, commentStore, mentionStore, deliverableStore);
+  const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore);
+  const getTicketContext = new GetTicketContextUseCase(ticketStore, commentStore, mentionStore, deliverableStore, getRelevantSummaries);
 
   // Agent personas use cases
   const createPersona = new CreatePersonaUseCase(personaStore, logger);
@@ -181,6 +184,8 @@ export async function createContainer() {
   const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore, config, logger);
   const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);
 
+  const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore, commentStore, deliverableStore, git, config, logger);
+
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
   // Domain event bus
@@ -197,6 +202,7 @@ export async function createContainer() {
     executeAgent,
     wakeWaitingAgents,
     runPanel,
+    generateTicketSummary,
     logger,
   });
   domainEventListener.register();
@@ -280,6 +286,8 @@ export async function createContainer() {
     deleteSkill,
     executeAgent,
     wakeWaitingAgents,
+    generateTicketSummary,
+    getRelevantSummaries,
     autoReviewWorkflow,
     panelStore,
     createPanel,

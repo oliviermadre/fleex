@@ -23,6 +23,22 @@ export class PgDeliverableStore implements DeliverableStorePort {
     return rows.map(rowToDeliverable);
   }
 
+  async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
+    const { rows } = await this.db.query(
+      'SELECT * FROM deliverables WHERE ticket_id = $1 AND type = $2 LIMIT 1',
+      [ticketId, type],
+    );
+    return rows.length > 0 ? rowToDeliverable(rows[0]) : null;
+  }
+
+  async getAllByType(type: string): Promise<TicketDeliverableEntity[]> {
+    const { rows } = await this.db.query(
+      'SELECT * FROM deliverables WHERE type = $1 ORDER BY created_at ASC',
+      [type],
+    );
+    return rows.map(rowToDeliverable);
+  }
+
   async save(deliverable: TicketDeliverableEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO deliverables (

@@ -70,6 +70,7 @@ export type {
   MentionExecutionMode,
   TicketMention,
   TicketDeliverable,
+  TicketSummaryRef,
   TicketContext,
   TicketReadCursors,
   TicketUnreadCounts,

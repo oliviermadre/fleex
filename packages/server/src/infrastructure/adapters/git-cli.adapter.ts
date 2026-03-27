@@ -202,6 +202,34 @@ export class GitCliAdapter implements GitPort {
     return { commitsAhead, commitsBehind, filesChanged, additions, deletions };
   }
 
+  async getDiffSummary(repoPath: string, branch: string, baseBranch?: string): Promise<string> {
+    const base = baseBranch ?? `origin/${await this.getDefaultBranch(repoPath)}`;
+    try {
+      const { stdout } = await this.execFn(
+        'git', ['diff', '--stat', `${base}...${branch}`],
+        { cwd: repoPath, timeout: 10_000 },
+      );
+      return stdout.trim();
+    } catch {
+      this.logger.debug('Failed to get diff summary', { repoPath, branch, base });
+      return '';
+    }
+  }
+
+  async getLogOneline(repoPath: string, branch: string, baseBranch?: string, limit = 50): Promise<string> {
+    const base = baseBranch ?? `origin/${await this.getDefaultBranch(repoPath)}`;
+    try {
+      const { stdout } = await this.execFn(
+        'git', ['log', '--oneline', `${base}...${branch}`, `-${limit}`],
+        { cwd: repoPath, timeout: 10_000 },
+      );
+      return stdout.trim();
+    } catch {
+      this.logger.debug('Failed to get log oneline', { repoPath, branch, base });
+      return '';
+    }
+  }
+
   async repairWorktrees(repoPath: string): Promise<void> {
     await this.execFn('git', ['worktree', 'repair'], { cwd: repoPath });
     this.logger.debug('Worktree repair completed', { repoPath });

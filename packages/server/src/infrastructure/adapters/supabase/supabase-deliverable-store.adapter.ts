@@ -63,6 +63,27 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     return (data as DeliverableRow[]).map(rowToEntity);
   }
 
+  async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
+    const { data, error } = await this.conn.client
+      .from('deliverables')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .eq('type', type)
+      .maybeSingle();
+    if (error) throw new Error(`SupabaseDeliverableStore.getByTicketAndType failed: ${error.message}`);
+    return data ? rowToEntity(data as DeliverableRow) : null;
+  }
+
+  async getAllByType(type: string): Promise<TicketDeliverableEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('deliverables')
+      .select('*')
+      .eq('type', type)
+      .order('created_at');
+    if (error) throw new Error(`SupabaseDeliverableStore.getAllByType failed: ${error.message}`);
+    return (data as DeliverableRow[]).map(rowToEntity);
+  }
+
   async save(deliverable: TicketDeliverableEntity): Promise<void> {
     const { error } = await this.conn.client.from('deliverables').upsert({
       id: deliverable.id,

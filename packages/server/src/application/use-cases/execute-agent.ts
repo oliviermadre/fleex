@@ -52,6 +52,7 @@ Your final response will be structured as JSON with two fields:
   - \`"code"\` — Code snippet, patch, or implementation
   - \`"report"\` — Analysis, audit, review, or research findings
   - \`"url"\` — External link (content should be the URL)
+  - \`"ticket-summary"\` — Auto-generated ticket summary (system use only)
   Choose the type that best matches your output. When in doubt, use \`"report"\`.
 - **deliverable.status**: Set to "draft" if your work has open questions, uncertainties, or
   needs human review before being acted upon. Set to "final" when the work is complete and
@@ -470,7 +471,7 @@ export class ExecuteAgentUseCase {
                   properties: {
                     title: { type: 'string' },
                     markdown: { type: 'string' },
-                    type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url'] },
+                    type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url', 'ticket-summary'] },
                     status: { type: 'string', enum: ['draft', 'final'] },
                   },
                   required: ['title', 'markdown', 'type', 'status'],
@@ -1035,7 +1036,7 @@ export class ExecuteAgentUseCase {
                     properties: {
                       title: { type: 'string' },
                       markdown: { type: 'string' },
-                      type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url'] },
+                      type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url', 'ticket-summary'] },
                       status: { type: 'string', enum: ['draft', 'final'] },
                     },
                     required: ['title', 'markdown', 'type', 'status'],
@@ -1517,6 +1518,14 @@ export class ExecuteAgentUseCase {
         if (d.content) {
           parts.push(d.content);
         }
+      }
+    }
+
+    if (context.relevantSummaries && context.relevantSummaries.length > 0) {
+      parts.push('\n## Related Ticket Summaries\n');
+      parts.push('Context from previously completed tickets — use to avoid reinventing solutions.\n');
+      for (const s of context.relevantSummaries) {
+        parts.push(`---\n${s.content}\n`);
       }
     }
 

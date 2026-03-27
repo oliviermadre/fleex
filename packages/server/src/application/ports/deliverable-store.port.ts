@@ -4,6 +4,8 @@ export interface DeliverableStorePort {
   getByTicket(ticketId: string): Promise<TicketDeliverableEntity[]>;
   getById(id: string): Promise<TicketDeliverableEntity | null>;
   getAll(): Promise<TicketDeliverableEntity[]>;
+  getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null>;
+  getAllByType(type: string): Promise<TicketDeliverableEntity[]>;
   save(deliverable: TicketDeliverableEntity): Promise<void>;
   remove(id: string): Promise<void>;
 }

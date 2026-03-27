@@ -52,6 +52,19 @@ export class JsonDeliverableStore implements DeliverableStorePort {
     return Array.from(this.deliverables.values());
   }
 
+  async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
+    for (const d of this.deliverables.values()) {
+      if (d.ticketId === ticketId && d.type === type) return d;
+    }
+    return null;
+  }
+
+  async getAllByType(type: string): Promise<TicketDeliverableEntity[]> {
+    return Array.from(this.deliverables.values())
+      .filter((d) => d.type === type)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
   async save(deliverable: TicketDeliverableEntity): Promise<void> {
     this.deliverables.set(deliverable.id, deliverable);
     await this.syncToDisk();
