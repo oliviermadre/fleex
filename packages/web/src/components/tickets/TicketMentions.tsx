@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import type { TicketMention, MentionStatus, TicketWsMessage } from '@fleex/shared';
+import type { TicketMention, MentionStatus, MentionExecutionMode, AgentExecution, TicketWsMessage } from '@fleex/shared';
 import { appWs } from '../../services/websocket';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useAgentEventStore } from '../../stores/agentEventStore';
+import { FloatingExecutionPanel } from './ExecutionModal';
 import * as api from '../../services/api';
 
 function relativeTime(dateStr: string): string {
@@ -109,6 +111,44 @@ function StatusDropdown({
   );
 }
 
+const MODE_CONFIG: Record<MentionExecutionMode, { label: string; color: string; bg: string }> = {
+  talk: { label: 'Talk', color: 'text-cyan-400', bg: 'bg-cyan-500/15' },
+  plan: { label: 'Plan', color: 'text-amber-400', bg: 'bg-amber-500/15' },
+  edit: { label: 'Edit', color: 'text-emerald-400', bg: 'bg-emerald-500/15' },
+};
+
+function MentionModeToggle({
+  mode,
+  onChange,
+  disabled = false,
+}: {
+  mode: MentionExecutionMode;
+  onChange: (mode: MentionExecutionMode) => void;
+  disabled?: boolean;
+}) {
+  const modes: MentionExecutionMode[] = ['talk', 'plan', 'edit'];
+  return (
+    <div className={`inline-flex items-center overflow-hidden rounded-full border border-[var(--theme-border)] ${disabled ? 'opacity-50' : ''}`}>
+      {modes.map((m) => {
+        const cfg = MODE_CONFIG[m];
+        return (
+          <button
+            key={m}
+            disabled={disabled}
+            className={`px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+              mode === m ? `${cfg.bg} ${cfg.color}` : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]'
+            } ${disabled ? 'cursor-default' : ''}`}
+            onClick={() => !disabled && onChange(m)}
+            title={`${cfg.label} mode`}
+          >
+            {cfg.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function TicketMentions({ ticketId }: { ticketId: string }) {
   const [mentions, setMentions] = useState<TicketMention[]>([]);
   const [filter, setFilter] = useState<FilterStatus>('all');
@@ -168,6 +208,33 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
   }, [personas]);
 
   const [executing, setExecuting] = useState<Set<string>>(new Set());
+  const [modalExecutionId, setModalExecutionId] = useState<string | null>(null);
+  const [modalTitle, setModalTitle] = useState('');
+
+  // Execution lookup: match mentions to their executions
+  const executionsByTicket = useAgentEventStore((s) => s.executionsByTicket);
+  const loadExecutionsForTicket = useAgentEventStore((s) => s.loadExecutionsForTicket);
+  useEffect(() => { loadExecutionsForTicket(ticketId); }, [ticketId, loadExecutionsForTicket]);
+
+  const executionByMention = useMemo(() => {
+    const execs = executionsByTicket[ticketId] ?? [];
+    const map = new Map<string, AgentExecution>();
+    for (const exec of execs) {
+      const existing = map.get(exec.mentionId);
+      // Keep the latest execution per mention
+      if (!existing || exec.startedAt > existing.startedAt) {
+        map.set(exec.mentionId, exec);
+      }
+    }
+    return map;
+  }, [executionsByTicket, ticketId]);
+
+  const openExecution = useCallback((mention: TicketMention) => {
+    const exec = executionByMention.get(mention.id);
+    if (!exec) return;
+    setModalTitle(`${mention.targetAgent} execution`);
+    setModalExecutionId(exec.id);
+  }, [executionByMention]);
 
   const handleExecute = useCallback(async (agentName: string) => {
     const personaId = personaByName.get(agentName);
@@ -199,6 +266,15 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     try {
       await api.deleteMentionFromComment(mentionId);
       setMentions((prev) => prev.filter((m) => m.id !== mentionId));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleModeChange = async (mentionId: string, mode: MentionExecutionMode) => {
+    try {
+      const updated = await api.updateMentionExecutionMode(mentionId, mode);
+      setMentions((prev) => prev.map((m) => (m.id === mentionId ? updated : m)));
     } catch {
       // ignore
     }
@@ -301,6 +377,23 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                   {/* Spacer */}
                   <div className="flex-1" />
 
+                  {/* View execution button — when an execution exists for this mention */}
+                  {executionByMention.has(m.id) && (
+                    <button
+                      className={`rounded p-0.5 transition-all ${
+                        executionByMention.get(m.id)?.status === 'running'
+                          ? 'animate-pulse text-blue-400'
+                          : 'text-[var(--theme-text-faint)] opacity-0 hover:bg-blue-500/15 hover:text-blue-400 group-hover:opacity-100'
+                      }`}
+                      onClick={() => openExecution(m)}
+                      title="View execution"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </button>
+                  )}
+
                   {/* Play button — only for non-resolved agent mentions */}
                   {m.targetType === 'agent' && m.status !== 'resolved' && personaByName.has(m.targetAgent) && (
                     <button
@@ -330,6 +423,13 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                     </svg>
                   </button>
 
+                  {/* Execution mode toggle (read-only when acknowledged or resolved) */}
+                  <MentionModeToggle
+                    mode={m.executionMode}
+                    onChange={(mode) => handleModeChange(m.id, mode)}
+                    disabled={m.status === 'acknowledged' || m.status === 'resolved'}
+                  />
+
                   {/* Status badge (clickable dropdown) */}
                   <StatusDropdown
                     currentStatus={m.status}
@@ -358,6 +458,15 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
           </div>
         )}
       </div>
+
+      {/* Floating execution panel */}
+      {modalExecutionId && (
+        <FloatingExecutionPanel
+          executionId={modalExecutionId}
+          title={modalTitle}
+          onClose={() => setModalExecutionId(null)}
+        />
+      )}
     </div>
   );
 }

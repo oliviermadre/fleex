@@ -31,18 +31,19 @@ export class PgPanelStore implements PanelStorePort {
   async save(panel: PanelEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO panels (
-        id, name, display_name, description, members, orchestrator_prompt,
+        id, name, display_name, description, execution_mode, members, orchestrator_prompt,
         orchestrator_model, orchestrator_persona_id, default_member_model, enabled, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       ON CONFLICT (id) DO UPDATE SET
-        name = $2, display_name = $3, description = $4, members = $5,
-        orchestrator_prompt = $6, orchestrator_model = $7, orchestrator_persona_id = $8,
-        default_member_model = $9, enabled = $10, created_at = $11, updated_at = $12`,
+        name = $2, display_name = $3, description = $4, execution_mode = $5, members = $6,
+        orchestrator_prompt = $7, orchestrator_model = $8, orchestrator_persona_id = $9,
+        default_member_model = $10, enabled = $11, created_at = $12, updated_at = $13`,
       [
         panel.id,
         panel.name,
         panel.displayName,
         panel.description,
+        panel.executionMode,
         JSON.stringify(panel.members),
         panel.orchestratorPrompt,
         panel.orchestratorModel,
@@ -73,6 +74,7 @@ function rowToPanel(row: Record<string, unknown>): PanelEntity {
     row.name as string,
     row.display_name as string,
     (row.description as string) ?? '',
+    ((row.execution_mode as string) ?? 'claude_code') as 'claude_code' | 'message',
     members,
     (row.orchestrator_prompt as string) ?? '',
     (row.orchestrator_model as string) ?? 'claude-sonnet-4-5-20250929',

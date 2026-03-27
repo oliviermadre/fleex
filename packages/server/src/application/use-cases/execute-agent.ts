@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput } from '@fleex/shared';
+import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
@@ -12,6 +12,7 @@ import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
+import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
@@ -320,14 +321,22 @@ export class ExecuteAgentUseCase {
     const humanName = this.resolveHumanMentionName(persona);
 
     try {
-      // 1. Ensure worktree exists BEFORE acknowledging (fail fast if no worktree)
-      const worktreePath = await this.ensureWorktree(mention.ticketId);
-      if (!worktreePath) {
-        this.logger.error('Cannot start agent: no worktree could be resolved', {
-          executionId, persona: persona.name, ticketId: mention.ticketId, mentionId: mention.id,
-        });
-        this.activeExecutions.delete(mention.id);
-        return;
+      // 0. Compute effective execution mode: min(mention grant, persona ceiling)
+      const effectiveMode: MentionExecutionMode = persona.executionMode === 'message'
+        ? 'talk'
+        : mention.executionMode;
+
+      // 1. Ensure worktree exists BEFORE acknowledging (skip for talk mode)
+      let worktreePath: string | null = null;
+      if (effectiveMode !== 'talk') {
+        worktreePath = await this.ensureWorktree(mention.ticketId);
+        if (!worktreePath) {
+          this.logger.error('Cannot start agent: no worktree could be resolved', {
+            executionId, persona: persona.name, ticketId: mention.ticketId, mentionId: mention.id,
+          });
+          this.activeExecutions.delete(mention.id);
+          return;
+        }
       }
 
       // 2. Acknowledge mention
@@ -417,6 +426,7 @@ export class ExecuteAgentUseCase {
         ticketId: mention.ticketId,
         mentionId: mention.id,
         model: persona.model,
+        effectiveMode,
         worktreePath,
         resumeSessionId: previousSessionId ?? null,
         context: {
@@ -438,131 +448,150 @@ export class ExecuteAgentUseCase {
       }, timeoutMs);
 
       // 10. Call Claude Agent SDK
-      const { query } = await import('@anthropic-ai/claude-agent-sdk');
-
       let sdkSessionId: string | undefined;
       let resultText = '';
       let structuredOutput: AgentStructuredOutput | null = null;
+      let sdkDurationMs: number | undefined;
+      let sdkCostUsd: number | undefined;
+      let sdkInputTokens: number | undefined;
+      let sdkOutputTokens: number | undefined;
+      let sdkCacheReadTokens: number | undefined;
+      let sdkCacheCreationTokens: number | undefined;
 
-      const queryOptions: Record<string, unknown> = {
-        model: persona.model,
-        systemPrompt,
-        allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
-        maxTurns: 150,
-        permissionMode: 'bypassPermissions',
-        allowDangerouslySkipPermissions: true,
-        outputFormat: {
-          type: 'json_schema',
-          schema: {
-            type: 'object',
-            properties: {
-              deliverable: {
-                oneOf: [
-                  {
-                    type: 'object',
-                    properties: {
-                      title: { type: 'string' },
-                      markdown: { type: 'string' },
-                      type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url'] },
-                      status: { type: 'string', enum: ['draft', 'final'] },
-                    },
-                    required: ['title', 'markdown', 'type', 'status'],
+      const outputFormatSchema = {
+        type: 'json_schema' as const,
+        schema: {
+          type: 'object',
+          properties: {
+            deliverable: {
+              oneOf: [
+                {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string' },
+                    markdown: { type: 'string' },
+                    type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url'] },
+                    status: { type: 'string', enum: ['draft', 'final'] },
                   },
-                  { type: 'null' },
-                ],
-              },
-              comment: {
-                oneOf: [{ type: 'string' }, { type: 'null' }],
-              },
-              mentionStatus: {
-                type: 'string',
-                enum: ['resolved', 'waiting_for_info'],
-                default: 'resolved',
-              },
+                  required: ['title', 'markdown', 'type', 'status'],
+                },
+                { type: 'null' },
+              ],
             },
-            required: ['deliverable', 'comment'],
+            comment: {
+              oneOf: [{ type: 'string' }, { type: 'null' }],
+            },
+            mentionStatus: {
+              type: 'string',
+              enum: ['resolved', 'waiting_for_info'],
+              default: 'resolved',
+            },
           },
+          required: ['deliverable', 'comment'],
         },
       };
 
-      if (worktreePath) {
-        queryOptions['cwd'] = worktreePath;
-      }
+      {
+        const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
-      if (previousSessionId) {
-        queryOptions['resume'] = previousSessionId;
-      }
+        const queryOptions = buildSdkOptions(effectiveMode, {
+          model: persona.model,
+          systemPrompt,
+          cwd: worktreePath,
+          outputFormat: outputFormatSchema,
+          resume: previousSessionId ?? undefined,
+        });
 
-      const runQueryLoop = async () => {
-        for await (const message of query({
-          prompt: userPrompt,
-          options: queryOptions as Parameters<typeof query>[0]['options'],
-        })) {
-          // Check abort signal between events
-          if (abortController.signal.aborted) {
-            break;
-          }
-
-          // Capture session ID from init message
-          const msg = message as Record<string, unknown>;
-          if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
-            sdkSessionId = msg['session_id'] as string;
-            await emitEvent('turn_start', { sessionId: sdkSessionId });
-          }
-
-          // Capture final result
-          if ('result' in message) {
-            resultText = (message as { result: string }).result;
-
-            // Use SDK's validated structured output if available
-            if (msg['structured_output']) {
-              structuredOutput = msg['structured_output'] as AgentStructuredOutput;
+        const runQueryLoop = async () => {
+          for await (const message of query({
+            prompt: userPrompt,
+            options: queryOptions as Parameters<typeof query>[0]['options'],
+          })) {
+            // Check abort signal between events
+            if (abortController.signal.aborted) {
+              break;
             }
 
-            if (msg['subtype'] === 'error_max_structured_output_retries') {
-              this.logger.warn('SDK structured output retries exhausted, falling back to parser', {
-                executionId,
-                persona: persona.name,
+            // Capture session ID from init message
+            const msg = message as Record<string, unknown>;
+            if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
+              sdkSessionId = msg['session_id'] as string;
+              await emitEvent('turn_start', { sessionId: sdkSessionId });
+            }
+
+            // Capture final result + instrumentation
+            if ('result' in message) {
+              resultText = (message as { result: string }).result;
+
+              // Use SDK's validated structured output if available
+              if (msg['structured_output']) {
+                structuredOutput = msg['structured_output'] as AgentStructuredOutput;
+              }
+
+              // Capture SDK instrumentation data from result message
+              if (typeof msg['duration_ms'] === 'number') sdkDurationMs = msg['duration_ms'] as number;
+              if (typeof msg['total_cost_usd'] === 'number') sdkCostUsd = msg['total_cost_usd'] as number;
+              // Use modelUsage for token breakdown (cumulative per-model totals)
+              const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;
+              if (modelUsage) {
+                let totalIn = 0, totalOut = 0, totalCacheRead = 0, totalCacheCreation = 0;
+                for (const mu of Object.values(modelUsage)) {
+                  totalIn += mu['inputTokens'] ?? 0;
+                  totalOut += mu['outputTokens'] ?? 0;
+                  totalCacheRead += mu['cacheReadInputTokens'] ?? 0;
+                  totalCacheCreation += mu['cacheCreationInputTokens'] ?? 0;
+                }
+                sdkInputTokens = totalIn;
+                sdkOutputTokens = totalOut;
+                sdkCacheReadTokens = totalCacheRead;
+                sdkCacheCreationTokens = totalCacheCreation;
+              }
+
+              if (msg['subtype'] === 'error_max_structured_output_retries') {
+                this.logger.warn('SDK structured output retries exhausted, falling back to parser', {
+                  executionId,
+                  persona: persona.name,
+                });
+              }
+
+              await emitEvent('message_stop', {
+                result: resultText,
+                subtype: msg['subtype'] as string | undefined,
               });
+            } else {
+              // Store all other SDK messages as events
+              await emitEvent('content_block_delta', msg);
             }
+          }
+        };
 
-            await emitEvent('message_stop', {
-              result: resultText,
-              subtype: msg['subtype'] as string | undefined,
+        try {
+          await runQueryLoop();
+        } catch (queryErr) {
+          if (abortController.signal.aborted) {
+            // Abort was triggered — handle below
+          } else if (previousSessionId) {
+            // Stale resume — clear session and retry fresh
+            this.logger.warn('SDK query failed with resume, retrying without resume', {
+              executionId,
+              persona: persona.name,
+              staleSessionId: previousSessionId,
+              error: queryErr instanceof Error ? queryErr.message : String(queryErr),
             });
+            this.sessionHistory.delete(sessionKey);
+            delete queryOptions['resume'];
+            sdkSessionId = undefined;
+            resultText = '';
+            structuredOutput = null;
+            await emitEvent('execution_retry', { reason: 'stale_resume_session', staleSessionId: previousSessionId });
+            await runQueryLoop(); // If this also fails, propagates to outer catch
           } else {
-            // Store all other SDK messages as events
-            await emitEvent('content_block_delta', msg);
+            throw queryErr;
           }
         }
-      };
-
-      try {
-        await runQueryLoop();
-      } catch (queryErr) {
-        if (abortController.signal.aborted) {
-          // Abort was triggered — handle below
-        } else if (previousSessionId) {
-          // Stale resume — clear session and retry fresh
-          this.logger.warn('SDK query failed with resume, retrying without resume', {
-            executionId,
-            persona: persona.name,
-            staleSessionId: previousSessionId,
-            error: queryErr instanceof Error ? queryErr.message : String(queryErr),
-          });
-          this.sessionHistory.delete(sessionKey);
-          delete queryOptions['resume'];
-          sdkSessionId = undefined;
-          resultText = '';
-          structuredOutput = null;
-          await emitEvent('execution_retry', { reason: 'stale_resume_session', staleSessionId: previousSessionId });
-          await runQueryLoop(); // If this also fails, propagates to outer catch
-        } else {
-          throw queryErr;
-        }
-      } finally {
-        clearTimeout(timeoutHandle);
       }
+
+      clearTimeout(timeoutHandle);
 
       // Handle abort (cancel or timeout)
       if (abortController.signal.aborted) {
@@ -590,8 +619,16 @@ export class ExecuteAgentUseCase {
 
       await emitEvent('execution_end', {
         status: 'completed',
+        model: persona.model,
+        effectiveMode,
         resultLength: resultText.length,
         structuredOutputParsed: structured !== null,
+        durationMs: sdkDurationMs,
+        costUsd: sdkCostUsd,
+        inputTokens: sdkInputTokens,
+        outputTokens: sdkOutputTokens,
+        cacheReadTokens: sdkCacheReadTokens,
+        cacheCreationTokens: sdkCacheCreationTokens,
       });
 
       // 10. Store session ID for future resume (in-memory + DB)
@@ -788,8 +825,17 @@ export class ExecuteAgentUseCase {
         });
       }
 
-      // 13. Complete execution tracking
-      await this.agentEventStore.completeExecution(executionId, 'completed');
+      // 13. Complete execution tracking (with instrumentation)
+      await this.agentEventStore.completeExecution(executionId, 'completed', {
+        model: persona.model,
+        effectiveMode,
+        durationMs: sdkDurationMs,
+        costUsd: sdkCostUsd,
+        inputTokens: sdkInputTokens,
+        outputTokens: sdkOutputTokens,
+        cacheReadTokens: sdkCacheReadTokens,
+        cacheCreationTokens: sdkCacheCreationTokens,
+      });
       this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'completed', abortController });
       this.onExecutionComplete?.(persona.id, 'completed', mention.id);
 
@@ -1056,8 +1102,16 @@ export class ExecuteAgentUseCase {
 
       await emitEvent('execution_end', {
         status: 'completed',
+        model: persona.model,
+        effectiveMode,
         resultLength: resultText.length,
         structuredOutputParsed: structured !== null,
+        durationMs: sdkDurationMs,
+        costUsd: sdkCostUsd,
+        inputTokens: sdkInputTokens,
+        outputTokens: sdkOutputTokens,
+        cacheReadTokens: sdkCacheReadTokens,
+        cacheCreationTokens: sdkCacheCreationTokens,
       });
 
       if (structured) {

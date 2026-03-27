@@ -117,11 +117,17 @@ export class GetStatisticsUseCase {
       ticketsCompleted: completedTickets.length,
       skillsExecuted: skillExecutions.length,
       panelsExecuted: 0, // Will be updated after panel events are fetched
+      totalCostUsd: filteredExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
+      totalInputTokens: filteredExecutions.reduce((sum, e) => sum + (e.inputTokens ?? 0), 0),
+      totalOutputTokens: filteredExecutions.reduce((sum, e) => sum + (e.outputTokens ?? 0), 0),
       activeSessions: sessions.filter((s) => {
         const dto = s as unknown as Record<string, unknown>;
         return dto.status === 'active' || dto.status === 'running';
       }).length,
     };
+
+    // Persona lookup (used by time series + leaderboard)
+    const personaMap = new Map(personas.map((p) => [p.id, p]));
 
     // Compute time series
     const buckets = this.buildBuckets(from, to, params.granularity);
@@ -161,11 +167,21 @@ export class GetStatisticsUseCase {
         ticketsCompleted: bTickets.filter((t) => t.toDTO().status === 'done').length,
         skillsExecuted: bExecutions.filter((e) => e.mentionId.startsWith('skill:')).length,
         panelsExecuted: 0, // Panel events are in domain log, not in agent executions
+        totalCostUsd: bExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
+        costByAgent: (() => {
+          const byAgent: Record<string, number> = {};
+          for (const e of bExecutions) {
+            if (e.costUsd == null || e.costUsd === 0) continue;
+            const p = personaMap.get(e.personaId);
+            const name = p?.displayName ?? p?.name ?? e.personaId;
+            byAgent[name] = (byAgent[name] ?? 0) + e.costUsd;
+          }
+          return byAgent;
+        })(),
       };
     });
 
     // Compute agent leaderboard
-    const personaMap = new Map(personas.map((p) => [p.id, p]));
     const execByPersona = new Map<string, AgentExecution[]>();
     for (const exec of filteredExecutions) {
       const list = execByPersona.get(exec.personaId) ?? [];
@@ -182,6 +198,10 @@ export class GetStatisticsUseCase {
           .filter((e) => e.completedAt)
           .map((e) => new Date(e.completedAt!).getTime() - new Date(e.startedAt).getTime());
 
+        const costs = execs.filter((e) => e.costUsd != null).map((e) => e.costUsd!);
+        const inToks = execs.filter((e) => e.inputTokens != null).map((e) => e.inputTokens!);
+        const outToks = execs.filter((e) => e.outputTokens != null).map((e) => e.outputTokens!);
+
         return {
           personaId,
           personaName: persona?.name ?? personaId,
@@ -192,6 +212,12 @@ export class GetStatisticsUseCase {
             : null,
           completedCount: completed.length,
           failedCount: failed.length,
+          totalCostUsd: costs.reduce((a, b) => a + b, 0),
+          avgCostUsd: costs.length > 0 ? costs.reduce((a, b) => a + b, 0) / costs.length : null,
+          totalInputTokens: inToks.reduce((a, b) => a + b, 0),
+          totalOutputTokens: outToks.reduce((a, b) => a + b, 0),
+          avgInputTokens: inToks.length > 0 ? Math.round(inToks.reduce((a, b) => a + b, 0) / inToks.length) : null,
+          avgOutputTokens: outToks.length > 0 ? Math.round(outToks.reduce((a, b) => a + b, 0) / outToks.length) : null,
         };
       })
       .sort((a, b) => b.spawnCount - a.spawnCount);

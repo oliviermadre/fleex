@@ -7,6 +7,7 @@ interface PersonaRow {
   name: string;
   display_name: string;
   model: string;
+  execution_mode: string;
   soul_md: string;
   identity_md: string;
   memory_md: string;
@@ -42,10 +43,10 @@ export class SqlitePersonaStoreAdapter implements PersonaStorePort {
   async save(persona: AgentPersonaEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO agent_personas
-        (id, name, display_name, model, soul_md, identity_md, memory_md,
+        (id, name, display_name, model, execution_mode, soul_md, identity_md, memory_md,
          human_mention_name, created_at, updated_at)
       VALUES
-        (@id, @name, @display_name, @model, @soul_md, @identity_md, @memory_md,
+        (@id, @name, @display_name, @model, @execution_mode, @soul_md, @identity_md, @memory_md,
          @human_mention_name, @created_at, @updated_at)
     `);
 
@@ -54,6 +55,7 @@ export class SqlitePersonaStoreAdapter implements PersonaStorePort {
       name: persona.name,
       display_name: persona.displayName,
       model: persona.model,
+      execution_mode: persona.executionMode,
       soul_md: persona.soulMd,
       identity_md: persona.identityMd,
       memory_md: persona.memoryMd,
@@ -73,6 +75,7 @@ export class SqlitePersonaStoreAdapter implements PersonaStorePort {
       row.name,
       row.display_name,
       row.model,
+      (row.execution_mode as 'claude_code' | 'message') ?? 'claude_code',
       row.soul_md,
       row.identity_md,
       row.memory_md,

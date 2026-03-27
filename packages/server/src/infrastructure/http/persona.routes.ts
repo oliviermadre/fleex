@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { ExecutionMode } from '@fleex/shared';
 import type { Container } from '../container.js';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 
@@ -25,6 +26,7 @@ export function personaRoutes(container: Container) {
         name: string;
         displayName: string;
         model?: string;
+        executionMode?: ExecutionMode;
         soulMd?: string;
         identityMd?: string;
         memoryMd?: string;
@@ -43,6 +45,7 @@ export function personaRoutes(container: Container) {
         name?: string;
         displayName?: string;
         model?: string;
+        executionMode?: ExecutionMode;
         soulMd?: string;
         identityMd?: string;
         memoryMd?: string;

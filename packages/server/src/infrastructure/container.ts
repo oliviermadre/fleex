@@ -176,7 +176,7 @@ export async function createContainer() {
   const createPanel = new CreatePanelUseCase(panelStore, personaStore, logger);
   const updatePanel = new UpdatePanelUseCase(panelStore, personaStore, logger);
   const deletePanel = new DeletePanelUseCase(panelStore, logger);
-  const runPanel = new RunPanelUseCase(panelStore, personaStore, mentionStore, ticketStore, postComment, submitDeliverable, getTicketContext, createWorktreeUC, config, logger);
+  const runPanel = new RunPanelUseCase(panelStore, personaStore, mentionStore, ticketStore, postComment, submitDeliverable, getTicketContext, createWorktreeUC, agentEventStore, config, logger);
 
   const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore, config, logger);
   const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);

@@ -19,6 +19,14 @@ interface ExecutionRow {
   completed_at: string | null;
   sdk_session_id: string | null;
   last_event_at: string | null;
+  model: string | null;
+  effective_mode: string | null;
+  duration_ms: number | null;
+  cost_usd: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_creation_tokens: number | null;
 }
 
 export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
@@ -63,10 +71,33 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     ).run(new Date().toISOString(), event.executionId);
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted'): Promise<void> {
+  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
+    model?: string; effectiveMode?: string; durationMs?: number; costUsd?: number;
+    inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
+  }): Promise<void> {
     this.conn.db.prepare(
-      'UPDATE agent_event_executions SET status = ?, completed_at = ? WHERE execution_id = ?'
-    ).run(status, new Date().toISOString(), executionId);
+      `UPDATE agent_event_executions SET status = ?, completed_at = ?,
+       model = COALESCE(?, model),
+       effective_mode = COALESCE(?, effective_mode),
+       duration_ms = COALESCE(?, duration_ms),
+       cost_usd = COALESCE(?, cost_usd),
+       input_tokens = COALESCE(?, input_tokens),
+       output_tokens = COALESCE(?, output_tokens),
+       cache_read_tokens = COALESCE(?, cache_read_tokens),
+       cache_creation_tokens = COALESCE(?, cache_creation_tokens)
+       WHERE execution_id = ?`
+    ).run(
+      status, new Date().toISOString(),
+      metrics?.model ?? null,
+      metrics?.effectiveMode ?? null,
+      metrics?.durationMs ?? null,
+      metrics?.costUsd ?? null,
+      metrics?.inputTokens ?? null,
+      metrics?.outputTokens ?? null,
+      metrics?.cacheReadTokens ?? null,
+      metrics?.cacheCreationTokens ?? null,
+      executionId,
+    );
   }
 
   async getEventsByExecution(executionId: string): Promise<AgentEventEntity[]> {
@@ -162,5 +193,13 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     completedAt: row.completed_at,
     lastEventAt: row.last_event_at ?? null,
     sdkSessionId: row.sdk_session_id,
+    model: row.model ?? null,
+    effectiveMode: row.effective_mode ?? null,
+    durationMs: row.duration_ms ?? null,
+    costUsd: row.cost_usd ?? null,
+    inputTokens: row.input_tokens ?? null,
+    outputTokens: row.output_tokens ?? null,
+    cacheReadTokens: row.cache_read_tokens ?? null,
+    cacheCreationTokens: row.cache_creation_tokens ?? null,
   };
 }

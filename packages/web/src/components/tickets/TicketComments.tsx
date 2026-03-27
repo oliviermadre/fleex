@@ -9,6 +9,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { usePanelStore } from '../../stores/panelStore';
+import { FloatingExecutionPanel } from './ExecutionModal';
 import * as api from '../../services/api';
 
 /**
@@ -366,6 +367,8 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [mentions, setMentions] = useState<TicketMention[]>([]);
   const [body, setBody] = useState('');
+  const [modalExecutionId, setModalExecutionId] = useState<string | null>(null);
+  const [modalTitle, setModalTitle] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const listEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -376,6 +379,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const [acIndex, setAcIndex] = useState(0);
   const [acTriggerPos, setAcTriggerPos] = useState(-1); // cursor position of the '@'
   const inputWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Execution mode toggle (Talk / Plan / Edit)
+  const [executionMode, setExecutionMode] = useState<'talk' | 'plan' | 'edit'>('plan');
 
   // Build mention options from personas + panels + human
   const personas = useAgentPersonaStore((s) => s.personas);
@@ -408,7 +414,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       .filter((e) => e.status === 'running')
       .map((e) => {
         const persona = personas.find((p) => p.id === e.personaId);
-        return persona?.displayName || persona?.name || 'Agent';
+        return { name: persona?.displayName || persona?.name || 'Agent', executionId: e.id };
       });
   }, [executionsByTicket, ticketId, personas]);
 
@@ -528,7 +534,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
 
     setSubmitting(true);
     try {
-      const comment = await api.postTicketComment(ticketId, trimmed);
+      const comment = await api.postTicketComment(ticketId, trimmed, executionMode);
       setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
       setBody('');
       if (textareaRef.current) {
@@ -540,7 +546,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       setSubmitting(false);
       textareaRef.current?.focus();
     }
-  }, [body, submitting, ticketId]);
+  }, [body, submitting, ticketId, executionMode]);
 
   const autoResize = useCallback(() => {
     const ta = textareaRef.current;
@@ -626,6 +632,12 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           return;
         }
       }
+      // Execution mode toggle: Ctrl+1/2/3
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        if (e.key === '1') { e.preventDefault(); setExecutionMode('talk'); return; }
+        if (e.key === '2') { e.preventDefault(); setExecutionMode('plan'); return; }
+        if (e.key === '3') { e.preventDefault(); setExecutionMode('edit'); return; }
+      }
       // Normal submit: Enter without shift
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -685,15 +697,22 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                   </button>
               </div>
             ))}
-            {runningAgents.map((name) => (
-              <div key={name} className="flex items-center gap-2 px-1 py-3">
+            {runningAgents.map((agent) => (
+              <button
+                key={agent.executionId}
+                className="flex w-full items-center gap-2 px-1 py-3 text-left transition-colors hover:bg-[var(--theme-bg-hover)] rounded"
+                onClick={() => { setModalTitle(`${agent.name} execution`); setModalExecutionId(agent.executionId); }}
+              >
                 <span className="flex items-center gap-1">
                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
                 </span>
                 <span className="text-xs text-purple-400">
-                  {name} is working…
+                  {agent.name} is working…
                 </span>
-              </div>
+                <svg className="h-3 w-3 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
             ))}
             <div ref={listEndRef} />
           </div>
@@ -722,6 +741,37 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           onBlur={() => { setTimeout(closeMentionAc, 150); }}
           disabled={submitting}
         />
+        {/* Execution mode toggle [Talk|Plan|Edit] */}
+        <div className="flex h-[36px] flex-shrink-0 items-center rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] overflow-hidden">
+          {(['talk', 'plan', 'edit'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setExecutionMode(mode)}
+              title={`${mode.charAt(0).toUpperCase() + mode.slice(1)} mode (Ctrl+${{ talk: '1', plan: '2', edit: '3' }[mode]})`}
+              className={`flex h-full items-center justify-center px-1.5 transition-colors ${
+                executionMode === mode
+                  ? 'bg-[var(--theme-accent)]/20 text-[var(--theme-accent)]'
+                  : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]'
+              }`}
+            >
+              {mode === 'talk' && (
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              )}
+              {mode === 'plan' && (
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+              )}
+              {mode === 'edit' && (
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
         <button
           className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-white transition-opacity hover:opacity-90 disabled:opacity-30"
           onClick={handleSubmit}
@@ -733,6 +783,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           </svg>
         </button>
       </div>
+
+      {/* Floating execution panel */}
+      {modalExecutionId && (
+        <FloatingExecutionPanel
+          executionId={modalExecutionId}
+          title={modalTitle}
+          onClose={() => setModalExecutionId(null)}
+        />
+      )}
     </div>
   );
 }

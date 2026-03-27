@@ -10,6 +10,7 @@ interface SerializedPersona {
   name: string;
   displayName: string;
   model: string;
+  executionMode?: string;
   soulMd: string;
   identityMd: string;
   memoryMd: string;
@@ -71,6 +72,7 @@ export class JsonPersonaStore implements PersonaStorePort {
       for (const p of data) {
         this.personas.set(p.id, new AgentPersonaEntity(
           p.id, p.name, p.displayName, p.model,
+          (p.executionMode ?? 'claude_code') as 'claude_code' | 'message',
           p.soulMd, p.identityMd, p.memoryMd,
           p.humanMentionName,
           new Date(p.createdAt), new Date(p.updatedAt),
@@ -88,6 +90,7 @@ export class JsonPersonaStore implements PersonaStorePort {
     try {
       const data: SerializedPersona[] = Array.from(this.personas.values()).map((p) => ({
         id: p.id, name: p.name, displayName: p.displayName, model: p.model,
+        executionMode: p.executionMode,
         soulMd: p.soulMd, identityMd: p.identityMd, memoryMd: p.memoryMd,
         humanMentionName: p.humanMentionName,
         createdAt: p.createdAt.toISOString(), updatedAt: p.updatedAt.toISOString(),

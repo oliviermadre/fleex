@@ -3,6 +3,9 @@ import migration001 from './migrations/001_initial_schema.js';
 import migration002 from './migrations/002_add_skills_table.js';
 import migration003 from './migrations/003_add_panels_table.js';
 import migration004 from './migrations/004_add_panel_orchestrator_persona.js';
+import migration005 from './migrations/005_add_execution_mode.js';
+import migration006 from './migrations/006_add_execution_metrics.js';
+import migration007 from './migrations/007_add_execution_model_and_token_breakdown.js';
 
 /**
  * Ordered array of all migrations.
@@ -13,4 +16,7 @@ export const allMigrations: Migration[] = [
   migration002,
   migration003,
   migration004,
+  migration005,
+  migration006,
+  migration007,
 ];

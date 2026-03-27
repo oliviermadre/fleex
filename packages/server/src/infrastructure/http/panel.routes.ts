@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
-import type { PanelMember } from '@fleex/shared';
+import type { ExecutionMode, PanelMember } from '@fleex/shared';
 import { PanelNotFoundError } from '../../domain/errors.js';
 
 export function panelRoutes(container: Container) {
@@ -32,6 +32,7 @@ export function panelRoutes(container: Container) {
         name: string;
         displayName: string;
         description?: string;
+        executionMode?: ExecutionMode;
         members: PanelMember[];
         orchestratorPrompt?: string;
         orchestratorModel?: string;
@@ -51,6 +52,7 @@ export function panelRoutes(container: Container) {
         name?: string;
         displayName?: string;
         description?: string;
+        executionMode?: ExecutionMode;
         members?: PanelMember[];
         orchestratorPrompt?: string;
         orchestratorModel?: string;

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { ExecutionMode } from '@fleex/shared';
 import { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import { AgentPersonaNameConflictError } from '../../domain/errors.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
@@ -14,6 +15,7 @@ export class CreatePersonaUseCase {
     name: string;
     displayName: string;
     model?: string;
+    executionMode?: ExecutionMode;
     soulMd?: string;
     identityMd?: string;
     memoryMd?: string;
@@ -29,6 +31,7 @@ export class CreatePersonaUseCase {
       name: params.name,
       displayName: params.displayName,
       model: params.model,
+      executionMode: params.executionMode,
       soulMd: params.soulMd,
       identityMd: params.identityMd,
       memoryMd: params.memoryMd,

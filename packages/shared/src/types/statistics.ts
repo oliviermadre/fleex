@@ -14,6 +14,8 @@ export interface StatisticsTimeBucket {
   readonly ticketsCompleted: number;
   readonly skillsExecuted: number;
   readonly panelsExecuted: number;
+  readonly totalCostUsd: number;
+  readonly costByAgent: Record<string, number>; // personaName → costUsd
 }
 
 export interface AgentLeaderboardEntry {
@@ -24,6 +26,12 @@ export interface AgentLeaderboardEntry {
   readonly avgDurationMs: number | null;
   readonly completedCount: number;
   readonly failedCount: number;
+  readonly totalCostUsd: number;
+  readonly avgCostUsd: number | null;
+  readonly totalInputTokens: number;
+  readonly totalOutputTokens: number;
+  readonly avgInputTokens: number | null;
+  readonly avgOutputTokens: number | null;
 }
 
 export interface StatisticsSummary {
@@ -43,6 +51,9 @@ export interface StatisticsSummary {
   readonly skillsExecuted: number;
   readonly panelsExecuted: number;
   readonly activeSessions: number;
+  readonly totalCostUsd: number;
+  readonly totalInputTokens: number;
+  readonly totalOutputTokens: number;
 }
 
 export interface StatisticsResponse {

@@ -8,6 +8,7 @@ interface PanelRow {
   name: string;
   display_name: string;
   description: string;
+  execution_mode: string;
   members: string; // JSON
   orchestrator_prompt: string;
   orchestrator_model: string;
@@ -52,10 +53,10 @@ export class SqlitePanelStoreAdapter implements PanelStorePort {
   async save(panel: PanelEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO panels
-        (id, name, display_name, description, members, orchestrator_prompt,
+        (id, name, display_name, description, execution_mode, members, orchestrator_prompt,
          orchestrator_model, orchestrator_persona_id, default_member_model, enabled, created_at, updated_at)
       VALUES
-        (@id, @name, @display_name, @description, @members, @orchestrator_prompt,
+        (@id, @name, @display_name, @description, @execution_mode, @members, @orchestrator_prompt,
          @orchestrator_model, @orchestrator_persona_id, @default_member_model, @enabled, @created_at, @updated_at)
     `);
 
@@ -64,6 +65,7 @@ export class SqlitePanelStoreAdapter implements PanelStorePort {
       name: panel.name,
       display_name: panel.displayName,
       description: panel.description,
+      execution_mode: panel.executionMode,
       members: JSON.stringify(panel.members),
       orchestrator_prompt: panel.orchestratorPrompt,
       orchestrator_model: panel.orchestratorModel,
@@ -92,6 +94,7 @@ export class SqlitePanelStoreAdapter implements PanelStorePort {
       row.name,
       row.display_name,
       row.description,
+      (row.execution_mode ?? 'claude_code') as 'claude_code' | 'message',
       members,
       row.orchestrator_prompt,
       row.orchestrator_model,

@@ -6,7 +6,7 @@ import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
-import type { MentionStatus } from '@fleex/shared';
+import type { MentionExecutionMode, MentionStatus } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 export function ticketRoutes(container: Container) {
@@ -418,6 +418,21 @@ export function ticketRoutes(container: Container) {
       return mention.toDTO();
     });
 
+    // PATCH /api/mentions/:id/execution-mode — update mention execution mode
+    app.patch<{
+      Params: { id: string };
+      Body: { executionMode: MentionExecutionMode };
+    }>('/api/mentions/:id/execution-mode', async (request) => {
+      const mention = await container.mentionStore.getById(request.params.id);
+      if (!mention) throw new MentionNotFoundError(request.params.id);
+
+      mention.executionMode = request.body.executionMode;
+      await container.mentionStore.save(mention);
+      container.ticketBroadcast('mention:updated', mention.toDTO());
+
+      return mention.toDTO();
+    });
+
     app.delete<{
       Params: { id: string };
     }>('/api/mentions/:id', async (request, reply) => {
@@ -495,7 +510,7 @@ export function ticketRoutes(container: Container) {
       return comments.map((c) => c.toDTO());
     });
 
-    app.post<{ Params: { id: string }; Body: { body: string } }>(
+    app.post<{ Params: { id: string }; Body: { body: string; executionMode?: 'talk' | 'plan' | 'edit' } }>(
       '/api/tickets/:id/comments',
       async (request, reply) => {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
@@ -509,6 +524,7 @@ export function ticketRoutes(container: Container) {
           body: request.body.body,
           visibility: 'public',
           humanMentionNames: humanMentionName ? [humanMentionName] : [],
+          executionMode: request.body.executionMode,
         });
 
         // Single event — the DomainEventListener handles broadcasting, auto-trigger, auto-review, wake

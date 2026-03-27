@@ -1,4 +1,4 @@
-import type { PanelMember } from '@fleex/shared';
+import type { ExecutionMode, PanelMember } from '@fleex/shared';
 import { PanelNotFoundError, PanelNameConflictError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import type { PanelStorePort } from '../ports/panel-store.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
@@ -18,6 +18,7 @@ export class UpdatePanelUseCase {
       name?: string;
       displayName?: string;
       description?: string;
+      executionMode?: ExecutionMode;
       members?: PanelMember[];
       orchestratorPrompt?: string;
       orchestratorModel?: string;

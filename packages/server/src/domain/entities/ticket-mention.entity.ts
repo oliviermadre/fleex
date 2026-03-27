@@ -1,4 +1,4 @@
-import type { TicketMention, MentionStatus, MentionTargetType } from '@fleex/shared';
+import type { TicketMention, MentionStatus, MentionTargetType, MentionExecutionMode } from '@fleex/shared';
 
 export class TicketMentionEntity {
   constructor(
@@ -8,6 +8,7 @@ export class TicketMentionEntity {
     public readonly targetAgent: string,
     public readonly sourceAgent: string,
     public readonly targetType: MentionTargetType,
+    public executionMode: MentionExecutionMode,
     public status: MentionStatus,
     public resolvedAt: Date | null,
     public resolvedCommentId: string | null,
@@ -22,6 +23,7 @@ export class TicketMentionEntity {
     targetAgent: string;
     sourceAgent: string;
     targetType?: MentionTargetType;
+    executionMode?: MentionExecutionMode;
   }): TicketMentionEntity {
     return new TicketMentionEntity(
       params.id,
@@ -30,6 +32,7 @@ export class TicketMentionEntity {
       params.targetAgent,
       params.sourceAgent,
       params.targetType ?? 'agent',
+      params.executionMode ?? 'plan',
       'pending',
       null,
       null,
@@ -81,6 +84,7 @@ export class TicketMentionEntity {
       targetAgent: this.targetAgent,
       sourceAgent: this.sourceAgent,
       targetType: this.targetType,
+      executionMode: this.executionMode,
       status: this.status,
       resolvedAt: this.resolvedAt?.toISOString() ?? null,
       resolvedCommentId: this.resolvedCommentId,

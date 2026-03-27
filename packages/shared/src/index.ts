@@ -65,6 +65,7 @@ export type {
   TicketComment,
   MentionStatus,
   MentionTargetType,
+  MentionExecutionMode,
   TicketMention,
   TicketDeliverable,
   TicketContext,
@@ -73,6 +74,7 @@ export type {
 } from './types/ticket.js';
 
 export type {
+  ExecutionMode,
   AgentPersona,
   AgentStructuredOutput,
   CreateAgentPersonaRequest,

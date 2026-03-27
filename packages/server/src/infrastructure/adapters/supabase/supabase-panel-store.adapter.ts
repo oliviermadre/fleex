@@ -8,6 +8,7 @@ interface PanelRow {
   name: string;
   display_name: string;
   description: string;
+  execution_mode: string;
   members: PanelMember[] | string;
   orchestrator_prompt: string;
   orchestrator_model: string;
@@ -31,6 +32,7 @@ function rowToEntity(r: PanelRow): PanelEntity {
     r.name,
     r.display_name,
     r.description ?? '',
+    (r.execution_mode ?? 'claude_code') as 'claude_code' | 'message',
     members,
     r.orchestrator_prompt ?? '',
     r.orchestrator_model ?? 'claude-sonnet-4-5-20250929',
@@ -90,6 +92,7 @@ export class SupabasePanelStore implements PanelStorePort {
       name: panel.name,
       display_name: panel.displayName,
       description: panel.description,
+      execution_mode: panel.executionMode,
       members: panel.members,
       orchestrator_prompt: panel.orchestratorPrompt,
       orchestrator_model: panel.orchestratorModel,

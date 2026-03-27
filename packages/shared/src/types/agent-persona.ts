@@ -1,8 +1,11 @@
+export type ExecutionMode = 'claude_code' | 'message';
+
 export interface AgentPersona {
   readonly id: string;
   readonly name: string;
   readonly displayName: string;
   readonly model: string;
+  readonly executionMode: ExecutionMode;
   readonly soulMd: string;
   readonly identityMd: string;
   readonly memoryMd: string;
@@ -15,6 +18,7 @@ export interface CreateAgentPersonaRequest {
   readonly name: string;
   readonly displayName: string;
   readonly model?: string;
+  readonly executionMode?: ExecutionMode;
   readonly soulMd?: string;
   readonly identityMd?: string;
   readonly memoryMd?: string;
@@ -25,6 +29,7 @@ export interface UpdateAgentPersonaRequest {
   readonly name?: string;
   readonly displayName?: string;
   readonly model?: string;
+  readonly executionMode?: ExecutionMode;
   readonly soulMd?: string;
   readonly identityMd?: string;
   readonly memoryMd?: string;

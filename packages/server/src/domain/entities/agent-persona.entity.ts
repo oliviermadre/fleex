@@ -1,4 +1,4 @@
-import type { AgentPersona } from '@fleex/shared';
+import type { AgentPersona, ExecutionMode } from '@fleex/shared';
 
 export class AgentPersonaEntity {
   constructor(
@@ -6,6 +6,7 @@ export class AgentPersonaEntity {
     public name: string,
     public displayName: string,
     public model: string,
+    public executionMode: ExecutionMode,
     public soulMd: string,
     public identityMd: string,
     public memoryMd: string,
@@ -19,6 +20,7 @@ export class AgentPersonaEntity {
     name: string;
     displayName: string;
     model?: string;
+    executionMode?: ExecutionMode;
     soulMd?: string;
     identityMd?: string;
     memoryMd?: string;
@@ -30,6 +32,7 @@ export class AgentPersonaEntity {
       params.name,
       params.displayName,
       params.model ?? 'claude-sonnet-4-6',
+      params.executionMode ?? 'claude_code',
       params.soulMd ?? '',
       params.identityMd ?? '',
       params.memoryMd ?? '',
@@ -43,6 +46,7 @@ export class AgentPersonaEntity {
     name?: string;
     displayName?: string;
     model?: string;
+    executionMode?: ExecutionMode;
     soulMd?: string;
     identityMd?: string;
     memoryMd?: string;
@@ -51,6 +55,7 @@ export class AgentPersonaEntity {
     if (changes.name !== undefined) this.name = changes.name;
     if (changes.displayName !== undefined) this.displayName = changes.displayName;
     if (changes.model !== undefined) this.model = changes.model;
+    if (changes.executionMode !== undefined) this.executionMode = changes.executionMode;
     if (changes.soulMd !== undefined) this.soulMd = changes.soulMd;
     if (changes.identityMd !== undefined) this.identityMd = changes.identityMd;
     if (changes.memoryMd !== undefined) this.memoryMd = changes.memoryMd;
@@ -64,6 +69,7 @@ export class AgentPersonaEntity {
       name: this.name,
       displayName: this.displayName,
       model: this.model,
+      executionMode: this.executionMode,
       soulMd: this.soulMd,
       identityMd: this.identityMd,
       memoryMd: this.memoryMd,

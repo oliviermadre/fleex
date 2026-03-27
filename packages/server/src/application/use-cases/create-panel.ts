@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { PanelMember } from '@fleex/shared';
+import type { ExecutionMode, PanelMember } from '@fleex/shared';
 import { PanelEntity } from '../../domain/entities/panel.entity.js';
 import { PanelNameConflictError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import type { PanelStorePort } from '../ports/panel-store.port.js';
@@ -17,6 +17,7 @@ export class CreatePanelUseCase {
     name: string;
     displayName: string;
     description?: string;
+    executionMode?: ExecutionMode;
     members: PanelMember[];
     orchestratorPrompt?: string;
     orchestratorModel?: string;
@@ -42,6 +43,7 @@ export class CreatePanelUseCase {
       name: params.name,
       displayName: params.displayName,
       description: params.description,
+      executionMode: params.executionMode,
       members: params.members,
       orchestratorPrompt: params.orchestratorPrompt,
       orchestratorModel: params.orchestratorModel,

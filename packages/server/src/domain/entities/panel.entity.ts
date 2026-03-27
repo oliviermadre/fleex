@@ -1,4 +1,4 @@
-import type { Panel, PanelMember } from '@fleex/shared';
+import type { ExecutionMode, Panel, PanelMember } from '@fleex/shared';
 
 export class PanelEntity {
   constructor(
@@ -6,6 +6,7 @@ export class PanelEntity {
     public name: string,
     public displayName: string,
     public description: string,
+    public executionMode: ExecutionMode,
     public members: PanelMember[],
     public orchestratorPrompt: string,
     public orchestratorModel: string,
@@ -21,6 +22,7 @@ export class PanelEntity {
     name: string;
     displayName: string;
     description?: string;
+    executionMode?: ExecutionMode;
     members: PanelMember[];
     orchestratorPrompt?: string;
     orchestratorModel?: string;
@@ -34,6 +36,7 @@ export class PanelEntity {
       params.name,
       params.displayName,
       params.description ?? '',
+      params.executionMode ?? 'claude_code',
       params.members,
       params.orchestratorPrompt ?? '',
       params.orchestratorModel ?? 'claude-sonnet-4-6',
@@ -49,6 +52,7 @@ export class PanelEntity {
     name?: string;
     displayName?: string;
     description?: string;
+    executionMode?: ExecutionMode;
     members?: PanelMember[];
     orchestratorPrompt?: string;
     orchestratorModel?: string;
@@ -59,6 +63,7 @@ export class PanelEntity {
     if (changes.name !== undefined) this.name = changes.name;
     if (changes.displayName !== undefined) this.displayName = changes.displayName;
     if (changes.description !== undefined) this.description = changes.description;
+    if (changes.executionMode !== undefined) this.executionMode = changes.executionMode;
     if (changes.members !== undefined) this.members = changes.members;
     if (changes.orchestratorPrompt !== undefined) this.orchestratorPrompt = changes.orchestratorPrompt;
     if (changes.orchestratorModel !== undefined) this.orchestratorModel = changes.orchestratorModel;
@@ -74,6 +79,7 @@ export class PanelEntity {
       name: this.name,
       displayName: this.displayName,
       description: this.description,
+      executionMode: this.executionMode,
       members: this.members,
       orchestratorPrompt: this.orchestratorPrompt,
       orchestratorModel: this.orchestratorModel,

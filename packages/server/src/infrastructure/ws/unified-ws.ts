@@ -186,7 +186,7 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       }
     };
 
-    container.executeAgent.onEvent = (event) => {
+    const broadcastAgentEvent = (event: { toDTO: () => { executionId: string; eventType: string; data: unknown } }) => {
       if (clients.size === 0) return;
       const dto = event.toDTO();
       const executionId = dto.executionId;
@@ -198,7 +198,7 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
         }
       }
 
-      if (dto.eventType === 'execution_start') {
+      if (dto.eventType === 'execution_start' || dto.eventType === 'execution_end') {
         const ticketId = (dto.data as Record<string, unknown>)?.['ticketId'] as string | undefined;
         if (ticketId) {
           for (const client of clients.values()) {
@@ -213,6 +213,9 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
         batchTimer = setTimeout(flushBatch, 50);
       }
     };
+
+    container.executeAgent.onEvent = broadcastAgentEvent;
+    container.runPanel.onEvent = broadcastAgentEvent;
 
     container.executeAgent.onExecutionComplete = (personaId, status, _mentionId) => {
       const type = status === 'completed' ? 'persona:execution_completed' : 'persona:execution_failed';
