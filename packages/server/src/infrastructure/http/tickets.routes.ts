@@ -168,8 +168,23 @@ export function ticketRoutes(container: Container) {
     });
 
     app.delete<{ Params: { id: string } }>('/api/tickets/:id', async (request, reply) => {
-      await container.ticketStore.removeTicket(request.params.id);
-      emit({ type: 'ticket.deleted', ticketId: request.params.id, occurredAt: new Date() });
+      // Cleanup uploaded files referenced in ticket description + comments
+      const ticketId = request.params.id;
+      try {
+        const ticket = await container.ticketStore.getTicketById(ticketId);
+        const comments = await container.commentStore.getByTicket(ticketId);
+        const allText = [ticket?.description ?? '', ...comments.map((c) => c.body)].join('\n');
+        const fileIds = extractFileIds(allText);
+        await Promise.all(fileIds.map(async (fid) => {
+          await container.fileStore.remove(fid).catch(() => {});
+          await container.fileMetaStore.remove(fid).catch(() => {});
+        }));
+      } catch {
+        // Best-effort cleanup — don't block ticket deletion
+      }
+
+      await container.ticketStore.removeTicket(ticketId);
+      emit({ type: 'ticket.deleted', ticketId, occurredAt: new Date() });
       return reply.code(204).send();
     });
 
@@ -700,4 +715,14 @@ export function ticketRoutes(container: Container) {
       return results;
     });
   };
+}
+
+const FILE_URL_PATTERN = /\/api\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/g;
+
+function extractFileIds(text: string): string[] {
+  const ids = new Set<string>();
+  for (const match of text.matchAll(FILE_URL_PATTERN)) {
+    ids.add(match[1]!);
+  }
+  return Array.from(ids);
 }

@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { createContainer } from './infrastructure/container.js';
@@ -37,6 +38,7 @@ import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.rou
 import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
 import { dashboardRoutes } from './infrastructure/http/dashboard.routes.js';
 import { githubImageProxyRoutes } from './infrastructure/http/github-image-proxy.routes.js';
+import { fileRoutes } from './infrastructure/http/files.routes.js';
 import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 
@@ -48,6 +50,7 @@ async function main() {
 
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true, credentials: true });
+  await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
   await app.register(websocket);
 
   registerErrorHandler(app);
@@ -79,6 +82,7 @@ async function main() {
   await app.register(statisticsRoutes(container));
   await app.register(dashboardRoutes(container));
   await app.register(githubImageProxyRoutes(container));
+  await app.register(fileRoutes(container));
 
   // Agent API with auth
   const authHook = createAgentAuthHook(container);
