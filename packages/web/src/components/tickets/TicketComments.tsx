@@ -586,6 +586,8 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     try {
       const comment = await api.postTicketComment(ticketId, trimmed, executionMode);
       setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
+      // Posting a comment means we're caught up — mark everything as read
+      markCommentsRead(ticketId, comment.createdAt).catch(() => {});
       setBody('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -596,7 +598,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       setSubmitting(false);
       textareaRef.current?.focus();
     }
-  }, [body, submitting, ticketId, executionMode]);
+  }, [body, submitting, ticketId, executionMode, markCommentsRead]);
 
   const autoResize = useCallback(() => {
     const ta = textareaRef.current;
