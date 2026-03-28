@@ -118,6 +118,8 @@ export type {
 
 export type { DomainEventLog } from './types/domain-event-log.js';
 
+export type { FileMetadata } from './types/file.js';
+
 export type {
   DashboardPullRequest,
   DashboardWorktree,

@@ -11,6 +11,8 @@ import type { ConfigPort } from '../../application/ports/config.port.js';
 import type { KvStorePort } from '../../application/ports/kv-store.port.js';
 import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
 import type { PanelStorePort } from '../../application/ports/panel-store.port.js';
+import type { FileStorePort } from '../../application/ports/file-store.port.js';
+import type { FileMetaStorePort } from '../../application/ports/file-meta-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
@@ -30,6 +32,8 @@ export interface StorageStores {
   skillStore: SkillStorePort;
   panelStore: PanelStorePort;
   kvStore: KvStorePort | null;
+  fileStore: FileStorePort;
+  fileMetaStore: FileMetaStorePort;
 }
 
 export function resolveStorageDriver(): StorageDriver {
@@ -83,6 +87,8 @@ async function createJsonStores(deps: {
   const { JsonDomainEventLogStore } = await import('./json-domain-event-log-store.adapter.js');
   const { JsonSkillStore } = await import('./json-skill-store.adapter.js');
   const { JsonPanelStore } = await import('./json-panel-store.adapter.js');
+  const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
+  const { JsonFileMetaStore } = await import('./json-file-meta-store.adapter.js');
 
   // Run pending migrations (JSON adapter — tracking via _migrations.json)
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
@@ -112,8 +118,11 @@ async function createJsonStores(deps: {
   await skillStore.init();
   const panelStore = new JsonPanelStore(deps.hostFs, deps.homedir, deps.logger);
   await panelStore.init();
+  const fileStore = new DiskFileStoreAdapter(deps.homedir);
+  const fileMetaStore = new JsonFileMetaStore(deps.hostFs, deps.homedir, deps.logger);
+  await fileMetaStore.init();
 
-  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null };
+  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null, fileStore, fileMetaStore };
 }
 
 async function createJsonSessionStore(deps: {
@@ -151,6 +160,8 @@ async function createSqliteStores(deps: {
   const { SqliteKvStoreAdapter } = await import('./sqlite/sqlite-kv-store.adapter.js');
   const { SqliteSkillStoreAdapter } = await import('./sqlite/sqlite-skill-store.adapter.js');
   const { SqlitePanelStoreAdapter } = await import('./sqlite/sqlite-panel-store.adapter.js');
+  const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
+  const { SqliteFileMetaStoreAdapter } = await import('./sqlite/sqlite-file-meta-store.adapter.js');
 
   const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
   const connection = new SqliteConnection(dbPath);
@@ -181,6 +192,8 @@ async function createSqliteStores(deps: {
     skillStore: new SqliteSkillStoreAdapter(connection),
     panelStore: new SqlitePanelStoreAdapter(connection),
     kvStore: new SqliteKvStoreAdapter(connection),
+    fileStore: new DiskFileStoreAdapter(deps.homedir),
+    fileMetaStore: new SqliteFileMetaStoreAdapter(connection),
   };
 }
 
@@ -208,6 +221,8 @@ async function createPgsqlStores(deps: {
   const { PgKvStoreAdapter } = await import('./pgsql/pg-kv-store.adapter.js');
   const { PgSkillStore } = await import('./pgsql/pg-skill-store.adapter.js');
   const { PgPanelStore } = await import('./pgsql/pg-panel-store.adapter.js');
+  const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
+  const { PgFileMetaStore } = await import('./pgsql/pg-file-meta-store.adapter.js');
 
   const connection = new PgConnection(url);
   await connection.init();
@@ -240,6 +255,8 @@ async function createPgsqlStores(deps: {
     skillStore: new PgSkillStore(connection),
     panelStore: new PgPanelStore(connection),
     kvStore: new PgKvStoreAdapter(connection),
+    fileStore: new DiskFileStoreAdapter(deps.homedir),
+    fileMetaStore: new PgFileMetaStore(connection),
   };
 }
 
@@ -270,6 +287,8 @@ async function createSupabaseStores(deps: {
   const { SupabaseKvStoreAdapter } = await import('./supabase/supabase-kv-store.adapter.js');
   const { SupabaseSkillStore } = await import('./supabase/supabase-skill-store.adapter.js');
   const { SupabasePanelStore } = await import('./supabase/supabase-panel-store.adapter.js');
+  const { SupabaseFileStoreAdapter } = await import('./supabase/supabase-file-store.adapter.js');
+  const { SupabaseFileMetaStore } = await import('./supabase/supabase-file-meta-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
   const connection = new SupabaseConnection(url, key, dbUrl);
@@ -300,5 +319,7 @@ async function createSupabaseStores(deps: {
     skillStore: new SupabaseSkillStore(connection),
     panelStore: new SupabasePanelStore(connection),
     kvStore: new SupabaseKvStoreAdapter(connection),
+    fileStore: new SupabaseFileStoreAdapter(connection),
+    fileMetaStore: new SupabaseFileMetaStore(connection),
   };
 }

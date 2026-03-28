@@ -93,6 +93,8 @@ export async function createContainer() {
     skillStore,
     panelStore,
     kvStore,
+    fileStore,
+    fileMetaStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   const tmux = new TmuxCliAdapter(execFn, logger);
@@ -225,7 +227,11 @@ export async function createContainer() {
   createWorktreeUC.configPort = config;
   createWorktreeUC.execFn = execFn;
   executeAgent.eventBus = eventBus;
+  executeAgent.fileMetaStore = fileMetaStore;
+  executeAgent.fileStore = fileStore;
   runPanel.eventBus = eventBus;
+  runPanel.fileMetaStore = fileMetaStore;
+  runPanel.fileStore = fileStore;
   generateTicketSummary.eventBus = eventBus;
   autoReviewWorkflow.eventBus = eventBus;
 
@@ -299,6 +305,8 @@ export async function createContainer() {
     agentEventStore,
     domainEventLogStore,
     kvStore,
+    fileStore,
+    fileMetaStore,
     eventBus,
     domainEventListener,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

@@ -230,5 +230,14 @@ export const SQLITE_SCHEMA: string[] = [
     updated_at TEXT NOT NULL
   )`,
 
+  // ── Files (uploaded attachments) ──
+  `CREATE TABLE IF NOT EXISTS files (
+    id TEXT PRIMARY KEY,
+    original_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+
 ];
 

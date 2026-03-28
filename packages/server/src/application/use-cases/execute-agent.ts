@@ -22,7 +22,10 @@ import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { AutoReviewWorkflowUseCase } from './auto-review-workflow.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
+import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
+import type { FileStorePort } from '../ports/file-store.port.js';
 import type { EventBus } from '../event-bus.js';
+import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
 
 interface ActiveExecution {
   mentionId: string;
@@ -93,6 +96,10 @@ export class ExecuteAgentUseCase {
 
   /** Set by container after construction (avoids circular dep) */
   public eventBus: EventBus | null = null;
+
+  /** Set by container — enables resolving file attachments in agent prompts */
+  public fileMetaStore: FileMetaStorePort | null = null;
+  public fileStore: FileStorePort | null = null;
 
   constructor(
     private readonly personaStore: PersonaStorePort,
@@ -378,10 +385,11 @@ export class ExecuteAgentUseCase {
         agentName: persona.name,
       });
 
-      // 6. Build user prompt with ticket context
+      // 6. Build user prompt with ticket context (content blocks for multimodal support)
       const sessionKey = `${persona.name}:${mention.ticketId}`;
       const isWakeUp = mention.status === 'pending' && this.sessionHistory.has(sessionKey);
-      const userPrompt = this.composeUserPrompt(context, mention, isWakeUp);
+      const userPromptBlocks = await this.composeUserPrompt(context, mention, isWakeUp);
+      const userPromptTextLength = userPromptBlocks.reduce((n, b) => n + (b.type === 'text' ? b.text.length : 0), 0);
 
       this.logger.info('Agent execution started', {
         executionId,
@@ -430,7 +438,7 @@ export class ExecuteAgentUseCase {
         context: {
           systemPromptSections: contextSections,
           systemPromptLength: systemPrompt.length,
-          userPromptLength: userPrompt.length,
+          userPromptLength: userPromptTextLength,
           ticketTitle: context.ticket.title,
           ticketStatus: context.ticket.status,
           commentsCount: context.comments.length,
@@ -500,9 +508,27 @@ export class ExecuteAgentUseCase {
           resume: previousSessionId ?? undefined,
         });
 
+        // Build the prompt: use content blocks if there are images, plain string otherwise
+        const hasImages = userPromptBlocks.some((b) => b.type === 'image');
+        const userPrompt = hasImages
+          ? userPromptBlocks  // Will be wrapped into SDKUserMessage below
+          : userPromptBlocks.map((b) => (b as { text: string }).text).join('');
+
         const runQueryLoop = async () => {
+          // If we have images, wrap blocks in an SDKUserMessage AsyncIterable
+          const promptArg = Array.isArray(userPrompt)
+            ? (async function* () {
+                yield {
+                  type: 'user' as const,
+                  message: { role: 'user' as const, content: userPrompt },
+                  parent_tool_use_id: null,
+                  session_id: previousSessionId ?? '',
+                };
+              })()
+            : userPrompt;
+
           for await (const message of query({
-            prompt: userPrompt,
+            prompt: promptArg,
             options: queryOptions as Parameters<typeof query>[0]['options'],
           })) {
             // Check abort signal between events
@@ -955,7 +981,7 @@ export class ExecuteAgentUseCase {
       agentName: persona.name,
     });
 
-    const userPrompt = this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent);
+    const skillPromptBlocks = await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent);
 
     this.logger.info('Skill execution started', {
       executionId,
@@ -1064,8 +1090,21 @@ export class ExecuteAgentUseCase {
         queryOptions['resume'] = previousSessionId;
       }
 
+      // Build prompt: content blocks if images, string otherwise
+      const skillHasImages = skillPromptBlocks.some((b) => b.type === 'image');
+      const skillPromptArg = skillHasImages
+        ? (async function* () {
+            yield {
+              type: 'user' as const,
+              message: { role: 'user' as const, content: skillPromptBlocks },
+              parent_tool_use_id: null,
+              session_id: previousSessionId ?? '',
+            };
+          })()
+        : skillPromptBlocks.map((b) => (b as { text: string }).text).join('');
+
       for await (const message of query({
-        prompt: userPrompt,
+        prompt: skillPromptArg,
         options: queryOptions as Parameters<typeof query>[0]['options'],
       })) {
         if (abortController.signal.aborted) break;
@@ -1282,40 +1321,40 @@ export class ExecuteAgentUseCase {
     }
   }
 
-  private composeSkillUserPrompt(
+  private async composeSkillUserPrompt(
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     skillDisplayName: string,
     skillMarkdown: string,
-  ): string {
-    const parts: string[] = [];
+  ): Promise<PromptContentBlock[]> {
+    const blocks: PromptContentBlock[] = [];
+    const pushText = (text: string) => blocks.push({ type: 'text', text });
 
-    parts.push(`# Ticket: ${context.ticket.title}`);
-    parts.push(`Status: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
+    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
 
     if (context.ticket.description) {
-      parts.push(`\n## Description\n\n${context.ticket.description}`);
+      blocks.push(...await this.resolveText(`\n## Description\n\n${context.ticket.description}`));
     }
 
     if (context.comments.length > 0) {
-      parts.push('\n## Comments\n');
+      pushText('\n## Comments\n');
       for (const comment of context.comments) {
-        parts.push(`**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`);
+        blocks.push(...await this.resolveText(`**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`));
       }
     }
 
     if (context.deliverables.length > 0) {
-      parts.push('\n## Deliverables\n');
+      pushText('\n## Deliverables\n');
       for (const d of context.deliverables) {
-        parts.push(`### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}\n`);
+        pushText(`### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}\n`);
         if (d.content) {
-          parts.push(d.content);
+          pushText(d.content);
         }
       }
     }
 
-    parts.push(`\n---\n\n# Skill Instructions: ${skillDisplayName}\n\n${skillMarkdown}`);
+    pushText(`\n---\n\n# Skill Instructions: ${skillDisplayName}\n\n${skillMarkdown}`);
 
-    return parts.join('\n');
+    return blocks;
   }
 
   /**
@@ -1487,51 +1526,69 @@ export class ExecuteAgentUseCase {
     return parts.join('\n\n');
   }
 
-  private composeUserPrompt(
+  private async composeUserPrompt(
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     mention: TicketMentionEntity,
     isWakeUp = false,
-  ): string {
-    const parts: string[] = [];
+  ): Promise<PromptContentBlock[]> {
+    const blocks: PromptContentBlock[] = [];
 
-    parts.push(`# Ticket: ${context.ticket.title}`);
-    parts.push(`Status: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
+    const pushText = (text: string) => blocks.push({ type: 'text', text });
+
+    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
 
     if (context.ticket.description) {
-      parts.push(`\n## Description\n\n${context.ticket.description}`);
+      const descBlocks = await this.resolveText(`\n## Description\n\n${context.ticket.description}`);
+      blocks.push(...descBlocks);
     }
 
     if (context.comments.length > 0) {
-      parts.push('\n## Comments\n');
+      pushText('\n## Comments\n');
       for (const comment of context.comments) {
-        parts.push(`**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`);
+        const commentBlocks = await this.resolveText(`**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`);
+        blocks.push(...commentBlocks);
       }
     }
 
     if (context.deliverables.length > 0) {
-      parts.push('\n## Deliverables\n');
+      pushText('\n## Deliverables\n');
       for (const d of context.deliverables) {
-        parts.push(`### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}\n`);
+        pushText(`### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}\n`);
         if (d.content) {
-          parts.push(d.content);
+          pushText(d.content);
         }
       }
     }
 
     if (context.relevantSummaries && context.relevantSummaries.length > 0) {
-      parts.push('\n## Related Ticket Summaries\n');
-      parts.push('Context from previously completed tickets — use to avoid reinventing solutions.\n');
+      pushText('\n## Related Ticket Summaries\n');
+      pushText('Context from previously completed tickets — use to avoid reinventing solutions.\n');
       for (const s of context.relevantSummaries) {
-        parts.push(`---\n${s.content}\n`);
+        pushText(`---\n${s.content}\n`);
       }
     }
 
     if (isWakeUp) {
-      parts.push(`\n---\n\n**WAKE-UP: You previously indicated you were waiting for more information.** New content has been added to this ticket since then. Review the updated context above and continue your work. You MUST produce at least a comment or a deliverable — decide whether to ask someone else, escalate to a human, or move forward on your own.`);
+      pushText(`\n---\n\n**WAKE-UP: You previously indicated you were waiting for more information.** New content has been added to this ticket since then. Review the updated context above and continue your work. You MUST produce at least a comment or a deliverable — decide whether to ask someone else, escalate to a human, or move forward on your own.`);
     } else {
-      parts.push(`\n---\n\nYou were mentioned in comment ${mention.commentId} by ${mention.sourceAgent}. Please review the ticket context above and respond appropriately.`);
+      pushText(`\n---\n\nYou were mentioned in comment ${mention.commentId} by ${mention.sourceAgent}. Please review the ticket context above and respond appropriately.`);
     }
 
-    return parts.join('\n');
+    return blocks;
+  }
+
+  /**
+   * Resolve file references in text, returning content blocks with images as native ImageBlockParam.
+   * Falls back to plain text block if file stores are not available.
+   */
+  private async resolveText(text: string): Promise<PromptContentBlock[]> {
+    if (this.fileMetaStore && this.fileStore && text.includes('/api/files/')) {
+      try {
+        return await resolveFileReferences(text, this.fileMetaStore, this.fileStore);
+      } catch {
+        // Fallback to plain text
+      }
+    }
+    return [{ type: 'text', text }];
   }
 }
