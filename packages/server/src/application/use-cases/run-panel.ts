@@ -21,6 +21,9 @@ import type { EventBus } from '../event-bus.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { MentionExecutionMode } from '@fleex/shared';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
+import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
+import type { FileStorePort } from '../ports/file-store.port.js';
+import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
 
 interface SdkMetrics {
   durationMs?: number;
@@ -53,6 +56,8 @@ export interface PanelResult {
 export class RunPanelUseCase {
   public eventBus: EventBus | null = null;
   public onEvent: ((event: AgentEventEntity) => void) | null = null;
+  public fileMetaStore: FileMetaStorePort | null = null;
+  public fileStore: FileStorePort | null = null;
 
   constructor(
     private readonly panelStore: PanelStorePort,
@@ -93,7 +98,7 @@ export class RunPanelUseCase {
     });
 
     const topic = params.topic || context.ticket.title;
-    const ticketContext = this.buildTicketContextString(context);
+    const ticketContextBlocks = await this.buildTicketContextBlocks(context);
 
     this.logger.info('Panel execution started', {
       panelName: panel.name,
@@ -164,7 +169,7 @@ export class RunPanelUseCase {
       panel,
       memberPersonas,
       topic,
-      ticketContext,
+      ticketContextBlocks,
       worktreePath,
       params.ticketId,
       panelMentionId,
@@ -328,7 +333,7 @@ export class RunPanelUseCase {
     panel: PanelEntity,
     memberPersonas: Map<string, AgentPersonaEntity>,
     topic: string,
-    ticketContext: string,
+    ticketContextBlocks: PromptContentBlock[],
     worktreePath: string | null,
     ticketId: string,
     mentionId: string,
@@ -368,7 +373,7 @@ export class RunPanelUseCase {
 
           const identityEmoji = this.extractEmojiFromIdentity(persona.identityMd);
           const panelMode: MentionExecutionMode = panel.executionMode === 'message' ? 'talk' : 'edit';
-          const response = await this.queryMember(persona, model, topic, ticketContext, identityEmoji, worktreePath, panelMode, ticketId, mentionId);
+          const response = await this.queryMember(persona, model, topic, ticketContextBlocks, identityEmoji, worktreePath, panelMode, ticketId, mentionId);
 
           this.logger.info('Panel member completed', {
             persona: persona.name,
@@ -393,7 +398,7 @@ export class RunPanelUseCase {
   }
 
   private async querySDK(
-    prompt: string,
+    prompt: string | PromptContentBlock[],
     options: {
       model: string;
       systemPrompt?: string;
@@ -420,8 +425,20 @@ export class RunPanelUseCase {
     let messageCount = 0;
     const metrics: SdkMetrics = {};
 
+    // If content blocks (multimodal), wrap in SDKUserMessage async iterable
+    const promptArg = Array.isArray(prompt)
+      ? (async function* () {
+          yield {
+            type: 'user' as const,
+            message: { role: 'user' as const, content: prompt },
+            parent_tool_use_id: null,
+            session_id: '',
+          };
+        })()
+      : prompt;
+
     for await (const message of query({
-      prompt,
+      prompt: promptArg,
       options: queryOptions as Parameters<typeof query>[0]['options'],
     })) {
       messageCount++;
@@ -469,7 +486,7 @@ export class RunPanelUseCase {
     persona: AgentPersonaEntity,
     model: string,
     topic: string,
-    ticketContext: string,
+    ticketContextBlocks: PromptContentBlock[],
     emoji: string,
     worktreePath: string | null,
     effectiveMode: MentionExecutionMode,
@@ -507,20 +524,15 @@ export class RunPanelUseCase {
       ? `\n\nYou have access to the codebase. Use Read, Grep, Glob to inspect relevant files. You can run \`gh pr view\` or \`gh pr diff\` via Bash to review the PR if one exists. Ground your analysis in the actual code.`
       : '';
 
-    const userPrompt = `# Panel Discussion Topic
+    // Build content blocks for multimodal support
+    const promptBlocks: PromptContentBlock[] = [
+      { type: 'text', text: `# Panel Discussion Topic\n\n**Subject:** ${topic}\n\n## Ticket Context\n` },
+      ...ticketContextBlocks,
+      { type: 'text', text: `${codeAccessInstructions}\n\n---\n\nAs ${persona.displayName || persona.name}, share your expert perspective on this topic.\nBe concise (3-5 paragraphs max) but incisive.\nRaise the key points from your area of expertise.\nIf you disagree with the approach, explain why and propose alternatives.` },
+    ];
 
-**Subject:** ${topic}
-
-## Ticket Context
-
-${ticketContext}${codeAccessInstructions}
-
----
-
-As ${persona.displayName || persona.name}, share your expert perspective on this topic.
-Be concise (3-5 paragraphs max) but incisive.
-Raise the key points from your area of expertise.
-If you disagree with the approach, explain why and propose alternatives.`;
+    const hasImages = promptBlocks.some((b) => b.type === 'image');
+    const userPrompt = hasImages ? promptBlocks : promptBlocks.map((b) => (b as { text: string }).text).join('');
 
     try {
       const { text, metrics } = await this.querySDK(userPrompt, {
@@ -720,39 +732,43 @@ Be concise and decision-oriented. Write in the same language as the panel member
     return parts.join('\n');
   }
 
-  private buildTicketContextString(context: { ticket: { title: string; description: string }; comments: Array<{ authorName: string; body: string }>; deliverables: Array<{ title: string; type: string; content: string; status: string; agentName: string }> }): string {
-    const parts: string[] = [];
+  private async buildTicketContextBlocks(context: { ticket: { title: string; description: string }; comments: Array<{ authorName: string; body: string }>; deliverables: Array<{ title: string; type: string; content: string; status: string; agentName: string }> }): Promise<PromptContentBlock[]> {
+    const blocks: PromptContentBlock[] = [];
+    const pushText = (text: string) => blocks.push({ type: 'text', text });
 
-    parts.push(`## Ticket: ${context.ticket.title}`);
+    pushText(`## Ticket: ${context.ticket.title}`);
     if (context.ticket.description) {
-      parts.push('');
-      parts.push(context.ticket.description);
+      blocks.push(...await this.resolveText(`\n${context.ticket.description}`));
     }
 
     if (context.comments.length > 0) {
-      parts.push('');
-      parts.push('## Recent Comments');
-      // Include last 10 comments for context
+      pushText('\n## Recent Comments');
       const recentComments = context.comments.slice(-10);
       for (const comment of recentComments) {
-        parts.push('');
-        parts.push(`**${comment.authorName}:**`);
-        parts.push(comment.body);
+        blocks.push(...await this.resolveText(`\n**${comment.authorName}:**\n${comment.body}`));
       }
     }
 
     if (context.deliverables.length > 0) {
-      parts.push('');
-      parts.push('## Deliverables');
+      pushText('\n## Deliverables');
       for (const d of context.deliverables) {
-        parts.push('');
-        parts.push(`### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}`);
-        // Include first 2000 chars of deliverable content
-        parts.push(d.content.length > 2000 ? d.content.substring(0, 2000) + '\n...(truncated)' : d.content);
+        pushText(`\n### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}`);
+        pushText(d.content.length > 2000 ? d.content.substring(0, 2000) + '\n...(truncated)' : d.content);
       }
     }
 
-    return parts.join('\n');
+    return blocks;
+  }
+
+  private async resolveText(text: string): Promise<PromptContentBlock[]> {
+    if (this.fileMetaStore && this.fileStore && text.includes('/api/files/')) {
+      try {
+        return await resolveFileReferences(text, this.fileMetaStore, this.fileStore);
+      } catch {
+        // Fallback
+      }
+    }
+    return [{ type: 'text', text }];
   }
 
   private extractEmojiFromIdentity(identityMd: string): string {

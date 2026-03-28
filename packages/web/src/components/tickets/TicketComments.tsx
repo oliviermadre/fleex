@@ -12,6 +12,7 @@ import { usePanelStore } from '../../stores/panelStore';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import * as api from '../../services/api';
+import { useFileUpload } from '../../hooks/useFileUpload';
 
 /**
  * Build a lookup: commentId -> mentionText -> mentionId
@@ -384,6 +385,12 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   // Execution mode toggle (Talk / Plan / Edit)
   const [executionMode, setExecutionMode] = useState<'talk' | 'plan' | 'edit'>('plan');
 
+  const commentFileUpload = useFileUpload({
+    textareaRef,
+    value: body,
+    onChange: setBody,
+  });
+
   // Build mention options from personas + panels + human
   const personas = useAgentPersonaStore((s) => s.personas);
   const panels = usePanelStore((s) => s.panels);
@@ -586,7 +593,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     try {
       const comment = await api.postTicketComment(ticketId, trimmed, executionMode);
       setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
-      // Posting a comment means the user is up-to-date — advance the read cursor
+      // Posting a comment means we're caught up — mark everything as read
       markCommentsRead(ticketId, comment.createdAt).catch(() => {});
       setBody('');
       if (textareaRef.current) {
@@ -789,7 +796,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       </div>
 
       {/* Input area */}
-      <div ref={inputWrapperRef} className="relative flex flex-shrink-0 items-end gap-2 border-t border-[var(--theme-border)] pt-3">
+      <div ref={inputWrapperRef} className="relative flex flex-shrink-0 items-end gap-2 border-t border-[var(--theme-border)] pt-3" {...commentFileUpload.dragProps}>
         {/* Mention autocomplete popup */}
         {acOpen && filteredOptions.length > 0 && (
           <MentionAutocomplete
@@ -801,12 +808,17 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         )}
         <textarea
           ref={textareaRef}
-          className="max-h-40 min-h-[36px] flex-1 resize-none overflow-y-auto rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm leading-snug text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
+          className={`max-h-40 min-h-[36px] flex-1 resize-none overflow-y-auto rounded-lg border bg-[var(--theme-bg-surface)] px-3 py-2 text-sm leading-snug text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none ${
+            commentFileUpload.isDragOver
+              ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/30'
+              : 'border-[var(--theme-border)]'
+          }`}
           rows={1}
           placeholder="Write a comment... (@ to mention)"
           value={body}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onPaste={commentFileUpload.pasteHandler}
           onBlur={() => { setTimeout(closeMentionAc, 150); }}
           disabled={submitting}
         />
@@ -841,6 +853,16 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg text-[var(--theme-text-muted)] transition-opacity hover:text-[var(--theme-accent)] hover:opacity-90"
+          onClick={commentFileUpload.openFilePicker}
+          title="Attach file"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+          </svg>
+        </button>
         <button
           className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-white transition-opacity hover:opacity-90 disabled:opacity-30"
           onClick={handleSubmit}

@@ -16,6 +16,7 @@ import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import * as api from '../../services/api';
 import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { useFileUpload } from '../../hooks/useFileUpload';
 
 type DescriptionMode = 'write' | 'preview' | 'split';
 
@@ -28,6 +29,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   const setMainTab = useTicketStore((s) => s.setTicketTab);
   const sessions = useSessionStore((s) => s.sessions);
   const ticket = tickets.find((t) => t.id === ticketId);
+  const unread = useUnreadStore((s) => s.getUnread(ticketId));
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -42,6 +44,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   // Track initial description to know if it changed when leaving
   const initialDescRef = useRef('');
   const descriptionRef = useRef('');
+  const descTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (ticket) {
@@ -60,27 +63,46 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   }, [ticketId]);
 
   // Track deliverable & mention counts via WebSocket
+  const incrementUnread = useUnreadStore((s) => s.incrementUnread);
   useEffect(() => {
     const unsub = appWs.onChannel('tickets', (raw) => {
       try {
         const msg = raw as TicketWsMessage;
         if (msg.type === 'comment:created') {
           const c = msg.data as TicketComment;
-          if (c.ticketId === ticketId) setCommentCount((n) => n + 1);
+          if (c.ticketId === ticketId) {
+            setCommentCount((n) => n + 1);
+            incrementUnread(ticketId, 'unreadComments');
+          }
         } else if (msg.type === 'deliverable:created') {
           const d = msg.data as TicketDeliverable;
-          if (d.ticketId === ticketId) setDeliverableCount((c) => c + 1);
+          if (d.ticketId === ticketId) {
+            setDeliverableCount((c) => c + 1);
+            incrementUnread(ticketId, 'unreadDeliverables');
+          }
         } else if (msg.type === 'deliverable:deleted') {
           const { ticketId: tid } = msg.data as { ticketId: string };
-          if (tid === ticketId) setDeliverableCount((c) => Math.max(0, c - 1));
+          if (tid === ticketId) {
+            setDeliverableCount((c) => Math.max(0, c - 1));
+            incrementUnread(ticketId, 'unreadDeliverables', -1);
+          }
+        } else if (msg.type === 'comment:deleted') {
+          const { ticketId: tid } = msg.data as { ticketId: string };
+          if (tid === ticketId) {
+            setCommentCount((c) => Math.max(0, c - 1));
+            incrementUnread(ticketId, 'unreadComments', -1);
+          }
         } else if (msg.type === 'mention:created') {
           const m = msg.data as TicketMention;
           if (m.ticketId === ticketId) setMentionCount((c) => c + 1);
+        } else if (msg.type === 'mention:deleted') {
+          const { ticketId: tid } = msg.data as { ticketId: string };
+          if (tid === ticketId) setMentionCount((c) => Math.max(0, c - 1));
         }
       } catch { /* ignore */ }
     });
     return unsub;
-  }, [ticketId]);
+  }, [ticketId, incrementUnread]);
 
   // Flush pending description changes and log activity on unmount / ticket switch
   useEffect(() => {
@@ -118,6 +140,24 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     },
     [ticketId],
   );
+
+  const flushDescDebounce = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+  }, []);
+
+  const fileUpload = useFileUpload({
+    textareaRef: descTextareaRef,
+    value: description,
+    onChange: (val: string) => {
+      setDescription(val);
+      descriptionRef.current = val;
+      debouncedSilentDescription(val);
+    },
+    onFlushDebounce: flushDescDebounce,
+  });
 
   const handleDescToggleCheckbox = useCallback(
     (lineIndex: number) => {
@@ -239,8 +279,6 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     );
   }
 
-  const unread = useUnreadStore((s) => s.getUnread(ticketId));
-
   const commentLabel = commentCount > 0
     ? `Comments (${unread.unreadComments > 0 ? `${unread.unreadComments} new` : commentCount})`
     : 'Comments';
@@ -325,18 +363,42 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
             {mainTab === 'description' && (
               <div className="flex min-h-0 flex-1 gap-4 overflow-hidden">
                 {descMode !== 'preview' && (
-                  <textarea
-                    className={`resize-none rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 text-sm font-mono text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none ${
-                      descMode === 'split' ? 'w-1/2' : 'w-full'
-                    }`}
-                    value={description}
-                    onChange={(e) => {
-                      setDescription(e.target.value);
-                      descriptionRef.current = e.target.value;
-                      debouncedSilentDescription(e.target.value);
-                    }}
-                    placeholder="Add a description (markdown supported)..."
-                  />
+                  <div
+                    className={`relative ${descMode === 'split' ? 'w-1/2' : 'w-full'}`}
+                    {...fileUpload.dragProps}
+                  >
+                    <textarea
+                      ref={descTextareaRef}
+                      className={`h-full w-full resize-none rounded-md border bg-[var(--theme-bg-surface)] p-3 text-sm font-mono text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none ${
+                        fileUpload.isDragOver
+                          ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/30'
+                          : 'border-[var(--theme-border)]'
+                      }`}
+                      value={description}
+                      onChange={(e) => {
+                        setDescription(e.target.value);
+                        descriptionRef.current = e.target.value;
+                        debouncedSilentDescription(e.target.value);
+                      }}
+                      onPaste={fileUpload.pasteHandler}
+                      placeholder="Add a description (markdown supported)..."
+                    />
+                    <button
+                      type="button"
+                      onClick={fileUpload.openFilePicker}
+                      className="absolute bottom-2 right-2 rounded p-1 text-[var(--theme-text-muted)] opacity-50 hover:opacity-100 hover:text-[var(--theme-accent)] transition-opacity"
+                      title="Attach file"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+                      </svg>
+                    </button>
+                    {fileUpload.isUploading && (
+                      <div className="absolute bottom-2 left-3 text-xs text-[var(--theme-text-muted)]">
+                        Uploading...
+                      </div>
+                    )}
+                  </div>
                 )}
                 {descMode !== 'write' && (
                   <div

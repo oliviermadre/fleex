@@ -634,3 +634,31 @@ export async function fetchStatistics(params: {
   const query = qs.toString();
   return request<StatisticsResponse>(`/statistics${query ? `?${query}` : ''}`);
 }
+
+// ── File uploads ──
+
+export interface UploadedFile {
+  id: string;
+  url: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export async function uploadFile(file: File): Promise<UploadedFile> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_URL}/files`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    const message = extractErrorMessage(body, res.statusText);
+    throw new Error(message);
+  }
+
+  return res.json() as Promise<UploadedFile>;
+}

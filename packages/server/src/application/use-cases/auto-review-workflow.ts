@@ -4,6 +4,7 @@ import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
+import type { EventBus } from '../event-bus.js';
 
 interface ReviewWorkflowConfig {
   // Default human reviewer when no specific human mentioned
@@ -17,8 +18,7 @@ interface ReviewWorkflowConfig {
 }
 
 export class AutoReviewWorkflowUseCase {
-  /** Set by WS plugin to broadcast ticket updates in real-time */
-  public onTicketUpdate: ((type: string, data: unknown) => void) | null = null;
+  public eventBus?: EventBus;
 
   constructor(
     private readonly mentionStore: MentionStorePort,
@@ -63,7 +63,7 @@ export class AutoReviewWorkflowUseCase {
     const assignDiff = ticket.assign(params.mentionedHuman);
 
     await this.ticketStore.saveTicket(ticket);
-    this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+    this.eventBus?.emit({ type: 'ticket.updated', ticketId: params.ticketId, changes: { ...diff, ...assignDiff }, occurredAt: new Date() });
     await this.ticketStore.saveActivity(TicketActivityEntity.create({
       id: randomUUID(),
       ticketId: params.ticketId,
@@ -140,7 +140,7 @@ export class AutoReviewWorkflowUseCase {
     if (!ticket.blocked) {
       const diff = ticket.update({ blocked: true });
       await this.ticketStore.saveTicket(ticket);
-      this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+      this.eventBus?.emit({ type: 'ticket.updated', ticketId: params.ticketId, changes: diff, occurredAt: new Date() });
 
       await this.ticketStore.saveActivity(TicketActivityEntity.create({
         id: randomUUID(),
@@ -173,7 +173,14 @@ export class AutoReviewWorkflowUseCase {
     for (const mention of unresolvedHuman) {
       mention.resolve();
       await this.mentionStore.save(mention);
-      this.onTicketUpdate?.('mention:updated', mention.toDTO());
+      this.eventBus?.emit({
+        type: 'mention.resolved',
+        mentionId: mention.id,
+        ticketId: params.ticketId,
+        targetAgent: mention.targetAgent,
+        resolvedBy: 'system',
+        occurredAt: new Date(),
+      });
     }
 
     if (unresolvedHuman.length > 0) {
@@ -196,7 +203,14 @@ export class AutoReviewWorkflowUseCase {
     for (const mention of unresolved) {
       mention.resolve();
       await this.mentionStore.save(mention);
-      this.onTicketUpdate?.('mention:updated', mention.toDTO());
+      this.eventBus?.emit({
+        type: 'mention.resolved',
+        mentionId: mention.id,
+        ticketId: params.ticketId,
+        targetAgent: mention.targetAgent,
+        resolvedBy: 'system',
+        occurredAt: new Date(),
+      });
     }
 
     if (unresolved.length > 0) {

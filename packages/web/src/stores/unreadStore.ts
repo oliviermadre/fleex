@@ -33,6 +33,9 @@ interface UnreadState {
   /** Check if a specific deliverable is seen */
   isDeliverableSeen: (ticketId: string, deliverableId: string) => boolean;
 
+  /** Optimistically increment unread counts when WS events arrive */
+  incrementUnread: (ticketId: string, field: 'unreadComments' | 'unreadDeliverables', delta?: number) => void;
+
   /** Get unread counts for a specific ticket (0 if not tracked) */
   getUnread: (ticketId: string) => TicketUnreadCounts;
 }
@@ -134,6 +137,18 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
   isDeliverableSeen: (ticketId: string, deliverableId: string) => {
     const seen = get().seenDeliverablesByTicket[ticketId];
     return seen ? seen.has(deliverableId) : false;
+  },
+
+  incrementUnread: (ticketId: string, field: 'unreadComments' | 'unreadDeliverables', delta = 1) => {
+    set((state) => {
+      const unread = { ...state.unreadByTicket };
+      const existing = unread[ticketId] ?? { ticketId, unreadComments: 0, unreadDeliverables: 0 };
+      unread[ticketId] = { ...existing, [field]: Math.max(0, existing[field] + delta) };
+      const total = Object.values(unread).reduce(
+        (sum, c) => sum + c.unreadComments + c.unreadDeliverables, 0,
+      );
+      return { unreadByTicket: unread, totalUnread: total };
+    });
   },
 
   getUnread: (ticketId: string) => {

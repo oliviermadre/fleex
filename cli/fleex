@@ -1021,10 +1021,13 @@ _ticket_list() {
 }
 
 _ticket_show() {
-  local ticket_id="" board_id=""
+  local ticket_id="" board_id="" with_comments=false with_deliverables=false
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --board) board_id="${2:?Missing value for --board}"; shift 2 ;;
+      --with-comments) with_comments=true; shift ;;
+      --with-deliverables) with_deliverables=true; shift ;;
+      --full) with_comments=true; with_deliverables=true; shift ;;
       *)
         if [[ -z "$ticket_id" ]]; then
           ticket_id="$1"; shift
@@ -1035,7 +1038,7 @@ _ticket_show() {
     esac
   done
 
-  [[ -n "$ticket_id" ]] || die "Usage: fleex ticket show <id> [--board ID]"
+  [[ -n "$ticket_id" ]] || die "Usage: fleex ticket show <id> [--board ID] [--with-comments] [--with-deliverables] [--full]"
 
   local uuid; uuid="$(_resolve_ticket_id "$ticket_id" "$board_id")"
   local base; base="$(_api_base)"
@@ -1084,6 +1087,81 @@ _ticket_show() {
     echo ""
     printf "  ${BOLD}Links:${NC}\n"
     echo "$ticket" | jq -r '(.links // [])[] | "    [\(.type)] \(.label) \(.url // .ref // "")"'
+  fi
+
+  # Show comments if requested
+  if [[ "$with_comments" == "true" ]]; then
+    local comments; comments="$(_api_get "$base/api/tickets/$uuid/comments")"
+    local comments_count; comments_count="$(echo "$comments" | jq 'length')"
+
+    echo ""
+    printf "  ════════════════════════════════════════════════════════════\n"
+    printf "  COMMENTS (%s)\n" "$comments_count"
+    printf "  ════════════════════════════════════════════════════════════\n"
+
+    if [[ "$comments_count" -gt 0 ]]; then
+      local i=0
+      while [[ "$i" -lt "$comments_count" ]]; do
+        local author_type author_name created_at body
+        author_type="$(echo "$comments" | jq -r ".[$i].authorType")"
+        author_name="$(echo "$comments" | jq -r ".[$i].authorName")"
+        created_at="$(echo "$comments" | jq -r ".[$i].createdAt")"
+        body="$(echo "$comments" | jq -r ".[$i].body")"
+
+        local color="$NC"
+        [[ "$author_type" == "agent" ]] && color="$CYAN"
+        [[ "$author_type" == "user" ]] && color="$GREEN"
+        echo ""
+        printf "    ${color}${BOLD}%s${NC} ${DIM}(%s)${NC}  ${DIM}%s${NC}\n" "$author_name" "$author_type" "$created_at"
+        echo "$body" | while IFS= read -r line; do
+          printf "      %s\n" "$line"
+        done
+
+        i=$((i + 1))
+      done
+    else
+      echo ""
+      printf "    ${DIM}No comments.${NC}\n"
+    fi
+  fi
+
+  # Show deliverables if requested
+  if [[ "$with_deliverables" == "true" ]]; then
+    local deliverables; deliverables="$(_api_get "$base/api/tickets/$uuid/deliverables")"
+    local deliv_count; deliv_count="$(echo "$deliverables" | jq 'length')"
+
+    echo ""
+    printf "  ════════════════════════════════════════════════════════════\n"
+    printf "  DELIVERABLES (%s)\n" "$deliv_count"
+    printf "  ════════════════════════════════════════════════════════════\n"
+
+    if [[ "$deliv_count" -gt 0 ]]; then
+      local i=0
+      while [[ "$i" -lt "$deliv_count" ]]; do
+        local d_title d_type d_agent d_status d_version d_content
+        d_title="$(echo "$deliverables" | jq -r ".[$i].title")"
+        d_type="$(echo "$deliverables" | jq -r ".[$i].type")"
+        d_agent="$(echo "$deliverables" | jq -r ".[$i].agentName")"
+        d_status="$(echo "$deliverables" | jq -r ".[$i].status")"
+        d_version="$(echo "$deliverables" | jq -r ".[$i].version")"
+        d_content="$(echo "$deliverables" | jq -r ".[$i].content")"
+
+        local status_color="$YELLOW"
+        [[ "$d_status" == "final" ]] && status_color="$GREEN"
+        echo ""
+        printf "    ${BOLD}%s${NC}  ${DIM}[%s]${NC}  by ${CYAN}%s${NC}  ${status_color}%s${NC}  ${DIM}v%s${NC}\n" \
+          "$d_title" "$d_type" "$d_agent" "$d_status" "$d_version"
+        printf "    ────────────────────────────────────────────────────────\n"
+        echo "$d_content" | while IFS= read -r line; do
+          printf "      %s\n" "$line"
+        done
+
+        i=$((i + 1))
+      done
+    else
+      echo ""
+      printf "    ${DIM}No deliverables.${NC}\n"
+    fi
   fi
 
   echo ""
@@ -1381,7 +1459,10 @@ _ticket_help() {
 
   ${BOLD}${YELLOW}Commands:${NC}
     ${CYAN}list${NC} [--board ID] [--status S] [--tag T]     List tickets
-    ${CYAN}show${NC} <id> [--board ID]                       Show ticket details
+    ${CYAN}show${NC} <id> [--board ID] [--full]               Show ticket details
+                                                     ${DIM}--with-comments   include comments${NC}
+                                                     ${DIM}--with-deliverables include deliverables${NC}
+                                                     ${DIM}--full            include both${NC}
     ${CYAN}create${NC} --title "..." [--board ID] [opts]     Create a ticket
     ${CYAN}update${NC} <id> [--title "..."] [--status S]     Update a ticket
     ${CYAN}move${NC} <id> <status> [--board ID]              Change ticket status
@@ -1418,6 +1499,7 @@ _ticket_help() {
     ${GREEN}fleex ticket update 42 --priority high${NC}     Set priority
     ${GREEN}fleex ticket comment 42 "Looks good"${NC}       Add comment
     ${GREEN}fleex ticket delete 42 -f${NC}                  Delete without confirm
+    ${GREEN}fleex ticket show 42 --full${NC}                Full context (comments + deliverables)
 
 EOF
 }
