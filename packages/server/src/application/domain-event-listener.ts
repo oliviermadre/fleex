@@ -122,6 +122,11 @@ export class DomainEventListener {
     // ── Deliverable broadcasts ──
     bus.on('deliverable.created', (e) => this.broadcastDeliverableEntity(e, 'deliverable:created'));
     bus.on('deliverable.updated', (e) => this.broadcastDeliverableEntity(e, 'deliverable:updated'));
+    bus.on('deliverable.deleted', (e) => {
+      if (e.type === 'deliverable.deleted') {
+        this.ticketBroadcast('deliverable:deleted', { deliverableId: e.deliverableId, ticketId: e.ticketId });
+      }
+    });
 
     // ── Persona broadcasts ──
     bus.on('persona.created', (e) => this.broadcastPersonaEntity(e, 'persona:created'));

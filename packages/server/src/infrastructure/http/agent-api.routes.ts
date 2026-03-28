@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus } from '@fleex/shared';
 import { TICKET_STATUSES } from '@fleex/shared';
-import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { BoardNotFoundError, TicketNotFoundError } from '../../domain/errors.js';
 import type { Container } from '../container.js';
 
 export function agentApiRoutes(container: Container) {
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+
   return async function (app: FastifyInstance) {
 
     // List boards
@@ -82,7 +83,7 @@ export function agentApiRoutes(container: Container) {
         }));
 
         const dto = ticket.toDTO();
-        container.ticketBroadcast('ticket:created', dto);
+        emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
         return reply.code(201).send(dto);
       },
     );
@@ -108,14 +109,14 @@ export function agentApiRoutes(container: Container) {
       }
 
       const dto = ticket.toDTO();
-      container.ticketBroadcast('ticket:updated', dto);
+      emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
       return dto;
     });
 
     // Delete ticket
     app.delete<{ Params: { id: string } }>('/tickets/:id', async (request, reply) => {
       await container.ticketStore.removeTicket(request.params.id);
-      container.ticketBroadcast('ticket:deleted', { id: request.params.id });
+      emit({ type: 'ticket.deleted', ticketId: request.params.id, occurredAt: new Date() });
       return reply.code(204).send();
     });
 
@@ -139,7 +140,7 @@ export function agentApiRoutes(container: Container) {
       }));
 
       const dto = ticket.toDTO();
-      container.ticketBroadcast('ticket:updated', dto);
+      emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
       return dto;
     });
 
@@ -162,7 +163,7 @@ export function agentApiRoutes(container: Container) {
       }));
 
       const dto = ticket.toDTO();
-      container.ticketBroadcast('ticket:updated', dto);
+      emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
       return dto;
     });
 
@@ -185,7 +186,7 @@ export function agentApiRoutes(container: Container) {
       }));
 
       const dto = ticket.toDTO();
-      container.ticketBroadcast('ticket:updated', dto);
+      emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
       return dto;
     });
 
@@ -208,7 +209,7 @@ export function agentApiRoutes(container: Container) {
       }));
 
       const dto = ticket.toDTO();
-      container.ticketBroadcast('ticket:updated', dto);
+      emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
       return dto;
     });
 
@@ -217,6 +218,7 @@ export function agentApiRoutes(container: Container) {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
+      const fromStatus = ticket.status;
       const targetStatus: TicketStatus = ticket.status === 'done' ? 'doing' : 'done';
       const diff = ticket.moveTo(targetStatus);
       await container.ticketStore.saveTicket(ticket);
@@ -234,14 +236,7 @@ export function agentApiRoutes(container: Container) {
       }
 
       const dto = ticket.toDTO();
-      container.ticketBroadcast('ticket:moved', dto);
-
-      // Auto-resolve all mentions when ticket moves to done
-      if (targetStatus === 'done') {
-        container.autoReviewWorkflow.handleTicketDone({
-          ticketId: ticket.id,
-        }).catch(() => {});
-      }
+      emit({ type: 'ticket.moved', ticketId: ticket.id, fromStatus, toStatus: targetStatus, occurredAt: new Date() });
 
       return dto;
     });

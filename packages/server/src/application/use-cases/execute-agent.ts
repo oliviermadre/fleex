@@ -91,9 +91,6 @@ export class ExecuteAgentUseCase {
   /** Set by WS plugin to broadcast execution completion */
   public onExecutionComplete: ((personaId: string, status: 'completed' | 'failed', mentionId: string) => void) | null = null;
 
-  /** Set by WS plugin to broadcast ticket updates */
-  public onTicketUpdate: ((type: string, data: unknown) => void) | null = null;
-
   /** Set by container after construction (avoids circular dep) */
   public eventBus: EventBus | null = null;
 
@@ -710,7 +707,7 @@ export class ExecuteAgentUseCase {
             if (m.targetType === 'human' && ticket) {
               ticket.assign(m.targetAgent);
               await this.ticketStore.saveTicket(ticket);
-              this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+              this.eventBus?.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
             }
           }
 
@@ -770,7 +767,7 @@ export class ExecuteAgentUseCase {
           if (m.targetType === 'human' && ticket) {
             ticket.assign(m.targetAgent);
             await this.ticketStore.saveTicket(ticket);
-            this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+            this.eventBus?.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
           }
         }
 
@@ -803,7 +800,7 @@ export class ExecuteAgentUseCase {
           if (ticket) {
             ticket.update({ blocked: true });
             await this.ticketStore.saveTicket(ticket);
-            this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+            this.eventBus?.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
           }
           this.eventBus?.emit({
             type: 'mention.waiting_for_info',
@@ -1183,7 +1180,7 @@ export class ExecuteAgentUseCase {
             if (m.targetType === 'human' && ticket) {
               ticket.assign(m.targetAgent);
               await this.ticketStore.saveTicket(ticket);
-              this.onTicketUpdate?.('ticket:updated', ticket.toDTO());
+              this.eventBus?.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
             }
           }
         }

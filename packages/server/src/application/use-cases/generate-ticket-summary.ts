@@ -8,6 +8,7 @@ import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { EventBus } from '../event-bus.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
@@ -47,6 +48,8 @@ Rules:
 - Omit any section that has no meaningful content (except Problem and Closure Reason which are always required)`.trim();
 
 export class GenerateTicketSummaryUseCase {
+  public eventBus?: EventBus;
+
   constructor(
     private readonly ticketStore: TicketStorePort,
     private readonly commentStore: CommentStorePort,
@@ -130,9 +133,19 @@ export class GenerateTicketSummaryUseCase {
     // Upsert deliverable
     const existing = await this.deliverableStore.getByTicketAndType(ticketId, 'ticket-summary');
     if (existing) {
+      const oldStatus = existing.status;
       existing.update({ content: summaryText, title: `Summary: ${ticket.title}`, status: 'final' });
       await this.deliverableStore.save(existing);
       this.logger.info('Ticket summary updated', { ticketId, deliverableId: existing.id, version: existing.version });
+      this.eventBus?.emit({
+        type: 'deliverable.updated',
+        deliverableId: existing.id,
+        ticketId,
+        agentName: 'system',
+        oldStatus,
+        newStatus: 'final',
+        occurredAt: new Date(),
+      });
     } else {
       const deliverable = TicketDeliverableEntity.create({
         id: randomUUID(),
@@ -145,6 +158,14 @@ export class GenerateTicketSummaryUseCase {
       });
       await this.deliverableStore.save(deliverable);
       this.logger.info('Ticket summary created', { ticketId, deliverableId: deliverable.id });
+      this.eventBus?.emit({
+        type: 'deliverable.created',
+        deliverableId: deliverable.id,
+        ticketId,
+        agentName: 'system',
+        status: 'final',
+        occurredAt: new Date(),
+      });
     }
   }
 

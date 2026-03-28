@@ -159,7 +159,6 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
     const ticketBroadcast = (type: string, data: unknown) => channelBroadcast('tickets', type, data);
     container.ticketBroadcast = ticketBroadcast;
     container.domainEventListener.setTicketBroadcast(ticketBroadcast);
-    container.autoReviewWorkflow.onTicketUpdate = ticketBroadcast;
 
     // Wire up persona broadcast
     const personaBroadcast = (type: string, data: unknown) => channelBroadcast('personas', type, data);
@@ -220,10 +219,6 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
     container.executeAgent.onExecutionComplete = (personaId, status, _mentionId) => {
       const type = status === 'completed' ? 'persona:execution_completed' : 'persona:execution_failed';
       container.personaBroadcast(type, { personaId });
-    };
-
-    container.executeAgent.onTicketUpdate = (type, data) => {
-      container.ticketBroadcast(type, data);
     };
 
     container.agentEventBroadcast = (msg: unknown) => {

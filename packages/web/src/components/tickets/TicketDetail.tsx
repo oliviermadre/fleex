@@ -28,6 +28,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   const setMainTab = useTicketStore((s) => s.setTicketTab);
   const sessions = useSessionStore((s) => s.sessions);
   const ticket = tickets.find((t) => t.id === ticketId);
+  const unread = useUnreadStore((s) => s.getUnread(ticketId));
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -60,27 +61,46 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   }, [ticketId]);
 
   // Track deliverable & mention counts via WebSocket
+  const incrementUnread = useUnreadStore((s) => s.incrementUnread);
   useEffect(() => {
     const unsub = appWs.onChannel('tickets', (raw) => {
       try {
         const msg = raw as TicketWsMessage;
         if (msg.type === 'comment:created') {
           const c = msg.data as TicketComment;
-          if (c.ticketId === ticketId) setCommentCount((n) => n + 1);
+          if (c.ticketId === ticketId) {
+            setCommentCount((n) => n + 1);
+            incrementUnread(ticketId, 'unreadComments');
+          }
         } else if (msg.type === 'deliverable:created') {
           const d = msg.data as TicketDeliverable;
-          if (d.ticketId === ticketId) setDeliverableCount((c) => c + 1);
+          if (d.ticketId === ticketId) {
+            setDeliverableCount((c) => c + 1);
+            incrementUnread(ticketId, 'unreadDeliverables');
+          }
         } else if (msg.type === 'deliverable:deleted') {
           const { ticketId: tid } = msg.data as { ticketId: string };
-          if (tid === ticketId) setDeliverableCount((c) => Math.max(0, c - 1));
+          if (tid === ticketId) {
+            setDeliverableCount((c) => Math.max(0, c - 1));
+            incrementUnread(ticketId, 'unreadDeliverables', -1);
+          }
+        } else if (msg.type === 'comment:deleted') {
+          const { ticketId: tid } = msg.data as { ticketId: string };
+          if (tid === ticketId) {
+            setCommentCount((c) => Math.max(0, c - 1));
+            incrementUnread(ticketId, 'unreadComments', -1);
+          }
         } else if (msg.type === 'mention:created') {
           const m = msg.data as TicketMention;
           if (m.ticketId === ticketId) setMentionCount((c) => c + 1);
+        } else if (msg.type === 'mention:deleted') {
+          const { ticketId: tid } = msg.data as { ticketId: string };
+          if (tid === ticketId) setMentionCount((c) => Math.max(0, c - 1));
         }
       } catch { /* ignore */ }
     });
     return unsub;
-  }, [ticketId]);
+  }, [ticketId, incrementUnread]);
 
   // Flush pending description changes and log activity on unmount / ticket switch
   useEffect(() => {
@@ -238,8 +258,6 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
       </div>
     );
   }
-
-  const unread = useUnreadStore((s) => s.getUnread(ticketId));
 
   const commentLabel = commentCount > 0
     ? `Comments (${unread.unreadComments > 0 ? `${unread.unreadComments} new` : commentCount})`

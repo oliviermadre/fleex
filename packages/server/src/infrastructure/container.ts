@@ -226,6 +226,8 @@ export async function createContainer() {
   createWorktreeUC.execFn = execFn;
   executeAgent.eventBus = eventBus;
   runPanel.eventBus = eventBus;
+  generateTicketSummary.eventBus = eventBus;
+  autoReviewWorkflow.eventBus = eventBus;
 
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
