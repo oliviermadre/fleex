@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { PanelNotFoundError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
@@ -23,6 +22,8 @@ import type { MentionExecutionMode } from '@fleex/shared';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
+import type { BareCloneManager } from '../services/bare-clone-manager.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
 
 interface SdkMetrics {
@@ -58,6 +59,8 @@ export class RunPanelUseCase {
   public onEvent: ((event: AgentEventEntity) => void) | null = null;
   public fileMetaStore: FileMetaStorePort | null = null;
   public fileStore: FileStorePort | null = null;
+  public bareCloneManager: BareCloneManager | null = null;
+  public resolver: RepoPathResolver | null = null;
 
   constructor(
     private readonly panelStore: PanelStorePort,
@@ -837,24 +840,22 @@ Be concise and decision-oriented. Write in the same language as the panel member
 
     if (!org || !repo) return null;
 
-    const repoPath = join(this.config.get().basePath, org, repo);
-
-    // Ensure repo is cloned locally
-    if (!existsSync(repoPath)) {
-      this.logger.info('Cloning repository for panel worktree', { ticketId, repoPath, org, name: repo });
+    // Ensure bare clone exists locally
+    const barePath = this.resolver!.barePath(org, repo);
+    if (!existsSync(barePath)) {
+      this.logger.info('Creating bare clone for panel worktree', { ticketId, barePath, org, name: repo });
       try {
-        const { execSync } = await import('node:child_process');
-        execSync(`git clone git@github.com:${org}/${repo}.git ${repoPath}`, { timeout: 120_000 });
+        await this.bareCloneManager!.ensureBareClone(org, repo);
       } catch (err) {
-        this.logger.error('Failed to clone repository for panel', {
-          ticketId, repoPath,
+        this.logger.error('Failed to create bare clone for panel', {
+          ticketId, barePath,
           error: err instanceof Error ? err.message : String(err),
         });
         return null;
       }
     }
 
-    const wtPath = join(repoPath, '..', buildWorktreeDirName(repo, branchName));
+    const wtPath = this.resolver!.worktreeDir(org, buildWorktreeDirName(repo, branchName));
 
     // Reuse existing worktree if on disk
     if (existingWorktreeLink && existsSync(wtPath)) {
@@ -864,7 +865,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
 
     // Create worktree
     try {
-      const existingPath = await this.createWorktree.execute(repoPath, wtPath, {
+      const existingPath = await this.createWorktree.execute(org, repo, wtPath, {
         branch: branchName,
         createNewBranch,
       });

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
@@ -25,6 +24,8 @@ import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
 import type { EventBus } from '../event-bus.js';
+import type { BareCloneManager } from '../services/bare-clone-manager.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
 
 interface ActiveExecution {
@@ -96,6 +97,10 @@ export class ExecuteAgentUseCase {
 
   /** Set by container after construction (avoids circular dep) */
   public eventBus: EventBus | null = null;
+
+  /** Set by container — bare-clone infrastructure */
+  public bareCloneManager: BareCloneManager | null = null;
+  public resolver: RepoPathResolver | null = null;
 
   /** Set by container — enables resolving file attachments in agent prompts */
   public fileMetaStore: FileMetaStorePort | null = null;
@@ -1424,20 +1429,19 @@ export class ExecuteAgentUseCase {
 
     if (!org || !repo) return null;
 
-    const repoPath = join(this.config.get().basePath, org, repo);
+    const barePath = this.resolver!.barePath(org, repo);
 
-    // Ensure repo is cloned locally
-    if (!existsSync(repoPath)) {
+    // Ensure repo is cloned locally (bare clone)
+    if (!existsSync(barePath)) {
       this.logger.info('Cloning repository for agent worktree', {
-        ticketId, repoPath, org, name: repo,
+        ticketId, barePath, org, name: repo,
       });
       try {
         const remote = `git@github.com:${org}/${repo}.git`;
-        const { execSync } = await import('node:child_process');
-        execSync(`git clone ${remote} ${repoPath}`, { timeout: 120_000 });
+        await this.bareCloneManager!.ensureBareClone(org, repo, remote);
       } catch (err) {
         this.logger.error('Failed to clone repository for agent', {
-          ticketId, repoPath,
+          ticketId, barePath,
           error: err instanceof Error ? err.message : String(err),
         });
         return null;
@@ -1445,7 +1449,7 @@ export class ExecuteAgentUseCase {
     }
 
     // Derive worktree directory name from branch
-    const wtPath = join(repoPath, '..', buildWorktreeDirName(repo, branchName));
+    const wtPath = this.resolver!.worktreeDir(org, buildWorktreeDirName(repo, branchName));
 
     // If worktree directory already exists on disk, reuse it directly
     if (existingWorktreeLink && existsSync(wtPath)) {
@@ -1457,7 +1461,7 @@ export class ExecuteAgentUseCase {
 
     // Create or reuse worktree
     try {
-      const existingPath = await this.createWorktree.execute(repoPath, wtPath, {
+      const existingPath = await this.createWorktree.execute(org, repo, wtPath, {
         branch: branchName,
         createNewBranch,
       });

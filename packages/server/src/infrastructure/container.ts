@@ -6,6 +6,9 @@ import { SessionGroupingService } from '../domain/services/session-grouping.js';
 import { RepositoryCache } from '../domain/services/repository-cache.js';
 import { RepositoryRefreshScheduler } from '../domain/services/repository-refresh-scheduler.js';
 import { RepositoryResolver } from '../domain/services/repository-resolver.js';
+import { RepoPathResolver } from '../domain/services/repo-path-resolver.js';
+import { BareCloneManager } from '../application/services/bare-clone-manager.js';
+import { OverlayManager } from '../application/services/overlay-manager.js';
 import { EventBus } from '../application/event-bus.js';
 import { DomainEventListener } from '../application/domain-event-listener.js';
 import { CreateSessionUseCase } from '../application/use-cases/create-session.js';
@@ -150,12 +153,17 @@ export async function createContainer() {
   const repositoryRefreshScheduler = new RepositoryRefreshScheduler(githubGraphql, repositoryCache, logger);
   const repositoryResolver = new RepositoryResolver(execFn, logger);
 
+  // Bare clone infrastructure
+  const resolver = new RepoPathResolver(config.get().basePath);
+  const bareCloneManager = new BareCloneManager(git, hostFs, resolver, execFn, logger);
+  const overlayManager = new OverlayManager(hostFs, resolver, execFn, config, logger);
+
   const createSession = new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger);
   const renameSession = new RenameSessionUseCase(tmux, sessionStore, namingService, logger);
-  const createWorktreeUC = new CreateWorktreeUseCase(git, logger);
+  const createWorktreeUC = new CreateWorktreeUseCase(git, logger, bareCloneManager, overlayManager, resolver);
   const detectMerge = new DetectMergeUseCase(ticketStore, logger);
   const createSessionFromTicket = new CreateSessionFromTicketUseCase(
-    ticketStore, createSession, createWorktreeUC, git, config, logger,
+    ticketStore, createSession, createWorktreeUC, git, config, logger, resolver,
   );
   const importGitHubIssue = new ImportGitHubIssueUseCase(ticketStore, githubGraphql, logger);
   const backfillPRTicket = new BackfillPRTicketUseCase(ticketStore, logger);
@@ -186,7 +194,7 @@ export async function createContainer() {
   const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore, config, logger);
   const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);
 
-  const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore, commentStore, deliverableStore, git, config, logger);
+  const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore, commentStore, deliverableStore, git, config, logger, resolver);
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
@@ -224,21 +232,23 @@ export async function createContainer() {
 
   // Wire eventBus + config (avoids circular constructor dep)
   createWorktreeUC.eventBus = eventBus;
-  createWorktreeUC.configPort = config;
-  createWorktreeUC.execFn = execFn;
   executeAgent.eventBus = eventBus;
   executeAgent.fileMetaStore = fileMetaStore;
   executeAgent.fileStore = fileStore;
+  executeAgent.bareCloneManager = bareCloneManager;
+  executeAgent.resolver = resolver;
   runPanel.eventBus = eventBus;
   runPanel.fileMetaStore = fileMetaStore;
   runPanel.fileStore = fileStore;
+  runPanel.bareCloneManager = bareCloneManager;
+  runPanel.resolver = resolver;
   generateTicketSummary.eventBus = eventBus;
   autoReviewWorkflow.eventBus = eventBus;
 
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
 
-  const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, config, hostFs, git, logger);
+  const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, resolver, hostFs, bareCloneManager, git, logger);
 
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git);
   const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore, personaStore, agentEventStore, reconcileWorktree, hostFs, config);
@@ -261,14 +271,17 @@ export async function createContainer() {
     githubGraphql,
     repositoryResolver,
     repositoryRefreshScheduler,
+    resolver,
+    bareCloneManager,
+    overlayManager,
     createSession,
     renameSession,
     listSessions: new ListSessionsUseCase(sessionStore, tmux, logger),
     killSession: new KillSessionUseCase(tmux, sessionStore, logger),
     getSessionGroups,
     discoverSessions,
-    listRepositories: new ListRepositoriesUseCase(git, config, logger),
-    listWorktrees: new ListWorktreesUseCase(git, logger),
+    listRepositories: new ListRepositoriesUseCase(git, config, logger, hostFs, resolver),
+    listWorktrees: new ListWorktreesUseCase(git, logger, resolver, bareCloneManager),
     createWorktree: createWorktreeUC,
     getClaudeUsage,
     agentTokenStore,

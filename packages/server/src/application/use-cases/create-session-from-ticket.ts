@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { buildTicketBranchName, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { TicketLink } from '@fleex/shared';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -20,6 +20,7 @@ export class CreateSessionFromTicketUseCase {
     private readonly git: GitPort,
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
+    private readonly resolver: RepoPathResolver,
   ) {}
 
   async execute(ticketId: string): Promise<{ sessionId: string }> {
@@ -76,11 +77,10 @@ export class CreateSessionFromTicketUseCase {
 
       // Create worktree if we found a repo
       if (repoOrg && repoName) {
-        const repoPath = join(this.config.get().basePath, repoOrg, repoName);
         const branchName = buildTicketBranchName(ticket.title, ticket.id);
+        const wtPath = this.resolver.worktreeDir(repoOrg, buildWorktreeDirName(repoName, branchName));
         try {
-          const wtPath = join(repoPath, '..', buildWorktreeDirName(repoName, branchName));
-          await this.createWorktree.execute(repoPath, wtPath, {
+          await this.createWorktree.execute(repoOrg, repoName, wtPath, {
             branch: branchName,
             createNewBranch: true,
           });
@@ -91,7 +91,7 @@ export class CreateSessionFromTicketUseCase {
           this.logger.warn('Failed to auto-create worktree for ticket', {
             ticketId, error: err instanceof Error ? err.message : String(err),
           });
-          cwd = repoPath;
+          cwd = this.resolver.barePath(repoOrg, repoName);
         }
       }
     }
@@ -119,16 +119,6 @@ export class CreateSessionFromTicketUseCase {
     return { sessionId: session.id };
   }
 
-  /**
-   * Resolves the actual filesystem path for a worktree link.
-   *
-   * The worktree link `ref` can be stored in two formats:
-   *  - Absolute path (e.g. `/Users/.../repo.branch`) — written by agents/API
-   *  - `org/name:branch` — written by the web UI when the user selects a worktree
-   *
-   * After resolving the path we also check whether it exists locally and
-   * auto-create the worktree when it is missing.
-   */
   private async resolveWorktreeCwd(
     ticketId: string,
     boardId: string,
@@ -138,19 +128,17 @@ export class CreateSessionFromTicketUseCase {
     const ref = worktreeLink.ref;
     let wtPath: string = ref;
     let branchName: string = worktreeLink.label;
-    let repoPath: string | null = null;
+    let org: string | null = null;
+    let repo: string | null = null;
 
     if (ref.startsWith('/')) {
       // Absolute path format (agent / API created).
-      // Try to derive the repo path from a repository link, then board fallback.
       const repoLink = links.find((l) => l.type === 'repository');
       if (repoLink?.ref?.includes('/') && !repoLink.ref.includes(':')) {
         const slashIdx = repoLink.ref.indexOf('/');
-        const org = repoLink.ref.substring(0, slashIdx);
-        const name = repoLink.ref.substring(slashIdx + 1);
-        repoPath = join(this.config.get().basePath, org, name);
+        org = repoLink.ref.substring(0, slashIdx);
+        repo = repoLink.ref.substring(slashIdx + 1);
       }
-      // Board fallback resolved later if repoPath still null
     } else {
       // UI format: "org/name:branch"
       const colonIdx = ref.indexOf(':');
@@ -159,66 +147,63 @@ export class CreateSessionFromTicketUseCase {
         branchName = ref.substring(colonIdx + 1);
         const slashIdx = repoKey.indexOf('/');
         if (slashIdx > 0) {
-          const org = repoKey.substring(0, slashIdx);
-          const name = repoKey.substring(slashIdx + 1);
-          repoPath = join(this.config.get().basePath, org, name);
+          const parsedOrg = repoKey.substring(0, slashIdx);
+          const parsedRepo = repoKey.substring(slashIdx + 1);
+          org = parsedOrg;
+          repo = parsedRepo;
 
           // Find the actual filesystem path via git worktree list
+          const barePath = this.resolver.barePath(parsedOrg, parsedRepo);
           try {
-            const worktrees = await this.git.listWorktrees(repoPath);
+            const worktrees = await this.git.listWorktrees(barePath);
             const match = worktrees.find((wt) => wt.branch === branchName);
             if (match) {
               wtPath = match.path;
             } else {
-              // Compute the expected path the server would have chosen
-              wtPath = join(repoPath, '..', buildWorktreeDirName(name, branchName));
+              wtPath = this.resolver.worktreeDir(parsedOrg, buildWorktreeDirName(parsedRepo, branchName));
             }
           } catch {
-            wtPath = join(repoPath, '..', buildWorktreeDirName(name, branchName));
+            wtPath = this.resolver.worktreeDir(parsedOrg, buildWorktreeDirName(parsedRepo, branchName));
           }
         }
       }
     }
 
-    // Board fallback for repoPath when still unknown
-    if (!repoPath) {
+    // Board fallback for repo when still unknown
+    if (!org || !repo) {
       try {
         const board = await this.ticketStore.getBoardById(boardId);
         if (board?.repositoryOrg && board.repositoryName) {
-          repoPath = join(this.config.get().basePath, board.repositoryOrg, board.repositoryName);
+          org = board.repositoryOrg;
+          repo = board.repositoryName;
         }
       } catch { /* ignore */ }
     }
 
     // Auto-create the worktree if the resolved path doesn't exist locally
-    if (!existsSync(wtPath) && repoPath) {
+    if (!existsSync(wtPath) && org && repo) {
       this.logger.warn('Worktree path not found locally, auto-creating', { ticketId, wtPath, branchName });
       try {
-        // Try checking out an existing branch first
-        const actualPath = await this.createWorktree.execute(repoPath, wtPath, {
+        const actualPath = await this.createWorktree.execute(org, repo, wtPath, {
           branch: branchName,
           createNewBranch: false,
         });
-        // createWorktree returns the alternative path when the branch is already
-        // checked out elsewhere; fall back to it if provided.
         if (actualPath) {
           wtPath = actualPath;
         }
         this.logger.info('Worktree auto-created (existing branch)', { ticketId, wtPath });
       } catch {
-        // Branch may not exist yet — create it
         try {
-          await this.createWorktree.execute(repoPath, wtPath, {
+          await this.createWorktree.execute(org, repo, wtPath, {
             branch: branchName,
             createNewBranch: true,
           });
           this.logger.info('Worktree auto-created (new branch)', { ticketId, wtPath });
         } catch (err) {
-          this.logger.warn('Failed to auto-create missing worktree, falling back to repo path', {
+          this.logger.warn('Failed to auto-create missing worktree, falling back to bare path', {
             ticketId, wtPath, error: err instanceof Error ? err.message : String(err),
           });
-          // Last resort: use the repo itself as the working directory
-          wtPath = repoPath;
+          wtPath = this.resolver.barePath(org, repo);
         }
       }
     }

@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { DashboardPullRequest, DashboardWorktree, DashboardGitHubIssue, DashboardData, PullRequest, GitHubIssue } from '@fleex/shared';
@@ -55,8 +54,7 @@ export function dashboardRoutes(container: Container) {
 
         await Promise.all(
           configuredRepos.map(async ({ org, name }) => {
-            const basePath = container.config.get().basePath;
-            const repoPath = join(basePath, org, name);
+            const barePath = container.resolver.barePath(org, name);
 
             // Fetch PRs, issues, worktrees in parallel per repo
             const [prsResult, issuesResult, worktreesResult] = await Promise.allSettled([
@@ -76,9 +74,9 @@ export function dashboardRoutes(container: Container) {
                 '--limit', '50',
               ], { timeout: 15_000 }),
               (async () => {
-                const exists = await container.hostFs.exists(repoPath);
+                const exists = await container.hostFs.exists(barePath);
                 if (!exists) return [];
-                return container.listWorktrees.execute(repoPath);
+                return container.listWorktrees.execute(org, name);
               })(),
             ]);
 

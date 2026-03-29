@@ -1,9 +1,10 @@
 export interface Repository {
   readonly org: string;
   readonly name: string;
-  readonly path: string;
+  readonly barePath: string;
   readonly defaultBranch: string;
   readonly remote: string;
+  readonly isCloned: boolean;
 }
 
 export interface Worktree {

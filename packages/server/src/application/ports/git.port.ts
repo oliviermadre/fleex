@@ -14,10 +14,10 @@ export interface GitPort {
   removeWorktree(repoPath: string, wtPath: string): Promise<void>;
   getDefaultBranch(repoPath: string): Promise<string>;
   fetch(repoPath: string): Promise<void>;
+  cloneBare(remote: string, barePath: string): Promise<void>;
   getDiffStats(repoPath: string, branch: string, baseBranch?: string): Promise<DiffStats>;
   getDiffSummary(repoPath: string, branch: string, baseBranch?: string): Promise<string>;
   getLogOneline(repoPath: string, branch: string, baseBranch?: string, limit?: number): Promise<string>;
-  copyIgnoredFiles(sourceRepo: string, targetPath: string): Promise<void>;
   repairWorktrees(repoPath: string): Promise<void>;
   pruneWorktrees(repoPath: string): Promise<void>;
 }
