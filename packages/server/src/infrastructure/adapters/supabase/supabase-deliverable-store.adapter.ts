@@ -12,6 +12,7 @@ interface DeliverableRow {
   version: number;
   status: string;
   mention_id: string | null;
+  excluded_from_context: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +28,7 @@ function rowToEntity(r: DeliverableRow): TicketDeliverableEntity {
     r.version,
     r.status as 'draft' | 'final',
     r.mention_id,
+    r.excluded_from_context ?? false,
     new Date(r.created_at),
     new Date(r.updated_at),
   );
@@ -95,6 +97,7 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
       version: deliverable.version,
       status: deliverable.status,
       mention_id: deliverable.mentionId,
+      excluded_from_context: deliverable.excludedFromContext,
       created_at: deliverable.createdAt.toISOString(),
       updated_at: deliverable.updatedAt.toISOString(),
     });

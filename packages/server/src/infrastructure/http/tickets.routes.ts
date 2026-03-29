@@ -513,6 +513,30 @@ export function ticketRoutes(container: Container) {
       return reply.code(204).send();
     });
 
+    app.patch<{
+      Params: { id: string; delivId: string };
+      Body: { excludedFromContext?: boolean };
+    }>('/api/tickets/:id/deliverables/:delivId', async (request) => {
+      const deliverable = await container.deliverableStore.getById(request.params.delivId);
+      if (!deliverable) throw new DeliverableNotFoundError(request.params.delivId);
+
+      const oldStatus = deliverable.status;
+      deliverable.update({ excludedFromContext: request.body.excludedFromContext });
+      await container.deliverableStore.save(deliverable);
+
+      container.eventBus.emit({
+        type: 'deliverable.updated',
+        deliverableId: deliverable.id,
+        ticketId: deliverable.ticketId,
+        agentName: deliverable.agentName,
+        oldStatus,
+        newStatus: deliverable.status,
+        occurredAt: new Date(),
+      });
+
+      return deliverable.toDTO();
+    });
+
     // ── Comments (web) ──
 
     app.get<{ Params: { id: string } }>('/api/tickets/:id/comments', async (request) => {

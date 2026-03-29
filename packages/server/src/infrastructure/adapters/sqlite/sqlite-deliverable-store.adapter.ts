@@ -12,6 +12,7 @@ interface DeliverableRow {
   version: number;
   status: string;
   mention_id: string | null;
+  excluded_from_context: number;
   created_at: string;
   updated_at: string;
 }
@@ -58,10 +59,10 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO deliverables
         (id, ticket_id, agent_name, type, title, content, version, status,
-         mention_id, created_at, updated_at)
+         mention_id, excluded_from_context, created_at, updated_at)
       VALUES
         (@id, @ticket_id, @agent_name, @type, @title, @content, @version, @status,
-         @mention_id, @created_at, @updated_at)
+         @mention_id, @excluded_from_context, @created_at, @updated_at)
     `);
 
     stmt.run({
@@ -74,6 +75,7 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
       version: deliverable.version,
       status: deliverable.status,
       mention_id: deliverable.mentionId,
+      excluded_from_context: deliverable.excludedFromContext ? 1 : 0,
       created_at: deliverable.createdAt.toISOString(),
       updated_at: deliverable.updatedAt.toISOString(),
     });
@@ -94,6 +96,7 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
       row.version,
       row.status as 'draft' | 'final',
       row.mention_id,
+      !!row.excluded_from_context,
       new Date(row.created_at),
       new Date(row.updated_at),
     );

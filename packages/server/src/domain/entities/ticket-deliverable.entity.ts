@@ -11,6 +11,7 @@ export class TicketDeliverableEntity {
     public version: number,
     public status: 'draft' | 'final',
     public readonly mentionId: string | null,
+    public excludedFromContext: boolean,
     public readonly createdAt: Date,
     public updatedAt: Date,
   ) {}
@@ -36,12 +37,13 @@ export class TicketDeliverableEntity {
       1,
       params.status ?? 'draft',
       params.mentionId ?? null,
+      false,
       now,
       now,
     );
   }
 
-  update(changes: { title?: string; content?: string; status?: 'draft' | 'final' }): void {
+  update(changes: { title?: string; content?: string; status?: 'draft' | 'final'; excludedFromContext?: boolean }): void {
     if (changes.content !== undefined && changes.content !== this.content) {
       this.content = changes.content;
       this.version += 1;
@@ -51,6 +53,9 @@ export class TicketDeliverableEntity {
     }
     if (changes.status !== undefined) {
       this.status = changes.status;
+    }
+    if (changes.excludedFromContext !== undefined) {
+      this.excludedFromContext = changes.excludedFromContext;
     }
     this.updatedAt = new Date();
   }
@@ -70,6 +75,7 @@ export class TicketDeliverableEntity {
       version: this.version,
       status: this.status,
       mentionId: this.mentionId,
+      excludedFromContext: this.excludedFromContext,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };

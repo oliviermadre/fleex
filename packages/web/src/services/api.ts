@@ -407,6 +407,17 @@ export async function deleteDeliverable(ticketId: string, deliverableId: string)
   await request<void>(`/tickets/${encodeURIComponent(ticketId)}/deliverables/${encodeURIComponent(deliverableId)}`, { method: 'DELETE' });
 }
 
+export async function patchDeliverable(
+  ticketId: string,
+  deliverableId: string,
+  body: { excludedFromContext?: boolean },
+): Promise<import('@fleex/shared').TicketDeliverable> {
+  return request<import('@fleex/shared').TicketDeliverable>(
+    `/tickets/${encodeURIComponent(ticketId)}/deliverables/${encodeURIComponent(deliverableId)}`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+}
+
 // ── Ticket Comments API ──
 
 export async function fetchTicketComments(ticketId: string): Promise<import('@fleex/shared').TicketComment[]> {

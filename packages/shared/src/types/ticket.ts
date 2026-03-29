@@ -183,6 +183,7 @@ export interface TicketDeliverable {
   readonly version: number;
   readonly status: 'draft' | 'final';
   readonly mentionId: string | null;
+  readonly excludedFromContext: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

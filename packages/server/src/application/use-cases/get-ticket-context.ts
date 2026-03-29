@@ -39,8 +39,9 @@ export class GetTicketContextUseCase {
       (m) => m.targetAgent === params.agentName && m.status !== 'resolved',
     );
 
-    // Get deliverables
-    const deliverables = await this.deliverableStore.getByTicket(params.ticketId);
+    // Get deliverables (exclude ones the user toggled off from context)
+    const allDeliverables = await this.deliverableStore.getByTicket(params.ticketId);
+    const deliverables = allDeliverables.filter((d) => !d.excludedFromContext);
 
     // Get activity
     const activity = await this.ticketStore.getActivitiesByTicket(params.ticketId, activityLimit);

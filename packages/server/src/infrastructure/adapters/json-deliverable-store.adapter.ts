@@ -15,6 +15,7 @@ interface SerializedDeliverable {
   version: number;
   status: 'draft' | 'final';
   mentionId: string | null;
+  excludedFromContext: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,7 +85,7 @@ export class JsonDeliverableStore implements DeliverableStorePort {
         this.deliverables.set(d.id, new TicketDeliverableEntity(
           d.id, d.ticketId, d.agentName, d.type, d.title,
           d.content, d.version, d.status, d.mentionId,
-          new Date(d.createdAt), new Date(d.updatedAt),
+          d.excludedFromContext ?? false, new Date(d.createdAt), new Date(d.updatedAt),
         ));
       }
       this.logger.info('Deliverable store loaded', { count: this.deliverables.size });
@@ -101,6 +102,7 @@ export class JsonDeliverableStore implements DeliverableStorePort {
         id: d.id, ticketId: d.ticketId, agentName: d.agentName,
         type: d.type, title: d.title, content: d.content,
         version: d.version, status: d.status, mentionId: d.mentionId,
+        excludedFromContext: d.excludedFromContext,
         createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));
