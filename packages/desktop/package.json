@@ -2,7 +2,7 @@
   "name": "@fleex/desktop",
   "version": "0.1.0",
   "private": true,
-  "main": "src/main.ts",
+  "main": "src/main.js",
   "scripts": {
     "dev": "electron --inspect .",
     "start": "electron ."

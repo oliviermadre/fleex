@@ -3,10 +3,13 @@ import type { Session, WorktreeSessionGroup, Ticket, PullRequest, TicketStatus }
 import { cn } from '../../../lib/cn';
 import { useUIStore } from '../../../stores/uiStore';
 import { useTicketStore } from '../../../stores/ticketStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { usePullRequestStore } from '../../../stores/pullRequestStore';
 import { deriveDisplayStatus } from '../../../lib/deriveStatus';
 import { StatusDot } from '../../ui/StatusDot';
 import { NanoKanban } from '../../tickets/NanoKanban';
+import { renderIcon } from '../../sidebar/PinnedIcons';
+import { buildWorktreeContext } from '../../../lib/templateUtils';
 
 interface Props {
   worktree: WorktreeSessionGroup | null;
@@ -57,12 +60,25 @@ function PrBadge({ pr, org, name }: { pr: PullRequest; org: string; name: string
 
 // ——— Main header ———
 
+const ICON_BTN = 'flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)] overflow-hidden';
+
 export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, ticket, splitFocused }: Props) {
   const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
   const isFloating = activeSession ? floatingSessionIds.includes(activeSession.id) : false;
   const updateTicket = useTicketStore((s) => s.updateTicket);
+  const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
+  const worktreeActions = useSettingsStore((s) => s.settings.worktreeActions);
+  const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
+  const executeWorktreeAction = useSettingsStore((s) => s.executeWorktreeAction);
+
+  const worktreeContext = useMemo(() => {
+    if (worktree && repoOrg && repoName) return buildWorktreeContext(repoOrg, repoName, worktree.branch, worktree.path);
+    if (activeSession?.repositoryOrg && activeSession?.repositoryName && activeSession?.worktreeBranch)
+      return buildWorktreeContext(activeSession.repositoryOrg, activeSession.repositoryName, activeSession.worktreeBranch, activeSession.cwd);
+    return null;
+  }, [worktree, repoOrg, repoName, activeSession?.repositoryOrg, activeSession?.repositoryName, activeSession?.worktreeBranch, activeSession?.cwd]);
 
   const handleStatusChange = useCallback((status: TicketStatus) => {
     if (ticket) updateTicket(ticket.id, { status });
@@ -147,6 +163,45 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
       )}
 
       <div className="ml-auto flex items-center gap-2">
+        {/* Pinned actions + worktree actions */}
+        {(pinnedIcons.length > 0 || (worktreeContext && worktreeActions && worktreeActions.length > 0)) && (
+          <div className="flex items-center gap-1">
+            {pinnedIcons.map((icon) => (
+              <button
+                key={icon.id}
+                className={ICON_BTN}
+                onClick={() => executePinnedAction(icon)}
+                title={icon.label}
+              >
+                <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
+                  {renderIcon(icon, 14)}
+                </span>
+              </button>
+            ))}
+            {pinnedIcons.length > 0 && worktreeContext && worktreeActions && worktreeActions.length > 0 && (
+              <div className="mx-0.5 h-4 w-px bg-[var(--theme-border)]" />
+            )}
+            {worktreeContext && worktreeActions?.map((action) => (
+              <button
+                key={action.id}
+                className={ICON_BTN}
+                onClick={() => executeWorktreeAction(action, worktreeContext)}
+                title={action.label}
+              >
+                {action.icon ? (
+                  <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
+                    {renderIcon(action, 14)}
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-semibold leading-none text-[var(--theme-text-secondary)]">
+                    {action.label.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Nano kanban status picker (when linked to a ticket) */}
         {ticket && (
           <div className="w-[100px] shrink-0">

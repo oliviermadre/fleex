@@ -516,10 +516,11 @@ JSON
 
   # Launch Electron desktop window if --desktop was passed
   if $DESKTOP_MODE; then
-    local electron_bin="$REPO_DIR/node_modules/.bin/electron"
     local desktop_dir="$REPO_DIR/packages/desktop"
+    local electron_bin="$desktop_dir/node_modules/.bin/electron"
     if [[ ! -x "$electron_bin" ]]; then
-      warn "Electron not found. Install it: cd packages/desktop && bun install"
+      warn "Electron not found at $electron_bin"
+      warn "Install it: cd $desktop_dir && bun install"
       warn "Continuing without desktop window."
     elif [[ ! -d "$desktop_dir" ]]; then
       warn "packages/desktop not found. Continuing without desktop window."

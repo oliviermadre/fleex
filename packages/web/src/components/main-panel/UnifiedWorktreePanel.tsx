@@ -3,7 +3,6 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useWorktreeContext, type WorktreeEntry } from '../../hooks/useWorktreeContext';
-import { TopToolbar } from './TopToolbar';
 import { WorktreeHeader } from './tab-engine/WorktreeHeader';
 import { TabBar } from './tab-engine/TabBar';
 import { useTabEngine } from './tab-engine/useTabEngine';
@@ -94,12 +93,6 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
     return () => window.removeEventListener('fleex:new-tab', handler);
   }, [handleNewTab, isUnavailable]);
 
-  // Toolbar worktree context
-  const worktreeToolbar = useMemo(() => {
-    if (!worktree || !repoOrg || !repoName) return undefined;
-    return { org: repoOrg, repo: repoName, branch: worktree.branch, path: worktree.path };
-  }, [worktree, repoOrg, repoName]);
-
   // Content rendering — delegates to the active tab kind's Content component
   // Floating logic is handled inline by TerminalTabContent (no guard needed here)
   const renderContent = () => {
@@ -136,7 +129,6 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
       }${isSplit && !focused ? ' session-pane-unfocused' : ''}`}
       onClick={onFocus}
     >
-      <TopToolbar worktree={worktreeToolbar} session={activeSession ?? undefined} />
       <WorktreeHeader
         worktree={worktree}
         repoOrg={repoOrg}
