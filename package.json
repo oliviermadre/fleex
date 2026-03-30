@@ -16,7 +16,8 @@
     "start:gateway": "cd packages/host-gateway && bun run src/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc -b packages/shared && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json"
+    "lint": "tsc -b packages/shared && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json",
+    "dev:desktop": "FLEEX_SERVER_PORT=${PORT:-3000} electron packages/desktop"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
