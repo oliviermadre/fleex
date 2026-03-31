@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { SessionEntity } from '../../domain/entities.js';
 import { SessionNamingService } from '../../domain/services/session-naming.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { TmuxPort, TmuxSessionInfo } from '../ports/tmux.port.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 
 export class DiscoverExistingSessionsUseCase {
@@ -13,6 +15,8 @@ export class DiscoverExistingSessionsUseCase {
     private readonly namingService: SessionNamingService,
     private readonly logger: LoggerPort,
     private readonly git?: GitPort,
+    private readonly resolver?: RepoPathResolver,
+    private readonly ticketStore?: TicketStorePort,
   ) {}
 
   async execute(prefetchedSessions?: TmuxSessionInfo[]): Promise<void> {
@@ -55,41 +59,6 @@ export class DiscoverExistingSessionsUseCase {
         repositoryName: metadata.repositoryName || undefined,
       });
     }
-
-    if (!prefetchedSessions) {
-      // Re-enrich existing sessions that are missing metadata (e.g. discovered before a bug fix)
-      // Skip when called with prefetched sessions (lightweight path, no expensive git lookups)
-      for (const session of await this.sessionStore.getAll()) {
-        if (session.repositoryOrg || session.status === 'dead') continue;
-
-        const metadata = await this.resolveMetadata(session.tmuxName);
-        if (!metadata.repositoryOrg) continue;
-
-        const enriched = new SessionEntity(
-          session.id,
-          session.tmuxName,
-          session.type,
-          session.status,
-          metadata.cwd || session.cwd,
-          session.createdAt,
-          session.lastAttachedAt,
-          metadata.repositoryOrg,
-          metadata.repositoryName,
-          metadata.worktreeBranch,
-          metadata.gitRemote,
-          session.claudePrompt,
-          session.displayName,
-        );
-
-        await this.sessionStore.save(enriched);
-        this.logger.info('Re-enriched session metadata', {
-          id: session.id,
-          tmuxName: session.tmuxName,
-          repositoryOrg: metadata.repositoryOrg || undefined,
-          repositoryName: metadata.repositoryName || undefined,
-        });
-      }
-    }
   }
 
   private async resolveMetadata(tmuxName: string): Promise<{
@@ -108,6 +77,31 @@ export class DiscoverExistingSessionsUseCase {
     const paneCwd = await this.tmux.getSessionCwd(tmuxName);
     if (paneCwd) {
       cwd = paneCwd;
+
+      // Try manifest-based resolution first (zero network, reads from filesystem + memory cache)
+      if (this.resolver && this.ticketStore) {
+        const manifest = this.resolver.resolveManifest(paneCwd);
+        if (manifest?.ticketId) {
+          const ticket = await this.ticketStore.getTicketById(manifest.ticketId);
+          if (ticket) {
+            const repoLink = ticket.links.find((l) => l.type === 'repository');
+            if (repoLink) {
+              const slashIdx = repoLink.ref.indexOf('/');
+              if (slashIdx > 0) {
+                repositoryOrg = repoLink.ref.substring(0, slashIdx);
+                repositoryName = repoLink.ref.substring(slashIdx + 1);
+              }
+            }
+            const wtLink = ticket.links.find((l) => l.type === 'worktree');
+            if (wtLink) {
+              worktreeBranch = wtLink.label;
+            }
+            return { cwd, repositoryOrg, repositoryName, worktreeBranch, gitRemote };
+          }
+        }
+      }
+
+      // Fallback to git info for non-workspace sessions
       if (this.git) {
         try {
           const info = await this.git.getInfo(paneCwd);
@@ -116,7 +110,7 @@ export class DiscoverExistingSessionsUseCase {
           worktreeBranch = info.branch;
           gitRemote = info.remote;
         } catch {
-          // Not a git repo or git not available — leave metadata null
+          // Not a git repo — leave metadata null
         }
       }
     }

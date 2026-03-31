@@ -79,8 +79,8 @@ export function useCommandItems(query: string): CommandItem[] {
 
     // ── Create actions ──
     items.push({
-      id: 'create:session',
-      label: 'Create new session',
+      id: 'create:task',
+      label: 'New task',
       category: 'create',
       categoryLabel: 'Create',
       icon: PlusIcon({ size: 16, className: 'text-[var(--theme-text-secondary)]' }),

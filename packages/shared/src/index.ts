@@ -9,6 +9,7 @@ export type {
   SessionGroup,
   AgentWorktreeInfo,
   WorktreeSessionGroup,
+  WorktreeDiffStats,
 } from './types/session.js';
 
 export { slugify } from './slugify.js';

@@ -30,11 +30,9 @@ interface UIState {
   altHeld: boolean;
   setAltHeld: (held: boolean) => void;
 
-  // Create session modal
+  // Create task modal
   createModalOpen: boolean;
-  createModalTicketContext: { ticketId: string; repo: string | null; prompt: string } | null;
   openCreateModal: () => void;
-  openCreateModalForTicket: (ctx: { ticketId: string; repo: string | null; prompt: string }) => void;
   closeCreateModal: () => void;
 
   // Command palette
@@ -123,7 +121,6 @@ export const useUIStore = create<UIState>((set) => ({
   analyticsTab: 'audit-trail',
   altHeld: false,
   createModalOpen: false,
-  createModalTicketContext: null,
   commandPaletteOpen: false,
   collapsedGroups: new Set<string>(),
   scratchpadOpen: false,
@@ -171,9 +168,7 @@ export const useUIStore = create<UIState>((set) => ({
 
   openCreateModal: () => set({ createModalOpen: true }),
 
-  openCreateModalForTicket: (ctx) => set({ createModalOpen: true, createModalTicketContext: ctx }),
-
-  closeCreateModal: () => set({ createModalOpen: false, createModalTicketContext: null }),
+  closeCreateModal: () => set({ createModalOpen: false }),
 
   openCommandPalette: () => set({ commandPaletteOpen: true }),
 

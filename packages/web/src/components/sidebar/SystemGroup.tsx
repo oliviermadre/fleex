@@ -23,29 +23,27 @@ interface Props {
  */
 export function SystemGroup({ sessions }: Props) {
   const navigate = useNavigate();
-  const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
+  const sessionTicketId = useSessionStore((s) => s.selectedTicketId);
   const lastActiveTab = useUIStore((s) => s.lastActiveTabByWorktree[SYSTEM_WORKTREE_KEY]);
   const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
   const basePath = useSettingsStore((s) => s.settings.basePath);
 
   const branchStatus = useMemo(() => aggregateBranchStatus(sessions), [sessions]);
-  const isSelected = sessions.some((s) => s.id === selectedSessionId);
+  const isSelected = sessionTicketId === 'system';
 
   const handleClick = () => {
     if (sessions.length === 0) {
       const cwd = basePath || '/tmp';
       api.createSession({ cwd, type: 'shell' }).then((session) => {
         addSessionToGroup(session);
-        navigate(`/sessions/${session.id}`, { replace: true });
+        navigate(`/sessions/system/s:${session.id}`, { replace: true });
         api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
       }).catch(() => {});
       return;
     }
-    const targetId = lastActiveTab && sessions.some((s) => s.id === lastActiveTab)
-      ? lastActiveTab
-      : sessions[0]!.id;
-    navigate(`/sessions/${targetId}`, { replace: true });
+    const tabSuffix = lastActiveTab ? `/${encodeURIComponent(lastActiveTab)}` : '';
+    navigate(`/sessions/system${tabSuffix}`, { replace: true });
   };
 
   return (

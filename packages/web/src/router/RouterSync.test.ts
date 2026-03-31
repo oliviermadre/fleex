@@ -15,18 +15,32 @@ describe('parseUrl', () => {
     expect(result.splitId).toBeNull();
   });
 
-  it('parses /sessions/:id', () => {
+  it('parses /sessions/:ticketId', () => {
     const result = parseUrl('/sessions/abc123', '');
     expect(result.panel).toBe('sessions');
-    expect(result.sessionId).toBe('abc123');
-    expect(result.splitId).toBeNull();
+    expect(result.sessionTicketId).toBe('abc123');
+    expect(result.sessionTabKey).toBeNull();
   });
 
-  it('parses /sessions/:id?split=:splitId', () => {
-    const result = parseUrl('/sessions/abc123', '?split=def456');
+  it('parses /sessions/:ticketId/:tabKey', () => {
+    const result = parseUrl('/sessions/abc123/s%3Adef456', '');
     expect(result.panel).toBe('sessions');
-    expect(result.sessionId).toBe('abc123');
-    expect(result.splitId).toBe('def456');
+    expect(result.sessionTicketId).toBe('abc123');
+    expect(result.sessionTabKey).toBe('s:def456');
+  });
+
+  it('parses /sessions/system', () => {
+    const result = parseUrl('/sessions/system', '');
+    expect(result.panel).toBe('sessions');
+    expect(result.sessionTicketId).toBe('system');
+    expect(result.sessionTabKey).toBeNull();
+  });
+
+  it('parses /sessions/system/:tabKey', () => {
+    const result = parseUrl('/sessions/system/s%3Aabc123', '');
+    expect(result.panel).toBe('sessions');
+    expect(result.sessionTicketId).toBe('system');
+    expect(result.sessionTabKey).toBe('s:abc123');
   });
 
   it('parses /repositories', () => {
@@ -155,22 +169,25 @@ describe('parseUrl', () => {
 });
 
 describe('storeToUrl', () => {
-  it('generates /sessions when no session selected', () => {
+  it('generates /sessions when nothing selected', () => {
     const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general');
     expect(url.pathname).toBe('/sessions');
     expect(url.search).toBe('');
   });
 
-  it('generates /sessions/:id when session selected', () => {
-    const url = storeToUrl('sessions', 'abc123', null, null, null, null, null, null, null, 'config', 'general');
-    expect(url.pathname).toBe('/sessions/abc123');
-    expect(url.search).toBe('');
+  it('generates /sessions/:ticketId when ticket selected', () => {
+    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'ticket-abc', null);
+    expect(url.pathname).toBe('/sessions/ticket-abc');
   });
 
-  it('generates /sessions/:id?split=:splitId when split active', () => {
-    const url = storeToUrl('sessions', 'abc123', 'def456', null, null, null, null, null, null, 'config', 'general');
-    expect(url.pathname).toBe('/sessions/abc123');
-    expect(url.search).toBe('?split=def456');
+  it('generates /sessions/:ticketId/:tabKey when ticket and tab selected', () => {
+    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'ticket-abc', 's:session-123');
+    expect(url.pathname).toBe('/sessions/ticket-abc/s%3Asession-123');
+  });
+
+  it('generates /sessions/system when system shells selected', () => {
+    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', undefined, undefined, undefined, undefined, 'system', null);
+    expect(url.pathname).toBe('/sessions/system');
   });
 
   it('generates /repositories when no repo selected', () => {
@@ -243,8 +260,8 @@ describe('storeToUrl', () => {
     expect(url.pathname).toBe('/sessions/agent/ticket-123');
   });
 
-  it('prefers session over agent worktree when both set', () => {
-    const url = storeToUrl('sessions', 'abc123', null, null, null, null, null, null, null, 'config', 'general', 'ticket-123');
-    expect(url.pathname).toBe('/sessions/abc123');
+  it('prefers ticket over agent worktree when both set', () => {
+    const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', 'ticket-123', undefined, undefined, undefined, 'ticket-abc', null);
+    expect(url.pathname).toBe('/sessions/ticket-abc');
   });
 });

@@ -505,8 +505,6 @@ function TicketCard({
       >
         <SmartSessionButton
           sessions={sessions}
-          creating={creating}
-          onCreateSession={() => onCreateSession(ticket.id)}
           disabled={!hasRepo}
           ticketId={ticket.id}
           onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}

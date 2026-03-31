@@ -12,6 +12,7 @@ import type { Container } from '../container.js';
 import type { JsonlFileWatcher } from '../services/jsonl-file-watcher.js';
 import type { WsHeartbeat } from './ws-heartbeat.js';
 import { encodePath } from '../../domain/services/claude-path-encoding.js';
+import { DiffStatsCache } from '../../domain/services/diff-stats-cache.js';
 
 // Binary protocol constants (match shared ClientMessageType / ServerMessageType)
 const CLIENT_ATTACH = 0x01;
@@ -79,6 +80,9 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
   return async function (app: FastifyInstance) {
     const clients = new Map<WebSocket, UnifiedClient>();
 
+    // ─── Diff stats cache (refreshed every 60s, injected into each broadcast) ───
+    const diffStatsCache = new DiffStatsCache(container.git, container.logger);
+
     // ─── Dashboard broadcast logic (ported from dashboard-ws.ts) ───
     let broadcastInFlight = false;
     let pendingBroadcast = false;
@@ -91,6 +95,7 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       broadcastInFlight = true;
       try {
         const groups = await container.getSessionGroups.execute();
+        diffStatsCache.inject(groups);
         const message: DashboardMessage = { type: 'sessions:updated', data: groups };
         const payload = JSON.stringify({ channel: 'dashboard' as WsChannel, ...message });
 
@@ -138,6 +143,17 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
     if (fileWatcher) {
       fileWatcher.on('change', () => dashboardBroadcast());
     }
+
+    // Refresh diff stats every 60s (non-blocking — runs git diff in background)
+    const DIFF_STATS_INTERVAL_MS = 60_000;
+    async function refreshDiffStats(): Promise<void> {
+      try {
+        const groups = await container.getSessionGroups.execute();
+        await diffStatsCache.refresh(groups);
+      } catch { /* ignore */ }
+    }
+    refreshDiffStats(); // initial refresh on startup
+    const diffStatsInterval = setInterval(() => refreshDiffStats(), DIFF_STATS_INTERVAL_MS);
 
     // ─── Channel broadcast helper (for repositories, tickets, personas, skills) ───
     function channelBroadcast(channel: WsChannel, type: string, data: unknown): void {
@@ -262,9 +278,12 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
               const payload = data.subarray(1);
               const { sessionId, cols, rows } = parseAttachPayload(payload);
 
-              if (client.ptyHandles.has(sessionId)) {
-                sendTerminalError(ws, sessionId, 'Already attached to this session');
-                return;
+              // If already attached, kill old PTY and re-attach (handles React StrictMode double-mount)
+              const existingHandle = client.ptyHandles.get(sessionId);
+              if (existingHandle) {
+                container.logger.info('Re-attaching to session, killing old PTY', { sessionId });
+                client.ptyHandles.delete(sessionId);
+                existingHandle.kill();
               }
 
               try {
@@ -380,6 +399,7 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
 
     app.addHook('onClose', () => {
       clearInterval(dashboardInterval);
+      clearInterval(diffStatsInterval);
       if (batchTimer) clearTimeout(batchTimer);
       if (fileWatcher) fileWatcher.closeAll();
       for (const client of clients.values()) {

@@ -12,6 +12,7 @@ export interface GitPort {
     base?: string,
   ): Promise<void>;
   removeWorktree(repoPath: string, wtPath: string): Promise<void>;
+  moveWorktree(repoPath: string, wtPath: string, newPath: string): Promise<void>;
   getDefaultBranch(repoPath: string): Promise<string>;
   fetch(repoPath: string): Promise<void>;
   cloneBare(remote: string, barePath: string): Promise<void>;

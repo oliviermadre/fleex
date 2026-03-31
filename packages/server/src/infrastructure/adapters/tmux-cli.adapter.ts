@@ -105,18 +105,19 @@ export class TmuxCliAdapter implements TmuxPort {
     try {
       const { stdout } = await this.execFn('tmux', [
         'list-panes', '-a', '-F',
-        '#{session_name},#{session_created},#{session_attached},#{window_width},#{window_height},#{pane_pid},#{pane_current_command}',
+        '#{session_name},#{session_created},#{session_attached},#{window_width},#{window_height},#{pane_pid},#{pane_current_command},#{pane_current_path}',
       ]);
 
       const sessionMap = new Map<string, TmuxSessionInfo>();
       const paneCommands = new Map<string, string>();
+      const paneCwds = new Map<string, string>();
       const pidsToResolve: { sessionName: string; pid: string }[] = [];
       const activePids = new Set<string>();
 
       for (const line of stdout.trim().split('\n')) {
         if (!line) continue;
         const parts = line.split(',');
-        if (parts.length < 7) continue;
+        if (parts.length < 8) continue;
 
         const sessionName = parts[0] ?? '';
         if (!sessionName.startsWith(FLEEX_PREFIX)) continue;
@@ -134,6 +135,8 @@ export class TmuxCliAdapter implements TmuxPort {
 
         const pid = parts[5] ?? '';
         const command = parts[6] ?? '';
+        const paneCwd = parts[7] ?? '';
+        if (paneCwd) paneCwds.set(sessionName, paneCwd);
         activePids.add(pid);
 
         // Claude CLI sets its process title to its version number (e.g. "2.1.49")
@@ -177,10 +180,11 @@ export class TmuxCliAdapter implements TmuxPort {
       return {
         sessions: Array.from(sessionMap.values()),
         paneCommands,
+        paneCwds,
       };
     } catch (err: any) {
       if (err.code === 1 || (err.message && err.message.includes('no server running'))) {
-        return { sessions: [], paneCommands: new Map() };
+        return { sessions: [], paneCommands: new Map(), paneCwds: new Map() };
       }
       throw err;
     }

@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import type { DiffStats, GitRemoteInfo, Worktree } from '@fleex/shared';
 import type { GitPort } from '../../application/ports/git.port.js';
@@ -127,6 +128,9 @@ export class GitCliAdapter implements GitPort {
       args.push(wtPath, branch);
     }
 
+    // Ensure parent directory exists (git worktree add doesn't create nested parents)
+    mkdirSync(dirname(wtPath), { recursive: true });
+
     await this.execFn('git', args, { cwd: repoPath });
     this.logger.debug('Worktree created', { repoPath, wtPath, branch });
   }
@@ -136,6 +140,14 @@ export class GitCliAdapter implements GitPort {
       cwd: repoPath,
     });
     this.logger.debug('Worktree removed', { repoPath, wtPath });
+  }
+
+  async moveWorktree(repoPath: string, wtPath: string, newPath: string): Promise<void> {
+    mkdirSync(dirname(newPath), { recursive: true });
+    await this.execFn('git', ['worktree', 'move', wtPath, newPath], {
+      cwd: repoPath,
+    });
+    this.logger.debug('Worktree moved', { repoPath, from: wtPath, to: newPath });
   }
 
   async getDefaultBranch(repoPath: string): Promise<string> {

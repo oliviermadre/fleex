@@ -31,7 +31,6 @@ export function KanbanColumn({
   boardId,
   isAllBoards,
   boards,
-  onOpenSession,
   collapsed,
   onToggleCollapse,
   prStates,
@@ -41,7 +40,6 @@ export function KanbanColumn({
   boardId: string;
   isAllBoards?: boolean;
   boards?: BoardWithCounts[];
-  onOpenSession: (ticketId: string) => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   prStates?: Record<string, string>;
@@ -218,7 +216,6 @@ export function KanbanColumn({
             <KanbanCard
               ticket={ticket}
               board={isAllBoards ? boards?.find((b) => b.id === ticket.boardId) : undefined}
-              onOpenSession={onOpenSession}
               prStates={prStates}
             />
           </div>

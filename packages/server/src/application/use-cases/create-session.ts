@@ -19,22 +19,25 @@ export class CreateSessionUseCase {
   ) {}
 
   async execute(request: CreateSessionRequest): Promise<SessionEntity> {
-    let repositoryOrg: string | null = null;
-    let repositoryName: string | null = null;
-    let worktreeBranch: string | null = null;
+    // Use caller-provided metadata or fall back to git detection
+    let repositoryOrg: string | null = request.repositoryOrg ?? null;
+    let repositoryName: string | null = request.repositoryName ?? null;
+    let worktreeBranch: string | null = request.worktreeBranch ?? null;
     let gitRemote: string | null = null;
 
-    try {
-      const gitInfo = await this.git.getInfo(request.cwd);
-      repositoryOrg = gitInfo.org;
-      repositoryName = gitInfo.name;
-      worktreeBranch = gitInfo.branch;
-      gitRemote = gitInfo.remote;
-    } catch {
-      this.logger.debug('No git info found for cwd', { cwd: request.cwd });
+    if (!repositoryOrg) {
+      try {
+        const gitInfo = await this.git.getInfo(request.cwd);
+        repositoryOrg = gitInfo.org;
+        repositoryName = gitInfo.name;
+        worktreeBranch = gitInfo.branch;
+        gitRemote = gitInfo.remote;
+      } catch {
+        this.logger.debug('No git info found for cwd', { cwd: request.cwd });
+      }
     }
 
-    const defaultDisplayName = this.namingService.defaultDisplayName(request.type);
+    const defaultDisplayName = request.displayName ?? this.namingService.defaultDisplayName(request.type);
 
     // Gather existing tmux names for uniqueness check
     const storedNames = (await this.sessionStore.getAll()).map((s) => s.tmuxName);

@@ -114,32 +114,34 @@ export function RepositoryGroup({ group, flowType }: Props) {
           <path d="M3 1l5 4-5 4V1z" />
         </svg>
         <span className="truncate text-[11px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          {group.repositoryOrg}/{group.repositoryName}
+          {group.repositoryOrg === '_multi-repo' ? 'Multi-Repo' : `${group.repositoryOrg}/${group.repositoryName}`}
         </span>
-        <span className="ml-auto flex items-center gap-1">
-          <span
-            role="button"
-            className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] p-0.5 rounded hover:bg-white/[0.08] transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              openScratchpadForRepo(groupId);
-            }}
-            title="Open scratchpad"
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" />
-            </svg>
+        {group.repositoryOrg !== '_multi-repo' && (
+          <span className="ml-auto flex items-center gap-1">
+            <span
+              role="button"
+              className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] p-0.5 rounded hover:bg-white/[0.08] transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                openScratchpadForRepo(groupId);
+              }}
+              title="Open scratchpad"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" />
+              </svg>
+            </span>
+            <a
+              href={`https://github.com/${group.repositoryOrg}/${group.repositoryName}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <GitHubIcon size={14} />
+            </a>
           </span>
-          <a
-            href={`https://github.com/${group.repositoryOrg}/${group.repositoryName}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <GitHubIcon size={14} />
-          </a>
-        </span>
+        )}
       </button>
       {!collapsed &&
         sortedWorktrees.map((wt) => {

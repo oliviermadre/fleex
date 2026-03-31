@@ -1,4 +1,5 @@
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 export class RepoPathResolver {
   constructor(private readonly basePath: string) {}
@@ -51,5 +52,32 @@ export class RepoPathResolver {
   /** Worktree within a workspace: workspaces/workspaceId/repoName */
   workspaceRepoPath(workspaceId: string, repoName: string): string {
     return join(this.basePath, 'workspaces', workspaceId, repoName);
+  }
+
+  /** Root of all workspaces */
+  workspacesRoot(): string {
+    return join(this.basePath, 'workspaces');
+  }
+
+  /**
+   * Walk up from cwd looking for .fleex.json under workspaces/.
+   * Returns { ticketId } or null if cwd is not inside a workspace.
+   */
+  resolveManifest(cwd: string): { ticketId: string } | null {
+    const root = this.workspacesRoot();
+    if (!cwd.startsWith(root)) return null;
+    let dir = cwd;
+    while (dir.startsWith(root) && dir !== root) {
+      const manifest = join(dir, '.fleex.json');
+      if (existsSync(manifest)) {
+        try {
+          return JSON.parse(readFileSync(manifest, 'utf-8'));
+        } catch {
+          return null;
+        }
+      }
+      dir = dirname(dir);
+    }
+    return null;
   }
 }

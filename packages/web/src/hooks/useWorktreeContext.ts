@@ -1,11 +1,12 @@
 import { useMemo, useEffect } from 'react';
-import type { Session, WorktreeSessionGroup, Ticket, AgentExecution, TicketLink } from '@fleex/shared';
+import type { Session, WorktreeSessionGroup, Ticket, AgentExecution } from '@fleex/shared';
 import { useSessionStore } from '../stores/sessionStore';
 import { useTicketStore } from '../stores/ticketStore';
 import { useAgentEventStore } from '../stores/agentEventStore';
 
 export type WorktreeEntry =
   | { kind: 'session'; sessionId: string }
+  | { kind: 'ticket'; ticketId: string }
   | { kind: 'agent'; ticketId: string };
 
 export interface WorktreeContext {
@@ -36,11 +37,11 @@ export function useWorktreeContext(entry: WorktreeEntry): WorktreeContext {
   const entryId = entry.kind === 'session' ? entry.sessionId : entry.ticketId;
 
   const resolved = useMemo(() => {
-    if (entryKind === 'agent') {
+    if (entryKind === 'agent' || entryKind === 'ticket') {
       // Find worktree by ticketId
       for (const group of sessionGroups) {
         for (const wt of group.worktrees) {
-          if (wt.agentWorktree?.ticketId === entryId) {
+          if (wt.ticketId === entryId || wt.agentWorktree?.ticketId === entryId) {
             const gId = `${group.repositoryOrg}/${group.repositoryName}:${wt.branch}`;
             const ticket = tickets.find((t) => t.id === entryId) ?? null;
             return {
@@ -55,50 +56,33 @@ export function useWorktreeContext(entry: WorktreeEntry): WorktreeContext {
           }
         }
       }
-      // Worktree not found — still return ticket if available
       const ticket = tickets.find((t) => t.id === entryId) ?? null;
       return { worktree: null, repoOrg: '', repoName: '', groupId: '', sessions: [] as Session[], ticketId: entryId, ticket };
     }
 
-    // Find worktree by sessionId
-    const session = sessions.find((s) => s.id === entryId);
-    if (!session) {
-      return { worktree: null, repoOrg: '', repoName: '', groupId: '', sessions: [] as Session[], ticketId: null, ticket: null };
-    }
-
-    const targetOrg = session.repositoryOrg ?? '_ungrouped';
-    const targetName = session.repositoryName ?? '_ungrouped';
-    const targetBranch = session.worktreeBranch ?? '_default';
-    const isSystem = !session.repositoryOrg || !session.repositoryName || !session.worktreeBranch;
-    const gId = isSystem ? '_system' : `${targetOrg}/${targetName}:${targetBranch}`;
-
+    // Find worktree that actually contains this session (the backend's grouping is authoritative)
     for (const group of sessionGroups) {
-      if (group.repositoryOrg === targetOrg && group.repositoryName === targetName) {
-        for (const wt of group.worktrees) {
-          if (wt.branch === targetBranch) {
-            // Try agent worktree ticket first, then fall back to worktree link
-            const worktreeRef = `${targetOrg}/${targetName}:${wt.branch}`;
-            let tId = wt.agentWorktree?.ticketId ?? null;
-            let ticket: Ticket | null = tId ? (tickets.find((t) => t.id === tId) ?? null) : null;
-            if (!ticket) {
-              ticket = tickets.find((t) => t.links.some((l: TicketLink) => l.type === 'worktree' && l.ref === worktreeRef)) ?? null;
-              tId = ticket?.id ?? null;
-            }
-            return {
-              worktree: wt,
-              repoOrg: targetOrg,
-              repoName: targetName,
-              groupId: gId,
-              sessions: wt.sessions,
-              ticketId: tId,
-              ticket,
-            };
-          }
+      for (const wt of group.worktrees) {
+        if (wt.sessions.some((s: Session) => s.id === entryId)) {
+          const gId = (group.repositoryOrg === '_ungrouped')
+            ? '_system'
+            : `${group.repositoryOrg}/${group.repositoryName}:${wt.branch}`;
+          const tId = wt.ticketId ?? null;
+          const ticket = tId ? (tickets.find((t) => t.id === tId) ?? null) : null;
+          return {
+            worktree: wt,
+            repoOrg: group.repositoryOrg,
+            repoName: group.repositoryName,
+            groupId: gId,
+            sessions: wt.sessions,
+            ticketId: tId,
+            ticket,
+          };
         }
       }
     }
 
-    return { worktree: null, repoOrg: targetOrg, repoName: targetName, groupId: gId, sessions: [] as Session[], ticketId: null, ticket: null };
+    return { worktree: null, repoOrg: '', repoName: '', groupId: '', sessions: [] as Session[], ticketId: null, ticket: null };
   }, [entryKind, entryId, sessionGroups, sessions, tickets]);
 
   // Load executions if this worktree has a linked ticket

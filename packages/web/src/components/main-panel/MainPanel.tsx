@@ -116,9 +116,23 @@ export function MainPanel() {
     return <RepositoryDashboard repoKey={selectedRepoKey} />;
   }
 
-  // Agent worktree view — unified panel with ticket context
+  // Agent worktree view (legacy route)
   if (activePanel === 'sessions' && selectedAgentWorktreeTicketId) {
     return <UnifiedWorktreePanel entry={{ kind: 'agent', ticketId: selectedAgentWorktreeTicketId }} focused />;
+  }
+
+  // Ticket-based session view
+  const sessionTicketId = useSessionStore.getState().selectedTicketId;
+  if (activePanel === 'sessions' && sessionTicketId) {
+    if (sessionTicketId === 'system') {
+      // System shells — find the first system session to create the entry
+      const systemSession = sessions.find((s) => !s.repositoryOrg);
+      if (systemSession) {
+        return <UnifiedWorktreePanel entry={{ kind: 'session', sessionId: systemSession.id }} focused />;
+      }
+    } else {
+      return <UnifiedWorktreePanel entry={{ kind: 'ticket', ticketId: sessionTicketId }} focused />;
+    }
   }
 
   // Grouped view

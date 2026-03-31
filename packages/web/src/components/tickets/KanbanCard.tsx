@@ -48,12 +48,10 @@ function formatTimeAgo(dateStr: string): string {
 export function KanbanCard({
   ticket,
   board,
-  onOpenSession,
   prStates,
 }: {
   ticket: Ticket;
   board?: BoardWithCounts | null;
-  onOpenSession: (ticketId: string) => void;
   prStates?: Record<string, string>;
 }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
@@ -304,8 +302,6 @@ export function KanbanCard({
           <span onClick={(e) => e.stopPropagation()}>
             <SmartSessionButton
               sessions={ticketSessions}
-              creating={false}
-              onCreateSession={() => onOpenSession(ticket.id)}
               ticketId={ticket.id}
               onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
             />

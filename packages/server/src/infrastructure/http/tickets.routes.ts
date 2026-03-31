@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest } from '@fleex/shared';
 import { TICKET_STATUSES } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import { buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus } from '@fleex/shared';
 import type { Container } from '../container.js';
@@ -225,9 +227,45 @@ export function ticketRoutes(container: Container) {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
+        let ref = request.body.ref;
+
+        // When linking a worktree to a ticket, move it into the ticket workspace
+        if (request.body.type === 'worktree' && ref.includes(':') && !ref.startsWith('/')) {
+          const colonIdx = ref.indexOf(':');
+          const repoKey = ref.substring(0, colonIdx);
+          const branch = ref.substring(colonIdx + 1);
+          const slashIdx = repoKey.indexOf('/');
+          if (slashIdx > 0) {
+            const org = repoKey.substring(0, slashIdx);
+            const name = repoKey.substring(slashIdx + 1);
+            const barePath = container.resolver.barePath(org, name);
+            const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+            const targetPath = container.resolver.workspaceRepoPath(workspaceId, name);
+
+            try {
+              // Find the worktree's current path
+              const worktrees = await container.git.listWorktrees(barePath);
+              const match = worktrees.find((wt) => wt.branch === branch);
+              if (match && match.path !== targetPath) {
+                // Move worktree to ticket workspace
+                await container.git.moveWorktree(barePath, match.path, targetPath);
+                container.logger.info('Worktree moved to ticket workspace', {
+                  from: match.path, to: targetPath, ticketId: ticket.id,
+                });
+              }
+              // Update ref to absolute workspace path
+              ref = targetPath;
+            } catch (err) {
+              container.logger.warn('Failed to move worktree to workspace, keeping original ref', {
+                ticketId: ticket.id, ref, error: err instanceof Error ? err.message : String(err),
+              });
+            }
+          }
+        }
+
         const link = ticket.addLink(
           request.body.type as Parameters<TicketEntity['addLink']>[0],
-          request.body.ref,
+          ref,
           request.body.label,
           request.body.url ?? null,
           randomUUID(),
@@ -252,6 +290,121 @@ export function ticketRoutes(container: Container) {
       async (request, reply) => {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+        // Before removing, check if it's a worktree link in a workspace — move it back
+        const link = ticket.links.find((l) => l.id === request.params.linkId);
+        if (link?.type === 'worktree') {
+          const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+          const workspaceBase = container.resolver.workspacePath(workspaceId);
+
+          try {
+            // Resolve org/name/branch and current path from the link ref
+            let wtPath: string | null = null;
+            let org: string | null = null;
+            let name: string | null = null;
+            let branch: string | null = null;
+
+            if (link.ref.includes(':') && !link.ref.startsWith('/')) {
+              // UI format: "org/name:branch"
+              const colonIdx = link.ref.indexOf(':');
+              const repoKey = link.ref.substring(0, colonIdx);
+              branch = link.ref.substring(colonIdx + 1);
+              const si = repoKey.indexOf('/');
+              if (si > 0) {
+                org = repoKey.substring(0, si);
+                name = repoKey.substring(si + 1);
+              }
+              if (org && name) {
+                const barePath = container.resolver.barePath(org, name);
+                const worktrees = await container.git.listWorktrees(barePath);
+                const match = worktrees.find((wt) => wt.branch === branch);
+                if (match) wtPath = match.path;
+              }
+            } else if (link.ref.startsWith('/')) {
+              // Absolute path — the worktree IS at this path
+              wtPath = link.ref;
+              branch = link.label;
+              // Derive org/name: try repository link, then board config, then scan bare clones
+              const repoLink = ticket.links.find((l) => l.type === 'repository');
+              if (repoLink?.ref?.includes('/')) {
+                const si = repoLink.ref.indexOf('/');
+                org = repoLink.ref.substring(0, si);
+                name = repoLink.ref.substring(si + 1);
+              }
+              if (!org || !name) {
+                // Fallback: find which bare clone owns this worktree
+                const bareClones = await container.bareCloneManager.listBareClones();
+                for (const bc of bareClones) {
+                  const barePath = container.resolver.barePath(bc.org, bc.name);
+                  try {
+                    const worktrees = await container.git.listWorktrees(barePath);
+                    if (worktrees.some((wt) => wt.path === wtPath)) {
+                      org = bc.org;
+                      name = bc.name;
+                      break;
+                    }
+                  } catch { /* ignore */ }
+                }
+              }
+            }
+
+            // If worktree is inside the workspace, move it back to standalone worktrees/
+            if (wtPath && org && name && branch && wtPath.startsWith(workspaceBase)) {
+              const barePath = container.resolver.barePath(org, name);
+              const standalonePath = container.resolver.worktreeDir(org, buildWorktreeDirName(name, branch));
+              await container.git.moveWorktree(barePath, wtPath, standalonePath);
+              container.logger.info('Worktree moved back from workspace', {
+                from: wtPath, to: standalonePath, ticketId: ticket.id,
+              });
+            }
+
+            // Clean up empty workspace folder
+            if (existsSync(workspaceBase)) {
+              const entries = readdirSync(workspaceBase).filter((e) => e !== '.DS_Store');
+              if (entries.length === 0) {
+                rmSync(workspaceBase, { recursive: true, force: true });
+                container.logger.info('Cleaned up empty workspace folder', { workspaceBase });
+              }
+            }
+          } catch (err) {
+            container.logger.warn('Failed to move worktree back from workspace', {
+              ticketId: ticket.id, linkRef: link.ref, error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
+        // When removing a repository link, clean up the worktree from the workspace
+        if (link?.type === 'repository') {
+          const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+          const workspaceBase = container.resolver.workspacePath(workspaceId);
+          try {
+            const slashIdx = link.ref.indexOf('/');
+            if (slashIdx > 0) {
+              const org = link.ref.substring(0, slashIdx);
+              const name = link.ref.substring(slashIdx + 1);
+              const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
+              if (existsSync(wtPath)) {
+                const barePath = container.resolver.barePath(org, name);
+                await container.git.removeWorktree(barePath, wtPath);
+                container.logger.info('Worktree removed from workspace on repo unlink', { wtPath, ticketId: ticket.id });
+              }
+              // Also remove any worktree link that pointed to this repo's workspace path
+              const wtLink = ticket.links.find((l) => l.type === 'worktree' && (l.ref === wtPath || l.ref.startsWith(`${org}/${name}:`)));
+              if (wtLink) ticket.removeLink(wtLink.id);
+            }
+            // Clean up empty workspace folder
+            if (existsSync(workspaceBase)) {
+              const entries = readdirSync(workspaceBase).filter((e) => e !== '.DS_Store');
+              if (entries.length === 0) {
+                rmSync(workspaceBase, { recursive: true, force: true });
+              }
+            }
+          } catch (err) {
+            container.logger.warn('Failed to clean up workspace worktree on repo unlink', {
+              ticketId: ticket.id, ref: link.ref, error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
 
         const removed = ticket.removeLink(request.params.linkId);
         if (removed) {

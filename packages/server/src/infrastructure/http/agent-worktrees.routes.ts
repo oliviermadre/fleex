@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketNotFoundError, WorktreeError } from '../../domain/errors.js';
-import { buildTicketBranchName, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
 import type { Container } from '../container.js';
 
 export function agentWorktreesRoutes(container: Container) {
@@ -74,7 +74,8 @@ export function agentWorktreesRoutes(container: Container) {
         }
 
         const branchName = buildTicketBranchName(ticket.title, ticket.id);
-        const wtPath = container.resolver.worktreeDir(repoOrg, buildWorktreeDirName(repoName, branchName));
+        const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+        const wtPath = container.resolver.workspaceRepoPath(workspaceId, repoName);
 
         const baseBranch = request.body?.baseBranch;
         await container.createWorktree.execute(repoOrg, repoName, wtPath, {

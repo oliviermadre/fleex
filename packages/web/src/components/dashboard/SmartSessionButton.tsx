@@ -1,16 +1,18 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Session } from '@fleex/shared';
 import { StatusDot } from '../ui/StatusDot';
 import { deriveDisplayStatus, aggregateBranchStatus } from '../../lib/deriveStatus';
 import type { DisplayStatus } from '../../lib/deriveStatus';
 import { useUIStore } from '../../stores/uiStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { cn } from '../../lib/cn';
 
 interface SmartSessionButtonProps {
   sessions: Session[];
-  creating: boolean;
-  onCreateSession: () => void;
+  creating?: boolean;
+  onCreateSession?: () => void;
   disabled?: boolean;
   size?: 'sm' | 'md';
   ticketId?: string;
@@ -172,11 +174,41 @@ function DropdownContent({
   );
 }
 
-export function SmartSessionButton({ sessions, creating, onCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill }: SmartSessionButtonProps) {
+export function SmartSessionButton({ sessions, creating: externalCreating, onCreateSession: externalOnCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill }: SmartSessionButtonProps) {
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
+  const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const skills = useSkillStore((s) => s.skills);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [internalCreating, setInternalCreating] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const creating = externalCreating || internalCreating;
+
+  const handleCreateSession = useCallback(async () => {
+    if (ticketId) {
+      // Internalized: call backend directly, then open floating session
+      setInternalCreating(true);
+      try {
+        const { sessionId } = await openSessionFromTicket(ticketId);
+        const tryOpen = () => {
+          const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
+          if (session) {
+            addFloatingSession(sessionId);
+            setInternalCreating(false);
+          } else {
+            setTimeout(tryOpen, 300);
+          }
+        };
+        tryOpen();
+      } catch {
+        setInternalCreating(false);
+      }
+    } else if (externalOnCreateSession) {
+      externalOnCreateSession();
+    }
+  }, [ticketId, openSessionFromTicket, addFloatingSession, externalOnCreateSession]);
+
+  const onCreateSession = handleCreateSession;
 
   const enabledSkills = skills.filter((s) => s.enabled);
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
-import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
@@ -1448,38 +1448,46 @@ export class ExecuteAgentUseCase {
       }
     }
 
-    // Derive worktree directory name from branch
-    const wtPath = this.resolver!.worktreeDir(org, buildWorktreeDirName(repo, branchName));
+    // Place ticket worktrees in workspaces/<ticket-slug>/repo
+    const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+    const workspaceRoot = this.resolver!.workspacePath(workspaceId);
+    const wtPath = this.resolver!.workspaceRepoPath(workspaceId, repo);
 
-    // If worktree directory already exists on disk, reuse it directly
-    if (existingWorktreeLink && existsSync(wtPath)) {
-      this.logger.info('Agent worktree ready', {
-        ticketId, worktreePath: wtPath, branchName, reused: true,
-      });
-      return wtPath;
+    // If existing link, try to find worktree on disk (may be at old worktrees/ path or new workspaces/ path)
+    if (existingWorktreeLink) {
+      if (existsSync(wtPath)) {
+        this.logger.info('Agent worktree ready', { ticketId, worktreePath: workspaceRoot, branchName, reused: true });
+        return workspaceRoot;
+      }
+      // Check legacy worktrees/ layout
+      const legacyPath = this.resolver!.worktreeDir(org, buildWorktreeDirName(repo, branchName));
+      if (legacyPath !== wtPath && existsSync(legacyPath)) {
+        this.logger.info('Agent worktree ready (legacy path)', { ticketId, worktreePath: legacyPath, branchName, reused: true });
+        return legacyPath;
+      }
     }
 
     // Create or reuse worktree
     try {
-      const existingPath = await this.createWorktree.execute(org, repo, wtPath, {
+      await this.createWorktree.execute(org, repo, wtPath, {
         branch: branchName,
         createNewBranch,
       });
-      const worktreePath = existingPath ?? wtPath;
 
       // If this is a new worktree (no link yet), add the link to the ticket
       if (!existingWorktreeLink) {
         const ref = `${org}/${repo}:${branchName}`;
-        ticket.addLink('worktree', ref, branchName, worktreePath, randomUUID());
+        ticket.addLink('worktree', ref, branchName, wtPath, randomUUID());
         await this.ticketStore.saveTicket(ticket);
         this.eventBus?.emit({ type: 'ticket.updated', ticketId, changes: {}, occurredAt: new Date() });
       }
 
       this.logger.info('Agent worktree ready', {
-        ticketId, worktreePath, branchName, reused: !!existingWorktreeLink,
+        ticketId, worktreePath: workspaceRoot, branchName, reused: !!existingWorktreeLink,
       });
 
-      return worktreePath;
+      // Return workspace root so agent can access all repos in multi-repo setups
+      return workspaceRoot;
     } catch (err) {
       this.logger.error('Failed to ensure agent worktree', {
         ticketId, branchName, wtPath,

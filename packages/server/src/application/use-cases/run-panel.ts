@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { PanelNotFoundError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import type { PanelEntity } from '../../domain/entities/panel.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { PanelStorePort } from '../ports/panel-store.port.js';
@@ -855,31 +855,41 @@ Be concise and decision-oriented. Write in the same language as the panel member
       }
     }
 
-    const wtPath = this.resolver!.worktreeDir(org, buildWorktreeDirName(repo, branchName));
+    // Place ticket worktrees in workspaces/<ticket-slug>/repo
+    const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+    const workspaceRoot = this.resolver!.workspacePath(workspaceId);
+    const wtPath = this.resolver!.workspaceRepoPath(workspaceId, repo);
 
-    // Reuse existing worktree if on disk
-    if (existingWorktreeLink && existsSync(wtPath)) {
-      this.logger.info('Panel worktree ready (reused)', { ticketId, worktreePath: wtPath, branchName });
-      return wtPath;
+    // If existing link, try to find worktree on disk (may be at old worktrees/ path or new workspaces/ path)
+    if (existingWorktreeLink) {
+      if (existsSync(wtPath)) {
+        this.logger.info('Panel worktree ready (reused)', { ticketId, worktreePath: workspaceRoot, branchName });
+        return workspaceRoot;
+      }
+      // Check legacy worktrees/ layout
+      const legacyPath = this.resolver!.worktreeDir(org, buildWorktreeDirName(repo, branchName));
+      if (legacyPath !== wtPath && existsSync(legacyPath)) {
+        this.logger.info('Panel worktree ready (legacy path)', { ticketId, worktreePath: legacyPath, branchName });
+        return legacyPath;
+      }
     }
 
     // Create worktree
     try {
-      const existingPath = await this.createWorktree.execute(org, repo, wtPath, {
+      await this.createWorktree.execute(org, repo, wtPath, {
         branch: branchName,
         createNewBranch,
       });
-      const worktreePath = existingPath ?? wtPath;
 
       if (!existingWorktreeLink) {
         const ref = `${org}/${repo}:${branchName}`;
-        ticket.addLink('worktree', ref, branchName, worktreePath, randomUUID());
+        ticket.addLink('worktree', ref, branchName, wtPath, randomUUID());
         await this.ticketStore.saveTicket(ticket);
         this.eventBus?.emit({ type: 'ticket.updated', ticketId, changes: {}, occurredAt: new Date() });
       }
 
-      this.logger.info('Panel worktree ready', { ticketId, worktreePath, branchName, reused: !!existingWorktreeLink });
-      return worktreePath;
+      this.logger.info('Panel worktree ready', { ticketId, worktreePath: workspaceRoot, branchName, reused: !!existingWorktreeLink });
+      return workspaceRoot;
     } catch (err) {
       this.logger.error('Failed to ensure panel worktree', {
         ticketId, branchName, wtPath,

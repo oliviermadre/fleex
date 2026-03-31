@@ -58,6 +58,8 @@ import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
 import { DomainEventLogEntity } from '../domain/entities/domain-event-log.entity.js';
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
+import { CachedSessionStore } from './adapters/cached-session-store.js';
+import { CachedTicketStore } from './adapters/cached-ticket-store.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 
@@ -100,6 +102,13 @@ export async function createContainer() {
     fileMetaStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
+  // Wrap stores with write-through in-memory cache (zero DB queries on 1s tick).
+  // Shadow the original variables so all downstream code uses cached versions.
+  const sessionStore_ = new CachedSessionStore(sessionStore);
+  await sessionStore_.warmUp();
+  const ticketStore_ = new CachedTicketStore(ticketStore);
+  await ticketStore_.warmUp();
+
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
 
@@ -138,7 +147,7 @@ export async function createContainer() {
   }
 
   const namingService = new SessionNamingService();
-  const groupingService = new SessionGroupingService();
+  // groupingService created below after resolver is initialized
   const claudeState = new ClaudeStateAdapter(shellExecFn, hostFs, hostHomedir, logger);
 
   const enrichClaudeActivity = new EnrichClaudeActivityUseCase(claudeState, logger);
@@ -155,25 +164,26 @@ export async function createContainer() {
 
   // Bare clone infrastructure
   const resolver = new RepoPathResolver(config.get().basePath);
+  const groupingService = new SessionGroupingService(resolver, ticketStore_);
   const bareCloneManager = new BareCloneManager(git, hostFs, resolver, execFn, logger);
   const overlayManager = new OverlayManager(hostFs, resolver, execFn, config, logger);
 
-  const createSession = new CreateSessionUseCase(tmux, sessionStore, namingService, git, config, logger);
-  const renameSession = new RenameSessionUseCase(tmux, sessionStore, namingService, logger);
+  const createSession = new CreateSessionUseCase(tmux, sessionStore_, namingService, git, config, logger);
+  const renameSession = new RenameSessionUseCase(tmux, sessionStore_, namingService, logger);
   const createWorktreeUC = new CreateWorktreeUseCase(git, logger, bareCloneManager, overlayManager, resolver);
-  const detectMerge = new DetectMergeUseCase(ticketStore, logger);
+  const detectMerge = new DetectMergeUseCase(ticketStore_, logger);
   const createSessionFromTicket = new CreateSessionFromTicketUseCase(
-    ticketStore, createSession, createWorktreeUC, git, config, logger, resolver,
+    ticketStore_, createSession, createWorktreeUC, git, config, logger, resolver,
   );
-  const importGitHubIssue = new ImportGitHubIssueUseCase(ticketStore, githubGraphql, logger);
-  const backfillPRTicket = new BackfillPRTicketUseCase(ticketStore, logger);
+  const importGitHubIssue = new ImportGitHubIssueUseCase(ticketStore_, githubGraphql, logger);
+  const backfillPRTicket = new BackfillPRTicketUseCase(ticketStore_, logger);
 
   // Agent collaboration use cases
-  const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore, logger);
-  const resolveMention = new ResolveMentionUseCase(mentionStore, ticketStore, logger);
-  const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore, logger);
-  const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore);
-  const getTicketContext = new GetTicketContextUseCase(ticketStore, commentStore, mentionStore, deliverableStore, getRelevantSummaries);
+  const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore_, logger);
+  const resolveMention = new ResolveMentionUseCase(mentionStore, ticketStore_, logger);
+  const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore_, logger);
+  const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore_);
+  const getTicketContext = new GetTicketContextUseCase(ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries);
 
   // Agent personas use cases
   const createPersona = new CreatePersonaUseCase(personaStore, logger);
@@ -189,12 +199,12 @@ export async function createContainer() {
   const createPanel = new CreatePanelUseCase(panelStore, personaStore, logger);
   const updatePanel = new UpdatePanelUseCase(panelStore, personaStore, logger);
   const deletePanel = new DeletePanelUseCase(panelStore, logger);
-  const runPanel = new RunPanelUseCase(panelStore, personaStore, mentionStore, ticketStore, postComment, submitDeliverable, getTicketContext, createWorktreeUC, agentEventStore, config, logger);
+  const runPanel = new RunPanelUseCase(panelStore, personaStore, mentionStore, ticketStore_, postComment, submitDeliverable, getTicketContext, createWorktreeUC, agentEventStore, config, logger);
 
-  const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore, config, logger);
-  const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);
+  const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore_, config, logger);
+  const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore_, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);
 
-  const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore, commentStore, deliverableStore, git, config, logger, resolver);
+  const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore_, commentStore, deliverableStore, git, config, logger, resolver);
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
@@ -204,7 +214,7 @@ export async function createContainer() {
     eventBus,
     personaStore,
     skillStore,
-    ticketStore,
+    ticketStore: ticketStore_,
     mentionStore,
     commentStore,
     deliverableStore,
@@ -250,8 +260,8 @@ export async function createContainer() {
 
   const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, resolver, hostFs, bareCloneManager, git, logger);
 
-  const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore, namingService, logger, git);
-  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore, personaStore, agentEventStore, reconcileWorktree, hostFs, config);
+  const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore_, namingService, logger, git, resolver, ticketStore_);
+  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore_, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore_, personaStore, agentEventStore, reconcileWorktree, hostFs, config);
 
   return {
     logger,
@@ -266,7 +276,7 @@ export async function createContainer() {
     git,
     userStore,
     sessionManager,
-    sessionStore,
+    sessionStore: sessionStore_,
     repositoryCache,
     githubGraphql,
     repositoryResolver,
@@ -276,8 +286,8 @@ export async function createContainer() {
     overlayManager,
     createSession,
     renameSession,
-    listSessions: new ListSessionsUseCase(sessionStore, tmux, logger),
-    killSession: new KillSessionUseCase(tmux, sessionStore, logger),
+    listSessions: new ListSessionsUseCase(sessionStore_, tmux, logger),
+    killSession: new KillSessionUseCase(tmux, sessionStore_, logger),
     getSessionGroups,
     discoverSessions,
     listRepositories: new ListRepositoriesUseCase(git, config, logger, hostFs, resolver),
@@ -285,7 +295,7 @@ export async function createContainer() {
     createWorktree: createWorktreeUC,
     getClaudeUsage,
     agentTokenStore,
-    ticketStore,
+    ticketStore: ticketStore_,
     detectMerge,
     createSessionFromTicket,
     importGitHubIssue,

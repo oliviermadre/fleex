@@ -16,10 +16,10 @@ export function EmptyState() {
         <line x1="14" y1="26" x2="20" y2="26" />
         <line x1="12" y1="32" x2="28" y2="32" />
       </svg>
-      <p className="text-sm">Select a session or create a new one</p>
+      <p className="text-sm">Select a session or create a new task</p>
       <div className="relative">
         <Button variant="primary" size="sm" onClick={openCreateModal}>
-          New Session
+          New Task
         </Button>
         <HotkeyBadge hotkey="⇧⌘N" position="top-right" />
       </div>

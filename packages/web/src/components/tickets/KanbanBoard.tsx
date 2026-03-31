@@ -1,12 +1,10 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { TICKET_STATUSES } from '@fleex/shared';
-import type { TicketLink, TicketStatus, Session } from '@fleex/shared';
+import type { TicketStatus } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useSessionStore } from '../../stores/sessionStore';
 import { fetchBulkPRStates } from '../../services/api';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanHeader } from './KanbanHeader';
-import { TerminalOverlay } from '../main-panel/FloatingSessionOverlay';
 import { useUnreadStore } from '../../stores/unreadStore';
 
 export function KanbanBoard() {
@@ -15,15 +13,11 @@ export function KanbanBoard() {
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const ticketsByColumn = useTicketStore((s) => s.ticketsByColumn);
   const tickets = useTicketStore((s) => s.tickets);
-  const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
-  const sessions = useSessionStore((s) => s.sessions);
   const loadUnreadCounts = useUnreadStore((s) => s.loadUnreadCounts);
 
   // Load unread counts on mount and when tickets change
   useEffect(() => { loadUnreadCounts(); }, [tickets.length, loadUnreadCounts]);
 
-  const [overlaySession, setOverlaySession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState<string | null>(null);
   const [prStates, setPrStates] = useState<Record<string, string>>({});
 
   // Fetch live PR states for all visible tickets with github_pr links
@@ -63,70 +57,6 @@ export function KanbanBoard() {
 
   const isAllBoards = selectedBoardId === null && boards.length > 1;
   const board = selectedBoardId ? boards.find((b) => b.id === selectedBoardId) ?? null : null;
-
-  // Find an existing running session for a ticket's worktree
-  const findSessionForTicket = useCallback((ticketId: string): Session | null => {
-    const ticket = tickets.find((t) => t.id === ticketId);
-    if (!ticket) return null;
-
-    // Check session links first
-    const sessionLink = ticket.links.find((l: TicketLink) => l.type === 'session');
-    if (sessionLink) {
-      const session = sessions.find((s) => s.id === sessionLink.ref && s.status === 'running');
-      if (session) return session;
-    }
-
-    // Check worktree link and find matching session
-    const wtLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
-    if (wtLink) {
-      const colonIdx = wtLink.ref.indexOf(':');
-      if (colonIdx > 0) {
-        const repoKey = wtLink.ref.substring(0, colonIdx);
-        const branch = wtLink.ref.substring(colonIdx + 1);
-        const [org, name] = repoKey.split('/');
-        const session = sessions.find(
-          (s) =>
-            s.status === 'running' &&
-            s.type === 'claude' &&
-            s.repositoryOrg === org &&
-            s.repositoryName === name &&
-            s.worktreeBranch === branch,
-        );
-        if (session) return session;
-      }
-    }
-
-    return null;
-  }, [tickets, sessions]);
-
-  const handleOpenSession = useCallback(async (ticketId: string) => {
-    // Try to find existing active session
-    const existing = findSessionForTicket(ticketId);
-    if (existing) {
-      setOverlaySession(existing);
-      return;
-    }
-
-    // No existing session — create one via API
-    setLoading(ticketId);
-    try {
-      const { sessionId } = await openSessionFromTicket(ticketId);
-      // Wait a tick for session store to update via WS, then find it
-      const tryOpen = () => {
-        const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
-        if (session) {
-          setOverlaySession(session);
-          setLoading(null);
-        } else {
-          // Retry briefly — session might arrive via WS
-          setTimeout(tryOpen, 300);
-        }
-      };
-      tryOpen();
-    } catch {
-      setLoading(null);
-    }
-  }, [findSessionForTicket, openSessionFromTicket]);
 
   const createBoard = useTicketStore((s) => s.createBoard);
 
@@ -169,7 +99,6 @@ export function KanbanBoard() {
             boardId={selectedBoardId ?? boards[0]?.id ?? ''}
             isAllBoards={isAllBoards}
             boards={isAllBoards ? boards : undefined}
-            onOpenSession={handleOpenSession}
             collapsed={collapsedColumns.has(status)}
             onToggleCollapse={() => toggleCollapse(status)}
             prStates={prStates}
@@ -177,20 +106,6 @@ export function KanbanBoard() {
         ))}
       </div>
 
-      {/* Loading indicator */}
-      {loading && (
-        <div className="fixed bottom-4 right-4 z-40 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-2 text-xs text-[var(--theme-text-secondary)] shadow-lg">
-          Creating session...
-        </div>
-      )}
-
-      {/* Session terminal overlay */}
-      {overlaySession && (
-        <TerminalOverlay
-          sessionId={overlaySession.id}
-          onClose={() => setOverlaySession(null)}
-        />
-      )}
     </div>
   );
 }

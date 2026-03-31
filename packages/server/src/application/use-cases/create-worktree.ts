@@ -1,3 +1,4 @@
+import { rmSync } from 'node:fs';
 import type { CreateWorktreeRequest, HookResult } from '@fleex/shared';
 import { WorktreeError } from '../../domain/errors.js';
 import type { EventBus } from '../event-bus.js';
@@ -55,26 +56,27 @@ export class CreateWorktreeUseCase {
       const reuseMatch = message.match(/is already used by worktree at '([^']+)'/);
       if (reuseMatch) {
         const existingPath = reuseMatch[1]!;
-        this.logger.info('Worktree path claimed in use, pruning stale entries', {
-          barePath, existingPath, branch: request.branch,
+        this.logger.info('Worktree path claimed in use, removing old worktree', {
+          barePath, existingPath, wtPath, branch: request.branch,
         });
+        // Force-remove the old worktree blocking the new path
         try {
-          await this.git.pruneWorktrees(barePath);
-          await this.git.createWorktree(
-            barePath, wtPath, request.branch, request.createNewBranch, request.baseBranch,
-          );
-          this.logger.info('Worktree created after pruning stale entry', { barePath, wtPath });
-          await this.applyOverlay(org, name, wtPath);
-          const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, request.branch);
-          if (!hookStarted) {
-            this.emitCreated(barePath, wtPath, request);
-          }
-          return { existingPath: null, hookStarted };
+          await this.git.removeWorktree(barePath, existingPath);
         } catch {
-          this.logger.info('Worktree still valid after prune, reusing', { barePath, existingPath });
-          this.emitCreated(barePath, existingPath, request);
-          return { existingPath, hookStarted: false };
+          this.logger.warn('git worktree remove failed, force-deleting old worktree', { existingPath });
+          rmSync(existingPath, { recursive: true, force: true });
         }
+        await this.git.pruneWorktrees(barePath);
+        await this.git.createWorktree(
+          barePath, wtPath, request.branch, request.createNewBranch, request.baseBranch,
+        );
+        this.logger.info('Worktree created after removing old worktree', { barePath, wtPath });
+        await this.applyOverlay(org, name, wtPath);
+        const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, request.branch);
+        if (!hookStarted) {
+          this.emitCreated(barePath, wtPath, request);
+        }
+        return { existingPath: null, hookStarted };
       }
       const branchExistsMatch = message.match(/branch named '([^']+)' already exists/i);
       if (branchExistsMatch && request.createNewBranch) {
@@ -93,7 +95,10 @@ export class CreateWorktreeUseCase {
         try {
           await this.git.removeWorktree(barePath, existingPath);
         } catch {
-          this.logger.warn('Could not remove stale worktree, continuing after prune', { existingPath });
+          // git worktree remove failed (dirty worktree, etc.) — force-delete directory and prune
+          this.logger.warn('git worktree remove failed, force-deleting old worktree', { existingPath });
+          rmSync(existingPath, { recursive: true, force: true });
+          await this.git.pruneWorktrees(barePath);
         }
         await this.git.createWorktree(
           barePath,

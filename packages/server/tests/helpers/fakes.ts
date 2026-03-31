@@ -1,4 +1,4 @@
-import type { TmuxPort, TmuxSessionInfo } from '../../src/application/ports/tmux.port.js';
+import type { TmuxPort, TmuxSessionInfo, ManagedSessionsWithPanes } from '../../src/application/ports/tmux.port.js';
 import type { SessionStorePort } from '../../src/application/ports/session-store.port.js';
 import type { GitPort } from '../../src/application/ports/git.port.js';
 import type { ConfigPort, AppConfig } from '../../src/application/ports/config.port.js';
@@ -55,8 +55,27 @@ export class FakeTmuxPort implements TmuxPort {
     this.sentKeys.push({ name, keys });
   }
 
+  async listManagedSessionsWithPaneCommands(): Promise<ManagedSessionsWithPanes> {
+    const sessions = await this.listManagedSessions();
+    const paneCommands = new Map<string, string>();
+    const paneCwds = new Map<string, string>();
+    for (const [name, data] of this.sessions) {
+      if (data.command) paneCommands.set(name, data.command);
+      paneCwds.set(name, data.cwd);
+    }
+    return { sessions, paneCommands, paneCwds };
+  }
+
   async getSessionCwd(name: string): Promise<string | null> {
     return this.sessions.get(name)?.cwd ?? null;
+  }
+
+  async getPaneCommands(): Promise<Map<string, string>> {
+    const commands = new Map<string, string>();
+    for (const [name, data] of this.sessions) {
+      if (data.command) commands.set(name, data.command);
+    }
+    return commands;
   }
 }
 
@@ -114,6 +133,7 @@ export class FakeGitPort implements GitPort {
 
   async createWorktree(): Promise<void> {}
   async removeWorktree(): Promise<void> {}
+  async moveWorktree(): Promise<void> {}
   async getDefaultBranch(): Promise<string> {
     return 'main';
   }

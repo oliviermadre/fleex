@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { Session, TicketLink, TicketComment, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
+import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
 import { appWs } from '../../services/websocket';
 import { useTicketStore, type TicketTab } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
-import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { TicketDetailHeader } from './TicketDetailHeader';
 import { TicketMetaSidebar } from './TicketMetaSidebar';
@@ -11,7 +10,6 @@ import { TicketActivityTimeline } from './TicketActivityTimeline';
 import { TicketComments } from './TicketComments';
 import { TicketDeliverables } from './TicketDeliverables';
 import { TicketMentions } from './TicketMentions';
-import { TerminalOverlay } from '../main-panel/FloatingSessionOverlay';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import * as api from '../../services/api';
 import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
@@ -24,7 +22,6 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   const tickets = useTicketStore((s) => s.tickets);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const selectTicket = useTicketStore((s) => s.selectTicket);
-  const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const mainTab = useTicketStore((s) => s.ticketTab);
   const setMainTab = useTicketStore((s) => s.setTicketTab);
   const sessions = useSessionStore((s) => s.sessions);
@@ -35,8 +32,6 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
   const [description, setDescription] = useState('');
   const [descMode, setDescMode] = useState<DescriptionMode>('split');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [overlaySession, setOverlaySession] = useState<Session | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
   const [deliverableCount, setDeliverableCount] = useState(0);
   const [mentionCount, setMentionCount] = useState(0);
@@ -115,16 +110,16 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     };
   }, [ticketId, updateTicket]);
 
-  // ESC to go back to board view (only when overlay is NOT open)
+  // ESC to go back to board view
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !overlaySession) {
+      if (e.key === 'Escape') {
         selectTicket(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectTicket, overlaySession]);
+  }, [selectTicket]);
 
   // Debounced silent save — persists data without creating activity entries
   const debouncedSilentDescription = useCallback(
@@ -187,89 +182,12 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
     [ticketId, updateTicket],
   );
 
-  // Find an existing running session for this ticket
-  const findSessionForTicket = useCallback((): Session | null => {
-    if (!ticket) return null;
-    const sessions = useSessionStore.getState().sessions;
-
-    // Check session links first
-    const sessionLink = ticket.links.find((l: TicketLink) => l.type === 'session');
-    if (sessionLink) {
-      const session = sessions.find((s) => s.id === sessionLink.ref && s.status === 'running');
-      if (session) return session;
-    }
-
-    // Check worktree link and find matching session
-    const wtLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
-    if (wtLink) {
-      const colonIdx = wtLink.ref.indexOf(':');
-      if (colonIdx > 0) {
-        const repoKey = wtLink.ref.substring(0, colonIdx);
-        const branch = wtLink.ref.substring(colonIdx + 1);
-        const [org, name] = repoKey.split('/');
-        const session = sessions.find(
-          (s) =>
-            s.status === 'running' &&
-            s.type === 'claude' &&
-            s.repositoryOrg === org &&
-            s.repositoryName === name &&
-            s.worktreeBranch === branch,
-        );
-        if (session) return session;
-      }
-    }
-
-    return null;
-  }, [ticket]);
-
   const ticketSessions = useMemo(
     () => ticket ? findSessionsForTicket(ticket, sessions) : [],
     [ticket, sessions],
   );
 
-  const openCreateModalForTicket = useUIStore((s) => s.openCreateModalForTicket);
-
-  const handleOpenSession = useCallback(async () => {
-    if (!ticket) return;
-
-    // Try to find existing active session
-    const existing = findSessionForTicket();
-    if (existing) {
-      setOverlaySession(existing);
-      return;
-    }
-
-    // If ticket has a worktree link → auto-create via API (existing behavior)
-    const wtLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
-    if (wtLink) {
-      setSessionLoading(true);
-      try {
-        const { sessionId } = await openSessionFromTicket(ticketId);
-        const tryOpen = () => {
-          const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
-          if (session) {
-            setOverlaySession(session);
-            setSessionLoading(false);
-          } else {
-            setTimeout(tryOpen, 300);
-          }
-        };
-        tryOpen();
-      } catch {
-        setSessionLoading(false);
-      }
-      return;
-    }
-
-    // No worktree → open CreateSessionModal with prefilled context
-    const repoLink = ticket.links.find((l: TicketLink) => l.type === 'repository');
-    const prompt = [ticket.title, ticket.description].filter(Boolean).join('\n\n');
-    openCreateModalForTicket({
-      ticketId: ticket.id,
-      repo: repoLink?.ref ?? null,
-      prompt,
-    });
-  }, [ticket, ticketId, findSessionForTicket, openSessionFromTicket, openCreateModalForTicket]);
+  // Session creation is now handled by SmartSessionButton internally via ticketId
 
   if (!ticket) {
     return (
@@ -313,8 +231,6 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
             />
             <SmartSessionButton
               sessions={ticketSessions}
-              creating={sessionLoading}
-              onCreateSession={handleOpenSession}
               ticketId={ticketId}
               onExecuteSkill={(skillId) => api.executeSkill(skillId, ticketId).catch(console.error)}
             />
@@ -447,13 +363,6 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
         <TicketMetaSidebar ticket={ticket} />
       </div>
 
-      {/* Session terminal overlay */}
-      {overlaySession && (
-        <TerminalOverlay
-          sessionId={overlaySession.id}
-          onClose={() => setOverlaySession(null)}
-        />
-      )}
     </div>
   );
 }

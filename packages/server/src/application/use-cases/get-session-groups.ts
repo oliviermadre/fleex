@@ -72,7 +72,7 @@ export class GetSessionGroupsUseCase {
       }
     }
 
-    const groups = this.groupingService.groupSessions(sessions);
+    const groups = await this.groupingService.groupSessions(sessions);
 
     // Inject agent worktree info for tickets with worktree links and agent assignees
     if (this.ticketStore && this.personaStore) {
@@ -161,13 +161,14 @@ export class GetSessionGroupsUseCase {
         latestExecutionId,
       };
 
-      // Find matching worktree group by branch label
+      // Find matching worktree group by branch label OR by ticket title
+      // (the grouping service uses ticket title as the branch label for manifest-resolved sessions)
       const branch = wtLink.label;
       let found = false;
 
       for (const group of groups) {
         for (const wt of group.worktrees) {
-          if (wt.branch === branch) {
+          if (wt.branch === branch || wt.branch === ticket.title) {
             // Attach agent info to existing group (cast to mutable)
             (wt as { agentWorktree?: AgentWorktreeInfo }).agentWorktree = agentInfo;
             found = true;
