@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PanelNotFoundError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import { buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import type { PanelEntity } from '../../domain/entities/panel.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { PanelStorePort } from '../ports/panel-store.port.js';
@@ -790,45 +791,32 @@ Be concise and decision-oriented. Write in the same language as the panel member
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) return null;
 
-    const board = await this.ticketStore.getBoardById(ticket.boardId);
-    const existingWorktreeLink = ticket.links.find((l) => l.type === 'worktree');
+    // Collect all repos from ticket links, fall back to board config
+    const repoLinks = ticket.links.filter((l) => l.type === 'repository');
+    const repos: { org: string; name: string }[] = [];
+    for (const link of repoLinks) {
+      const slashIdx = link.ref.indexOf('/');
+      if (slashIdx > 0) {
+        repos.push({ org: link.ref.substring(0, slashIdx), name: link.ref.substring(slashIdx + 1) });
+      }
+    }
+    if (repos.length === 0) {
+      const board = await this.ticketStore.getBoardById(ticket.boardId);
+      if (board?.repositoryOrg && board.repositoryName) {
+        repos.push({ org: board.repositoryOrg, name: board.repositoryName });
+      }
+    }
+    if (repos.length === 0) return null;
 
-    let org: string | null = null;
-    let repo: string | null = null;
+    // Determine branch: use existing worktree link's branch, or generate a new one
+    const existingWorktreeLink = ticket.links.find((l) => l.type === 'worktree');
     let branchName: string;
     let createNewBranch: boolean;
-
     if (existingWorktreeLink) {
-      if (existingWorktreeLink.ref.includes(':')) {
-        const [orgRepo, branch] = existingWorktreeLink.ref.split(':');
-        const [linkOrg, linkRepo] = orgRepo!.split('/');
-        org = linkOrg!;
-        repo = linkRepo!;
-        branchName = branch!;
-      } else {
-        branchName = existingWorktreeLink.label || existingWorktreeLink.ref;
-        const repoLink = ticket.links.find((l) => l.type === 'repository');
-        if (repoLink && repoLink.ref.includes('/')) {
-          const [linkOrg, linkRepo] = repoLink.ref.split('/');
-          org = linkOrg!;
-          repo = linkRepo!;
-        } else {
-          org = board?.repositoryOrg ?? null;
-          repo = board?.repositoryName ?? null;
-        }
-      }
+      const colonIdx = existingWorktreeLink.ref.indexOf(':');
+      branchName = colonIdx > 0 ? existingWorktreeLink.ref.substring(colonIdx + 1) : (existingWorktreeLink.label || existingWorktreeLink.ref);
       createNewBranch = false;
     } else {
-      const repoLink = ticket.links.find((l) => l.type === 'repository');
-      if (repoLink && repoLink.ref.includes('/')) {
-        const [linkOrg, linkRepo] = repoLink.ref.split('/');
-        org = linkOrg!;
-        repo = linkRepo!;
-      } else {
-        org = board?.repositoryOrg ?? null;
-        repo = board?.repositoryName ?? null;
-      }
-      if (!org || !repo) return null;
       const slug = ticket.title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -838,64 +826,64 @@ Be concise and decision-oriented. Write in the same language as the panel member
       createNewBranch = true;
     }
 
-    if (!org || !repo) return null;
-
-    // Ensure bare clone exists locally
-    const barePath = this.resolver!.barePath(org, repo);
-    if (!existsSync(barePath)) {
-      this.logger.info('Creating bare clone for panel worktree', { ticketId, barePath, org, name: repo });
-      try {
-        await this.bareCloneManager!.ensureBareClone(org, repo);
-      } catch (err) {
-        this.logger.error('Failed to create bare clone for panel', {
-          ticketId, barePath,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        return null;
-      }
-    }
-
-    // Place ticket worktrees in workspaces/<ticket-slug>/repo
+    // Create workspace + manifest
     const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
     const workspaceRoot = this.resolver!.workspacePath(workspaceId);
-    const wtPath = this.resolver!.workspaceRepoPath(workspaceId, repo);
+    mkdirSync(workspaceRoot, { recursive: true });
+    const manifestPath = join(workspaceRoot, '.fleex.json');
+    if (!existsSync(manifestPath)) {
+      writeFileSync(manifestPath, JSON.stringify({ ticketId: ticket.id }, null, 2));
+    }
 
-    // If existing link, try to find worktree on disk (may be at old worktrees/ path or new workspaces/ path)
-    if (existingWorktreeLink) {
-      if (existsSync(wtPath)) {
-        this.logger.info('Panel worktree ready (reused)', { ticketId, worktreePath: workspaceRoot, branchName });
-        return workspaceRoot;
+    // Ensure worktree for each repo
+    let needsSave = false;
+    for (const repo of repos) {
+      const wtPath = this.resolver!.workspaceRepoPath(workspaceId, repo.name);
+      if (existsSync(wtPath)) continue;
+
+      const barePath = this.resolver!.barePath(repo.org, repo.name);
+      if (!existsSync(barePath)) {
+        try {
+          await this.bareCloneManager!.ensureBareClone(repo.org, repo.name);
+        } catch (err) {
+          this.logger.warn('Failed to clone repository for panel', {
+            ticketId, repo: `${repo.org}/${repo.name}`,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          continue;
+        }
       }
-      // Check legacy worktrees/ layout
-      const legacyPath = this.resolver!.worktreeDir(org, buildWorktreeDirName(repo, branchName));
-      if (legacyPath !== wtPath && existsSync(legacyPath)) {
-        this.logger.info('Panel worktree ready (legacy path)', { ticketId, worktreePath: legacyPath, branchName });
-        return legacyPath;
+
+      try {
+        let usedBranch = branchName;
+        try {
+          await this.createWorktree.execute(repo.org, repo.name, wtPath, { branch: branchName, createNewBranch });
+        } catch {
+          if (!createNewBranch) {
+            usedBranch = buildTicketBranchName(ticket.title, ticket.id);
+            await this.createWorktree.execute(repo.org, repo.name, wtPath, { branch: usedBranch, createNewBranch: true });
+          } else {
+            throw new Error(`Failed to create branch ${branchName}`);
+          }
+        }
+        if (!ticket.links.some((l) => l.type === 'worktree' && l.ref.startsWith(`${repo.org}/${repo.name}:`))) {
+          ticket.addLink('worktree', wtPath, usedBranch, null, randomUUID());
+          needsSave = true;
+        }
+        this.logger.info('Panel worktree ready', { ticketId, repo: `${repo.org}/${repo.name}`, wtPath, branch: usedBranch });
+      } catch (err) {
+        this.logger.warn('Failed to create panel worktree', {
+          ticketId, repo: `${repo.org}/${repo.name}`, wtPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
-    // Create worktree
-    try {
-      await this.createWorktree.execute(org, repo, wtPath, {
-        branch: branchName,
-        createNewBranch,
-      });
-
-      if (!existingWorktreeLink) {
-        const ref = `${org}/${repo}:${branchName}`;
-        ticket.addLink('worktree', ref, branchName, wtPath, randomUUID());
-        await this.ticketStore.saveTicket(ticket);
-        this.eventBus?.emit({ type: 'ticket.updated', ticketId, changes: {}, occurredAt: new Date() });
-      }
-
-      this.logger.info('Panel worktree ready', { ticketId, worktreePath: workspaceRoot, branchName, reused: !!existingWorktreeLink });
-      return workspaceRoot;
-    } catch (err) {
-      this.logger.error('Failed to ensure panel worktree', {
-        ticketId, branchName, wtPath,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return null;
+    if (needsSave) {
+      await this.ticketStore.saveTicket(ticket);
+      this.eventBus?.emit({ type: 'ticket.updated', ticketId, changes: {}, occurredAt: new Date() });
     }
+
+    return workspaceRoot;
   }
 }

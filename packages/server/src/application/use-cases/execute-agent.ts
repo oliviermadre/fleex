@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
-import { buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
@@ -1375,49 +1376,32 @@ export class ExecuteAgentUseCase {
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) return null;
 
-    const board = await this.ticketStore.getBoardById(ticket.boardId);
-    const existingWorktreeLink = ticket.links.find((l) => l.type === 'worktree');
+    // Collect all repos from ticket links, fall back to board config
+    const repoLinks = ticket.links.filter((l) => l.type === 'repository');
+    const repos: { org: string; name: string }[] = [];
+    for (const link of repoLinks) {
+      const slashIdx = link.ref.indexOf('/');
+      if (slashIdx > 0) {
+        repos.push({ org: link.ref.substring(0, slashIdx), name: link.ref.substring(slashIdx + 1) });
+      }
+    }
+    if (repos.length === 0) {
+      const board = await this.ticketStore.getBoardById(ticket.boardId);
+      if (board?.repositoryOrg && board.repositoryName) {
+        repos.push({ org: board.repositoryOrg, name: board.repositoryName });
+      }
+    }
+    if (repos.length === 0) return null;
 
-    // Resolve org, repo, and branch — ticket worktree link is source of truth
-    let org: string | null = null;
-    let repo: string | null = null;
+    // Determine branch: use existing worktree link's branch, or generate a new one
+    const existingWorktreeLink = ticket.links.find((l) => l.type === 'worktree');
     let branchName: string;
     let createNewBranch: boolean;
-
     if (existingWorktreeLink) {
-      if (existingWorktreeLink.ref.includes(':')) {
-        // ref = "org/repo:branch" — extract all three
-        const [orgRepo, branch] = existingWorktreeLink.ref.split(':');
-        const [linkOrg, linkRepo] = orgRepo!.split('/');
-        org = linkOrg!;
-        repo = linkRepo!;
-        branchName = branch!;
-      } else {
-        // label-only or legacy — use ticket repo link, then board as fallback
-        branchName = existingWorktreeLink.label || existingWorktreeLink.ref;
-        const repoLink = ticket.links.find((l) => l.type === 'repository');
-        if (repoLink && repoLink.ref.includes('/')) {
-          const [linkOrg, linkRepo] = repoLink.ref.split('/');
-          org = linkOrg!;
-          repo = linkRepo!;
-        } else {
-          org = board?.repositoryOrg ?? null;
-          repo = board?.repositoryName ?? null;
-        }
-      }
+      const colonIdx = existingWorktreeLink.ref.indexOf(':');
+      branchName = colonIdx > 0 ? existingWorktreeLink.ref.substring(colonIdx + 1) : (existingWorktreeLink.label || existingWorktreeLink.ref);
       createNewBranch = false;
     } else {
-      // No worktree link — check ticket repository link first, then board config
-      const repoLink = ticket.links.find((l) => l.type === 'repository');
-      if (repoLink && repoLink.ref.includes('/')) {
-        const [linkOrg, linkRepo] = repoLink.ref.split('/');
-        org = linkOrg!;
-        repo = linkRepo!;
-      } else {
-        org = board?.repositoryOrg ?? null;
-        repo = board?.repositoryName ?? null;
-      }
-      if (!org || !repo) return null;
       const slug = ticket.title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -1427,74 +1411,68 @@ export class ExecuteAgentUseCase {
       createNewBranch = true;
     }
 
-    if (!org || !repo) return null;
-
-    const barePath = this.resolver!.barePath(org, repo);
-
-    // Ensure repo is cloned locally (bare clone)
-    if (!existsSync(barePath)) {
-      this.logger.info('Cloning repository for agent worktree', {
-        ticketId, barePath, org, name: repo,
-      });
-      try {
-        const remote = `git@github.com:${org}/${repo}.git`;
-        await this.bareCloneManager!.ensureBareClone(org, repo, remote);
-      } catch (err) {
-        this.logger.error('Failed to clone repository for agent', {
-          ticketId, barePath,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        return null;
-      }
-    }
-
-    // Place ticket worktrees in workspaces/<ticket-slug>/repo
+    // Create workspace + manifest
     const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
     const workspaceRoot = this.resolver!.workspacePath(workspaceId);
-    const wtPath = this.resolver!.workspaceRepoPath(workspaceId, repo);
+    mkdirSync(workspaceRoot, { recursive: true });
+    const manifestPath = join(workspaceRoot, '.fleex.json');
+    if (!existsSync(manifestPath)) {
+      writeFileSync(manifestPath, JSON.stringify({ ticketId: ticket.id }, null, 2));
+    }
 
-    // If existing link, try to find worktree on disk (may be at old worktrees/ path or new workspaces/ path)
-    if (existingWorktreeLink) {
-      if (existsSync(wtPath)) {
-        this.logger.info('Agent worktree ready', { ticketId, worktreePath: workspaceRoot, branchName, reused: true });
-        return workspaceRoot;
+    // Ensure worktree for each repo
+    let needsSave = false;
+    for (const repo of repos) {
+      const wtPath = this.resolver!.workspaceRepoPath(workspaceId, repo.name);
+      if (existsSync(wtPath)) continue; // already exists
+
+      // Ensure bare clone
+      const barePath = this.resolver!.barePath(repo.org, repo.name);
+      if (!existsSync(barePath)) {
+        try {
+          const remote = `git@github.com:${repo.org}/${repo.name}.git`;
+          await this.bareCloneManager!.ensureBareClone(repo.org, repo.name, remote);
+        } catch (err) {
+          this.logger.warn('Failed to clone repository for agent', {
+            ticketId, repo: `${repo.org}/${repo.name}`,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          continue;
+        }
       }
-      // Check legacy worktrees/ layout
-      const legacyPath = this.resolver!.worktreeDir(org, buildWorktreeDirName(repo, branchName));
-      if (legacyPath !== wtPath && existsSync(legacyPath)) {
-        this.logger.info('Agent worktree ready (legacy path)', { ticketId, worktreePath: legacyPath, branchName, reused: true });
-        return legacyPath;
+
+      try {
+        let usedBranch = branchName;
+        try {
+          await this.createWorktree.execute(repo.org, repo.name, wtPath, { branch: branchName, createNewBranch });
+        } catch {
+          // Branch may not exist on this repo (e.g. PR branch from another repo) — create a new one
+          if (!createNewBranch) {
+            usedBranch = buildTicketBranchName(ticket.title, ticket.id);
+            await this.createWorktree.execute(repo.org, repo.name, wtPath, { branch: usedBranch, createNewBranch: true });
+          } else {
+            throw new Error(`Failed to create branch ${branchName}`);
+          }
+        }
+        if (!ticket.links.some((l) => l.type === 'worktree' && l.ref.startsWith(`${repo.org}/${repo.name}:`))) {
+          ticket.addLink('worktree', wtPath, usedBranch, null, randomUUID());
+          needsSave = true;
+        }
+        this.logger.info('Agent worktree ready', { ticketId, repo: `${repo.org}/${repo.name}`, wtPath, branch: usedBranch });
+      } catch (err) {
+        this.logger.warn('Failed to create agent worktree', {
+          ticketId, repo: `${repo.org}/${repo.name}`, wtPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
-    // Create or reuse worktree
-    try {
-      await this.createWorktree.execute(org, repo, wtPath, {
-        branch: branchName,
-        createNewBranch,
-      });
-
-      // If this is a new worktree (no link yet), add the link to the ticket
-      if (!existingWorktreeLink) {
-        const ref = `${org}/${repo}:${branchName}`;
-        ticket.addLink('worktree', ref, branchName, wtPath, randomUUID());
-        await this.ticketStore.saveTicket(ticket);
-        this.eventBus?.emit({ type: 'ticket.updated', ticketId, changes: {}, occurredAt: new Date() });
-      }
-
-      this.logger.info('Agent worktree ready', {
-        ticketId, worktreePath: workspaceRoot, branchName, reused: !!existingWorktreeLink,
-      });
-
-      // Return workspace root so agent can access all repos in multi-repo setups
-      return workspaceRoot;
-    } catch (err) {
-      this.logger.error('Failed to ensure agent worktree', {
-        ticketId, branchName, wtPath,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return null;
+    if (needsSave) {
+      await this.ticketStore.saveTicket(ticket);
+      this.eventBus?.emit({ type: 'ticket.updated', ticketId, changes: {}, occurredAt: new Date() });
     }
+
+    return workspaceRoot;
   }
 
   private composeSystemPrompt(persona: AgentPersonaEntity, humanName: string | null, worktreePath: string | null = null): string {

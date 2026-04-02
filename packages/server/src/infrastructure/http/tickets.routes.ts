@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest } from '@fleex/shared';
 import { TICKET_STATUSES } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus } from '@fleex/shared';
 import type { Container } from '../container.js';
@@ -270,6 +271,34 @@ export function ticketRoutes(container: Container) {
           request.body.url ?? null,
           randomUUID(),
         );
+
+        // When adding a repository link, create worktree if ticket already has a workspace
+        if (request.body.type === 'repository' && ref.includes('/')) {
+          const slashIdx = ref.indexOf('/');
+          const org = ref.substring(0, slashIdx);
+          const name = ref.substring(slashIdx + 1);
+          const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+          const workspaceRoot = container.resolver.workspacePath(workspaceId);
+          const manifestPath = join(workspaceRoot, '.fleex.json');
+
+          if (existsSync(manifestPath)) {
+            // Workspace exists — create worktree for this new repo with a fresh branch
+            const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
+            if (!existsSync(wtPath)) {
+              const branchName = buildTicketBranchName(ticket.title, ticket.id);
+
+              try {
+                await container.createWorktree.execute(org, name, wtPath, { branch: branchName, createNewBranch: true });
+                ticket.addLink('worktree', wtPath, branchName, null, randomUUID());
+                container.logger.info('Worktree created for added repo', { ticketId: ticket.id, repo: ref, wtPath });
+              } catch (err) {
+                container.logger.warn('Failed to create worktree for added repo', {
+                  ticketId: ticket.id, repo: ref, error: err instanceof Error ? err.message : String(err),
+                });
+              }
+            }
+          }
+        }
 
         await container.ticketStore.saveTicket(ticket);
         await container.ticketStore.saveActivity(TicketActivityEntity.create({
