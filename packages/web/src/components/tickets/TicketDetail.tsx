@@ -18,7 +18,7 @@ import { useFileUpload } from '../../hooks/useFileUpload';
 
 type DescriptionMode = 'write' | 'preview' | 'split';
 
-export function TicketDetail({ ticketId }: { ticketId: string }) {
+export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedded?: boolean }) {
   const tickets = useTicketStore((s) => s.tickets);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const selectTicket = useTicketStore((s) => s.selectTicket);
@@ -214,27 +214,29 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
-      <TicketDetailHeader ticket={ticket} />
+      {!embedded && <TicketDetailHeader ticket={ticket} />}
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex flex-1 flex-col overflow-hidden p-6">
-          {/* Title + Session button */}
-          <div className="flex flex-shrink-0 items-center gap-3">
-            <input
-              className="min-w-0 flex-1 bg-transparent text-lg font-semibold text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                debouncedUpdate('title', e.target.value);
-              }}
-              placeholder="Ticket title..."
-            />
-            <SmartSessionButton
-              sessions={ticketSessions}
-              ticketId={ticketId}
-              onExecuteSkill={(skillId) => api.executeSkill(skillId, ticketId).catch(console.error)}
-            />
-          </div>
+          {/* Title + Session button (hidden when embedded in session tab) */}
+          {!embedded && (
+            <div className="flex flex-shrink-0 items-center gap-3">
+              <input
+                className="min-w-0 flex-1 bg-transparent text-lg font-semibold text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  debouncedUpdate('title', e.target.value);
+                }}
+                placeholder="Ticket title..."
+              />
+              <SmartSessionButton
+                sessions={ticketSessions}
+                ticketId={ticketId}
+                onExecuteSkill={(skillId) => api.executeSkill(skillId, ticketId).catch(console.error)}
+              />
+            </div>
+          )}
 
           {/* Main tabs */}
           <div className="mt-3 flex flex-shrink-0 items-center gap-1 border-b border-[var(--theme-border)]">
@@ -360,7 +362,7 @@ export function TicketDetail({ ticketId }: { ticketId: string }) {
         </div>
 
         {/* Meta sidebar */}
-        <TicketMetaSidebar ticket={ticket} />
+        <TicketMetaSidebar ticket={ticket} embedded={embedded} />
       </div>
 
     </div>

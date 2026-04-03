@@ -61,6 +61,7 @@ export function MainPanel() {
   const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
 
   const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
+  const sessionTicketId = useSessionStore((s) => s.selectedTicketId);
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
@@ -122,7 +123,6 @@ export function MainPanel() {
   }
 
   // Ticket-based session view
-  const sessionTicketId = useSessionStore.getState().selectedTicketId;
   if (activePanel === 'sessions' && sessionTicketId) {
     if (sessionTicketId === 'system') {
       // System shells — find the first system session to create the entry

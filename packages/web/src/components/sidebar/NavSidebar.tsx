@@ -56,7 +56,7 @@ export function NavSidebar() {
           badge={totalUnread > 0 ? (totalUnread > 9 ? '9+' : String(totalUnread)) : undefined}
         />
 
-        {/* Branches (was Sessions) */}
+        {/* Tasks */}
         <NavItem
           icon={
             <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -66,7 +66,7 @@ export function NavSidebar() {
               <path d="M5 5v6M5 7.5c0-1.5 1-3 4.5-3" />
             </svg>
           }
-          label="Branches"
+          label="Tasks"
           active={activePanel === 'sessions'}
           collapsed={navCollapsed}
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}

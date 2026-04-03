@@ -13,7 +13,7 @@ import * as api from '../../services/api';
 
 // Side-effect: register all tab kinds
 import './tab-engine/kinds';
-import { buildShellTab, buildClaudeTab, buildAgentTab } from './tab-engine/kinds';
+import { buildShellTab, buildClaudeTab, buildAgentTab, buildTicketTab } from './tab-engine/kinds';
 
 interface Props {
   entry: WorktreeEntry;
@@ -51,8 +51,9 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
       return buildAgentTab(personaId, name, execs);
     });
 
-    return [...sessionTabs, ...agentTabs];
-  }, [sessions, executions, personas]);
+    const ticketTabs = ticket ? [buildTicketTab(ticket)] : [];
+    return [...ticketTabs, ...sessionTabs, ...agentTabs];
+  }, [sessions, executions, personas, ticket]);
 
   // Tab engine manages ordering, active tab, DnD, keyboard nav
   const engine = useTabEngine(groupId, allTabs);

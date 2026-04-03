@@ -22,8 +22,12 @@ export class SessionGroupingService {
     const ticketCache = new Map<string, TicketInfo | null>();
     const sessionTickets = new Map<string, TicketInfo>();
 
+    // Sessions inside workspaces/ whose ticket no longer exists should be excluded entirely
+    const orphanSessionIds = new Set<string>();
+
     for (const session of sessions) {
       if (this.resolver && this.ticketStore) {
+        const inWorkspace = session.cwd.startsWith(this.resolver.workspacesRoot());
         const manifest = this.resolver.resolveManifest(session.cwd);
         if (manifest?.ticketId) {
           let info = ticketCache.get(manifest.ticketId);
@@ -47,7 +51,15 @@ export class SessionGroupingService {
             }
             ticketCache.set(manifest.ticketId, info);
           }
-          if (info) sessionTickets.set(session.id, info);
+          if (info) {
+            sessionTickets.set(session.id, info);
+          } else {
+            // Ticket was deleted — exclude this workspace session
+            orphanSessionIds.add(session.id);
+          }
+        } else if (inWorkspace) {
+          // Inside workspaces/ but no manifest (directory deleted) — exclude
+          orphanSessionIds.add(session.id);
         }
       }
     }
@@ -60,6 +72,9 @@ export class SessionGroupingService {
     const repoMap = new Map<string, Map<string, SessionEntity[]>>();
 
     for (const session of sessions) {
+      // Skip orphaned workspace sessions (ticket deleted or workspace removed)
+      if (orphanSessionIds.has(session.id)) continue;
+
       const ticketInfo = sessionTickets.get(session.id);
       let groupOrg: string;
       let groupName: string;

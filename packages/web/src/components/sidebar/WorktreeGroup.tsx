@@ -90,10 +90,12 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
   const isSelected = sessionTicketId === worktree.ticketId || worktree.sessions.some((s: Session) => s.id === selectedSessionId) || !!isAgentSelected;
 
   const handleBranchClick = () => {
-    if (!worktree.ticketId) return;
-    // Navigate to ticket, optionally with last active tab
-    const tabSuffix = lastActiveTab ? `/${encodeURIComponent(lastActiveTab)}` : '';
-    navigate(`/sessions/${worktree.ticketId}${tabSuffix}`, { replace: true });
+    if (worktree.ticketId) {
+      const tabSuffix = lastActiveTab ? `/${encodeURIComponent(lastActiveTab)}` : '';
+      navigate(`/sessions/${worktree.ticketId}${tabSuffix}`, { replace: true });
+    } else if (worktree.sessions.length > 0) {
+      navigate(`/sessions/${worktree.sessions[0]!.id}`, { replace: true });
+    }
   };
 
   const priority = ticket?.priority ?? 'none';

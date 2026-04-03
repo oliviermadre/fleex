@@ -171,10 +171,11 @@ export function ticketRoutes(container: Container) {
     });
 
     app.delete<{ Params: { id: string } }>('/api/tickets/:id', async (request, reply) => {
-      // Cleanup uploaded files referenced in ticket description + comments
       const ticketId = request.params.id;
+      const ticket = await container.ticketStore.getTicketById(ticketId);
+
+      // Cleanup uploaded files referenced in ticket description + comments
       try {
-        const ticket = await container.ticketStore.getTicketById(ticketId);
         const comments = await container.commentStore.getByTicket(ticketId);
         const allText = [ticket?.description ?? '', ...comments.map((c) => c.body)].join('\n');
         const fileIds = extractFileIds(allText);
@@ -184,6 +185,51 @@ export function ticketRoutes(container: Container) {
         }));
       } catch {
         // Best-effort cleanup — don't block ticket deletion
+      }
+
+      // Cleanup workspace: remove git worktrees, kill sessions, delete workspace folder
+      if (ticket) {
+        const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+        const workspaceBase = container.resolver.workspacePath(workspaceId);
+
+        try {
+          // Kill sessions whose cwd is inside the workspace
+          const allSessions = await container.sessionStore.getAll();
+          const workspaceSessions = allSessions.filter((s) => s.cwd.startsWith(workspaceBase));
+          await Promise.all(workspaceSessions.map(async (s) => {
+            await container.killSession.execute(s.id).catch(() => {});
+          }));
+
+          // Remove git worktrees for each repo linked to this ticket
+          for (const link of ticket.links) {
+            if (link.type === 'repository') {
+              const slashIdx = link.ref.indexOf('/');
+              if (slashIdx > 0) {
+                const org = link.ref.substring(0, slashIdx);
+                const name = link.ref.substring(slashIdx + 1);
+                const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
+                if (existsSync(wtPath)) {
+                  const barePath = container.resolver.barePath(org, name);
+                  await container.git.removeWorktree(barePath, wtPath).catch((err) => {
+                    container.logger.warn('Failed to remove worktree on ticket delete', {
+                      wtPath, ticketId, error: err instanceof Error ? err.message : String(err),
+                    });
+                  });
+                }
+              }
+            }
+          }
+
+          // Remove the workspace folder
+          if (existsSync(workspaceBase)) {
+            rmSync(workspaceBase, { recursive: true, force: true });
+            container.logger.info('Workspace cleaned up on ticket delete', { workspaceBase, ticketId });
+          }
+        } catch (err) {
+          container.logger.warn('Failed to cleanup workspace on ticket delete', {
+            ticketId, error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
 
       await container.ticketStore.removeTicket(ticketId);

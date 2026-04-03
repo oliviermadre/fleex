@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { Ticket, TicketLink, TicketStatus, TicketPriority, GitHubIssueMetadata } from '@fleex/shared';
+import { useNavigate } from 'react-router-dom';
+import type { Ticket, TicketLink, TicketStatus, TicketPriority, GitHubIssueMetadata, WorktreeSessionGroup } from '@fleex/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useSessionStore } from '../../stores/sessionStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -307,8 +309,10 @@ function CollapsedTicketMetaSidebar({
 
 export function TicketMetaSidebar({
   ticket,
+  embedded,
 }: {
   ticket: Ticket;
+  embedded?: boolean;
 }) {
   const ticketMetaSidebarCollapsed = useUIStore((s) => s.ticketMetaSidebarCollapsed);
 
@@ -316,16 +320,19 @@ export function TicketMetaSidebar({
     return <CollapsedTicketMetaSidebar ticket={ticket} />;
   }
 
-  return <ExpandedTicketMetaSidebar ticket={ticket} />;
+  return <ExpandedTicketMetaSidebar ticket={ticket} embedded={embedded} />;
 }
 
 // ── Expanded ticket meta sidebar ──
 
 function ExpandedTicketMetaSidebar({
   ticket,
+  embedded,
 }: {
   ticket: Ticket;
+  embedded?: boolean;
 }) {
+  const navigate = useNavigate();
   const toggleTicketMetaSidebar = useUIStore((s) => s.toggleTicketMetaSidebar);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const deleteTicket = useTicketStore((s) => s.deleteTicket);
@@ -333,6 +340,7 @@ function ExpandedTicketMetaSidebar({
   const removeLink = useTicketStore((s) => s.removeLink);
   const syncGithubIssue = useTicketStore((s) => s.syncGithubIssue);
   const boards = useTicketStore((s) => s.boards);
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
 
   // Fetch live PR states from GitHub on mount / ticket change
   const [prStates, setPrStates] = useState<Record<string, string>>({});
@@ -350,9 +358,37 @@ function ExpandedTicketMetaSidebar({
     updateTicket(ticket.id, { priority });
   };
 
-  const handleDelete = () => {
-    if (confirm('Delete this ticket?')) {
-      deleteTicket(ticket.id);
+  const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
+
+  const handleDelete = async () => {
+    if (!confirm('Delete this ticket?')) return;
+
+    // Find a sibling task to navigate to after deletion
+    const allWorktrees: { ticketId?: string; sessionId?: string }[] = [];
+    for (const group of sessionGroups) {
+      for (const wt of group.worktrees) {
+        if (wt.ticketId) {
+          allWorktrees.push({ ticketId: wt.ticketId, sessionId: wt.sessions[0]?.id });
+        } else if (wt.sessions.length > 0) {
+          allWorktrees.push({ sessionId: wt.sessions[0]!.id });
+        }
+      }
+    }
+    const currentIdx = allWorktrees.findIndex((w) => w.ticketId === ticket.id);
+    const sibling = allWorktrees[currentIdx - 1] ?? allWorktrees[currentIdx + 1];
+
+    await deleteTicket(ticket.id);
+
+    // Navigate to sibling via sessionStore directly (avoids race with RouterSync)
+    if (sibling?.ticketId) {
+      selectTicketTab(sibling.ticketId);
+      navigate(`/sessions/${sibling.ticketId}`, { replace: true });
+    } else if (sibling?.sessionId) {
+      selectTicketTab(null, `s:${sibling.sessionId}`);
+      navigate(`/sessions/${sibling.sessionId}`, { replace: true });
+    } else {
+      selectTicketTab(null);
+      navigate('/sessions', { replace: true });
     }
   };
 
@@ -373,8 +409,8 @@ function ExpandedTicketMetaSidebar({
       </button>
 
       <div className="flex flex-1 flex-col gap-5 p-4 overflow-y-auto">
-      {/* Status — Nano Kanban */}
-      <div>
+      {/* Status — Nano Kanban (hidden when embedded in session tab — already in WorktreeHeader) */}
+      {!embedded && <div>
         <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
           Status
         </label>
@@ -417,7 +453,7 @@ function ExpandedTicketMetaSidebar({
             );
           })}
         </div>
-      </div>
+      </div>}
 
       {/* Board */}
       {boards.length > 1 && (

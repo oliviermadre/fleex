@@ -101,12 +101,17 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
       }
     }
 
-    // Fallback: first execution, then first session
-    const firstExec = orderedTabs.find((t) => t.kind === 'execution');
-    if (firstExec) {
-      setActiveTabRaw(firstExec);
-    } else if (orderedTabs.length > 0) {
-      setActiveTabRaw(orderedTabs[0]!);
+    // Fallback: ticket → execution → first tab
+    const firstTicket = orderedTabs.find((t) => t.kind === 'ticket');
+    if (firstTicket) {
+      setActiveTabRaw(firstTicket);
+    } else {
+      const firstExec = orderedTabs.find((t) => t.kind === 'execution');
+      if (firstExec) {
+        setActiveTabRaw(firstExec);
+      } else if (orderedTabs.length > 0) {
+        setActiveTabRaw(orderedTabs[0]!);
+      }
     }
   }, [orderedTabs, activeTab, savedActiveKey]);
 
