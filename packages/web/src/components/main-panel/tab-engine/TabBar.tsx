@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
 import { cn } from '../../../lib/cn';
-import { HotkeyBadge } from '../../ui/HotkeyBadge';
 import { getTabKind } from './registry';
 import type { TabDescriptor } from './types';
 import type { TabDragState } from './useTabEngine';
@@ -13,9 +12,8 @@ interface TabBarProps {
   onSelect: (tab: TabDescriptor) => void;
   onClose?: (tab: TabDescriptor) => void;
   onRename?: (tab: TabDescriptor, newName: string) => void;
-  onNewTab?: () => void;
-  isNewTabDisabled?: boolean;
-  newTabTitle?: string;
+  /** Slot rendered after the last tab (e.g. SmartSessionButton). Replaces the old onNewTab button. */
+  trailing?: React.ReactNode;
   drag: TabDragState;
 }
 
@@ -158,9 +156,7 @@ export function TabBar({
   onSelect,
   onClose,
   onRename,
-  onNewTab,
-  isNewTabDisabled,
-  newTabTitle,
+  trailing,
   drag,
 }: TabBarProps) {
   return (
@@ -177,26 +173,11 @@ export function TabBar({
         />
       ))}
 
-      {/* New Tab button */}
-      {onNewTab && (
-        <button
-          className={cn(
-            'relative flex items-center gap-1 px-3 py-2 text-xs whitespace-nowrap transition-colors',
-            isNewTabDisabled
-              ? 'text-[var(--theme-text-faint)] cursor-not-allowed opacity-50'
-              : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
-          )}
-          onClick={onNewTab}
-          disabled={isNewTabDisabled}
-          title={newTabTitle ?? 'New shell in this worktree'}
-        >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <line x1="8" y1="3" x2="8" y2="13" />
-            <line x1="3" y1="8" x2="13" y2="8" />
-          </svg>
-          <span>New Tab</span>
-          <HotkeyBadge hotkey="⌘N" position="top-right" />
-        </button>
+      {/* Trailing slot (e.g. SmartSessionButton) */}
+      {trailing && (
+        <div className="flex items-center px-1 py-1">
+          {trailing}
+        </div>
       )}
     </div>
   );

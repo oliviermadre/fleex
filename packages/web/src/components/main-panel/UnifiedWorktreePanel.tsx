@@ -9,6 +9,7 @@ import { TabBar } from './tab-engine/TabBar';
 import { useTabEngine } from './tab-engine/useTabEngine';
 import { getTabKind } from './tab-engine/registry';
 import type { TabDescriptor } from './tab-engine/types';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import * as api from '../../services/api';
 
 // Side-effect: register all tab kinds
@@ -152,12 +153,22 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
         onSelect={engine.setActiveTab}
         onClose={engine.closeTab}
         onRename={engine.renameTab}
-        onNewTab={handleNewTab}
-        isNewTabDisabled={isUnavailable}
-        newTabTitle={
-          isUnavailable
-            ? (worktree?.worktreeStatus === 'repo_missing' ? 'Repository not found locally' : 'Worktree unavailable')
-            : 'New shell in this worktree'
+        trailing={
+          !isUnavailable && (
+            <SmartSessionButton
+              sessions={sessions}
+              onCreateSession={handleNewTab}
+              disabled={isUnavailable}
+              size="sm"
+              ticketId={ticket?.id}
+              onExecuteSkill={
+                ticket
+                  ? (skillId) => api.executeSkill(skillId, ticket.id).catch(console.error)
+                  : undefined
+              }
+              alwaysShowMenu
+            />
+          )
         }
         drag={engine.drag}
       />
