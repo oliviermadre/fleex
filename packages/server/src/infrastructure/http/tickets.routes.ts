@@ -282,15 +282,42 @@ export function ticketRoutes(container: Container) {
           const manifestPath = join(workspaceRoot, '.fleex.json');
 
           if (existsSync(manifestPath)) {
-            // Workspace exists — create worktree for this new repo with a fresh branch
             const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
             if (!existsSync(wtPath)) {
-              const branchName = buildTicketBranchName(ticket.title, ticket.id);
+              // Check if this repo has a linked PR — if so, use the PR's branch
+              let branchName: string | null = null;
+              let createNewBranch = true;
+              const prLink = ticket.links.find((l) => l.type === 'github_pr' && l.ref.startsWith(`${org}/${name}#`));
+              if (prLink) {
+                const prNumber = parseInt(prLink.ref.split('#')[1]!, 10);
+                if (prNumber) {
+                  // Try cache first, then fetch
+                  const cached = container.repositoryCache.get<import('@fleex/shared').PullRequest[]>(`pulls:${org}/${name}`);
+                  const pr = cached?.data?.find((p) => p.number === prNumber);
+                  if (pr) {
+                    branchName = pr.headRefName;
+                    createNewBranch = false;
+                  } else {
+                    try {
+                      const result = await container.githubGraphql.fetchRepoBatch([{ org, name }]);
+                      const repoData = result.get(`${org}/${name}`);
+                      const fetchedPR = repoData?.pulls?.find((p: { number: number; headRefName: string }) => p.number === prNumber);
+                      if (fetchedPR) {
+                        branchName = fetchedPR.headRefName;
+                        createNewBranch = false;
+                      }
+                    } catch { /* ignore — fall through to ticket branch */ }
+                  }
+                }
+              }
+              if (!branchName) {
+                branchName = buildTicketBranchName(ticket.title, ticket.id);
+              }
 
               try {
-                await container.createWorktree.execute(org, name, wtPath, { branch: branchName, createNewBranch: true });
+                await container.createWorktree.execute(org, name, wtPath, { branch: branchName, createNewBranch });
                 ticket.addLink('worktree', wtPath, branchName, null, randomUUID());
-                container.logger.info('Worktree created for added repo', { ticketId: ticket.id, repo: ref, wtPath });
+                container.logger.info('Worktree created for added repo', { ticketId: ticket.id, repo: ref, branch: branchName, wtPath });
               } catch (err) {
                 container.logger.warn('Failed to create worktree for added repo', {
                   ticketId: ticket.id, repo: ref, error: err instanceof Error ? err.message : String(err),
