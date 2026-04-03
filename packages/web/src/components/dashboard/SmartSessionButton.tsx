@@ -90,6 +90,7 @@ function DropdownContent({
   onOpenFloating,
   onCreateSession,
   onExecuteSkill,
+  onClose,
   creating,
   hasTicketId,
   anchorRect,
@@ -100,6 +101,7 @@ function DropdownContent({
   onOpenFloating: (sessionId: string) => void;
   onCreateSession: () => void;
   onExecuteSkill?: (skillId: string) => void;
+  onClose: () => void;
   creating: boolean;
   hasTicketId: boolean;
   anchorRect?: DOMRect | null;
@@ -147,6 +149,7 @@ function DropdownContent({
         className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
         onClick={(e) => {
           e.stopPropagation();
+          onClose();
           onCreateSession();
         }}
         disabled={creating}
@@ -320,6 +323,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
               onOpenFloating={handleOpenFloating}
               onCreateSession={onCreateSession}
               onExecuteSkill={handleExecuteSkill}
+              onClose={() => setDropdownOpen(false)}
               creating={creating}
               hasTicketId={!!ticketId}
               anchorRect={anchorRect}
@@ -405,6 +409,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
           onOpenFloating={handleOpenFloating}
           onCreateSession={onCreateSession}
           onExecuteSkill={handleExecuteSkill}
+          onClose={() => setDropdownOpen(false)}
           creating={creating}
           hasTicketId={!!ticketId}
           anchorRect={anchorRect}

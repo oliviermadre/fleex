@@ -20,11 +20,14 @@ export class SessionNamingService {
     const prefix = type === 'claude' ? 'claude' : 'shell';
     const slugDisplay = slugify(context.displayName);
 
-    if (context.org && context.repo && context.worktree) {
+    if (context.org && context.repo) {
       const slugOrg = slugify(context.org);
       const slugRepo = slugify(context.repo);
-      const slugWorktree = slugify(context.worktree);
-      return `${FLEEX_PREFIX}${prefix}_${slugOrg}_${slugRepo}_${slugWorktree}_${slugDisplay}`;
+      if (context.worktree) {
+        const slugWorktree = slugify(context.worktree);
+        return `${FLEEX_PREFIX}${prefix}_${slugOrg}_${slugRepo}_${slugWorktree}_${slugDisplay}`;
+      }
+      return `${FLEEX_PREFIX}${prefix}_${slugOrg}_${slugRepo}_${slugDisplay}`;
     }
 
     return `${FLEEX_PREFIX}${prefix}_${slugDisplay}`;
@@ -35,18 +38,19 @@ export class SessionNamingService {
     type: SessionType,
     context: Omit<NamingContext, 'displayName'>,
     existingTmuxNames: string[],
+    existingDisplayNames: string[] = [],
   ): { displayName: string; tmuxName: string } {
     const base = desiredDisplayName;
     const baseTmux = this.buildTmuxName(type, { ...context, displayName: base });
 
-    if (!existingTmuxNames.includes(baseTmux)) {
+    if (!existingTmuxNames.includes(baseTmux) && !existingDisplayNames.includes(base)) {
       return { displayName: base, tmuxName: baseTmux };
     }
 
     for (let i = 1; ; i++) {
       const candidate = `${base}-${i}`;
       const candidateTmux = this.buildTmuxName(type, { ...context, displayName: candidate });
-      if (!existingTmuxNames.includes(candidateTmux)) {
+      if (!existingTmuxNames.includes(candidateTmux) && !existingDisplayNames.includes(candidate)) {
         return { displayName: candidate, tmuxName: candidateTmux };
       }
     }

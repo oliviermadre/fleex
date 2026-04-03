@@ -39,8 +39,10 @@ export class CreateSessionUseCase {
 
     const defaultDisplayName = request.displayName ?? this.namingService.defaultDisplayName(request.type);
 
-    // Gather existing tmux names for uniqueness check
-    const storedNames = (await this.sessionStore.getAll()).map((s) => s.tmuxName);
+    // Gather existing tmux names and display names for uniqueness check
+    const storedSessions = await this.sessionStore.getAll();
+    const storedNames = storedSessions.map((s) => s.tmuxName);
+    const storedDisplayNames = storedSessions.map((s) => s.displayName);
     const liveSessions = await this.tmux.listManagedSessions();
     const liveNames = liveSessions.map((s) => s.name);
     const existingTmuxNames = [...new Set([...storedNames, ...liveNames])];
@@ -50,6 +52,7 @@ export class CreateSessionUseCase {
       request.type,
       { org: repositoryOrg, repo: repositoryName, worktree: worktreeBranch },
       existingTmuxNames,
+      storedDisplayNames,
     );
 
     const command =

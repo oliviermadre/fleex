@@ -114,14 +114,13 @@ export class CreateSessionFromTicketUseCase {
         sessionName = firstRepoLink.ref.substring(si + 1);
       }
     }
-    const sessionBranch = ticket.links.find((l) => l.type === 'worktree')?.label;
+    const ticketShortId = ticket.id.slice(0, 6);
     const session = await this.createSession.execute({
       cwd,
       type: 'shell',
       repositoryOrg: sessionOrg,
       repositoryName: sessionName,
-      worktreeBranch: sessionBranch,
-      displayName: ticket.title,
+      displayName: `ticket-${ticketShortId}-session`,
     });
 
     // Auto-link session to ticket

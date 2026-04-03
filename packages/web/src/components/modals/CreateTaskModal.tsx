@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Ticket, DashboardPullRequest, BoardWithCounts, Repository } from '@fleex/shared';
+import type { Ticket, DashboardPullRequest, BoardWithCounts } from '@fleex/shared';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useRepositoryStore } from '../../stores/repositoryStore';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
 
@@ -32,8 +33,9 @@ function timeAgo(dateStr: string): string {
 export function CreateTaskModal() {
   const open = useUIStore((s) => s.createModalOpen);
   const closeModal = useUIStore((s) => s.closeCreateModal);
-  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
+  const setActivePanel = useUIStore((s) => s.setActivePanel);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
+  const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
   const createTicket = useTicketStore((s) => s.createTicket);
   const fetchTickets = useTicketStore((s) => s.fetchTickets);
   const boards = useTicketStore((s) => s.boards);
@@ -56,7 +58,7 @@ export function CreateTaskModal() {
   // New task
   const [taskTitle, setTaskTitle] = useState('');
   const [selectedBoardId, setSelectedBoardId] = useState('');
-  const [repos, setRepos] = useState<Repository[]>([]);
+  const repos = useRepositoryStore((s) => s.repositories);
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
 
   // Load data when modal opens
@@ -66,8 +68,6 @@ export function CreateTaskModal() {
     if (boards.length > 0 && !selectedBoardId) {
       setSelectedBoardId(boards[0]!.id);
     }
-    // Load repos
-    api.fetchRepositories().then(setRepos).catch(() => {});
     // Load dashboard PRs
     setLoadingPRs(true);
     api.fetchDashboard()
@@ -184,23 +184,24 @@ export function CreateTaskModal() {
 
       // Open session from ticket (auto-creates workspace + worktree + session)
       const { sessionId } = await openSessionFromTicket(ticketId);
-      // Wait for session to appear in store, then open floating overlay
-      const tryOpen = () => {
-        const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
-        if (session) {
-          addFloatingSession(sessionId);
-          closeModal();
+      // Navigate to session view and wait for session to appear before selecting its tab
+      setActivePanel('sessions');
+      closeModal();
+      const trySelect = () => {
+        const sessions = useSessionStore.getState().sessions;
+        if (sessions.some((s) => s.id === sessionId)) {
+          selectTicketTab(ticketId, `s:${sessionId}`);
           setCreating(false);
         } else {
-          setTimeout(tryOpen, 300);
+          setTimeout(trySelect, 200);
         }
       };
-      tryOpen();
+      trySelect();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create task');
       setCreating(false);
     }
-  }, [mode, selectedTicketId, selectedPR, taskTitle, selectedBoardId, selectedRepos, boards, tickets, createTicket, openSessionFromTicket, addFloatingSession, closeModal]);
+  }, [mode, selectedTicketId, selectedPR, taskTitle, selectedBoardId, selectedRepos, boards, tickets, createTicket, openSessionFromTicket, setActivePanel, selectTicketTab, closeModal]);
 
   // Cmd+Enter to submit
   useEffect(() => {
@@ -404,7 +405,7 @@ export function CreateTaskModal() {
                 Repositories ({selectedRepos.size} selected)
               </label>
               <div className="max-h-[160px] overflow-y-auto rounded-md border border-[var(--theme-border)] p-1">
-                {repos.filter((r) => r.isCloned).map((r) => {
+                {[...repos].sort((a, b) => a.org.localeCompare(b.org) || a.name.localeCompare(b.name)).map((r) => {
                   const key = `${r.org}/${r.name}`;
                   const selected = selectedRepos.has(key);
                   return (
