@@ -28,7 +28,7 @@ interface TicketState {
 
   // Actions
   fetchBoards: () => Promise<void>;
-  fetchTickets: (boardId?: string) => Promise<void>;
+  fetchTickets: () => Promise<void>;
   createBoard: (req: CreateBoardRequest) => Promise<void>;
   updateBoard: (id: string, req: UpdateBoardRequest) => Promise<void>;
   deleteBoard: (id: string) => Promise<void>;
@@ -110,10 +110,8 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     }
   },
 
-  fetchTickets: async (boardId) => {
-    const id = boardId ?? get().selectedBoardId;
-    // When null (all boards), fetch without filter
-    const tickets = await api.fetchTickets(id ?? undefined);
+  fetchTickets: async () => {
+    const tickets = await api.fetchTickets();
     set({ tickets });
   },
 
@@ -221,8 +219,6 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   selectBoard: (id) => {
     set({ selectedBoardId: id, selectedTicketId: null });
     localStorage.setItem(BOARD_STORAGE_KEY, id ?? ALL_BOARDS_SENTINEL);
-    // Refetch tickets for the new board (or all)
-    get().fetchTickets(id ?? undefined);
   },
   selectTicket: (id) => set((s) => ({
     selectedTicketId: id,
