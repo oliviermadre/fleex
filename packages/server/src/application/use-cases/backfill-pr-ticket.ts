@@ -27,9 +27,7 @@ export class BackfillPRTicketUseCase {
     const ticketId = randomUUID();
     const displayId = await this.ticketStore.getNextDisplayId(boardId);
 
-    const title = role === 'reviewer'
-      ? `To Review : ${prTitle}`
-      : `Ticket PR Backfill : ${prTitle}`;
+    const title = prTitle;
 
     const status = role === 'reviewer' ? 'reviewing' : 'doing';
 
