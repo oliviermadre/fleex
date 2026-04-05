@@ -19,7 +19,7 @@ export function SidebarHeader() {
 
   return (
     <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
-      <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Tasks</span>
+      <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Session Tasks</span>
       <div className="flex items-center gap-1">
         <button
           onClick={handleRefresh}

@@ -66,7 +66,7 @@ export function NavSidebar() {
               <path d="M5 5v6M5 7.5c0-1.5 1-3 4.5-3" />
             </svg>
           }
-          label="Tasks"
+          label="Session Tasks"
           active={activePanel === 'sessions'}
           collapsed={navCollapsed}
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
