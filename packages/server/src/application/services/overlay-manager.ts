@@ -16,22 +16,43 @@ export class OverlayManager {
   ) {}
 
   /**
+   * Ensure overlay directory structure exists for a repo and the global overlay.
+   */
+  async ensureOverlayDirs(org: string, name: string): Promise<void> {
+    const dirs = [
+      this.resolver.overlayFilesDir(org, name),
+      this.resolver.overlayHooksDir(org, name),
+      this.resolver.globalOverlayFilesDir(),
+      this.resolver.globalOverlayHooksDir(),
+    ];
+    for (const dir of dirs) {
+      if (!(await this.hostFs.exists(dir))) {
+        await this.hostFs.mkdir(dir);
+      }
+    }
+  }
+
+  /**
    * Copy overlay files into a worktree.
-   * Copies everything from overlays/org/name/files/ into worktreePath.
+   * Applies global overlay first, then per-repo overlay (which overrides global).
    */
   async applyOverlay(org: string, name: string, worktreePath: string): Promise<void> {
-    const filesDir = this.resolver.overlayFilesDir(org, name);
+    // Global overlay first
+    await this.copyOverlayFiles(this.resolver.globalOverlayFilesDir(), worktreePath);
+    // Per-repo overlay overrides global
+    await this.copyOverlayFiles(this.resolver.overlayFilesDir(org, name), worktreePath);
+  }
+
+  private async copyOverlayFiles(filesDir: string, worktreePath: string): Promise<void> {
     const exists = await this.hostFs.exists(filesDir);
     if (!exists) return;
 
     try {
-      // Use cp -rT to copy contents (not the directory itself) into worktree
-      // -T treats destination as a normal file (avoids creating files/ subdirectory)
       await this.execFn('cp', ['-r', `${filesDir}/.`, worktreePath]);
-      this.logger.info('Applied overlay files to worktree', { org, name, worktreePath });
+      this.logger.info('Applied overlay files to worktree', { source: filesDir, worktreePath });
     } catch (err) {
       this.logger.warn('Failed to apply overlay files', {
-        org, name, worktreePath,
+        source: filesDir, worktreePath,
         error: err instanceof Error ? err.message : String(err),
       });
     }
@@ -50,11 +71,15 @@ export class OverlayManager {
   ): boolean {
     const repoKey = `${org}/${name}`;
 
-    // 1. Check for file-based hooks
+    // 1. Run global file-based hooks first
+    const globalHooksDir = this.resolver.globalOverlayHooksDir();
+    this.runFileHooks(globalHooksDir, '_global', '', worktreePath, branch);
+
+    // 2. Check for per-repo file-based hooks
     const hooksDir = this.resolver.overlayHooksDir(org, name);
     this.runFileHooks(hooksDir, org, name, worktreePath, branch);
 
-    // 2. Check for inline config hook
+    // 3. Check for inline config hook
     const appConfig = this.config.get();
     const repoConfig = appConfig.repoConfigs?.[repoKey];
     const script = repoConfig?.postCheckoutHook?.trim();

@@ -2,6 +2,7 @@ import type { GitPort } from '../ports/git.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { HostFs, ExecFn } from '../../infrastructure/host/types.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+import type { OverlayManager } from './overlay-manager.js';
 
 export class BareCloneManager {
   constructor(
@@ -10,6 +11,7 @@ export class BareCloneManager {
     private readonly resolver: RepoPathResolver,
     private readonly execFn: ExecFn,
     private readonly logger: LoggerPort,
+    private readonly overlayManager: OverlayManager,
   ) {}
 
   /**
@@ -41,6 +43,9 @@ export class BareCloneManager {
 
     // Initial fetch to populate remote refs
     await this.execFn('git', ['fetch', '--prune', 'origin'], { cwd: barePath });
+
+    // Scaffold overlay directories for this repo (+ global)
+    await this.overlayManager.ensureOverlayDirs(org, name);
 
     this.logger.info('Bare clone created', { org, name, barePath });
     return barePath;

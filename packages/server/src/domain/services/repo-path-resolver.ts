@@ -34,6 +34,21 @@ export class RepoPathResolver {
     return join(this.basePath, 'overlays', org, name, 'hooks');
   }
 
+  /** Global overlay root: overlays/_global */
+  globalOverlayDir(): string {
+    return join(this.basePath, 'overlays', '_global');
+  }
+
+  /** Global files to copy into all worktrees: overlays/_global/files */
+  globalOverlayFilesDir(): string {
+    return join(this.basePath, 'overlays', '_global', 'files');
+  }
+
+  /** Global hook scripts for all repos: overlays/_global/hooks */
+  globalOverlayHooksDir(): string {
+    return join(this.basePath, 'overlays', '_global', 'hooks');
+  }
+
   /** Standalone worktree: worktrees/org/dirName */
   worktreeDir(org: string, dirName: string): string {
     return join(this.basePath, 'worktrees', org, dirName);

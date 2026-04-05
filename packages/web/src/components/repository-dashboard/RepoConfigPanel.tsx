@@ -54,6 +54,7 @@ export function RepoConfigPanel({ org, name }: Props) {
           <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
             Shell script automatically run in each new worktree after creation.
             Runs asynchronously — the UI is not blocked.
+            The cwd is the worktree root.
           </p>
         </div>
 
