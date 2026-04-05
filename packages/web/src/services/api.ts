@@ -357,6 +357,14 @@ export async function importGitHubIssue(org: string, name: string, issueNumber: 
   });
 }
 
+export async function importGitHubPR(
+  org: string, name: string, prNumber: number, prTitle: string, headRefName: string, boardId: string,
+): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>('/tickets/import-github-pr', {
+    method: 'POST', body: JSON.stringify({ org, name, prNumber, prTitle, headRefName, boardId }),
+  });
+}
+
 export async function syncGithubIssue(ticketId: string): Promise<import('@fleex/shared').Ticket> {
   return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(ticketId)}/sync-github`, {
     method: 'POST',

@@ -93,6 +93,17 @@ export function repositoryRoutes(container: Container) {
         const cached = container.repositoryCache.get<PullRequest[]>(cacheKey);
         if (cached) return cached.data;
 
+        // Check rate limit before making API calls
+        try {
+          const rateLimit = await container.githubGraphql.getRateLimit();
+          if (rateLimit.remaining < 100) {
+            container.logger.warn('GitHub rate limit low, skipping PR fetch', { org, name, remaining: rateLimit.remaining });
+            return [];
+          }
+        } catch {
+          // rate limit check failed, proceed cautiously
+        }
+
         try {
           const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
           const mergedDateStr = thirtyDaysAgo.toISOString().split('T')[0];
@@ -167,7 +178,7 @@ export function repositoryRoutes(container: Container) {
             'issue', 'list',
             '--repo', `${org}/${name}`,
             '--assignee', '@me',
-            '--json', 'number,title,author,createdAt,updatedAt',
+            '--json', 'number,title,author,assignees,createdAt,updatedAt',
             '--state', 'open',
             '--limit', '50',
           ], { timeout: 15_000 });
@@ -175,6 +186,7 @@ export function repositoryRoutes(container: Container) {
             number: number;
             title: string;
             author: { login: string };
+            assignees: { login: string }[];
             createdAt: string;
             updatedAt: string;
           }[];
@@ -182,6 +194,7 @@ export function repositoryRoutes(container: Container) {
             number: issue.number,
             title: issue.title,
             author: issue.author.login,
+            assignees: issue.assignees.map((a) => a.login),
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
           }));

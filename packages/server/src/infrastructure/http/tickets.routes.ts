@@ -548,6 +548,22 @@ export function ticketRoutes(container: Container) {
       },
     );
 
+    // Import GitHub PR as ticket
+    app.post<{ Body: { org: string; name: string; prNumber: number; prTitle: string; headRefName: string; boardId: string } }>(
+      '/api/tickets/import-github-pr',
+      async (request, reply) => {
+        const { org, name, prNumber, prTitle, headRefName, boardId } = request.body;
+        const ticket = await container.backfillPRTicket.execute({
+          org, name, prNumber, prTitle, headRefName,
+          prUrl: `https://github.com/${org}/${name}/pull/${prNumber}`,
+          boardId,
+          role: 'author',
+        });
+        emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
+        return reply.code(201).send(ticket.toDTO());
+      },
+    );
+
     // Sync GitHub metadata
     app.post<{ Params: { id: string } }>(
       '/api/tickets/:id/sync-github',

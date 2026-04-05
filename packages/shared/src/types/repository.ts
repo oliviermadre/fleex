@@ -51,6 +51,7 @@ export interface PullRequest {
   readonly state: 'open' | 'merged';
   readonly author: string;
   readonly assignees: string[];
+  readonly reviewRequests?: string[];
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly mergedAt?: string;
@@ -68,6 +69,7 @@ export interface GitHubIssue {
   readonly number: number;
   readonly title: string;
   readonly author: string;
+  readonly assignees: string[];
   readonly createdAt: string;
   readonly updatedAt: string;
 }

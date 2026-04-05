@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useSessionStore } from '../stores/sessionStore';
 import { usePullRequestStore } from '../stores/pullRequestStore';
 
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = 120_000; // 2 minutes — matches server cache TTL to avoid redundant API calls
 
 export function usePullRequestPolling() {
   const sessionGroups = useSessionStore((s) => s.sessionGroups);

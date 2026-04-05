@@ -1,17 +1,23 @@
-import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import type { DashboardPullRequest, DashboardWorktree, DashboardGitHubIssue, DashboardData, PullRequest, GitHubIssue } from '@fleex/shared';
-import { BoardEntity } from '../../domain/entities/board.entity.js';
+import type { DashboardPullRequest, DashboardWorktree, DashboardGitHubIssue, DashboardData } from '@fleex/shared';
 import type { Container } from '../container.js';
 
-const PR_BACKFILL_BOARD_NAME = 'PR Backfill';
-const TO_REVIEW_BOARD_NAME = 'To Review';
+// Raw shape returned by `gh search issues --json ...`
+interface GhSearchIssue {
+  number: number;
+  title: string;
+  author: { login: string };
+  assignees: { login: string }[];
+  repository: { name: string; nameWithOwner: string };
+  createdAt: string;
+  updatedAt: string;
+}
 
 export function dashboardRoutes(container: Container) {
   return async function (app: FastifyInstance) {
     app.get('/api/dashboard', async (_request, reply) => {
       try {
-        // Get configured repos (same pattern as repositories.routes.ts)
+        // Get configured repos
         const config = container.config.get() as unknown as Record<string, unknown>;
         const resolved = config['resolvedRepositories'];
         const configuredRepos: { org: string; name: string }[] = [];
@@ -22,6 +28,18 @@ export function dashboardRoutes(container: Container) {
               configuredRepos.push({ org: org!, name: name! });
             }
           }
+        }
+
+        // Check rate limit before making GitHub API calls
+        let rateLimited = false;
+        try {
+          const rateLimit = await container.githubGraphql.getRateLimit();
+          if (rateLimit.remaining < 100) {
+            container.logger.warn('GitHub rate limit low, dashboard will skip GitHub fetches', { remaining: rateLimit.remaining });
+            rateLimited = true;
+          }
+        } catch {
+          // rate limit check failed, proceed cautiously
         }
 
         // Get GitHub user + all tickets in parallel
@@ -46,201 +64,206 @@ export function dashboardRoutes(container: Container) {
           }
         }
 
-        // Fetch PRs, issues, worktrees per repo in parallel
         const myPullRequests: DashboardPullRequest[] = [];
         const reviewRequests: DashboardPullRequest[] = [];
+        const myIssues: DashboardGitHubIssue[] = [];
         const assignedIssues: DashboardGitHubIssue[] = [];
         const activeWorktrees: DashboardWorktree[] = [];
 
-        await Promise.all(
-          configuredRepos.map(async ({ org, name }) => {
-            const barePath = container.resolver.barePath(org, name);
+        // Skip GitHub fetches if rate-limited — return tickets-only dashboard
+        if (rateLimited) {
+          const activeTickets = allTickets
+            .filter((t) => t.status !== 'done' && t.status !== 'cancelled')
+            .map((t) => t.toDTO());
+          return {
+            activeTickets,
+            myPullRequests,
+            reviewRequests,
+            myIssues,
+            assignedIssues,
+            activeWorktrees,
+            githubUser,
+          } satisfies DashboardData;
+        }
 
-            // Fetch PRs, issues, worktrees in parallel per repo
-            const [prsResult, issuesResult, worktreesResult] = await Promise.allSettled([
-              container.execFn('gh', [
-                'pr', 'list',
-                '--repo', `${org}/${name}`,
+        // Case-insensitive lookup: GitHub returns canonical casing, we need configured casing
+        const repoLookup = new Map<string, { org: string; name: string }>();
+        for (const r of configuredRepos) {
+          repoLookup.set(`${r.org}/${r.name}`.toLowerCase(), r);
+        }
+
+        // ── Fetch everything in parallel: batch PRs + global issues + worktrees ──
+        const repoFlags = configuredRepos.flatMap(({ org, name }) => ['--repo', `${org}/${name}`]);
+        const issueJsonFields = 'number,title,author,assignees,repository,createdAt,updatedAt';
+
+        const [
+          batchPRsResult,
+          authoredIssuesResult,
+          assignedIssuesResult,
+          ...worktreeResults
+        ] = await Promise.allSettled([
+          // 1 GraphQL call for all repos' PRs (batch up to 8)
+          configuredRepos.length > 0
+            ? container.githubGraphql.fetchRepoBatch(configuredRepos)
+            : Promise.resolve(new Map()),
+          // 1 gh search call for authored issues
+          configuredRepos.length > 0
+            ? container.execFn('gh', [
+                'search', 'issues',
+                '--author', '@me',
                 '--state', 'open',
-                '--json', 'number,title,headRefName,author,assignees,reviewRequests,createdAt,updatedAt',
+                ...repoFlags,
+                '--json', issueJsonFields,
                 '--limit', '50',
-              ], { timeout: 15_000 }),
-              container.execFn('gh', [
-                'issue', 'list',
-                '--repo', `${org}/${name}`,
+              ], { timeout: 20_000 })
+            : Promise.resolve({ stdout: '[]', stderr: '', exitCode: 0 }),
+          // 1 gh search call for assigned issues
+          configuredRepos.length > 0
+            ? container.execFn('gh', [
+                'search', 'issues',
                 '--assignee', '@me',
                 '--state', 'open',
-                '--json', 'number,title,author,createdAt,updatedAt',
+                ...repoFlags,
+                '--json', issueJsonFields,
                 '--limit', '50',
-              ], { timeout: 15_000 }),
-              (async () => {
-                const exists = await container.hostFs.exists(barePath);
-                if (!exists) return [];
-                return container.listWorktrees.execute(org, name);
-              })(),
-            ]);
-
-            // Process PRs
-            if (prsResult.status === 'fulfilled') {
-              try {
-                const rawPRs = JSON.parse(prsResult.value.stdout) as {
-                  number: number; title: string; headRefName: string;
-                  author: { login: string }; assignees: { login: string }[];
-                  reviewRequests: { login: string }[];
-                  createdAt: string; updatedAt: string;
-                }[];
-
-                for (const pr of rawPRs) {
-                  const mapped: DashboardPullRequest = {
-                    number: pr.number,
-                    title: pr.title,
-                    headRefName: pr.headRefName,
-                    state: 'open',
-                    author: pr.author.login,
-                    assignees: pr.assignees.map((a) => a.login),
-                    createdAt: pr.createdAt,
-                    updatedAt: pr.updatedAt,
-                    org,
-                    name,
-                  };
-
-                  if (pr.author.login === githubUser) {
-                    myPullRequests.push(mapped);
-                  } else if (
-                    pr.assignees.some((a) => a.login === githubUser) ||
-                    pr.reviewRequests?.some((r) => r.login === githubUser)
-                  ) {
-                    reviewRequests.push(mapped);
-                  }
-                }
-              } catch {
-                container.logger.warn('Failed to parse PRs for dashboard', { org, name });
-              }
-            }
-
-            // Process issues
-            if (issuesResult.status === 'fulfilled') {
-              try {
-                const rawIssues = JSON.parse(issuesResult.value.stdout) as {
-                  number: number; title: string;
-                  author: { login: string };
-                  createdAt: string; updatedAt: string;
-                }[];
-
-                for (const issue of rawIssues) {
-                  const ref = `${org}/${name}#${issue.number}`;
-                  assignedIssues.push({
-                    number: issue.number,
-                    title: issue.title,
-                    author: issue.author.login,
-                    createdAt: issue.createdAt,
-                    updatedAt: issue.updatedAt,
-                    org,
-                    name,
-                    hasLocalTicket: localIssueMap.has(ref),
-                    linkedTicketId: localIssueMap.get(ref),
-                  });
-                }
-              } catch {
-                container.logger.warn('Failed to parse issues for dashboard', { org, name });
-              }
-            }
-
-            // Process worktrees
-            if (worktreesResult.status === 'fulfilled') {
-              for (const wt of worktreesResult.value) {
-                if (!wt.isBare && !wt.isMain) {
-                  activeWorktrees.push({ ...wt, org, name });
-                }
-              }
-            }
+              ], { timeout: 20_000 })
+            : Promise.resolve({ stdout: '[]', stderr: '', exitCode: 0 }),
+          // Per-repo worktree listing (local git, no API calls)
+          ...configuredRepos.map(async ({ org, name }) => {
+            const barePath = container.resolver.barePath(org, name);
+            const exists = await container.hostFs.exists(barePath);
+            if (!exists) return { org, name, worktrees: [] as DashboardWorktree[] };
+            const wts = await container.listWorktrees.execute(org, name);
+            return {
+              org,
+              name,
+              worktrees: wts
+                .filter((wt) => !wt.isBare && !wt.isMain)
+                .map((wt) => ({ ...wt, org, name })),
+            };
           }),
-        );
-
-        // ── PR ticket backfill ──────────────────────────────────────────────
-        // Find-or-create dedicated boards for PR backfill
-        const allBoards = await container.ticketStore.getAllBoards();
-        const findOrCreateBoard = async (boardName: string, emoji: string): Promise<string> => {
-          const existing = allBoards.find((b) => b.name === boardName);
-          if (existing) return existing.id;
-          const board = BoardEntity.create({ id: randomUUID(), name: boardName, emoji });
-          await container.ticketStore.saveBoard(board);
-          allBoards.push(board); // keep in sync for subsequent lookups
-          return board.id;
-        };
-
-        // Eagerly resolve boards only for roles that have unlinked PRs
-        const hasUnlinkedAuthorPR = myPullRequests.some((pr) => {
-          const prRef = `${pr.org}/${pr.name}#${pr.number}`;
-          const wtRef = `${pr.org}/${pr.name}:${pr.headRefName}`;
-          return !localPRMap.has(prRef) && !worktreeBranchMap.has(wtRef);
-        });
-        const hasUnlinkedReviewPR = reviewRequests.some((pr) => {
-          const prRef = `${pr.org}/${pr.name}#${pr.number}`;
-          const wtRef = `${pr.org}/${pr.name}:${pr.headRefName}`;
-          return !localPRMap.has(prRef) && !worktreeBranchMap.has(wtRef);
-        });
-
-        const [prBackfillBoardId, toReviewBoardId] = await Promise.all([
-          hasUnlinkedAuthorPR ? findOrCreateBoard(PR_BACKFILL_BOARD_NAME, '🔀') : Promise.resolve(undefined),
-          hasUnlinkedReviewPR ? findOrCreateBoard(TO_REVIEW_BOARD_NAME, '👀') : Promise.resolve(undefined),
         ]);
 
-        const backfillPR = async (pr: DashboardPullRequest, role: 'author' | 'reviewer') => {
+        // ── Process batch PR results (1 GraphQL call covered all repos) ──
+        if (batchPRsResult.status === 'fulfilled') {
+          const batchResults = batchPRsResult.value as Map<string, import('../../infrastructure/adapters/github-graphql.adapter.js').RepoBatchResult>;
+          for (const [key, result] of batchResults) {
+            const repo = repoLookup.get(key.toLowerCase());
+            if (!repo) continue;
+            const { org, name } = repo;
+
+            for (const pr of result.pulls) {
+              const mapped: DashboardPullRequest = {
+                number: pr.number,
+                title: pr.title,
+                headRefName: pr.headRefName,
+                state: 'open',
+                author: pr.author,
+                assignees: pr.assignees,
+                createdAt: pr.createdAt,
+                updatedAt: pr.updatedAt,
+                org,
+                name,
+              };
+
+              if (pr.author === githubUser) {
+                myPullRequests.push(mapped);
+              } else if (
+                pr.assignees.some((a) => a === githubUser) ||
+                pr.reviewRequests?.some((r) => r === githubUser)
+              ) {
+                reviewRequests.push(mapped);
+              }
+            }
+          }
+        } else {
+          container.logger.warn('Failed to fetch PR batch for dashboard', { error: String((batchPRsResult as PromiseRejectedResult).reason) });
+        }
+
+        // ── Process global issue search results ──
+        const seenIssueKeys = new Set<string>();
+
+        const buildIssueFromSearch = (raw: GhSearchIssue): DashboardGitHubIssue | null => {
+          const nwo = raw.repository.nameWithOwner.toLowerCase();
+          const repo = repoLookup.get(nwo);
+          if (!repo) return null;
+          const ref = `${repo.org}/${repo.name}#${raw.number}`;
+          return {
+            number: raw.number,
+            title: raw.title,
+            author: raw.author.login,
+            assignees: raw.assignees.map((a) => a.login),
+            createdAt: raw.createdAt,
+            updatedAt: raw.updatedAt,
+            org: repo.org,
+            name: repo.name,
+            hasLocalTicket: localIssueMap.has(ref),
+            linkedTicketId: localIssueMap.get(ref),
+          };
+        };
+
+        if (authoredIssuesResult.status === 'fulfilled') {
+          try {
+            const rawIssues = JSON.parse(authoredIssuesResult.value.stdout) as GhSearchIssue[];
+            for (const raw of rawIssues) {
+              const issue = buildIssueFromSearch(raw);
+              if (!issue) continue;
+              const key = `${issue.org}/${issue.name}#${issue.number}`;
+              seenIssueKeys.add(key);
+              myIssues.push(issue);
+            }
+          } catch {
+            container.logger.warn('Failed to parse authored issues search');
+          }
+        }
+
+        if (assignedIssuesResult.status === 'fulfilled') {
+          try {
+            const rawIssues = JSON.parse(assignedIssuesResult.value.stdout) as GhSearchIssue[];
+            for (const raw of rawIssues) {
+              const issue = buildIssueFromSearch(raw);
+              if (!issue) continue;
+              const key = `${issue.org}/${issue.name}#${issue.number}`;
+              if (seenIssueKeys.has(key)) continue;
+              assignedIssues.push(issue);
+            }
+          } catch {
+            container.logger.warn('Failed to parse assigned issues search');
+          }
+        }
+
+        // ── Process worktree results (local git, no API calls) ──
+        for (const result of worktreeResults) {
+          if (result.status === 'fulfilled') {
+            const { worktrees } = result.value as { org: string; name: string; worktrees: DashboardWorktree[] };
+            activeWorktrees.push(...worktrees);
+          }
+        }
+
+        // Populate linkedTicketId for PRs that already have a linked ticket
+        for (const pr of [...myPullRequests, ...reviewRequests]) {
           const prRef = `${pr.org}/${pr.name}#${pr.number}`;
           const wtRef = `${pr.org}/${pr.name}:${pr.headRefName}`;
-
-          // Already linked?
           const existingId = localPRMap.get(prRef) ?? worktreeBranchMap.get(wtRef);
           if (existingId) {
             pr.linkedTicketId = existingId;
-            return;
           }
+        }
 
-          const boardId = role === 'reviewer' ? toReviewBoardId : prBackfillBoardId;
-          if (!boardId) return;
-
-          try {
-            const ticket = await container.backfillPRTicket.execute({
-              org: pr.org,
-              name: pr.name,
-              prNumber: pr.number,
-              prTitle: pr.title,
-              headRefName: pr.headRefName,
-              prUrl: `https://github.com/${pr.org}/${pr.name}/pull/${pr.number}`,
-              boardId,
-              role,
-            });
-            pr.linkedTicketId = ticket.id;
-            // Update maps so duplicates within the same request are avoided
-            localPRMap.set(prRef, ticket.id);
-            worktreeBranchMap.set(wtRef, ticket.id);
-          } catch (err) {
-            container.logger.warn('PR ticket backfill failed', { prRef, error: String(err) });
-          }
-        };
-
-        await Promise.all([
-          ...myPullRequests.map((pr) => backfillPR(pr, 'author')),
-          ...reviewRequests.map((pr) => backfillPR(pr, 'reviewer')),
-        ]);
-
-        // Re-compute activeTickets to include newly backfilled tickets
-        const allTicketsAfterBackfill = await container.ticketStore.getAllTickets();
-        const activeTicketsFinal = allTicketsAfterBackfill
-          .filter((t) => t.status === 'todo' || t.status === 'doing' || t.status === 'reviewing')
+        // Return all non-terminal tickets so linked items can always resolve their ticket
+        const activeTickets = allTickets
+          .filter((t) => t.status !== 'done' && t.status !== 'cancelled')
           .map((t) => t.toDTO());
 
-        const data: DashboardData = {
-          activeTickets: activeTicketsFinal,
+        return {
+          activeTickets,
           myPullRequests,
           reviewRequests,
+          myIssues,
           assignedIssues,
           activeWorktrees,
           githubUser,
-        };
-
-        return data;
+        } satisfies DashboardData;
       } catch (err) {
         container.logger.error('Dashboard aggregation failed', { error: String(err) });
         return reply.code(500).send({ error: 'Failed to load dashboard data' });

@@ -8,6 +8,7 @@ interface GraphQLPRNode {
   headRefName: string;
   author: { login: string } | null;
   assignees: { nodes: { login: string }[] };
+  reviewRequests?: { nodes: { requestedReviewer: { login: string } | null }[] };
   createdAt: string;
   updatedAt: string;
   mergedAt: string | null;
@@ -17,6 +18,7 @@ interface GraphQLIssueNode {
   number: number;
   title: string;
   author: { login: string } | null;
+  assignees?: { nodes: { login: string }[] };
   createdAt: string;
   updatedAt: string;
 }
@@ -205,6 +207,7 @@ export class GitHubGraphQLAdapter {
           headRefName
           author { login }
           assignees(first: 10) { nodes { login } }
+          reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } } } }
           createdAt
           updatedAt
         }
@@ -227,6 +230,7 @@ export class GitHubGraphQLAdapter {
           number
           title
           author { login }
+          assignees(first: 10) { nodes { login } }
           createdAt
           updatedAt
         }
@@ -259,6 +263,9 @@ export class GitHubGraphQLAdapter {
           state: 'open' as const,
           author: pr.author?.login ?? 'unknown',
           assignees: pr.assignees.nodes.map((a) => a.login),
+          reviewRequests: (pr.reviewRequests?.nodes ?? [])
+            .map((r) => r.requestedReviewer?.login)
+            .filter((login): login is string => !!login),
           createdAt: pr.createdAt,
           updatedAt: pr.updatedAt,
         }));
@@ -281,6 +288,7 @@ export class GitHubGraphQLAdapter {
           number: issue.number,
           title: issue.title,
           author: issue.author?.login ?? 'unknown',
+          assignees: (issue.assignees?.nodes ?? []).map((a: { login: string }) => a.login),
           createdAt: issue.createdAt,
           updatedAt: issue.updatedAt,
         }));
@@ -372,19 +380,21 @@ export class GitHubGraphQLAdapter {
     // Fetch issues
     const { stdout: issueOut } = await this.execFn('gh', [
       'issue', 'list', '--repo', repoSlug,
-      '--json', 'number,title,author,createdAt,updatedAt',
+      '--json', 'number,title,author,assignees,createdAt,updatedAt',
       '--state', 'open', '--limit', '50',
     ], { timeout: 15_000 });
 
     const rawIssues = JSON.parse(issueOut) as {
       number: number; title: string;
-      author: { login: string }; createdAt: string; updatedAt: string;
+      author: { login: string }; assignees: { login: string }[];
+      createdAt: string; updatedAt: string;
     }[];
 
     const issues: GitHubIssue[] = rawIssues.map((issue) => ({
       number: issue.number,
       title: issue.title,
       author: issue.author.login,
+      assignees: (issue.assignees ?? []).map((a) => a.login),
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
     }));
