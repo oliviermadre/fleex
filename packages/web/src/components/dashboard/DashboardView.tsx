@@ -14,7 +14,8 @@ import type {
   DashboardGitHubIssue,
 } from '@fleex/shared';
 import { TICKET_PRIORITIES, TICKET_STATUS_LABELS } from '@fleex/shared';
-import { fetchDashboard, fetchBoards, importGitHubIssue, importGitHubPR, openSessionFromTicket, createWorktree, createSession, executeSkill } from '../../services/api';
+import { importGitHubIssue, importGitHubPR, executeSkill } from '../../services/api';
+import { useDashboardStore } from '../../stores/dashboardStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -1017,14 +1018,133 @@ function GithubSection({
   );
 }
 
+// ── Sync Toolbar ─────────────────────────────────────────────────────────────
+
+const SYNC_OPTIONS = [
+  { label: 'Disabled', ms: 0 },
+  { label: '1 min', ms: 60_000 },
+  { label: '2 min', ms: 120_000 },
+  { label: '5 min', ms: 300_000 },
+  { label: '15 min', ms: 900_000 },
+  { label: '30 min', ms: 1_800_000 },
+  { label: '1h', ms: 3_600_000 },
+];
+
+function useLiveSyncAge(lastFetchedAt: Date | null): string {
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    if (!lastFetchedAt) return;
+    const id = setInterval(() => forceUpdate((n) => n + 1), 10_000);
+    return () => clearInterval(id);
+  }, [lastFetchedAt]);
+  if (!lastFetchedAt) return 'never';
+  return timeAgo(lastFetchedAt.toISOString());
+}
+
+function SyncToolbar() {
+  const refreshing = useDashboardStore((s) => s.refreshing);
+  const lastFetchedAt = useDashboardStore((s) => s.lastFetchedAt);
+  const autoSyncIntervalMs = useDashboardStore((s) => s.autoSyncIntervalMs);
+  const setAutoSyncInterval = useDashboardStore((s) => s.setAutoSyncInterval);
+  const fetchDash = useDashboardStore((s) => s.fetch);
+
+  const [syncOpen, setSyncOpen] = useState(false);
+  const syncBtnRef = useRef<HTMLButtonElement>(null);
+  const syncMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!syncOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (syncMenuRef.current && !syncMenuRef.current.contains(e.target as Node) &&
+          syncBtnRef.current && !syncBtnRef.current.contains(e.target as Node)) setSyncOpen(false);
+    };
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSyncOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', keyHandler);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', keyHandler); };
+  }, [syncOpen]);
+
+  const syncAge = useLiveSyncAge(lastFetchedAt);
+  const currentLabel = SYNC_OPTIONS.find((o) => o.ms === autoSyncIntervalMs)?.label ?? 'Disabled';
+
+  return (
+    <div className="flex items-center gap-3">
+      {/* Last sync */}
+      <span className="text-[11px] text-[var(--theme-text-faint)]">
+        Last sync: {syncAge}
+      </span>
+
+      {/* Auto-sync dropdown */}
+      <button
+        ref={syncBtnRef}
+        className={cn(
+          'flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors',
+          autoSyncIntervalMs > 0
+            ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
+            : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
+        )}
+        onClick={() => setSyncOpen(!syncOpen)}
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="8" cy="8" r="6" />
+          <polyline points="8,4 8,8 11,10" />
+        </svg>
+        {currentLabel}
+        <ChevronDownIcon />
+      </button>
+      {syncOpen && syncBtnRef.current && createPortal(
+        <div
+          ref={syncMenuRef}
+          className="fixed z-50 min-w-[120px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-1.5 shadow-xl"
+          style={{ left: syncBtnRef.current.getBoundingClientRect().left, top: syncBtnRef.current.getBoundingClientRect().bottom + 4 }}
+        >
+          {SYNC_OPTIONS.map((opt) => (
+            <button
+              key={opt.ms}
+              className={cn(
+                'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                autoSyncIntervalMs === opt.ms
+                  ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
+                  : 'text-[var(--theme-text-secondary)]',
+              )}
+              onClick={() => { setAutoSyncInterval(opt.ms); setSyncOpen(false); }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )}
+
+      {/* Refresh now */}
+      <button
+        className={cn(
+          'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all',
+          'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
+          refreshing && 'pointer-events-none opacity-60',
+        )}
+        onClick={() => fetchDash()}
+        disabled={refreshing}
+        title="Refresh now"
+      >
+        <RefreshIcon spinning={refreshing} />
+      </button>
+    </div>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export function DashboardView() {
   const navigate = useNavigate();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [importingKey, setImportingKey] = useState<string | null>(null);
+
+  // Dashboard store
+  const data = useDashboardStore((s) => s.data);
+  const loading = useDashboardStore((s) => s.loading);
+  const refreshing = useDashboardStore((s) => s.refreshing);
+  const autoSyncIntervalMs = useDashboardStore((s) => s.autoSyncIntervalMs);
+  const fetchDash = useDashboardStore((s) => s.fetch);
 
   // Live data from stores
   const humanDisplayName = useSettingsStore((s) => s.settings.humanDisplayName);
@@ -1038,6 +1158,18 @@ export function DashboardView() {
   const personas = useAgentPersonaStore((s) => s.personas);
 
   useEffect(() => { loadUnreadCounts(); }, [loadUnreadCounts]);
+
+  // Fetch on mount only if no cached data
+  useEffect(() => {
+    if (!data) fetchDash();
+  }, [data, fetchDash]);
+
+  // Auto-sync interval (only while this view is mounted)
+  useEffect(() => {
+    if (autoSyncIntervalMs <= 0) return;
+    const id = setInterval(fetchDash, autoSyncIntervalMs);
+    return () => clearInterval(id);
+  }, [autoSyncIntervalMs, fetchDash]);
 
   // Build recent agent activity from all executions
   const recentActivity = useMemo(() => {
@@ -1055,29 +1187,6 @@ export function DashboardView() {
 
   const boards = useTicketStore((s) => s.boards);
   const moveTicket = useTicketStore((s) => s.moveTicket);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
-
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const result = await fetchDashboard();
-      setData(result);
-      // Seed ticket store so inline updates (priority, blocked) are reflected live
-      if (useTicketStore.getState().tickets.length === 0 && result.activeTickets.length > 0) {
-        useTicketStore.setState({ tickets: result.activeTickets });
-      }
-    } catch {
-      // toast handled by api layer
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   // Merge live store updates on top of dashboard data
   const allTickets = useMemo(() => {
@@ -1095,11 +1204,11 @@ export function DashboardView() {
   const handleStatusChange = useCallback(async (ticketId: string, newStatus: TicketStatus) => {
     try {
       await moveTicket(ticketId, newStatus);
-      load(true);
+      fetchDash();
     } catch {
       // handled by api layer
     }
-  }, [moveTicket, load]);
+  }, [moveTicket, fetchDash]);
 
   const handleTicketNavigate = useCallback((ticket: Ticket) => {
     navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`);
@@ -1111,13 +1220,13 @@ export function DashboardView() {
     setImportingKey(key);
     try {
       await importGitHubIssue(item.org, item.name, item.number, boardId);
-      await load(true);
+      await fetchDash();
     } catch {
       // handled by api layer
     } finally {
       setImportingKey(null);
     }
-  }, [importingKey, load]);
+  }, [importingKey, fetchDash]);
 
   const handleImportPR = useCallback(async (item: DashboardItem, boardId: string) => {
     const key = `${item.org}/${item.name}#${item.number}`;
@@ -1125,13 +1234,13 @@ export function DashboardView() {
     setImportingKey(key);
     try {
       await importGitHubPR(item.org, item.name, item.number, item.title, item.headRefName, boardId);
-      await load(true);
+      await fetchDash();
     } catch {
       // handled by api layer
     } finally {
       setImportingKey(null);
     }
-  }, [importingKey, load]);
+  }, [importingKey, fetchDash]);
 
   return (
     <>
@@ -1152,18 +1261,7 @@ export function DashboardView() {
                 {getTodayFrench()}
               </span>
             </div>
-            <button
-              className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
-                'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
-                refreshing && 'pointer-events-none opacity-60',
-              )}
-              onClick={() => load(true)}
-              disabled={refreshing}
-            >
-              <RefreshIcon spinning={refreshing} />
-              Rafraichir
-            </button>
+            <SyncToolbar />
           </div>
 
           {/* ── Loading skeleton ── */}
