@@ -820,6 +820,7 @@ export function ticketRoutes(container: Container) {
           ticketId: request.params.id,
           authorType: 'user',
           authorName: humanDisplayName || humanMentionName || 'user',
+          executionMode: request.body.executionMode,
           createdMentions: createdMentions.map((m) => ({
             mentionId: m.id,
             targetAgent: m.targetAgent,

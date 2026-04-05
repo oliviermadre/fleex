@@ -317,7 +317,7 @@ export class DomainEventListener {
 
   private async handleWakeWaitingOnComment(event: CommentPostedEvent): Promise<void> {
     const excludeAgent = event.authorType === 'agent' ? event.authorName : undefined;
-    await this.deps.wakeWaitingAgents.execute(event.ticketId, excludeAgent);
+    await this.deps.wakeWaitingAgents.execute(event.ticketId, excludeAgent, event.executionMode);
   }
 
   private async handleWakeWaitingOnDeliverable(event: DeliverableCreatedEvent): Promise<void> {
