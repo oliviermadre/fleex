@@ -1190,7 +1190,7 @@ export function DashboardView() {
                   <SectionHeader
                     icon={<span className="text-purple-400"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" /></svg></span>}
                     title="Agent Activity"
-                    count={totalUnread}
+                    count={recentActivity.length}
                     subtitle={totalUnread > 0 ? `${totalUnread} unread` : undefined}
                   />
                   {recentActivity.length > 0 ? (
