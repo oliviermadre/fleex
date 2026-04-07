@@ -5,6 +5,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { fetchBulkPRStates } from '../../services/api';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanHeader } from './KanbanHeader';
+import { ArchivedTicketsModal } from './ArchivedTicketsModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 
 export function KanbanBoard() {
@@ -55,6 +56,8 @@ export function KanbanBoard() {
     });
   }, []);
 
+  const [showArchived, setShowArchived] = useState(false);
+
   const isAllBoards = selectedBoardId === null && boards.length > 1;
   const board = selectedBoardId ? boards.find((b) => b.id === selectedBoardId) ?? null : null;
 
@@ -89,7 +92,15 @@ export function KanbanBoard() {
       <KanbanHeader
         board={board}
         isAllBoards={isAllBoards}
+        onShowArchived={() => setShowArchived(true)}
       />
+      {showArchived && (
+        <ArchivedTicketsModal
+          boardId={selectedBoardId}
+          boards={boards}
+          onClose={() => setShowArchived(false)}
+        />
+      )}
       <div className="flex min-h-0 flex-1 items-stretch overflow-hidden">
         {(TICKET_STATUSES as readonly TicketStatus[]).map((status) => (
           <KanbanColumn

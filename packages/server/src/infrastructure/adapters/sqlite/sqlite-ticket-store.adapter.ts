@@ -36,6 +36,7 @@ interface TicketRow {
   assignee: string | null;
   agent_claimed_at: string | null;
   github_metadata: string | null;
+  archived_at: string | null;
   status_changed_at: string;
   created_at: string;
   updated_at: string;
@@ -102,7 +103,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
   // ── Tickets ──
 
   async getAllTickets(): Promise<TicketEntity[]> {
-    const rows = this.conn.db.prepare('SELECT * FROM tickets').all() as TicketRow[];
+    const rows = this.conn.db.prepare('SELECT * FROM tickets WHERE archived_at IS NULL').all() as TicketRow[];
     return rows.map((r) => this.toTicketEntity(r));
   }
 
@@ -113,14 +114,14 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
 
   async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {
     const rows = this.conn.db
-      .prepare('SELECT * FROM tickets WHERE board_id = ? ORDER BY position ASC')
+      .prepare('SELECT * FROM tickets WHERE board_id = ? AND archived_at IS NULL ORDER BY position ASC')
       .all(boardId) as TicketRow[];
     return rows.map((r) => this.toTicketEntity(r));
   }
 
   async getTicketsByStatus(boardId: string, status: TicketStatus): Promise<TicketEntity[]> {
     const rows = this.conn.db
-      .prepare('SELECT * FROM tickets WHERE board_id = ? AND status = ? ORDER BY position ASC')
+      .prepare('SELECT * FROM tickets WHERE board_id = ? AND status = ? AND archived_at IS NULL ORDER BY position ASC')
       .all(boardId, status) as TicketRow[];
     return rows.map((r) => this.toTicketEntity(r));
   }
@@ -137,11 +138,11 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       INSERT OR REPLACE INTO tickets
         (id, board_id, display_id, title, description, status, priority, position,
          tags, links, blocked, favorite, due_date, assignee, agent_claimed_at,
-         github_metadata, status_changed_at, created_at, updated_at)
+         github_metadata, archived_at, status_changed_at, created_at, updated_at)
       VALUES
         (@id, @board_id, @display_id, @title, @description, @status, @priority, @position,
          @tags, @links, @blocked, @favorite, @due_date, @assignee, @agent_claimed_at,
-         @github_metadata, @status_changed_at, @created_at, @updated_at)
+         @github_metadata, @archived_at, @status_changed_at, @created_at, @updated_at)
     `);
 
     stmt.run({
@@ -161,6 +162,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       assignee: ticket.assignee,
       agent_claimed_at: ticket.agentClaimedAt?.toISOString() ?? null,
       github_metadata: ticket.githubMetadata ? JSON.stringify(ticket.githubMetadata) : null,
+      archived_at: ticket.archivedAt?.toISOString() ?? null,
       status_changed_at: ticket.statusChangedAt.toISOString(),
       created_at: ticket.createdAt.toISOString(),
       updated_at: ticket.updatedAt.toISOString(),
@@ -182,11 +184,11 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
 
     if (boardId) {
       rows = this.conn.db
-        .prepare('SELECT * FROM tickets WHERE status = ? AND blocked = 0 AND board_id = ?')
+        .prepare('SELECT * FROM tickets WHERE status = ? AND blocked = 0 AND archived_at IS NULL AND board_id = ?')
         .all('todo', boardId) as TicketRow[];
     } else {
       rows = this.conn.db
-        .prepare('SELECT * FROM tickets WHERE status = ? AND blocked = 0')
+        .prepare('SELECT * FROM tickets WHERE status = ? AND blocked = 0 AND archived_at IS NULL')
         .all('todo') as TicketRow[];
     }
 
@@ -204,9 +206,39 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
 
   async getClaimedByAgent(agentName: string): Promise<TicketEntity[]> {
     const rows = this.conn.db
-      .prepare('SELECT * FROM tickets WHERE status = ? AND assignee = ?')
+      .prepare('SELECT * FROM tickets WHERE status = ? AND assignee = ? AND archived_at IS NULL')
       .all('doing', agentName) as TicketRow[];
     return rows.map((r) => this.toTicketEntity(r));
+  }
+
+  // ── Archive ──
+
+  async getArchivedTickets(boardId?: string, limit = 50, offset = 0): Promise<TicketEntity[]> {
+    let rows: TicketRow[];
+    if (boardId) {
+      rows = this.conn.db
+        .prepare('SELECT * FROM tickets WHERE archived_at IS NOT NULL AND board_id = ? ORDER BY archived_at DESC LIMIT ? OFFSET ?')
+        .all(boardId, limit, offset) as TicketRow[];
+    } else {
+      rows = this.conn.db
+        .prepare('SELECT * FROM tickets WHERE archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT ? OFFSET ?')
+        .all(limit, offset) as TicketRow[];
+    }
+    return rows.map((r) => this.toTicketEntity(r));
+  }
+
+  async countArchivedTickets(boardId?: string): Promise<number> {
+    let row: { cnt: number };
+    if (boardId) {
+      row = this.conn.db
+        .prepare('SELECT COUNT(*) as cnt FROM tickets WHERE archived_at IS NOT NULL AND board_id = ?')
+        .get(boardId) as { cnt: number };
+    } else {
+      row = this.conn.db
+        .prepare('SELECT COUNT(*) as cnt FROM tickets WHERE archived_at IS NOT NULL')
+        .get() as { cnt: number };
+    }
+    return row.cnt;
   }
 
   // ── Activity ──
@@ -318,6 +350,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       row.assignee,
       row.agent_claimed_at ? new Date(row.agent_claimed_at) : null,
       row.github_metadata ? (JSON.parse(row.github_metadata) as GitHubIssueMetadata) : null,
+      row.archived_at ? new Date(row.archived_at) : null,
       new Date(row.status_changed_at),
       new Date(row.created_at),
       new Date(row.updated_at),

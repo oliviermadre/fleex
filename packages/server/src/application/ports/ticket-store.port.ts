@@ -23,6 +23,10 @@ export interface TicketStorePort {
   // Display ID
   getNextDisplayId(boardId: string): Promise<number>;
 
+  // Archive
+  getArchivedTickets(boardId?: string, limit?: number, offset?: number): Promise<TicketEntity[]>;
+  countArchivedTickets(boardId?: string): Promise<number>;
+
   // Agent queries
   getNextTicketForAgent(boardId?: string): Promise<TicketEntity | null>;
   getClaimedByAgent(agentName: string): Promise<TicketEntity[]>;

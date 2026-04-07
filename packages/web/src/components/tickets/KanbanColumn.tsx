@@ -198,8 +198,8 @@ export function KanbanColumn({
         )}
       </div>
 
-      {/* Inline card creator at top (not for cancelled) */}
-      {status !== 'cancelled' && (
+      {/* Inline card creator at top (not for done/cancelled) */}
+      {status !== 'cancelled' && status !== 'done' && (
         <div className="px-3 py-1.5">
           <InlineCardCreator boardId={boardId} status={status} />
         </div>

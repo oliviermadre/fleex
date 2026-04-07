@@ -56,6 +56,7 @@ export function KanbanCard({
 }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const updateTicket = useTicketStore((s) => s.updateTicket);
+  const archiveTicket = useTicketStore((s) => s.archiveTicket);
   const sessions = useSessionStore((s) => s.sessions);
   const unread = useUnreadStore((s) => s.getUnread(ticket.id));
 
@@ -137,7 +138,7 @@ export function KanbanCard({
         {/* Left column: priority indicator + blocked lock */}
         <div className="flex flex-col items-center gap-1 flex-shrink-0">
           <PriorityPickerPopover ticket={ticket} />
-          {ticket.status !== 'done' && (
+          {ticket.status !== 'done' && ticket.status !== 'cancelled' && (
             <button
               className={cn(
                 'rounded transition-all',
@@ -243,9 +244,25 @@ export function KanbanCard({
       )}
 
       {/* Bottom row */}
-      {ticket.status === 'done' ? (
-        <div className="mt-2.5 flex items-center justify-center text-xs text-[var(--theme-text-faint)]" title={`Done since ${new Date(ticket.statusChangedAt).toLocaleString(undefined, { hour12: false })}`}>
-          {timeInColumn} ago
+      {(ticket.status === 'done' || ticket.status === 'cancelled') ? (
+        <div className="mt-2.5 flex items-center justify-center gap-2 text-xs text-[var(--theme-text-faint)]">
+          <span title={`${ticket.status === 'done' ? 'Done' : 'Cancelled'} since ${new Date(ticket.statusChangedAt).toLocaleString(undefined, { hour12: false })}`}>
+            {timeInColumn} ago
+          </span>
+          <button
+            className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-primary)] transition-all"
+            onClick={(e) => {
+              e.stopPropagation();
+              archiveTicket(ticket.id);
+            }}
+            title="Archive ticket"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="5" rx="1" />
+              <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+              <path d="M10 12h4" />
+            </svg>
+          </button>
         </div>
       ) : (
         <div className="mt-2.5 flex items-center gap-2.5 text-xs text-[var(--theme-text-muted)]">

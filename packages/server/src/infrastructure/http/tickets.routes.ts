@@ -91,6 +91,20 @@ export function ticketRoutes(container: Container) {
       },
     );
 
+    app.get<{ Querystring: { boardId?: string; limit?: string; offset?: string } }>(
+      '/api/tickets/archived',
+      async (request) => {
+        const boardId = request.query.boardId || undefined;
+        const limit = parseInt(request.query.limit ?? '50', 10);
+        const offset = parseInt(request.query.offset ?? '0', 10);
+        const [tickets, total] = await Promise.all([
+          container.ticketStore.getArchivedTickets(boardId, limit, offset),
+          container.ticketStore.countArchivedTickets(boardId),
+        ]);
+        return { tickets: tickets.map((t) => t.toDTO()), total };
+      },
+    );
+
     app.get<{ Params: { id: string } }>('/api/tickets/:id', async (request) => {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
@@ -235,6 +249,46 @@ export function ticketRoutes(container: Container) {
       await container.ticketStore.removeTicket(ticketId);
       emit({ type: 'ticket.deleted', ticketId, occurredAt: new Date() });
       return reply.code(204).send();
+    });
+
+    // ── Archive / Unarchive ──
+
+    app.post<{ Params: { id: string } }>('/api/tickets/:id/archive', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const diff = ticket.archive();
+      await container.ticketStore.saveTicket(ticket);
+
+      await container.ticketStore.saveActivity(TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: ticket.id,
+        action: 'archived',
+        changes: diff,
+        source: 'web',
+      }));
+
+      emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
+      return ticket.toDTO();
+    });
+
+    app.post<{ Params: { id: string } }>('/api/tickets/:id/unarchive', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const diff = ticket.unarchive();
+      await container.ticketStore.saveTicket(ticket);
+
+      await container.ticketStore.saveActivity(TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: ticket.id,
+        action: 'unarchived',
+        changes: diff,
+        source: 'web',
+      }));
+
+      emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
+      return ticket.toDTO();
     });
 
     app.post<{ Params: { id: string }; Body: { status: TicketStatus; position?: number } }>(

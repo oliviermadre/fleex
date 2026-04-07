@@ -58,7 +58,7 @@ export class CachedTicketStore implements TicketStorePort {
 
   async getAllTickets(): Promise<TicketEntity[]> {
     await this.ensureWarmed();
-    return [...this.tickets.values()];
+    return [...this.tickets.values()].filter((t) => t.archivedAt === null);
   }
 
   async getTicketById(id: string): Promise<TicketEntity | null> {
@@ -68,12 +68,12 @@ export class CachedTicketStore implements TicketStorePort {
 
   async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {
     await this.ensureWarmed();
-    return [...this.tickets.values()].filter((t) => t.boardId === boardId);
+    return [...this.tickets.values()].filter((t) => t.boardId === boardId && t.archivedAt === null);
   }
 
   async getTicketsByStatus(boardId: string, status: TicketStatus): Promise<TicketEntity[]> {
     await this.ensureWarmed();
-    return [...this.tickets.values()].filter((t) => t.boardId === boardId && t.status === status);
+    return [...this.tickets.values()].filter((t) => t.boardId === boardId && t.status === status && t.archivedAt === null);
   }
 
   async getTicketsLinkedTo(type: TicketLinkType, ref: string): Promise<TicketEntity[]> {
@@ -98,6 +98,16 @@ export class CachedTicketStore implements TicketStorePort {
     for (const [id, t] of this.tickets) {
       if (t.boardId === boardId) this.tickets.delete(id);
     }
+  }
+
+  // ── Archive ──
+
+  async getArchivedTickets(boardId?: string, limit?: number, offset?: number): Promise<TicketEntity[]> {
+    return this.inner.getArchivedTickets(boardId, limit, offset);
+  }
+
+  async countArchivedTickets(boardId?: string): Promise<number> {
+    return this.inner.countArchivedTickets(boardId);
   }
 
   // ── Passthrough (not on hot path) ──

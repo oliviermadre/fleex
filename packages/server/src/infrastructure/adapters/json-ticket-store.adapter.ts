@@ -39,6 +39,7 @@ interface SerializedTicket {
   assignee: string | null;
   agentClaimedAt: string | null;
   githubMetadata?: GitHubIssueMetadata | null;
+  archivedAt?: string | null;
   statusChangedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -108,7 +109,7 @@ export class JsonTicketStore implements TicketStorePort {
   // ── Tickets ──
 
   async getAllTickets(): Promise<TicketEntity[]> {
-    return Array.from(this.tickets.values());
+    return Array.from(this.tickets.values()).filter((t) => t.archivedAt === null);
   }
 
   async getTicketById(id: string): Promise<TicketEntity | null> {
@@ -117,7 +118,7 @@ export class JsonTicketStore implements TicketStorePort {
 
   async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {
     return Array.from(this.tickets.values())
-      .filter((t) => t.boardId === boardId)
+      .filter((t) => t.boardId === boardId && t.archivedAt === null)
       .sort((a, b) => a.position - b.position);
   }
 
@@ -152,7 +153,7 @@ export class JsonTicketStore implements TicketStorePort {
 
   async getNextTicketForAgent(boardId?: string): Promise<TicketEntity | null> {
     let candidates = Array.from(this.tickets.values()).filter(
-      (t) => t.status === 'todo' && !t.blocked,
+      (t) => t.status === 'todo' && !t.blocked && t.archivedAt === null,
     );
     if (boardId) {
       candidates = candidates.filter((t) => t.boardId === boardId);
@@ -176,8 +177,21 @@ export class JsonTicketStore implements TicketStorePort {
 
   async getClaimedByAgent(agentName: string): Promise<TicketEntity[]> {
     return Array.from(this.tickets.values()).filter(
-      (t) => t.assignee === agentName && t.status === 'doing',
+      (t) => t.assignee === agentName && t.status === 'doing' && t.archivedAt === null,
     );
+  }
+
+  async getArchivedTickets(boardId?: string, limit = 50, offset = 0): Promise<TicketEntity[]> {
+    let archived = Array.from(this.tickets.values()).filter((t) => t.archivedAt !== null);
+    if (boardId) archived = archived.filter((t) => t.boardId === boardId);
+    archived.sort((a, b) => (b.archivedAt!.getTime()) - (a.archivedAt!.getTime()));
+    return archived.slice(offset, offset + limit);
+  }
+
+  async countArchivedTickets(boardId?: string): Promise<number> {
+    let archived = Array.from(this.tickets.values()).filter((t) => t.archivedAt !== null);
+    if (boardId) archived = archived.filter((t) => t.boardId === boardId);
+    return archived.length;
   }
 
   // ── Activity ──
@@ -267,6 +281,7 @@ export class JsonTicketStore implements TicketStorePort {
           t.assignee,
           t.agentClaimedAt ? new Date(t.agentClaimedAt) : null,
           t.githubMetadata ?? null,
+          t.archivedAt ? new Date(t.archivedAt) : null,
           new Date(t.statusChangedAt ?? t.updatedAt),
           new Date(t.createdAt), new Date(t.updatedAt),
         );
@@ -325,6 +340,7 @@ export class JsonTicketStore implements TicketStorePort {
         assignee: t.assignee,
         agentClaimedAt: t.agentClaimedAt?.toISOString() ?? null,
         githubMetadata: t.githubMetadata ?? null,
+        archivedAt: t.archivedAt?.toISOString() ?? null,
         statusChangedAt: t.statusChangedAt.toISOString(),
         createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(),
       }));

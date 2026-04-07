@@ -37,6 +37,7 @@ export interface Ticket {
   readonly assignee: string | null;
   readonly agentClaimedAt: string | null;
   readonly githubMetadata: GitHubIssueMetadata | null;
+  readonly archivedAt: string | null;
   readonly statusChangedAt: string;
   readonly createdAt: string;
   readonly updatedAt: string;

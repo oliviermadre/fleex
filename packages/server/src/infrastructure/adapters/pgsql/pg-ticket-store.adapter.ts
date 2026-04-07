@@ -63,7 +63,7 @@ export class PgTicketStore implements TicketStorePort {
   // ── Tickets ──
 
   async getAllTickets(): Promise<TicketEntity[]> {
-    const { rows } = await this.db.query('SELECT * FROM tickets');
+    const { rows } = await this.db.query('SELECT * FROM tickets WHERE archived_at IS NULL');
     return rows.map(rowToTicket);
   }
 
@@ -74,7 +74,7 @@ export class PgTicketStore implements TicketStorePort {
 
   async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {
     const { rows } = await this.db.query(
-      'SELECT * FROM tickets WHERE board_id = $1 ORDER BY position ASC',
+      'SELECT * FROM tickets WHERE board_id = $1 AND archived_at IS NULL ORDER BY position ASC',
       [boardId],
     );
     return rows.map(rowToTicket);
@@ -82,7 +82,7 @@ export class PgTicketStore implements TicketStorePort {
 
   async getTicketsByStatus(boardId: string, status: TicketStatus): Promise<TicketEntity[]> {
     const { rows } = await this.db.query(
-      'SELECT * FROM tickets WHERE board_id = $1 AND status = $2 ORDER BY position ASC',
+      'SELECT * FROM tickets WHERE board_id = $1 AND status = $2 AND archived_at IS NULL ORDER BY position ASC',
       [boardId, status],
     );
     return rows.map(rowToTicket);
@@ -101,8 +101,8 @@ export class PgTicketStore implements TicketStorePort {
       `INSERT INTO tickets (
         id, board_id, display_id, title, description, status, priority, position,
         tags, links, blocked, favorite, due_date, assignee,
-        agent_claimed_at, github_metadata, status_changed_at, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        agent_claimed_at, github_metadata, archived_at, status_changed_at, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
       ON CONFLICT (id) DO UPDATE SET
         board_id = $2,
         display_id = $3,
@@ -119,9 +119,10 @@ export class PgTicketStore implements TicketStorePort {
         assignee = $14,
         agent_claimed_at = $15,
         github_metadata = $16,
-        status_changed_at = $17,
-        created_at = $18,
-        updated_at = $19`,
+        archived_at = $17,
+        status_changed_at = $18,
+        created_at = $19,
+        updated_at = $20`,
       [
         ticket.id,
         ticket.boardId,
@@ -139,6 +140,7 @@ export class PgTicketStore implements TicketStorePort {
         ticket.assignee,
         ticket.agentClaimedAt?.toISOString() ?? null,
         ticket.githubMetadata ? JSON.stringify(ticket.githubMetadata) : null,
+        ticket.archivedAt?.toISOString() ?? null,
         ticket.statusChangedAt.toISOString(),
         ticket.createdAt.toISOString(),
         ticket.updatedAt.toISOString(),
@@ -157,7 +159,7 @@ export class PgTicketStore implements TicketStorePort {
   // ── Agent queries ──
 
   async getNextTicketForAgent(boardId?: string): Promise<TicketEntity | null> {
-    let sql = `SELECT * FROM tickets WHERE status = 'todo' AND blocked = false`;
+    let sql = `SELECT * FROM tickets WHERE status = 'todo' AND blocked = false AND archived_at IS NULL`;
     const params: unknown[] = [];
 
     if (boardId) {
@@ -181,10 +183,34 @@ export class PgTicketStore implements TicketStorePort {
 
   async getClaimedByAgent(agentName: string): Promise<TicketEntity[]> {
     const { rows } = await this.db.query(
-      `SELECT * FROM tickets WHERE assignee = $1 AND status = 'doing'`,
+      `SELECT * FROM tickets WHERE assignee = $1 AND status = 'doing' AND archived_at IS NULL`,
       [agentName],
     );
     return rows.map(rowToTicket);
+  }
+
+  async getArchivedTickets(boardId?: string, limit = 50, offset = 0): Promise<TicketEntity[]> {
+    let sql = 'SELECT * FROM tickets WHERE archived_at IS NOT NULL';
+    const params: unknown[] = [];
+    if (boardId) {
+      params.push(boardId);
+      sql += ` AND board_id = $${params.length}`;
+    }
+    params.push(limit, offset);
+    sql += ` ORDER BY archived_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+    const { rows } = await this.db.query(sql, params);
+    return rows.map(rowToTicket);
+  }
+
+  async countArchivedTickets(boardId?: string): Promise<number> {
+    let sql = 'SELECT COUNT(*)::int AS count FROM tickets WHERE archived_at IS NOT NULL';
+    const params: unknown[] = [];
+    if (boardId) {
+      params.push(boardId);
+      sql += ` AND board_id = $${params.length}`;
+    }
+    const { rows } = await this.db.query(sql, params);
+    return (rows[0]?.count as number) ?? 0;
   }
 
   // ── Activity ──
@@ -294,6 +320,7 @@ function rowToTicket(row: Record<string, unknown>): TicketEntity {
     (row.assignee as string) ?? null,
     row.agent_claimed_at ? new Date(row.agent_claimed_at as string) : null,
     (row.github_metadata as GitHubIssueMetadata) ?? null,
+    row.archived_at ? new Date(row.archived_at as string) : null,
     new Date(row.status_changed_at as string),
     new Date(row.created_at as string),
     new Date(row.updated_at as string),
