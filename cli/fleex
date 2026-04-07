@@ -266,7 +266,7 @@ check_repo() {
 }
 
 # ── Port allocation ───────────────────────────────────────────────────────────
-SERVICES=(gateway server web)
+SERVICES=(gateway server web desktop)
 
 find_free_port() {
   local port
@@ -382,8 +382,9 @@ _wait_for_service() {
 # ── Commands ───────────────────────────────────────────────────────────────────
 
 cmd_start() {
-  # Parse --port flag
+  # Parse --port and --desktop flags
   local FORCED_WEB_PORT=""
+  local DESKTOP_MODE=false
   local args=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -394,6 +395,10 @@ cmd_start() {
         fi
         FORCED_WEB_PORT="$2"
         shift 2
+        ;;
+      --desktop)
+        DESKTOP_MODE=true
+        shift
         ;;
       *)
         args+=("$1")
@@ -508,6 +513,27 @@ JSON
   printf "  ${CYAN}%-10s${NC} %-30s ${DIM}%s${NC}\n" "web"     "http://localhost:$PORT_WEB"     "$(log_file web)"
   echo ""
   info "Use ${BOLD}fleex status${NC} to check, ${BOLD}fleex stop${NC} to shut down."
+
+  # Launch Electron desktop window if --desktop was passed
+  if $DESKTOP_MODE; then
+    local desktop_dir="$REPO_DIR/packages/desktop"
+    local electron_bin="$desktop_dir/node_modules/.bin/electron"
+    if [[ ! -x "$electron_bin" ]]; then
+      warn "Electron not found at $electron_bin"
+      warn "Install it: cd $desktop_dir && bun install"
+      warn "Continuing without desktop window."
+    elif [[ ! -d "$desktop_dir" ]]; then
+      warn "packages/desktop not found. Continuing without desktop window."
+    else
+      info "Opening Electron desktop window..."
+      (cd "$REPO_DIR" && \
+        FLEEX_SERVER_PORT="$PORT_SERVER" \
+        "$electron_bin" "$desktop_dir" \
+      ) < /dev/null > "$(log_file desktop)" 2>&1 &
+      save_pid desktop $!
+      ok "Desktop window opened (PID $!)"
+    fi
+  fi
 }
 
 cmd_stop() {
