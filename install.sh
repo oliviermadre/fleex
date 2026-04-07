@@ -648,7 +648,7 @@ phase_wizard() {
     info "Running database migrations..."
     FLEEX_STORAGE_DRIVER="sqlite" \
     FLEEX_SQLITE_PATH="$DB_FILE" \
-    bun run "$REPO_DIR/packages/server/src/infrastructure/migrations/cli-migrate.ts"
+    bun --conditions development "$REPO_DIR/packages/server/src/infrastructure/migrations/cli-migrate.ts"
     ok "Migrations applied."
 
     FLEEX_CFG_BASE_PATH="$base_path" \
@@ -973,7 +973,7 @@ phase_complete_update() {
     set +a
     info "Running database migrations..."
     FLEEX_SQLITE_PATH="$DB_FILE" \
-    bun run "$REPO_DIR/packages/server/src/infrastructure/migrations/cli-migrate.ts" 2>&1 || true
+    bun --conditions development "$REPO_DIR/packages/server/src/infrastructure/migrations/cli-migrate.ts" 2>&1 || true
     ok "Migrations checked."
   fi
 
