@@ -11,11 +11,11 @@ import { cn } from '../../lib/cn';
 
 type TaskMode = 'ticket' | 'my-prs' | 'review' | 'new';
 
-const MODES: { key: TaskMode; label: string; hotkey: string }[] = [
-  { key: 'ticket', label: 'From Ticket', hotkey: '1' },
-  { key: 'my-prs', label: 'My PRs', hotkey: '2' },
-  { key: 'review', label: 'To Review', hotkey: '3' },
-  { key: 'new', label: 'New', hotkey: '4' },
+const MODES: { key: TaskMode; label: string }[] = [
+  { key: 'new', label: 'From Scratch' },
+  { key: 'ticket', label: 'From Kanban' },
+  { key: 'my-prs', label: 'My PRs' },
+  { key: 'review', label: 'To Review' },
 ];
 
 function timeAgo(dateStr: string): string {
@@ -41,7 +41,7 @@ export function CreateTaskModal() {
   const boards = useTicketStore((s) => s.boards);
   const tickets = useTicketStore((s) => s.tickets);
 
-  const [mode, setMode] = useState<TaskMode>('ticket');
+  const [mode, setMode] = useState<TaskMode>('new');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
@@ -82,7 +82,7 @@ export function CreateTaskModal() {
   // Reset on close
   useEffect(() => {
     if (!open) {
-      setMode('ticket');
+      setMode('new');
       setTicketSearch('');
       setSelectedTicketId(null);
       setSelectedPR(null);
@@ -93,19 +93,6 @@ export function CreateTaskModal() {
     }
   }, [open]);
 
-  // Keyboard: number keys to switch mode
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      const idx = parseInt(e.key) - 1;
-      if (idx >= 0 && idx < MODES.length) {
-        setMode(MODES[idx]!.key);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open]);
 
   // Filtered tickets for search
   const filteredTickets = useMemo(() => {
@@ -241,9 +228,6 @@ export function CreateTaskModal() {
             onClick={() => setMode(m.key)}
           >
             {m.label}
-            <span className="ml-1.5 rounded bg-[var(--theme-bg-surface)] px-1 py-0.5 text-[9px] font-bold text-[var(--theme-text-faint)]">
-              {m.hotkey}
-            </span>
           </button>
         ))}
       </div>

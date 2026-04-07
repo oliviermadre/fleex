@@ -527,7 +527,7 @@ JSON
     else
       info "Opening Electron desktop window..."
       (cd "$REPO_DIR" && \
-        FLEEX_SERVER_PORT="$PORT_SERVER" \
+        FLEEX_SERVER_PORT="$PORT_WEB" \
         "$electron_bin" "$desktop_dir" \
       ) < /dev/null > "$(log_file desktop)" 2>&1 &
       save_pid desktop $!

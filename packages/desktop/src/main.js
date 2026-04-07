@@ -1,17 +1,23 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, nativeImage } = require('electron');
+const path = require('path');
 
 // ── Configuration ────────────────────────────────────────────────────────────
 // When launched by `fleex start --desktop`, the CLI passes the server port.
 // Fallback to 3000 for standalone usage.
+app.setName('Fleex');
+
 const serverPort = process.env['FLEEX_SERVER_PORT'] || '3000';
 const serverUrl = `http://localhost:${serverPort}`;
 
 const TITLEBAR_HEIGHT = 38;
 
+const iconPath = path.join(__dirname, '..', 'assets', 'icon.png');
+
 let mainWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    icon: iconPath,
     width: 1400,
     height: 900,
     minWidth: 800,
@@ -185,7 +191,12 @@ function createWindow() {
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(nativeImage.createFromPath(iconPath));
+  }
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   app.quit();

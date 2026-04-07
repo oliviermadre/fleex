@@ -2,10 +2,12 @@
   "name": "@fleex/desktop",
   "version": "0.1.0",
   "private": true,
+  "productName": "Fleex",
   "main": "src/main.js",
   "scripts": {
     "dev": "electron --inspect .",
-    "start": "electron ."
+    "start": "electron .",
+    "postinstall": "node scripts/patch-electron-plist.js"
   },
   "devDependencies": {
     "electron": "^35.0.0"
