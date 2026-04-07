@@ -518,13 +518,19 @@ JSON
   if $DESKTOP_MODE; then
     local desktop_dir="$REPO_DIR/packages/desktop"
     local electron_bin="$desktop_dir/node_modules/.bin/electron"
-    if [[ ! -x "$electron_bin" ]]; then
-      warn "Electron not found at $electron_bin"
-      warn "Install it: cd $desktop_dir && bun install"
-      warn "Continuing without desktop window."
-    elif [[ ! -d "$desktop_dir" ]]; then
+    if [[ ! -d "$desktop_dir" ]]; then
       warn "packages/desktop not found. Continuing without desktop window."
-    else
+    elif [[ ! -x "$electron_bin" ]]; then
+      info "Installing desktop dependencies..."
+      (cd "$desktop_dir" && bun install) > "$(log_file desktop-install)" 2>&1
+      if [[ -x "$electron_bin" ]]; then
+        ok "Desktop dependencies installed."
+      else
+        warn "Failed to install Electron. Check $(log_file desktop-install)"
+        warn "Continuing without desktop window."
+      fi
+    fi
+    if [[ -x "$electron_bin" ]]; then
       info "Opening Electron desktop window..."
       (cd "$REPO_DIR" && \
         FLEEX_SERVER_PORT="$PORT_WEB" \

@@ -4,7 +4,8 @@
   "workspaces": [
     "packages/shared",
     "packages/server",
-    "packages/web"
+    "packages/web",
+    "packages/desktop"
   ],
   "scripts": {
     "dev": "trap 'kill 0' INT; bun run dev:gateway & bun run dev:server & bun run dev:web & wait",
