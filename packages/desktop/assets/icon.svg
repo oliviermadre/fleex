@@ -5,8 +5,8 @@
       <stop offset="100%" stop-color="#0f0f1a"/>
     </linearGradient>
   </defs>
-  <!-- Background rounded rect -->
-  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
-  <!-- Lightning bolt -->
-  <path d="M556 128L268 576h220L436 896l288-448H504L556 128z" fill="#6ee7b7"/>
+  <!-- Background rounded rect with macOS-standard inset -->
+  <rect x="95" y="95" width="834" height="834" rx="186" fill="url(#bg)"/>
+  <!-- Lightning bolt (scaled and centered within inset) -->
+  <path d="M547 222L310 587h179L444 838l237-365H508L547 222z" fill="#6ee7b7"/>
 </svg>
