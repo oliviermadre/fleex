@@ -214,8 +214,10 @@ export class ExecuteAgentUseCase {
    * Transitions it to pending and enqueues for execution.
    */
   async wakeUp(mention: TicketMentionEntity): Promise<void> {
-    // Skip if already active
-    if (this.activeExecutions.has(mention.id)) return;
+    // Skip only if the mention is currently running; clean up stale completed/failed entries
+    const existing = this.activeExecutions.get(mention.id);
+    if (existing && existing.status === 'running') return;
+    if (existing) this.activeExecutions.delete(mention.id);
 
     const persona = await this.personaStore.getByName(mention.targetAgent);
     if (!persona) {
@@ -227,6 +229,14 @@ export class ExecuteAgentUseCase {
 
     mention.wakeUp();
     await this.mentionStore.save(mention);
+
+    this.eventBus?.emit({
+      type: 'mention.woken_up',
+      mentionId: mention.id,
+      ticketId: mention.ticketId,
+      targetAgent: mention.targetAgent,
+      occurredAt: new Date(),
+    });
 
     this.logger.info('Waking up waiting agent', {
       mentionId: mention.id, targetAgent: mention.targetAgent, ticketId: mention.ticketId,

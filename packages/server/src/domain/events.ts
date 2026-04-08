@@ -115,6 +115,13 @@ export interface MentionWaitingForInfoEvent extends DomainEvent {
   targetAgent: string;
 }
 
+export interface MentionWokenUpEvent extends DomainEvent {
+  type: 'mention.woken_up';
+  mentionId: string;
+  ticketId: string;
+  targetAgent: string;
+}
+
 export interface MentionDeletedEvent extends DomainEvent {
   type: 'mention.deleted';
   mentionId: string;
@@ -271,6 +278,7 @@ export type AnyDomainEvent =
   | MentionAcknowledgedEvent
   | MentionResolvedEvent
   | MentionWaitingForInfoEvent
+  | MentionWokenUpEvent
   | MentionDeletedEvent
   | DeliverableCreatedEvent
   | DeliverableUpdatedEvent

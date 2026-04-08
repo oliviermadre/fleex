@@ -113,6 +113,7 @@ export class DomainEventListener {
     bus.on('mention.acknowledged', (e) => this.broadcastMentionEntity(e, 'mention:acknowledged'));
     bus.on('mention.resolved', (e) => this.broadcastMentionEntity(e, 'mention:resolved'));
     bus.on('mention.waiting_for_info', (e) => this.broadcastMentionEntity(e, 'mention:waiting_for_info'));
+    bus.on('mention.woken_up', (e) => this.broadcastMentionEntity(e, 'mention:updated'));
     bus.on('mention.deleted', (e) => {
       if (e.type === 'mention.deleted') {
         this.ticketBroadcast('mention:deleted', { id: e.mentionId, ticketId: e.ticketId, commentId: e.commentId });
