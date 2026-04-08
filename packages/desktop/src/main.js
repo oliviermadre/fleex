@@ -72,6 +72,26 @@ function createWindow() {
         display: flex;
         align-items: center;
         gap: 8px;
+        position: relative;
+        cursor: default;
+      }
+      #fleex-titlebar-usage .fleex-usage-tooltip {
+        display: none;
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        min-width: 220px;
+        background: var(--theme-bg-surface, #27273a);
+        border: 1px solid var(--theme-border, #2a2a3e);
+        border-radius: 6px;
+        padding: 10px 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        z-index: 100000;
+        pointer-events: none;
+      }
+      #fleex-titlebar-usage:hover .fleex-usage-tooltip {
+        display: block;
       }
 
       /* Push ALL app content below the titlebar */
@@ -139,7 +159,7 @@ function createWindow() {
           const remaining = 100 - metric.percentage;
           const fillHeight = remaining / 100;
           const fillColor = getFillColor(remaining);
-          return '<div style="display:flex;align-items:center;gap:2px;cursor:default;" title="' + metric.label + ' — ' + remaining + '% left">'
+          return '<div style="display:flex;align-items:center;gap:2px;">'
             + '<span style="font-size:8px;font-weight:500;line-height:1;color:var(--theme-text-muted,#a1a1aa);">' + label + '</span>'
             + '<svg width="10" height="16" viewBox="0 0 10 16" fill="none">'
             + '<rect x="1" y="2" width="8" height="12" rx="1" stroke="var(--theme-border-input,#3f3f46)" stroke-width="0.8" fill="none"/>'
@@ -150,6 +170,74 @@ function createWindow() {
             + '</div>';
         }
 
+        function formatResetTime(resetStr) {
+          if (!resetStr) return '';
+          const tzMatch = resetStr.match(/\\(([^)]+)\\)/);
+          const tz = tzMatch ? tzMatch[1] : 'UTC';
+          const now = new Date();
+
+          const sameDayMatch = resetStr.match(/Resets?\\s+(\\d{1,2}(?::\\d{2})?)\\s*(am|pm)/i);
+          const futureDayMatch = resetStr.match(/Resets?\\s+(\\w+)\\s+(\\d{1,2})\\s+at\\s+(\\d{1,2}(?::\\d{2})?)\\s*(am|pm)/i);
+
+          let target = null;
+          if (sameDayMatch) {
+            target = buildResetDate(now.getFullYear(), now.getMonth(), now.getDate(), sameDayMatch[1], sameDayMatch[2], tz);
+            if (target <= now) target = buildResetDate(now.getFullYear(), now.getMonth(), now.getDate() + 1, sameDayMatch[1], sameDayMatch[2], tz);
+          } else if (futureDayMatch) {
+            const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+            const monthIdx = months.findIndex(m => futureDayMatch[1].toLowerCase().startsWith(m));
+            if (monthIdx >= 0) {
+              let year = now.getFullYear();
+              if (monthIdx < now.getMonth() || (monthIdx === now.getMonth() && parseInt(futureDayMatch[2]) < now.getDate())) year++;
+              target = buildResetDate(year, monthIdx, parseInt(futureDayMatch[2]), futureDayMatch[3], futureDayMatch[4], tz);
+            }
+          }
+          if (!target) return resetStr;
+          const diffMs = target.getTime() - now.getTime();
+          if (diffMs <= 0) return 'any moment';
+          const totalMin = Math.floor(diffMs / 60000);
+          const totalHrs = Math.floor(totalMin / 60);
+          const totalDays = Math.floor(totalHrs / 24);
+          if (totalMin < 1) return '<1m';
+          if (totalMin < 60) return totalMin + 'm';
+          if (totalHrs < 24) { const rm = totalMin % 60; return rm > 0 ? totalHrs + 'h ' + rm + 'm' : totalHrs + 'h'; }
+          const rh = totalHrs % 24;
+          return rh > 0 ? totalDays + 'd ' + rh + 'h' : totalDays + 'd';
+        }
+
+        function buildResetDate(year, month, day, timePart, ampm, tz) {
+          const parts = timePart.includes(':') ? timePart.split(':') : [timePart, '0'];
+          let hour = parseInt(parts[0]);
+          const minute = parseInt(parts[1]);
+          if (ampm.toLowerCase() === 'pm' && hour !== 12) hour += 12;
+          if (ampm.toLowerCase() === 'am' && hour === 12) hour = 0;
+          const dateStr = year + '-' + String(month+1).padStart(2,'0') + '-' + String(day).padStart(2,'0') + 'T' + String(hour).padStart(2,'0') + ':' + String(minute).padStart(2,'0') + ':00';
+          try {
+            const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+            const utcGuess = new Date(dateStr + 'Z');
+            const p = fmt.formatToParts(utcGuess);
+            const g = (t) => parseInt(p.find(x => x.type === t)?.value ?? '0');
+            const tzDate = new Date(Date.UTC(g('year'), g('month')-1, g('day'), g('hour'), g('minute'), g('second')));
+            return new Date(utcGuess.getTime() - (tzDate.getTime() - utcGuess.getTime()));
+          } catch { return new Date(dateStr); }
+        }
+
+        function renderTooltipRow(label, metric) {
+          const remaining = 100 - metric.percentage;
+          const fillColor = getFillColor(remaining);
+          const resetTime = formatResetTime(metric.reset);
+          return '<div>'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'
+            + '<span style="font-size:11px;font-weight:600;color:var(--theme-text-primary,#e4e4e7);">' + label + '</span>'
+            + '<span style="font-size:10px;font-weight:500;color:var(--theme-text-secondary,#d4d4d8);">' + remaining + '% left</span>'
+            + '</div>'
+            + '<div style="height:6px;border-radius:3px;background:var(--theme-bg-overlay,#1a1a2e);overflow:hidden;">'
+            + '<div style="height:100%;width:' + remaining + '%;border-radius:3px;background:' + fillColor + ';"></div>'
+            + '</div>'
+            + '<div style="font-size:10px;color:var(--theme-text-muted,#a1a1aa);margin-top:3px;">Resets in ' + resetTime + '</div>'
+            + '</div>';
+        }
+
         async function syncUsage() {
           const container = document.getElementById('fleex-titlebar-usage');
           if (!container) return;
@@ -157,10 +245,22 @@ function createWindow() {
             const res = await fetch('/api/claude-usage');
             if (!res.ok) return;
             const usage = await res.json();
-            let html = '';
-            if (usage.session) html += renderGauge('5h', usage.session);
-            if (usage.weeklyAllModels) html += renderGauge('7d', usage.weeklyAllModels);
-            if (html) container.innerHTML = html;
+            let gaugesHtml = '';
+            let tooltipHtml = '';
+            if (usage.session) {
+              gaugesHtml += renderGauge('5h', usage.session);
+              tooltipHtml += renderTooltipRow('Current session (5h)', usage.session);
+            }
+            if (usage.weeklyAllModels) {
+              gaugesHtml += renderGauge('7d', usage.weeklyAllModels);
+              tooltipHtml += renderTooltipRow('Weekly — all models', usage.weeklyAllModels);
+            }
+            if (usage.weeklySonnet) {
+              tooltipHtml += renderTooltipRow('Weekly — Sonnet', usage.weeklySonnet);
+            }
+            if (gaugesHtml) {
+              container.innerHTML = gaugesHtml + '<div class="fleex-usage-tooltip"><div style="display:flex;flex-direction:column;gap:8px;">' + tooltipHtml + '</div></div>';
+            }
           } catch {}
         }
 
