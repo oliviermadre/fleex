@@ -80,7 +80,7 @@ export const WS_SKILL_PATH = '/ws/skills';
 
 // Auto-review workflow activity actions
 export const AUTO_REVIEW_ACTIVITY_ACTIONS = [
-  'moved_to_review_via_human_mention',
+  'unclaimed_and_assigned_human_via_mention',
   'moved_to_review_auto',
   'moved_from_review_to_doing',
   'moved_to_qa_review_auto',
