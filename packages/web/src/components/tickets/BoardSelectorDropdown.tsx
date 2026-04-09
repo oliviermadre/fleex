@@ -11,6 +11,9 @@ export function BoardSelectorDropdown() {
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const selectBoard = useTicketStore((s) => s.selectBoard);
   const createBoard = useTicketStore((s) => s.createBoard);
+  const ticketsByColumn = useTicketStore((s) => s.ticketsByColumn);
+  const filters = useTicketStore((s) => s.filters);
+  const searchQuery = useTicketStore((s) => s.searchQuery);
 
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -19,11 +22,9 @@ export function BoardSelectorDropdown() {
   const isAllBoards = selectedBoardId === null && boards.length > 1;
   const selectedBoard = selectedBoardId ? boards.find((b) => b.id === selectedBoardId) : null;
 
-  const totalCount = isAllBoards
-    ? tickets.length
-    : selectedBoard
-      ? (Object.values(selectedBoard.ticketCounts) as number[]).reduce((sum, c) => sum + c, 0)
-      : tickets.length;
+  // Use client-side filtered count so badge matches what the kanban actually shows
+  const columns = ticketsByColumn(selectedBoardId);
+  const totalCount = (Object.values(columns) as import('@fleex/shared').Ticket[][]).reduce((sum, col) => sum + col.length, 0);
 
   useEffect(() => {
     if (!open) return;
@@ -119,7 +120,7 @@ export function BoardSelectorDropdown() {
                 onClick={() => handleSelect(null)}
               >
                 <span className="font-medium">All Boards</span>
-                <span className="text-xs text-[var(--theme-text-muted)]">{tickets.length}</span>
+                <span className="text-xs text-[var(--theme-text-muted)]">{(Object.values(ticketsByColumn(null)) as import('@fleex/shared').Ticket[][]).reduce((s, c) => s + c.length, 0)}</span>
               </button>
               <div className="my-1 border-t border-[var(--theme-border)]" />
             </>
@@ -127,7 +128,7 @@ export function BoardSelectorDropdown() {
 
           {/* Board list */}
           {boards.map((b) => {
-            const count = (Object.values(b.ticketCounts) as number[]).reduce((sum, c) => sum + c, 0);
+            const count = (Object.values(ticketsByColumn(b.id)) as import('@fleex/shared').Ticket[][]).reduce((sum, c) => sum + c.length, 0);
             return (
               <button
                 key={b.id}

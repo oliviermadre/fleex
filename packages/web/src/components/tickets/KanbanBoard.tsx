@@ -14,6 +14,8 @@ export function KanbanBoard() {
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const ticketsByColumn = useTicketStore((s) => s.ticketsByColumn);
   const tickets = useTicketStore((s) => s.tickets);
+  const filters = useTicketStore((s) => s.filters);
+  const searchQuery = useTicketStore((s) => s.searchQuery);
   const loadUnreadCounts = useUnreadStore((s) => s.loadUnreadCounts);
 
   // Load unread counts on mount and when tickets change
