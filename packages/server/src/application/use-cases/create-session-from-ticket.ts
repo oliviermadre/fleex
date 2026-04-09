@@ -49,14 +49,6 @@ export class CreateSessionFromTicketUseCase {
       }
     }
 
-    // Fall back to board's repository config
-    if (repos.length === 0) {
-      const board = await this.ticketStore.getBoardById(ticket.boardId);
-      if (board?.repositoryOrg && board.repositoryName) {
-        repos.push({ org: board.repositoryOrg, name: board.repositoryName });
-      }
-    }
-
     // Determine branch: use worktree link's branch if present, otherwise create a new one
     const worktreeLink = ticket.links.find((l) => l.type === 'worktree');
     let branchName: string;

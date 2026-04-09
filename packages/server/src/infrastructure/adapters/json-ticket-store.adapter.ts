@@ -15,8 +15,6 @@ interface SerializedBoard {
   id: string;
   name: string;
   emoji: string;
-  repositoryOrg: string | null;
-  repositoryName: string | null;
   nextDisplayId?: number;
   createdAt: string;
   updatedAt: string;
@@ -253,7 +251,6 @@ export class JsonTicketStore implements TicketStorePort {
       for (const b of data) {
         const entity = new BoardEntity(
           b.id, b.name, b.emoji,
-          b.repositoryOrg, b.repositoryName,
           b.nextDisplayId ?? 1,
           new Date(b.createdAt), new Date(b.updatedAt),
         );
@@ -318,7 +315,6 @@ export class JsonTicketStore implements TicketStorePort {
     try {
       const data: SerializedBoard[] = Array.from(this.boards.values()).map((b) => ({
         id: b.id, name: b.name, emoji: b.emoji,
-        repositoryOrg: b.repositoryOrg, repositoryName: b.repositoryName,
         nextDisplayId: b.nextDisplayId,
         createdAt: b.createdAt.toISOString(), updatedAt: b.updatedAt.toISOString(),
       }));

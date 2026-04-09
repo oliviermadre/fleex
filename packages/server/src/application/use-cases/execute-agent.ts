@@ -1379,26 +1379,19 @@ export class ExecuteAgentUseCase {
    *
    * Priority for resolving org/repo/branch:
    * 1. Ticket worktree link (source of truth) — if ref = "org/repo:branch", extract all three
-   * 2. Board config (fallback) — if no worktree link, use board.repositoryOrg/Name + generate branch
-   * 3. No repo resolved → return null (agent cannot start)
+   * 2. No repo resolved → return null (agent cannot start)
    */
   private async ensureWorktree(ticketId: string): Promise<string | null> {
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) return null;
 
-    // Collect all repos from ticket links, fall back to board config
+    // Collect all repos from ticket links
     const repoLinks = ticket.links.filter((l) => l.type === 'repository');
     const repos: { org: string; name: string }[] = [];
     for (const link of repoLinks) {
       const slashIdx = link.ref.indexOf('/');
       if (slashIdx > 0) {
         repos.push({ org: link.ref.substring(0, slashIdx), name: link.ref.substring(slashIdx + 1) });
-      }
-    }
-    if (repos.length === 0) {
-      const board = await this.ticketStore.getBoardById(ticket.boardId);
-      if (board?.repositoryOrg && board.repositoryName) {
-        repos.push({ org: board.repositoryOrg, name: board.repositoryName });
       }
     }
     if (repos.length === 0) return null;

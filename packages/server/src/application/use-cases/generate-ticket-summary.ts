@@ -246,10 +246,6 @@ export class GenerateTicketSummaryUseCase {
         const [linkOrg, linkRepo] = repoLink.ref.split('/');
         org = linkOrg!;
         repo = linkRepo!;
-      } else {
-        const board = await this.ticketStore.getBoardById(ticket.boardId);
-        org = board?.repositoryOrg ?? null;
-        repo = board?.repositoryName ?? null;
       }
     }
 

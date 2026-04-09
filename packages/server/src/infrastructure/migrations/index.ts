@@ -8,6 +8,7 @@ import migration006 from './migrations/006_add_execution_metrics.js';
 import migration007 from './migrations/007_add_execution_model_and_token_breakdown.js';
 import migration008 from './migrations/003_add_files_table.js';
 import migration009 from './migrations/008_add_ticket_archived_at.js';
+import migration010 from './migrations/009_remove_board_repository.js';
 
 /**
  * Ordered array of all migrations.
@@ -23,4 +24,5 @@ export const allMigrations: Migration[] = [
   migration007,
   migration008,
   migration009,
+  migration010,
 ];

@@ -47,8 +47,6 @@ export interface Board {
   readonly id: string;
   readonly name: string;
   readonly emoji: string;
-  readonly repositoryOrg: string | null;
-  readonly repositoryName: string | null;
   readonly nextDisplayId: number;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -88,8 +86,6 @@ export interface UpdateTicketRequest {
 export interface CreateBoardRequest {
   readonly name: string;
   readonly emoji?: string;
-  readonly repositoryOrg?: string | null;
-  readonly repositoryName?: string | null;
 }
 
 export interface UpdateBoardRequest {

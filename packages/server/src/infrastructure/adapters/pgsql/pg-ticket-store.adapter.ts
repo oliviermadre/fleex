@@ -24,22 +24,18 @@ export class PgTicketStore implements TicketStorePort {
 
   async saveBoard(board: BoardEntity): Promise<void> {
     await this.db.query(
-      `INSERT INTO boards (id, name, emoji, repository_org, repository_name, next_display_id, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO boards (id, name, emoji, next_display_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT (id) DO UPDATE SET
          name = $2,
          emoji = $3,
-         repository_org = $4,
-         repository_name = $5,
-         next_display_id = $6,
-         created_at = $7,
-         updated_at = $8`,
+         next_display_id = $4,
+         created_at = $5,
+         updated_at = $6`,
       [
         board.id,
         board.name,
         board.emoji,
-        board.repositoryOrg,
-        board.repositoryName,
         board.nextDisplayId,
         board.createdAt.toISOString(),
         board.updatedAt.toISOString(),
@@ -294,8 +290,6 @@ function rowToBoard(row: Record<string, unknown>): BoardEntity {
     row.id as string,
     row.name as string,
     row.emoji as string,
-    (row.repository_org as string) ?? null,
-    (row.repository_name as string) ?? null,
     (row.next_display_id as number) ?? 1,
     new Date(row.created_at as string),
     new Date(row.updated_at as string),

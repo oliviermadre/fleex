@@ -12,8 +12,6 @@ interface BoardRow {
   id: string;
   name: string;
   emoji: string;
-  repository_org: string | null;
-  repository_name: string | null;
   next_display_id: number;
   created_at: string;
   updated_at: string;
@@ -71,17 +69,15 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
   async saveBoard(board: BoardEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO boards
-        (id, name, emoji, repository_org, repository_name, next_display_id, created_at, updated_at)
+        (id, name, emoji, next_display_id, created_at, updated_at)
       VALUES
-        (@id, @name, @emoji, @repository_org, @repository_name, @next_display_id, @created_at, @updated_at)
+        (@id, @name, @emoji, @next_display_id, @created_at, @updated_at)
     `);
 
     stmt.run({
       id: board.id,
       name: board.name,
       emoji: board.emoji,
-      repository_org: board.repositoryOrg,
-      repository_name: board.repositoryName,
       next_display_id: board.nextDisplayId,
       created_at: board.createdAt.toISOString(),
       updated_at: board.updatedAt.toISOString(),
@@ -324,8 +320,6 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       row.id,
       row.name,
       row.emoji,
-      row.repository_org,
-      row.repository_name,
       row.next_display_id ?? 1,
       new Date(row.created_at),
       new Date(row.updated_at),

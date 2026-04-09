@@ -14,8 +14,6 @@ interface BoardRow {
   id: string;
   name: string;
   emoji: string;
-  repository_org: string | null;
-  repository_name: string | null;
   next_display_id: number;
   created_at: string;
   updated_at: string;
@@ -62,8 +60,6 @@ function boardRowToEntity(r: BoardRow): BoardEntity {
     r.id,
     r.name,
     r.emoji,
-    r.repository_org,
-    r.repository_name,
     r.next_display_id ?? 1,
     new Date(r.created_at),
     new Date(r.updated_at),
@@ -138,8 +134,6 @@ export class SupabaseTicketStore implements TicketStorePort {
       id: board.id,
       name: board.name,
       emoji: board.emoji,
-      repository_org: board.repositoryOrg,
-      repository_name: board.repositoryName,
       next_display_id: board.nextDisplayId,
       created_at: board.createdAt.toISOString(),
       updated_at: board.updatedAt.toISOString(),

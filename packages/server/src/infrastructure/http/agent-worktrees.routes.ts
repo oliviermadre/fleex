@@ -62,15 +62,7 @@ export function agentWorktreesRoutes(container: Container) {
         }
 
         if (!repoOrg || !repoName) {
-          const board = await container.ticketStore.getBoardById(ticket.boardId);
-          if (board?.repositoryOrg && board.repositoryName) {
-            repoOrg = board.repositoryOrg;
-            repoName = board.repositoryName;
-          }
-        }
-
-        if (!repoOrg || !repoName) {
-          throw new WorktreeError('No repository found on ticket or board');
+          throw new WorktreeError('No repository found on ticket');
         }
 
         const branchName = buildTicketBranchName(ticket.title, ticket.id);

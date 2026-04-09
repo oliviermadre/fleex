@@ -42,8 +42,6 @@ export function ticketRoutes(container: Container) {
         id: randomUUID(),
         name: request.body.name,
         emoji: request.body.emoji,
-        repositoryOrg: request.body.repositoryOrg,
-        repositoryName: request.body.repositoryName,
       });
       await container.ticketStore.saveBoard(board);
       emit({ type: 'board.updated', boardId: board.id, occurredAt: new Date() });
