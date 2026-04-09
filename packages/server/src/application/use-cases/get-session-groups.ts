@@ -215,6 +215,7 @@ export class GetSessionGroupsUseCase {
             path: wtLink.url ?? wtLink.ref,
             sessions: [],
             agentWorktree: agentInfo,
+            ticketId: ticket.id,
           };
           (repoGroup.worktrees as WorktreeSessionGroup[]).push(newWt);
         }

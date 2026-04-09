@@ -93,6 +93,8 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
     if (worktree.ticketId) {
       const tabSuffix = lastActiveTab ? `/${encodeURIComponent(lastActiveTab)}` : '';
       navigate(`/sessions/${worktree.ticketId}${tabSuffix}`, { replace: true });
+    } else if (agentInfo?.ticketId) {
+      navigate(`/sessions/agent/${agentInfo.ticketId}`, { replace: true });
     } else if (worktree.sessions.length > 0) {
       navigate(`/sessions/${worktree.sessions[0]!.id}`, { replace: true });
     }
