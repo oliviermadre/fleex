@@ -1,7 +1,7 @@
-import { join } from 'node:path';
 import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
-import type { ConfigPort } from '../ports/config.port.js';
 import type { GitPort } from '../ports/git.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { HostFs } from '../../infrastructure/host/types.js';
@@ -24,8 +24,9 @@ export class ReconcileWorktreeUseCase {
 
   constructor(
     private readonly createWorktree: CreateWorktreeUseCase,
-    private readonly config: ConfigPort,
+    private readonly resolver: RepoPathResolver,
     private readonly hostFs: HostFs,
+    private readonly bareCloneManager: BareCloneManager,
     private readonly git: GitPort,
     private readonly logger: LoggerPort,
   ) {}
@@ -48,9 +49,8 @@ export class ReconcileWorktreeUseCase {
   }
 
   private async reconcile(org: string, repoName: string, branch: string): Promise<ReconcileResult> {
-    const basePath = this.config.get().basePath;
-    const repoPath = join(basePath, org, repoName);
-    const wtPath = join(repoPath, '..', buildWorktreeDirName(repoName, branch));
+    const barePath = this.resolver.barePath(org, repoName);
+    const wtPath = this.resolver.worktreeDir(org, buildWorktreeDirName(repoName, branch));
 
     // 1. Check if worktree path already exists
     try {
@@ -61,10 +61,10 @@ export class ReconcileWorktreeUseCase {
       // fs check failed, continue to try creation
     }
 
-    // 2. Check if repo exists locally
+    // 2. Check if bare clone exists
     try {
-      if (!(await this.hostFs.exists(repoPath))) {
-        this.logger.debug('Repo not found locally for worktree reconciliation', { repoPath, branch });
+      if (!(await this.hostFs.exists(barePath))) {
+        this.logger.debug('Bare clone not found for worktree reconciliation', { barePath, branch });
         return { path: null, status: 'repo_missing' };
       }
     } catch {
@@ -73,7 +73,7 @@ export class ReconcileWorktreeUseCase {
 
     // 3. Try to create worktree using existing branch
     try {
-      const existingPath = await this.createWorktree.execute(repoPath, wtPath, {
+      const existingPath = await this.createWorktree.execute(org, repoName, wtPath, {
         branch,
         createNewBranch: false,
       });
@@ -87,7 +87,7 @@ export class ReconcileWorktreeUseCase {
         branch, error: String(err),
       });
       try {
-        const existingPath = await this.createWorktree.execute(repoPath, wtPath, {
+        const existingPath = await this.createWorktree.execute(org, repoName, wtPath, {
           branch,
           createNewBranch: true,
           baseBranch: 'origin/main',

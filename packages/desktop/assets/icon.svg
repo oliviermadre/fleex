@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0f0f1a"/>
+    </linearGradient>
+  </defs>
+  <!-- Background rounded rect with macOS-standard inset -->
+  <rect x="95" y="95" width="834" height="834" rx="186" fill="url(#bg)"/>
+  <!-- Lightning bolt (scaled and centered within inset) -->
+  <path d="M547 222L310 587h179L444 838l237-365H508L547 222z" fill="#6ee7b7"/>
+</svg>

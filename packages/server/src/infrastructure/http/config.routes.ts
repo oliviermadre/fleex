@@ -28,6 +28,9 @@ export function configRoutes(container: Container) {
           });
         container.repositoryRefreshScheduler.setRepos(repos);
         container.repositoryRefreshScheduler.refresh().catch(() => {});
+
+        // Sync bare clones: create new ones, delete removed ones
+        container.bareCloneManager.syncWithConfig(repos).catch(() => {});
       }
 
       return container.config.get();

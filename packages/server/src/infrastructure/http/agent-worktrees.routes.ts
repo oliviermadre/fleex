@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketNotFoundError, WorktreeError } from '../../domain/errors.js';
-import { buildTicketBranchName, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
 import type { Container } from '../container.js';
 
 export function agentWorktreesRoutes(container: Container) {
@@ -63,23 +62,15 @@ export function agentWorktreesRoutes(container: Container) {
         }
 
         if (!repoOrg || !repoName) {
-          const board = await container.ticketStore.getBoardById(ticket.boardId);
-          if (board?.repositoryOrg && board.repositoryName) {
-            repoOrg = board.repositoryOrg;
-            repoName = board.repositoryName;
-          }
+          throw new WorktreeError('No repository found on ticket');
         }
 
-        if (!repoOrg || !repoName) {
-          throw new WorktreeError('No repository found on ticket or board');
-        }
-
-        const repoPath = join(container.config.get().basePath, repoOrg, repoName);
         const branchName = buildTicketBranchName(ticket.title, ticket.id);
-        const wtPath = join(repoPath, '..', buildWorktreeDirName(repoName, branchName));
+        const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+        const wtPath = container.resolver.workspaceRepoPath(workspaceId, repoName);
 
         const baseBranch = request.body?.baseBranch;
-        await container.createWorktree.execute(repoPath, wtPath, {
+        await container.createWorktree.execute(repoOrg, repoName, wtPath, {
           branch: branchName,
           createNewBranch: true,
           ...(baseBranch ? { baseBranch } : {}),

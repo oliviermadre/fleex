@@ -1,3 +1,4 @@
+import type { MentionExecutionMode } from '@fleex/shared';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { ExecuteAgentUseCase } from './execute-agent.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -15,13 +16,18 @@ export class WakeWaitingAgentsUseCase {
    *
    * @param ticketId - The ticket that received new content
    * @param excludeAgentName - Agent to exclude (to avoid self-wake loops)
+   * @param executionMode - If provided, update the waiting mention's execution mode before waking
    */
-  async execute(ticketId: string, excludeAgentName?: string): Promise<void> {
+  async execute(ticketId: string, excludeAgentName?: string, executionMode?: MentionExecutionMode): Promise<void> {
     const waitingMentions = await this.mentionStore.getWaitingByTicket(ticketId);
 
     for (const mention of waitingMentions) {
       if (excludeAgentName && mention.targetAgent === excludeAgentName) {
         continue;
+      }
+
+      if (executionMode) {
+        mention.executionMode = executionMode;
       }
 
       try {

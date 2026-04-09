@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary, Worktree } from '@fleex/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
@@ -30,29 +29,30 @@ export function repositoryRoutes(container: Container) {
     app.get<{ Params: { org: string; name: string } }>(
       '/api/repositories/:org/:name/worktrees',
       async (request) => {
-        const repoPath = resolveRepoPath(container, request.params.org, request.params.name);
-        const exists = await container.hostFs.exists(repoPath);
+        const { org, name } = request.params;
+        const barePath = container.resolver.barePath(org, name);
+        const exists = await container.hostFs.exists(barePath);
         if (!exists) return [];
-        return container.listWorktrees.execute(repoPath);
+        return container.listWorktrees.execute(org, name);
       },
     );
 
     app.post<{ Params: { org: string; name: string }; Body: CreateWorktreeRequest }>(
       '/api/repositories/:org/:name/worktrees',
       async (request, reply) => {
-        const repoPath = resolveRepoPath(container, request.params.org, request.params.name);
+        const { org, name } = request.params;
         const sanitized = sanitizeBranchForPath(request.body.branch);
         const { prNumber, issueNumber } = request.body;
         let dirName: string;
         if (prNumber) {
-          dirName = `${request.params.name}.pr-${prNumber}-${sanitized}`;
+          dirName = `${name}.pr-${prNumber}-${sanitized}`;
         } else if (issueNumber) {
-          dirName = `${request.params.name}.issue-${issueNumber}-${sanitized}`;
+          dirName = `${name}.issue-${issueNumber}-${sanitized}`;
         } else {
-          dirName = `${request.params.name}.${sanitized}`;
+          dirName = `${name}.${sanitized}`;
         }
-        const wtPath = join(repoPath, '..', dirName);
-        const result = await container.createWorktree.executeWithHook(repoPath, wtPath, request.body);
+        const wtPath = container.resolver.worktreeDir(org, dirName);
+        const result = await container.createWorktree.executeWithHook(org, name, wtPath, request.body);
         return reply.code(201).send({
           path: result.existingPath ?? wtPath,
           hookStarted: result.hookStarted,
@@ -63,8 +63,9 @@ export function repositoryRoutes(container: Container) {
     app.delete<{ Params: { org: string; name: string }; Body: { path: string } }>(
       '/api/repositories/:org/:name/worktrees',
       async (request, reply) => {
-        const repoPath = resolveRepoPath(container, request.params.org, request.params.name);
-        await container.git.removeWorktree(repoPath, request.body.path);
+        const { org, name } = request.params;
+        const barePath = container.resolver.barePath(org, name);
+        await container.git.removeWorktree(barePath, request.body.path);
         return reply.code(204).send();
       },
     );
@@ -72,10 +73,12 @@ export function repositoryRoutes(container: Container) {
     app.get<{ Params: { org: string; name: string } }>(
       '/api/repositories/:org/:name/branches',
       async (request) => {
-        const repoPath = resolveRepoPath(container, request.params.org, request.params.name);
-        const exists = await container.hostFs.exists(repoPath);
+        const { org, name } = request.params;
+        const barePath = container.resolver.barePath(org, name);
+        const exists = await container.hostFs.exists(barePath);
         if (!exists) return [];
-        return container.git.listBranches(repoPath);
+        await container.bareCloneManager.fetch(org, name);
+        return container.git.listBranches(barePath);
       },
     );
 
@@ -89,6 +92,17 @@ export function repositoryRoutes(container: Container) {
         }
         const cached = container.repositoryCache.get<PullRequest[]>(cacheKey);
         if (cached) return cached.data;
+
+        // Check rate limit before making API calls
+        try {
+          const rateLimit = await container.githubGraphql.getRateLimit();
+          if (rateLimit.remaining < 100) {
+            container.logger.warn('GitHub rate limit low, skipping PR fetch', { org, name, remaining: rateLimit.remaining });
+            return [];
+          }
+        } catch {
+          // rate limit check failed, proceed cautiously
+        }
 
         try {
           const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -164,7 +178,7 @@ export function repositoryRoutes(container: Container) {
             'issue', 'list',
             '--repo', `${org}/${name}`,
             '--assignee', '@me',
-            '--json', 'number,title,author,createdAt,updatedAt',
+            '--json', 'number,title,author,assignees,createdAt,updatedAt',
             '--state', 'open',
             '--limit', '50',
           ], { timeout: 15_000 });
@@ -172,6 +186,7 @@ export function repositoryRoutes(container: Container) {
             number: number;
             title: string;
             author: { login: string };
+            assignees: { login: string }[];
             createdAt: string;
             updatedAt: string;
           }[];
@@ -179,6 +194,7 @@ export function repositoryRoutes(container: Container) {
             number: issue.number,
             title: issue.title,
             author: issue.author.login,
+            assignees: issue.assignees.map((a) => a.login),
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
           }));
@@ -215,17 +231,17 @@ export function repositoryRoutes(container: Container) {
           return reply.code(400).send({ error: 'branches query parameter is required' });
         }
         const branches = branchesParam.split(',').slice(0, 20);
-        const repoPath = resolveRepoPath(container, org, name);
-        const exists = await container.hostFs.exists(repoPath);
+        const barePath = container.resolver.barePath(org, name);
+        const exists = await container.hostFs.exists(barePath);
         if (!exists) return {};
-        await container.git.fetch(repoPath).catch(() => {});
-        const defaultBranch = await container.git.getDefaultBranch(repoPath);
+        await container.bareCloneManager.fetch(org, name);
+        const defaultBranch = await container.git.getDefaultBranch(barePath);
         const base = `origin/${defaultBranch}`;
 
         const results = await Promise.all(
           branches.map(async (branch): Promise<[string, DiffStats]> => {
             const remoteBranch = `origin/${branch}`;
-            const stats = await container.git.getDiffStats(repoPath, remoteBranch, base);
+            const stats = await container.git.getDiffStats(barePath, remoteBranch, base);
             return [branch, stats];
           }),
         );
@@ -241,15 +257,15 @@ export function repositoryRoutes(container: Container) {
     app.get<{ Params: { org: string; name: string } }>(
       '/api/repositories/:org/:name/default-branch',
       async (request, reply) => {
-        const repoPath = resolveRepoPath(container, request.params.org, request.params.name);
-        const exists = await container.hostFs.exists(repoPath);
+        const { org, name } = request.params;
+        const barePath = container.resolver.barePath(org, name);
+        const exists = await container.hostFs.exists(barePath);
         if (!exists) return reply.code(404).send({ error: 'Repository not cloned locally' });
-        const defaultBranch = await container.git.getDefaultBranch(repoPath);
-        const info = await container.git.getInfo(repoPath);
+        const defaultBranch = await container.git.getDefaultBranch(barePath);
         return {
           defaultBranch,
-          currentBranch: info.branch,
-          isOnDefault: info.branch === defaultBranch,
+          currentBranch: defaultBranch,
+          isOnDefault: true,
         };
       },
     );
@@ -262,8 +278,8 @@ export function repositoryRoutes(container: Container) {
 
       for (const { org, name } of configuredRepos) {
         const key = `${org}/${name}`;
-        const repoPath = resolveRepoPath(container, org, name);
-        const isClonedLocally = await container.hostFs.exists(repoPath);
+        const barePath = container.resolver.barePath(org, name);
+        const isClonedLocally = await container.hostFs.exists(barePath);
         const cached = container.repositoryCache.get<RepositorySummary>(`summary:${key}`);
         if (cached) {
           summaries.push({ ...cached.data, isClonedLocally });
@@ -296,7 +312,7 @@ export function repositoryRoutes(container: Container) {
       async (request) => {
         const { org, name } = request.params;
         const key = `${org}/${name}`;
-        const repoPath = resolveRepoPath(container, org, name);
+        const barePath = container.resolver.barePath(org, name);
 
         // Try cache first
         const cachedPulls = container.repositoryCache.get<PullRequest[]>(`pulls:${key}`);
@@ -325,24 +341,23 @@ export function repositoryRoutes(container: Container) {
           }
         }
 
-        // Get worktrees and diff stats (only if repo is cloned locally)
-        const repoExists = await container.hostFs.exists(repoPath);
+        // Get worktrees and diff stats (only if bare clone exists)
+        const repoExists = await container.hostFs.exists(barePath);
         let worktrees: Worktree[] = [];
         const diffStats: Record<string, DiffStats> = {};
 
         if (repoExists) {
-          worktrees = await container.listWorktrees.execute(repoPath);
+          worktrees = await container.listWorktrees.execute(org, name);
           const nonBareWorktrees = worktrees.filter((wt) => !wt.isBare);
 
           if (nonBareWorktrees.length > 0) {
-            await container.git.fetch(repoPath).catch(() => {});
-            const defaultBranch = await container.git.getDefaultBranch(repoPath);
+            const defaultBranch = await container.git.getDefaultBranch(barePath);
             const base = `origin/${defaultBranch}`;
 
             const results = await Promise.all(
               nonBareWorktrees.map(async (wt): Promise<[string, DiffStats]> => {
                 const remoteBranch = `origin/${wt.branch}`;
-                const stats = await container.git.getDiffStats(repoPath, remoteBranch, base);
+                const stats = await container.git.getDiffStats(barePath, remoteBranch, base);
                 return [wt.branch, stats];
               }),
             );
@@ -446,14 +461,14 @@ export function repositoryRoutes(container: Container) {
         if (!org || !name) {
           return reply.code(400).send({ error: 'org and name query parameters are required' });
         }
-        const repoPath = resolveRepoPath(container, org, name);
-        const exists = await container.hostFs.exists(repoPath);
+        const barePath = container.resolver.barePath(org, name);
+        const exists = await container.hostFs.exists(barePath);
         if (exists) {
           return { exists: true };
         }
         const gitHost = getGitHost(container);
         const remote = `git@${gitHost}:${org}/${name}`;
-        return { exists: false, remote, targetPath: repoPath };
+        return { exists: false, remote, targetPath: barePath };
       },
     );
 
@@ -475,23 +490,15 @@ export function repositoryRoutes(container: Container) {
           });
         }
 
-        const repoPath = resolveRepoPath(container, org, name);
         const gitHost = getGitHost(container);
         const remote = `git@${gitHost}:${org}/${name}`;
 
-        // Ensure parent directory exists
-        const parentPath = join(container.config.get().basePath, org);
-        const parentExists = await container.hostFs.exists(parentPath);
-        if (!parentExists) {
-          await container.hostFs.mkdir(parentPath);
-        }
-
         try {
-          await container.execFn('git', ['clone', remote, repoPath], { timeout: 120_000 });
+          await container.bareCloneManager.ensureBareClone(org, name, remote);
           return { success: true };
         } catch (err) {
           const stderr = (err as any)?.stderr ?? String(err);
-          container.logger.warn('git clone failed', { org, name, remote, error: stderr });
+          container.logger.warn('bare clone failed', { org, name, remote, error: stderr });
           return reply.code(422).send({
             code: 'CLONE_FAILED',
             message: stderr || `Failed to clone ${remote}`,
@@ -502,10 +509,6 @@ export function repositoryRoutes(container: Container) {
   };
 }
 
-function resolveRepoPath(container: Container, org: string, name: string): string {
-  return join(container.config.get().basePath, org, name);
-}
-
 function getGitHost(container: Container): string {
   const config = container.config.get() as unknown as Record<string, unknown>;
   const gitHost = config['gitHost'];
@@ -513,7 +516,6 @@ function getGitHost(container: Container): string {
 }
 
 function getConfiguredRepos(container: Container): { org: string; name: string }[] {
-  // Read the resolved repositories list from the config (set by the frontend settings)
   const config = container.config.get() as unknown as Record<string, unknown>;
   const resolved = config['resolvedRepositories'];
   if (!Array.isArray(resolved)) return [];

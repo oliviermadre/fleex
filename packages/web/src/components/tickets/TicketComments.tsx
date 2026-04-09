@@ -383,7 +383,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const inputWrapperRef = useRef<HTMLDivElement>(null);
 
   // Execution mode toggle (Talk / Plan / Edit)
+  // Default to the most recent user-created mention's mode, or 'plan' if none
   const [executionMode, setExecutionMode] = useState<'talk' | 'plan' | 'edit'>('plan');
+  const modeInitialised = useRef(false);
 
   const commentFileUpload = useFileUpload({
     textareaRef,
@@ -425,6 +427,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         return { name: persona?.displayName || persona?.name || 'Agent', executionId: e.id };
       });
   }, [executionsByTicket, ticketId, personas]);
+
+  const waitingAgents = useMemo(() => {
+    return mentions
+      .filter((m) => m.status === 'waiting_for_info' && m.targetType === 'agent')
+      .map((m) => {
+        const persona = personas.find((p) => p.name === m.targetAgent);
+        return { name: persona?.displayName || persona?.name || m.targetAgent, mentionId: m.id, mode: m.executionMode };
+      });
+  }, [mentions, personas]);
 
   const allMentionOptions = useMemo<MentionOption[]>(() => {
     const opts: MentionOption[] = personas.map((p) => ({
@@ -469,8 +480,17 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const cursorPinnedRef = useRef(false);
 
   useEffect(() => {
+    modeInitialised.current = false;
     api.fetchTicketComments(ticketId).then(setComments).catch(() => {});
-    api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
+    api.fetchTicketMentions(ticketId).then((fetched) => {
+      setMentions(fetched);
+      // Initialise mode selector to the most recent mention's mode
+      if (!modeInitialised.current && fetched.length > 0) {
+        const sorted = [...fetched].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        setExecutionMode(sorted[0]!.executionMode);
+        modeInitialised.current = true;
+      }
+    }).catch(() => {});
     loadCursors(ticketId).catch(() => {});
   }, [ticketId, loadCursors]);
 
@@ -789,6 +809,20 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </button>
+            ))}
+            {waitingAgents.map((agent) => (
+              <div
+                key={agent.mentionId}
+                className="flex w-full items-center gap-2 px-1 py-3"
+              >
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse" />
+                <span className="text-xs text-orange-400">
+                  {agent.name} is waiting for your reply…
+                </span>
+                <span className="rounded bg-orange-400/15 px-1.5 py-0.5 text-[10px] font-medium text-orange-400">
+                  {agent.mode}
+                </span>
+              </div>
             ))}
             <div ref={listEndRef} />
           </div>

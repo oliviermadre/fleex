@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import type { TicketStatus } from '@fleex/shared';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
@@ -57,6 +57,7 @@ export class GenerateTicketSummaryUseCase {
     private readonly git: GitPort,
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
+    private readonly resolver: RepoPathResolver,
   ) {}
 
   async execute(params: { ticketId: string; status: TicketStatus }): Promise<void> {
@@ -245,16 +246,12 @@ export class GenerateTicketSummaryUseCase {
         const [linkOrg, linkRepo] = repoLink.ref.split('/');
         org = linkOrg!;
         repo = linkRepo!;
-      } else {
-        const board = await this.ticketStore.getBoardById(ticket.boardId);
-        org = board?.repositoryOrg ?? null;
-        repo = board?.repositoryName ?? null;
       }
     }
 
     if (!org || !repo) return null;
 
-    const repoPath = join(this.config.get().basePath, org, repo);
+    const repoPath = this.resolver.barePath(org, repo);
     return { repoPath, branch };
   }
 }

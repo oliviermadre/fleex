@@ -14,8 +14,6 @@ interface BoardRow {
   id: string;
   name: string;
   emoji: string;
-  repository_org: string | null;
-  repository_name: string | null;
   next_display_id: number;
   created_at: string;
   updated_at: string;
@@ -38,6 +36,7 @@ interface TicketRow {
   assignee: string | null;
   agent_claimed_at: string | null;
   github_metadata: GitHubIssueMetadata | null;
+  archived_at: string | null;
   status_changed_at: string;
   created_at: string;
   updated_at: string;
@@ -61,8 +60,6 @@ function boardRowToEntity(r: BoardRow): BoardEntity {
     r.id,
     r.name,
     r.emoji,
-    r.repository_org,
-    r.repository_name,
     r.next_display_id ?? 1,
     new Date(r.created_at),
     new Date(r.updated_at),
@@ -87,6 +84,7 @@ function ticketRowToEntity(r: TicketRow): TicketEntity {
     r.assignee,
     r.agent_claimed_at ? new Date(r.agent_claimed_at) : null,
     r.github_metadata ?? null,
+    r.archived_at ? new Date(r.archived_at) : null,
     new Date(r.status_changed_at),
     new Date(r.created_at),
     new Date(r.updated_at),
@@ -136,8 +134,6 @@ export class SupabaseTicketStore implements TicketStorePort {
       id: board.id,
       name: board.name,
       emoji: board.emoji,
-      repository_org: board.repositoryOrg,
-      repository_name: board.repositoryName,
       next_display_id: board.nextDisplayId,
       created_at: board.createdAt.toISOString(),
       updated_at: board.updatedAt.toISOString(),
@@ -158,7 +154,8 @@ export class SupabaseTicketStore implements TicketStorePort {
   async getAllTickets(): Promise<TicketEntity[]> {
     const { data, error } = await this.conn.client
       .from('tickets')
-      .select('*');
+      .select('*')
+      .is('archived_at', null);
     if (error) throw new Error(`SupabaseTicketStore.getAllTickets failed: ${error.message}`);
     return (data as TicketRow[]).map(ticketRowToEntity);
   }
@@ -178,6 +175,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       .from('tickets')
       .select('*')
       .eq('board_id', boardId)
+      .is('archived_at', null)
       .order('position', { ascending: true });
     if (error) throw new Error(`SupabaseTicketStore.getTicketsByBoard failed: ${error.message}`);
     return (data as TicketRow[]).map(ticketRowToEntity);
@@ -189,6 +187,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       .select('*')
       .eq('board_id', boardId)
       .eq('status', status)
+      .is('archived_at', null)
       .order('position', { ascending: true });
     if (error) throw new Error(`SupabaseTicketStore.getTicketsByStatus failed: ${error.message}`);
     return (data as TicketRow[]).map(ticketRowToEntity);
@@ -224,6 +223,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       assignee: ticket.assignee,
       agent_claimed_at: ticket.agentClaimedAt?.toISOString() ?? null,
       github_metadata: ticket.githubMetadata,
+      archived_at: ticket.archivedAt?.toISOString() ?? null,
       status_changed_at: ticket.statusChangedAt.toISOString(),
       created_at: ticket.createdAt.toISOString(),
       updated_at: ticket.updatedAt.toISOString(),
@@ -255,6 +255,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       .select('*')
       .eq('status', 'todo')
       .eq('blocked', false)
+      .is('archived_at', null)
       .order('position', { ascending: true })
       .limit(100);
 
@@ -283,9 +284,34 @@ export class SupabaseTicketStore implements TicketStorePort {
       .from('tickets')
       .select('*')
       .eq('assignee', agentName)
-      .eq('status', 'doing');
+      .eq('status', 'doing')
+      .is('archived_at', null);
     if (error) throw new Error(`SupabaseTicketStore.getClaimedByAgent failed: ${error.message}`);
     return (data as TicketRow[]).map(ticketRowToEntity);
+  }
+
+  async getArchivedTickets(boardId?: string, limit = 50, offset = 0): Promise<TicketEntity[]> {
+    let query = this.conn.client
+      .from('tickets')
+      .select('*')
+      .not('archived_at', 'is', null)
+      .order('archived_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (boardId) query = query.eq('board_id', boardId);
+    const { data, error } = await query;
+    if (error) throw new Error(`SupabaseTicketStore.getArchivedTickets failed: ${error.message}`);
+    return (data as TicketRow[]).map(ticketRowToEntity);
+  }
+
+  async countArchivedTickets(boardId?: string): Promise<number> {
+    let query = this.conn.client
+      .from('tickets')
+      .select('*', { count: 'exact', head: true })
+      .not('archived_at', 'is', null);
+    if (boardId) query = query.eq('board_id', boardId);
+    const { count, error } = await query;
+    if (error) throw new Error(`SupabaseTicketStore.countArchivedTickets failed: ${error.message}`);
+    return count ?? 0;
   }
 
   // ── Display ID ──

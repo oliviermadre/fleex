@@ -72,7 +72,7 @@ export class GetSessionGroupsUseCase {
       }
     }
 
-    const groups = this.groupingService.groupSessions(sessions);
+    const groups = await this.groupingService.groupSessions(sessions);
 
     // Inject agent worktree info for tickets with worktree links and agent assignees
     if (this.ticketStore && this.personaStore) {
@@ -96,17 +96,27 @@ export class GetSessionGroupsUseCase {
   private async injectAgentWorktreeInfo(groups: SessionGroup[]): Promise<void> {
     if (!this.ticketStore || !this.personaStore) return;
 
+    // Build a map of ticketId → latest execution in a single query
+    const ticketLatestExec = new Map<string, { id: string; status: string; personaId: string }>();
+    if (this.agentEventStore) {
+      try {
+        const allExecs = await this.agentEventStore.getAllExecutions();
+        for (const exec of allExecs) {
+          // getAllExecutions returns newest first; keep only the first (latest) per ticket
+          if (!ticketLatestExec.has(exec.ticketId)) {
+            ticketLatestExec.set(exec.ticketId, exec);
+          }
+        }
+      } catch {
+        // ignore event store errors
+      }
+    }
+
     const allTickets = await this.ticketStore.getAllTickets();
     const agentTickets = allTickets.filter(
       (t) =>
         t.status !== 'done' && t.status !== 'cancelled' &&
-        t.links.some((l) => l.type === 'worktree') &&
-        (
-          // Active agent assignment
-          ((t.status === 'doing' || t.status === 'reviewing') && t.assignee) ||
-          // Past agent work (not done) — show if agent ever claimed
-          t.agentClaimedAt !== null
-        ),
+        ticketLatestExec.has(t.id),
     );
 
     if (agentTickets.length === 0) return;
@@ -118,37 +128,22 @@ export class GetSessionGroupsUseCase {
 
     for (const ticket of agentTickets) {
       const wtLink = ticket.links.find((l) => l.type === 'worktree');
-      if (!wtLink) continue;
 
-      // Determine execution status and latest execution
-      let executionStatus: AgentWorktreeInfo['executionStatus'] = 'idle';
-      let latestExecutionId: string | null = null;
-      let latestExecution: { id: string; status: string; personaId: string } | null = null;
-      if (this.agentEventStore) {
-        try {
-          const executions = await this.agentEventStore.getExecutionsByTicket(ticket.id);
-          if (executions.length > 0) {
-            const latest = executions[0]!;
-            latestExecution = latest;
-            latestExecutionId = latest.id;
-            executionStatus = latest.status === 'running' ? 'running'
-              : latest.status === 'completed' ? 'completed'
-              : latest.status === 'failed' ? 'failed'
-              : 'idle';
-          }
-        } catch {
-          // ignore event store errors
-        }
-      }
-
-      // Skip non-active tickets that have zero execution history
-      const isActiveAgent = (ticket.status === 'doing' || ticket.status === 'reviewing') && !!ticket.assignee;
-      if (!isActiveAgent && !latestExecution) continue;
+      // Get execution info from pre-fetched map
+      const latestExecution = ticketLatestExec.get(ticket.id)!;
+      const latestExecutionId = latestExecution.id;
+      const executionStatus: AgentWorktreeInfo['executionStatus'] =
+        latestExecution.status === 'running' ? 'running'
+        : latestExecution.status === 'completed' ? 'completed'
+        : latestExecution.status === 'failed' ? 'failed'
+        : 'idle';
 
       // Resolve persona: from current assignee, or from latest execution's personaId
       const persona = (ticket.assignee ? personaByName.get(ticket.assignee) : undefined)
-        ?? (latestExecution ? personaById.get(latestExecution.personaId) : undefined);
+        ?? personaById.get(latestExecution.personaId);
       if (!persona) continue;
+
+      const branch = wtLink?.label ?? ticket.title;
 
       const agentInfo: AgentWorktreeInfo = {
         ticketId: ticket.id,
@@ -161,13 +156,13 @@ export class GetSessionGroupsUseCase {
         latestExecutionId,
       };
 
-      // Find matching worktree group by branch label
-      const branch = wtLink.label;
+      // Find matching worktree group by branch label OR by ticket title
+      // (the grouping service uses ticket title as the branch label for manifest-resolved sessions)
       let found = false;
 
       for (const group of groups) {
         for (const wt of group.worktrees) {
-          if (wt.branch === branch) {
+          if (wt.branch === branch || wt.branch === ticket.title) {
             // Attach agent info to existing group (cast to mutable)
             (wt as { agentWorktree?: AgentWorktreeInfo }).agentWorktree = agentInfo;
             found = true;
@@ -177,8 +172,8 @@ export class GetSessionGroupsUseCase {
         if (found) break;
       }
 
-      // If no matching group found, create a phantom group only for active agents
-      if (!found && isActiveAgent) {
+      // If no matching group found, create a phantom group
+      if (!found) {
         // Determine which repo group this belongs to
         let org: string | undefined;
         let name: string | undefined;
@@ -190,33 +185,38 @@ export class GetSessionGroupsUseCase {
         }
 
         // Fallback: parse repo from worktree link ref (format: "org/repo:branch")
-        if (!org || !name) {
+        if ((!org || !name) && wtLink) {
           const colonIdx = wtLink.ref.indexOf(':');
           if (colonIdx > 0) {
             [org, name] = wtLink.ref.substring(0, colonIdx).split('/');
           }
         }
 
+        // If repo info found, check it's a watched repo
         if (org && name) {
-          // Skip phantom groups for unwatched repos
           const resolved = this.config?.get().resolvedRepositories ?? [];
           if (!resolved.includes(`${org}/${name}`)) continue;
-
-          let repoGroup = groups.find(
-            (g) => g.repositoryOrg === org && g.repositoryName === name,
-          );
-          if (!repoGroup) {
-            repoGroup = { repositoryOrg: org, repositoryName: name, worktrees: [] };
-            groups.push(repoGroup);
-          }
-          const newWt: WorktreeSessionGroup = {
-            branch,
-            path: wtLink.url ?? wtLink.ref,
-            sessions: [],
-            agentWorktree: agentInfo,
-          };
-          (repoGroup.worktrees as WorktreeSessionGroup[]).push(newWt);
+        } else {
+          // No repo info — use multi-repo fallback
+          org = '_multi-repo';
+          name = '_multi-repo';
         }
+
+        let repoGroup = groups.find(
+          (g) => g.repositoryOrg === org && g.repositoryName === name,
+        );
+        if (!repoGroup) {
+          repoGroup = { repositoryOrg: org, repositoryName: name, worktrees: [] };
+          groups.push(repoGroup);
+        }
+        const newWt: WorktreeSessionGroup = {
+          branch,
+          path: wtLink?.url ?? wtLink?.ref ?? '',
+          sessions: [],
+          agentWorktree: agentInfo,
+          ticketId: ticket.id,
+        };
+        (repoGroup.worktrees as WorktreeSessionGroup[]).push(newWt);
       }
     }
   }

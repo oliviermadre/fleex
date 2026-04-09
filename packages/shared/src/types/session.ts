@@ -33,6 +33,11 @@ export interface CreateSessionRequest {
   readonly type: SessionType;
   readonly dimensions?: TerminalDimensions;
   readonly claudePrompt?: string;
+  /** Override git-derived metadata (e.g. from workspace manifest) */
+  readonly repositoryOrg?: string;
+  readonly repositoryName?: string;
+  readonly worktreeBranch?: string;
+  readonly displayName?: string;
 }
 
 export interface RenameSessionRequest {
@@ -56,10 +61,17 @@ export interface AgentWorktreeInfo {
   readonly latestExecutionId: string | null;
 }
 
+export interface WorktreeDiffStats {
+  readonly additions: number;
+  readonly deletions: number;
+}
+
 export interface WorktreeSessionGroup {
   readonly branch: string;
   readonly path: string;
   readonly sessions: Session[];
+  readonly ticketId?: string;
   readonly agentWorktree?: AgentWorktreeInfo;
   readonly worktreeStatus?: 'ready' | 'reconciling' | 'repo_missing' | 'unavailable';
+  readonly diffStats?: WorktreeDiffStats;
 }

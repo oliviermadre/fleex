@@ -18,7 +18,7 @@ describe('SessionGroupingService', () => {
     );
   }
 
-  it('should group sessions by repo and worktree', () => {
+  it('should group sessions by repo and worktree', async () => {
     const sessions = [
       makeSession('1', 'org', 'repo1', 'main'),
       makeSession('2', 'org', 'repo1', 'main'),
@@ -26,7 +26,7 @@ describe('SessionGroupingService', () => {
       makeSession('4', 'org', 'repo2', 'main'),
     ];
 
-    const groups = service.groupSessions(sessions);
+    const groups = await service.groupSessions(sessions);
 
     expect(groups).toHaveLength(2);
 
@@ -44,17 +44,17 @@ describe('SessionGroupingService', () => {
     expect(repo2!.worktrees).toHaveLength(1);
   });
 
-  it('should handle sessions without repo info', () => {
+  it('should handle sessions without repo info', async () => {
     const sessions = [
       makeSession('1', null, null, null),
     ];
 
-    const groups = service.groupSessions(sessions);
+    const groups = await service.groupSessions(sessions);
     expect(groups).toHaveLength(1);
     expect(groups[0]!.repositoryOrg).toBe('_ungrouped');
   });
 
-  it('should return empty array for no sessions', () => {
-    expect(service.groupSessions([])).toEqual([]);
+  it('should return empty array for no sessions', async () => {
+    expect(await service.groupSessions([])).toEqual([]);
   });
 });

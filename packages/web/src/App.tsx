@@ -1,6 +1,6 @@
 import { BrowserRouter } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
-import { CreateSessionModal } from './components/modals/CreateSessionModal';
+import { CreateTaskModal } from './components/modals/CreateTaskModal';
 import { CommandPalette } from './components/command-palette/CommandPalette';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { VersionBanner } from './components/ui/VersionBanner';
@@ -16,7 +16,7 @@ export function App() {
     <BrowserRouter>
       <RouterSync />
       <AppLayout />
-      <CreateSessionModal />
+      <CreateTaskModal />
       <CommandPalette />
       <ToastContainer />
       <VersionBanner />

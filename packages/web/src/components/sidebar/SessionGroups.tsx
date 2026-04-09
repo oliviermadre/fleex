@@ -13,6 +13,10 @@ function isSystemGroup(org: string, name: string): boolean {
   return org === '_ungrouped' && name === '_ungrouped';
 }
 
+function isMultiRepoGroup(org: string): boolean {
+  return org === '_multi-repo';
+}
+
 /** Split repo groups into manual (has tmux sessions) and agentic (agent-only, no tmux) worktrees */
 function partitionByFlow(groups: SessionGroup[]): {
   manualGroups: SessionGroup[];
@@ -246,7 +250,7 @@ export function SessionGroups() {
         onClick={openCreateModal}
       >
         <PlusIcon size={16} />
-        New Session
+        New Task
         <HotkeyBadge hotkey="⇧⌘N" position="top-right" />
       </button>
     </div>

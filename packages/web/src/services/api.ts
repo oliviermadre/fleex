@@ -323,6 +323,22 @@ export async function deleteTicket(id: string): Promise<void> {
   await request<void>(`/tickets/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+export async function archiveTicket(id: string): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/archive`, { method: 'POST' });
+}
+
+export async function unarchiveTicket(id: string): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/unarchive`, { method: 'POST' });
+}
+
+export async function fetchArchivedTickets(boardId?: string, limit = 50, offset = 0): Promise<{ tickets: import('@fleex/shared').Ticket[]; total: number }> {
+  const params = new URLSearchParams();
+  if (boardId) params.set('boardId', boardId);
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+  return request<{ tickets: import('@fleex/shared').Ticket[]; total: number }>(`/tickets/archived?${params}`);
+}
+
 export async function moveTicket(id: string, status: import('@fleex/shared').TicketStatus, position?: number): Promise<import('@fleex/shared').Ticket> {
   return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/move`, {
     method: 'POST', body: JSON.stringify({ status, position }),
@@ -354,6 +370,14 @@ export async function openSessionFromTicket(id: string): Promise<{ sessionId: st
 export async function importGitHubIssue(org: string, name: string, issueNumber: number, boardId: string): Promise<import('@fleex/shared').Ticket> {
   return request<import('@fleex/shared').Ticket>('/tickets/import-github-issue', {
     method: 'POST', body: JSON.stringify({ org, name, number: issueNumber, boardId }),
+  });
+}
+
+export async function importGitHubPR(
+  org: string, name: string, prNumber: number, prTitle: string, headRefName: string, boardId: string,
+): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>('/tickets/import-github-pr', {
+    method: 'POST', body: JSON.stringify({ org, name, prNumber, prTitle, headRefName, boardId }),
   });
 }
 

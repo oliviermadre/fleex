@@ -28,13 +28,15 @@ interface TicketState {
 
   // Actions
   fetchBoards: () => Promise<void>;
-  fetchTickets: (boardId?: string) => Promise<void>;
+  fetchTickets: () => Promise<void>;
   createBoard: (req: CreateBoardRequest) => Promise<void>;
   updateBoard: (id: string, req: UpdateBoardRequest) => Promise<void>;
   deleteBoard: (id: string) => Promise<void>;
   createTicket: (req: CreateTicketRequest) => Promise<Ticket>;
   updateTicket: (id: string, req: UpdateTicketRequest) => Promise<void>;
   deleteTicket: (id: string) => Promise<void>;
+  archiveTicket: (id: string) => Promise<void>;
+  unarchiveTicket: (id: string) => Promise<void>;
   moveTicket: (id: string, status: TicketStatus, position?: number) => Promise<void>;
   addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
@@ -110,10 +112,8 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     }
   },
 
-  fetchTickets: async (boardId) => {
-    const id = boardId ?? get().selectedBoardId;
-    // When null (all boards), fetch without filter
-    const tickets = await api.fetchTickets(id ?? undefined);
+  fetchTickets: async () => {
+    const tickets = await api.fetchTickets();
     set({ tickets });
   },
 
@@ -143,6 +143,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       if (s.tickets.some((t) => t.id === ticket.id)) return s;
       return { tickets: [...s.tickets, ticket] };
     });
+    get().fetchBoards();
     return ticket;
   },
 
@@ -159,6 +160,25 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       tickets: s.tickets.filter((t) => t.id !== id),
       selectedTicketId: s.selectedTicketId === id ? null : s.selectedTicketId,
     }));
+    get().fetchBoards();
+  },
+
+  archiveTicket: async (id) => {
+    await api.archiveTicket(id);
+    set((s) => ({
+      tickets: s.tickets.filter((t) => t.id !== id),
+      selectedTicketId: s.selectedTicketId === id ? null : s.selectedTicketId,
+    }));
+    get().fetchBoards();
+  },
+
+  unarchiveTicket: async (id) => {
+    const ticket = await api.unarchiveTicket(id);
+    set((s) => {
+      if (s.tickets.some((t) => t.id === ticket.id)) return s;
+      return { tickets: [...s.tickets, ticket] };
+    });
+    get().fetchBoards();
   },
 
   moveTicket: async (id, status, position) => {
@@ -221,8 +241,6 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   selectBoard: (id) => {
     set({ selectedBoardId: id, selectedTicketId: null });
     localStorage.setItem(BOARD_STORAGE_KEY, id ?? ALL_BOARDS_SENTINEL);
-    // Refetch tickets for the new board (or all)
-    get().fetchTickets(id ?? undefined);
   },
   selectTicket: (id) => set((s) => ({
     selectedTicketId: id,
@@ -328,9 +346,20 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       case 'ticket:updated':
       case 'ticket:moved': {
         const ticket = msg.data as Ticket;
-        set((s) => ({
-          tickets: s.tickets.map((t) => (t.id === ticket.id ? ticket : t)),
-        }));
+        if (ticket.archivedAt) {
+          // Ticket was archived — remove from board state
+          set((s) => ({
+            tickets: s.tickets.filter((t) => t.id !== ticket.id),
+            selectedTicketId: s.selectedTicketId === ticket.id ? null : s.selectedTicketId,
+          }));
+        } else {
+          set((s) => {
+            const exists = s.tickets.some((t) => t.id === ticket.id);
+            return exists
+              ? { tickets: s.tickets.map((t) => (t.id === ticket.id ? ticket : t)) }
+              : { tickets: [...s.tickets, ticket] };
+          });
+        }
         break;
       }
       case 'ticket:deleted': {

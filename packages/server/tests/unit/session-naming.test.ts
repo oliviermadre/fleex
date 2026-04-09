@@ -70,7 +70,16 @@ describe('SessionNamingService', () => {
       expect(name).toBe('fleex_claude_my-org_my-repo_feat-upper_my-session');
     });
 
-    it('should omit git segments when any is null', () => {
+    it('should build name with org and repo but no worktree', () => {
+      const name = service.buildTmuxName('shell', {
+        org: 'odys-travel',
+        repo: 'odys-proxy',
+        displayName: 'ticket-47e255-session',
+      });
+      expect(name).toBe('fleex_shell_odys-travel_odys-proxy_ticket-47e255-session');
+    });
+
+    it('should omit git segments when repo is null', () => {
       const name = service.buildTmuxName('claude', {
         org: 'myorg',
         repo: null,

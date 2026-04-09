@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import type { DiffStats, GitRemoteInfo, Worktree } from '@fleex/shared';
 import type { GitPort } from '../../application/ports/git.port.js';
@@ -127,6 +128,9 @@ export class GitCliAdapter implements GitPort {
       args.push(wtPath, branch);
     }
 
+    // Ensure parent directory exists (git worktree add doesn't create nested parents)
+    mkdirSync(dirname(wtPath), { recursive: true });
+
     await this.execFn('git', args, { cwd: repoPath });
     this.logger.debug('Worktree created', { repoPath, wtPath, branch });
   }
@@ -136,6 +140,14 @@ export class GitCliAdapter implements GitPort {
       cwd: repoPath,
     });
     this.logger.debug('Worktree removed', { repoPath, wtPath });
+  }
+
+  async moveWorktree(repoPath: string, wtPath: string, newPath: string): Promise<void> {
+    mkdirSync(dirname(newPath), { recursive: true });
+    await this.execFn('git', ['worktree', 'move', wtPath, newPath], {
+      cwd: repoPath,
+    });
+    this.logger.debug('Worktree moved', { repoPath, from: wtPath, to: newPath });
   }
 
   async getDefaultBranch(repoPath: string): Promise<string> {
@@ -158,6 +170,11 @@ export class GitCliAdapter implements GitPort {
   async fetch(repoPath: string): Promise<void> {
     await this.execFn('git', ['fetch', '--prune'], { cwd: repoPath });
     this.logger.debug('Git fetch completed', { repoPath });
+  }
+
+  async cloneBare(remote: string, barePath: string): Promise<void> {
+    await this.execFn('git', ['clone', '--bare', remote, barePath], { timeout: 120_000 });
+    this.logger.debug('Bare clone created', { remote, barePath });
   }
 
   async getDiffStats(repoPath: string, branch: string, baseBranch?: string): Promise<DiffStats> {
@@ -238,33 +255,6 @@ export class GitCliAdapter implements GitPort {
   async pruneWorktrees(repoPath: string): Promise<void> {
     await this.execFn('git', ['worktree', 'prune'], { cwd: repoPath });
     this.logger.debug('Worktree prune completed', { repoPath });
-  }
-
-  private static readonly IGNORED_DIRS = [
-    'node_modules/', '.next/', 'dist/', 'build/', 'vendor/',
-    '.cache/', '.turbo/', '.nuxt/', '.output/', '__pycache__/',
-  ];
-
-  async copyIgnoredFiles(sourceRepo: string, targetPath: string): Promise<void> {
-    const { stdout } = await this.execFn(
-      'git', ['ls-files', '--others', '--ignored', '--exclude-standard'],
-      { cwd: sourceRepo },
-    );
-
-    const files = stdout.trim().split('\n')
-      .filter(f => f.length > 0)
-      .filter(f => !GitCliAdapter.IGNORED_DIRS.some(dir => f.includes(dir)));
-
-    if (files.length === 0) return;
-
-    for (const relative of files) {
-      const destFile = `${targetPath}/${relative}`;
-      const destDir = destFile.slice(0, destFile.lastIndexOf('/'));
-      await this.execFn('mkdir', ['-p', destDir]);
-      await this.execFn('cp', [`${sourceRepo}/${relative}`, destFile]);
-    }
-
-    this.logger.debug('Copied ignored files', { sourceRepo, targetPath, count: files.length });
   }
 
   private parseRemoteUrl(url: string): { org: string; name: string } {

@@ -8,11 +8,12 @@ import { FilterDropdown } from './FilterDropdown';
 interface KanbanHeaderProps {
   board: BoardWithCounts | null;
   isAllBoards: boolean;
+  onShowArchived?: () => void;
 }
 
 const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;
 
-export function KanbanHeader({ board, isAllBoards }: KanbanHeaderProps) {
+export function KanbanHeader({ board, isAllBoards, onShowArchived }: KanbanHeaderProps) {
   const boards = useTicketStore((s) => s.boards);
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const createTicket = useTicketStore((s) => s.createTicket);
@@ -78,6 +79,22 @@ export function KanbanHeader({ board, isAllBoards }: KanbanHeaderProps) {
       <div className="flex items-center gap-2">
         <SearchToggle />
         <FilterDropdown />
+
+        {/* Archived tickets */}
+        {onShowArchived && (
+          <button
+            className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--theme-border)] px-2.5 text-xs text-[var(--theme-text-muted)] transition-colors hover:border-[var(--theme-border-input)] hover:text-[var(--theme-text-primary)]"
+            onClick={onShowArchived}
+            title="View archived tickets"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="5" rx="1" />
+              <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+              <path d="M10 12h4" />
+            </svg>
+            Archived
+          </button>
+        )}
 
         {/* Quick create popover */}
         <div className="relative">

@@ -1,4 +1,4 @@
-import type { MentionTargetType, HookResult } from '@fleex/shared';
+import type { MentionTargetType, MentionExecutionMode, HookResult } from '@fleex/shared';
 
 // ── Base ──
 
@@ -53,6 +53,8 @@ export interface CommentPostedEvent extends DomainEvent {
   ticketId: string;
   authorType: 'user' | 'agent';
   authorName: string;
+  /** Execution mode selected by the user for this comment */
+  executionMode?: MentionExecutionMode;
   /** Mentions extracted from the comment */
   createdMentions: Array<{
     mentionId: string;
@@ -108,6 +110,13 @@ export interface MentionResolvedEvent extends DomainEvent {
 
 export interface MentionWaitingForInfoEvent extends DomainEvent {
   type: 'mention.waiting_for_info';
+  mentionId: string;
+  ticketId: string;
+  targetAgent: string;
+}
+
+export interface MentionWokenUpEvent extends DomainEvent {
+  type: 'mention.woken_up';
   mentionId: string;
   ticketId: string;
   targetAgent: string;
@@ -269,6 +278,7 @@ export type AnyDomainEvent =
   | MentionAcknowledgedEvent
   | MentionResolvedEvent
   | MentionWaitingForInfoEvent
+  | MentionWokenUpEvent
   | MentionDeletedEvent
   | DeliverableCreatedEvent
   | DeliverableUpdatedEvent

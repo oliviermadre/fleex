@@ -23,6 +23,7 @@ export interface DashboardData {
   readonly activeTickets: Ticket[];
   readonly myPullRequests: DashboardPullRequest[];
   readonly reviewRequests: DashboardPullRequest[];
+  readonly myIssues: DashboardGitHubIssue[];
   readonly assignedIssues: DashboardGitHubIssue[];
   readonly activeWorktrees: DashboardWorktree[];
   readonly githubUser: string;

@@ -266,7 +266,7 @@ check_repo() {
 }
 
 # ── Port allocation ───────────────────────────────────────────────────────────
-SERVICES=(gateway server web)
+SERVICES=(gateway server web desktop)
 
 find_free_port() {
   local port
@@ -382,8 +382,9 @@ _wait_for_service() {
 # ── Commands ───────────────────────────────────────────────────────────────────
 
 cmd_start() {
-  # Parse --port flag
+  # Parse --port and --desktop flags
   local FORCED_WEB_PORT=""
+  local DESKTOP_MODE=false
   local args=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -394,6 +395,10 @@ cmd_start() {
         fi
         FORCED_WEB_PORT="$2"
         shift 2
+        ;;
+      --desktop)
+        DESKTOP_MODE=true
+        shift
         ;;
       *)
         args+=("$1")
@@ -508,6 +513,37 @@ JSON
   printf "  ${CYAN}%-10s${NC} %-30s ${DIM}%s${NC}\n" "web"     "http://localhost:$PORT_WEB"     "$(log_file web)"
   echo ""
   info "Use ${BOLD}fleex status${NC} to check, ${BOLD}fleex stop${NC} to shut down."
+
+  # Launch Electron desktop window if --desktop was passed
+  if $DESKTOP_MODE; then
+    _launch_desktop
+  fi
+}
+
+# ── Desktop launcher (shared by cmd_start --desktop and cmd_desktop) ──────────
+_launch_desktop() {
+  local desktop_dir="$REPO_DIR/packages/desktop"
+  local electron_bin="$desktop_dir/node_modules/.bin/electron"
+  if [[ ! -d "$desktop_dir" ]]; then
+    warn "packages/desktop not found."
+    return 1
+  fi
+  if [[ ! -x "$electron_bin" ]]; then
+    info "Installing desktop dependencies..."
+    (cd "$desktop_dir" && bun install) > "$(log_file desktop-install)" 2>&1
+    if [[ ! -x "$electron_bin" ]]; then
+      warn "Failed to install Electron. Check $(log_file desktop-install)"
+      return 1
+    fi
+    ok "Desktop dependencies installed."
+  fi
+  info "Opening Electron desktop window..."
+  (cd "$REPO_DIR" && \
+    FLEEX_SERVER_PORT="$PORT_WEB" \
+    "$electron_bin" "$desktop_dir" \
+  ) < /dev/null > "$(log_file desktop)" 2>&1 &
+  save_pid desktop $!
+  ok "Desktop window opened (PID $!)"
 }
 
 cmd_stop() {
@@ -650,6 +686,47 @@ cmd_restart() {
   cmd_stop
   sleep 1
   cmd_start "$@"
+}
+
+cmd_desktop() {
+  ensure_dirs
+  # Try current instance first
+  if load_ports 2>/dev/null && kill -0 "$(cat "$(pid_file server)" 2>/dev/null)" 2>/dev/null; then
+    info "Attaching desktop to running instance [$INSTANCE_SLUG]..."
+    _launch_desktop
+    return
+  fi
+
+  # Scan for any running instance
+  local run_base="$FLEEX_HOME/.run"
+  local running_slugs=()
+  for dir in "$run_base"/*/; do
+    [[ -d "$dir" ]] || continue
+    local pf="$dir/server.pid"
+    if [[ -f "$pf" ]] && kill -0 "$(cat "$pf")" 2>/dev/null; then
+      running_slugs+=("$(basename "$dir")")
+    fi
+  done
+
+  if [[ ${#running_slugs[@]} -eq 1 ]]; then
+    local target="${running_slugs[0]}"
+    info "Found running instance: $target"
+    INSTANCE_SLUG="$target"
+    INSTANCE_RUN="$FLEEX_HOME/.run/$INSTANCE_SLUG"
+    INSTANCE_LOG="$FLEEX_HOME/.logs/$INSTANCE_SLUG"
+    PORTS_FILE="$INSTANCE_RUN/ports.json"
+    load_ports
+    _launch_desktop
+  elif [[ ${#running_slugs[@]} -gt 1 ]]; then
+    warn "Multiple running instances found:"
+    for s in "${running_slugs[@]}"; do
+      printf "  - %s\n" "$s"
+    done
+    die "Stop other instances or specify which one to use."
+  else
+    info "No running instance found. Starting stack with desktop..."
+    cmd_start --desktop "$@"
+  fi
 }
 
 cmd_status() {
@@ -1513,7 +1590,8 @@ cmd_help() {
     fleex <command> [options]
 
   ${BOLD}${YELLOW}Commands:${NC}
-    ${CYAN}start${NC} [--port <port>]  Start all services (gateway, server, web)
+    ${CYAN}start${NC} [--port <port>] [--desktop]  Start all services (gateway, server, web)
+    ${CYAN}desktop${NC}       Open desktop window (starts stack if not running)
     ${CYAN}stop${NC} [name]    Stop the current instance (or a named one)
     ${CYAN}stop --all${NC}    Stop ALL running instances
     ${CYAN}remove${NC} [name]         Remove a stopped instance (run + logs)
@@ -1572,6 +1650,7 @@ main() {
     stop)        cmd_stop "$@" ;;
     remove)      cmd_remove "$@" ;;
     restart)     cmd_restart "$@" ;;
+    desktop)     cmd_desktop "$@" ;;
     status)      cmd_status "$@" ;;
     logs)        cmd_logs "$@" ;;
     ticket|t)    cmd_ticket "$@" ;;

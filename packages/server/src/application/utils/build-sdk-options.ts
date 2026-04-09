@@ -28,7 +28,7 @@ export function buildSdkOptions(
     case 'plan':
       return {
         ...base,
-        allowedTools: ['Read', 'Bash', 'Glob', 'Grep'],
+        allowedTools: ['Read', 'Glob', 'Grep'],
         permissionMode: 'dontAsk',
         maxTurns: 150,
         ...(ctx.cwd ? { cwd: ctx.cwd } : {}),

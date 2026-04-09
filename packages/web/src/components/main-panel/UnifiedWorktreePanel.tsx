@@ -3,17 +3,17 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useWorktreeContext, type WorktreeEntry } from '../../hooks/useWorktreeContext';
-import { TopToolbar } from './TopToolbar';
 import { WorktreeHeader } from './tab-engine/WorktreeHeader';
 import { TabBar } from './tab-engine/TabBar';
 import { useTabEngine } from './tab-engine/useTabEngine';
 import { getTabKind } from './tab-engine/registry';
 import type { TabDescriptor } from './tab-engine/types';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import * as api from '../../services/api';
 
 // Side-effect: register all tab kinds
 import './tab-engine/kinds';
-import { buildShellTab, buildClaudeTab, buildAgentTab } from './tab-engine/kinds';
+import { buildShellTab, buildClaudeTab, buildAgentTab, buildTicketTab } from './tab-engine/kinds';
 
 interface Props {
   entry: WorktreeEntry;
@@ -51,8 +51,9 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
       return buildAgentTab(personaId, name, execs);
     });
 
-    return [...sessionTabs, ...agentTabs];
-  }, [sessions, executions, personas]);
+    const ticketTabs = ticket ? [buildTicketTab(ticket)] : [];
+    return [...ticketTabs, ...sessionTabs, ...agentTabs];
+  }, [sessions, executions, personas, ticket]);
 
   // Tab engine manages ordering, active tab, DnD, keyboard nav
   const engine = useTabEngine(groupId, allTabs);
@@ -94,12 +95,6 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
     return () => window.removeEventListener('fleex:new-tab', handler);
   }, [handleNewTab, isUnavailable]);
 
-  // Toolbar worktree context
-  const worktreeToolbar = useMemo(() => {
-    if (!worktree || !repoOrg || !repoName) return undefined;
-    return { org: repoOrg, repo: repoName, branch: worktree.branch, path: worktree.path };
-  }, [worktree, repoOrg, repoName]);
-
   // Content rendering — delegates to the active tab kind's Content component
   // Floating logic is handled inline by TerminalTabContent (no guard needed here)
   const renderContent = () => {
@@ -136,7 +131,6 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
       }${isSplit && !focused ? ' session-pane-unfocused' : ''}`}
       onClick={onFocus}
     >
-      <TopToolbar worktree={worktreeToolbar} session={activeSession ?? undefined} />
       <WorktreeHeader
         worktree={worktree}
         repoOrg={repoOrg}
@@ -151,12 +145,22 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
         onSelect={engine.setActiveTab}
         onClose={engine.closeTab}
         onRename={engine.renameTab}
-        onNewTab={handleNewTab}
-        isNewTabDisabled={isUnavailable}
-        newTabTitle={
-          isUnavailable
-            ? (worktree?.worktreeStatus === 'repo_missing' ? 'Repository not found locally' : 'Worktree unavailable')
-            : 'New shell in this worktree'
+        trailing={
+          !isUnavailable && (
+            <SmartSessionButton
+              sessions={sessions}
+              onCreateSession={handleNewTab}
+              disabled={isUnavailable}
+              size="sm"
+              ticketId={ticket?.id}
+              onExecuteSkill={
+                ticket
+                  ? (skillId) => api.executeSkill(skillId, ticket.id).catch(console.error)
+                  : undefined
+              }
+              alwaysShowMenu
+            />
+          )
         }
         drag={engine.drag}
       />

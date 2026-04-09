@@ -10,6 +10,7 @@ import { useAgentPersonas } from '../../hooks/useAgentPersonas';
 import { useSkills } from '../../hooks/useSkills';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useRepositoryStore } from '../../stores/repositoryStore';
 import { NavSidebar } from '../sidebar/NavSidebar';
 import { ContentPanel } from '../sidebar/ContentPanel';
 import { MainPanel } from '../main-panel/MainPanel';
@@ -39,10 +40,12 @@ export function AppLayout() {
   const contentPanelWidth = useUIStore((s) => s.contentPanelWidth);
   const contentPanelCollapsed = useUIStore((s) => s.contentPanelCollapsed);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
+  const fetchRepositories = useRepositoryStore((s) => s.fetchRepositories);
 
   useEffect(() => {
     loadSettings();
-  }, [loadSettings]);
+    fetchRepositories();
+  }, [loadSettings, fetchRepositories]);
 
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
   const hideContentPanel = activePanel === 'dashboard' || activePanel === 'cluster' || activePanel === 'tickets';

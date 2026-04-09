@@ -9,6 +9,7 @@ export interface TmuxSessionInfo {
 export interface ManagedSessionsWithPanes {
   sessions: TmuxSessionInfo[];
   paneCommands: Map<string, string>;
+  paneCwds: Map<string, string>;
 }
 
 export interface TmuxPort {

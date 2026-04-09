@@ -18,6 +18,7 @@ export class TicketEntity {
     public assignee: string | null,
     public agentClaimedAt: Date | null,
     public githubMetadata: GitHubIssueMetadata | null,
+    public archivedAt: Date | null,
     public statusChangedAt: Date,
     public readonly createdAt: Date,
     public updatedAt: Date,
@@ -51,6 +52,7 @@ export class TicketEntity {
       false,
       false,
       params.dueDate ?? null,
+      null,
       null,
       null,
       null,
@@ -215,6 +217,21 @@ export class TicketEntity {
     return { assignee: { from, to: null } };
   }
 
+  archive(): Record<string, { from: unknown; to: unknown }> {
+    const now = new Date();
+    this.archivedAt = now;
+    this.updatedAt = now;
+    return { archivedAt: { from: null, to: now.toISOString() } };
+  }
+
+  unarchive(): Record<string, { from: unknown; to: unknown }> {
+    const from = this.archivedAt?.toISOString() ?? null;
+    const now = new Date();
+    this.archivedAt = null;
+    this.updatedAt = now;
+    return { archivedAt: { from, to: null } };
+  }
+
   toDTO(): Ticket {
     return {
       id: this.id,
@@ -233,6 +250,7 @@ export class TicketEntity {
       assignee: this.assignee,
       agentClaimedAt: this.agentClaimedAt?.toISOString() ?? null,
       githubMetadata: this.githubMetadata,
+      archivedAt: this.archivedAt?.toISOString() ?? null,
       statusChangedAt: this.statusChangedAt.toISOString(),
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),

@@ -37,8 +37,13 @@ const VALID_PERSONA_TABS: PersonaTab[] = ['config', 'soul', 'identity', 'memory'
 
 interface ParsedUrl {
   panel: ActivePanel;
+  /** @deprecated — use sessionTicketId + sessionTabKey */
   sessionId: string | null;
   splitId: string | null;
+  /** Ticket-based session routing: 'system' or ticket UUID */
+  sessionTicketId: string | null;
+  /** Tab within the ticket: 's:sessionId' or 'e:executionId' */
+  sessionTabKey: string | null;
   repoKey: string | null;
   /** undefined = "no board preference in URL", null = "all boards", string = specific board */
   boardId: string | null | undefined;
@@ -58,7 +63,7 @@ interface ParsedUrl {
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
-  const base = { sessionId: null, splitId: null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
+  const base = { sessionId: null, splitId: null, sessionTicketId: null as string | null, sessionTabKey: null as string | null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
 
   // Root: redirect to /dashboard
   if (pathname === '/') {
@@ -76,12 +81,21 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
     return { ...base, panel: 'sessions', agentWorktreeTicketId: agentWtMatch[1]! };
   }
 
-  // Sessions
-  const sessionsMatch = pathname.match(/^\/sessions(?:\/(.+))?$/);
+  // Sessions: /sessions/system/:tabKey or /sessions/system
+  const systemMatch = pathname.match(/^\/sessions\/system(?:\/(.+))?$/);
+  if (systemMatch) {
+    return { ...base, panel: 'sessions', sessionTicketId: 'system', sessionTabKey: systemMatch[1] ? decodeURIComponent(systemMatch[1]) : null };
+  }
+
+  // Sessions: /sessions/:ticketId/:tabKey or /sessions/:ticketId or /sessions
+  const sessionsMatch = pathname.match(/^\/sessions(?:\/([^/]+))?(?:\/(.+))?$/);
   if (sessionsMatch) {
-    const sessionId = sessionsMatch[1] ?? null;
-    const splitId = sessionId ? (params.get('split') ?? null) : null;
-    return { ...base, panel: 'sessions', sessionId, splitId };
+    const first = sessionsMatch[1] ?? null;
+    const second = sessionsMatch[2] ? decodeURIComponent(sessionsMatch[2]) : null;
+    if (first) {
+      return { ...base, panel: 'sessions', sessionTicketId: first, sessionTabKey: second };
+    }
+    return { ...base, panel: 'sessions' };
   }
 
   // Repositories
@@ -206,17 +220,22 @@ export function storeToUrl(
   analyticsTab?: AnalyticsTab,
   ticketTab?: TicketTab,
   selectedPanelId?: string | null,
+  sessionTicketId?: string | null,
+  sessionTabKey?: string | null,
 ): { pathname: string; search: string } {
   switch (activePanel) {
     case 'dashboard':
       return { pathname: '/dashboard', search: '' };
     case 'sessions': {
-      if (selectedAgentWorktreeTicketId && !selectedSessionId) {
+      if (selectedAgentWorktreeTicketId && !sessionTicketId) {
         return { pathname: `/sessions/agent/${selectedAgentWorktreeTicketId}`, search: '' };
       }
-      if (selectedSessionId) {
-        const search = splitSessionId ? `?split=${splitSessionId}` : '';
-        return { pathname: `/sessions/${selectedSessionId}`, search };
+      if (sessionTicketId) {
+        const base = sessionTicketId === 'system' ? '/sessions/system' : `/sessions/${sessionTicketId}`;
+        if (sessionTabKey) {
+          return { pathname: `${base}/${encodeURIComponent(sessionTabKey)}`, search: '' };
+        }
+        return { pathname: base, search: '' };
       }
       return { pathname: '/sessions', search: '' };
     }
@@ -299,6 +318,9 @@ export function RouterSync() {
 
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
+  const sessionTicketId = useSessionStore((s) => s.selectedTicketId);
+  const sessionTabKey = useSessionStore((s) => s.selectedTabKey);
+  const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
   const selectSession = useSessionStore((s) => s.selectSession);
   const openSplit = useSessionStore((s) => s.openSplit);
   const closeSplit = useSessionStore((s) => s.closeSplit);
@@ -350,33 +372,14 @@ export function RouterSync() {
         setSelectedAgentWorktreeTicketId(parsed.agentWorktreeTicketId);
       }
       if (parsed.agentWorktreeTicketId) {
-        // Clear session selection when viewing agent worktree
-        if (selectedSessionId) selectSession(null);
+        if (sessionTicketId) selectTicketTab(null);
         syncingFromUrl.current = false;
         return;
       }
 
-      // Auto-restore last active session when navigating to /sessions with no session
-      if (!parsed.sessionId) {
-        const lastActiveSessionId = useUIStore.getState().lastActiveSessionId;
-        if (lastActiveSessionId) {
-          // Verify session still exists before redirecting
-          const sessions = useSessionStore.getState().sessions;
-          if (sessions.some((s) => s.id === lastActiveSessionId)) {
-            navigate(`/sessions/${lastActiveSessionId}`, { replace: true });
-            syncingFromUrl.current = false;
-            return;
-          }
-        }
-      }
-      if (parsed.sessionId !== selectedSessionId) {
-        selectSession(parsed.sessionId);
-      }
-      if (parsed.splitId && parsed.splitId !== splitSessionId) {
-        // openSplit requires selectedSessionId to be set first — give store time to update
-        setTimeout(() => openSplit(parsed.splitId!), 0);
-      } else if (!parsed.splitId && splitSessionId) {
-        closeSplit();
+      // Ticket-based routing
+      if (parsed.sessionTicketId !== sessionTicketId || parsed.sessionTabKey !== sessionTabKey) {
+        selectTicketTab(parsed.sessionTicketId, parsed.sessionTabKey);
       }
     }
 
@@ -479,6 +482,8 @@ export function RouterSync() {
       analyticsTab,
       ticketTab,
       selectedPanelId,
+      sessionTicketId,
+      sessionTabKey,
     );
 
     const currentPath = location.pathname;
@@ -494,6 +499,8 @@ export function RouterSync() {
     activePanel,
     selectedSessionId,
     splitSessionId,
+    sessionTicketId,
+    sessionTabKey,
     selectedRepoKey,
     selectedBoardId,
     selectedTicketId,

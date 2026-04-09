@@ -136,7 +136,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
               <div className="group/deliv flex items-center">
                 {/* Read/unread toggle */}
                 <button
-                  className={`ml-2 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded transition-all ${
+                  className={`ml-2 flex h-6 w-8 flex-shrink-0 items-center justify-center rounded transition-all ${
                     !isSeen
                       ? 'text-[var(--theme-accent)] opacity-100'
                       : 'text-[var(--theme-text-faint)] opacity-0 group-hover/deliv:opacity-60 hover:!opacity-100'
@@ -144,11 +144,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                   onClick={(e) => { e.stopPropagation(); handleToggleRead(d, isSeen); }}
                   title={isSeen ? 'Mark as unread' : 'Mark as read'}
                 >
-                  {!isSeen ? (
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="5" /></svg>
-                  ) : (
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="5" cy="5" r="4" /></svg>
-                  )}
+                  <span className="text-[9px] font-bold tracking-wider">NEW</span>
                 </button>
 
                 <button

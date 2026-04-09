@@ -1,20 +1,25 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { Session } from '@fleex/shared';
 import { StatusDot } from '../ui/StatusDot';
 import { deriveDisplayStatus, aggregateBranchStatus } from '../../lib/deriveStatus';
 import type { DisplayStatus } from '../../lib/deriveStatus';
 import { useUIStore } from '../../stores/uiStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { cn } from '../../lib/cn';
 
 interface SmartSessionButtonProps {
   sessions: Session[];
-  creating: boolean;
-  onCreateSession: () => void;
+  creating?: boolean;
+  onCreateSession?: () => void;
   disabled?: boolean;
   size?: 'sm' | 'md';
   ticketId?: string;
   onExecuteSkill?: (skillId: string) => void;
+  /** Always show the dropdown menu on click, even with 0-1 sessions and no skills. */
+  alwaysShowMenu?: boolean;
 }
 
 function FleexIcon() {
@@ -85,19 +90,32 @@ function DropdownContent({
   onOpenFloating,
   onCreateSession,
   onExecuteSkill,
+  onClose,
   creating,
   hasTicketId,
+  anchorRect,
+  portalRef,
 }: {
   sessions: Session[];
   enabledSkills: { id: string; displayName: string; commandName: string }[];
   onOpenFloating: (sessionId: string) => void;
   onCreateSession: () => void;
   onExecuteSkill?: (skillId: string) => void;
+  onClose: () => void;
   creating: boolean;
   hasTicketId: boolean;
+  anchorRect?: DOMRect | null;
+  portalRef?: React.Ref<HTMLDivElement>;
 }) {
-  return (
-    <div className="absolute right-0 top-full z-50 mt-1 min-w-[220px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl">
+  const content = (
+    <div
+      ref={portalRef}
+      className={cn(
+        'z-50 min-w-[220px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl',
+        anchorRect ? 'fixed' : 'absolute right-0 top-full mt-1',
+      )}
+      style={anchorRect ? { left: anchorRect.left, top: anchorRect.bottom + 4 } : undefined}
+    >
       {/* Sessions group */}
       {sessions.length > 0 && (
         <>
@@ -131,6 +149,7 @@ function DropdownContent({
         className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
         onClick={(e) => {
           e.stopPropagation();
+          onClose();
           onCreateSession();
         }}
         disabled={creating}
@@ -170,20 +189,68 @@ function DropdownContent({
       )}
     </div>
   );
+
+  return anchorRect ? createPortal(content, document.body) : content;
 }
 
-export function SmartSessionButton({ sessions, creating, onCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill }: SmartSessionButtonProps) {
+export function SmartSessionButton({ sessions, creating: externalCreating, onCreateSession: externalOnCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill, alwaysShowMenu }: SmartSessionButtonProps) {
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
+  const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const skills = useSkillStore((s) => s.skills);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [internalCreating, setInternalCreating] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const portalRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+
+  const creating = externalCreating || internalCreating;
+
+  const toggleDropdown = useCallback(() => {
+    setDropdownOpen((prev) => {
+      if (!prev && buttonRef.current) {
+        setAnchorRect(buttonRef.current.getBoundingClientRect());
+      }
+      return !prev;
+    });
+  }, []);
+
+  const handleCreateSession = useCallback(async () => {
+    if (ticketId) {
+      // Internalized: call backend directly, then open floating session
+      setInternalCreating(true);
+      try {
+        const { sessionId } = await openSessionFromTicket(ticketId);
+        const tryOpen = () => {
+          const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
+          if (session) {
+            addFloatingSession(sessionId);
+            setInternalCreating(false);
+          } else {
+            setTimeout(tryOpen, 300);
+          }
+        };
+        tryOpen();
+      } catch {
+        setInternalCreating(false);
+      }
+    } else if (externalOnCreateSession) {
+      externalOnCreateSession();
+    }
+  }, [ticketId, openSessionFromTicket, addFloatingSession, externalOnCreateSession]);
+
+  const onCreateSession = handleCreateSession;
 
   const enabledSkills = skills.filter((s) => s.enabled);
 
   useEffect(() => {
     if (!dropdownOpen) return;
     const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(target) &&
+        (!portalRef.current || !portalRef.current.contains(target))
+      ) {
         setDropdownOpen(false);
       }
     };
@@ -226,16 +293,17 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
   const hasSkills = enabledSkills.length > 0 && !!ticketId && !!onExecuteSkill;
 
   // ── State 1: No sessions — "Start" ──
-  if (sessions.length === 0) {
+  if (sessions.length === 0 && !alwaysShowMenu) {
     // If we have skills, show dropdown instead of direct action
     if (hasSkills) {
       return (
         <div className="relative flex-shrink-0" ref={dropdownRef}>
           <button
+            ref={buttonRef}
             className={cn(shell(OPEN_THEME), (disabled || creating) && 'pointer-events-none opacity-50')}
             onClick={(e) => {
               e.stopPropagation();
-              setDropdownOpen(!dropdownOpen);
+              toggleDropdown();
             }}
             disabled={disabled || creating}
           >
@@ -255,8 +323,11 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
               onOpenFloating={handleOpenFloating}
               onCreateSession={onCreateSession}
               onExecuteSkill={handleExecuteSkill}
+              onClose={() => setDropdownOpen(false)}
               creating={creating}
               hasTicketId={!!ticketId}
+              anchorRect={anchorRect}
+              portalRef={portalRef}
             />
           )}
         </div>
@@ -283,7 +354,7 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
   }
 
   // ── State 2: 1 session ──
-  if (sessions.length === 1 && !hasSkills) {
+  if (sessions.length === 1 && !hasSkills && !alwaysShowMenu) {
     const session = sessions[0]!;
     const derived = deriveDisplayStatus(session);
     return (
@@ -307,10 +378,11 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
   return (
     <div className="relative flex-shrink-0" ref={dropdownRef}>
       <button
+        ref={buttonRef}
         className={shell(theme)}
         onClick={(e) => {
           e.stopPropagation();
-          setDropdownOpen(!dropdownOpen);
+          toggleDropdown();
         }}
       >
         {aggregated ? (
@@ -337,8 +409,11 @@ export function SmartSessionButton({ sessions, creating, onCreateSession, disabl
           onOpenFloating={handleOpenFloating}
           onCreateSession={onCreateSession}
           onExecuteSkill={handleExecuteSkill}
+          onClose={() => setDropdownOpen(false)}
           creating={creating}
           hasTicketId={!!ticketId}
+          anchorRect={anchorRect}
+          portalRef={portalRef}
         />
       )}
     </div>

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { getTabKind } from './registry';
 import type { TabDescriptor } from './types';
 
@@ -56,15 +57,22 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
   // — Active tab state —
   const [activeTab, setActiveTabRaw] = useState<TabDescriptor | null>(null);
 
-  // Persist last active tab per worktree (only if tab belongs to current group)
+  // Persist last active tab per worktree AND sync to store for URL routing
   const setLastActiveTab = useUIStore((s) => s.setLastActiveTab);
+  const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
+  const currentTicketId = useSessionStore((s) => s.selectedTicketId);
   useEffect(() => {
     if (!activeTab || !groupId) return;
     if (!orderedTabs.some((t) => t.key === activeTab.key)) return;
     setLastActiveTab(groupId, activeTab.key);
-  }, [activeTab, groupId, setLastActiveTab, orderedTabs]);
+    // Sync tab key to store so URL updates
+    if (currentTicketId) {
+      selectTicketTab(currentTicketId, activeTab.key);
+    }
+  }, [activeTab, groupId, setLastActiveTab, orderedTabs, currentTicketId, selectTicketTab]);
 
   // Auto-restore or auto-select when tabs change
+  const urlTabKey = useSessionStore((s) => s.selectedTabKey);
   const savedActiveKey = useUIStore((s) => groupId ? s.lastActiveTabByWorktree[groupId] : undefined);
   useEffect(() => {
     // If active tab was removed, reset
@@ -74,7 +82,16 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
     }
     if (activeTab) return;
 
-    // Try restore from persisted key (handle legacy un-prefixed IDs → treat as s:{id})
+    // Priority 1: restore from URL tab key
+    if (urlTabKey && orderedTabs.length > 0) {
+      const fromUrl = orderedTabs.find((t) => t.key === urlTabKey);
+      if (fromUrl) {
+        setActiveTabRaw(fromUrl);
+        return;
+      }
+    }
+
+    // Priority 2: restore from persisted key (handle legacy un-prefixed IDs → treat as s:{id})
     if (savedActiveKey && orderedTabs.length > 0) {
       const normalizedKey = savedActiveKey.includes(':') ? savedActiveKey : `s:${savedActiveKey}`;
       const restored = orderedTabs.find((t) => t.key === normalizedKey);
@@ -84,12 +101,17 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
       }
     }
 
-    // Fallback: first execution, then first session
-    const firstExec = orderedTabs.find((t) => t.kind === 'execution');
-    if (firstExec) {
-      setActiveTabRaw(firstExec);
-    } else if (orderedTabs.length > 0) {
-      setActiveTabRaw(orderedTabs[0]!);
+    // Fallback: ticket → execution → first tab
+    const firstTicket = orderedTabs.find((t) => t.kind === 'ticket');
+    if (firstTicket) {
+      setActiveTabRaw(firstTicket);
+    } else {
+      const firstExec = orderedTabs.find((t) => t.kind === 'execution');
+      if (firstExec) {
+        setActiveTabRaw(firstExec);
+      } else if (orderedTabs.length > 0) {
+        setActiveTabRaw(orderedTabs[0]!);
+      }
     }
   }, [orderedTabs, activeTab, savedActiveKey]);
 

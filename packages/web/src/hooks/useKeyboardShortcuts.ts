@@ -20,6 +20,7 @@ export function useKeyboardShortcuts() {
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
   const focusedPane = useSessionStore((s) => s.focusedPane);
   const selectSession = useSessionStore((s) => s.selectSession);
+  const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
   const selectedGroupId = useSessionStore((s) => s.selectedGroupId);
   const closeSplit = useSessionStore((s) => s.closeSplit);
   const setFocusedPane = useSessionStore((s) => s.setFocusedPane);
@@ -49,7 +50,7 @@ export function useKeyboardShortcuts() {
   // Order: System shells → manual worktrees → agentic worktrees.
   // Collapsed sections are skipped.
   const orderedWorktrees = useMemo(() => {
-    const entries: Array<{ key: string; sessions: string[]; agentTicketId?: string }> = [];
+    const entries: Array<{ key: string; sessions: string[]; ticketId?: string; agentTicketId?: string }> = [];
 
     // 1. System sessions first (ungrouped)
     const systemGroup = sessionGroups.find(
@@ -65,7 +66,7 @@ export function useKeyboardShortcuts() {
           })
         : allSystemSessions;
       if (sortedSystemSessions.length > 0) {
-        entries.push({ key: SYSTEM_GROUP_ID, sessions: sortedSystemSessions.map((s: Session) => s.id) });
+        entries.push({ key: SYSTEM_GROUP_ID, ticketId: 'system', sessions: sortedSystemSessions.map((s: Session) => s.id) });
       }
     }
 
@@ -104,7 +105,7 @@ export function useKeyboardShortcuts() {
             })
           : wt.sessions;
         if (sortedSessions.length > 0 || wt.agentWorktree) {
-          entries.push({ key: wtGroupId, sessions: sortedSessions.map((s: Session) => s.id), agentTicketId: wt.agentWorktree?.ticketId });
+          entries.push({ key: wtGroupId, ticketId: wt.ticketId ?? wt.agentWorktree?.ticketId, sessions: sortedSessions.map((s: Session) => s.id), agentTicketId: wt.agentWorktree?.ticketId });
         }
       }
     };
@@ -306,9 +307,11 @@ export function useKeyboardShortcuts() {
         e.preventDefault();
         if (orderedWorktrees.length === 0) return;
 
-        // Find current worktree index by the selected session or agent worktree
-        let currentIndex = selectedSessionId
-          ? orderedWorktrees.findIndex((wt) => wt.sessions.includes(selectedSessionId))
+        const currentTicketId = useSessionStore.getState().selectedTicketId;
+
+        // Find current worktree index by ticketId
+        let currentIndex = currentTicketId
+          ? orderedWorktrees.findIndex((wt) => wt.ticketId === currentTicketId)
           : -1;
         if (currentIndex === -1 && selectedAgentWorktreeTicketId) {
           currentIndex = orderedWorktrees.findIndex((wt) => wt.agentTicketId === selectedAgentWorktreeTicketId);
@@ -319,22 +322,10 @@ export function useKeyboardShortcuts() {
           : (currentIndex >= orderedWorktrees.length - 1 ? 0 : currentIndex + 1);
 
         const nextWorktree = orderedWorktrees[nextIndex];
-        if (nextWorktree) {
-          if (nextWorktree.agentTicketId) {
-            // Agent worktree → open agent panel (same as sidebar click)
-            selectSession(null);
-            setSelectedAgentWorktreeTicketId(nextWorktree.agentTicketId);
-          } else if (nextWorktree.sessions.length > 0) {
-            // Regular worktree → select session
-            const lastActive = lastActiveTabByWorktree[nextWorktree.key];
-            const targetId = (lastActive && nextWorktree.sessions.includes(lastActive))
-              ? lastActive
-              : nextWorktree.sessions[0];
-            if (targetId) {
-              if (selectedAgentWorktreeTicketId) setSelectedAgentWorktreeTicketId(null);
-              selectSession(targetId);
-            }
-          }
+        if (nextWorktree?.ticketId) {
+          if (selectedAgentWorktreeTicketId) setSelectedAgentWorktreeTicketId(null);
+          const lastActive = lastActiveTabByWorktree[nextWorktree.key] ?? null;
+          selectTicketTab(nextWorktree.ticketId, lastActive);
         }
         return;
       }

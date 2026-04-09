@@ -21,8 +21,6 @@ CREATE TABLE IF NOT EXISTS boards (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   emoji TEXT NOT NULL DEFAULT '',
-  repository_org TEXT,
-  repository_name TEXT,
   next_display_id INT NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL

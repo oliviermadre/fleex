@@ -13,8 +13,9 @@ import type {
   DashboardWorktree,
   DashboardGitHubIssue,
 } from '@fleex/shared';
-import { TICKET_PRIORITIES } from '@fleex/shared';
-import { fetchDashboard, fetchBoards, importGitHubIssue, openSessionFromTicket, createWorktree, createSession, executeSkill } from '../../services/api';
+import { TICKET_PRIORITIES, TICKET_STATUS_LABELS } from '@fleex/shared';
+import { importGitHubIssue, importGitHubPR, executeSkill } from '../../services/api';
+import { useDashboardStore } from '../../stores/dashboardStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -56,42 +57,23 @@ function getTodayFrench(): string {
   return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
 }
 
-function formatDueDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const due = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000);
-  if (diffDays < 0) return `${Math.abs(diffDays)}j en retard`;
-  if (diffDays === 0) return "Aujourd'hui";
-  if (diffDays === 1) return 'Demain';
-  if (diffDays <= 7) return `${diffDays}j`;
-  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-}
-
-function isDueDateOverdue(dateStr: string): boolean {
-  const d = new Date(dateStr);
-  const now = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()) < new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
-
-const STATUS_DOT: Record<string, { color: string; pulse: boolean; label: string }> = {
-  backlog: { color: 'var(--theme-text-faint)', pulse: false, label: 'Backlog' },
-  todo: { color: '#60a5fa', pulse: false, label: 'A faire' },
-  doing: { color: '#f59e0b', pulse: true, label: 'En cours' },
-  reviewing: { color: '#a78bfa', pulse: false, label: 'En review' },
-  done: { color: '#22c55e', pulse: false, label: 'Done' },
+// Status colors matching the kanban NanoKanban palette
+const STATUS_COLOR: Record<string, string> = {
+  backlog: 'var(--theme-text-faint)',
+  todo: '#fb923c',      // orange-400
+  doing: '#60a5fa',     // blue-400
+  reviewing: '#c084fc',  // purple-400
+  done: '#4ade80',      // green-400
+  cancelled: 'rgb(248 113 113 / 0.7)', // red-400/70
 };
 
-const INLINE_STATUSES: { value: TicketStatus; label: string }[] = [
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'todo', label: 'A faire' },
-  { value: 'doing', label: 'En cours' },
-  { value: 'reviewing', label: 'En review' },
-  { value: 'done', label: 'Done' },
-];
+const STATUS_PULSE: Record<string, boolean> = {
+  doing: true,
+};
 
-const STATUS_ORDER: Array<'doing' | 'reviewing' | 'todo'> = ['todo', 'doing', 'reviewing'];
+const INLINE_STATUSES: TicketStatus[] = [
+  'backlog', 'todo', 'doing', 'reviewing', 'done', 'cancelled',
+];
 
 // ── Inline keyframes ─────────────────────────────────────────────────────────
 
@@ -132,26 +114,27 @@ function SectionShell({
 }
 
 function SectionHeader({
-  dotColor,
+  icon,
   title,
   count,
   subtitle,
   toolbar,
 }: {
-  dotColor: string;
+  icon?: React.ReactNode;
   title: string;
   count: number;
   subtitle?: string;
   toolbar?: React.ReactNode;
 }) {
   return (
-    <div className="mb-3 flex flex-col gap-0.5">
-      <div className="flex items-center gap-2">
-        <span
-          className="inline-block h-2 w-2 rounded-full"
-          style={{ backgroundColor: dotColor }}
-        />
-        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-secondary)]">
+    <div className="-mx-4 -mt-4 mb-3 rounded-t-xl border-b border-[var(--theme-border-subtle)] px-4 py-2.5" style={{ backgroundColor: 'color-mix(in srgb, var(--theme-accent) 8%, var(--theme-bg-surface))' }}>
+      <div className="flex items-center gap-2.5">
+        {icon && (
+          <span className="text-[var(--theme-text-secondary)]">
+            {icon}
+          </span>
+        )}
+        <span className="text-sm font-bold uppercase tracking-wider text-[var(--theme-text-primary)]">
           {title}
         </span>
         <span className="rounded-full bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
@@ -165,7 +148,7 @@ function SectionHeader({
         )}
       </div>
       {subtitle && (
-        <span className="ml-4 text-[10px] text-[var(--theme-text-faint)]">{subtitle}</span>
+        <span className="ml-7 text-[10px] text-[var(--theme-text-faint)]">{subtitle}</span>
       )}
     </div>
   );
@@ -222,24 +205,6 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
-function InboxIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1.5" y="2" width="13" height="12" rx="2" />
-      <path d="M1.5 10h4l1 2h3l1-2h4" />
-    </svg>
-  );
-}
-
-function CheckCircleIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6" />
-      <polyline points="5.5,8 7,9.5 10.5,6" />
-    </svg>
-  );
-}
-
 function GitPrIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -264,6 +229,73 @@ function GitBranchIcon() {
   );
 }
 
+function GitHubIcon({ size = 14 }: { size?: number } = {}) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+    </svg>
+  );
+}
+
+function IssueIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6.5" />
+      <circle cx="8" cy="8" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function BugIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="8" cy="9.5" rx="3.5" ry="4" />
+      <path d="M6 6.5a2 2 0 0 1 4 0" />
+      <line x1="1.5" y1="8" x2="4.5" y2="8" />
+      <line x1="11.5" y1="8" x2="14.5" y2="8" />
+      <line x1="2" y1="11.5" x2="4.5" y2="10.5" />
+      <line x1="14" y1="11.5" x2="11.5" y2="10.5" />
+      <line x1="3" y1="5" x2="5" y2="6.5" />
+      <line x1="13" y1="5" x2="11" y2="6.5" />
+    </svg>
+  );
+}
+
+function ImportIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 2v8" />
+      <polyline points="4,7 8,11 12,7" />
+      <path d="M2 13h12" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4,6 8,10 12,6" />
+    </svg>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="1 1 15 1 9 8 9 13 7 15 7 8 1 1" />
+    </svg>
+  );
+}
+
+function SortIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 2v12M4 14l-3-3M4 14l3-3" />
+      <path d="M12 14V2M12 2l-3 3M12 2l3 3" />
+    </svg>
+  );
+}
+
 function CoffeeIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -274,64 +306,137 @@ function CoffeeIcon() {
   );
 }
 
-function SparkleIcon() {
+// ── Import Task Button ──────────────────────────────────────────────────────
+
+function ImportTaskButton({
+  boards,
+  onImport,
+  importing,
+}: {
+  boards: BoardWithCounts[];
+  onImport: (boardId: string) => void;
+  importing: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', keyHandler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', keyHandler);
+    };
+  }, [open]);
+
+  if (importing) {
+    return (
+      <div className="flex w-[108px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-500">
+        <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
+          <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        Importing...
+      </div>
+    );
+  }
+
+  const handleClick = () => {
+    if (boards.length === 1) {
+      onImport(boards[0]!.id);
+    } else {
+      setOpen(!open);
+    }
+  };
+
+  const rect = buttonRef.current?.getBoundingClientRect();
+
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" />
-    </svg>
+    <>
+      <button
+        ref={buttonRef}
+        className="flex w-[108px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-500 transition-all hover:border-amber-500/60 hover:bg-amber-500/20"
+        onClick={handleClick}
+      >
+        <ImportIcon />
+        Import
+        {boards.length > 1 && <ChevronDownIcon />}
+      </button>
+
+      {open && rect && createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-50 min-w-[180px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
+          style={{ left: rect.left, top: rect.bottom + 4 }}
+        >
+          <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">
+            Select board
+          </div>
+          {boards.map((b) => (
+            <button
+              key={b.id}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+              onClick={() => {
+                setOpen(false);
+                onImport(b.id);
+              }}
+            >
+              <span>{b.emoji}</span>
+              <span className="truncate">{b.name}</span>
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
-function ExternalLinkIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 2h8v8" />
-      <line x1="14" y1="2" x2="6" y2="10" />
-    </svg>
-  );
+// ── Dashboard Item Row ──────────────────────────────────────────────────────
+
+type DashboardItem = (DashboardGitHubIssue | DashboardPullRequest) & { linkedTicketId?: string };
+
+function isPR(item: DashboardItem): item is DashboardPullRequest {
+  return 'headRefName' in item;
 }
 
-function GitHubIcon({ size = 14 }: { size?: number } = {}) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor">
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-    </svg>
-  );
-}
-
-function LinkIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6.5 9.5l3-3" />
-      <path d="M9 6.5l1.5-1.5a2.12 2.12 0 0 1 3 3L12 9.5" />
-      <path d="M7 9.5L5.5 11a2.12 2.12 0 0 1-3-3L4 6.5" />
-    </svg>
-  );
-}
-
-// ── Ticket Card ──────────────────────────────────────────────────────────────
-
-function TicketCard({
+function DashboardItemRow({
+  kind,
+  item,
   ticket,
-  boardLabel,
   sessions,
+  worktrees,
+  boards,
+  allPullRequests,
+  onImport,
+  importing,
   onStatusChange,
   onNavigate,
-  onCreateSession,
-  creating,
-  hasRepo,
-  pullRequests,
 }: {
-  ticket: Ticket;
-  boardLabel?: { name: string; emoji: string };
+  kind: 'issue' | 'pr';
+  item: DashboardItem;
+  ticket?: Ticket;
   sessions: Session[];
+  worktrees: DashboardWorktree[];
+  boards: BoardWithCounts[];
+  allPullRequests: DashboardPullRequest[];
+  onImport: (boardId: string) => void;
+  importing: boolean;
   onStatusChange: (ticketId: string, newStatus: TicketStatus) => void;
   onNavigate: (ticket: Ticket) => void;
-  onCreateSession: (ticketId: string) => void;
-  creating: boolean;
-  hasRepo: boolean;
-  pullRequests: DashboardPullRequest[];
 }) {
+  const navigate = useNavigate();
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement>(null);
   const updateTicket = useTicketStore.getState().updateTicket;
@@ -347,6 +452,49 @@ function TicketCard({
     return () => document.removeEventListener('mousedown', handler);
   }, [statusMenuOpen]);
 
+  const ghUrl = kind === 'issue'
+    ? `https://github.com/${item.org}/${item.name}/issues/${item.number}`
+    : `https://github.com/${item.org}/${item.name}/pull/${item.number}`;
+
+  // ── State A: No linked ticket ──
+  if (!ticket) {
+    return (
+      <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 hover:bg-[var(--theme-bg-hover)]">
+        <span className="flex-shrink-0 text-[var(--theme-text-muted)]">
+          {kind === 'issue' ? <IssueIcon /> : <GitPrIcon />}
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-sm text-[var(--theme-text-primary)]">
+            {item.title}
+          </span>
+          <div className="flex items-center gap-2 text-xs text-[var(--theme-text-muted)]">
+            <span className="truncate text-[10px] text-[var(--theme-text-faint)]">
+              {item.org}/{item.name}
+            </span>
+            <a
+              href={ghUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-text-secondary)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              #{item.number}
+              <GitHubIcon size={11} />
+            </a>
+            <span className="text-[var(--theme-text-faint)]">{timeAgo(item.createdAt)}</span>
+          </div>
+        </div>
+        <span className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          <ImportTaskButton boards={boards} onImport={onImport} importing={importing} />
+        </span>
+      </div>
+    );
+  }
+
+  // ── State B: Has linked ticket ──
+  const boardMap = useTicketStore.getState().boards;
+  const board = boardMap.find((b) => b.id === ticket.boardId);
+
   const repoLink = ticket.links.find((l: TicketLink) => l.type === 'repository' || l.type === 'worktree');
   const repoLabel = repoLink
     ? repoLink.type === 'worktree'
@@ -354,22 +502,39 @@ function TicketCard({
       : repoLink.ref
     : null;
 
-  // Extract branch from worktree link
   const wtLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
   const branchName = wtLink ? wtLink.ref.split(':')[1] : null;
 
   // Match PR for this ticket's worktree branch
-  const ticketPR = useMemo(() => {
+  const ticketPR = (() => {
     if (!wtLink) return null;
     const [orgName, branch] = wtLink.ref.split(':');
     if (!orgName || !branch) return null;
     const [org, name] = orgName.split('/');
-    return pullRequests.find(
+    return allPullRequests.find(
       (pr) => pr.org === org && pr.name === name && pr.headRefName === branch,
     ) ?? null;
-  }, [wtLink, pullRequests]);
+  })();
 
-  const statusDot = STATUS_DOT[ticket.status];
+  const statusColor = STATUS_COLOR[ticket.status] ?? '#60a5fa';
+  const statusPulse = STATUS_PULSE[ticket.status] ?? false;
+  const statusLabel = TICKET_STATUS_LABELS[ticket.status] ?? ticket.status;
+
+  const hasWorktree = isPR(item) ? hasLocalWorktreeForPR(item, worktrees) : false;
+
+  const handleWorktreeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isPR(item)) return;
+    const worktreeKey = `${item.org}/${item.name}:${item.headRefName}`;
+    const lastSessionId = useUIStore.getState().lastActiveTabByWorktree[worktreeKey];
+    if (lastSessionId) {
+      navigate(`/sessions/${lastSessionId}`);
+      return;
+    }
+    if (sessions.length > 0) {
+      navigate(`/sessions/${sessions[0]!.id}`);
+    }
+  };
 
   return (
     <div
@@ -407,7 +572,7 @@ function TicketCard({
         <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">
           {ticket.title}
         </span>
-        <div className="flex items-center gap-2 text-xs text-[var(--theme-text-muted)]">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--theme-text-muted)]">
           {/* Status chip with dropdown */}
           <div className="relative" ref={statusMenuRef} onClick={(e) => e.stopPropagation()}>
             <span
@@ -419,42 +584,42 @@ function TicketCard({
               <span
                 className="inline-block h-1.5 w-1.5 rounded-full"
                 style={{
-                  backgroundColor: statusDot?.color ?? '#60a5fa',
-                  animation: statusDot?.pulse ? 'dashPulse 2s ease-in-out infinite' : 'none',
+                  backgroundColor: statusColor,
+                  animation: statusPulse ? 'dashPulse 2s ease-in-out infinite' : 'none',
                 }}
               />
-              {statusDot?.label ?? ticket.status}
+              {statusLabel}
             </span>
             {statusMenuOpen && (
               <div className="absolute left-0 top-full z-50 mt-1 min-w-[120px] rounded-lg border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
                 {INLINE_STATUSES.map((s) => (
                   <button
-                    key={s.value}
+                    key={s}
                     className={cn(
                       'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-                      ticket.status === s.value && 'font-semibold text-[var(--theme-accent)]',
+                      ticket.status === s && 'font-semibold text-[var(--theme-accent)]',
                     )}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (ticket.status !== s.value) {
-                        onStatusChange(ticket.id, s.value);
+                      if (ticket.status !== s) {
+                        onStatusChange(ticket.id, s);
                       }
                       setStatusMenuOpen(false);
                     }}
                   >
                     <span
                       className="inline-block h-1.5 w-1.5 rounded-full"
-                      style={{ backgroundColor: STATUS_DOT[s.value]?.color }}
+                      style={{ backgroundColor: STATUS_COLOR[s] }}
                     />
-                    {s.label}
+                    {TICKET_STATUS_LABELS[s] ?? s}
                   </button>
                 ))}
               </div>
             )}
           </div>
-          {boardLabel && (
+          {board && (
             <span className="truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
-              {boardLabel.emoji} {boardLabel.name}
+              {board.emoji} {board.name}
             </span>
           )}
           {repoLabel && (
@@ -467,7 +632,7 @@ function TicketCard({
               {branchName}
             </span>
           )}
-          {ticketPR && (
+{ticketPR && (
             <a
               href={`https://github.com/${ticketPR.org}/${ticketPR.name}/pull/${ticketPR.number}`}
               target="_blank"
@@ -485,283 +650,8 @@ function TicketCard({
               #{ticketPR.number}
             </a>
           )}
-          {ticket.dueDate && (
-            <span
-              className={cn(
-                'whitespace-nowrap',
-                isDueDateOverdue(ticket.dueDate) && 'text-red-400',
-              )}
-            >
-              {formatDueDate(ticket.dueDate)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* SmartSessionButton */}
-      <span
-        className="flex-shrink-0"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <SmartSessionButton
-          sessions={sessions}
-          creating={creating}
-          onCreateSession={() => onCreateSession(ticket.id)}
-          disabled={!hasRepo}
-          ticketId={ticket.id}
-          onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
-        />
-      </span>
-    </div>
-  );
-}
-
-// ── GitHub Issue Row ─────────────────────────────────────────────────────────
-
-function GitHubIssueRow({
-  issue,
-  tickets,
-  onImport,
-  onLinkToTicket,
-  importing,
-}: {
-  issue: DashboardGitHubIssue;
-  tickets: Ticket[];
-  onImport: (issue: DashboardGitHubIssue) => void;
-  onLinkToTicket: (issue: DashboardGitHubIssue, ticketId: string) => void;
-  importing: boolean;
-}) {
-  const navigate = useNavigate();
-  const [linkSelectorOpen, setLinkSelectorOpen] = useState(false);
-  const selectorRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!linkSelectorOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) {
-        setLinkSelectorOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [linkSelectorOpen]);
-
-  const linkableTickets = tickets.filter(
-    (t) => t.status === 'todo' || t.status === 'doing' || t.status === 'reviewing',
-  );
-
-  if (issue.hasLocalTicket) {
-    // Find the linked ticket to show its title
-    const linkedTicket = issue.linkedTicketId
-      ? tickets.find((t) => t.id === issue.linkedTicketId)
-      : null;
-
-    return (
-      <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 hover:bg-[var(--theme-bg-hover)]">
-        <span className="flex-shrink-0 text-[var(--theme-text-faint)]">
-          <CheckCircleIcon />
-        </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-sm text-[var(--theme-text-secondary)]">
-            {issue.title}
-          </span>
-          <div className="flex items-center gap-2 text-xs text-[var(--theme-text-faint)]">
-            <span>{issue.org}/{issue.name}</span>
-            <a
-              href={`https://github.com/${issue.org}/${issue.name}/issues/${issue.number}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 transition-colors hover:text-[var(--theme-text-secondary)]"
-              onClick={(e) => e.stopPropagation()}
-              title="Voir sur GitHub"
-            >
-              #{issue.number}
-              <GitHubIcon size={11} />
-            </a>
-          </div>
-        </div>
-        {linkedTicket ? (
-          <button
-            className="flex flex-shrink-0 items-center gap-1 rounded bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] font-medium text-[var(--theme-accent)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-            onClick={() =>
-              navigate(`/tickets/board/${linkedTicket.boardId}/ticket/${linkedTicket.id}`)
-            }
-          >
-            <LinkIcon />
-            <span className="max-w-[120px] truncate">{linkedTicket.title}</span>
-          </button>
-        ) : issue.linkedTicketId ? (
-          <button
-            className="flex flex-shrink-0 items-center gap-1 rounded bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] font-medium text-[var(--theme-accent)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-            onClick={() => {
-              // Navigate to ticket even if we don't have the full object
-              // We'll use the ticket panel
-              useUIStore.getState().setActivePanel('tickets');
-            }}
-          >
-            <LinkIcon />
-            Voir le ticket
-          </button>
-        ) : (
-          <span className="flex-shrink-0 rounded bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] text-[var(--theme-text-faint)]">
-            Importe
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 hover:bg-[var(--theme-bg-hover)]">
-      <span className="flex-shrink-0 text-[var(--theme-accent)]">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-        </svg>
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">
-          {issue.title}
-        </span>
-        <div className="flex items-center gap-2 text-xs text-[var(--theme-text-muted)]">
-          <span>{issue.org}/{issue.name}</span>
           <a
-            href={`https://github.com/${issue.org}/${issue.name}/issues/${issue.number}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 transition-colors hover:text-[var(--theme-text-secondary)]"
-            onClick={(e) => e.stopPropagation()}
-            title="Voir sur GitHub"
-          >
-            #{issue.number}
-            <GitHubIcon size={11} />
-          </a>
-          <span>{timeAgo(issue.createdAt)}</span>
-        </div>
-      </div>
-      <div className="flex flex-shrink-0 items-center gap-1.5">
-        {/* Link to existing ticket */}
-        <div className="relative" ref={selectorRef}>
-          <button
-            className={cn(
-              'flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium transition-all',
-              'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-secondary)]',
-            )}
-            onClick={() => setLinkSelectorOpen(!linkSelectorOpen)}
-            title="Lier a un ticket existant"
-          >
-            <LinkIcon />
-            <span className="hidden sm:inline">Lier</span>
-          </button>
-          {linkSelectorOpen && linkableTickets.length > 0 && (
-            <div className="absolute right-0 top-full z-50 mt-1 max-h-[200px] min-w-[220px] overflow-y-auto rounded-lg border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
-              {linkableTickets.map((t) => (
-                <button
-                  key={t.id}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
-                  onClick={() => {
-                    onLinkToTicket(issue, t.id);
-                    setLinkSelectorOpen(false);
-                  }}
-                >
-                  <span
-                    className="inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full"
-                    style={{ backgroundColor: STATUS_DOT[t.status]?.color ?? '#60a5fa' }}
-                  />
-                  <span className="truncate text-[var(--theme-text-primary)]">
-                    {t.title}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {/* Import & Start */}
-        <button
-          className={cn(
-            'flex flex-shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-            'bg-[var(--theme-accent)] text-white hover:bg-[var(--theme-accent-hover)] active:bg-[var(--theme-accent-active)]',
-            importing && 'pointer-events-none opacity-60',
-          )}
-          onClick={() => onImport(issue)}
-          disabled={importing}
-        >
-          {importing ? (
-            <span className="h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
-          ) : (
-            <SparkleIcon />
-          )}
-          Import & Start
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── PR Row ───────────────────────────────────────────────────────────────────
-
-function PRRow({
-  pr,
-  sessions,
-  worktrees,
-  onCreateSession,
-  creating,
-  ticketId,
-  onExecuteSkill,
-}: {
-  pr: DashboardPullRequest;
-  sessions: Session[];
-  worktrees: DashboardWorktree[];
-  onCreateSession: (pr: DashboardPullRequest) => void;
-  creating: boolean;
-  ticketId?: string;
-  onExecuteSkill?: (skillId: string) => void;
-}) {
-  const navigate = useNavigate();
-  const hasWorktree = hasLocalWorktreeForPR(pr, worktrees);
-
-  const handleWorktreeClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    // Priority 1: last active session for this worktree
-    const worktreeKey = `${pr.org}/${pr.name}:${pr.headRefName}`;
-    const lastSessionId = useUIStore.getState().lastActiveTabByWorktree[worktreeKey];
-    if (lastSessionId) {
-      navigate(`/sessions/${lastSessionId}`);
-      return;
-    }
-    // Priority 2: any existing session matching this PR's branch
-    if (sessions.length > 0) {
-      navigate(`/sessions/${sessions[0]!.id}`);
-      return;
-    }
-    // Priority 3: no session yet — create one (same as clicking "Open")
-    onCreateSession(pr);
-  };
-
-  return (
-    <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 hover:bg-[var(--theme-bg-hover)]">
-      <span className="flex-shrink-0 text-[var(--theme-text-muted)]">
-        <GitPrIcon />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm text-[var(--theme-text-primary)]">
-          {pr.title}
-        </span>
-        <div className="flex items-center gap-2 text-xs text-[var(--theme-text-muted)]">
-          <span className="truncate font-mono text-[10px] text-[var(--theme-text-faint)]">
-            {pr.headRefName}
-          </span>
-          {hasWorktree && (
-            <button
-              className="flex items-center gap-0.5 rounded bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-medium text-cyan-400 transition-colors hover:bg-cyan-500/20"
-              onClick={handleWorktreeClick}
-              title="Ouvrir la session"
-            >
-              <GitBranchIcon />
-              worktree
-            </button>
-          )}
-          <a
-            href={`https://github.com/${pr.org}/${pr.name}/pull/${pr.number}`}
+            href={ghUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-text-secondary)]"
@@ -770,57 +660,40 @@ function PRRow({
           >
             <GitHubIcon size={11} />
           </a>
+          <span className="text-[var(--theme-text-faint)]">{timeAgo(item.createdAt)}</span>
         </div>
       </div>
-      <div className="flex flex-shrink-0 items-center gap-1.5">
-        <span className="text-xs text-[var(--theme-text-faint)]">
-          {timeAgo(pr.updatedAt)}
-        </span>
-        <span className="flex-shrink-0">
-          <SmartSessionButton
-            sessions={sessions}
-            creating={creating}
-            onCreateSession={() => onCreateSession(pr)}
-            ticketId={ticketId}
-            onExecuteSkill={onExecuteSkill}
-          />
-        </span>
-      </div>
+
+      {/* SmartSessionButton */}
+      <span className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <SmartSessionButton
+          sessions={sessions}
+          ticketId={ticket.id}
+          onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
+        />
+      </span>
     </div>
   );
 }
 
-// ── PR Section with grouping & filter ────────────────────────────────────────
+// ── Section Toolbar ─────────────────────────────────────────────────────────
 
-function FilterIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="1 1 15 1 9 8 9 13 7 15 7 8 1 1" />
-    </svg>
-  );
-}
-
-function SortIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 2v12M4 14l-3-3M4 14l3-3" />
-      <path d="M12 14V2M12 2l-3 3M12 2l3 3" />
-    </svg>
-  );
-}
-
-function PRToolbar({
+function SectionToolbar({
   repos,
   repoFilter,
   setRepoFilter,
   sortOrder,
   setSortOrder,
+  searchQuery,
+  setSearchQuery,
 }: {
   repos: string[];
   repoFilter: string;
   setRepoFilter: (v: string) => void;
   sortOrder: 'recent' | 'oldest';
   setSortOrder: (v: 'recent' | 'oldest') => void;
+  searchQuery: string;
+  setSearchQuery: (v: string) => void;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
@@ -847,7 +720,22 @@ function PRToolbar({
   const isFilterActive = repoFilter !== 'all';
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
+      {/* Search */}
+      <div className="relative">
+        <svg className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)]" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="7" cy="7" r="5" />
+          <line x1="11" y1="11" x2="14" y2="14" />
+        </svg>
+        <input
+          type="text"
+          placeholder="Rechercher..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="h-7 w-36 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] pl-7 pr-2 text-[11px] text-[var(--theme-text-primary)] placeholder-[var(--theme-text-muted)] transition-colors focus:border-[var(--theme-accent)] focus:outline-none"
+        />
+      </div>
+
       {/* Filter icon */}
       {repos.length > 1 && (
         <div className="relative" ref={filterRef}>
@@ -948,349 +836,300 @@ function PRToolbar({
   );
 }
 
-function PRSection({
+// ── GitHub Section ──────────────────────────────────────────────────────────
+
+function GithubSection({
   title,
-  subtitle,
-  dotColor,
-  prs,
+  icon,
+  leftItems,
+  rightItems,
+  kind,
+  allTickets,
   sessions,
   worktrees,
+  boards,
+  allPullRequests,
+  onImport,
+  importingKey,
+  onStatusChange,
+  onNavigate,
   delay,
-  onCreateSession,
-  creatingPR,
   emptyMessage,
-  onExecuteSkill,
 }: {
   title: string;
-  subtitle?: string;
-  dotColor: string;
-  prs: DashboardPullRequest[];
+  icon: React.ReactNode;
+  leftItems: DashboardItem[];
+  rightItems: DashboardItem[];
+  kind: 'issue' | 'pr';
+  allTickets: Ticket[];
   sessions: Session[];
   worktrees: DashboardWorktree[];
+  boards: BoardWithCounts[];
+  allPullRequests: DashboardPullRequest[];
+  onImport: (item: DashboardItem, boardId: string) => void;
+  importingKey: string | null;
+  onStatusChange: (ticketId: string, newStatus: TicketStatus) => void;
+  onNavigate: (ticket: Ticket) => void;
   delay: number;
-  onCreateSession: (pr: DashboardPullRequest) => void;
-  creatingPR: string | null;
   emptyMessage: string;
-  onExecuteSkill?: (skillId: string, ticketId: string) => void;
 }) {
+  const [searchQuery, setSearchQuery] = useState('');
   const [repoFilter, setRepoFilter] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest'>('recent');
 
-  // Available repos
-  const repos = useMemo(() => {
-    const set = new Set(prs.map((pr) => `${pr.org}/${pr.name}`));
-    return Array.from(set).sort();
-  }, [prs]);
+  const totalCount = leftItems.length + rightItems.length;
 
-  // Filter + sort
-  const filteredPRs = useMemo(() => {
-    let result = repoFilter === 'all'
-      ? prs
-      : prs.filter((pr) => `${pr.org}/${pr.name}` === repoFilter);
+  // All repos across both columns
+  const repos = useMemo(() => {
+    const set = new Set([...leftItems, ...rightItems].map((item) => `${item.org}/${item.name}`));
+    return Array.from(set).sort();
+  }, [leftItems, rightItems]);
+
+  // Ticket lookup map
+  const ticketMap = useMemo(() => {
+    const map = new Map<string, Ticket>();
+    for (const t of allTickets) map.set(t.id, t);
+    return map;
+  }, [allTickets]);
+
+  // Filter + sort a column's items
+  const filterAndSort = useCallback((items: DashboardItem[]) => {
+    let result = items;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((item) => {
+        if (item.title.toLowerCase().includes(q)) return true;
+        // Also search the linked Fleex ticket title (may differ from GitHub title)
+        const ticket = item.linkedTicketId ? ticketMap.get(item.linkedTicketId) : undefined;
+        return ticket ? ticket.title.toLowerCase().includes(q) : false;
+      });
+    }
+    if (repoFilter !== 'all') {
+      result = result.filter((item) => `${item.org}/${item.name}` === repoFilter);
+    }
     result = [...result].sort((a, b) => {
       const diff = new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       return sortOrder === 'recent' ? diff : -diff;
     });
     return result;
-  }, [prs, repoFilter, sortOrder]);
+  }, [searchQuery, repoFilter, sortOrder, ticketMap]);
 
-  // Group by repo
-  const grouped = useMemo(() => {
-    const map = new Map<string, DashboardPullRequest[]>();
-    for (const pr of filteredPRs) {
-      const key = `${pr.org}/${pr.name}`;
-      const arr = map.get(key);
-      if (arr) arr.push(pr);
-      else map.set(key, [pr]);
-    }
-    return Array.from(map.entries());
-  }, [filteredPRs]);
+  const filteredLeft = useMemo(() => filterAndSort(leftItems), [filterAndSort, leftItems]);
+  const filteredRight = useMemo(() => filterAndSort(rightItems), [filterAndSort, rightItems]);
+
+  const renderItem = (item: DashboardItem) => {
+    const ticket = item.linkedTicketId ? ticketMap.get(item.linkedTicketId) : undefined;
+    const key = `${item.org}/${item.name}#${item.number}`;
+
+    const itemSessions = ticket
+      ? findSessionsForTicket(ticket, sessions)
+      : isPR(item) ? findSessionsForPR(item, sessions) : [];
+
+    return (
+      <DashboardItemRow
+        key={key}
+        kind={kind}
+        item={item}
+        ticket={ticket}
+        sessions={itemSessions}
+        worktrees={worktrees}
+        boards={boards}
+        allPullRequests={allPullRequests}
+        onImport={(boardId) => onImport(item, boardId)}
+        importing={importingKey === key}
+        onStatusChange={onStatusChange}
+        onNavigate={onNavigate}
+      />
+    );
+  };
 
   return (
     <SectionShell delay={delay}>
       <SectionHeader
-        dotColor={dotColor}
+        icon={icon}
         title={title}
-        subtitle={subtitle}
-        count={prs.length}
-        toolbar={prs.length > 0 ? (
-          <PRToolbar
+        count={totalCount}
+        toolbar={totalCount > 0 ? (
+          <SectionToolbar
             repos={repos}
             repoFilter={repoFilter}
             setRepoFilter={setRepoFilter}
             sortOrder={sortOrder}
             setSortOrder={setSortOrder}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
           />
         ) : undefined}
       />
-      {prs.length === 0 ? (
+      {totalCount === 0 ? (
         <EmptyState
-          icon={<GitPrIcon />}
+          icon={kind === 'issue' ? <IssueIcon /> : <GitPrIcon />}
           message={emptyMessage}
         />
       ) : (
-        <>
-          <div className="flex flex-col gap-2">
-            {grouped.map(([repoKey, repoPRs]) => (
-              <div key={repoKey}>
-                {grouped.length > 1 && (
-                  <div className="mb-0.5 px-3">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-faint)]">
-                      {repoKey}
-                    </span>
-                  </div>
-                )}
-                <div className="flex flex-col">
-                  {repoPRs.map((pr) => (
-                    <PRRow
-                      key={`${pr.org}/${pr.name}#${pr.number}`}
-                      pr={pr}
-                      sessions={findSessionsForPR(pr, sessions)}
-                      worktrees={worktrees}
-                      onCreateSession={onCreateSession}
-                      creating={creatingPR === `${pr.org}/${pr.name}#${pr.number}`}
-                      ticketId={pr.linkedTicketId}
-                      onExecuteSkill={pr.linkedTicketId && onExecuteSkill
-                        ? (skillId: string) => onExecuteSkill(skillId, pr.linkedTicketId!)
-                        : undefined}
-                    />
-                  ))}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr]">
+          {/* Created by me */}
+          <div className="min-w-0">
+            <div className="mb-1.5 flex items-center gap-2 px-3">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                Created by me
+              </span>
+              <span className="text-[10px] text-[var(--theme-text-faint)]">
+                {filteredLeft.length}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              {filteredLeft.length === 0 ? (
+                <div className="px-3 py-4 text-xs text-[var(--theme-text-faint)]">
+                  Nothing here
                 </div>
-              </div>
-            ))}
+              ) : (
+                filteredLeft.map(renderItem)
+              )}
+            </div>
           </div>
-        </>
+
+          {/* Vertical separator */}
+          <div className="mx-2 hidden w-px bg-[var(--theme-border-subtle)] lg:block" />
+
+          {/* Assigned to me */}
+          <div className="min-w-0">
+            <div className="mb-1.5 flex items-center gap-2 px-3">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                Assigned to me
+              </span>
+              <span className="text-[10px] text-[var(--theme-text-faint)]">
+                {filteredRight.length}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              {filteredRight.length === 0 ? (
+                <div className="px-3 py-4 text-xs text-[var(--theme-text-faint)]">
+                  Nothing here
+                </div>
+              ) : (
+                filteredRight.map(renderItem)
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </SectionShell>
   );
 }
 
-// ── Dashboard Filter Types ───────────────────────────────────────────────────
+// ── Sync Toolbar ─────────────────────────────────────────────────────────────
 
-interface DashboardFilters {
-  boardId: string | null;
-  priority: TicketPriority | null;
-  hasPR: boolean | null;
-  blocked: boolean | null;
+const SYNC_OPTIONS = [
+  { label: 'Disabled', ms: 0 },
+  { label: '1 min', ms: 60_000 },
+  { label: '2 min', ms: 120_000 },
+  { label: '5 min', ms: 300_000 },
+  { label: '15 min', ms: 900_000 },
+  { label: '30 min', ms: 1_800_000 },
+  { label: '1h', ms: 3_600_000 },
+];
+
+function useLiveSyncAge(lastFetchedAt: Date | null): string {
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    if (!lastFetchedAt) return;
+    const id = setInterval(() => forceUpdate((n) => n + 1), 10_000);
+    return () => clearInterval(id);
+  }, [lastFetchedAt]);
+  if (!lastFetchedAt) return 'never';
+  return timeAgo(lastFetchedAt.toISOString());
 }
 
-const EMPTY_FILTERS: DashboardFilters = { boardId: null, priority: null, hasPR: null, blocked: null };
+function SyncToolbar() {
+  const refreshing = useDashboardStore((s) => s.refreshing);
+  const lastFetchedAt = useDashboardStore((s) => s.lastFetchedAt);
+  const autoSyncIntervalMs = useDashboardStore((s) => s.autoSyncIntervalMs);
+  const setAutoSyncInterval = useDashboardStore((s) => s.setAutoSyncInterval);
+  const fetchDash = useDashboardStore((s) => s.fetch);
 
-// ── Dashboard Filter Popover ─────────────────────────────────────────────────
-
-function DashboardFilterPopover({
-  filters,
-  setFilters,
-  boards,
-  allTickets,
-  pullRequests,
-}: {
-  filters: DashboardFilters;
-  setFilters: React.Dispatch<React.SetStateAction<DashboardFilters>>;
-  boards: BoardWithCounts[];
-  allTickets: Ticket[];
-  pullRequests: DashboardPullRequest[];
-}) {
-  const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  const activeCount =
-    (filters.boardId ? 1 : 0) +
-    (filters.priority ? 1 : 0) +
-    (filters.hasPR !== null ? 1 : 0) +
-    (filters.blocked !== null ? 1 : 0);
-
-  // Derive which boards actually have active tickets
-  const boardOptions = useMemo(() => {
-    const ids = new Set(allTickets.map((t) => t.boardId));
-    return boards.filter((b) => ids.has(b.id));
-  }, [allTickets, boards]);
-
-  // Check if any ticket has a matching PR
-  const hasPRData = useMemo(() => {
-    return allTickets.some((t) => {
-      const wtLink = t.links.find((l: TicketLink) => l.type === 'worktree');
-      if (!wtLink) return false;
-      const [orgName, branch] = wtLink.ref.split(':');
-      if (!orgName || !branch) return false;
-      const [org, name] = orgName.split('/');
-      return pullRequests.some((pr) => pr.org === org && pr.name === name && pr.headRefName === branch);
-    });
-  }, [allTickets, pullRequests]);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const syncBtnRef = useRef<HTMLButtonElement>(null);
+  const syncMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
-    function handleMouseDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
-          buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleKeyDown);
+    if (!syncOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (syncMenuRef.current && !syncMenuRef.current.contains(e.target as Node) &&
+          syncBtnRef.current && !syncBtnRef.current.contains(e.target as Node)) setSyncOpen(false);
     };
-  }, [open]);
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSyncOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', keyHandler);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', keyHandler); };
+  }, [syncOpen]);
 
-  const rect = buttonRef.current?.getBoundingClientRect();
-  const update = (partial: Partial<DashboardFilters>) => setFilters((prev) => ({ ...prev, ...partial }));
+  const syncAge = useLiveSyncAge(lastFetchedAt);
+  const currentLabel = SYNC_OPTIONS.find((o) => o.ms === autoSyncIntervalMs)?.label ?? 'Disabled';
 
   return (
-    <>
+    <div className="flex items-center gap-3">
+      {/* Last sync */}
+      <span className="text-[11px] text-[var(--theme-text-faint)]">
+        Last sync: {syncAge}
+      </span>
+
+      {/* Auto-sync dropdown */}
       <button
-        ref={buttonRef}
+        ref={syncBtnRef}
         className={cn(
-          'relative flex h-8 w-8 items-center justify-center rounded-md transition-colors',
-          activeCount > 0
-            ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'
+          'flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors',
+          autoSyncIntervalMs > 0
+            ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
             : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
-          open && 'bg-[var(--theme-bg-hover)]',
         )}
-        onClick={() => setOpen(!open)}
-        title="Filter tickets"
+        onClick={() => setSyncOpen(!syncOpen)}
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="1 1 15 1 9 8 9 13 7 15 7 8 1 1" />
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="8" cy="8" r="6" />
+          <polyline points="8,4 8,8 11,10" />
         </svg>
-        {activeCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--theme-accent)] text-[9px] font-bold text-white">
-            {activeCount}
-          </span>
-        )}
+        {currentLabel}
+        <ChevronDownIcon />
       </button>
-
-      {open && rect && createPortal(
+      {syncOpen && syncBtnRef.current && createPortal(
         <div
-          ref={menuRef}
-          className="fixed z-50 w-[260px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4 shadow-xl"
-          style={{ right: window.innerWidth - rect.right, top: rect.bottom + 4 }}
+          ref={syncMenuRef}
+          className="fixed z-50 min-w-[120px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-1.5 shadow-xl"
+          style={{ left: syncBtnRef.current.getBoundingClientRect().left, top: syncBtnRef.current.getBoundingClientRect().bottom + 4 }}
         >
-          {/* Header */}
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Filters</span>
-            {activeCount > 0 && (
-              <button
-                className="text-xs text-[var(--theme-accent)] transition-colors hover:underline"
-                onClick={() => setFilters(EMPTY_FILTERS)}
-              >
-                Clear all ({activeCount})
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3.5">
-            {/* Board */}
-            {boardOptions.length > 1 && (
-              <div>
-                <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Board</label>
-                <select
-                  className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
-                  value={filters.boardId ?? ''}
-                  onChange={(e) => update({ boardId: e.target.value || null })}
-                >
-                  <option value="">All boards</option>
-                  {boardOptions.map((b) => (
-                    <option key={b.id} value={b.id}>{b.emoji} {b.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Priority */}
-            <div>
-              <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Priority</label>
-              <div className="flex flex-wrap gap-1">
-                <button
-                  className={cn(
-                    'rounded px-2 py-1 text-[11px] transition-colors',
-                    !filters.priority
-                      ? 'bg-[var(--theme-accent)] text-white'
-                      : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
-                  )}
-                  onClick={() => update({ priority: null })}
-                >
-                  All
-                </button>
-                {(TICKET_PRIORITIES as readonly TicketPriority[]).map((p) => (
-                  <button
-                    key={p}
-                    className={cn(
-                      'flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors',
-                      filters.priority === p
-                        ? 'bg-[var(--theme-accent)] text-white'
-                        : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
-                    )}
-                    onClick={() => update({ priority: p })}
-                  >
-                    <PriorityIndicator priority={p} />
-                    {p === 'none' ? 'None' : p.charAt(0).toUpperCase() + p.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Has PR */}
-            {hasPRData && (
-              <div>
-                <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Pull Request</label>
-                <div className="flex gap-1">
-                  {([
-                    { label: 'All', value: null },
-                    { label: 'Has PR', value: true },
-                    { label: 'No PR', value: false },
-                  ] as const).map((opt) => (
-                    <button
-                      key={String(opt.value)}
-                      className={cn(
-                        'rounded px-2 py-1 text-[11px] transition-colors',
-                        filters.hasPR === opt.value
-                          ? 'bg-[var(--theme-accent)] text-white'
-                          : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
-                      )}
-                      onClick={() => update({ hasPR: opt.value })}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Blocked */}
-            <div>
-              <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Blocked</label>
-              <div className="flex gap-1">
-                {([
-                  { label: 'All', value: null },
-                  { label: 'Blocked', value: true },
-                  { label: 'Not blocked', value: false },
-                ] as const).map((opt) => (
-                  <button
-                    key={String(opt.value)}
-                    className={cn(
-                      'rounded px-2 py-1 text-[11px] transition-colors',
-                      filters.blocked === opt.value
-                        ? 'bg-[var(--theme-accent)] text-white'
-                        : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
-                    )}
-                    onClick={() => update({ blocked: opt.value })}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          {SYNC_OPTIONS.map((opt) => (
+            <button
+              key={opt.ms}
+              className={cn(
+                'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                autoSyncIntervalMs === opt.ms
+                  ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
+                  : 'text-[var(--theme-text-secondary)]',
+              )}
+              onClick={() => { setAutoSyncInterval(opt.ms); setSyncOpen(false); }}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>,
         document.body,
       )}
-    </>
+
+      {/* Refresh now */}
+      <button
+        className={cn(
+          'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all',
+          'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
+          refreshing && 'pointer-events-none opacity-60',
+        )}
+        onClick={() => fetchDash()}
+        disabled={refreshing}
+        title="Refresh now"
+      >
+        <RefreshIcon spinning={refreshing} />
+      </button>
+    </div>
   );
 }
 
@@ -1298,19 +1137,18 @@ function DashboardFilterPopover({
 
 export function DashboardView() {
   const navigate = useNavigate();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [creatingSession, setCreatingSession] = useState<string | null>(null);
-  const [importingIssue, setImportingIssue] = useState<string | null>(null);
-  const [creatingPRSession, setCreatingPRSession] = useState<string | null>(null);
-  const [dashFilters, setDashFilters] = useState<DashboardFilters>(EMPTY_FILTERS);
-  const [dashSearch, setDashSearch] = useState('');
+  const [importingKey, setImportingKey] = useState<string | null>(null);
+
+  // Dashboard store
+  const data = useDashboardStore((s) => s.data);
+  const loading = useDashboardStore((s) => s.loading);
+  const refreshing = useDashboardStore((s) => s.refreshing);
+  const autoSyncIntervalMs = useDashboardStore((s) => s.autoSyncIntervalMs);
+  const fetchDash = useDashboardStore((s) => s.fetch);
 
   // Live data from stores
   const humanDisplayName = useSettingsStore((s) => s.settings.humanDisplayName);
   const sessions = useSessionStore((s) => s.sessions);
-  const selectSession = useSessionStore((s) => s.selectSession);
   const storeTickets = useTicketStore((s) => s.tickets);
 
   // Unread & agent activity
@@ -1320,6 +1158,18 @@ export function DashboardView() {
   const personas = useAgentPersonaStore((s) => s.personas);
 
   useEffect(() => { loadUnreadCounts(); }, [loadUnreadCounts]);
+
+  // Fetch on mount only if no cached data
+  useEffect(() => {
+    if (!data) fetchDash();
+  }, [data, fetchDash]);
+
+  // Auto-sync interval (only while this view is mounted)
+  useEffect(() => {
+    if (autoSyncIntervalMs <= 0) return;
+    const id = setInterval(fetchDash, autoSyncIntervalMs);
+    return () => clearInterval(id);
+  }, [autoSyncIntervalMs, fetchDash]);
 
   // Build recent agent activity from all executions
   const recentActivity = useMemo(() => {
@@ -1334,200 +1184,63 @@ export function DashboardView() {
         return { ...e, personaName: persona?.displayName ?? persona?.name ?? 'Agent', ticketTitle: ticket?.title ?? `#${ticket?.displayId ?? '?'}` };
       });
   }, [executionsByTicket, personas, storeTickets]);
+
   const boards = useTicketStore((s) => s.boards);
   const moveTicket = useTicketStore((s) => s.moveTicket);
-  const addLink = useTicketStore((s) => s.addLink);
 
-  const boardMap = useMemo(() => {
-    const m = new Map<string, { name: string; emoji: string; repositoryOrg: string | null; repositoryName: string | null }>();
-    for (const b of boards) m.set(b.id, { name: b.name, emoji: b.emoji, repositoryOrg: b.repositoryOrg ?? null, repositoryName: b.repositoryName ?? null });
-    return m;
-  }, [boards]);
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
-  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
-
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const result = await fetchDashboard();
-      setData(result);
-      // Seed ticket store so inline updates (priority, blocked) are reflected live
-      if (useTicketStore.getState().tickets.length === 0 && result.activeTickets.length > 0) {
-        useTicketStore.setState({ tickets: result.activeTickets });
-      }
-    } catch {
-      // toast handled by api layer
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Merge live store updates on top of dashboard data (which contains all boards).
-  // The store may only have a subset (current board), so we use dashboard as base.
+  // Merge live store updates on top of dashboard data
   const allTickets = useMemo(() => {
     const base = data?.activeTickets ?? [];
     if (storeTickets.length === 0) return base;
-    // Build a map of store tickets for O(1) lookup
     const storeMap = new Map(storeTickets.map((t: Ticket) => [t.id, t]));
     return base.map((t: Ticket) => storeMap.get(t.id) ?? t);
   }, [data?.activeTickets, storeTickets]);
 
-  const handleCreateSession = useCallback(async (ticketId: string) => {
-    if (creatingSession) return;
-    setCreatingSession(ticketId);
-    try {
-      const { sessionId } = await openSessionFromTicket(ticketId);
-      const tryOpen = () => {
-        const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
-        if (session) {
-          addFloatingSession(sessionId);
-          setCreatingSession(null);
-        } else {
-          setTimeout(tryOpen, 300);
-        }
-      };
-      tryOpen();
-    } catch {
-      setCreatingSession(null);
-    }
-  }, [creatingSession, addFloatingSession]);
+  const allPullRequests = useMemo(
+    () => [...(data?.myPullRequests ?? []), ...(data?.reviewRequests ?? [])],
+    [data?.myPullRequests, data?.reviewRequests],
+  );
 
   const handleStatusChange = useCallback(async (ticketId: string, newStatus: TicketStatus) => {
     try {
       await moveTicket(ticketId, newStatus);
-      // Refresh dashboard data
-      load(true);
+      fetchDash();
     } catch {
       // handled by api layer
     }
-  }, [moveTicket, load]);
-
-  const handleImportIssue = useCallback(async (issue: DashboardGitHubIssue) => {
-    const key = `${issue.org}/${issue.name}#${issue.number}`;
-    if (importingIssue) return;
-    setImportingIssue(key);
-    try {
-      const boards = await fetchBoards();
-      const scoped = boards.find(
-        (b) => b.repositoryOrg === issue.org && b.repositoryName === issue.name,
-      );
-      const board = scoped ?? boards[0];
-      if (!board) return;
-      const ticket = await importGitHubIssue(issue.org, issue.name, issue.number, board.id);
-      const { sessionId } = await openSessionFromTicket(ticket.id);
-      selectSession(sessionId);
-      setActivePanel('sessions');
-    } catch {
-      // handled by api layer
-    } finally {
-      setImportingIssue(null);
-    }
-  }, [importingIssue, selectSession, setActivePanel]);
-
-  const handleLinkToTicket = useCallback(async (issue: DashboardGitHubIssue, ticketId: string) => {
-    try {
-      await addLink(ticketId, {
-        type: 'github_issue',
-        ref: `${issue.org}/${issue.name}#${issue.number}`,
-        label: issue.title,
-      });
-      // Refresh to update hasLocalTicket
-      load(true);
-    } catch {
-      // handled by api layer
-    }
-  }, [addLink, load]);
+  }, [moveTicket, fetchDash]);
 
   const handleTicketNavigate = useCallback((ticket: Ticket) => {
     navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`);
   }, [navigate]);
 
-  const handleCreatePRSession = useCallback(async (pr: DashboardPullRequest) => {
-    const key = `${pr.org}/${pr.name}#${pr.number}`;
-    if (creatingPRSession) return;
-    setCreatingPRSession(key);
+  const handleImportIssue = useCallback(async (item: DashboardItem, boardId: string) => {
+    const key = `${item.org}/${item.name}#${item.number}`;
+    if (importingKey) return;
+    setImportingKey(key);
     try {
-      // Check if worktree already exists
-      const existingWt = data?.activeWorktrees.find(
-        (wt: DashboardWorktree) => wt.branch === pr.headRefName && wt.org === pr.org && wt.name === pr.name,
-      );
-      let cwd: string;
-      if (existingWt) {
-        cwd = existingWt.path;
-      } else {
-        const result = await createWorktree(pr.org, pr.name, {
-          branch: pr.headRefName,
-          createNewBranch: false,
-          prNumber: pr.number,
-        });
-        cwd = result.path;
-        notifyHookStarted(result.hookStarted);
-      }
-      const session = await createSession({ type: 'claude', cwd });
-      selectSession(session.id);
-      setActivePanel('sessions');
+      await importGitHubIssue(item.org, item.name, item.number, boardId);
+      await fetchDash();
     } catch {
       // handled by api layer
     } finally {
-      setCreatingPRSession(null);
+      setImportingKey(null);
     }
-  }, [creatingPRSession, data?.activeWorktrees, selectSession, setActivePanel]);
+  }, [importingKey, fetchDash]);
 
-  // Active tickets with dashboard filters applied
-  const ACTIVE_STATUSES: TicketStatus[] = ['todo', 'doing', 'reviewing'];
-  const activeTickets = useMemo(() => {
-    let filtered = allTickets.filter((t: Ticket) => ACTIVE_STATUSES.includes(t.status));
-    if (dashFilters.boardId) {
-      filtered = filtered.filter((t: Ticket) => t.boardId === dashFilters.boardId);
+  const handleImportPR = useCallback(async (item: DashboardItem, boardId: string) => {
+    const key = `${item.org}/${item.name}#${item.number}`;
+    if (importingKey || !isPR(item)) return;
+    setImportingKey(key);
+    try {
+      await importGitHubPR(item.org, item.name, item.number, item.title, item.headRefName, boardId);
+      await fetchDash();
+    } catch {
+      // handled by api layer
+    } finally {
+      setImportingKey(null);
     }
-    if (dashFilters.priority) {
-      filtered = filtered.filter((t: Ticket) => t.priority === dashFilters.priority);
-    }
-    if (dashFilters.hasPR !== null) {
-      const prs = [...(data?.myPullRequests ?? []), ...(data?.reviewRequests ?? [])];
-      filtered = filtered.filter((t: Ticket) => {
-        const wtLink = t.links.find((l: TicketLink) => l.type === 'worktree');
-        if (!wtLink) return !dashFilters.hasPR;
-        const [orgName, branch] = wtLink.ref.split(':');
-        if (!orgName || !branch) return !dashFilters.hasPR;
-        const [org, name] = orgName.split('/');
-        const has = prs.some((pr) => pr.org === org && pr.name === name && pr.headRefName === branch);
-        return dashFilters.hasPR ? has : !has;
-      });
-    }
-    if (dashFilters.blocked !== null) {
-      filtered = filtered.filter((t: Ticket) => t.blocked === dashFilters.blocked);
-    }
-    if (dashSearch) {
-      const q = dashSearch.toLowerCase();
-      filtered = filtered.filter((t: Ticket) => t.title.toLowerCase().includes(q));
-    }
-    return filtered;
-  }, [allTickets, dashFilters, dashSearch, data?.myPullRequests, data?.reviewRequests]);
-
-  // Group tickets by status
-  const ticketsByStatus = data
-    ? STATUS_ORDER.reduce<Record<string, Ticket[]>>((acc, status) => {
-        const filtered = activeTickets.filter((t: Ticket) => t.status === status);
-        if (filtered.length > 0) acc[status] = filtered;
-        return acc;
-      }, {})
-    : {};
-
-  const totalActiveTickets = activeTickets.length;
-  const unimportedIssues = data?.assignedIssues.filter((i: DashboardGitHubIssue) => !i.hasLocalTicket) ?? [];
-  const importedIssues = data?.assignedIssues.filter((i: DashboardGitHubIssue) => i.hasLocalTicket) ?? [];
-  const totalIssues = data?.assignedIssues.length ?? 0;
-  const allPullRequests = useMemo(
-    () => [...(data?.myPullRequests ?? []), ...(data?.reviewRequests ?? [])],
-    [data?.myPullRequests, data?.reviewRequests],
-  );
+  }, [importingKey, fetchDash]);
 
   return (
     <>
@@ -1548,18 +1261,7 @@ export function DashboardView() {
                 {getTodayFrench()}
               </span>
             </div>
-            <button
-              className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
-                'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
-                refreshing && 'pointer-events-none opacity-60',
-              )}
-              onClick={() => load(true)}
-              disabled={refreshing}
-            >
-              <RefreshIcon spinning={refreshing} />
-              Rafraichir
-            </button>
+            <SyncToolbar />
           </div>
 
           {/* ── Loading skeleton ── */}
@@ -1571,18 +1273,8 @@ export function DashboardView() {
               </SectionShell>
               <SectionShell delay={100}>
                 <div className="mb-3 h-4 w-32 rounded bg-[var(--theme-bg-hover)]" />
-                <SkeletonBlock lines={2} />
+                <SkeletonBlock lines={3} />
               </SectionShell>
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                <SectionShell delay={200}>
-                  <div className="mb-3 h-4 w-28 rounded bg-[var(--theme-bg-hover)]" />
-                  <SkeletonBlock lines={2} />
-                </SectionShell>
-                <SectionShell delay={300}>
-                  <div className="mb-3 h-4 w-20 rounded bg-[var(--theme-bg-hover)]" />
-                  <SkeletonBlock lines={2} />
-                </SectionShell>
-              </div>
             </div>
           )}
 
@@ -1594,9 +1286,9 @@ export function DashboardView() {
               {(recentActivity.length > 0 || totalUnread > 0) && (
                 <SectionShell delay={0}>
                   <SectionHeader
-                    dotColor="#a78bfa"
+                    icon={<span className="text-purple-400"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" /></svg></span>}
                     title="Agent Activity"
-                    count={totalUnread}
+                    count={recentActivity.length}
                     subtitle={totalUnread > 0 ? `${totalUnread} unread` : undefined}
                   />
                   {recentActivity.length > 0 ? (
@@ -1636,161 +1328,45 @@ export function DashboardView() {
                 </SectionShell>
               )}
 
-              {/* ── MY WORK ── */}
-              <SectionShell delay={0}>
-                <SectionHeader
-                  dotColor="#f59e0b"
-                  title="Mon travail"
-                  count={totalActiveTickets}
-                  toolbar={
-                    <div className="flex items-center gap-1.5">
-                      <div className="relative">
-                        <svg className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)]" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="7" cy="7" r="5" />
-                          <line x1="11" y1="11" x2="14" y2="14" />
-                        </svg>
-                        <input
-                          type="text"
-                          placeholder="Rechercher..."
-                          value={dashSearch}
-                          onChange={(e) => setDashSearch(e.target.value)}
-                          className="h-7 w-36 rounded-md border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] pl-7 pr-2 text-[11px] text-[var(--theme-text-primary)] placeholder-[var(--theme-text-faint)] transition-colors focus:border-[var(--theme-accent)] focus:outline-none"
-                        />
-                      </div>
-                      <DashboardFilterPopover
-                        filters={dashFilters}
-                        setFilters={setDashFilters}
-                        boards={boards}
-                        allTickets={allTickets}
-                        pullRequests={[...(data?.myPullRequests ?? []), ...(data?.reviewRequests ?? [])]}
-                      />
-                    </div>
-                  }
-                />
-                {totalActiveTickets === 0 ? (
-                  <EmptyState
-                    icon={<CoffeeIcon />}
-                    message="RAS, profite. Ou alors va checker GitHub parce que c'est louche quand meme."
-                  />
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    {STATUS_ORDER.map((status) => {
-                      const tickets = ticketsByStatus[status];
-                      if (!tickets || tickets.length === 0) return null;
-                      const dot = STATUS_DOT[status]!;
-                      return (
-                        <div key={status}>
-                          <div className="mb-1 flex items-center gap-2 px-3">
-                            <span
-                              className="inline-block h-1.5 w-1.5 rounded-full"
-                              style={{
-                                backgroundColor: dot.color,
-                                animation: dot.pulse ? 'dashPulse 2s ease-in-out infinite' : 'none',
-                              }}
-                            />
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-faint)]">
-                              {dot.label}
-                            </span>
-                            <span className="text-[10px] text-[var(--theme-text-faint)]">
-                              {tickets.length}
-                            </span>
-                          </div>
-                          <div className="flex flex-col">
-                            {tickets.map((t: Ticket) => {
-                              const board = boardMap.get(t.boardId);
-                              const hasRepo = !!t.links.find((l: TicketLink) => l.type === 'repository' || l.type === 'worktree')
-                                || !!(board?.repositoryOrg && board?.repositoryName);
-                              return (
-                                <TicketCard
-                                  key={t.id}
-                                  ticket={t}
-                                  boardLabel={board}
-                                  sessions={findSessionsForTicket(t, sessions)}
-                                  onStatusChange={handleStatusChange}
-                                  onNavigate={handleTicketNavigate}
-                                  onCreateSession={handleCreateSession}
-                                  creating={creatingSession === t.id}
-                                  hasRepo={hasRepo}
-                                  pullRequests={allPullRequests}
-                                />
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </SectionShell>
+              {/* ── ISSUES ── */}
+              <GithubSection
+                title="Remote Issues"
+                icon={<BugIcon />}
+                kind="issue"
+                leftItems={data.myIssues}
+                rightItems={data.assignedIssues}
+                allTickets={allTickets}
+                sessions={sessions}
+                worktrees={data.activeWorktrees}
+                boards={boards}
+                allPullRequests={allPullRequests}
+                onImport={handleImportIssue}
+                importingKey={importingKey}
+                onStatusChange={handleStatusChange}
+                onNavigate={handleTicketNavigate}
+                delay={80}
+                emptyMessage="Inbox zero ! Soit t'es une machine, soit personne t'assigne de travail. Hmm."
+              />
 
-              {/* ── GITHUB INBOX ── */}
-              <SectionShell delay={80}>
-                <SectionHeader
-                  dotColor="var(--theme-accent)"
-                  title="GitHub Inbox"
-                  count={totalIssues}
-                  subtitle="Issues assignees sur GitHub"
-                />
-                {totalIssues === 0 ? (
-                  <EmptyState
-                    icon={<InboxIcon />}
-                    message="Inbox zero ! Soit t'es une machine, soit personne t'assigne de travail. Hmm."
-                  />
-                ) : (
-                  <div className="flex flex-col">
-                    {unimportedIssues.map((issue: DashboardGitHubIssue) => (
-                      <GitHubIssueRow
-                        key={`${issue.org}/${issue.name}#${issue.number}`}
-                        issue={issue}
-                        tickets={allTickets}
-                        onImport={handleImportIssue}
-                        onLinkToTicket={handleLinkToTicket}
-                        importing={importingIssue === `${issue.org}/${issue.name}#${issue.number}`}
-                      />
-                    ))}
-                    {importedIssues.map((issue: DashboardGitHubIssue) => (
-                      <GitHubIssueRow
-                        key={`${issue.org}/${issue.name}#${issue.number}`}
-                        issue={issue}
-                        tickets={allTickets}
-                        onImport={handleImportIssue}
-                        onLinkToTicket={handleLinkToTicket}
-                        importing={false}
-                      />
-                    ))}
-                  </div>
-                )}
-              </SectionShell>
-
-              {/* ── PULL REQUESTS + REVIEWS ── */}
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                <PRSection
-                  title="Pull Requests"
-                  subtitle="Open PRs you authored"
-                  dotColor="#22c55e"
-                  prs={data.myPullRequests}
-                  sessions={sessions}
-                  worktrees={data.activeWorktrees}
-                  delay={160}
-                  onCreateSession={handleCreatePRSession}
-                  creatingPR={creatingPRSession}
-                  emptyMessage="Aucune PR ouverte. Ship it !"
-                  onExecuteSkill={(skillId, ticketId) => executeSkill(skillId, ticketId).catch(console.error)}
-                />
-                <PRSection
-                  title="Reviews"
-                  subtitle="Open PRs where you are an assignee or a requested reviewer"
-                  dotColor="#a78bfa"
-                  prs={data.reviewRequests}
-                  sessions={sessions}
-                  worktrees={data.activeWorktrees}
-                  delay={240}
-                  onCreateSession={handleCreatePRSession}
-                  creatingPR={creatingPRSession}
-                  emptyMessage="Personne a besoin de ton avis. Enfin, pour l'instant."
-                  onExecuteSkill={(skillId, ticketId) => executeSkill(skillId, ticketId).catch(console.error)}
-                />
-              </div>
+              {/* ── PULL REQUESTS ── */}
+              <GithubSection
+                title="Pull Requests"
+                icon={<GitPrIcon />}
+                kind="pr"
+                leftItems={data.myPullRequests}
+                rightItems={data.reviewRequests}
+                allTickets={allTickets}
+                sessions={sessions}
+                worktrees={data.activeWorktrees}
+                boards={boards}
+                allPullRequests={allPullRequests}
+                onImport={handleImportPR}
+                importingKey={importingKey}
+                onStatusChange={handleStatusChange}
+                onNavigate={handleTicketNavigate}
+                delay={160}
+                emptyMessage="Aucune PR ouverte. Ship it !"
+              />
 
             </div>
           )}

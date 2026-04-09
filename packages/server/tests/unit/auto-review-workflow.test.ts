@@ -66,7 +66,7 @@ describe('AutoReviewWorkflowUseCase', () => {
   });
 
   describe('handleHumanMention', () => {
-    it('should move ticket to reviewing when human is mentioned', async () => {
+    it('should unclaim agent and assign human without changing status', async () => {
       // Arrange
       const ticketId = randomUUID();
       const ticket = TicketEntity.create({
@@ -76,6 +76,7 @@ describe('AutoReviewWorkflowUseCase', () => {
         title: 'Test Ticket',
         status: 'doing',
       });
+      ticket.claim('test-agent');
 
       vi.mocked(ticketStore.getTicketById).mockResolvedValue(ticket);
       vi.mocked(ticketStore.saveTicket).mockResolvedValue();
@@ -87,18 +88,19 @@ describe('AutoReviewWorkflowUseCase', () => {
         mentionedHuman: 'nas',
       });
 
-      // Assert
-      expect(ticket.status).toBe('reviewing');
-      expect(ticket.assignee).toBe('nas');
+      // Assert — status unchanged, agent unclaimed, human assigned as 'user'
+      expect(ticket.status).toBe('doing');
+      expect(ticket.assignee).toBe('user');
+      expect(ticket.agentClaimedAt).toBeNull();
       expect(ticketStore.saveTicket).toHaveBeenCalledWith(ticket);
       expect(ticketStore.saveActivity).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'moved_to_review_via_human_mention',
+          action: 'unclaimed_and_assigned_human_via_mention',
         }),
       );
     });
 
-    it('should not move ticket if already in reviewing or done', async () => {
+    it('should still work on tickets in reviewing status', async () => {
       // Arrange
       const ticketId = randomUUID();
       const ticket = TicketEntity.create({
@@ -108,8 +110,11 @@ describe('AutoReviewWorkflowUseCase', () => {
         title: 'Test Ticket',
         status: 'reviewing',
       });
+      ticket.claim('test-agent');
 
       vi.mocked(ticketStore.getTicketById).mockResolvedValue(ticket);
+      vi.mocked(ticketStore.saveTicket).mockResolvedValue();
+      vi.mocked(ticketStore.saveActivity).mockResolvedValue();
 
       // Act
       await useCase.handleHumanMention({
@@ -117,9 +122,34 @@ describe('AutoReviewWorkflowUseCase', () => {
         mentionedHuman: 'nas',
       });
 
-      // Assert
-      expect(ticketStore.saveTicket).not.toHaveBeenCalled();
-      expect(ticketStore.saveActivity).not.toHaveBeenCalled();
+      // Assert — status stays reviewing, but assignment changes to 'user'
+      expect(ticket.status).toBe('reviewing');
+      expect(ticket.assignee).toBe('user');
+      expect(ticketStore.saveTicket).toHaveBeenCalled();
+    });
+
+    it('should skip done and cancelled tickets', async () => {
+      for (const status of ['done', 'cancelled'] as const) {
+        vi.clearAllMocks();
+        const ticketId = randomUUID();
+        const ticket = TicketEntity.create({
+          id: ticketId,
+          boardId: randomUUID(),
+          displayId: 1,
+          title: 'Test Ticket',
+          status,
+        });
+
+        vi.mocked(ticketStore.getTicketById).mockResolvedValue(ticket);
+
+        await useCase.handleHumanMention({
+          ticketId,
+          mentionedHuman: 'nas',
+        });
+
+        expect(ticketStore.saveTicket).not.toHaveBeenCalled();
+        expect(ticketStore.saveActivity).not.toHaveBeenCalled();
+      }
     });
   });
 

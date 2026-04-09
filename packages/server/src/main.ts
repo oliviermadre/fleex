@@ -118,6 +118,22 @@ async function main() {
     }
   }
 
+  // Sync bare clones with configured repos
+  {
+    const resolved = container.config.get().resolvedRepositories;
+    if (Array.isArray(resolved)) {
+      const repos = resolved
+        .filter((entry): entry is string => typeof entry === 'string' && entry.includes('/'))
+        .map((entry) => {
+          const [org, name] = entry.split('/');
+          return { org: org!, name: name! };
+        });
+      container.bareCloneManager.syncWithConfig(repos).catch((err) => {
+        container.logger.warn('Failed to sync bare clones at startup', { error: String(err) });
+      });
+    }
+  }
+
   // Start repository refresh scheduler if configured
   const refreshInterval = container.config.get().repositoryRefreshIntervalMs;
   if (refreshInterval > 0) {
@@ -136,8 +152,8 @@ async function main() {
 
   // Wire repo-exists check so refresh summaries include isClonedLocally
   container.repositoryRefreshScheduler.setCheckRepoExists(async (org, name) => {
-    const repoPath = join(container.config.get().basePath, org, name);
-    return container.hostFs.exists(repoPath);
+    const barePath = container.resolver.barePath(org, name);
+    return container.hostFs.exists(barePath);
   });
 
   // Wire merge detection for ticket auto-complete

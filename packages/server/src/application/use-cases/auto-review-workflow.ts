@@ -37,8 +37,8 @@ export class AutoReviewWorkflowUseCase {
   }
 
   /**
-   * Rule 1A: Handle human mention in comment - immediate transition to reviewing.
-   * This is the only auto-transition that remains — explicit human @mention is intentional.
+   * Handle human mention in comment — unclaim agent and assign the mentioned human.
+   * No status change: ticket stays in its current column.
    */
   async handleHumanMention(params: {
     ticketId: string;
@@ -48,33 +48,34 @@ export class AutoReviewWorkflowUseCase {
     if (!config.enableAutoReview) return;
 
     const ticket = await this.ticketStore.getTicketById(params.ticketId);
-    if (!ticket || ticket.status === 'reviewing' || ticket.status === 'done' || ticket.status === 'cancelled') {
-      return; // Already in review, done, or cancelled
+    if (!ticket || ticket.status === 'done' || ticket.status === 'cancelled') {
+      return;
     }
 
-    this.logger.info('Moving ticket to reviewing due to human mention', {
+    this.logger.info('Unclaiming agent and assigning human due to human mention', {
       ticketId: params.ticketId,
       mentionedHuman: params.mentionedHuman,
       currentStatus: ticket.status,
     });
 
-    // Move to reviewing and assign to human
-    const diff = ticket.moveTo('reviewing');
-    const assignDiff = ticket.assign(params.mentionedHuman);
+    // Unclaim agent and assign human (no status change)
+    // Use 'user' as the assignee value — the frontend maps this to "Me" with an amber badge.
+    const unclaimDiff = ticket.unclaim();
+    const assignDiff = ticket.assign('user');
 
     await this.ticketStore.saveTicket(ticket);
-    this.eventBus?.emit({ type: 'ticket.updated', ticketId: params.ticketId, changes: { ...diff, ...assignDiff }, occurredAt: new Date() });
+    this.eventBus?.emit({ type: 'ticket.updated', ticketId: params.ticketId, changes: { ...unclaimDiff, ...assignDiff }, occurredAt: new Date() });
     await this.ticketStore.saveActivity(TicketActivityEntity.create({
       id: randomUUID(),
       ticketId: params.ticketId,
-      action: 'moved_to_review_via_human_mention',
-      changes: { ...diff, ...assignDiff },
+      action: 'unclaimed_and_assigned_human_via_mention',
+      changes: { ...unclaimDiff, ...assignDiff },
       actorType: 'agent',
       actorName: 'system',
       source: 'api',
     }));
 
-    this.logger.info('Ticket moved to reviewing via human mention', {
+    this.logger.info('Agent unclaimed and human assigned via mention', {
       ticketId: params.ticketId,
       assignedTo: params.mentionedHuman,
     });

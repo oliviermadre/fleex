@@ -61,6 +61,7 @@ export function MainPanel() {
   const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
 
   const selectedAgentWorktreeTicketId = useUIStore((s) => s.selectedAgentWorktreeTicketId);
+  const sessionTicketId = useSessionStore((s) => s.selectedTicketId);
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
@@ -116,9 +117,22 @@ export function MainPanel() {
     return <RepositoryDashboard repoKey={selectedRepoKey} />;
   }
 
-  // Agent worktree view — unified panel with ticket context
+  // Agent worktree view (legacy route)
   if (activePanel === 'sessions' && selectedAgentWorktreeTicketId) {
     return <UnifiedWorktreePanel entry={{ kind: 'agent', ticketId: selectedAgentWorktreeTicketId }} focused />;
+  }
+
+  // Ticket-based session view
+  if (activePanel === 'sessions' && sessionTicketId) {
+    if (sessionTicketId === 'system') {
+      // System shells — find the first system session to create the entry
+      const systemSession = sessions.find((s) => !s.repositoryOrg);
+      if (systemSession) {
+        return <UnifiedWorktreePanel entry={{ kind: 'session', sessionId: systemSession.id }} focused />;
+      }
+    } else {
+      return <UnifiedWorktreePanel entry={{ kind: 'ticket', ticketId: sessionTicketId }} focused />;
+    }
   }
 
   // Grouped view
