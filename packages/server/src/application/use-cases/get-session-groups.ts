@@ -37,6 +37,7 @@ export class GetSessionGroupsUseCase {
   async execute(): Promise<SessionGroup[]> {
     // Single tmux call to get both managed sessions and pane commands
     let paneCommands: Map<string, string>;
+    let paneCwds: Map<string, string>;
     let sessions: SessionEntity[];
     try {
       const combined = await this.tmux.listManagedSessionsWithPaneCommands();
@@ -44,17 +45,23 @@ export class GetSessionGroupsUseCase {
       await this.discoverSessions?.execute(combined.sessions);
       sessions = await this.listSessions.execute(combined.sessions);
       paneCommands = combined.paneCommands;
+      paneCwds = combined.paneCwds;
     } catch (err) {
       this.logger.debug('Failed combined tmux call, falling back', { error: String(err) });
       sessions = await this.listSessions.execute();
       paneCommands = new Map();
+      paneCwds = new Map();
     }
 
-    // Enrich foreground process from pane commands
+    // Enrich foreground process and pane CWD from tmux
     for (const session of sessions) {
       const command = paneCommands.get(session.tmuxName);
       if (command) {
         session.foregroundProcess = command;
+      }
+      const cwd = paneCwds.get(session.tmuxName);
+      if (cwd) {
+        session.paneCwd = cwd;
       }
     }
 

@@ -24,7 +24,7 @@ export function deriveDisplayStatus(session: Session): DerivedStatus {
   }
 
   // Claude session with activity info
-  if (session.type !== 'shell' && session.claudeActivity) {
+  if (session.claudeActivity) {
     const activity = session.claudeActivity;
 
     if (activity === 'executing') {

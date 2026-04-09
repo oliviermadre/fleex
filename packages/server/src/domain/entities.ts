@@ -23,6 +23,9 @@ export class SessionEntity {
   /** Mutable, not persisted — set each broadcast cycle from tmux pane_current_command. */
   public foregroundProcess?: string;
 
+  /** Mutable, not persisted — set each broadcast cycle from tmux pane_current_path. */
+  public paneCwd?: string;
+
   rename(newTmuxName: string, newDisplayName: string): void {
     this.tmuxName = newTmuxName;
     this.displayName = newDisplayName;
