@@ -6,7 +6,8 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { DataTable, type Column } from '../ui/DataTable';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { ImportTaskButton } from '../dashboard/ImportTaskButton';
-import { importGitHubIssue } from '../../services/api';
+import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
+import { importGitHubIssue, executeSkill } from '../../services/api';
 
 interface Props {
   org: string;
@@ -105,16 +106,13 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
             </span>
           );
         }
-        const issueSessions = sessions.filter(
-          (s) => s.status === 'running'
-            && s.repositoryOrg === org && s.repositoryName === name
-            && s.worktreeBranch?.startsWith(`issue-${row.number}-`),
-        );
+        const issueSessions = findSessionsForTicket(ticket, sessions);
         return (
           <span className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
             <SmartSessionButton
               sessions={issueSessions}
               ticketId={ticket.id}
+              onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
               size="sm"
             />
           </span>

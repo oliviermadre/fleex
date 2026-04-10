@@ -7,8 +7,9 @@ import { DataTable, type Column } from '../ui/DataTable';
 import { DiffStatsBadge } from '../ui/DiffStatsBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { ImportTaskButton } from '../dashboard/ImportTaskButton';
+import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
 import { cn } from '../../lib/cn';
-import { importGitHubPR } from '../../services/api';
+import { importGitHubPR, executeSkill } from '../../services/api';
 
 interface Props {
   org: string;
@@ -147,15 +148,13 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
             </span>
           );
         }
-        const prSessions = sessions.filter(
-          (s) => s.status === 'running' && s.worktreeBranch === row.headRefName
-            && s.repositoryOrg === org && s.repositoryName === name,
-        );
+        const prSessions = findSessionsForTicket(ticket, sessions);
         return (
           <span className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
             <SmartSessionButton
               sessions={prSessions}
               ticketId={ticket.id}
+              onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
               size="sm"
             />
           </span>
