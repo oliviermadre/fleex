@@ -34,7 +34,6 @@ export function RepositoryDashboard({ repoKey }: Props) {
 
   const openPRs = data?.openPullRequests ?? [];
   const issues = data?.openIssues ?? [];
-  const worktrees = (data?.worktrees ?? []).filter((wt: { isBare: boolean }) => !wt.isBare);
   const mergedPRs = data?.recentlyMergedPullRequests ?? [];
 
   if (!org || !name) return null;
@@ -98,7 +97,6 @@ export function RepositoryDashboard({ repoKey }: Props) {
             pullRequests={openPRs}
             diffStats={data?.diffStats ?? {}}
             githubUser={githubUser}
-            worktrees={data?.worktrees ?? []}
             loading={isLoading}
           />
         )}
@@ -107,7 +105,6 @@ export function RepositoryDashboard({ repoKey }: Props) {
             org={org}
             name={name}
             issues={issues}
-            worktrees={worktrees}
             loading={isLoading}
           />
         )}

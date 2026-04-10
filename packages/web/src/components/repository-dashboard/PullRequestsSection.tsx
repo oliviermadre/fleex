@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import type { PullRequest, DiffStats, Worktree, Ticket } from '@fleex/shared';
-import { useUIStore } from '../../stores/uiStore';
+import type { PullRequest, DiffStats, Ticket } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -9,9 +8,7 @@ import { DiffStatsBadge } from '../ui/DiffStatsBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { ImportTaskButton } from '../dashboard/ImportTaskButton';
 import { cn } from '../../lib/cn';
-import * as api from '../../services/api';
 import { importGitHubPR } from '../../services/api';
-import { notifyHookStarted } from '../../lib/hookResultToast';
 
 interface Props {
   org: string;
@@ -19,7 +16,6 @@ interface Props {
   pullRequests: PullRequest[];
   diffStats: Record<string, DiffStats>;
   githubUser: string | null;
-  worktrees: Worktree[];
   loading: boolean;
 }
 
@@ -40,11 +36,9 @@ function isStale(dateStr: string): boolean {
   return Date.now() - new Date(dateStr).getTime() > 7 * 86400000;
 }
 
-export function PullRequestsSection({ org, name, pullRequests, diffStats, githubUser, worktrees, loading }: Props) {
+export function PullRequestsSection({ org, name, pullRequests, diffStats, githubUser, loading }: Props) {
   const [filter, setFilter] = useState<TabFilter>('all');
-  const [creating, setCreating] = useState<Set<number>>(new Set());
   const [importingKey, setImportingKey] = useState<string | null>(null);
-  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const sessions = useSessionStore((s) => s.sessions);
   const tickets = useTicketStore((s) => s.tickets);
   const boards = useTicketStore((s) => s.boards);
@@ -69,37 +63,6 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
     }
     return pullRequests;
   }, [pullRequests, filter, githubUser]);
-
-  const handleCreateSession = useCallback(async (pr: PullRequest) => {
-    if (creating.has(pr.number)) return;
-    setCreating((prev) => new Set(prev).add(pr.number));
-    try {
-      const existingWt = worktrees.find((wt) => wt.branch === pr.headRefName);
-      let cwd: string;
-      if (existingWt) {
-        cwd = existingWt.path;
-      } else {
-        const result = await api.createWorktree(org, name, {
-          branch: pr.headRefName,
-          createNewBranch: false,
-          prNumber: pr.number,
-        });
-        cwd = result.path;
-        notifyHookStarted(result.hookStarted);
-      }
-      const session = await api.createSession({ type: 'shell', cwd });
-      addFloatingSession(session.id);
-      fetchDashboard(org, name);
-    } catch {
-      // ignore
-    } finally {
-      setCreating((prev) => {
-        const next = new Set(prev);
-        next.delete(pr.number);
-        return next;
-      });
-    }
-  }, [creating, worktrees, org, name, addFloatingSession, fetchDashboard]);
 
   const handleImportPR = useCallback(async (pr: PullRequest, boardId: string) => {
     const key = `${org}/${name}#${pr.number}`;
@@ -192,8 +155,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
           <span className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
             <SmartSessionButton
               sessions={prSessions}
-              creating={creating.has(row.number)}
-              onCreateSession={() => handleCreateSession(row)}
+              ticketId={ticket.id}
               size="sm"
             />
           </span>

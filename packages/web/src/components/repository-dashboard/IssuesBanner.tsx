@@ -1,21 +1,17 @@
 import { useState, useMemo, useCallback } from 'react';
-import type { GitHubIssue, Worktree, Ticket } from '@fleex/shared';
-import { useUIStore } from '../../stores/uiStore';
+import type { GitHubIssue, Ticket } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { DataTable, type Column } from '../ui/DataTable';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { ImportTaskButton } from '../dashboard/ImportTaskButton';
-import * as api from '../../services/api';
 import { importGitHubIssue } from '../../services/api';
-import { notifyHookStarted } from '../../lib/hookResultToast';
 
 interface Props {
   org: string;
   name: string;
   issues: GitHubIssue[];
-  worktrees: Worktree[];
   loading: boolean;
 }
 
@@ -30,22 +26,8 @@ function formatRelativeTime(dateStr: string): string {
   return `${minutes}m`;
 }
 
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .split(/\s+/)
-    .slice(0, 5)
-    .join('-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-{2,}/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50);
-}
-
-export function IssuesBanner({ org, name, issues, worktrees, loading }: Props) {
-  const [creating, setCreating] = useState<Set<number>>(new Set());
+export function IssuesBanner({ org, name, issues, loading }: Props) {
   const [importingKey, setImportingKey] = useState<string | null>(null);
-  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const sessions = useSessionStore((s) => s.sessions);
   const tickets = useTicketStore((s) => s.tickets);
   const boards = useTicketStore((s) => s.boards);
@@ -60,38 +42,6 @@ export function IssuesBanner({ org, name, issues, worktrees, loading }: Props) {
     }
     return map;
   }, [tickets]);
-
-  const handleCreateSession = useCallback(async (issue: GitHubIssue) => {
-    if (creating.has(issue.number)) return;
-    setCreating((prev) => new Set(prev).add(issue.number));
-    try {
-      const existingWt = worktrees.find((wt) => wt.branch.startsWith(`issue-${issue.number}-`));
-      let cwd: string;
-      if (existingWt) {
-        cwd = existingWt.path;
-      } else {
-        const branch = `issue-${issue.number}-${slugify(issue.title)}`;
-        const result = await api.createWorktree(org, name, {
-          branch,
-          createNewBranch: true,
-          issueNumber: issue.number,
-        });
-        cwd = result.path;
-        notifyHookStarted(result.hookStarted);
-      }
-      const session = await api.createSession({ type: 'shell', cwd });
-      addFloatingSession(session.id);
-      fetchDashboard(org, name);
-    } catch {
-      // ignore
-    } finally {
-      setCreating((prev) => {
-        const next = new Set(prev);
-        next.delete(issue.number);
-        return next;
-      });
-    }
-  }, [creating, worktrees, org, name, addFloatingSession, fetchDashboard]);
 
   const handleImportIssue = useCallback(async (issue: GitHubIssue, boardId: string) => {
     const key = `${org}/${name}#${issue.number}`;
@@ -164,8 +114,7 @@ export function IssuesBanner({ org, name, issues, worktrees, loading }: Props) {
           <span className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
             <SmartSessionButton
               sessions={issueSessions}
-              creating={creating.has(row.number)}
-              onCreateSession={() => handleCreateSession(row)}
+              ticketId={ticket.id}
               size="sm"
             />
           </span>
