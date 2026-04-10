@@ -104,7 +104,7 @@ export function CommandPalette() {
     >
       <div className="command-palette-container" style={{ alignSelf: 'flex-start' }}>
         {/* Search input */}
-        <div className="flex items-center gap-3 border-b border-[rgba(255,255,255,0.06)] px-4 py-3">
+        <div className="flex items-center gap-3 border-b border-[var(--theme-border-subtle)] px-4 py-3">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-text-muted)]">
             <circle cx="7" cy="7" r="4.5" />
             <line x1="10.2" y1="10.2" x2="14" y2="14" />
@@ -117,7 +117,7 @@ export function CommandPalette() {
             placeholder="Type a command or search..."
             className="flex-1 bg-transparent text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] outline-none"
           />
-          <kbd className="shrink-0 rounded-md border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-faint)]">
+          <kbd className="shrink-0 rounded-md border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-faint)]">
             ESC
           </kbd>
         </div>
@@ -142,7 +142,7 @@ export function CommandPalette() {
                     'mx-1 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ' +
                     (idx === highlightedIndex
                       ? 'bg-[var(--theme-accent-muted)] text-[var(--theme-text-primary)]'
-                      : 'text-[var(--theme-text-secondary)] hover:bg-[rgba(255,255,255,0.04)]')
+                      : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]')
                   }
                   onMouseEnter={() => setHighlightedIndex(idx)}
                   onMouseDown={(e) => {
@@ -166,17 +166,17 @@ export function CommandPalette() {
         </div>
 
         {/* Footer with keyboard hints */}
-        <div className="flex items-center gap-4 border-t border-[rgba(255,255,255,0.06)] px-4 py-2 text-[11px] text-[var(--theme-text-faint)]">
+        <div className="flex items-center gap-4 border-t border-[var(--theme-border-subtle)] px-4 py-2 text-[11px] text-[var(--theme-text-faint)]">
           <span className="flex items-center gap-1">
-            <kbd className="rounded border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-1 py-0.5 text-[10px]">&uarr;&darr;</kbd>
+            <kbd className="rounded border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-1 py-0.5 text-[10px]">&uarr;&darr;</kbd>
             navigate
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="rounded border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-1 py-0.5 text-[10px]">&crarr;</kbd>
+            <kbd className="rounded border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-1 py-0.5 text-[10px]">&crarr;</kbd>
             select
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="rounded border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-1 py-0.5 text-[10px]">esc</kbd>
+            <kbd className="rounded border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-1 py-0.5 text-[10px]">esc</kbd>
             close
           </span>
         </div>
