@@ -9,6 +9,16 @@ app.setName('Fleex');
 const serverPort = process.env['FLEEX_SERVER_PORT'] || '3000';
 const serverUrl = `http://localhost:${serverPort}`;
 
+function isExternalUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === 'localhost' && parsed.port === serverPort) return false;
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 const TITLEBAR_HEIGHT = 38;
 
 const iconPath = path.join(__dirname, '..', 'assets', 'icon.png');
@@ -268,6 +278,19 @@ function createWindow() {
         syncUsage();
         setInterval(syncUsage, 30000);
 
+        // Intercept ALL link clicks so external URLs open in the OS browser
+        document.addEventListener('click', function(e) {
+          var link = e.target.closest('a[href]');
+          if (!link) return;
+          var href = link.href;
+          if (href && /^https?:\\/\\//.test(href) && href.indexOf('localhost:${serverPort}') === -1) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            window.open(href, '_blank');
+          }
+        }, true);
+
         // Re-hide logo on DOM changes (SPA navigation)
         const observer = new MutationObserver(() => { hideSidebarLogo(); });
         observer.observe(document.body, { childList: true, subtree: true });
@@ -277,11 +300,38 @@ function createWindow() {
 
   // Open external links in the default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http') && !url.includes(`localhost:${serverPort}`)) {
+    if (isExternalUrl(url)) {
       shell.openExternal(url);
       return { action: 'deny' };
     }
     return { action: 'allow' };
+  });
+
+  // Prevent the main window from navigating away to external URLs
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isExternalUrl(url)) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
+  // Protect child windows (e.g. about:blank intermediaries) with the same handlers
+  mainWindow.webContents.on('did-create-window', (childWindow) => {
+    childWindow.webContents.on('will-navigate', (event, url) => {
+      if (isExternalUrl(url)) {
+        event.preventDefault();
+        shell.openExternal(url);
+        childWindow.close();
+      }
+    });
+
+    childWindow.webContents.setWindowOpenHandler(({ url }) => {
+      if (isExternalUrl(url)) {
+        shell.openExternal(url);
+        return { action: 'deny' };
+      }
+      return { action: 'allow' };
+    });
   });
 
   mainWindow.on('closed', () => {
