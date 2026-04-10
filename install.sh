@@ -823,8 +823,6 @@ const boards = [
     id: process.env.SEED_ID,
     name: "Personal",
     emoji: "🏠",
-    repositoryOrg: null,
-    repositoryName: null,
     nextDisplayId: 1,
     createdAt: process.env.SEED_NOW,
     updatedAt: process.env.SEED_NOW
@@ -882,9 +880,9 @@ insertPersona.run(process.env.SEED_ID3, "the-builder", "The Builder", "claude-so
   "", "", m, now, now);
 
 const insertBoard = db.prepare(
-  "INSERT OR IGNORE INTO boards (id, name, emoji, repository_org, repository_name, next_display_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  "INSERT OR IGNORE INTO boards (id, name, emoji, next_display_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
 );
-insertBoard.run(process.env.SEED_ID4, "Personal", "🏠", null, null, 1, now, now);
+insertBoard.run(process.env.SEED_ID4, "Personal", "🏠", 1, now, now);
 
 db.close();
 '
