@@ -236,22 +236,13 @@ html, body {
   display: flex;
   flex-direction: column;
 
-  /* Liquid glass effect */
-  background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.05) 0%,
-      rgba(255, 255, 255, 0.02) 40%,
-      rgba(0, 0, 0, 0.12) 100%
-    ),
-    rgba(24, 24, 27, 0.82);
+  background: var(--theme-bg-surface);
   backdrop-filter: blur(40px) saturate(1.4);
   -webkit-backdrop-filter: blur(40px) saturate(1.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--theme-border-subtle);
   box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.5),
-    0 8px 32px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    0 24px 80px rgba(0, 0, 0, 0.25),
+    0 8px 32px rgba(0, 0, 0, 0.15);
 
   animation: command-palette-scale-in 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -265,9 +256,9 @@ html, body {
   height: 1px;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(255, 255, 255, 0.12) 50%,
-    rgba(255, 255, 255, 0.04) 100%
+    var(--theme-border-subtle) 0%,
+    var(--theme-border) 50%,
+    var(--theme-border-subtle) 100%
   );
   pointer-events: none;
 }
@@ -288,7 +279,7 @@ html, body {
   width: 6px;
 }
 .command-palette-results::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--theme-border);
   border-radius: 3px;
 }
 .command-palette-results::-webkit-scrollbar-track {
