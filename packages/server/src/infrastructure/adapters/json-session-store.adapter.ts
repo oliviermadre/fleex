@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { FLEEX_DIR, SESSIONS_FILE } from '@fleex/shared';
+import { SESSIONS_FILE } from '@fleex/shared';
 import { SessionEntity } from '../../domain/entities.js';
 import type { SessionStorePort } from '../../application/ports/session-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -32,13 +32,13 @@ export class JsonSessionStore implements SessionStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    const dir = join(this.homedir, FLEEX_DIR);
+    const dir = this.homedir;
     this.filePath = join(dir, SESSIONS_FILE);
   }
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    const dir = join(this.homedir, FLEEX_DIR);
+    const dir = this.homedir;
     if (!(await this.hostFs.exists(dir))) {
       await this.hostFs.mkdir(dir);
     }

@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
 import { DomainEventLogEntity } from '../../domain/entities/domain-event-log.entity.js';
 import type { DomainEventLogStorePort } from '../../application/ports/domain-event-log-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -24,7 +23,7 @@ export class JsonDomainEventLogStore implements DomainEventLogStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.filePath = join(this.homedir, FLEEX_DIR, 'projects', 'domain-event-log.json');
+    this.filePath = join(this.homedir, 'projects', 'domain-event-log.json');
   }
 
   async init(): Promise<void> {

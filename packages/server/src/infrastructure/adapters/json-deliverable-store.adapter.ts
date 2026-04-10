@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
 import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -29,7 +28,7 @@ export class JsonDeliverableStore implements DeliverableStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.filePath = join(this.homedir, FLEEX_DIR, 'projects', 'deliverables.json');
+    this.filePath = join(this.homedir, 'projects', 'deliverables.json');
   }
 
   async init(): Promise<void> {

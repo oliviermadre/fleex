@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
 import type { PanelMember } from '@fleex/shared';
 import { PanelEntity } from '../../domain/entities/panel.entity.js';
 import type { PanelStorePort } from '../../application/ports/panel-store.port.js';
@@ -32,7 +31,7 @@ export class JsonPanelStore implements PanelStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.filePath = join(this.homedir, FLEEX_DIR, 'projects', 'panels.json');
+    this.filePath = join(this.homedir, 'projects', 'panels.json');
   }
 
   async init(): Promise<void> {

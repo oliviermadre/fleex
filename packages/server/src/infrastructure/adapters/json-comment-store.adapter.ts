@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
 import type { CommentVisibility } from '@fleex/shared';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import type { CommentStorePort } from '../../application/ports/comment-store.port.js';
@@ -30,7 +29,7 @@ export class JsonCommentStore implements CommentStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.filePath = join(this.homedir, FLEEX_DIR, 'projects', 'comments.json');
+    this.filePath = join(this.homedir, 'projects', 'comments.json');
   }
 
   async init(): Promise<void> {

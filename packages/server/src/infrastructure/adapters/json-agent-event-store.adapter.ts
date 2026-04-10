@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort } from '../../application/ports/agent-event-store.port.js';
@@ -38,7 +37,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.eventsDir = join(this.homedir, FLEEX_DIR, 'projects', 'agent-events');
+    this.eventsDir = join(this.homedir, 'projects', 'agent-events');
     this.indexFile = join(this.eventsDir, 'index.json');
   }
 

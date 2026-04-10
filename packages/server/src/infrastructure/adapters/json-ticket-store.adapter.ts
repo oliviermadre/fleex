@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
 import type { TicketStatus, TicketLinkType, TicketLink, GitHubIssueMetadata } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
@@ -69,7 +68,7 @@ export class JsonTicketStore implements TicketStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.projectsDir = join(this.homedir, FLEEX_DIR, 'projects');
+    this.projectsDir = join(this.homedir, 'projects');
     this.boardsFile = join(this.projectsDir, 'boards.json');
     this.ticketsFile = join(this.projectsDir, 'tickets.json');
     this.activityFile = join(this.projectsDir, 'activity.json');

@@ -15,7 +15,7 @@ export async function runPendingMigrations(
   adapter: AdapterType,
   connection: unknown,
   logger: LoggerPort,
-  opts?: { homedir?: string },
+  opts?: { dataDir?: string },
 ): Promise<void> {
   const ctx = buildContext(adapter, connection);
   const runner = new MigrationRunner(adapter, ctx, allMigrations, logger);
@@ -23,9 +23,9 @@ export async function runPendingMigrations(
   // Set up adapter-specific helpers
   if (adapter === 'json') {
     const { join } = await import('node:path');
-    const { FLEEX_DIR } = await import('@fleex/shared');
-    const homedir = opts?.homedir ?? (await import('node:os')).homedir();
-    const migrationsPath = join(homedir, FLEEX_DIR, 'projects', '_migrations.json');
+    const { resolvePaths } = await import('../paths.js');
+    const dataDir = opts?.dataDir ?? resolvePaths((await import('node:os')).homedir()).dataDir;
+    const migrationsPath = join(dataDir, 'projects', '_migrations.json');
     runner.setJsonMigrationsPath(migrationsPath);
   }
 

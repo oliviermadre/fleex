@@ -8,23 +8,37 @@
 #
 # What it does:
 #   1. Checks prerequisites (git, bun, tmux, claude, gh) — offers auto-install
-#   2. Clones/updates the repo into ~/.fleex/repo
+#   2. Clones/updates the repo into ~/.local/lib/fleex
 #   3. First-time setup wizard (display name, worktree path, storage driver)
 #   4. Seeds default personas and board
 #   5. Repository registration
 #
 set -euo pipefail
 
-# ── Config ─────────────────────────────────────────────────────────────────────
-FLEEX_HOME="${FLEEX_HOME:-$HOME/.fleex}"
+# ── Config (XDG Base Directory Specification) ─────────────────────────────────
+FLEEX_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fleex"
+FLEEX_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fleex"
+FLEEX_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fleex"
+FLEEX_LIB_DIR="$HOME/.local/lib/fleex"
+FLEEX_BIN_DIR="$HOME/.local/bin"
+
+# Legacy: FLEEX_HOME env var overrides everything to a single directory
+if [[ -n "${FLEEX_HOME:-}" ]]; then
+  FLEEX_CONFIG_DIR="$FLEEX_HOME"
+  FLEEX_DATA_DIR="$FLEEX_HOME"
+  FLEEX_STATE_DIR="$FLEEX_HOME"
+  FLEEX_LIB_DIR="$FLEEX_HOME/repo"
+  FLEEX_BIN_DIR="$FLEEX_HOME/bin"
+fi
+
 REPO_URL="git@github.com:oliviermadre/fleex.git"
-REPO_DIR="$FLEEX_HOME/repo"
-BIN_DIR="$FLEEX_HOME/bin"
+REPO_DIR="$FLEEX_LIB_DIR"
+BIN_DIR="$FLEEX_BIN_DIR"
 CLI_NAME="fleex"
-CONFIG_FILE="$FLEEX_HOME/config.json"
-PROJECTS_DIR="$FLEEX_HOME/projects"
-ENV_FILE="$REPO_DIR/.env"
-DB_FILE="$FLEEX_HOME/fleex.db"
+CONFIG_FILE="$FLEEX_CONFIG_DIR/config.json"
+PROJECTS_DIR="$FLEEX_DATA_DIR/projects"
+ENV_FILE="$FLEEX_CONFIG_DIR/.env"
+DB_FILE="$FLEEX_DATA_DIR/fleex.db"
 IS_FRESH_INSTALL=false
 SPINNER_PID=""
 
@@ -532,7 +546,7 @@ phase_install() {
     IS_FRESH_INSTALL=true
 
     ui_step 1 3 "Cloning repository..."
-    mkdir -p "$FLEEX_HOME"
+    mkdir -p "$FLEEX_CONFIG_DIR" "$FLEEX_DATA_DIR" "$FLEEX_STATE_DIR" "$(dirname "$REPO_DIR")"
     git clone "$REPO_URL" "$REPO_DIR"
     ok "Repository cloned to $REPO_DIR"
 
@@ -554,8 +568,15 @@ phase_install() {
 
 # ── PATH setup ─────────────────────────────────────────────────────────────────
 setup_path() {
-  # Check if already in PATH
+  # If BIN_DIR is already in PATH, nothing to do
   if echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
+    return
+  fi
+
+  # In XDG mode (~/.local/bin), the system should already have it in PATH.
+  # Only modify shell RC files when using a non-standard BIN_DIR (legacy/FLEEX_HOME).
+  if [[ -z "${FLEEX_HOME:-}" ]]; then
+    warn "$BIN_DIR is not in your PATH. Add it to your shell configuration to use fleex."
     return
   fi
 
@@ -578,13 +599,13 @@ setup_path() {
 
   local path_line
   if [ "$shell_name" = "fish" ]; then
-    path_line="set -gx PATH \$HOME/.fleex/bin \$PATH"
+    path_line="set -gx PATH $BIN_DIR \$PATH"
   else
-    path_line='export PATH="$HOME/.fleex/bin:$PATH"'
+    path_line="export PATH=\"$BIN_DIR:\$PATH\""
   fi
 
   # Only add if not already present
-  if [ -f "$rc_file" ] && grep -qF '.fleex/bin' "$rc_file" 2>/dev/null; then
+  if [ -f "$rc_file" ] && grep -qF "$BIN_DIR" "$rc_file" 2>/dev/null; then
     return
   fi
 
@@ -642,7 +663,7 @@ phase_wizard() {
   default_shell="${SHELL:-/bin/zsh}"
 
   # Write config — to DB when sqlite, to config.json when json
-  mkdir -p "$FLEEX_HOME"
+  mkdir -p "$FLEEX_CONFIG_DIR" "$FLEEX_DATA_DIR"
   if [ "$storage_driver" = "sqlite" ]; then
     # Run migrations to create all tables before writing config
     info "Running database migrations..."

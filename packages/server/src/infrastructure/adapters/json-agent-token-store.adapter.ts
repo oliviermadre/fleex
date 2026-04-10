@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
 import { ApiTokenEntity } from '../../domain/entities/api-token.entity.js';
 import type { AgentTokenStorePort } from '../../application/ports/agent-token-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -25,12 +24,12 @@ export class JsonAgentTokenStore implements AgentTokenStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.filePath = join(this.homedir, FLEEX_DIR, 'api-tokens.json');
+    this.filePath = join(this.homedir, 'api-tokens.json');
   }
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    const dir = join(this.homedir, FLEEX_DIR);
+    const dir = this.homedir;
     if (!(await this.hostFs.exists(dir))) {
       await this.hostFs.mkdir(dir);
     }

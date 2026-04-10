@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
 import { FileMetadataEntity } from '../../domain/entities/file-metadata.entity.js';
 import type { FileMetaStorePort } from '../../application/ports/file-meta-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -23,7 +22,7 @@ export class JsonFileMetaStore implements FileMetaStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.filePath = join(this.homedir, FLEEX_DIR, 'projects', 'files.json');
+    this.filePath = join(this.homedir, 'projects', 'files.json');
   }
 
   async init(): Promise<void> {

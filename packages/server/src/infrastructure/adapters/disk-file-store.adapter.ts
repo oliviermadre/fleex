@@ -2,14 +2,13 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
-import { FLEEX_DIR } from '@fleex/shared';
 import type { FileStorePort } from '../../application/ports/file-store.port.js';
 
 export class DiskFileStoreAdapter implements FileStorePort {
   private readonly dir: string;
 
   constructor(homedir: string) {
-    this.dir = join(homedir, FLEEX_DIR, 'files');
+    this.dir = join(homedir, 'files');
   }
 
   async save(id: string, buffer: Buffer, _mimeType: string): Promise<void> {

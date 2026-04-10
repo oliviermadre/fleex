@@ -7,9 +7,27 @@
 #
 set -euo pipefail
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
-FLEEX_HOME="${FLEEX_HOME:-$HOME/.fleex}"
-DEFAULT_REPO_DIR="$FLEEX_HOME/repo"
+# ── Paths (XDG Base Directory Specification) ──────────────────────────────────
+FLEEX_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fleex"
+FLEEX_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fleex"
+FLEEX_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fleex"
+FLEEX_LIB_DIR="$HOME/.local/lib/fleex"
+
+# Legacy: FLEEX_HOME env var overrides everything to a single directory
+if [[ -n "${FLEEX_HOME:-}" ]]; then
+  FLEEX_CONFIG_DIR="$FLEEX_HOME"
+  FLEEX_DATA_DIR="$FLEEX_HOME"
+  FLEEX_STATE_DIR="$FLEEX_HOME"
+  FLEEX_LIB_DIR="$FLEEX_HOME/repo"
+# Legacy: detect unmigrated ~/.fleex installation
+elif [[ -d "$HOME/.fleex" && ! -d "$FLEEX_CONFIG_DIR" ]]; then
+  FLEEX_CONFIG_DIR="$HOME/.fleex"
+  FLEEX_DATA_DIR="$HOME/.fleex"
+  FLEEX_STATE_DIR="$HOME/.fleex"
+  FLEEX_LIB_DIR="$HOME/.fleex/repo"
+fi
+
+DEFAULT_REPO_DIR="$FLEEX_LIB_DIR"
 
 # ── Colors ─────────────────────────────────────────────────────────────────────
 RED=$'\033[0;31m'
@@ -226,8 +244,8 @@ resolve_instance() {
   INSTANCE_SLUG="$(echo "$branch" | sed 's/[^a-zA-Z0-9._-]/-/g')"
 
   # Per-instance directories
-  INSTANCE_RUN="$FLEEX_HOME/.run/$INSTANCE_SLUG"
-  INSTANCE_LOG="$FLEEX_HOME/.logs/$INSTANCE_SLUG"
+  INSTANCE_RUN="$FLEEX_STATE_DIR/run/$INSTANCE_SLUG"
+  INSTANCE_LOG="$FLEEX_STATE_DIR/logs/$INSTANCE_SLUG"
   PORTS_FILE="$INSTANCE_RUN/ports.json"
 }
 
@@ -443,10 +461,16 @@ JSON
 
   info "Allocated ports — gateway:$PORT_GATEWAY  server:$PORT_SERVER  web:$PORT_WEB"
 
-  # Load project .env if present (set -a exports all vars to subprocesses)
-  if [ -f "$REPO_DIR/.env" ]; then
+  # Load .env if present (set -a exports all vars to subprocesses)
+  local env_file=""
+  if [ -f "$FLEEX_CONFIG_DIR/.env" ]; then
+    env_file="$FLEEX_CONFIG_DIR/.env"
+  elif [ -f "$REPO_DIR/.env" ]; then
+    env_file="$REPO_DIR/.env"
+  fi
+  if [ -n "$env_file" ]; then
     set -a
-    . "$REPO_DIR/.env"
+    . "$env_file"
     set +a
   fi
 
@@ -552,7 +576,7 @@ cmd_stop() {
   elif [[ -n "${1:-}" ]]; then
     # Named instance — validate it exists
     local target="$1"
-    local target_run="$FLEEX_HOME/.run/$target"
+    local target_run="$FLEEX_STATE_DIR/run/$target"
     if [[ ! -d "$target_run" ]]; then
       die "Unknown instance '$target'. Use 'fleex status' to list instances."
     fi
@@ -565,7 +589,7 @@ cmd_stop() {
 
 _stop_instance() {
   local slug="$1"
-  local run_dir="$FLEEX_HOME/.run/$slug"
+  local run_dir="$FLEEX_STATE_DIR/run/$slug"
   local stopped=0
 
   for svc in "${SERVICES[@]}"; do
@@ -602,7 +626,7 @@ _stop_instance() {
 }
 
 _stop_all_instances() {
-  local run_base="$FLEEX_HOME/.run"
+  local run_base="$FLEEX_STATE_DIR/run"
   if [[ ! -d "$run_base" ]]; then
     warn "No instances found."
     return
@@ -629,8 +653,8 @@ cmd_remove() {
   fi
 
   local target="${1:-$INSTANCE_SLUG}"
-  local target_run="$FLEEX_HOME/.run/$target"
-  local target_log="$FLEEX_HOME/.logs/$target"
+  local target_run="$FLEEX_STATE_DIR/run/$target"
+  local target_log="$FLEEX_STATE_DIR/logs/$target"
 
   if [[ ! -d "$target_run" && ! -d "$target_log" ]]; then
     die "Unknown instance '$target'. Use 'fleex status' to list instances."
@@ -649,7 +673,7 @@ cmd_remove() {
 }
 
 _remove_all_stopped() {
-  local run_base="$FLEEX_HOME/.run"
+  local run_base="$FLEEX_STATE_DIR/run"
   [[ -d "$run_base" ]] || { warn "No instances found."; return; }
 
   local removed=0
@@ -669,7 +693,7 @@ _remove_all_stopped() {
     done
     $running && continue
 
-    rm -rf "$FLEEX_HOME/.run/$slug" "$FLEEX_HOME/.logs/$slug"
+    rm -rf "$FLEEX_STATE_DIR/run/$slug" "$FLEEX_STATE_DIR/logs/$slug"
     ok "Removed instance '$slug'"
     removed=$((removed + 1))
   done
@@ -698,7 +722,7 @@ cmd_desktop() {
   fi
 
   # Scan for any running instance
-  local run_base="$FLEEX_HOME/.run"
+  local run_base="$FLEEX_STATE_DIR/run"
   local running_slugs=()
   for dir in "$run_base"/*/; do
     [[ -d "$dir" ]] || continue
@@ -712,8 +736,8 @@ cmd_desktop() {
     local target="${running_slugs[0]}"
     info "Found running instance: $target"
     INSTANCE_SLUG="$target"
-    INSTANCE_RUN="$FLEEX_HOME/.run/$INSTANCE_SLUG"
-    INSTANCE_LOG="$FLEEX_HOME/.logs/$INSTANCE_SLUG"
+    INSTANCE_RUN="$FLEEX_STATE_DIR/run/$INSTANCE_SLUG"
+    INSTANCE_LOG="$FLEEX_STATE_DIR/logs/$INSTANCE_SLUG"
     PORTS_FILE="$INSTANCE_RUN/ports.json"
     load_ports
     _launch_desktop
@@ -730,7 +754,7 @@ cmd_desktop() {
 }
 
 cmd_status() {
-  local run_base="$FLEEX_HOME/.run"
+  local run_base="$FLEEX_STATE_DIR/run"
 
   echo ""
   printf "  ${BOLD}fleex stack status${NC}\n"
@@ -819,7 +843,7 @@ cmd_status() {
     echo ""
   done
 
-  printf "  ${DIM}Logs: $FLEEX_HOME/.logs/<instance>/${NC}\n"
+  printf "  ${DIM}Logs: %s/logs/<instance>/${NC}\n" "$FLEEX_STATE_DIR"
   printf "  ${DIM}Current instance: $INSTANCE_SLUG${NC}\n"
   printf "  ${DIM}Source: $REPO_DIR${NC}\n"
   echo ""
@@ -836,29 +860,34 @@ cmd_self_update() {
 
   check_bun
   info "Reinstalling dependencies..."
-  (cd "$update_dir" && bun install) > "$FLEEX_HOME/.logs/self-update.log" 2>&1
+  (cd "$update_dir" && bun install) > "$FLEEX_STATE_DIR/logs/self-update.log" 2>&1
   ok "Dependencies updated."
 
   info "Building packages..."
-  (cd "$update_dir" && bun run build) >> "$FLEEX_HOME/.logs/self-update.log" 2>&1
+  (cd "$update_dir" && bun run build) >> "$FLEEX_STATE_DIR/logs/self-update.log" 2>&1
   ok "Build complete."
 
   # Run pending database migrations
-  local env_file="$update_dir/.env"
-  if [[ -f "$env_file" ]]; then
+  local env_file=""
+  if [[ -f "$FLEEX_CONFIG_DIR/.env" ]]; then
+    env_file="$FLEEX_CONFIG_DIR/.env"
+  elif [[ -f "$update_dir/.env" ]]; then
+    env_file="$update_dir/.env"
+  fi
+  if [[ -n "$env_file" ]]; then
     info "Running database migrations..."
     (
       set -a
       . "$env_file"
       set +a
-      FLEEX_SQLITE_PATH="${FLEEX_SQLITE_PATH:-$FLEEX_HOME/fleex.db}" \
+      FLEEX_SQLITE_PATH="${FLEEX_SQLITE_PATH:-$FLEEX_DATA_DIR/fleex.db}" \
       bun run "$update_dir/packages/server/src/infrastructure/migrations/cli-migrate.ts"
-    ) >> "$FLEEX_HOME/.logs/self-update.log" 2>&1 && ok "Migrations applied." || warn "Migration failed — check $FLEEX_HOME/.logs/self-update.log"
+    ) >> "$FLEEX_STATE_DIR/logs/self-update.log" 2>&1 && ok "Migrations applied." || warn "Migration failed — check $FLEEX_STATE_DIR/logs/self-update.log"
   fi
 
   # Ensure symlink is in place (in case user installed with an older version that copied)
   local cli_src="$update_dir/cli/fleex"
-  local cli_dst="$FLEEX_HOME/bin/fleex"
+  local cli_dst="$HOME/.local/bin/fleex"
   if [[ -f "$cli_src" ]]; then
     chmod +x "$cli_src"
     if [[ ! -L "$cli_dst" ]]; then
@@ -1616,10 +1645,10 @@ cmd_help() {
     ${CYAN}web${NC}           Frontend (Vite)        ${DIM}(dynamic port)${NC}
 
   ${BOLD}${YELLOW}Paths:${NC}
-    ${DIM}Home${NC}          ~/.fleex/
-    ${DIM}Default repo${NC}  ~/.fleex/repo/
-    ${DIM}Instances${NC}     ~/.fleex/.run/<branch>/
-    ${DIM}Logs${NC}          ~/.fleex/.logs/<branch>/
+    ${DIM}Config${NC}        \${XDG_CONFIG_HOME:-~/.config}/fleex/
+    ${DIM}Data${NC}          \${XDG_DATA_HOME:-~/.local/share}/fleex/
+    ${DIM}State${NC}         \${XDG_STATE_HOME:-~/.local/state}/fleex/
+    ${DIM}Source${NC}        ~/.local/lib/fleex/
 
   ${BOLD}${YELLOW}Options:${NC}
     ${CYAN}--port <port>${NC}  Force the web (Vite) service to use a specific port
