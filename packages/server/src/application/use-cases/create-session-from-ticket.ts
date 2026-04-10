@@ -53,14 +53,19 @@ export class CreateSessionFromTicketUseCase {
     const worktreeLink = ticket.links.find((l) => l.type === 'worktree');
     let branchName: string;
     let createNewBranch: boolean;
+    let baseBranch: string | undefined;
     if (worktreeLink) {
       // Extract branch from worktree link (format: "org/repo:branch" or label)
       const colonIdx = worktreeLink.ref.indexOf(':');
       branchName = colonIdx > 0 ? worktreeLink.ref.substring(colonIdx + 1) : (worktreeLink.label || worktreeLink.ref);
-      createNewBranch = false;
+      // In bare clones the branch only exists as origin/<branch> after fetch.
+      // Create a local branch from the remote tracking ref so git worktree add succeeds.
+      createNewBranch = true;
+      baseBranch = `origin/${branchName}`;
     } else {
       branchName = buildTicketBranchName(ticket.title, ticket.id);
       createNewBranch = true;
+      baseBranch = undefined;
     }
 
     // Create workspace and write manifest
@@ -80,6 +85,7 @@ export class CreateSessionFromTicketUseCase {
         const existingPath = await this.createWorktree.execute(repo.org, repo.name, wtPath, {
           branch: branchName,
           createNewBranch,
+          ...(baseBranch ? { baseBranch } : {}),
         });
         const actualPath = existingPath ?? wtPath;
         // Add/update worktree link with the actual path

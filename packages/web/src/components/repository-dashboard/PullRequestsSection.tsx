@@ -156,6 +156,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
               ticketId={ticket.id}
               onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
               size="sm"
+              alwaysShowMenu
             />
           </span>
         );

@@ -114,6 +114,7 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
               ticketId={ticket.id}
               onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
               size="sm"
+              alwaysShowMenu
             />
           </span>
         );
