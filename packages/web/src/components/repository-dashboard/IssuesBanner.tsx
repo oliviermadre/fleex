@@ -1,17 +1,21 @@
-import { useState, useCallback } from 'react';
-import type { GitHubIssue, GitHubIssueDetail } from '@fleex/shared';
+import { useState, useMemo, useCallback } from 'react';
+import type { GitHubIssue, Worktree, Ticket } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { DataTable, type Column } from '../ui/DataTable';
-import { cn } from '../../lib/cn';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { ImportTaskButton } from '../dashboard/ImportTaskButton';
 import * as api from '../../services/api';
+import { importGitHubIssue } from '../../services/api';
 import { notifyHookStarted } from '../../lib/hookResultToast';
 
 interface Props {
   org: string;
   name: string;
   issues: GitHubIssue[];
+  worktrees: Worktree[];
   loading: boolean;
 }
 
@@ -38,66 +42,45 @@ function slugify(title: string): string {
     .slice(0, 50);
 }
 
-function formatClaudePrompt(detail: GitHubIssueDetail): string {
-  const lines: string[] = [
-    'Read carefully the following GitHub issue and plan a fix for it.',
-    '',
-    `# Issue #${detail.number}: ${detail.title}`,
-    `URL: ${detail.url}`,
-    `Author: ${detail.author} | State: ${detail.state}`,
-    `Labels: ${detail.labels.length > 0 ? detail.labels.join(', ') : 'none'}`,
-    `Assignees: ${detail.assignees.length > 0 ? detail.assignees.join(', ') : 'none'}`,
-    `Milestone: ${detail.milestone ?? 'none'}`,
-    '',
-    '## Description',
-    detail.body || '_No description provided._',
-  ];
-
-  if (detail.comments.length > 0) {
-    lines.push('', `## Comments (${detail.comments.length})`);
-    for (const c of detail.comments) {
-      lines.push(`### ${c.author} — ${new Date(c.createdAt).toLocaleDateString()}`, c.body, '---');
-    }
-  }
-
-  lines.push(
-    '',
-    'Please analyze this issue thoroughly, understand the root cause, explore the codebase to identify the relevant files, and propose a detailed implementation plan to fix it.',
-  );
-
-  return lines.join('\n');
-}
-
-export function IssuesBanner({ org, name, issues, loading }: Props) {
+export function IssuesBanner({ org, name, issues, worktrees, loading }: Props) {
   const [creating, setCreating] = useState<Set<number>>(new Set());
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
-  const selectSession = useSessionStore((s) => s.selectSession);
+  const [importingKey, setImportingKey] = useState<string | null>(null);
+  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
+  const sessions = useSessionStore((s) => s.sessions);
+  const tickets = useTicketStore((s) => s.tickets);
+  const boards = useTicketStore((s) => s.boards);
   const fetchDashboard = useRepositoryDashboardStore((s) => s.fetchDashboard);
 
-  const handleCreateSession = useCallback(async (issue: GitHubIssue, type: 'shell' | 'claude') => {
+  const ticketByIssue = useMemo(() => {
+    const map = new Map<string, Ticket>();
+    for (const t of tickets) {
+      for (const l of t.links) {
+        if (l.type === 'github_issue') map.set(l.ref, t);
+      }
+    }
+    return map;
+  }, [tickets]);
+
+  const handleCreateSession = useCallback(async (issue: GitHubIssue) => {
     if (creating.has(issue.number)) return;
     setCreating((prev) => new Set(prev).add(issue.number));
     try {
-      const branch = `issue-${issue.number}-${slugify(issue.title)}`;
-      const result = await api.createWorktree(org, name, {
-        branch,
-        createNewBranch: true,
-        issueNumber: issue.number,
-      });
-      const cwd = result.path;
-      notifyHookStarted(result.hookStarted);
-
-      if (type === 'claude') {
-        const detail = await api.fetchIssueDetail(org, name, issue.number);
-        const claudePrompt = formatClaudePrompt(detail);
-        const session = await api.createSession({ type: 'claude', cwd, claudePrompt });
-        selectSession(session.id);
+      const existingWt = worktrees.find((wt) => wt.branch.startsWith(`issue-${issue.number}-`));
+      let cwd: string;
+      if (existingWt) {
+        cwd = existingWt.path;
       } else {
-        const session = await api.createSession({ type: 'shell', cwd });
-        selectSession(session.id);
+        const branch = `issue-${issue.number}-${slugify(issue.title)}`;
+        const result = await api.createWorktree(org, name, {
+          branch,
+          createNewBranch: true,
+          issueNumber: issue.number,
+        });
+        cwd = result.path;
+        notifyHookStarted(result.hookStarted);
       }
-
-      setActivePanel('sessions');
+      const session = await api.createSession({ type: 'shell', cwd });
+      addFloatingSession(session.id);
       fetchDashboard(org, name);
     } catch {
       // ignore
@@ -108,7 +91,21 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
         return next;
       });
     }
-  }, [creating, org, name, selectSession, setActivePanel, fetchDashboard]);
+  }, [creating, worktrees, org, name, addFloatingSession, fetchDashboard]);
+
+  const handleImportIssue = useCallback(async (issue: GitHubIssue, boardId: string) => {
+    const key = `${org}/${name}#${issue.number}`;
+    if (importingKey) return;
+    setImportingKey(key);
+    try {
+      await importGitHubIssue(org, name, issue.number, boardId);
+      await fetchDashboard(org, name);
+    } catch {
+      // handled by api layer
+    } finally {
+      setImportingKey(null);
+    }
+  }, [importingKey, org, name, fetchDashboard]);
 
   const columns: Column<GitHubIssue>[] = [
     {
@@ -145,46 +142,32 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
       shrink: true,
       align: 'right',
       render: (row) => {
-        const busy = creating.has(row.number);
+        const ref = `${org}/${name}#${row.number}`;
+        const ticket = ticketByIssue.get(ref);
+        if (!ticket) {
+          return (
+            <span className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+              <ImportTaskButton
+                boards={boards}
+                onImport={(boardId) => handleImportIssue(row, boardId)}
+                importing={importingKey === ref}
+              />
+            </span>
+          );
+        }
+        const issueSessions = sessions.filter(
+          (s) => s.status === 'running'
+            && s.repositoryOrg === org && s.repositoryName === name
+            && s.worktreeBranch?.startsWith(`issue-${row.number}-`),
+        );
         return (
-          <span className="flex items-center justify-end gap-1.5">
-            <button
-              className={cn(
-                'rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-secondary)]',
-                busy && 'pointer-events-none opacity-40',
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCreateSession(row, 'shell');
-              }}
-              title="New Shell Session"
-              disabled={busy}
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
-                <polyline points="4.5,6.5 7,9 4.5,11.5" />
-                <line x1="9" y1="11.5" x2="11.5" y2="11.5" />
-              </svg>
-            </button>
-            <button
-              className={cn(
-                'rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-accent)]',
-                busy && 'pointer-events-none opacity-40',
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCreateSession(row, 'claude');
-              }}
-              title="New Claude Session"
-              disabled={busy}
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                <circle cx="4" cy="8" r="1.5" />
-                <circle cx="8" cy="4" r="1.5" />
-                <circle cx="12" cy="8" r="1.5" />
-                <circle cx="8" cy="12" r="1.5" />
-              </svg>
-            </button>
+          <span className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+            <SmartSessionButton
+              sessions={issueSessions}
+              creating={creating.has(row.number)}
+              onCreateSession={() => handleCreateSession(row)}
+              size="sm"
+            />
           </span>
         );
       },

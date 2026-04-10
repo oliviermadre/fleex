@@ -4,11 +4,10 @@ import { DashboardHeader } from './DashboardHeader';
 import { IssuesBanner } from './IssuesBanner';
 import { PullRequestsSection } from './PullRequestsSection';
 import { MergedPRsSection } from './MergedPRsSection';
-import { WorktreesSection } from './WorktreesSection';
 import { RepoConfigPanel } from './RepoConfigPanel';
 import { cn } from '../../lib/cn';
 
-type Tab = 'pulls' | 'issues' | 'worktrees' | 'merged' | 'settings';
+type Tab = 'pulls' | 'issues' | 'merged' | 'settings';
 
 interface Props {
   repoKey: string;
@@ -43,7 +42,6 @@ export function RepositoryDashboard({ repoKey }: Props) {
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'pulls', label: 'Pull Requests', count: openPRs.length },
     { key: 'issues', label: 'Issues', count: issues.length },
-    { key: 'worktrees', label: 'Worktrees', count: worktrees.length },
     { key: 'merged', label: 'Merged', count: mergedPRs.length },
     { key: 'settings', label: 'Settings' },
   ];
@@ -109,17 +107,7 @@ export function RepositoryDashboard({ repoKey }: Props) {
             org={org}
             name={name}
             issues={issues}
-            loading={isLoading}
-          />
-        )}
-        {activeTab === 'worktrees' && (
-          <WorktreesSection
-            org={org}
-            name={name}
-            worktrees={data?.worktrees ?? []}
-            diffStats={data?.diffStats ?? {}}
-            openPullRequests={openPRs}
-            mergedPullRequests={mergedPRs}
+            worktrees={worktrees}
             loading={isLoading}
           />
         )}

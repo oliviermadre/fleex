@@ -1,12 +1,16 @@
 import { useState, useMemo, useCallback } from 'react';
-import type { PullRequest, DiffStats, Worktree } from '@fleex/shared';
+import type { PullRequest, DiffStats, Worktree, Ticket } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { DataTable, type Column } from '../ui/DataTable';
 import { DiffStatsBadge } from '../ui/DiffStatsBadge';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { ImportTaskButton } from '../dashboard/ImportTaskButton';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
+import { importGitHubPR } from '../../services/api';
 import { notifyHookStarted } from '../../lib/hookResultToast';
 
 interface Props {
@@ -39,9 +43,22 @@ function isStale(dateStr: string): boolean {
 export function PullRequestsSection({ org, name, pullRequests, diffStats, githubUser, worktrees, loading }: Props) {
   const [filter, setFilter] = useState<TabFilter>('all');
   const [creating, setCreating] = useState<Set<number>>(new Set());
-  const setActivePanel = useUIStore((s) => s.setActivePanel);
-  const selectSession = useSessionStore((s) => s.selectSession);
+  const [importingKey, setImportingKey] = useState<string | null>(null);
+  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
+  const sessions = useSessionStore((s) => s.sessions);
+  const tickets = useTicketStore((s) => s.tickets);
+  const boards = useTicketStore((s) => s.boards);
   const fetchDashboard = useRepositoryDashboardStore((s) => s.fetchDashboard);
+
+  const ticketByPR = useMemo(() => {
+    const map = new Map<string, Ticket>();
+    for (const t of tickets) {
+      for (const l of t.links) {
+        if (l.type === 'github_pr') map.set(l.ref, t);
+      }
+    }
+    return map;
+  }, [tickets]);
 
   const filtered = useMemo(() => {
     if (filter === 'mine' && githubUser) {
@@ -53,7 +70,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
     return pullRequests;
   }, [pullRequests, filter, githubUser]);
 
-  const handleCreateSession = useCallback(async (pr: PullRequest, type: 'shell' | 'claude') => {
+  const handleCreateSession = useCallback(async (pr: PullRequest) => {
     if (creating.has(pr.number)) return;
     setCreating((prev) => new Set(prev).add(pr.number));
     try {
@@ -70,9 +87,8 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
         cwd = result.path;
         notifyHookStarted(result.hookStarted);
       }
-      const session = await api.createSession({ type, cwd });
-      selectSession(session.id);
-      setActivePanel('sessions');
+      const session = await api.createSession({ type: 'shell', cwd });
+      addFloatingSession(session.id);
       fetchDashboard(org, name);
     } catch {
       // ignore
@@ -83,7 +99,21 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
         return next;
       });
     }
-  }, [creating, worktrees, org, name, selectSession, setActivePanel, fetchDashboard]);
+  }, [creating, worktrees, org, name, addFloatingSession, fetchDashboard]);
+
+  const handleImportPR = useCallback(async (pr: PullRequest, boardId: string) => {
+    const key = `${org}/${name}#${pr.number}`;
+    if (importingKey) return;
+    setImportingKey(key);
+    try {
+      await importGitHubPR(org, name, pr.number, pr.title, pr.headRefName, boardId);
+      await fetchDashboard(org, name);
+    } catch {
+      // handled by api layer
+    } finally {
+      setImportingKey(null);
+    }
+  }, [importingKey, org, name, fetchDashboard]);
 
   const columns: Column<PullRequest>[] = [
     {
@@ -141,46 +171,31 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
       shrink: true,
       align: 'right',
       render: (row) => {
-        const busy = creating.has(row.number);
+        const ref = `${org}/${name}#${row.number}`;
+        const ticket = ticketByPR.get(ref);
+        if (!ticket) {
+          return (
+            <span className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+              <ImportTaskButton
+                boards={boards}
+                onImport={(boardId) => handleImportPR(row, boardId)}
+                importing={importingKey === ref}
+              />
+            </span>
+          );
+        }
+        const prSessions = sessions.filter(
+          (s) => s.status === 'running' && s.worktreeBranch === row.headRefName
+            && s.repositoryOrg === org && s.repositoryName === name,
+        );
         return (
-          <span className="flex items-center justify-end gap-1.5">
-            <button
-              className={cn(
-                'rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-secondary)]',
-                busy && 'pointer-events-none opacity-40',
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCreateSession(row, 'shell');
-              }}
-              title="New Shell Session"
-              disabled={busy}
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
-                <polyline points="4.5,6.5 7,9 4.5,11.5" />
-                <line x1="9" y1="11.5" x2="11.5" y2="11.5" />
-              </svg>
-            </button>
-            <button
-              className={cn(
-                'rounded p-1.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-accent)]',
-                busy && 'pointer-events-none opacity-40',
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCreateSession(row, 'claude');
-              }}
-              title="New Claude Session"
-              disabled={busy}
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                <circle cx="4" cy="8" r="1.5" />
-                <circle cx="8" cy="4" r="1.5" />
-                <circle cx="12" cy="8" r="1.5" />
-                <circle cx="8" cy="12" r="1.5" />
-              </svg>
-            </button>
+          <span className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+            <SmartSessionButton
+              sessions={prSessions}
+              creating={creating.has(row.number)}
+              onCreateSession={() => handleCreateSession(row)}
+              size="sm"
+            />
           </span>
         );
       },
