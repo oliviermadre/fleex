@@ -6,6 +6,7 @@ export interface ActivityInput {
   readonly fileAgeSeconds: number;
   readonly cpuPercent: number;
   readonly hasPendingToolApproval: boolean;
+  readonly isClaudeRunning: boolean;
 }
 
 /**
@@ -23,7 +24,7 @@ export interface ActivityInput {
 const CPU_ACTIVE_THRESHOLD = 3;
 
 export function determineClaudeActivity(input: ActivityInput): ClaudeActivityStatus {
-  const { messages, fileAgeSeconds, cpuPercent, hasPendingToolApproval } = input;
+  const { messages, fileAgeSeconds, cpuPercent, hasPendingToolApproval, isClaudeRunning } = input;
 
   // Filter out progress/system noise — only care about user/assistant turns
   const meaningful = messages.filter(
@@ -51,11 +52,15 @@ export function determineClaudeActivity(input: ActivityInput): ClaudeActivitySta
       // Tool result sent back to Claude → Claude is processing the result
       if (fileAgeSeconds <= 10) return 'working';
       if (cpuPercent > CPU_ACTIVE_THRESHOLD) return 'working';
+      // Claude process is alive but JSONL is stale → waiting for user input
+      // (e.g. ExitPlanMode not written to JSONL yet)
+      if (isClaudeRunning && fileAgeSeconds > 30) return 'waiting_tool_approval';
       return 'idle';
     }
     // Actual human message
     if (fileAgeSeconds <= 5) return 'working';
     if (cpuPercent > CPU_ACTIVE_THRESHOLD) return 'working';
+    if (isClaudeRunning && fileAgeSeconds > 30) return 'waiting_tool_approval';
     return 'idle';
   }
 

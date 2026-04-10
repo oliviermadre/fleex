@@ -19,7 +19,7 @@ export class EnrichClaudeActivityUseCase {
     const result = new Map<string, ClaudeActivityStatus>();
 
     const claudeSessions = sessions.filter(
-      (s) => s.type === 'claude' && s.status === 'running',
+      (s) => s.status === 'running',
     );
 
     if (claudeSessions.length === 0) return result;
@@ -41,13 +41,14 @@ export class EnrichClaudeActivityUseCase {
     const enrichTasks = claudeSessions.map(async (session) => {
       try {
         const activity = await this.enrichOne(session, processByCwd);
-        result.set(session.id, activity);
+        if (activity !== 'unknown') {
+          result.set(session.id, activity);
+        }
       } catch (err) {
         this.logger.debug('Failed to enrich claude activity', {
           sessionId: session.id,
           error: String(err),
         });
-        result.set(session.id, 'unknown');
       }
     });
 
@@ -59,14 +60,15 @@ export class EnrichClaudeActivityUseCase {
     session: SessionEntity,
     processByCwd: Map<string, { cpuPercent: number }>,
   ): Promise<ClaudeActivityStatus> {
-    const sessionFile = await this.claudeState.findSessionFile(session.cwd);
+    const cwd = session.paneCwd ?? session.cwd;
+    const sessionFile = await this.claudeState.findSessionFile(cwd);
     if (!sessionFile) return 'unknown';
 
     const rawLines = await this.claudeState.readLastMessages(sessionFile.path, 100);
     if (rawLines.length === 0) return 'unknown';
 
     const messages = parseMessages(rawLines);
-    const processInfo = processByCwd.get(session.cwd);
+    const processInfo = processByCwd.get(cwd);
     const cpuPercent = processInfo?.cpuPercent ?? 0;
 
     const hasPendingToolApproval = await this.claudeState.checkPendingToolApproval(
@@ -84,6 +86,7 @@ export class EnrichClaudeActivityUseCase {
       fileAgeSeconds: sessionFile.ageSeconds,
       cpuPercent,
       hasPendingToolApproval,
+      isClaudeRunning: processInfo !== undefined,
     });
 
     // this.logger.info('Claude activity enrichment', {
