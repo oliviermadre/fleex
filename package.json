@@ -1,6 +1,7 @@
 {
   "name": "fleex",
   "private": true,
+  "license": "Elastic-2.0",
   "workspaces": [
     "packages/shared",
     "packages/server",
