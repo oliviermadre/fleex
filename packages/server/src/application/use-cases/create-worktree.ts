@@ -32,22 +32,31 @@ export class CreateWorktreeUseCase {
   async executeWithHook(org: string, name: string, wtPath: string, request: CreateWorktreeRequest): Promise<CreateWorktreeResult> {
     const barePath = this.resolver.barePath(org, name);
 
-    // Fetch before any operation
+    // Ensure bare clone exists and fetch latest refs
+    await this.bareCloneManager.ensureBareClone(org, name);
     await this.bareCloneManager.fetch(org, name);
+
+    // When creating a new branch without an explicit base, default to origin/<defaultBranch>
+    // so the worktree reflects the latest remote state (bare clone HEAD is stale after fetch).
+    let effectiveRequest = request;
+    if (request.createNewBranch && !request.baseBranch) {
+      const defaultBranch = await this.git.getDefaultBranch(barePath);
+      effectiveRequest = { ...request, baseBranch: `origin/${defaultBranch}` };
+    }
 
     try {
       await this.git.createWorktree(
         barePath,
         wtPath,
-        request.branch,
-        request.createNewBranch,
-        request.baseBranch,
+        effectiveRequest.branch,
+        effectiveRequest.createNewBranch,
+        effectiveRequest.baseBranch,
       );
-      this.logger.info('Worktree created', { barePath, wtPath, branch: request.branch });
+      this.logger.info('Worktree created', { barePath, wtPath, branch: effectiveRequest.branch, baseBranch: effectiveRequest.baseBranch });
       await this.applyOverlay(org, name, wtPath);
-      const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, request.branch);
+      const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, effectiveRequest.branch);
       if (!hookStarted) {
-        this.emitCreated(barePath, wtPath, request);
+        this.emitCreated(barePath, wtPath, effectiveRequest);
       }
       return { existingPath: null, hookStarted };
     } catch (err) {
@@ -57,7 +66,7 @@ export class CreateWorktreeUseCase {
       if (reuseMatch) {
         const existingPath = reuseMatch[1]!;
         this.logger.info('Worktree path claimed in use, removing old worktree', {
-          barePath, existingPath, wtPath, branch: request.branch,
+          barePath, existingPath, wtPath, branch: effectiveRequest.branch,
         });
         // Force-remove the old worktree blocking the new path
         try {
@@ -68,28 +77,28 @@ export class CreateWorktreeUseCase {
         }
         await this.git.pruneWorktrees(barePath);
         await this.git.createWorktree(
-          barePath, wtPath, request.branch, request.createNewBranch, request.baseBranch,
+          barePath, wtPath, effectiveRequest.branch, effectiveRequest.createNewBranch, effectiveRequest.baseBranch,
         );
         this.logger.info('Worktree created after removing old worktree', { barePath, wtPath });
         await this.applyOverlay(org, name, wtPath);
-        const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, request.branch);
+        const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, effectiveRequest.branch);
         if (!hookStarted) {
-          this.emitCreated(barePath, wtPath, request);
+          this.emitCreated(barePath, wtPath, effectiveRequest);
         }
         return { existingPath: null, hookStarted };
       }
       const branchExistsMatch = message.match(/branch named '([^']+)' already exists/i);
-      if (branchExistsMatch && request.createNewBranch) {
+      if (branchExistsMatch && effectiveRequest.createNewBranch) {
         this.logger.info('Branch already exists, checking out existing branch', {
-          barePath, wtPath, branch: request.branch,
+          barePath, wtPath, branch: effectiveRequest.branch,
         });
-        return this.executeWithHook(org, name, wtPath, { ...request, createNewBranch: false });
+        return this.executeWithHook(org, name, wtPath, { ...effectiveRequest, createNewBranch: false });
       }
       const checkedOutMatch = message.match(/is already checked out at '([^']+)'/);
       if (checkedOutMatch) {
         const existingPath = checkedOutMatch[1]!;
         this.logger.info('Branch already checked out elsewhere, replacing worktree', {
-          barePath, existingPath, wtPath, branch: request.branch,
+          barePath, existingPath, wtPath, branch: effectiveRequest.branch,
         });
         await this.git.pruneWorktrees(barePath);
         try {
@@ -103,15 +112,15 @@ export class CreateWorktreeUseCase {
         await this.git.createWorktree(
           barePath,
           wtPath,
-          request.branch,
-          request.createNewBranch,
-          request.baseBranch,
+          effectiveRequest.branch,
+          effectiveRequest.createNewBranch,
+          effectiveRequest.baseBranch,
         );
-        this.logger.info('Worktree replaced', { barePath, wtPath, branch: request.branch });
+        this.logger.info('Worktree replaced', { barePath, wtPath, branch: effectiveRequest.branch });
         await this.applyOverlay(org, name, wtPath);
-        const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, request.branch);
+        const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, effectiveRequest.branch);
         if (!hookStarted) {
-          this.emitCreated(barePath, wtPath, request);
+          this.emitCreated(barePath, wtPath, effectiveRequest);
         }
         return { existingPath: null, hookStarted };
       }
@@ -119,7 +128,7 @@ export class CreateWorktreeUseCase {
       if (dirExistsMatch) {
         const existingPath = dirExistsMatch[1]!;
         this.logger.info('Worktree directory already exists, repairing and pruning', {
-          barePath, existingPath, branch: request.branch,
+          barePath, existingPath, branch: effectiveRequest.branch,
         });
         try {
           await this.git.repairWorktrees(barePath);
@@ -129,18 +138,18 @@ export class CreateWorktreeUseCase {
         }
         try {
           await this.git.createWorktree(
-            barePath, wtPath, request.branch, request.createNewBranch, request.baseBranch,
+            barePath, wtPath, effectiveRequest.branch, effectiveRequest.createNewBranch, effectiveRequest.baseBranch,
           );
           this.logger.info('Worktree created after repair and prune', { barePath, wtPath });
           await this.applyOverlay(org, name, wtPath);
-          const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, request.branch);
+          const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, effectiveRequest.branch);
           if (!hookStarted) {
-            this.emitCreated(barePath, wtPath, request);
+            this.emitCreated(barePath, wtPath, effectiveRequest);
           }
           return { existingPath: null, hookStarted };
         } catch {
           this.logger.info('Worktree directory still valid, reusing', { barePath, existingPath });
-          this.emitCreated(barePath, existingPath, request);
+          this.emitCreated(barePath, existingPath, effectiveRequest);
           return { existingPath, hookStarted: false };
         }
       }
