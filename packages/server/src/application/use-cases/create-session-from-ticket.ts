@@ -51,16 +51,23 @@ export class CreateSessionFromTicketUseCase {
 
     // Determine branch: use worktree link's branch if present, otherwise create a new one
     const worktreeLink = ticket.links.find((l) => l.type === 'worktree');
+    const prLink = ticket.links.find((l) => l.type === 'github_pr');
     let branchName: string;
-    let createNewBranch: boolean;
     if (worktreeLink) {
       // Extract branch from worktree link (format: "org/repo:branch" or label)
       const colonIdx = worktreeLink.ref.indexOf(':');
       branchName = colonIdx > 0 ? worktreeLink.ref.substring(colonIdx + 1) : (worktreeLink.label || worktreeLink.ref);
-      createNewBranch = false;
     } else {
       branchName = buildTicketBranchName(ticket.title, ticket.id);
-      createNewBranch = true;
+    }
+
+    // Extract PR number from github_pr link (format: "org/name#number")
+    let prNumber: number | undefined;
+    if (prLink) {
+      const hashIdx = prLink.ref.indexOf('#');
+      if (hashIdx > 0) {
+        prNumber = parseInt(prLink.ref.substring(hashIdx + 1), 10) || undefined;
+      }
     }
 
     // Create workspace and write manifest
@@ -79,7 +86,8 @@ export class CreateSessionFromTicketUseCase {
       try {
         const existingPath = await this.createWorktree.execute(repo.org, repo.name, wtPath, {
           branch: branchName,
-          createNewBranch,
+          createNewBranch: !worktreeLink,
+          ...(prNumber ? { prNumber } : {}),
         });
         const actualPath = existingPath ?? wtPath;
         // Add/update worktree link with the actual path

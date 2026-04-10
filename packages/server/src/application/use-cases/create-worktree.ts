@@ -153,6 +153,34 @@ export class CreateWorktreeUseCase {
           return { existingPath, hookStarted: false };
         }
       }
+      // Branch doesn't exist locally — for fork PRs, the branch lives on the
+      // contributor's fork and is only available via refs/pull/<number>/head.
+      // Fetch the PR ref into a local tracking branch and retry.
+      if (request.prNumber && (message.includes('invalid reference') || message.includes('not a valid object name'))) {
+        const prRef = `refs/pull/${request.prNumber}/head:refs/remotes/origin/${effectiveRequest.branch}`;
+        this.logger.info('Branch not found, fetching PR ref', {
+          barePath, prNumber: request.prNumber, refspec: prRef,
+        });
+        try {
+          await this.git.fetchRef(barePath, prRef);
+          // Now retry — the branch exists as origin/<branch>, git will auto-track it
+          await this.git.createWorktree(
+            barePath, wtPath, effectiveRequest.branch, false,
+          );
+          this.logger.info('Worktree created from PR ref', { barePath, wtPath, branch: effectiveRequest.branch });
+          await this.applyOverlay(org, name, wtPath);
+          const hookStarted = this.overlayManager.firePostCheckoutHooks(org, name, wtPath, effectiveRequest.branch);
+          if (!hookStarted) {
+            this.emitCreated(barePath, wtPath, effectiveRequest);
+          }
+          return { existingPath: null, hookStarted };
+        } catch (prFetchErr) {
+          this.logger.warn('Failed to fetch PR ref', {
+            barePath, prNumber: request.prNumber,
+            error: prFetchErr instanceof Error ? prFetchErr.message : String(prFetchErr),
+          });
+        }
+      }
       throw new WorktreeError(`Failed to create worktree: ${message}`);
     }
   }

@@ -62,7 +62,12 @@ export class BareCloneManager {
       return;
     }
     try {
-      await this.git.fetch(barePath);
+      // Ensure the fetch refspec is configured (may be missing on older bare clones)
+      await this.execFn(
+        'git', ['config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'],
+        { cwd: barePath },
+      );
+      await this.execFn('git', ['fetch', '--prune', 'origin'], { cwd: barePath });
     } catch {
       this.logger.warn('Failed to fetch bare clone', { org, name, barePath });
     }

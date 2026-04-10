@@ -15,6 +15,7 @@ export interface GitPort {
   moveWorktree(repoPath: string, wtPath: string, newPath: string): Promise<void>;
   getDefaultBranch(repoPath: string): Promise<string>;
   fetch(repoPath: string): Promise<void>;
+  fetchRef(repoPath: string, refspec: string): Promise<void>;
   cloneBare(remote: string, barePath: string): Promise<void>;
   getDiffStats(repoPath: string, branch: string, baseBranch?: string): Promise<DiffStats>;
   getDiffSummary(repoPath: string, branch: string, baseBranch?: string): Promise<string>;
