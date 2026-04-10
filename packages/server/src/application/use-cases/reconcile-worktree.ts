@@ -90,7 +90,6 @@ export class ReconcileWorktreeUseCase {
         const existingPath = await this.createWorktree.execute(org, repoName, wtPath, {
           branch,
           createNewBranch: true,
-          baseBranch: 'origin/main',
         });
         const finalPath = existingPath ?? wtPath;
         this.logger.info('Reconciled worktree (new branch from origin/main)', { org, repoName, branch, path: finalPath });
