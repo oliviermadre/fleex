@@ -74,38 +74,10 @@ export class CreateSessionFromTicketUseCase {
     for (const repo of repos) {
       const wtPath = this.resolver.workspaceRepoPath(workspaceId, repo.name);
       try {
-        // Try checkout strategies in order:
-        // 1. Checkout existing branch (works if local ref exists)
-        // 2. Create local branch from origin/<branch> (works if remote ref exists under refs/remotes)
-        // 3. Create local branch from <branch> (works in bare clones where remote refs are stored as refs/heads)
-        // 4. Create new branch from default branch (fallback)
-        const strategies: { createNewBranch: boolean; baseBranch?: string }[] = [
-          { createNewBranch: false },
-          { createNewBranch: true, baseBranch: `origin/${branchName}` },
-          { createNewBranch: true, baseBranch: branchName },
-        ];
-        if (!worktreeLink) {
-          // No worktree link: just create a new branch from default (handled by CreateWorktreeUseCase)
-          strategies.length = 0;
-          strategies.push({ createNewBranch: true });
-        }
-
-        let existingPath: string | null = null;
-        let lastErr: unknown;
-        for (const strategy of strategies) {
-          try {
-            existingPath = await this.createWorktree.execute(repo.org, repo.name, wtPath, {
-              branch: branchName,
-              ...strategy,
-            });
-            lastErr = null;
-            break;
-          } catch (err) {
-            lastErr = err;
-          }
-        }
-        if (lastErr) throw lastErr;
-
+        const existingPath = await this.createWorktree.execute(repo.org, repo.name, wtPath, {
+          branch: branchName,
+          createNewBranch: !worktreeLink,
+        });
         const actualPath = existingPath ?? wtPath;
         // Add/update worktree link with the actual path
         if (worktreeLink) {
