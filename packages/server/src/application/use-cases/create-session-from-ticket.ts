@@ -52,20 +52,12 @@ export class CreateSessionFromTicketUseCase {
     // Determine branch: use worktree link's branch if present, otherwise create a new one
     const worktreeLink = ticket.links.find((l) => l.type === 'worktree');
     let branchName: string;
-    let createNewBranch: boolean;
-    let baseBranch: string | undefined;
     if (worktreeLink) {
       // Extract branch from worktree link (format: "org/repo:branch" or label)
       const colonIdx = worktreeLink.ref.indexOf(':');
       branchName = colonIdx > 0 ? worktreeLink.ref.substring(colonIdx + 1) : (worktreeLink.label || worktreeLink.ref);
-      // In bare clones the branch only exists as origin/<branch> after fetch.
-      // Create a local branch from the remote tracking ref so git worktree add succeeds.
-      createNewBranch = true;
-      baseBranch = `origin/${branchName}`;
     } else {
       branchName = buildTicketBranchName(ticket.title, ticket.id);
-      createNewBranch = true;
-      baseBranch = undefined;
     }
 
     // Create workspace and write manifest
@@ -82,11 +74,38 @@ export class CreateSessionFromTicketUseCase {
     for (const repo of repos) {
       const wtPath = this.resolver.workspaceRepoPath(workspaceId, repo.name);
       try {
-        const existingPath = await this.createWorktree.execute(repo.org, repo.name, wtPath, {
-          branch: branchName,
-          createNewBranch,
-          ...(baseBranch ? { baseBranch } : {}),
-        });
+        // Try checkout strategies in order:
+        // 1. Checkout existing branch (works if local ref exists)
+        // 2. Create local branch from origin/<branch> (works if remote ref exists under refs/remotes)
+        // 3. Create local branch from <branch> (works in bare clones where remote refs are stored as refs/heads)
+        // 4. Create new branch from default branch (fallback)
+        const strategies: { createNewBranch: boolean; baseBranch?: string }[] = [
+          { createNewBranch: false },
+          { createNewBranch: true, baseBranch: `origin/${branchName}` },
+          { createNewBranch: true, baseBranch: branchName },
+        ];
+        if (!worktreeLink) {
+          // No worktree link: just create a new branch from default (handled by CreateWorktreeUseCase)
+          strategies.length = 0;
+          strategies.push({ createNewBranch: true });
+        }
+
+        let existingPath: string | null = null;
+        let lastErr: unknown;
+        for (const strategy of strategies) {
+          try {
+            existingPath = await this.createWorktree.execute(repo.org, repo.name, wtPath, {
+              branch: branchName,
+              ...strategy,
+            });
+            lastErr = null;
+            break;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+        if (lastErr) throw lastErr;
+
         const actualPath = existingPath ?? wtPath;
         // Add/update worktree link with the actual path
         if (worktreeLink) {
