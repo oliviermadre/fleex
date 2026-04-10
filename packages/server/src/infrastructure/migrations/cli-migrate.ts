@@ -44,10 +44,10 @@ async function main() {
   if (driver === 'sqlite') {
     const { join } = await import('node:path');
     const { homedir } = await import('node:os');
-    const { FLEEX_DIR } = await import('@fleex/shared');
+    const { resolvePaths } = await import('../paths.js');
     const { SqliteConnection } = await import('../adapters/sqlite/connection.js');
 
-    const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
+    const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(resolvePaths(homedir()).dataDir, 'fleex.db');
     const conn = new SqliteConnection(dbPath);
     await conn.init();
     connection = conn;

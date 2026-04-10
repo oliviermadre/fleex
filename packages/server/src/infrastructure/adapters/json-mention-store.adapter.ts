@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
 import type { MentionExecutionMode, MentionStatus, MentionTargetType } from '@fleex/shared';
 import { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
@@ -31,7 +30,7 @@ export class JsonMentionStore implements MentionStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.filePath = join(this.homedir, FLEEX_DIR, 'projects', 'mentions.json');
+    this.filePath = join(this.homedir, 'projects', 'mentions.json');
   }
 
   async init(): Promise<void> {

@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { FLEEX_DIR, CONFIG_FILE } from '@fleex/shared';
+import { CONFIG_FILE } from '@fleex/shared';
 import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
 import type { SupabaseConnection } from './connection.js';
 import type { ExecFn, HostFs } from '../../host/types.js';
@@ -63,7 +63,7 @@ export class SupabaseConfigAdapter implements ConfigPort {
   }
 
   private async migrateFromJson(): Promise<void> {
-    const jsonPath = join(this.homedir, FLEEX_DIR, CONFIG_FILE);
+    const jsonPath = join(this.homedir, CONFIG_FILE);
     if (!(await this.hostFs.exists(jsonPath))) return;
 
     try {

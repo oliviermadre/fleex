@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
 import { SkillEntity } from '../../domain/entities/skill.entity.js';
 import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -27,7 +26,7 @@ export class JsonSkillStore implements SkillStorePort {
     private readonly homedir: string,
     private readonly logger: LoggerPort,
   ) {
-    this.filePath = join(this.homedir, FLEEX_DIR, 'projects', 'skills.json');
+    this.filePath = join(this.homedir, 'projects', 'skills.json');
   }
 
   async init(): Promise<void> {

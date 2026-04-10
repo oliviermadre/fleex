@@ -15,6 +15,7 @@ import type { FileStorePort } from '../../application/ports/file-store.port.js';
 import type { FileMetaStorePort } from '../../application/ports/file-meta-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
+import { resolvePaths } from '../paths.js';
 
 export type StorageDriver = 'json' | 'sqlite' | 'pgsql' | 'supabase';
 
@@ -51,21 +52,24 @@ export async function createStores(
   driver: StorageDriver,
   deps: { execFn: ExecFn; hostFs: HostFs; homedir: string; logger: LoggerPort },
 ): Promise<StorageStores> {
+  const paths = resolvePaths(deps.homedir);
+  const resolved = { ...deps, dataDir: paths.dataDir, configDir: paths.configDir };
+
   if (driver === 'json') {
-    return createJsonStores(deps);
+    return createJsonStores(resolved);
   }
 
   // Sessions are always stored locally (JSON) — they are ephemeral tmux data,
   // not ticketing data. Using a remote store causes network-race flickering.
-  const sessionStore = await createJsonSessionStore(deps);
+  const sessionStore = await createJsonSessionStore(resolved);
 
   switch (driver) {
     case 'sqlite':
-      return { sessionStore, ...(await createSqliteStores(deps)) };
+      return { sessionStore, ...(await createSqliteStores(resolved)) };
     case 'pgsql':
-      return { sessionStore, ...(await createPgsqlStores(deps)) };
+      return { sessionStore, ...(await createPgsqlStores(resolved)) };
     case 'supabase':
-      return { sessionStore, ...(await createSupabaseStores(deps)) };
+      return { sessionStore, ...(await createSupabaseStores(resolved)) };
   }
 }
 
@@ -73,6 +77,8 @@ async function createJsonStores(deps: {
   execFn: ExecFn;
   hostFs: HostFs;
   homedir: string;
+  dataDir: string;
+  configDir: string;
   logger: LoggerPort;
 }): Promise<StorageStores> {
   const { JsonConfigAdapter } = await import('./json-config.adapter.js');
@@ -92,34 +98,34 @@ async function createJsonStores(deps: {
 
   // Run pending migrations (JSON adapter — tracking via _migrations.json)
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
-  await runPendingMigrations('json', null, deps.logger, { homedir: deps.homedir });
+  await runPendingMigrations('json', null, deps.logger, { dataDir: deps.dataDir });
 
-  const configStore = new JsonConfigAdapter(deps.execFn, deps.hostFs, deps.homedir);
+  const configStore = new JsonConfigAdapter(deps.execFn, deps.hostFs, deps.configDir);
   await configStore.init();
-  const sessionStore = new JsonSessionStore(deps.hostFs, deps.homedir, deps.logger);
+  const sessionStore = new JsonSessionStore(deps.hostFs, deps.dataDir, deps.logger);
   await sessionStore.init();
-  const ticketStore = new JsonTicketStore(deps.hostFs, deps.homedir, deps.logger);
+  const ticketStore = new JsonTicketStore(deps.hostFs, deps.dataDir, deps.logger);
   await ticketStore.init();
-  const agentTokenStore = new JsonAgentTokenStore(deps.hostFs, deps.homedir, deps.logger);
+  const agentTokenStore = new JsonAgentTokenStore(deps.hostFs, deps.dataDir, deps.logger);
   await agentTokenStore.init();
-  const commentStore = new JsonCommentStore(deps.hostFs, deps.homedir, deps.logger);
+  const commentStore = new JsonCommentStore(deps.hostFs, deps.dataDir, deps.logger);
   await commentStore.init();
-  const mentionStore = new JsonMentionStore(deps.hostFs, deps.homedir, deps.logger);
+  const mentionStore = new JsonMentionStore(deps.hostFs, deps.dataDir, deps.logger);
   await mentionStore.init();
-  const deliverableStore = new JsonDeliverableStore(deps.hostFs, deps.homedir, deps.logger);
+  const deliverableStore = new JsonDeliverableStore(deps.hostFs, deps.dataDir, deps.logger);
   await deliverableStore.init();
-  const personaStore = new JsonPersonaStore(deps.hostFs, deps.homedir, deps.logger);
+  const personaStore = new JsonPersonaStore(deps.hostFs, deps.dataDir, deps.logger);
   await personaStore.init();
-  const agentEventStore = new JsonAgentEventStore(deps.hostFs, deps.homedir, deps.logger);
+  const agentEventStore = new JsonAgentEventStore(deps.hostFs, deps.dataDir, deps.logger);
   await agentEventStore.init();
-  const domainEventLogStore = new JsonDomainEventLogStore(deps.hostFs, deps.homedir, deps.logger);
+  const domainEventLogStore = new JsonDomainEventLogStore(deps.hostFs, deps.dataDir, deps.logger);
   await domainEventLogStore.init();
-  const skillStore = new JsonSkillStore(deps.hostFs, deps.homedir, deps.logger);
+  const skillStore = new JsonSkillStore(deps.hostFs, deps.dataDir, deps.logger);
   await skillStore.init();
-  const panelStore = new JsonPanelStore(deps.hostFs, deps.homedir, deps.logger);
+  const panelStore = new JsonPanelStore(deps.hostFs, deps.dataDir, deps.logger);
   await panelStore.init();
-  const fileStore = new DiskFileStoreAdapter(deps.homedir);
-  const fileMetaStore = new JsonFileMetaStore(deps.hostFs, deps.homedir, deps.logger);
+  const fileStore = new DiskFileStoreAdapter(deps.dataDir);
+  const fileMetaStore = new JsonFileMetaStore(deps.hostFs, deps.dataDir, deps.logger);
   await fileMetaStore.init();
 
   return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null, fileStore, fileMetaStore };
@@ -127,11 +133,11 @@ async function createJsonStores(deps: {
 
 async function createJsonSessionStore(deps: {
   hostFs: HostFs;
-  homedir: string;
+  dataDir: string;
   logger: LoggerPort;
 }): Promise<SessionStorePort> {
   const { JsonSessionStore } = await import('./json-session-store.adapter.js');
-  const store = new JsonSessionStore(deps.hostFs, deps.homedir, deps.logger);
+  const store = new JsonSessionStore(deps.hostFs, deps.dataDir, deps.logger);
   await store.init();
   return store;
 }
@@ -141,12 +147,11 @@ type NonSessionStores = Omit<StorageStores, 'sessionStore'>;
 async function createSqliteStores(deps: {
   execFn: ExecFn;
   hostFs: HostFs;
-  homedir: string;
+  dataDir: string;
+  configDir: string;
   logger: LoggerPort;
 }): Promise<NonSessionStores> {
   const { join } = await import('node:path');
-  const { homedir } = await import('node:os');
-  const { FLEEX_DIR } = await import('@fleex/shared');
   const { SqliteConnection } = await import('./sqlite/connection.js');
   const { SqliteConfigAdapter } = await import('./sqlite/sqlite-config.adapter.js');
   const { SqliteTicketStoreAdapter } = await import('./sqlite/sqlite-ticket-store.adapter.js');
@@ -163,7 +168,7 @@ async function createSqliteStores(deps: {
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { SqliteFileMetaStoreAdapter } = await import('./sqlite/sqlite-file-meta-store.adapter.js');
 
-  const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
+  const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(deps.dataDir, 'fleex.db');
   const connection = new SqliteConnection(dbPath);
   await connection.init();
 
@@ -171,10 +176,10 @@ async function createSqliteStores(deps: {
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
   await runPendingMigrations('sqlite', connection, deps.logger);
 
-  const configStore = new SqliteConfigAdapter(connection, deps.execFn, deps.hostFs, deps.homedir);
+  const configStore = new SqliteConfigAdapter(connection, deps.execFn, deps.hostFs, deps.configDir);
   await configStore.init();
 
-  const agentEventStore = new SqliteAgentEventStoreAdapter(connection);
+  const agentEventStore = new SqliteAgentEventStoreAdapter(connection, deps.dataDir);
   await agentEventStore.init();
 
   deps.logger.info('SQLite storage initialized', { path: dbPath });
@@ -192,7 +197,7 @@ async function createSqliteStores(deps: {
     skillStore: new SqliteSkillStoreAdapter(connection),
     panelStore: new SqlitePanelStoreAdapter(connection),
     kvStore: new SqliteKvStoreAdapter(connection),
-    fileStore: new DiskFileStoreAdapter(deps.homedir),
+    fileStore: new DiskFileStoreAdapter(deps.dataDir),
     fileMetaStore: new SqliteFileMetaStoreAdapter(connection),
   };
 }
@@ -200,7 +205,8 @@ async function createSqliteStores(deps: {
 async function createPgsqlStores(deps: {
   execFn: ExecFn;
   hostFs: HostFs;
-  homedir: string;
+  dataDir: string;
+  configDir: string;
   logger: LoggerPort;
 }): Promise<NonSessionStores> {
   const url = process.env['FLEEX_PGSQL_URL'];
@@ -231,10 +237,10 @@ async function createPgsqlStores(deps: {
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
   await runPendingMigrations('pgsql', connection, deps.logger);
 
-  const configStore = new PgConfigAdapter(connection, deps.execFn, deps.hostFs, deps.homedir);
+  const configStore = new PgConfigAdapter(connection, deps.execFn, deps.hostFs, deps.configDir);
   await configStore.init();
 
-  const agentEventStore = new PgAgentEventStore(connection);
+  const agentEventStore = new PgAgentEventStore(connection, deps.dataDir);
   await agentEventStore.init();
 
   const domainEventLogStore = new PgDomainEventLogStore(connection);
@@ -255,7 +261,7 @@ async function createPgsqlStores(deps: {
     skillStore: new PgSkillStore(connection),
     panelStore: new PgPanelStore(connection),
     kvStore: new PgKvStoreAdapter(connection),
-    fileStore: new DiskFileStoreAdapter(deps.homedir),
+    fileStore: new DiskFileStoreAdapter(deps.dataDir),
     fileMetaStore: new PgFileMetaStore(connection),
   };
 }
@@ -263,7 +269,8 @@ async function createPgsqlStores(deps: {
 async function createSupabaseStores(deps: {
   execFn: ExecFn;
   hostFs: HostFs;
-  homedir: string;
+  dataDir: string;
+  configDir: string;
   logger: LoggerPort;
 }): Promise<NonSessionStores> {
   const url = process.env['FLEEX_SUPABASE_URL'];
@@ -298,10 +305,10 @@ async function createSupabaseStores(deps: {
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
   await runPendingMigrations('supabase', connection, deps.logger);
 
-  const configStore = new SupabaseConfigAdapter(connection, deps.execFn, deps.hostFs, deps.homedir);
+  const configStore = new SupabaseConfigAdapter(connection, deps.execFn, deps.hostFs, deps.configDir);
   await configStore.init();
 
-  const agentEventStore = new SupabaseAgentEventStore(connection);
+  const agentEventStore = new SupabaseAgentEventStore(connection, deps.dataDir);
   await agentEventStore.init();
 
   deps.logger.info('Supabase storage initialized', { url });

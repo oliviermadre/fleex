@@ -1,8 +1,6 @@
 import { join } from 'node:path';
 import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort } from '../../../application/ports/agent-event-store.port.js';
@@ -32,8 +30,8 @@ interface ExecutionRow {
 export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
   private readonly eventsDir: string;
 
-  constructor(private readonly conn: SqliteConnection) {
-    this.eventsDir = join(homedir(), FLEEX_DIR, 'projects', 'agent-events');
+  constructor(private readonly conn: SqliteConnection, dataDir: string) {
+    this.eventsDir = join(dataDir, 'projects', 'agent-events');
   }
 
   async init(): Promise<void> {
