@@ -92,6 +92,7 @@ export function versionRoutes() {
         behindBy,
         updateAvailable: behindBy > 0,
         isWorktree: isWorktree(),
+        repoPath: ROOT_DIR,
       };
     });
   };

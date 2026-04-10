@@ -568,8 +568,15 @@ phase_install() {
 
 # ── PATH setup ─────────────────────────────────────────────────────────────────
 setup_path() {
-  # ~/.local/bin should already be in PATH on properly configured systems
+  # If BIN_DIR is already in PATH, nothing to do
   if echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
+    return
+  fi
+
+  # In XDG mode (~/.local/bin), the system should already have it in PATH.
+  # Only modify shell RC files when using a non-standard BIN_DIR (legacy/FLEEX_HOME).
+  if [[ -z "${FLEEX_HOME:-}" ]]; then
+    warn "$BIN_DIR is not in your PATH. Add it to your shell configuration to use fleex."
     return
   fi
 
@@ -592,18 +599,18 @@ setup_path() {
 
   local path_line
   if [ "$shell_name" = "fish" ]; then
-    path_line="fish_add_path \$HOME/.local/bin"
+    path_line="set -gx PATH $BIN_DIR \$PATH"
   else
-    path_line='export PATH="$HOME/.local/bin:$PATH"'
+    path_line="export PATH=\"$BIN_DIR:\$PATH\""
   fi
 
   # Only add if not already present
-  if [ -f "$rc_file" ] && grep -qF '.local/bin' "$rc_file" 2>/dev/null; then
+  if [ -f "$rc_file" ] && grep -qF "$BIN_DIR" "$rc_file" 2>/dev/null; then
     return
   fi
 
   echo "" >> "$rc_file"
-  echo "# fleex CLI (XDG: ~/.local/bin)" >> "$rc_file"
+  echo "# fleex CLI" >> "$rc_file"
   echo "$path_line" >> "$rc_file"
 
   info "Added $BIN_DIR to PATH in $rc_file"

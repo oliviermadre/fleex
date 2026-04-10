@@ -14,7 +14,7 @@ export function VersionBanner() {
         {versionInfo.isWorktree && (
           <>
             <br />
-            <span className="text-blue-500/80 italic">You're in a worktree — run <code className="bg-blue-900/50 px-1 rounded">fleex self-update</code> from the main install to update.</span>
+            <span className="text-blue-500/80 italic">You're in a worktree — self-update only affects <code className="bg-blue-900/50 px-1 rounded">{versionInfo.repoPath}</code>.</span>
           </>
         )}
       </span>
