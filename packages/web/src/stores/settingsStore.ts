@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { API_URL } from '../lib/constants';
+import { API_URL, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE } from '../lib/constants';
 import { resolveTemplate, type WorktreeContext } from '../lib/templateUtils';
 import type { Theme } from '../lib/themes';
 import * as api from '../services/api';
@@ -49,6 +49,9 @@ export interface AppSettings {
   activeThemeId: string;
   customThemes: Theme[];
   sessionLayoutGroups: SessionLayoutGroup[];
+  terminalFontFamily: string;
+  terminalFontSize: number;
+  terminalFontThicken: boolean;
   agentMaxConcurrency: number;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
@@ -91,6 +94,9 @@ const defaultSettings: AppSettings = {
   activeThemeId: 'verdant',
   customThemes: [],
   sessionLayoutGroups: [],
+  terminalFontFamily: TERMINAL_FONT_FAMILY,
+  terminalFontSize: TERMINAL_FONT_SIZE,
+  terminalFontThicken: false,
   agentMaxConcurrency: 1,
   humanDisplayName: '',
   repoConfigs: {},

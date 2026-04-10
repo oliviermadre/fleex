@@ -7,10 +7,12 @@ import { VersionBanner } from './components/ui/VersionBanner';
 import { RouterSync } from './router/RouterSync';
 import { useFaviconStatus } from './hooks/useFaviconStatus';
 import { useTheme } from './hooks/useTheme';
+import { useTerminalFont } from './hooks/useTerminalFont';
 
 export function App() {
   useFaviconStatus();
   useTheme();
+  useTerminalFont();
 
   return (
     <BrowserRouter>

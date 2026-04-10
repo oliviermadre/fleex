@@ -22,6 +22,9 @@ interface TerminalInstance {
 class TerminalManager {
   private terminals = new Map<string, TerminalInstance>();
   private currentTerminalTheme = TERMINAL_THEME;
+  private currentFontFamily = TERMINAL_FONT_FAMILY;
+  private currentFontSize = TERMINAL_FONT_SIZE;
+  private currentFontThicken = false;
 
   create(sessionId: string): Terminal {
     const existing = this.terminals.get(sessionId);
@@ -29,8 +32,10 @@ class TerminalManager {
 
     const terminal = new Terminal({
       theme: this.currentTerminalTheme,
-      fontFamily: TERMINAL_FONT_FAMILY,
-      fontSize: TERMINAL_FONT_SIZE,
+      fontFamily: this.currentFontFamily,
+      fontSize: this.currentFontSize,
+      fontWeight: this.currentFontThicken ? '500' : 'normal',
+      fontWeightBold: this.currentFontThicken ? '800' : 'bold',
       scrollback: TERMINAL_SCROLLBACK,
       cursorBlink: true,
       allowTransparency: true,
@@ -192,6 +197,21 @@ class TerminalManager {
     this.currentTerminalTheme = termTheme;
     for (const [, instance] of this.terminals) {
       instance.terminal.options.theme = termTheme;
+    }
+  }
+
+  updateFont(fontFamily: string, fontSize: number, fontThicken: boolean): void {
+    this.currentFontFamily = fontFamily;
+    this.currentFontSize = fontSize;
+    this.currentFontThicken = fontThicken;
+    const fontWeight = fontThicken ? '500' : 'normal';
+    const fontWeightBold = fontThicken ? '800' : 'bold';
+    for (const [, instance] of this.terminals) {
+      instance.terminal.options.fontFamily = fontFamily;
+      instance.terminal.options.fontSize = fontSize;
+      instance.terminal.options.fontWeight = fontWeight;
+      instance.terminal.options.fontWeightBold = fontWeightBold;
+      try { instance.fitAddon.fit(); } catch { /* ignore */ }
     }
   }
 
