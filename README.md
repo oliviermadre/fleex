@@ -98,4 +98,4 @@ fleex start
 
 ## License
 
-TBD
+[Elastic License 2.0 (ELv2)](LICENSE) — free to use, modify, and self-host. Commercial use by third parties (resale, hosted service, SaaS) is not permitted.
