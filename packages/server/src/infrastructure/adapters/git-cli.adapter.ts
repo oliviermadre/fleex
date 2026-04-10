@@ -172,6 +172,11 @@ export class GitCliAdapter implements GitPort {
     this.logger.debug('Git fetch completed', { repoPath });
   }
 
+  async fetchRef(repoPath: string, refspec: string): Promise<void> {
+    await this.execFn('git', ['fetch', 'origin', refspec], { cwd: repoPath });
+    this.logger.debug('Git fetch ref completed', { repoPath, refspec });
+  }
+
   async cloneBare(remote: string, barePath: string): Promise<void> {
     await this.execFn('git', ['clone', '--bare', remote, barePath], { timeout: 120_000 });
     this.logger.debug('Bare clone created', { remote, barePath });
