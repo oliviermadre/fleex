@@ -16,11 +16,11 @@ export function EpicDetailView() {
   const archiveGroup = useTicketGroupStore((s) => s.archiveGroup);
   const unarchiveGroup = useTicketGroupStore((s) => s.unarchiveGroup);
   const setSelectedEpicDetail = useTicketGroupStore((s) => s.setSelectedEpicDetail);
+  const activeTab = useTicketGroupStore((s) => s.epicDetailTab);
+  const setActiveTab = useTicketGroupStore((s) => s.setEpicDetailTab);
   const fetchGroupTickets = useTicketGroupStore((s) => s.fetchGroupTickets);
   const groupTicketIds = useTicketGroupStore((s) => s.groupTicketIds);
   const allTickets = useTicketStore((s) => s.tickets);
-
-  const [activeTab, setActiveTab] = useState<'description' | 'tickets' | 'deliverables' | 'activity'>('description');
 
   const group = groups.find((g) => g.id === epicId) ?? null;
 

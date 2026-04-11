@@ -10,6 +10,9 @@ import type {
 } from '@fleex/shared';
 import * as api from '../services/api';
 
+export type EpicDetailTab = 'description' | 'tickets' | 'deliverables' | 'activity';
+export const VALID_EPIC_DETAIL_TABS: EpicDetailTab[] = ['description', 'tickets', 'deliverables', 'activity'];
+
 interface TicketGroupState {
   // ── Data ──
   groups: TicketGroup[];
@@ -26,6 +29,7 @@ interface TicketGroupState {
   selectedEpicIds: string[];
   activeView: 'board' | 'roadmap';
   selectedEpicDetailId: string | null;
+  epicDetailTab: EpicDetailTab;
 
   // ── Actions ──
   fetchGroups: (boardId?: string) => Promise<void>;
@@ -49,6 +53,7 @@ interface TicketGroupState {
   clearEpicFilter: () => void;
   setActiveView: (view: 'board' | 'roadmap') => void;
   setSelectedEpicDetail: (id: string | null) => void;
+  setEpicDetailTab: (tab: EpicDetailTab) => void;
 
   // ── WebSocket ──
   handleWsMessage: (msg: TicketGroupWsMessage) => void;
@@ -63,6 +68,7 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
   childrenMap: {},
   selectedEpicIds: [],
   activeView: 'board',
+  epicDetailTab: 'description',
   selectedEpicDetailId: null,
 
   fetchGroups: async (boardId?: string) => {
@@ -207,7 +213,9 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
 
   setActiveView: (view) => set({ activeView: view }),
 
-  setSelectedEpicDetail: (id) => set({ selectedEpicDetailId: id }),
+  setSelectedEpicDetail: (id) => set({ selectedEpicDetailId: id, epicDetailTab: 'description' }),
+
+  setEpicDetailTab: (tab) => set({ epicDetailTab: tab }),
 
   handleWsMessage: (msg) => {
     switch (msg.type) {

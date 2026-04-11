@@ -12,6 +12,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useUIStore, type SettingsTab, type AnalyticsTab } from '../stores/uiStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useTicketStore, VALID_TICKET_TABS, type TicketTab } from '../stores/ticketStore';
+import { useTicketGroupStore, VALID_EPIC_DETAIL_TABS, type EpicDetailTab } from '../stores/ticketGroupStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { useSkillStore } from '../stores/skillStore';
@@ -49,6 +50,10 @@ interface ParsedUrl {
   boardId: string | null | undefined;
   ticketId: string | null;
   ticketTab: TicketTab | null;
+  /** 'board' | 'roadmap' — which sub-view of the tickets panel */
+  ticketsView: 'board' | 'roadmap' | null;
+  epicId: string | null;
+  epicDetailTab: EpicDetailTab | null;
   scratchpadKey: string | null;
   personaId: string | null;
   personaTab: PersonaTab | null;
@@ -63,7 +68,7 @@ interface ParsedUrl {
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
-  const base = { sessionId: null, splitId: null, sessionTicketId: null as string | null, sessionTabKey: null as string | null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
+  const base = { sessionId: null, splitId: null, sessionTicketId: null as string | null, sessionTabKey: null as string | null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, ticketsView: null as 'board' | 'roadmap' | null, epicId: null as string | null, epicDetailTab: null as EpicDetailTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
 
   // Root: redirect to /dashboard
   if (pathname === '/') {
@@ -106,6 +111,23 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   }
 
   // Tickets — order matters: more specific patterns first
+
+  // Epic detail: /tickets/board/{boardId}/epic/{epicId}/{tab?}
+  const epicDetailMatch = pathname.match(/^\/tickets\/board\/([^/]+)\/epic\/([^/]+)(?:\/([^/]+))?$/);
+  if (epicDetailMatch) {
+    const rawBoard = epicDetailMatch[1]!;
+    const rawTab = epicDetailMatch[3] as EpicDetailTab | undefined;
+    const epicDetailTab = rawTab && VALID_EPIC_DETAIL_TABS.includes(rawTab) ? rawTab : null;
+    return { ...base, panel: 'tickets', boardId: rawBoard === 'all' ? null : rawBoard, epicId: epicDetailMatch[2]!, epicDetailTab, ticketsView: null };
+  }
+
+  // Roadmap: /tickets/board/{boardId}/roadmap
+  const roadmapMatch = pathname.match(/^\/tickets\/board\/([^/]+)\/roadmap$/);
+  if (roadmapMatch) {
+    const rawBoard = roadmapMatch[1]!;
+    return { ...base, panel: 'tickets', boardId: rawBoard === 'all' ? null : rawBoard, ticketsView: 'roadmap' };
+  }
+
   const ticketBoardTicketMatch = pathname.match(/^\/tickets\/board\/([^/]+)\/ticket\/([^/]+)(?:\/([^/]+))?$/);
   if (ticketBoardTicketMatch) {
     const rawBoard = ticketBoardTicketMatch[1]!;
@@ -222,6 +244,9 @@ export function storeToUrl(
   selectedPanelId?: string | null,
   sessionTicketId?: string | null,
   sessionTabKey?: string | null,
+  activeView?: 'board' | 'roadmap',
+  epicDetailId?: string | null,
+  epicDetailTab?: EpicDetailTab,
 ): { pathname: string; search: string } {
   switch (activePanel) {
     case 'dashboard':
@@ -246,18 +271,26 @@ export function storeToUrl(
       return { pathname: '/repositories', search: '' };
     }
     case 'tickets': {
+      const boardSlug = selectedBoardId === null ? 'all' : selectedBoardId;
       const tabSuffix = selectedTicketId && ticketTab && ticketTab !== 'description' ? `/${ticketTab}` : '';
-      if (selectedBoardId === null) {
-        if (selectedTicketId) {
-          return { pathname: `/tickets/board/all/ticket/${selectedTicketId}${tabSuffix}`, search: '' };
-        }
-        return { pathname: '/tickets/board/all', search: '' };
+
+      // Epic detail takes priority
+      if (epicDetailId && boardSlug) {
+        const epicTabSuffix = epicDetailTab && epicDetailTab !== 'description' ? `/${epicDetailTab}` : '';
+        return { pathname: `/tickets/board/${boardSlug}/epic/${epicDetailId}${epicTabSuffix}`, search: '' };
       }
-      if (selectedBoardId) {
+
+      // Roadmap view
+      if (activeView === 'roadmap' && boardSlug) {
+        return { pathname: `/tickets/board/${boardSlug}/roadmap`, search: '' };
+      }
+
+      // Board view with ticket detail
+      if (boardSlug) {
         if (selectedTicketId) {
-          return { pathname: `/tickets/board/${selectedBoardId}/ticket/${selectedTicketId}${tabSuffix}`, search: '' };
+          return { pathname: `/tickets/board/${boardSlug}/ticket/${selectedTicketId}${tabSuffix}`, search: '' };
         }
-        return { pathname: `/tickets/board/${selectedBoardId}`, search: '' };
+        return { pathname: `/tickets/board/${boardSlug}`, search: '' };
       }
       return { pathname: '/tickets', search: '' };
     }
@@ -332,6 +365,13 @@ export function RouterSync() {
   const ticketTab = useTicketStore((s) => s.ticketTab);
   const setTicketTab = useTicketStore((s) => s.setTicketTab);
 
+  const activeView = useTicketGroupStore((s) => s.activeView);
+  const setActiveView = useTicketGroupStore((s) => s.setActiveView);
+  const epicDetailId = useTicketGroupStore((s) => s.selectedEpicDetailId);
+  const setSelectedEpicDetail = useTicketGroupStore((s) => s.setSelectedEpicDetail);
+  const epicDetailTab = useTicketGroupStore((s) => s.epicDetailTab);
+  const setEpicDetailTab = useTicketGroupStore((s) => s.setEpicDetailTab);
+
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
   const setSelectedScratchpadKey = useScratchpadStore((s) => s.setSelectedScratchpadKey);
   const loadScratchpad = useScratchpadStore((s) => s.load);
@@ -390,7 +430,7 @@ export function RouterSync() {
       }
     }
 
-    // Update ticket board/ticket selection
+    // Update ticket board/ticket/epic selection
     if (parsed.panel === 'tickets') {
       if (parsed.boardId !== undefined && parsed.boardId !== selectedBoardId) {
         selectBoard(parsed.boardId);
@@ -400,6 +440,19 @@ export function RouterSync() {
       }
       if (parsed.ticketTab && parsed.ticketTab !== ticketTab) {
         setTicketTab(parsed.ticketTab);
+      }
+      // Roadmap / board view
+      const newView = parsed.ticketsView ?? (parsed.epicId ? activeView : 'board');
+      if (newView !== activeView) {
+        setActiveView(newView);
+      }
+      // Epic detail
+      const newEpicId = parsed.epicId ?? null;
+      if (newEpicId !== epicDetailId) {
+        setSelectedEpicDetail(newEpicId);
+      }
+      if (parsed.epicDetailTab && parsed.epicDetailTab !== epicDetailTab) {
+        setEpicDetailTab(parsed.epicDetailTab);
       }
     }
 
@@ -484,6 +537,9 @@ export function RouterSync() {
       selectedPanelId,
       sessionTicketId,
       sessionTabKey,
+      activeView,
+      epicDetailId,
+      epicDetailTab,
     );
 
     const currentPath = location.pathname;
@@ -513,6 +569,9 @@ export function RouterSync() {
     analyticsTab,
     ticketTab,
     selectedPanelId,
+    activeView,
+    epicDetailId,
+    epicDetailTab,
     // Don't include location to avoid re-triggering on our own navigate calls
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
