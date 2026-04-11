@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { TicketGroup, Ticket, TicketStatus } from '@fleex/shared';
-import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
+import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { EpicProgressBar } from './EpicProgressBar';
@@ -262,30 +263,24 @@ const COLUMN_TITLE_COLOR: Record<string, string> = {
   cancelled: 'text-red-400/70',
 };
 
-const COLUMN_BADGE_COLOR: Record<string, string> = {
-  backlog: 'text-[var(--theme-text-muted)] bg-[var(--theme-bg-overlay)]',
-  todo: 'text-orange-400 bg-orange-400/10',
-  doing: 'text-blue-400 bg-blue-400/10',
-  reviewing: 'text-purple-400 bg-purple-400/10',
-  done: 'text-green-400 bg-green-400/10',
-  cancelled: 'text-red-400/70 bg-red-400/10',
-};
-
 function TicketsTab({ epicId, boardId, epicTickets }: { epicId: string; boardId: string; epicTickets: Ticket[] }) {
   const [showPicker, setShowPicker] = useState(false);
+  const removeTicketFromGroup = useTicketGroupStore((s) => s.removeTicketFromGroup);
+  const setSelectedEpicDetail = useTicketGroupStore((s) => s.setSelectedEpicDetail);
+  const navigate = useNavigate();
 
-  const byStatus = useMemo(() => {
-    const map: Record<TicketStatus, Ticket[]> = {
-      backlog: [], todo: [], doing: [], reviewing: [], done: [], cancelled: [],
-    };
-    for (const t of epicTickets) {
-      map[t.status]?.push(t);
-    }
-    return map;
+  const sorted = useMemo(() => {
+    return [...epicTickets].sort((a, b) => {
+      const statusDiff = (STATUS_SORT_ORDER[a.status] ?? 99) - (STATUS_SORT_ORDER[b.status] ?? 99);
+      if (statusDiff !== 0) return statusDiff;
+      return a.title.localeCompare(b.title);
+    });
   }, [epicTickets]);
 
-  const removeTicketFromGroup = useTicketGroupStore((s) => s.removeTicketFromGroup);
-  const statuses = TICKET_STATUSES as readonly TicketStatus[];
+  const handleClickTicket = (ticket: Ticket) => {
+    setSelectedEpicDetail(null);
+    navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -299,46 +294,41 @@ function TicketsTab({ epicId, boardId, epicTickets }: { epicId: string; boardId:
         </button>
       </div>
 
-      {/* Mini Kanban — matches KanbanColumn styling */}
-      <div className="flex min-h-0 flex-1 items-stretch overflow-hidden">
-        {statuses.map((status) => (
-          <div key={status} className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-[var(--theme-border)]">
-            {/* Header — matches KanbanColumn */}
-            <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-4 py-3">
-              <span className={cn('text-sm font-bold uppercase tracking-wider', COLUMN_TITLE_COLOR[status])}>
-                {TICKET_STATUS_LABELS[status]}
-              </span>
-              <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', COLUMN_BADGE_COLOR[status])}>
-                {byStatus[status].length}
-              </span>
-            </div>
-
-            {/* Cards — matches KanbanColumn card list */}
-            <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-2">
-              {byStatus[status].map((ticket) => (
-                <div
-                  key={ticket.id}
-                  className="group rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 transition-colors hover:border-[var(--theme-border-input)]"
-                >
-                  <div className="flex items-start gap-1.5">
-                    <PriorityIndicator priority={ticket.priority} />
-                    <span className="min-w-0 flex-1 text-sm text-[var(--theme-text-primary)]">{ticket.title}</span>
-                    <button
-                      className="flex-shrink-0 rounded p-0.5 text-[var(--theme-text-faint)] opacity-0 transition-opacity hover:text-[var(--theme-danger)] group-hover:opacity-100"
-                      onClick={() => removeTicketFromGroup(epicId, ticket.id)}
-                      title="Remove from epic"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                        <line x1="4" y1="4" x2="12" y2="12" />
-                        <line x1="12" y1="4" x2="4" y2="12" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* Ticket list */}
+      <div className="min-h-0 flex-1 overflow-y-auto epic-picker-scroll">
+        {sorted.map((ticket) => (
+          <div
+            key={ticket.id}
+            className="group flex items-center border-b border-[var(--theme-border)] px-4 py-2 transition-colors hover:bg-[var(--theme-bg-hover)]"
+          >
+            <PriorityIndicator priority={ticket.priority} />
+            <button
+              className="ml-2 min-w-0 flex-1 truncate text-left text-sm text-[var(--theme-text-primary)] transition-colors hover:text-[var(--theme-accent)]"
+              onClick={() => handleClickTicket(ticket)}
+              title={ticket.title}
+            >
+              {ticket.title}
+            </button>
+            <span className={cn('ml-3 flex-shrink-0 text-xs font-medium', COLUMN_TITLE_COLOR[ticket.status])}>
+              {TICKET_STATUS_LABELS[ticket.status]}
+            </span>
+            <button
+              className="ml-3 flex-shrink-0 rounded p-0.5 text-[var(--theme-text-faint)] opacity-0 transition-opacity hover:text-[var(--theme-danger)] group-hover:opacity-100"
+              onClick={() => removeTicketFromGroup(epicId, ticket.id)}
+              title="Remove from epic"
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="4" x2="12" y2="12" />
+                <line x1="12" y1="4" x2="4" y2="12" />
+              </svg>
+            </button>
           </div>
         ))}
+        {sorted.length === 0 && (
+          <div className="flex items-center justify-center py-8 text-xs text-[var(--theme-text-muted)]">
+            No tickets in this epic yet.
+          </div>
+        )}
       </div>
 
       {/* Ticket Picker Modal */}
