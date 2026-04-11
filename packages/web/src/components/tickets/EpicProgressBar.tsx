@@ -7,35 +7,27 @@ interface EpicProgressBarProps {
 
 export function EpicProgressBar({ tickets, showLabel = true }: EpicProgressBarProps) {
   const total = tickets.length;
-  const doneCount = tickets.filter((t) => t.status === 'done').length;
-  const inProgressCount = tickets.filter(
-    (t) => t.status === 'doing' || t.status === 'reviewing',
-  ).length;
+  const doneCount = tickets.filter((t) => t.status === 'done' || t.status === 'cancelled').length;
 
-  const donePercent = total > 0 ? (doneCount / total) * 100 : 0;
-  const inProgressPercent = total > 0 ? (inProgressCount / total) * 100 : 0;
+  const percent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="relative h-8 w-full overflow-hidden rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
+      {/* Fill */}
+      {percent > 0 && (
+        <div
+          className="absolute inset-y-0 left-0 rounded-lg bg-[var(--theme-accent)]"
+          style={{ width: `${percent}%` }}
+        />
+      )}
+      {/* Label inside the bar */}
       {showLabel && (
-        <span className="text-xs text-[var(--theme-text-secondary)]">
-          {Math.round(donePercent)}% {doneCount}/{total}
+        <span
+          className="absolute inset-0 flex items-center justify-center text-xs font-bold tracking-wide text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+        >
+          {percent}%&nbsp;&nbsp;{doneCount}/{total}
         </span>
       )}
-      <div className="h-2 rounded-full overflow-hidden bg-[var(--theme-bg-tertiary)]">
-        {donePercent > 0 && (
-          <div
-            className="h-full bg-[var(--color-fleex-cyan,#06b6d4)] float-left"
-            style={{ width: `${donePercent}%` }}
-          />
-        )}
-        {inProgressPercent > 0 && (
-          <div
-            className="h-full bg-[var(--color-fleex-green,#10b981)] opacity-60 float-left"
-            style={{ width: `${inProgressPercent}%` }}
-          />
-        )}
-      </div>
     </div>
   );
 }

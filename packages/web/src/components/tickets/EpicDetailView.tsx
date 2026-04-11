@@ -285,7 +285,7 @@ function TicketsTab({ epicId, boardId, epicTickets }: { epicId: string; boardId:
   }, [epicTickets]);
 
   const removeTicketFromGroup = useTicketGroupStore((s) => s.removeTicketFromGroup);
-  const statuses = (TICKET_STATUSES as readonly TicketStatus[]).filter((s) => s !== 'cancelled');
+  const statuses = TICKET_STATUSES as readonly TicketStatus[];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
