@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { TicketGroup, Ticket, TicketStatus } from '@fleex/shared';
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
+import type { DomainEventLog } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { fetchEvents } from '../../services/api';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { EpicProgressBar } from './EpicProgressBar';
 import { PriorityIndicator } from './PriorityIndicator';
@@ -80,8 +82,8 @@ export function EpicDetailView() {
         <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium text-white', statusBadgeColor[group.groupStatus] ?? '')}>
           {group.groupStatus.charAt(0).toUpperCase() + group.groupStatus.slice(1)}
         </span>
-        <span className="text-lg">{group.emoji}</span>
-        <span className="text-sm font-semibold text-[var(--theme-text-primary)]">{group.name}</span>
+        <EditableEmoji value={group.emoji} onSave={(emoji) => updateGroup(group.id, { emoji })} />
+        <EditableName value={group.name} onSave={(name) => updateGroup(group.id, { name })} />
       </div>
 
       {/* Content area */}
@@ -90,7 +92,7 @@ export function EpicDetailView() {
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* Tabs */}
           <div className="flex border-b border-[var(--theme-border)]">
-            {(['description', 'tickets', 'deliverables', 'activity'] as const).map((tab) => (
+            {(['description', 'tickets', 'activity'] as const).map((tab) => (
               <button
                 key={tab}
                 className={cn(
@@ -127,9 +129,7 @@ export function EpicDetailView() {
             )}
 
             {activeTab === 'activity' && (
-              <div className="flex items-center justify-center p-8 text-xs text-[var(--theme-text-muted)]">
-                Activity log will appear here.
-              </div>
+              <EpicActivityLog groupId={epicId!} />
             )}
           </div>
         </div>
@@ -246,7 +246,93 @@ export function EpicDetailView() {
   );
 }
 
-// ── Tickets Tab (mini-kanban + manage button) ──
+// ── Activity Log ──
+
+const EVENT_LABELS: Record<string, string> = {
+  'ticketGroup.created': 'Epic created',
+  'ticketGroup.updated': 'Epic updated',
+  'ticketGroup.deleted': 'Epic deleted',
+  'ticketGroup.memberAdded': 'Ticket added to epic',
+  'ticketGroup.memberRemoved': 'Ticket removed from epic',
+  'ticketRelationship.created': 'Ticket relationship created',
+  'ticketRelationship.deleted': 'Ticket relationship removed',
+};
+
+function EpicActivityLog({ groupId }: { groupId: string }) {
+  const [events, setEvents] = useState<DomainEventLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    // Fetch both ticketGroup.* and ticketRelationship.* events, then filter client-side by groupId
+    Promise.all([
+      fetchEvents({ eventType: 'ticketGroup.', limit: 200 }),
+      fetchEvents({ eventType: 'ticketRelationship.', limit: 200 }),
+    ]).then(([groupEvents, relEvents]) => {
+      const all = [...groupEvents, ...relEvents]
+        .filter((e) => e.payload.groupId === groupId || e.payload.parentId === groupId)
+        .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+      setEvents(all);
+    }).finally(() => setLoading(false));
+  }, [groupId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8 text-xs text-[var(--theme-text-muted)]">
+        Loading activity...
+      </div>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <div className="flex items-center justify-center p-8 text-xs text-[var(--theme-text-muted)]">
+        No activity recorded yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-y-auto epic-picker-scroll">
+      {events.map((event) => (
+        <div key={event.id} className="flex items-start gap-3 border-b border-[var(--theme-border)] px-4 py-3">
+          <div className="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full bg-[var(--theme-accent)]" />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm text-[var(--theme-text-primary)]">
+              {EVENT_LABELS[event.eventType] ?? event.eventType}
+            </div>
+            {event.payload.changes && typeof event.payload.changes === 'object' && (
+              <div className="mt-0.5 text-xs text-[var(--theme-text-muted)]">
+                {Object.keys(event.payload.changes as Record<string, unknown>).join(', ')}
+              </div>
+            )}
+            {event.payload.ticketId && (
+              <div className="mt-0.5 text-xs text-[var(--theme-text-muted)]">
+                Ticket: {String(event.payload.ticketId).slice(0, 8)}...
+              </div>
+            )}
+          </div>
+          <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]">
+            {formatRelativeTime(event.occurredAt)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+// ── Tickets Tab ──
 
 const COLUMN_TITLE_COLOR: Record<string, string> = {
   backlog: 'text-[var(--theme-text-muted)]',
@@ -256,6 +342,80 @@ const COLUMN_TITLE_COLOR: Record<string, string> = {
   done: 'text-green-400',
   cancelled: 'text-red-400/70',
 };
+
+// ── Editable Name / Emoji ──
+
+function EditableName({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => { setDraft(value); }, [value]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== value) onSave(trimmed);
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <button
+        className="text-sm font-semibold text-[var(--theme-text-primary)] hover:text-[var(--theme-accent)] transition-colors"
+        onClick={() => setEditing(true)}
+        title="Click to rename"
+      >
+        {value}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      className="rounded border border-[var(--theme-accent)] bg-transparent px-1 py-0.5 text-sm font-semibold text-[var(--theme-text-primary)] focus:outline-none"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+      onBlur={commit}
+    />
+  );
+}
+
+function EditableEmoji({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => { setDraft(value); }, [value]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== value) onSave(trimmed);
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <button
+        className="text-lg hover:scale-125 transition-transform"
+        onClick={() => setEditing(true)}
+        title="Click to change emoji"
+      >
+        {value}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      className="w-10 rounded border border-[var(--theme-accent)] bg-transparent px-1 py-0.5 text-center text-lg focus:outline-none"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+      onBlur={commit}
+    />
+  );
+}
 
 // ── Description Editor ──
 
