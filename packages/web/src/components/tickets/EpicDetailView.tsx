@@ -301,14 +301,14 @@ function EpicActivityLog({ groupId }: { groupId: string }) {
             <div className="text-sm text-[var(--theme-text-primary)]">
               {EVENT_LABELS[event.eventType] ?? event.eventType}
             </div>
-            {event.payload.changes && typeof event.payload.changes === 'object' && (
+            {event.payload['changes'] != null && typeof event.payload['changes'] === 'object' && (
               <div className="mt-0.5 text-xs text-[var(--theme-text-muted)]">
-                {Object.keys(event.payload.changes as Record<string, unknown>).join(', ')}
+                {Object.keys(event.payload['changes'] as Record<string, unknown>).join(', ')}
               </div>
             )}
-            {event.payload.ticketId && (
+            {event.payload['ticketId'] != null && (
               <div className="mt-0.5 text-xs text-[var(--theme-text-muted)]">
-                Ticket: {String(event.payload.ticketId).slice(0, 8)}...
+                Ticket: {String(event.payload['ticketId']).slice(0, 8)}...
               </div>
             )}
           </div>

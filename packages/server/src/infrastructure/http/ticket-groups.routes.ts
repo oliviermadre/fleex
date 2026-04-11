@@ -53,7 +53,7 @@ export function ticketGroupRoutes(container: Container) {
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       group.update(request.body);
       await container.ticketGroupStore.saveTicketGroup(group);
-      emit({ type: 'ticketGroup.updated', groupId: group.id, changes: request.body, occurredAt: new Date() });
+      emit({ type: 'ticketGroup.updated', groupId: group.id, changes: { ...request.body }, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:updated', group.toDTO());
       return group.toDTO();
     });
@@ -63,7 +63,7 @@ export function ticketGroupRoutes(container: Container) {
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       group.archive();
       await container.ticketGroupStore.saveTicketGroup(group);
-      emit({ type: 'ticketGroup.updated', groupId: group.id, changes: { groupStatus: 'archived' }, occurredAt: new Date() });
+      emit({ type: 'ticketGroup.updated', groupId: group.id, changes: { groupStatus: 'archived' as const }, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:updated', group.toDTO());
       return group.toDTO();
     });
@@ -73,7 +73,7 @@ export function ticketGroupRoutes(container: Container) {
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       group.unarchive();
       await container.ticketGroupStore.saveTicketGroup(group);
-      emit({ type: 'ticketGroup.updated', groupId: group.id, changes: { groupStatus: 'active' }, occurredAt: new Date() });
+      emit({ type: 'ticketGroup.updated', groupId: group.id, changes: { groupStatus: 'active' as const }, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:updated', group.toDTO());
       return group.toDTO();
     });
