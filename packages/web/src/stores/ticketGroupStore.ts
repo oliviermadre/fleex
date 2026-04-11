@@ -78,12 +78,18 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
 
   fetchGroupTickets: async (groupId: string) => {
     const tickets = await api.fetchTicketGroupTickets(groupId);
-    set((s) => ({
-      groupTicketIds: {
-        ...s.groupTicketIds,
-        [groupId]: tickets.map((t) => t.id),
-      },
-    }));
+    set((s) => {
+      const ticketIds = tickets.map((t) => t.id);
+      // Also build the reverse mapping: ticketId → groupIds
+      const updatedTicketGroupIds = { ...s.ticketGroupIds };
+      for (const tid of ticketIds) {
+        updatedTicketGroupIds[tid] = [...new Set([...(updatedTicketGroupIds[tid] ?? []), groupId])];
+      }
+      return {
+        groupTicketIds: { ...s.groupTicketIds, [groupId]: ticketIds },
+        ticketGroupIds: updatedTicketGroupIds,
+      };
+    });
     return tickets;
   },
 
