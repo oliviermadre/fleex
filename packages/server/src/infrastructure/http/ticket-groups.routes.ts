@@ -10,6 +10,8 @@ class TicketGroupNotFoundError extends Error {
 }
 
 export function ticketGroupRoutes(container: Container) {
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+
   return async function (app: FastifyInstance) {
 
     // ── Ticket Groups (Epics) ──
@@ -41,6 +43,7 @@ export function ticketGroupRoutes(container: Container) {
         timeframe: request.body.timeframe,
       });
       await container.ticketGroupStore.saveTicketGroup(group);
+      emit({ type: 'ticketGroup.created', groupId: group.id, boardId: group.boardId, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:created', group.toDTO());
       return reply.code(201).send(group.toDTO());
     });
@@ -50,6 +53,7 @@ export function ticketGroupRoutes(container: Container) {
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       group.update(request.body);
       await container.ticketGroupStore.saveTicketGroup(group);
+      emit({ type: 'ticketGroup.updated', groupId: group.id, changes: request.body, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:updated', group.toDTO());
       return group.toDTO();
     });
@@ -59,6 +63,7 @@ export function ticketGroupRoutes(container: Container) {
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       group.archive();
       await container.ticketGroupStore.saveTicketGroup(group);
+      emit({ type: 'ticketGroup.updated', groupId: group.id, changes: { groupStatus: 'archived' }, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:updated', group.toDTO());
       return group.toDTO();
     });
@@ -68,6 +73,7 @@ export function ticketGroupRoutes(container: Container) {
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       group.unarchive();
       await container.ticketGroupStore.saveTicketGroup(group);
+      emit({ type: 'ticketGroup.updated', groupId: group.id, changes: { groupStatus: 'active' }, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:updated', group.toDTO());
       return group.toDTO();
     });
@@ -76,6 +82,7 @@ export function ticketGroupRoutes(container: Container) {
       const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       await container.ticketGroupStore.removeTicketGroup(group.id);
+      emit({ type: 'ticketGroup.deleted', groupId: group.id, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:deleted', { id: group.id });
       return reply.code(204).send();
     });
@@ -93,20 +100,18 @@ export function ticketGroupRoutes(container: Container) {
     });
 
     app.post<{ Params: { id: string; ticketId: string } }>('/api/ticket-groups/:id/tickets/:ticketId', async (request, reply) => {
-      await container.ticketGroupStore.addMembership(request.params.ticketId, request.params.id);
-      container.ticketBroadcast('ticketGroup:memberAdded', {
-        groupId: request.params.id,
-        ticketId: request.params.ticketId,
-      });
-      return reply.code(201).send({ ticketId: request.params.ticketId, groupId: request.params.id });
+      const { id: groupId, ticketId } = request.params;
+      await container.ticketGroupStore.addMembership(ticketId, groupId);
+      emit({ type: 'ticketGroup.memberAdded', groupId, ticketId, occurredAt: new Date() });
+      container.ticketBroadcast('ticketGroup:memberAdded', { groupId, ticketId });
+      return reply.code(201).send({ ticketId, groupId });
     });
 
     app.delete<{ Params: { id: string; ticketId: string } }>('/api/ticket-groups/:id/tickets/:ticketId', async (request, reply) => {
-      await container.ticketGroupStore.removeMembership(request.params.ticketId, request.params.id);
-      container.ticketBroadcast('ticketGroup:memberRemoved', {
-        groupId: request.params.id,
-        ticketId: request.params.ticketId,
-      });
+      const { id: groupId, ticketId } = request.params;
+      await container.ticketGroupStore.removeMembership(ticketId, groupId);
+      emit({ type: 'ticketGroup.memberRemoved', groupId, ticketId, occurredAt: new Date() });
+      container.ticketBroadcast('ticketGroup:memberRemoved', { groupId, ticketId });
       return reply.code(204).send();
     });
 
@@ -141,7 +146,6 @@ export function ticketGroupRoutes(container: Container) {
     app.post<{ Params: { ticketId: string; childId: string } }>('/api/tickets/:ticketId/children/:childId', async (request, reply) => {
       const { ticketId, childId } = request.params;
 
-      // Cycle prevention: check if childId is already an ancestor of ticketId
       if (ticketId === childId) {
         return reply.code(400).send({ error: 'A ticket cannot be its own child' });
       }
@@ -150,19 +154,16 @@ export function ticketGroupRoutes(container: Container) {
       }
 
       await container.ticketGroupStore.addRelationship(ticketId, childId);
-      container.ticketBroadcast('ticketRelationship:created', {
-        parentId: ticketId,
-        childId,
-      });
+      emit({ type: 'ticketRelationship.created', parentId: ticketId, childId, occurredAt: new Date() });
+      container.ticketBroadcast('ticketRelationship:created', { parentId: ticketId, childId });
       return reply.code(201).send({ parentId: ticketId, childId });
     });
 
     app.delete<{ Params: { ticketId: string; childId: string } }>('/api/tickets/:ticketId/children/:childId', async (request, reply) => {
-      await container.ticketGroupStore.removeRelationship(request.params.ticketId, request.params.childId);
-      container.ticketBroadcast('ticketRelationship:deleted', {
-        parentId: request.params.ticketId,
-        childId: request.params.childId,
-      });
+      const { ticketId, childId } = request.params;
+      await container.ticketGroupStore.removeRelationship(ticketId, childId);
+      emit({ type: 'ticketRelationship.deleted', parentId: ticketId, childId, occurredAt: new Date() });
+      container.ticketBroadcast('ticketRelationship:deleted', { parentId: ticketId, childId });
       return reply.code(204).send();
     });
   };
