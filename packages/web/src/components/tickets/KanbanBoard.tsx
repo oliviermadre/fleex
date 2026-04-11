@@ -1,11 +1,15 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { TICKET_STATUSES } from '@fleex/shared';
-import type { TicketStatus } from '@fleex/shared';
+import type { TicketStatus, Ticket } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { fetchBulkPRStates } from '../../services/api';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanHeader } from './KanbanHeader';
 import { ArchivedTicketsModal } from './ArchivedTicketsModal';
+import { EpicBanner } from './EpicBanner';
+import { RoadmapView } from './RoadmapView';
+import { EpicDetailView } from './EpicDetailView';
 import { useUnreadStore } from '../../stores/unreadStore';
 
 export function KanbanBoard() {
@@ -17,6 +21,12 @@ export function KanbanBoard() {
   const filters = useTicketStore((s) => s.filters);
   const searchQuery = useTicketStore((s) => s.searchQuery);
   const loadUnreadCounts = useUnreadStore((s) => s.loadUnreadCounts);
+
+  // Epic stores
+  const activeView = useTicketGroupStore((s) => s.activeView);
+  const selectedEpicDetailId = useTicketGroupStore((s) => s.selectedEpicDetailId);
+  const selectedEpicIds = useTicketGroupStore((s) => s.selectedEpicIds);
+  const groupTicketIds = useTicketGroupStore((s) => s.groupTicketIds);
 
   // Load unread counts on mount and when tickets change
   const ticketIds = useMemo(() => tickets.map((t) => t.id), [tickets]);
@@ -88,7 +98,28 @@ export function KanbanBoard() {
     );
   }
 
+  // If epic detail is open, show it
+  if (selectedEpicDetailId) {
+    return <EpicDetailView />;
+  }
+
+  // If roadmap view is active, show it
+  if (activeView === 'roadmap') {
+    return (
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
+        <KanbanHeader
+          board={board}
+          isAllBoards={isAllBoards}
+          onShowArchived={() => setShowArchived(true)}
+        />
+        <RoadmapView />
+      </div>
+    );
+  }
+
+  // Filter tickets by selected epics
   const columns = ticketsByColumn(selectedBoardId);
+  const filteredColumns = filterColumnsByEpics(columns, selectedEpicIds, groupTicketIds);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
@@ -104,12 +135,13 @@ export function KanbanBoard() {
           onClose={() => setShowArchived(false)}
         />
       )}
+      <EpicBanner />
       <div className="flex min-h-0 flex-1 items-stretch overflow-hidden">
         {(TICKET_STATUSES as readonly TicketStatus[]).map((status) => (
           <KanbanColumn
             key={status}
             status={status}
-            tickets={columns[status] ?? []}
+            tickets={filteredColumns[status] ?? []}
             boardId={selectedBoardId ?? boards[0]?.id ?? ''}
             isAllBoards={isAllBoards}
             boards={isAllBoards ? boards : undefined}
@@ -122,4 +154,27 @@ export function KanbanBoard() {
 
     </div>
   );
+}
+
+/** Filter kanban columns to only show tickets belonging to the selected epics. */
+function filterColumnsByEpics(
+  columns: Record<string, Ticket[]>,
+  selectedEpicIds: string[],
+  groupTicketIds: Record<string, string[]>,
+): Record<string, Ticket[]> {
+  if (selectedEpicIds.length === 0) return columns;
+
+  // Collect the union of all ticket IDs from selected epics
+  const allowedIds = new Set<string>();
+  for (const epicId of selectedEpicIds) {
+    for (const ticketId of (groupTicketIds[epicId] ?? [])) {
+      allowedIds.add(ticketId);
+    }
+  }
+
+  const result: Record<string, Ticket[]> = {};
+  for (const [status, tickets] of Object.entries(columns)) {
+    result[status] = tickets.filter((t) => allowedIds.has(t.id));
+  }
+  return result;
 }

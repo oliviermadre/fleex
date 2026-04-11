@@ -102,6 +102,7 @@ export async function createContainer() {
     kvStore,
     fileStore,
     fileMetaStore,
+    ticketGroupStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   // Wrap stores with write-through in-memory cache (zero DB queries on 1s tick).
@@ -336,6 +337,7 @@ export async function createContainer() {
     kvStore,
     fileStore,
     fileMetaStore,
+    ticketGroupStore,
     eventBus,
     domainEventListener,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

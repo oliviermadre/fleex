@@ -19,6 +19,11 @@ import type {
   DomainEventLog,
   StatisticsResponse,
   DashboardData,
+  TicketGroup,
+  CreateTicketGroupRequest,
+  UpdateTicketGroupRequest,
+  Ticket,
+  TicketRelationship,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -690,4 +695,75 @@ export async function uploadFile(file: File): Promise<UploadedFile> {
   }
 
   return res.json() as Promise<UploadedFile>;
+}
+
+// ── Ticket Groups (Epics) ──
+
+export async function fetchTicketGroups(boardId?: string): Promise<TicketGroup[]> {
+  const q = boardId ? `?boardId=${encodeURIComponent(boardId)}` : '';
+  return request<TicketGroup[]>(`/ticket-groups${q}`);
+}
+
+export async function fetchTicketGroup(id: string): Promise<TicketGroup> {
+  return request<TicketGroup>(`/ticket-groups/${encodeURIComponent(id)}`);
+}
+
+export async function createTicketGroup(req: CreateTicketGroupRequest): Promise<TicketGroup> {
+  return request<TicketGroup>('/ticket-groups', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
+export async function updateTicketGroup(id: string, req: UpdateTicketGroupRequest): Promise<TicketGroup> {
+  return request<TicketGroup>(`/ticket-groups/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  });
+}
+
+export async function deleteTicketGroup(id: string): Promise<void> {
+  return request<void>(`/ticket-groups/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function archiveTicketGroup(id: string): Promise<TicketGroup> {
+  return request<TicketGroup>(`/ticket-groups/${encodeURIComponent(id)}/archive`, { method: 'POST' });
+}
+
+export async function unarchiveTicketGroup(id: string): Promise<TicketGroup> {
+  return request<TicketGroup>(`/ticket-groups/${encodeURIComponent(id)}/unarchive`, { method: 'POST' });
+}
+
+export async function fetchTicketGroupTickets(groupId: string): Promise<Ticket[]> {
+  return request<Ticket[]>(`/ticket-groups/${encodeURIComponent(groupId)}/tickets`);
+}
+
+export async function addTicketToGroup(groupId: string, ticketId: string): Promise<void> {
+  await request(`/ticket-groups/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, { method: 'POST' });
+}
+
+export async function removeTicketFromGroup(groupId: string, ticketId: string): Promise<void> {
+  await request(`/ticket-groups/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, { method: 'DELETE' });
+}
+
+export async function fetchTicketGroups4Ticket(ticketId: string): Promise<TicketGroup[]> {
+  return request<TicketGroup[]>(`/tickets/${encodeURIComponent(ticketId)}/groups`);
+}
+
+// ── Ticket Relationships ──
+
+export async function fetchTicketChildren(ticketId: string): Promise<Ticket[]> {
+  return request<Ticket[]>(`/tickets/${encodeURIComponent(ticketId)}/children`);
+}
+
+export async function fetchTicketParents(ticketId: string): Promise<Ticket[]> {
+  return request<Ticket[]>(`/tickets/${encodeURIComponent(ticketId)}/parents`);
+}
+
+export async function addTicketChild(parentId: string, childId: string): Promise<void> {
+  await request(`/tickets/${encodeURIComponent(parentId)}/children/${encodeURIComponent(childId)}`, { method: 'POST' });
+}
+
+export async function removeTicketChild(parentId: string, childId: string): Promise<void> {
+  await request(`/tickets/${encodeURIComponent(parentId)}/children/${encodeURIComponent(childId)}`, { method: 'DELETE' });
 }

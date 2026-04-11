@@ -1,0 +1,272 @@
+import { create } from 'zustand';
+import type {
+  TicketGroup,
+  TicketGroupMembership,
+  TicketRelationship,
+  CreateTicketGroupRequest,
+  UpdateTicketGroupRequest,
+  TicketGroupWsMessage,
+  Ticket,
+} from '@fleex/shared';
+import * as api from '../services/api';
+
+interface TicketGroupState {
+  // ── Data ──
+  groups: TicketGroup[];
+  memberships: TicketGroupMembership[];
+  relationships: TicketRelationship[];
+  /** Cache: groupId → ticket IDs */
+  groupTicketIds: Record<string, string[]>;
+  /** Cache: ticketId → groupIds */
+  ticketGroupIds: Record<string, string[]>;
+  /** Cache: parentId → childIds */
+  childrenMap: Record<string, string[]>;
+
+  // ── UI ──
+  selectedEpicIds: string[];
+  activeView: 'board' | 'roadmap';
+  selectedEpicDetailId: string | null;
+
+  // ── Actions ──
+  fetchGroups: (boardId?: string) => Promise<void>;
+  fetchGroupTickets: (groupId: string) => Promise<Ticket[]>;
+  createGroup: (req: CreateTicketGroupRequest) => Promise<TicketGroup>;
+  updateGroup: (id: string, req: UpdateTicketGroupRequest) => Promise<void>;
+  deleteGroup: (id: string) => Promise<void>;
+  archiveGroup: (id: string) => Promise<void>;
+  unarchiveGroup: (id: string) => Promise<void>;
+
+  addTicketToGroup: (groupId: string, ticketId: string) => Promise<void>;
+  removeTicketFromGroup: (groupId: string, ticketId: string) => Promise<void>;
+
+  fetchChildrenForTicket: (ticketId: string) => Promise<Ticket[]>;
+  addChild: (parentId: string, childId: string) => Promise<void>;
+  removeChild: (parentId: string, childId: string) => Promise<void>;
+
+  // ── UI Actions ──
+  toggleEpicFilter: (epicId: string) => void;
+  clearEpicFilter: () => void;
+  setActiveView: (view: 'board' | 'roadmap') => void;
+  setSelectedEpicDetail: (id: string | null) => void;
+
+  // ── WebSocket ──
+  handleWsMessage: (msg: TicketGroupWsMessage) => void;
+}
+
+export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
+  groups: [],
+  memberships: [],
+  relationships: [],
+  groupTicketIds: {},
+  ticketGroupIds: {},
+  childrenMap: {},
+  selectedEpicIds: [],
+  activeView: 'board',
+  selectedEpicDetailId: null,
+
+  fetchGroups: async (boardId?: string) => {
+    const groups = await api.fetchTicketGroups(boardId);
+    set({ groups });
+  },
+
+  fetchGroupTickets: async (groupId: string) => {
+    const tickets = await api.fetchTicketGroupTickets(groupId);
+    set((s) => ({
+      groupTicketIds: {
+        ...s.groupTicketIds,
+        [groupId]: tickets.map((t) => t.id),
+      },
+    }));
+    return tickets;
+  },
+
+  createGroup: async (req) => {
+    const group = await api.createTicketGroup(req);
+    set((s) => ({ groups: [...s.groups, group] }));
+    return group;
+  },
+
+  updateGroup: async (id, req) => {
+    const updated = await api.updateTicketGroup(id, req);
+    set((s) => ({
+      groups: s.groups.map((g) => (g.id === id ? updated : g)),
+    }));
+  },
+
+  deleteGroup: async (id) => {
+    await api.deleteTicketGroup(id);
+    set((s) => ({
+      groups: s.groups.filter((g) => g.id !== id),
+      groupTicketIds: Object.fromEntries(
+        Object.entries(s.groupTicketIds).filter(([k]) => k !== id),
+      ),
+    }));
+  },
+
+  archiveGroup: async (id) => {
+    const updated = await api.archiveTicketGroup(id);
+    set((s) => ({
+      groups: s.groups.map((g) => (g.id === id ? updated : g)),
+    }));
+  },
+
+  unarchiveGroup: async (id) => {
+    const updated = await api.unarchiveTicketGroup(id);
+    set((s) => ({
+      groups: s.groups.map((g) => (g.id === id ? updated : g)),
+    }));
+  },
+
+  addTicketToGroup: async (groupId, ticketId) => {
+    await api.addTicketToGroup(groupId, ticketId);
+    set((s) => ({
+      memberships: [...s.memberships, { ticketId, groupId }],
+      groupTicketIds: {
+        ...s.groupTicketIds,
+        [groupId]: [...(s.groupTicketIds[groupId] ?? []), ticketId],
+      },
+      ticketGroupIds: {
+        ...s.ticketGroupIds,
+        [ticketId]: [...(s.ticketGroupIds[ticketId] ?? []), groupId],
+      },
+    }));
+  },
+
+  removeTicketFromGroup: async (groupId, ticketId) => {
+    await api.removeTicketFromGroup(groupId, ticketId);
+    set((s) => ({
+      memberships: s.memberships.filter((m) => !(m.ticketId === ticketId && m.groupId === groupId)),
+      groupTicketIds: {
+        ...s.groupTicketIds,
+        [groupId]: (s.groupTicketIds[groupId] ?? []).filter((id) => id !== ticketId),
+      },
+      ticketGroupIds: {
+        ...s.ticketGroupIds,
+        [ticketId]: (s.ticketGroupIds[ticketId] ?? []).filter((id) => id !== groupId),
+      },
+    }));
+  },
+
+  fetchChildrenForTicket: async (ticketId) => {
+    const children = await api.fetchTicketChildren(ticketId);
+    set((s) => ({
+      childrenMap: {
+        ...s.childrenMap,
+        [ticketId]: children.map((c) => c.id),
+      },
+    }));
+    return children;
+  },
+
+  addChild: async (parentId, childId) => {
+    await api.addTicketChild(parentId, childId);
+    set((s) => ({
+      relationships: [...s.relationships, { parentId, childId }],
+      childrenMap: {
+        ...s.childrenMap,
+        [parentId]: [...(s.childrenMap[parentId] ?? []), childId],
+      },
+    }));
+  },
+
+  removeChild: async (parentId, childId) => {
+    await api.removeTicketChild(parentId, childId);
+    set((s) => ({
+      relationships: s.relationships.filter((r) => !(r.parentId === parentId && r.childId === childId)),
+      childrenMap: {
+        ...s.childrenMap,
+        [parentId]: (s.childrenMap[parentId] ?? []).filter((id) => id !== childId),
+      },
+    }));
+  },
+
+  toggleEpicFilter: (epicId) => {
+    set((s) => {
+      const selected = s.selectedEpicIds.includes(epicId)
+        ? s.selectedEpicIds.filter((id) => id !== epicId)
+        : [...s.selectedEpicIds, epicId];
+      return { selectedEpicIds: selected };
+    });
+  },
+
+  clearEpicFilter: () => set({ selectedEpicIds: [] }),
+
+  setActiveView: (view) => set({ activeView: view }),
+
+  setSelectedEpicDetail: (id) => set({ selectedEpicDetailId: id }),
+
+  handleWsMessage: (msg) => {
+    switch (msg.type) {
+      case 'ticketGroup:created': {
+        const group = msg.data as TicketGroup;
+        set((s) => {
+          if (s.groups.some((g) => g.id === group.id)) return s;
+          return { groups: [...s.groups, group] };
+        });
+        break;
+      }
+      case 'ticketGroup:updated': {
+        const group = msg.data as TicketGroup;
+        set((s) => ({
+          groups: s.groups.map((g) => (g.id === group.id ? group : g)),
+        }));
+        break;
+      }
+      case 'ticketGroup:deleted': {
+        const { id } = msg.data as { id: string };
+        set((s) => ({
+          groups: s.groups.filter((g) => g.id !== id),
+        }));
+        break;
+      }
+      case 'ticketGroup:memberAdded': {
+        const { groupId, ticketId } = msg.data as { groupId: string; ticketId: string };
+        set((s) => ({
+          groupTicketIds: {
+            ...s.groupTicketIds,
+            [groupId]: [...new Set([...(s.groupTicketIds[groupId] ?? []), ticketId])],
+          },
+          ticketGroupIds: {
+            ...s.ticketGroupIds,
+            [ticketId]: [...new Set([...(s.ticketGroupIds[ticketId] ?? []), groupId])],
+          },
+        }));
+        break;
+      }
+      case 'ticketGroup:memberRemoved': {
+        const { groupId, ticketId } = msg.data as { groupId: string; ticketId: string };
+        set((s) => ({
+          groupTicketIds: {
+            ...s.groupTicketIds,
+            [groupId]: (s.groupTicketIds[groupId] ?? []).filter((id) => id !== ticketId),
+          },
+          ticketGroupIds: {
+            ...s.ticketGroupIds,
+            [ticketId]: (s.ticketGroupIds[ticketId] ?? []).filter((id) => id !== groupId),
+          },
+        }));
+        break;
+      }
+      case 'ticketRelationship:created': {
+        const { parentId, childId } = msg.data as { parentId: string; childId: string };
+        set((s) => ({
+          childrenMap: {
+            ...s.childrenMap,
+            [parentId]: [...new Set([...(s.childrenMap[parentId] ?? []), childId])],
+          },
+        }));
+        break;
+      }
+      case 'ticketRelationship:deleted': {
+        const { parentId, childId } = msg.data as { parentId: string; childId: string };
+        set((s) => ({
+          childrenMap: {
+            ...s.childrenMap,
+            [parentId]: (s.childrenMap[parentId] ?? []).filter((id) => id !== childId),
+          },
+        }));
+        break;
+      }
+    }
+  },
+}));
