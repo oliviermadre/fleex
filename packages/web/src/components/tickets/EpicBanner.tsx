@@ -117,11 +117,6 @@ function EpicBannerCard({ group, selected, tickets, onClick }: EpicBannerCardPro
         <span className="text-xs">{group.emoji}</span>
         <span className="truncate text-xs font-medium text-[var(--theme-text-primary)]">{group.name}</span>
       </div>
-      {group.description && (
-        <div className="mt-0.5 line-clamp-2 text-[10px] text-[var(--theme-text-muted)]">
-          {group.description}
-        </div>
-      )}
       {tickets.length > 0 && (
         <div className="mt-1.5">
           <StatusCubes tickets={tickets} />
