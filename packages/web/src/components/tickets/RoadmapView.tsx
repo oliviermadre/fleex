@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { TicketGroup, TicketGroupTimeframe, TicketGroupStatus, Ticket } from '@fleex/shared';
+import type { TicketGroup, TicketGroupTimeframe, Ticket } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { EpicProgressBar } from './EpicProgressBar';
@@ -9,17 +9,19 @@ import { cn } from '../../lib/cn';
 interface RoadmapColumnDef {
   id: string;
   label: string;
-  accent: string;
+  titleColor: string;
+  badgeColor: string;
   filter: (g: TicketGroup) => boolean;
   collapsible: boolean;
 }
 
+// Match kanban column color pattern (Tailwind classes, not CSS vars)
 const COLUMNS: RoadmapColumnDef[] = [
-  { id: 'now', label: 'NOW', accent: 'var(--color-fleex-green, #10b981)', filter: (g) => g.groupStatus === 'active' && g.timeframe === 'now', collapsible: false },
-  { id: 'next', label: 'NEXT', accent: 'var(--color-fleex-amber, #f59e0b)', filter: (g) => g.groupStatus === 'active' && g.timeframe === 'next', collapsible: false },
-  { id: 'later', label: 'LATER', accent: 'var(--theme-text-muted)', filter: (g) => g.groupStatus === 'active' && g.timeframe === 'later', collapsible: false },
-  { id: 'done', label: 'DONE', accent: 'var(--color-fleex-cyan, #06b6d4)', filter: (g) => g.groupStatus === 'done', collapsible: true },
-  { id: 'cancelled', label: 'CANCELLED', accent: 'var(--theme-danger, #ef4444)', filter: (g) => g.groupStatus === 'cancelled', collapsible: true },
+  { id: 'now', label: 'NOW', titleColor: 'text-green-400', badgeColor: 'text-green-400 bg-green-400/10', filter: (g) => g.groupStatus === 'active' && g.timeframe === 'now', collapsible: false },
+  { id: 'next', label: 'NEXT', titleColor: 'text-orange-400', badgeColor: 'text-orange-400 bg-orange-400/10', filter: (g) => g.groupStatus === 'active' && g.timeframe === 'next', collapsible: false },
+  { id: 'later', label: 'LATER', titleColor: 'text-[var(--theme-text-muted)]', badgeColor: 'text-[var(--theme-text-muted)] bg-[var(--theme-bg-overlay)]', filter: (g) => g.groupStatus === 'active' && g.timeframe === 'later', collapsible: false },
+  { id: 'done', label: 'DONE', titleColor: 'text-blue-400', badgeColor: 'text-blue-400 bg-blue-400/10', filter: (g) => g.groupStatus === 'done', collapsible: true },
+  { id: 'cancelled', label: 'CANCELLED', titleColor: 'text-red-400/70', badgeColor: 'text-red-400/70 bg-red-400/10', filter: (g) => g.groupStatus === 'cancelled', collapsible: true },
 ];
 
 export function RoadmapView() {
@@ -41,7 +43,6 @@ export function RoadmapView() {
     fetchGroups(selectedBoardId ?? undefined);
   }, [selectedBoardId, fetchGroups]);
 
-  // Fetch tickets for each group
   useEffect(() => {
     for (const g of groups) {
       if (!groupTicketIds[g.id]) {
@@ -57,7 +58,6 @@ export function RoadmapView() {
     return ids.map((id) => ticketMap.get(id)).filter(Boolean) as Ticket[];
   }, [groupTicketIds, ticketMap]);
 
-  // Non-archived groups
   const visibleGroups = groups.filter((g) => g.groupStatus !== 'archived');
 
   const handleDragStart = (e: React.DragEvent, groupId: string) => {
@@ -68,14 +68,14 @@ export function RoadmapView() {
 
   const handleDragOver = (e: React.DragEvent, columnId: string) => {
     if (!e.dataTransfer.types.includes('application/x-epic-id')) return;
-    // Don't accept drops on collapsed columns
     if (collapsed[columnId]) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDragOverColumn(columnId);
   };
 
-  const handleDragLeave = () => {
+  const handleDragLeave = (e: React.DragEvent) => {
+    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
     setDragOverColumn(null);
   };
 
@@ -87,13 +87,11 @@ export function RoadmapView() {
     const epicId = e.dataTransfer.getData('application/x-epic-id');
     if (!epicId) return;
 
-    // Determine new state based on column
     if (columnId === 'done') {
       await updateGroup(epicId, { groupStatus: 'done' });
     } else if (columnId === 'cancelled') {
       await updateGroup(epicId, { groupStatus: 'cancelled' });
     } else {
-      // now, next, later
       await updateGroup(epicId, {
         groupStatus: 'active',
         timeframe: columnId as TicketGroupTimeframe,
@@ -120,58 +118,92 @@ export function RoadmapView() {
         const colGroups = visibleGroups.filter(col.filter);
         const isCollapsed = collapsed[col.id] ?? false;
 
+        // ── Collapsed column (matches KanbanColumn collapsed) ──
         if (col.collapsible && isCollapsed) {
           return (
-            <button
+            <div
               key={col.id}
-              className="flex w-8 flex-shrink-0 cursor-pointer flex-col items-center justify-start border-r border-[var(--theme-border)] bg-[var(--theme-bg-surface)] pt-3 transition-colors hover:bg-[var(--theme-bg-hover)]"
-              onClick={() => setCollapsed((p) => ({ ...p, [col.id]: false }))}
+              className={cn(
+                'flex w-11 flex-shrink-0 flex-col items-center border-l border-[var(--theme-border)]',
+                dragOverColumn === col.id && 'ring-2 ring-inset ring-[var(--theme-accent)]/50',
+              )}
+              onDragOver={(e) => handleDragOver(e, col.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, col.id)}
             >
+              <button
+                className="flex w-full items-center justify-center py-2 text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)]"
+                onClick={() => setCollapsed((p) => ({ ...p, [col.id]: false }))}
+                title={`Expand ${col.label}`}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+              <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', col.badgeColor)}>
+                {colGroups.length}
+              </span>
               <span
-                className="text-[10px] font-bold uppercase tracking-wider"
-                style={{ color: col.accent, writingMode: 'vertical-lr' }}
+                className={cn('mt-3 text-xs font-bold uppercase tracking-wider', col.titleColor)}
+                style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
               >
                 {col.label}
               </span>
-              <span className="mt-1 text-[9px] text-[var(--theme-text-muted)]">{colGroups.length}</span>
-            </button>
+            </div>
           );
         }
 
+        // ── Expanded column (matches KanbanColumn expanded) ──
         return (
           <div
             key={col.id}
             className={cn(
-              'flex min-w-[220px] flex-1 flex-col border-r border-[var(--theme-border)] last:border-r-0',
-              dragOverColumn === col.id && 'bg-[var(--theme-accent)]/5',
+              'flex min-h-0 min-w-0 flex-1 flex-col border-l border-[var(--theme-border)]',
+              dragOverColumn === col.id && 'ring-2 ring-inset ring-[var(--theme-accent)]/50',
             )}
             onDragOver={(e) => handleDragOver(e, col.id)}
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, col.id)}
           >
-            {/* Column header */}
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--theme-border)]">
-              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: col.accent }}>
+            {/* Column header — matches KanbanColumn header */}
+            <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-4 py-3">
+              <span className={cn('text-sm font-bold uppercase tracking-wider', col.titleColor)}>
                 {col.label}
               </span>
-              <span className="rounded-full bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
+              <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', col.badgeColor)}>
                 {colGroups.length}
               </span>
               {col.collapsible && (
                 <button
-                  className="ml-auto text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
+                  className="ml-auto flex items-center justify-center text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)]"
                   onClick={() => setCollapsed((p) => ({ ...p, [col.id]: true }))}
-                  title="Collapse"
+                  title={`Collapse ${col.label}`}
                 >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <polyline points="4,6 8,10 12,6" />
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6" />
                   </svg>
                 </button>
               )}
             </div>
 
-            {/* Cards */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-2">
+            {/* Add objective at top (matches InlineCardCreator placement) */}
+            {!col.collapsible && (
+              <div className="px-3 py-1.5">
+                <button
+                  className="flex w-full items-center gap-1.5 text-xs text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)]"
+                  onClick={() => handleAddObjective(col.id as TicketGroupTimeframe)}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                    <line x1="8" y1="3" x2="8" y2="13" />
+                    <line x1="3" y1="8" x2="13" y2="8" />
+                  </svg>
+                  Add objective
+                </button>
+              </div>
+            )}
+
+            {/* Cards — matches KanbanColumn card list */}
+            <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-2">
               {colGroups.map((group) => (
                 <RoadmapCard
                   key={group.id}
@@ -184,20 +216,6 @@ export function RoadmapView() {
                   onClick={() => setSelectedEpicDetail(group.id)}
                 />
               ))}
-
-              {/* Add objective button */}
-              {!col.collapsible && (
-                <button
-                  className="flex w-full items-center gap-1.5 rounded-lg border border-dashed border-[var(--theme-border)] px-3 py-2 text-xs text-[var(--theme-text-muted)] transition-colors hover:border-[var(--theme-border-input)] hover:text-[var(--theme-text-secondary)]"
-                  onClick={() => handleAddObjective(col.id as TicketGroupTimeframe)}
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <line x1="8" y1="3" x2="8" y2="13" />
-                    <line x1="3" y1="8" x2="13" y2="8" />
-                  </svg>
-                  Add objective
-                </button>
-              )}
             </div>
           </div>
         );
@@ -206,7 +224,7 @@ export function RoadmapView() {
   );
 }
 
-// ── Roadmap Card ──
+// ── Roadmap Card (matches KanbanCard styling) ──
 
 interface RoadmapCardProps {
   group: TicketGroup;
@@ -232,7 +250,6 @@ function RoadmapCard({ group, tickets, isDragging, showTicketList, onDragStart, 
         isDragging && 'rotate-2 opacity-50 shadow-lg',
       )}
     >
-      {/* Header */}
       <div className="flex items-center gap-1.5">
         <span className="text-sm">{group.emoji}</span>
         <span className={cn(
@@ -243,19 +260,16 @@ function RoadmapCard({ group, tickets, isDragging, showTicketList, onDragStart, 
         </span>
       </div>
 
-      {/* Description */}
       {group.description && (
         <div className="mt-1 line-clamp-2 text-[11px] text-[var(--theme-text-muted)]">
           {group.description}
         </div>
       )}
 
-      {/* Progress bar */}
       <div className="mt-2">
         <EpicProgressBar tickets={tickets} />
       </div>
 
-      {/* Ticket list */}
       {showTicketList && tickets.length > 0 && (
         <div className="mt-2 space-y-1">
           {tickets.map((ticket) => (
