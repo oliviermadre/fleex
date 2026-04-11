@@ -1,9 +1,11 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { TicketGroup, Ticket, TicketStatus } from '@fleex/shared';
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useFileUpload } from '../../hooks/useFileUpload';
+import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { EpicProgressBar } from './EpicProgressBar';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
@@ -86,13 +88,6 @@ export function EpicDetailView() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* Description */}
-          {group.description && (
-            <div className="border-b border-[var(--theme-border)] px-4 py-2">
-              <p className="text-xs text-[var(--theme-text-muted)]">{group.description}</p>
-            </div>
-          )}
-
           {/* Tabs */}
           <div className="flex border-b border-[var(--theme-border)]">
             {(['description', 'tickets', 'deliverables', 'activity'] as const).map((tab) => (
@@ -113,13 +108,12 @@ export function EpicDetailView() {
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {activeTab === 'description' && (
-              <div className="p-4 text-sm text-[var(--theme-text-secondary)]">
-                {group.description || (
-                  <span className="italic text-[var(--theme-text-muted)]">No description yet.</span>
-                )}
-              </div>
+              <EpicDescriptionEditor
+                groupId={group.id}
+                description={group.description}
+              />
             )}
 
             {activeTab === 'tickets' && (
@@ -262,6 +256,134 @@ const COLUMN_TITLE_COLOR: Record<string, string> = {
   done: 'text-green-400',
   cancelled: 'text-red-400/70',
 };
+
+// ── Description Editor ──
+
+function EpicDescriptionEditor({ groupId, description }: { groupId: string; description: string }) {
+  const updateGroup = useTicketGroupStore((s) => s.updateGroup);
+  const [text, setText] = useState(description);
+  const textRef = useRef(description);
+  const [mode, setMode] = useState<'write' | 'preview' | 'split'>('split');
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => { setText(description); textRef.current = description; }, [description]);
+
+  const flushDebounce = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = undefined;
+      updateGroup(groupId, { description: textRef.current });
+    }
+  }, [groupId, updateGroup]);
+
+  const handleChange = useCallback((value: string) => {
+    setText(value);
+    textRef.current = value;
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = undefined;
+      updateGroup(groupId, { description: value });
+    }, 600);
+  }, [groupId, updateGroup]);
+
+  useEffect(() => () => { clearTimeout(debounceRef.current); }, []);
+
+  const fileUpload = useFileUpload({
+    textareaRef,
+    value: text,
+    onChange: handleChange,
+    onFlushDebounce: flushDebounce,
+  });
+
+  const handleToggleCheckbox = useCallback((lineIndex: number) => {
+    const lines = textRef.current.split('\n');
+    const line = lines[lineIndex];
+    if (!line) return;
+    if (line.includes('[ ]')) {
+      lines[lineIndex] = line.replace('[ ]', '[x]');
+    } else if (/\[[xX]\]/.test(line)) {
+      lines[lineIndex] = line.replace(/\[[xX]\]/, '[ ]');
+    }
+    const next = lines.join('\n');
+    handleChange(next);
+  }, [handleChange]);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {/* Mode toggle */}
+      <div className="flex items-center gap-0.5 border-b border-[var(--theme-border)] px-4 py-1">
+        {(['write', 'preview', 'split'] as const).map((m) => (
+          <button
+            key={m}
+            className={cn(
+              'px-2 py-1 text-[11px] transition-colors',
+              mode === m
+                ? 'text-[var(--theme-text-primary)]'
+                : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-text-muted)]',
+            )}
+            onClick={() => setMode(m)}
+          >
+            {m === 'write' ? 'Write' : m === 'preview' ? 'Preview' : 'Split'}
+          </button>
+        ))}
+      </div>
+
+      {/* Editor / Preview */}
+      <div className="flex min-h-0 flex-1 gap-4 overflow-hidden p-4">
+        {mode !== 'preview' && (
+          <div
+            className={cn('relative', mode === 'split' ? 'w-1/2' : 'w-full')}
+            {...fileUpload.dragProps}
+          >
+            <textarea
+              ref={textareaRef}
+              className={cn(
+                'h-full w-full resize-none rounded-md border bg-[var(--theme-bg-surface)] p-3 text-sm font-mono text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none',
+                fileUpload.isDragOver
+                  ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/30'
+                  : 'border-[var(--theme-border)]',
+              )}
+              value={text}
+              onChange={(e) => handleChange(e.target.value)}
+              onPaste={fileUpload.pasteHandler}
+              placeholder="Add a description (markdown supported)..."
+            />
+            <button
+              type="button"
+              onClick={fileUpload.openFilePicker}
+              className="absolute bottom-2 right-2 rounded p-1 text-[var(--theme-text-muted)] opacity-50 transition-opacity hover:text-[var(--theme-accent)] hover:opacity-100"
+              title="Attach file"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+              </svg>
+            </button>
+            {fileUpload.isUploading && (
+              <div className="absolute bottom-2 left-3 text-xs text-[var(--theme-text-muted)]">
+                Uploading...
+              </div>
+            )}
+          </div>
+        )}
+        {mode !== 'write' && (
+          <div className={cn(
+            'overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3',
+            mode === 'split' ? 'w-1/2' : 'w-full',
+          )}>
+            {text.trim() ? (
+              <MarkdownRenderer content={text} onToggleCheckbox={handleToggleCheckbox} />
+            ) : (
+              <p className="text-sm italic text-[var(--theme-text-muted)]">Nothing to preview</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Tickets Tab ──
 
 function TicketsTab({ epicId, boardId, epicTickets }: { epicId: string; boardId: string; epicTickets: Ticket[] }) {
   const [showPicker, setShowPicker] = useState(false);
