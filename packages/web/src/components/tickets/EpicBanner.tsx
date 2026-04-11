@@ -41,7 +41,8 @@ export function EpicBanner() {
   );
 
   // Only show active (non-archived) groups
-  const visibleGroups = groups.filter((g) => g.groupStatus !== 'archived');
+  // Only show "now" epics in the board banner filter
+  const visibleGroups = groups.filter((g) => g.groupStatus === 'active' && g.timeframe === 'now');
 
   if (visibleGroups.length === 0) return null;
 

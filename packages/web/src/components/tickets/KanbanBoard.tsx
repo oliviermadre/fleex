@@ -110,7 +110,7 @@ export function KanbanBoard() {
         <KanbanHeader
           board={board}
           isAllBoards={isAllBoards}
-          onShowArchived={() => setShowArchived(true)}
+          hideActions
         />
         <RoadmapView />
       </div>

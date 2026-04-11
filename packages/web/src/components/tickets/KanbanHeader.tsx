@@ -11,11 +11,12 @@ interface KanbanHeaderProps {
   board: BoardWithCounts | null;
   isAllBoards: boolean;
   onShowArchived?: () => void;
+  hideActions?: boolean;
 }
 
 const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;
 
-export function KanbanHeader({ board, isAllBoards, onShowArchived }: KanbanHeaderProps) {
+export function KanbanHeader({ board, isAllBoards, onShowArchived, hideActions }: KanbanHeaderProps) {
   const boards = useTicketStore((s) => s.boards);
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const createTicket = useTicketStore((s) => s.createTicket);
@@ -114,8 +115,8 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived }: KanbanHeade
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Right: Search, Filter, New ticket */}
-      <div className="flex items-center gap-2">
+      {/* Right: Search, Filter, New ticket (hidden in roadmap view) */}
+      {!hideActions && <div className="flex items-center gap-2">
         <SearchToggle />
         <FilterDropdown />
 
@@ -176,7 +177,7 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived }: KanbanHeade
             </button>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
