@@ -432,6 +432,18 @@ html, body {
   background: transparent;
 }
 
+/* Epic picker modal scrollbar */
+.epic-picker-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.epic-picker-scroll::-webkit-scrollbar-thumb {
+  background: var(--theme-border);
+  border-radius: 3px;
+}
+.epic-picker-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* GitHub icon glow on kanban cards */
 .github-glow-icon {
   cursor: pointer;

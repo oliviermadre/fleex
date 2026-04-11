@@ -186,18 +186,14 @@ export function RoadmapView() {
               )}
             </div>
 
-            {/* Add objective at top (matches InlineCardCreator placement) */}
+            {/* Add objective at top (same style as InlineCardCreator "+ Add card") */}
             {!col.collapsible && (
               <div className="px-3 py-1.5">
                 <button
-                  className="flex w-full items-center gap-1.5 text-xs text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)]"
+                  className="w-full rounded-md px-3 py-2 text-left text-sm text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
                   onClick={() => handleAddObjective(col.id as TicketGroupTimeframe)}
                 >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <line x1="8" y1="3" x2="8" y2="13" />
-                    <line x1="3" y1="8" x2="13" y2="8" />
-                  </svg>
-                  Add objective
+                  + Add objective
                 </button>
               </div>
             )}

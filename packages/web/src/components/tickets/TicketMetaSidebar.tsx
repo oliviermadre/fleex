@@ -13,6 +13,7 @@ import * as api from '../../services/api';
 import { PriorityIndicator } from './PriorityIndicator';
 import { DueDateBadge } from './DueDateBadge';
 import { DueDatePickerPopover } from './DueDatePickerPopover';
+import { EpicPicker } from './EpicPicker';
 import { cn } from '../../lib/cn';
 
 // ── Collapsed sidebar tooltip (portal-based, appears to the LEFT) ──
@@ -532,6 +533,9 @@ function ExpandedTicketMetaSidebar({
         onAddLink={(link) => addLink(ticket.id, link)}
         onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
       />
+
+      {/* Epics */}
+      <EpicPicker ticketId={ticket.id} />
 
       {/* Pull Requests */}
       <PRLinkPicker

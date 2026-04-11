@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { TicketGroup, Ticket } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -34,12 +34,18 @@ export function EpicBanner() {
     }
   }, [groups, groupTicketIds, fetchGroupTickets]);
 
+  // All hooks must be above any early return
+  const boardTickets = useMemo(
+    () => selectedBoardId ? allTickets.filter((t) => t.boardId === selectedBoardId) : allTickets,
+    [allTickets, selectedBoardId],
+  );
+
   // Only show active (non-archived) groups
   const visibleGroups = groups.filter((g) => g.groupStatus !== 'archived');
 
   if (visibleGroups.length === 0) return null;
 
-  const totalTickets = allTickets.length;
+  const totalTickets = boardTickets.length;
 
   return (
     <div className="flex items-stretch gap-2 overflow-x-auto border-b border-[var(--theme-border)] px-3 py-2">

@@ -5,13 +5,14 @@ interface StatusCubesProps {
   tickets: Array<{ id: string; title: string; status: TicketStatus }>;
 }
 
+// Match kanban column colors exactly
 const statusColorClass: Record<TicketStatus, string> = {
   backlog: 'bg-[var(--theme-text-muted)]',
-  todo: 'bg-[var(--theme-text-secondary)]',
-  doing: 'bg-[var(--color-fleex-green,#10b981)]',
-  reviewing: 'bg-[var(--color-fleex-amber,#f59e0b)]',
-  done: 'bg-[var(--color-fleex-cyan,#06b6d4)]',
-  cancelled: 'bg-[var(--theme-text-muted)]',
+  todo: 'bg-orange-400',
+  doing: 'bg-blue-400',
+  reviewing: 'bg-purple-400',
+  done: 'bg-green-400',
+  cancelled: 'bg-red-400/70',
 };
 
 const CUBE_CLASS = 'w-2.5 h-2.5 rounded-[2px]';

@@ -36,6 +36,7 @@ interface TicketGroupState {
   archiveGroup: (id: string) => Promise<void>;
   unarchiveGroup: (id: string) => Promise<void>;
 
+  fetchTicketMemberships: (ticketId: string) => Promise<void>;
   addTicketToGroup: (groupId: string, ticketId: string) => Promise<void>;
   removeTicketFromGroup: (groupId: string, ticketId: string) => Promise<void>;
 
@@ -120,17 +121,27 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
     }));
   },
 
+  fetchTicketMemberships: async (ticketId) => {
+    const groups = await api.fetchTicketGroups4Ticket(ticketId);
+    set((s) => ({
+      ticketGroupIds: {
+        ...s.ticketGroupIds,
+        [ticketId]: groups.map((g) => g.id),
+      },
+    }));
+  },
+
   addTicketToGroup: async (groupId, ticketId) => {
     await api.addTicketToGroup(groupId, ticketId);
     set((s) => ({
       memberships: [...s.memberships, { ticketId, groupId }],
       groupTicketIds: {
         ...s.groupTicketIds,
-        [groupId]: [...(s.groupTicketIds[groupId] ?? []), ticketId],
+        [groupId]: [...new Set([...(s.groupTicketIds[groupId] ?? []), ticketId])],
       },
       ticketGroupIds: {
         ...s.ticketGroupIds,
-        [ticketId]: [...(s.ticketGroupIds[ticketId] ?? []), groupId],
+        [ticketId]: [...new Set([...(s.ticketGroupIds[ticketId] ?? []), groupId])],
       },
     }));
   },
