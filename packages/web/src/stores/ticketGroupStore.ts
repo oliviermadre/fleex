@@ -82,7 +82,10 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
 
   createGroup: async (req) => {
     const group = await api.createTicketGroup(req);
-    set((s) => ({ groups: [...s.groups, group] }));
+    set((s) => {
+      if (s.groups.some((g) => g.id === group.id)) return s;
+      return { groups: [...s.groups, group] };
+    });
     return group;
   },
 
