@@ -60,6 +60,8 @@ import { DomainEventLogEntity } from '../domain/entities/domain-event-log.entity
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
 import { CachedSessionStore } from './adapters/cached-session-store.js';
 import { CachedTicketStore } from './adapters/cached-ticket-store.js';
+import { CachedPersonaStore } from './adapters/cached-persona-store.js';
+import { CachedAgentEventStore } from './adapters/cached-agent-event-store.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 
@@ -108,6 +110,10 @@ export async function createContainer() {
   await sessionStore_.warmUp();
   const ticketStore_ = new CachedTicketStore(ticketStore);
   await ticketStore_.warmUp();
+  const personaStore_ = new CachedPersonaStore(personaStore);
+  await personaStore_.warmUp();
+  const agentEventStore_ = new CachedAgentEventStore(agentEventStore);
+  await agentEventStore_.warmUp();
 
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
@@ -125,7 +131,7 @@ export async function createContainer() {
       const { SupabaseSessionManager: SbSess } = await import('./adapters/supabase/supabase-session-manager.adapter.js');
 
       const supabaseDbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
-      const conn = new SupabaseConnection(supabaseUrl, supabaseKey, supabaseDbUrl);
+      const conn = new SupabaseConnection(supabaseUrl, supabaseKey, supabaseDbUrl, logger);
       await conn.init();
 
       userStore = new SbUser(conn);
@@ -186,23 +192,23 @@ export async function createContainer() {
   const getTicketContext = new GetTicketContextUseCase(ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries);
 
   // Agent personas use cases
-  const createPersona = new CreatePersonaUseCase(personaStore, logger);
-  const updatePersona = new UpdatePersonaUseCase(personaStore, logger);
-  const deletePersona = new DeletePersonaUseCase(personaStore, logger);
+  const createPersona = new CreatePersonaUseCase(personaStore_, logger);
+  const updatePersona = new UpdatePersonaUseCase(personaStore_, logger);
+  const deletePersona = new DeletePersonaUseCase(personaStore_, logger);
 
   // Skill CRUD use cases
-  const createSkill = new CreateSkillUseCase(skillStore, personaStore, logger);
-  const updateSkill = new UpdateSkillUseCase(skillStore, personaStore, logger);
+  const createSkill = new CreateSkillUseCase(skillStore, personaStore_, logger);
+  const updateSkill = new UpdateSkillUseCase(skillStore, personaStore_, logger);
   const deleteSkill = new DeleteSkillUseCase(skillStore, logger);
 
   // Panel CRUD use cases
-  const createPanel = new CreatePanelUseCase(panelStore, personaStore, logger);
-  const updatePanel = new UpdatePanelUseCase(panelStore, personaStore, logger);
+  const createPanel = new CreatePanelUseCase(panelStore, personaStore_, logger);
+  const updatePanel = new UpdatePanelUseCase(panelStore, personaStore_, logger);
   const deletePanel = new DeletePanelUseCase(panelStore, logger);
-  const runPanel = new RunPanelUseCase(panelStore, personaStore, mentionStore, ticketStore_, postComment, submitDeliverable, getTicketContext, createWorktreeUC, agentEventStore, config, logger);
+  const runPanel = new RunPanelUseCase(panelStore, personaStore_, mentionStore, ticketStore_, postComment, submitDeliverable, getTicketContext, createWorktreeUC, agentEventStore_, config, logger);
 
   const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore_, config, logger);
-  const executeAgent = new ExecuteAgentUseCase(personaStore, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore, ticketStore_, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);
+  const executeAgent = new ExecuteAgentUseCase(personaStore_, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore_, ticketStore_, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);
 
   const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore_, commentStore, deliverableStore, git, config, logger, resolver);
 
@@ -212,7 +218,7 @@ export async function createContainer() {
   const eventBus = new EventBus();
   const domainEventListener = new DomainEventListener({
     eventBus,
-    personaStore,
+    personaStore: personaStore_,
     skillStore,
     ticketStore: ticketStore_,
     mentionStore,
@@ -261,7 +267,7 @@ export async function createContainer() {
   const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, resolver, hostFs, bareCloneManager, git, logger);
 
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore_, namingService, logger, git, resolver, ticketStore_);
-  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore_, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore_, personaStore, agentEventStore, reconcileWorktree, hostFs, config);
+  const getSessionGroups = new GetSessionGroupsUseCase(sessionStore_, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore_, personaStore_, agentEventStore_, reconcileWorktree, hostFs, config);
 
   return {
     logger,
@@ -307,7 +313,7 @@ export async function createContainer() {
     resolveMention,
     submitDeliverable,
     getTicketContext,
-    personaStore,
+    personaStore: personaStore_,
     createPersona,
     updatePersona,
     deletePersona,
@@ -325,7 +331,7 @@ export async function createContainer() {
     updatePanel,
     deletePanel,
     runPanel,
-    agentEventStore,
+    agentEventStore: agentEventStore_,
     domainEventLogStore,
     kvStore,
     fileStore,

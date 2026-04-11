@@ -1051,7 +1051,8 @@ export function DashboardView() {
   const executionsByTicket = useAgentEventStore((s) => s.executionsByTicket);
   const personas = useAgentPersonaStore((s) => s.personas);
 
-  useEffect(() => { loadUnreadCounts(); }, [loadUnreadCounts]);
+  const visibleTicketIds = useMemo(() => storeTickets.map((t) => t.id), [storeTickets]);
+  useEffect(() => { loadUnreadCounts(visibleTicketIds); }, [loadUnreadCounts, visibleTicketIds]);
 
   // Fetch on mount only if no cached data
   useEffect(() => {

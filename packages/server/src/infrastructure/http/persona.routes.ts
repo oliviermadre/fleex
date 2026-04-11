@@ -76,6 +76,31 @@ export function personaRoutes(container: Container) {
       return result;
     });
 
+    // GET /api/personas/statuses — bulk execution statuses (1 query instead of N)
+    app.get('/api/personas/statuses', async () => {
+      const personas = await container.personaStore.getAll();
+      const allMentions = await container.mentionStore.getAll();
+
+      // Group pending mentions by agent name
+      const pendingByAgent = new Map<string, number>();
+      for (const m of allMentions) {
+        if (m.status !== 'resolved' && m.status !== 'waiting_for_info') {
+          pendingByAgent.set(m.targetAgent, (pendingByAgent.get(m.targetAgent) ?? 0) + 1);
+        }
+      }
+
+      const statuses: Record<string, { running: boolean; pendingMentionCount: number; activeMentionIds: string[] }> = {};
+      for (const persona of personas) {
+        const status = container.executeAgent.getStatus(persona.id);
+        statuses[persona.id] = {
+          running: status.running,
+          pendingMentionCount: pendingByAgent.get(persona.name) ?? 0,
+          activeMentionIds: status.activeMentionIds,
+        };
+      }
+      return statuses;
+    });
+
     // GET /api/personas/:id/status — get execution status
     app.get<{ Params: { id: string } }>('/api/personas/:id/status', async (request) => {
       const persona = await container.personaStore.getById(request.params.id);

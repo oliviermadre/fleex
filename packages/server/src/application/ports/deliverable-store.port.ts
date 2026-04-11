@@ -2,6 +2,7 @@ import type { TicketDeliverableEntity } from '../../domain/entities/ticket-deliv
 
 export interface DeliverableStorePort {
   getByTicket(ticketId: string): Promise<TicketDeliverableEntity[]>;
+  getByTicketIds(ticketIds: string[]): Promise<TicketDeliverableEntity[]>;
   getById(id: string): Promise<TicketDeliverableEntity | null>;
   getAll(): Promise<TicketDeliverableEntity[]>;
   getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null>;

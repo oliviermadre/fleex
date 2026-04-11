@@ -27,6 +27,15 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
     return rows.map((r) => this.toEntity(r));
   }
 
+  async getByTicketIds(ticketIds: string[]): Promise<TicketCommentEntity[]> {
+    if (ticketIds.length === 0) return [];
+    const placeholders = ticketIds.map(() => '?').join(',');
+    const rows = this.conn.db
+      .prepare(`SELECT * FROM comments WHERE ticket_id IN (${placeholders}) ORDER BY created_at ASC`)
+      .all(...ticketIds) as CommentRow[];
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async getById(id: string): Promise<TicketCommentEntity | null> {
     const row = this.conn.db
       .prepare('SELECT * FROM comments WHERE id = ?')

@@ -19,7 +19,8 @@ export function KanbanBoard() {
   const loadUnreadCounts = useUnreadStore((s) => s.loadUnreadCounts);
 
   // Load unread counts on mount and when tickets change
-  useEffect(() => { loadUnreadCounts(); }, [tickets.length, loadUnreadCounts]);
+  const ticketIds = useMemo(() => tickets.map((t) => t.id), [tickets]);
+  useEffect(() => { loadUnreadCounts(ticketIds); }, [ticketIds, loadUnreadCounts]);
 
   const [prStates, setPrStates] = useState<Record<string, string>>({});
 

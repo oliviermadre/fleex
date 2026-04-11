@@ -44,6 +44,16 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     return (data as DeliverableRow[]).map(rowToEntity);
   }
 
+  async getByTicketIds(ticketIds: string[]): Promise<TicketDeliverableEntity[]> {
+    if (ticketIds.length === 0) return [];
+    const { data, error } = await this.conn.client
+      .from('deliverables')
+      .select('*')
+      .in('ticket_id', ticketIds);
+    if (error) throw new Error(`SupabaseDeliverableStore.getByTicketIds failed: ${error.message}`);
+    return (data as DeliverableRow[]).map(rowToEntity);
+  }
+
   async getById(id: string): Promise<TicketDeliverableEntity | null> {
     const { data, error } = await this.conn.client
       .from('deliverables')

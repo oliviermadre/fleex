@@ -476,8 +476,9 @@ export async function toggleDeliverableSeen(ticketId: string, deliverableId: str
   });
 }
 
-export async function fetchUnreadCounts(): Promise<import('@fleex/shared').TicketUnreadCounts[]> {
-  return request<import('@fleex/shared').TicketUnreadCounts[]>('/tickets/unread-counts');
+export async function fetchUnreadCounts(ticketIds?: string[]): Promise<import('@fleex/shared').TicketUnreadCounts[]> {
+  const params = ticketIds?.length ? `?ticketIds=${ticketIds.join(',')}` : '';
+  return request<import('@fleex/shared').TicketUnreadCounts[]>(`/tickets/unread-counts${params}`);
 }
 
 // ── Agent Tokens API ──
@@ -522,6 +523,10 @@ export async function executeAgent(id: string): Promise<import('@fleex/shared').
 
 export async function fetchAgentStatus(id: string): Promise<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }> {
   return request<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>(`/personas/${encodeURIComponent(id)}/status`);
+}
+
+export async function fetchAllPersonaStatuses(): Promise<Record<string, { running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>> {
+  return request<Record<string, { running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>>('/personas/statuses');
 }
 
 // ── Skills API ──
