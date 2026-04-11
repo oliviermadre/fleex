@@ -98,8 +98,18 @@ export const useAgentPersonaStore = create<AgentPersonaState>((set, get) => ({
   },
 
   refreshAllStatuses: async () => {
-    const { personas, refreshStatus } = get();
-    await Promise.all(personas.map((p) => refreshStatus(p.id)));
+    try {
+      const statuses = await api.fetchAllPersonaStatuses();
+      const mapped: Record<string, { running: boolean; pendingMentions: number }> = {};
+      for (const [id, s] of Object.entries(statuses)) {
+        mapped[id] = { running: s.running, pendingMentions: s.pendingMentionCount };
+      }
+      set({ executionStatuses: mapped });
+    } catch {
+      // Fallback to individual calls
+      const { personas, refreshStatus } = get();
+      await Promise.all(personas.map((p) => refreshStatus(p.id)));
+    }
   },
 
   handleWsMessage: (msg) => {

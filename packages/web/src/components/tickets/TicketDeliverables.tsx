@@ -41,13 +41,13 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const bringDeliverableToFront = useUIStore((s) => s.bringDeliverableToFront);
   const updateFloatingDeliverable = useUIStore((s) => s.updateFloatingDeliverable);
 
-  const isDeliverableSeen = useUnreadStore((s) => s.isDeliverableSeen);
+  const seenSet = useUnreadStore((s) => s.seenDeliverablesByTicket[ticketId]);
   const toggleDeliverableSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
   const loadSeenDeliverables = useUnreadStore((s) => s.loadSeenDeliverables);
 
   const handleOpenDeliverable = useCallback((d: TicketDeliverable) => {
     // Mark as seen when opening
-    if (!isDeliverableSeen(ticketId, d.id)) {
+    if (!seenSet?.has(d.id)) {
       toggleDeliverableSeen(ticketId, d.id, true).catch(() => {});
     }
     if (isUrl(d.content)) {
@@ -57,7 +57,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
     } else {
       openDeliverableOverlay(d);
     }
-  }, [ticketId, isDeliverableSeen, toggleDeliverableSeen, floatingDeliverableIds, bringDeliverableToFront, openDeliverableOverlay]);
+  }, [ticketId, seenSet, toggleDeliverableSeen, floatingDeliverableIds, bringDeliverableToFront, openDeliverableOverlay]);
 
   // Toggle read/unread for a single deliverable
   const handleToggleRead = useCallback((d: TicketDeliverable, isSeen: boolean) => {
@@ -125,7 +125,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
           const contentIsUrl = isUrl(d.content);
           const isFloating = floatingDeliverableIds.includes(d.id);
 
-          const isSeen = isDeliverableSeen(ticketId, d.id);
+          const isSeen = seenSet?.has(d.id) ?? false;
 
           return (
             <div

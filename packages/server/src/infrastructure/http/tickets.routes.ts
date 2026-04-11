@@ -989,9 +989,14 @@ export function ticketRoutes(container: Container) {
       },
     );
 
-    /** Bulk query: unread counts for all tickets */
-    app.get('/api/tickets/unread-counts', async () => {
+    /** Bulk query: unread counts for tickets (accepts ?ticketIds=id1,id2,...) */
+    app.get('/api/tickets/unread-counts', async (request) => {
       if (!container.kvStore) return [];
+
+      // Frontend sends visible ticket IDs — only compute unread for those
+      const raw = (request.query as Record<string, string>).ticketIds ?? '';
+      const requestedIds = raw ? raw.split(',').filter(Boolean) : [];
+
       const [commentCursors, seenDeliverableEntries] = await Promise.all([
         container.kvStore.listByPrefix('read_cursor:comment:'),
         container.kvStore.listByPrefix('seen_deliverables:'),
@@ -1013,18 +1018,40 @@ export function ticketRoutes(container: Container) {
         }
       }
 
-      // Collect all ticket IDs that have any tracking
-      const ticketIds = new Set([...commentMap.keys(), ...seenDeliverableMap.keys()]);
+      // Scope: intersection of requested IDs and tracked IDs (fallback to all tracked)
+      const trackedIds = new Set([...commentMap.keys(), ...seenDeliverableMap.keys()]);
+      const ticketIds = requestedIds.length > 0
+        ? requestedIds.filter((id) => trackedIds.has(id))
+        : [...trackedIds];
+
+      if (ticketIds.length === 0) return [];
+
+      // Batch fetch: 2 queries instead of N×2
+      const [allComments, allDeliverables] = await Promise.all([
+        container.commentStore.getByTicketIds(ticketIds),
+        container.deliverableStore.getByTicketIds(ticketIds),
+      ]);
+
+      // Group by ticketId
+      const commentsByTicket = new Map<string, typeof allComments>();
+      for (const c of allComments) {
+        let arr = commentsByTicket.get(c.ticketId);
+        if (!arr) { arr = []; commentsByTicket.set(c.ticketId, arr); }
+        arr.push(c);
+      }
+      const deliverablesByTicket = new Map<string, typeof allDeliverables>();
+      for (const d of allDeliverables) {
+        let arr = deliverablesByTicket.get(d.ticketId);
+        if (!arr) { arr = []; deliverablesByTicket.set(d.ticketId, arr); }
+        arr.push(d);
+      }
 
       const results: { ticketId: string; unreadComments: number; unreadDeliverables: number }[] = [];
       for (const ticketId of ticketIds) {
         const commentCursor = commentMap.get(ticketId) ?? null;
         const seenSet = seenDeliverableMap.get(ticketId) ?? new Set<string>();
-
-        const [comments, deliverables] = await Promise.all([
-          container.commentStore.getByTicket(ticketId),
-          container.deliverableStore.getByTicket(ticketId),
-        ]);
+        const comments = commentsByTicket.get(ticketId) ?? [];
+        const deliverables = deliverablesByTicket.get(ticketId) ?? [];
 
         const unreadComments = commentCursor
           ? comments.filter((c) => c.createdAt > new Date(commentCursor)).length

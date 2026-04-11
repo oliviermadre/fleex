@@ -14,6 +14,15 @@ export class PgCommentStore implements CommentStorePort {
     return rows.map(rowToComment);
   }
 
+  async getByTicketIds(ticketIds: string[]): Promise<TicketCommentEntity[]> {
+    if (ticketIds.length === 0) return [];
+    const { rows } = await this.db.query(
+      'SELECT * FROM comments WHERE ticket_id = ANY($1::text[]) ORDER BY created_at ASC',
+      [ticketIds],
+    );
+    return rows.map(rowToComment);
+  }
+
   async getById(id: string): Promise<TicketCommentEntity | null> {
     const { rows } = await this.db.query('SELECT * FROM comments WHERE id = $1', [id]);
     return rows.length > 0 ? rowToComment(rows[0]) : null;

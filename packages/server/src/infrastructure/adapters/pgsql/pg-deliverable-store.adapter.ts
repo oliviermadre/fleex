@@ -13,6 +13,15 @@ export class PgDeliverableStore implements DeliverableStorePort {
     return rows.map(rowToDeliverable);
   }
 
+  async getByTicketIds(ticketIds: string[]): Promise<TicketDeliverableEntity[]> {
+    if (ticketIds.length === 0) return [];
+    const { rows } = await this.db.query(
+      'SELECT * FROM deliverables WHERE ticket_id = ANY($1::text[]) ORDER BY created_at ASC',
+      [ticketIds],
+    );
+    return rows.map(rowToDeliverable);
+  }
+
   async getById(id: string): Promise<TicketDeliverableEntity | null> {
     const { rows } = await this.db.query('SELECT * FROM deliverables WHERE id = $1', [id]);
     return rows.length > 0 ? rowToDeliverable(rows[0]) : null;

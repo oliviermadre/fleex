@@ -15,8 +15,8 @@ interface UnreadState {
   /** Total unread across all tickets */
   totalUnread: number;
 
-  /** Load bulk unread counts for all tickets */
-  loadUnreadCounts: () => Promise<void>;
+  /** Load bulk unread counts for given tickets (or all tracked if omitted) */
+  loadUnreadCounts: (ticketIds?: string[]) => Promise<void>;
 
   /** Load comment read cursors for a specific ticket */
   loadCursors: (ticketId: string) => Promise<TicketReadCursors>;
@@ -48,9 +48,9 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
   seenDeliverablesByTicket: {},
   totalUnread: 0,
 
-  loadUnreadCounts: async () => {
+  loadUnreadCounts: async (ticketIds?: string[]) => {
     try {
-      const counts = await api.fetchUnreadCounts();
+      const counts = await api.fetchUnreadCounts(ticketIds);
       const map: Record<string, TicketUnreadCounts> = {};
       let total = 0;
       for (const c of counts) {

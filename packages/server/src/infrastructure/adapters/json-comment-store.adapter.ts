@@ -45,6 +45,13 @@ export class JsonCommentStore implements CommentStorePort {
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
+  async getByTicketIds(ticketIds: string[]): Promise<TicketCommentEntity[]> {
+    const ids = new Set(ticketIds);
+    return Array.from(this.comments.values())
+      .filter((c) => ids.has(c.ticketId))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
   async getById(id: string): Promise<TicketCommentEntity | null> {
     return this.comments.get(id) ?? null;
   }

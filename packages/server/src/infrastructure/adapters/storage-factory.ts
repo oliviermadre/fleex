@@ -291,7 +291,7 @@ async function createSupabaseStores(deps: {
   const { SupabaseFileMetaStore } = await import('./supabase/supabase-file-meta-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
-  const connection = new SupabaseConnection(url, key, dbUrl);
+  const connection = new SupabaseConnection(url, key, dbUrl, deps.logger);
   await connection.init();
 
   // Run pending migrations
