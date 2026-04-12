@@ -10,6 +10,7 @@ import { useFileUpload } from '../../hooks/useFileUpload';
 import { fetchEvents } from '../../services/api';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { EpicProgressBar } from './EpicProgressBar';
+import { NanoRoadmap } from './NanoRoadmap';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
 
@@ -45,29 +46,19 @@ export function EpicDetailView() {
     return ids.map((id) => ticketMap.get(id)).filter(Boolean) as Ticket[];
   }, [epicId, groupTicketIds, ticketMap]);
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const handleBack = useCallback(() => setSelectedEpicDetail(null), [setSelectedEpicDetail]);
 
   if (!group) return null;
 
-  const handleStatusChange = async (status: 'active' | 'done' | 'cancelled') => {
-    if (status === 'active') {
-      await updateGroup(group.id, { groupStatus: 'active' });
-    } else {
-      await updateGroup(group.id, { groupStatus: status });
-    }
+  const handleRoadmapChange = async (newStatus: 'active' | 'done' | 'cancelled' | 'archived', newTimeframe: 'now' | 'next' | 'later') => {
+    await updateGroup(group.id, { groupStatus: newStatus, timeframe: newTimeframe });
   };
 
   const handleDelete = async () => {
     if (!confirm(`Delete epic "${group.name}"? Tickets will not be deleted.`)) return;
     await deleteGroup(group.id);
     setSelectedEpicDetail(null);
-  };
-
-  const statusBadgeColor: Record<string, string> = {
-    active: 'bg-[var(--color-fleex-green,#10b981)]',
-    done: 'bg-[var(--color-fleex-cyan,#06b6d4)]',
-    cancelled: 'bg-[var(--theme-danger,#ef4444)]',
-    archived: 'bg-[var(--theme-text-muted)]',
   };
 
   return (
@@ -83,9 +74,6 @@ export function EpicDetailView() {
           </svg>
           Back
         </button>
-        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium text-white', statusBadgeColor[group.groupStatus] ?? '')}>
-          {group.groupStatus.charAt(0).toUpperCase() + group.groupStatus.slice(1)}
-        </span>
         <EditableEmoji value={group.emoji} onSave={(emoji) => updateGroup(group.id, { emoji })} />
         <EditableName value={group.name} onSave={(name) => updateGroup(group.id, { name })} />
       </div>
@@ -139,121 +127,78 @@ export function EpicDetailView() {
         </div>
 
         {/* Sidebar */}
-        <div className="w-[272px] flex-shrink-0 overflow-y-auto border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
-          {/* Status */}
-          <div className="mb-4">
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Status</label>
-            <div className="flex gap-1">
-              {(['active', 'done', 'cancelled'] as const).map((s) => (
-                <button
-                  key={s}
-                  className={cn(
-                    'rounded px-2 py-1 text-[10px] font-medium transition-colors',
-                    group.groupStatus === s
-                      ? 'bg-[var(--theme-accent)] text-white'
-                      : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
-                  )}
-                  onClick={() => handleStatusChange(s)}
-                >
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Progress */}
-          <div className="mb-4">
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Progress</label>
-            <EpicProgressBar tickets={epicTickets} />
-          </div>
-
-          {/* Timeframe */}
-          <div className="mb-4">
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Timeframe</label>
-            <span className="text-xs text-[var(--theme-text-primary)] capitalize">{group.timeframe}</span>
-          </div>
-
-          {/* Boards */}
-          {group && (
-            <EpicBoardsPicker
-              group={group}
-              boards={boards}
-              onAdd={(boardId) => addBoardToGroup(group.id, boardId)}
-              onRemove={(boardId) => removeBoardFromGroup(group.id, boardId)}
-            />
-          )}
-
-          {/* Type */}
-          <div className="mb-4">
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Type</label>
-            <span className="text-xs text-[var(--theme-text-primary)]">Manual</span>
-          </div>
-
-          {/* Tags placeholder */}
-          <div className="mb-4">
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Tags</label>
-            <span className="text-[10px] text-[var(--theme-text-muted)]">+ Add tag</span>
-          </div>
-
-          {/* Blocked */}
-          <div className="mb-3 flex items-center justify-between">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Blocked</label>
-            <button
-              className={cn(
-                'relative h-5 w-9 rounded-full transition-colors',
-                group.blocked ? 'bg-[var(--theme-danger)]' : 'bg-[var(--theme-bg-overlay)]',
-              )}
-              onClick={() => updateGroup(group.id, { blocked: !group.blocked })}
-            >
-              <span className={cn(
-                'absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform',
-                group.blocked ? 'left-[18px]' : 'left-0.5',
-              )} />
-            </button>
-          </div>
-
-          {/* Favorite */}
-          <div className="mb-4 flex items-center justify-between">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Favorite</label>
-            <button
-              className={cn(
-                'relative h-5 w-9 rounded-full transition-colors',
-                group.favorite ? 'bg-[var(--theme-accent)]' : 'bg-[var(--theme-bg-overlay)]',
-              )}
-              onClick={() => updateGroup(group.id, { favorite: !group.favorite })}
-            >
-              <span className={cn(
-                'absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform',
-                group.favorite ? 'left-[18px]' : 'left-0.5',
-              )} />
-            </button>
-          </div>
-
-          {/* Archive / Unarchive */}
-          {(group.groupStatus === 'done' || group.groupStatus === 'cancelled') && (
-            <button
-              className="mb-2 w-full rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-              onClick={() => archiveGroup(group.id)}
-            >
-              Archive
-            </button>
-          )}
-          {group.groupStatus === 'archived' && (
-            <button
-              className="mb-2 w-full rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-              onClick={() => unarchiveGroup(group.id)}
-            >
-              Unarchive
-            </button>
-          )}
-
-          {/* Delete */}
+        <div className={cn('flex flex-shrink-0 flex-col border-l border-[var(--theme-border)]', sidebarCollapsed ? 'w-10' : 'w-[280px]')}>
+          {/* Toggle button */}
           <button
-            className="w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors hover:bg-[var(--theme-danger)]/10"
-            onClick={handleDelete}
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            className="flex w-full shrink-0 items-center justify-center border-b border-[var(--theme-border)] py-2 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+            title={sidebarCollapsed ? 'Expand panel' : 'Collapse panel'}
           >
-            Delete Epic
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+              <line x1="10" y1="1.5" x2="10" y2="14.5" />
+            </svg>
           </button>
+
+          {/* Sidebar content */}
+          {!sidebarCollapsed && (
+            <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-4">
+              {/* Status (NanoRoadmap) */}
+              <div>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Status</label>
+                <NanoRoadmap
+                  groupStatus={group.groupStatus}
+                  timeframe={group.timeframe}
+                  onChange={handleRoadmapChange}
+                />
+              </div>
+
+              {/* Progress */}
+              <div>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Progress</label>
+                <EpicProgressBar tickets={epicTickets} />
+              </div>
+
+              {/* Boards */}
+              {group && (
+                <EpicBoardsPicker
+                  group={group}
+                  boards={boards}
+                  onAdd={(boardId) => addBoardToGroup(group.id, boardId)}
+                  onRemove={(boardId) => removeBoardFromGroup(group.id, boardId)}
+                />
+              )}
+
+              {/* Actions */}
+              <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-[var(--theme-border)]">
+                {/* Archive / Unarchive */}
+                {(group.groupStatus === 'done' || group.groupStatus === 'cancelled') && (
+                  <button
+                    className="w-full rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+                    onClick={() => archiveGroup(group.id)}
+                  >
+                    Archive
+                  </button>
+                )}
+                {group.groupStatus === 'archived' && (
+                  <button
+                    className="w-full rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+                    onClick={() => unarchiveGroup(group.id)}
+                  >
+                    Unarchive
+                  </button>
+                )}
+
+                {/* Delete */}
+                <button
+                  className="w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors hover:bg-red-500/10"
+                  onClick={handleDelete}
+                >
+                  Delete Epic
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

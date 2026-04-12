@@ -661,7 +661,7 @@ function ExpandedTicketMetaSidebar({
       {/* Actions */}
       <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-[var(--theme-border)]">
         <button
-          className="w-full rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors hover:bg-red-500/10"
+          className="w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors hover:bg-red-500/10"
           onClick={handleDelete}
         >
           Delete Ticket
