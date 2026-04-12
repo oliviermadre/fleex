@@ -746,6 +746,14 @@ export async function removeTicketFromGroup(groupId: string, ticketId: string): 
   await request(`/ticket-groups/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, { method: 'DELETE' });
 }
 
+export async function addBoardToTicketGroup(groupId: string, boardId: string): Promise<void> {
+  await request(`/ticket-groups/${encodeURIComponent(groupId)}/boards/${encodeURIComponent(boardId)}`, { method: 'POST' });
+}
+
+export async function removeBoardFromTicketGroup(groupId: string, boardId: string): Promise<void> {
+  await request(`/ticket-groups/${encodeURIComponent(groupId)}/boards/${encodeURIComponent(boardId)}`, { method: 'DELETE' });
+}
+
 export async function fetchTicketGroups4Ticket(ticketId: string): Promise<TicketGroup[]> {
   return request<TicketGroup[]>(`/tickets/${encodeURIComponent(ticketId)}/groups`);
 }

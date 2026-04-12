@@ -70,15 +70,19 @@ export function EpicBanner() {
       </button>
 
       {/* Epic cards */}
-      {visibleGroups.map((group) => (
-        <EpicBannerCard
-          key={group.id}
-          group={group}
-          selected={selectedEpicIds.includes(group.id)}
-          tickets={getGroupTickets(group.id, groupTicketIds, allTickets)}
-          onClick={() => toggleEpicFilter(group.id)}
-        />
-      ))}
+      {visibleGroups.map((group) => {
+        const tickets = getGroupTickets(group.id, groupTicketIds, allTickets)
+          .filter(t => !selectedBoardId || t.boardId === selectedBoardId);
+        return (
+          <EpicBannerCard
+            key={group.id}
+            group={group}
+            selected={selectedEpicIds.includes(group.id)}
+            tickets={tickets}
+            onClick={() => toggleEpicFilter(group.id)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -87,13 +91,13 @@ function getGroupTickets(
   groupId: string,
   groupTicketIds: Record<string, string[]>,
   allTickets: Ticket[],
-): Array<{ id: string; title: string; status: Ticket['status'] }> {
+): Array<{ id: string; title: string; status: Ticket['status']; boardId: string }> {
   const ids = groupTicketIds[groupId] ?? [];
   const ticketMap = new Map(allTickets.map((t) => [t.id, t]));
   return ids
     .map((id) => ticketMap.get(id))
     .filter(Boolean)
-    .map((t) => ({ id: t!.id, title: t!.title, status: t!.status }));
+    .map((t) => ({ id: t!.id, title: t!.title, status: t!.status, boardId: t!.boardId }));
 }
 
 interface EpicBannerCardProps {

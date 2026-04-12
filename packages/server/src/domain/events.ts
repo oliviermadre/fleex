@@ -305,6 +305,18 @@ export interface TicketRelationshipDeletedEvent extends DomainEvent {
   childId: string;
 }
 
+export interface TicketGroupBoardAddedEvent extends DomainEvent {
+  type: 'ticketGroup.boardAdded';
+  groupId: string;
+  boardId: string;
+}
+
+export interface TicketGroupBoardRemovedEvent extends DomainEvent {
+  type: 'ticketGroup.boardRemoved';
+  groupId: string;
+  boardId: string;
+}
+
 // ── Union type ──
 
 export type AnyDomainEvent =
@@ -348,7 +360,9 @@ export type AnyDomainEvent =
   | TicketGroupMemberAddedEvent
   | TicketGroupMemberRemovedEvent
   | TicketRelationshipCreatedEvent
-  | TicketRelationshipDeletedEvent;
+  | TicketRelationshipDeletedEvent
+  | TicketGroupBoardAddedEvent
+  | TicketGroupBoardRemovedEvent;
 
 // ── Event type string union ──
 

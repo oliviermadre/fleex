@@ -3,7 +3,7 @@ import type { TicketGroup, TicketGroupTimeframe, TicketGroupStatus } from '@flee
 export class TicketGroupEntity {
   constructor(
     public readonly id: string,
-    public boardId: string,
+    public boardIds: string[],
     public name: string,
     public emoji: string,
     public color: string,
@@ -18,7 +18,8 @@ export class TicketGroupEntity {
 
   static create(params: {
     id: string;
-    boardId: string;
+    boardId?: string;
+    boardIds?: string[];
     name: string;
     emoji?: string;
     color?: string;
@@ -26,9 +27,10 @@ export class TicketGroupEntity {
     timeframe?: TicketGroupTimeframe;
   }): TicketGroupEntity {
     const now = new Date();
+    const boardIds = params.boardIds ?? (params.boardId ? [params.boardId] : []);
     return new TicketGroupEntity(
       params.id,
-      params.boardId,
+      boardIds,
       params.name,
       params.emoji ?? '📌',
       params.color ?? 'fleex-purple',
@@ -40,6 +42,30 @@ export class TicketGroupEntity {
       now,
       now,
     );
+  }
+
+  /** @deprecated Use boardIds[0] */
+  get boardId(): string {
+    return this.boardIds[0] ?? '';
+  }
+
+  hasBoard(boardId: string): boolean {
+    return this.boardIds.includes(boardId);
+  }
+
+  addBoard(boardId: string): void {
+    if (!this.boardIds.includes(boardId)) {
+      this.boardIds.push(boardId);
+      this.updatedAt = new Date();
+    }
+  }
+
+  removeBoard(boardId: string): void {
+    if (this.boardIds.length <= 1) {
+      throw new Error('Cannot remove the last board from an epic');
+    }
+    this.boardIds = this.boardIds.filter((id) => id !== boardId);
+    this.updatedAt = new Date();
   }
 
   update(changes: {
@@ -82,7 +108,8 @@ export class TicketGroupEntity {
   toDTO(): TicketGroup {
     return {
       id: this.id,
-      boardId: this.boardId,
+      boardIds: this.boardIds,
+      boardId: this.boardIds[0] ?? '',
       name: this.name,
       emoji: this.emoji,
       color: this.color,

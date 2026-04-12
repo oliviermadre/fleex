@@ -44,6 +44,9 @@ interface TicketGroupState {
   addTicketToGroup: (groupId: string, ticketId: string) => Promise<void>;
   removeTicketFromGroup: (groupId: string, ticketId: string) => Promise<void>;
 
+  addBoardToGroup: (groupId: string, boardId: string) => Promise<void>;
+  removeBoardFromGroup: (groupId: string, boardId: string) => Promise<void>;
+
   fetchChildrenForTicket: (ticketId: string) => Promise<Ticket[]>;
   addChild: (parentId: string, childId: string) => Promise<void>;
   removeChild: (parentId: string, childId: string) => Promise<void>;
@@ -173,6 +176,28 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
     }));
   },
 
+  addBoardToGroup: async (groupId, boardId) => {
+    await api.addBoardToTicketGroup(groupId, boardId);
+    set((s) => ({
+      groups: s.groups.map((g) =>
+        g.id === groupId
+          ? { ...g, boardIds: [...new Set([...g.boardIds, boardId])] }
+          : g,
+      ),
+    }));
+  },
+
+  removeBoardFromGroup: async (groupId, boardId) => {
+    await api.removeBoardFromTicketGroup(groupId, boardId);
+    set((s) => ({
+      groups: s.groups.map((g) =>
+        g.id === groupId
+          ? { ...g, boardIds: g.boardIds.filter((id) => id !== boardId) }
+          : g,
+      ),
+    }));
+  },
+
   fetchChildrenForTicket: async (ticketId) => {
     const children = await api.fetchTicketChildren(ticketId);
     set((s) => ({
@@ -272,6 +297,28 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
             ...s.ticketGroupIds,
             [ticketId]: (s.ticketGroupIds[ticketId] ?? []).filter((id) => id !== groupId),
           },
+        }));
+        break;
+      }
+      case 'ticketGroup:boardAdded': {
+        const { groupId, boardId } = msg.data as { groupId: string; boardId: string };
+        set((s) => ({
+          groups: s.groups.map((g) =>
+            g.id === groupId
+              ? { ...g, boardIds: [...new Set([...g.boardIds, boardId])] }
+              : g,
+          ),
+        }));
+        break;
+      }
+      case 'ticketGroup:boardRemoved': {
+        const { groupId, boardId } = msg.data as { groupId: string; boardId: string };
+        set((s) => ({
+          groups: s.groups.map((g) =>
+            g.id === groupId
+              ? { ...g, boardIds: g.boardIds.filter((id) => id !== boardId) }
+              : g,
+          ),
         }));
         break;
       }

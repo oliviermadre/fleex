@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { TicketGroup, Ticket, TicketStatus } from '@fleex/shared';
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { DomainEventLog } from '@fleex/shared';
+import type { BoardWithCounts } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useFileUpload } from '../../hooks/useFileUpload';
@@ -24,7 +25,10 @@ export function EpicDetailView() {
   const setActiveTab = useTicketGroupStore((s) => s.setEpicDetailTab);
   const fetchGroupTickets = useTicketGroupStore((s) => s.fetchGroupTickets);
   const groupTicketIds = useTicketGroupStore((s) => s.groupTicketIds);
+  const addBoardToGroup = useTicketGroupStore((s) => s.addBoardToGroup);
+  const removeBoardFromGroup = useTicketGroupStore((s) => s.removeBoardFromGroup);
   const allTickets = useTicketStore((s) => s.tickets);
+  const boards = useTicketStore((s) => s.boards);
 
   const group = groups.find((g) => g.id === epicId) ?? null;
 
@@ -119,7 +123,7 @@ export function EpicDetailView() {
             )}
 
             {activeTab === 'tickets' && (
-              <TicketsTab epicId={epicId!} boardId={group.boardId} epicTickets={epicTickets} />
+              <TicketsTab epicId={epicId!} boardIds={group.boardIds} epicTickets={epicTickets} />
             )}
 
             {activeTab === 'deliverables' && (
@@ -168,6 +172,16 @@ export function EpicDetailView() {
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Timeframe</label>
             <span className="text-xs text-[var(--theme-text-primary)] capitalize">{group.timeframe}</span>
           </div>
+
+          {/* Boards */}
+          {group && (
+            <EpicBoardsPicker
+              group={group}
+              boards={boards}
+              onAdd={(boardId) => addBoardToGroup(group.id, boardId)}
+              onRemove={(boardId) => removeBoardFromGroup(group.id, boardId)}
+            />
+          )}
 
           {/* Type */}
           <div className="mb-4">
@@ -545,19 +559,41 @@ function EpicDescriptionEditor({ groupId, description }: { groupId: string; desc
 
 // ── Tickets Tab ──
 
-function TicketsTab({ epicId, boardId, epicTickets }: { epicId: string; boardId: string; epicTickets: Ticket[] }) {
+function TicketsTab({ epicId, boardIds, epicTickets }: { epicId: string; boardIds: string[]; epicTickets: Ticket[] }) {
   const [showPicker, setShowPicker] = useState(false);
   const removeTicketFromGroup = useTicketGroupStore((s) => s.removeTicketFromGroup);
   const setSelectedEpicDetail = useTicketGroupStore((s) => s.setSelectedEpicDetail);
+  const boards = useTicketStore((s) => s.boards);
   const navigate = useNavigate();
 
-  const sorted = useMemo(() => {
-    return [...epicTickets].sort((a, b) => {
+  const boardMap = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
+
+  const groupedByBoard = useMemo(() => {
+    const sorted = [...epicTickets].sort((a, b) => {
       const statusDiff = (STATUS_SORT_ORDER[a.status] ?? 99) - (STATUS_SORT_ORDER[b.status] ?? 99);
       if (statusDiff !== 0) return statusDiff;
       return a.title.localeCompare(b.title);
     });
-  }, [epicTickets]);
+    const groups: { boardId: string; boardLabel: string; tickets: Ticket[] }[] = [];
+    const map = new Map<string, Ticket[]>();
+    const order: string[] = [];
+    for (const t of sorted) {
+      if (!map.has(t.boardId)) {
+        map.set(t.boardId, []);
+        order.push(t.boardId);
+      }
+      map.get(t.boardId)!.push(t);
+    }
+    for (const bid of order) {
+      const board = boardMap.get(bid);
+      groups.push({
+        boardId: bid,
+        boardLabel: board ? `${board.emoji} ${board.name}` : bid,
+        tickets: map.get(bid)!,
+      });
+    }
+    return groups;
+  }, [epicTickets, boardMap]);
 
   const handleClickTicket = (ticket: Ticket) => {
     setSelectedEpicDetail(null);
@@ -576,37 +612,51 @@ function TicketsTab({ epicId, boardId, epicTickets }: { epicId: string; boardId:
         </button>
       </div>
 
-      {/* Ticket list */}
+      {/* Ticket list grouped by board */}
       <div className="min-h-0 flex-1 overflow-y-auto epic-picker-scroll">
-        {sorted.map((ticket) => (
-          <div
-            key={ticket.id}
-            className="group flex items-center border-b border-[var(--theme-border)] px-4 py-2 transition-colors hover:bg-[var(--theme-bg-hover)]"
-          >
-            <PriorityIndicator priority={ticket.priority} />
-            <button
-              className="ml-2 min-w-0 flex-1 truncate text-left text-sm text-[var(--theme-text-primary)] transition-colors hover:text-[var(--theme-accent)]"
-              onClick={() => handleClickTicket(ticket)}
-              title={ticket.title}
-            >
-              {ticket.title}
-            </button>
-            <span className={cn('ml-3 flex-shrink-0 text-xs font-medium', COLUMN_TITLE_COLOR[ticket.status])}>
-              {TICKET_STATUS_LABELS[ticket.status]}
-            </span>
-            <button
-              className="ml-3 flex-shrink-0 rounded p-0.5 text-[var(--theme-text-faint)] opacity-0 transition-opacity hover:text-[var(--theme-danger)] group-hover:opacity-100"
-              onClick={() => removeTicketFromGroup(epicId, ticket.id)}
-              title="Remove from epic"
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="4" y1="4" x2="12" y2="12" />
-                <line x1="12" y1="4" x2="4" y2="12" />
-              </svg>
-            </button>
+        {groupedByBoard.map((group) => (
+          <div key={group.boardId}>
+            {groupedByBoard.length > 1 && (
+              <div className="sticky top-0 z-[1] border-b border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                {group.boardLabel}
+              </div>
+            )}
+            {group.tickets.map((ticket) => (
+              <div
+                key={ticket.id}
+                className="group flex items-center border-b border-[var(--theme-border)] px-4 py-2 transition-colors hover:bg-[var(--theme-bg-hover)]"
+              >
+                <PriorityIndicator priority={ticket.priority} />
+                <button
+                  className="ml-2 min-w-0 flex-1 truncate text-left text-sm text-[var(--theme-text-primary)] transition-colors hover:text-[var(--theme-accent)]"
+                  onClick={() => handleClickTicket(ticket)}
+                  title={ticket.title}
+                >
+                  {ticket.title}
+                </button>
+                {groupedByBoard.length === 1 && (
+                  <span className="ml-3 flex-shrink-0 truncate text-[10px] text-[var(--theme-text-muted)]">
+                    {group.boardLabel}
+                  </span>
+                )}
+                <span className={cn('ml-3 flex-shrink-0 text-xs font-medium', COLUMN_TITLE_COLOR[ticket.status])}>
+                  {TICKET_STATUS_LABELS[ticket.status]}
+                </span>
+                <button
+                  className="ml-3 flex-shrink-0 rounded p-0.5 text-[var(--theme-text-faint)] opacity-0 transition-opacity hover:text-[var(--theme-danger)] group-hover:opacity-100"
+                  onClick={() => removeTicketFromGroup(epicId, ticket.id)}
+                  title="Remove from epic"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="4" y1="4" x2="12" y2="12" />
+                    <line x1="12" y1="4" x2="4" y2="12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
           </div>
         ))}
-        {sorted.length === 0 && (
+        {epicTickets.length === 0 && (
           <div className="flex items-center justify-center py-8 text-xs text-[var(--theme-text-muted)]">
             No tickets in this epic yet.
           </div>
@@ -617,7 +667,7 @@ function TicketsTab({ epicId, boardId, epicTickets }: { epicId: string; boardId:
       {showPicker && (
         <TicketPickerModal
           epicId={epicId}
-          boardId={boardId}
+          boardIds={boardIds}
           epicTicketIds={new Set(epicTickets.map((t) => t.id))}
           onClose={() => setShowPicker(false)}
         />
@@ -632,9 +682,9 @@ const STATUS_SORT_ORDER: Record<string, number> = {
   backlog: 0, todo: 1, doing: 2, reviewing: 3, done: 4, cancelled: 5,
 };
 
-function TicketPickerModal({ epicId, boardId, epicTicketIds, onClose }: {
+function TicketPickerModal({ epicId, boardIds, epicTicketIds, onClose }: {
   epicId: string;
-  boardId: string;
+  boardIds: string[];
   epicTicketIds: Set<string>;
   onClose: () => void;
 }) {
@@ -646,17 +696,18 @@ function TicketPickerModal({ epicId, boardId, epicTicketIds, onClose }: {
   const [search, setSearch] = useState('');
   const [toggling, setToggling] = useState<Set<string>>(new Set());
 
-  // Filter by board, unarchived, search; sort by status then title
+  // Filter by boards, unarchived, search; sort by status then title
   const boardTickets = useMemo(() => {
+    const boardIdSet = new Set(boardIds);
     return allTickets
-      .filter((t) => t.boardId === boardId && !t.archivedAt)
+      .filter((t) => boardIdSet.has(t.boardId) && !t.archivedAt)
       .filter((t) => !search || t.title.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => {
         const statusDiff = (STATUS_SORT_ORDER[a.status] ?? 99) - (STATUS_SORT_ORDER[b.status] ?? 99);
         if (statusDiff !== 0) return statusDiff;
         return a.title.localeCompare(b.title);
       });
-  }, [allTickets, boardId, search]);
+  }, [allTickets, boardIds, search]);
 
   const ticketEpicLabels = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -783,6 +834,78 @@ function TicketPickerModal({ epicId, boardId, epicTicketIds, onClose }: {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Epic Boards Picker (sidebar) ──
+
+function EpicBoardsPicker({
+  group,
+  boards,
+  onAdd,
+  onRemove,
+}: {
+  group: TicketGroup;
+  boards: BoardWithCounts[];
+  onAdd: (boardId: string) => void;
+  onRemove: (boardId: string) => void;
+}) {
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const associatedBoards = boards.filter((b) => group.boardIds.includes(b.id));
+  const unassociatedBoards = boards.filter((b) => !group.boardIds.includes(b.id));
+
+  return (
+    <div className="mb-4">
+      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Boards</label>
+      <div className="space-y-1">
+        {associatedBoards.map((board) => (
+          <div key={board.id} className="group flex items-center gap-1.5 rounded px-1.5 py-1 transition-colors hover:bg-[var(--theme-bg-hover)]">
+            <span className="text-xs">{board.emoji}</span>
+            <span className="flex-1 truncate text-xs text-[var(--theme-text-primary)]">{board.name}</span>
+            {associatedBoards.length > 1 && (
+              <button
+                className="flex-shrink-0 rounded p-0.5 text-[var(--theme-text-faint)] opacity-0 transition-opacity hover:text-[var(--theme-danger)] group-hover:opacity-100"
+                onClick={() => onRemove(board.id)}
+                title="Remove board from epic"
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="4" x2="12" y2="12" />
+                  <line x1="12" y1="4" x2="4" y2="12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {unassociatedBoards.length > 0 && (
+        <div className="relative mt-1">
+          <button
+            className="text-[10px] text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-accent)]"
+            onClick={() => setShowDropdown((p) => !p)}
+          >
+            + Add board
+          </button>
+          {showDropdown && (
+            <div className="absolute left-0 top-full z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
+              {unassociatedBoards.map((board) => (
+                <button
+                  key={board.id}
+                  className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+                  onClick={() => {
+                    onAdd(board.id);
+                    setShowDropdown(false);
+                  }}
+                >
+                  <span>{board.emoji}</span>
+                  <span className="truncate">{board.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

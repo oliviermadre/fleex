@@ -5,7 +5,7 @@ import type { SqliteConnection } from './connection.js';
 
 interface TicketGroupRow {
   id: string;
-  board_id: string;
+  board_id: string | null;
   name: string;
   emoji: string;
   color: string;
@@ -18,15 +18,9 @@ interface TicketGroupRow {
   updated_at: string;
 }
 
-interface MembershipRow {
-  ticket_id: string;
-  group_id: string;
-}
-
-interface RelationshipRow {
-  parent_id: string;
-  child_id: string;
-}
+interface MembershipRow { ticket_id: string; group_id: string }
+interface RelationshipRow { parent_id: string; child_id: string }
+interface BoardAssocRow { group_id: string; board_id: string }
 
 export class SqliteTicketGroupStoreAdapter implements TicketGroupStorePort {
   constructor(private readonly conn: SqliteConnection) {}
@@ -35,17 +29,36 @@ export class SqliteTicketGroupStoreAdapter implements TicketGroupStorePort {
 
   async getAllTicketGroups(): Promise<TicketGroupEntity[]> {
     const rows = this.conn.db.prepare('SELECT * FROM ticket_groups').all() as TicketGroupRow[];
-    return rows.map((r) => this.toEntity(r));
+    // Batch-fetch all board associations
+    const allAssoc = this.conn.db.prepare('SELECT * FROM ticket_group_boards').all() as BoardAssocRow[];
+    const boardMap = new Map<string, string[]>();
+    for (const a of allAssoc) {
+      if (!boardMap.has(a.group_id)) boardMap.set(a.group_id, []);
+      boardMap.get(a.group_id)!.push(a.board_id);
+    }
+    return rows.map((r) => this.toEntity(r, boardMap.get(r.id) ?? (r.board_id ? [r.board_id] : [])));
   }
 
   async getTicketGroupById(id: string): Promise<TicketGroupEntity | null> {
     const row = this.conn.db.prepare('SELECT * FROM ticket_groups WHERE id = ?').get(id) as TicketGroupRow | undefined;
-    return row ? this.toEntity(row) : null;
+    if (!row) return null;
+    const boardIds = (this.conn.db.prepare('SELECT board_id FROM ticket_group_boards WHERE group_id = ?').all(id) as BoardAssocRow[]).map((a) => a.board_id);
+    return this.toEntity(row, boardIds.length > 0 ? boardIds : (row.board_id ? [row.board_id] : []));
   }
 
   async getTicketGroupsByBoard(boardId: string): Promise<TicketGroupEntity[]> {
-    const rows = this.conn.db.prepare('SELECT * FROM ticket_groups WHERE board_id = ?').all(boardId) as TicketGroupRow[];
-    return rows.map((r) => this.toEntity(r));
+    const rows = this.conn.db.prepare(
+      'SELECT tg.* FROM ticket_groups tg INNER JOIN ticket_group_boards tgb ON tg.id = tgb.group_id WHERE tgb.board_id = ?',
+    ).all(boardId) as TicketGroupRow[];
+    // Fetch all board associations for these groups
+    if (rows.length === 0) return [];
+    const allAssoc = this.conn.db.prepare('SELECT * FROM ticket_group_boards').all() as BoardAssocRow[];
+    const boardMap = new Map<string, string[]>();
+    for (const a of allAssoc) {
+      if (!boardMap.has(a.group_id)) boardMap.set(a.group_id, []);
+      boardMap.get(a.group_id)!.push(a.board_id);
+    }
+    return rows.map((r) => this.toEntity(r, boardMap.get(r.id) ?? []));
   }
 
   async saveTicketGroup(group: TicketGroupEntity): Promise<void> {
@@ -56,7 +69,7 @@ export class SqliteTicketGroupStoreAdapter implements TicketGroupStorePort {
         (@id, @board_id, @name, @emoji, @color, @description, @timeframe, @group_status, @blocked, @favorite, @created_at, @updated_at)
     `).run({
       id: group.id,
-      board_id: group.boardId,
+      board_id: group.boardIds[0] ?? null,
       name: group.name,
       emoji: group.emoji,
       color: group.color,
@@ -68,34 +81,46 @@ export class SqliteTicketGroupStoreAdapter implements TicketGroupStorePort {
       created_at: group.createdAt.toISOString(),
       updated_at: group.updatedAt.toISOString(),
     });
+    // Sync junction
+    this.conn.db.prepare('DELETE FROM ticket_group_boards WHERE group_id = ?').run(group.id);
+    const insertAssoc = this.conn.db.prepare('INSERT OR IGNORE INTO ticket_group_boards (group_id, board_id) VALUES (?, ?)');
+    for (const bid of group.boardIds) insertAssoc.run(group.id, bid);
   }
 
   async removeTicketGroup(id: string): Promise<void> {
     this.conn.db.prepare('DELETE FROM ticket_groups WHERE id = ?').run(id);
   }
 
+  // ── Board Associations ──
+
+  async getBoardIdsByGroup(groupId: string): Promise<string[]> {
+    return (this.conn.db.prepare('SELECT board_id FROM ticket_group_boards WHERE group_id = ?').all(groupId) as BoardAssocRow[]).map((a) => a.board_id);
+  }
+
+  async addBoardToGroup(groupId: string, boardId: string): Promise<void> {
+    this.conn.db.prepare('INSERT OR IGNORE INTO ticket_group_boards (group_id, board_id) VALUES (?, ?)').run(groupId, boardId);
+  }
+
+  async removeBoardFromGroup(groupId: string, boardId: string): Promise<void> {
+    this.conn.db.prepare('DELETE FROM ticket_group_boards WHERE group_id = ? AND board_id = ?').run(groupId, boardId);
+  }
+
   // ── Memberships ──
 
   async getMembershipsByGroup(groupId: string): Promise<TicketGroupMembership[]> {
-    const rows = this.conn.db.prepare('SELECT * FROM ticket_group_memberships WHERE group_id = ?').all(groupId) as MembershipRow[];
-    return rows.map((r) => ({ ticketId: r.ticket_id, groupId: r.group_id }));
+    return (this.conn.db.prepare('SELECT * FROM ticket_group_memberships WHERE group_id = ?').all(groupId) as MembershipRow[]).map((r) => ({ ticketId: r.ticket_id, groupId: r.group_id }));
   }
 
   async getMembershipsByTicket(ticketId: string): Promise<TicketGroupMembership[]> {
-    const rows = this.conn.db.prepare('SELECT * FROM ticket_group_memberships WHERE ticket_id = ?').all(ticketId) as MembershipRow[];
-    return rows.map((r) => ({ ticketId: r.ticket_id, groupId: r.group_id }));
+    return (this.conn.db.prepare('SELECT * FROM ticket_group_memberships WHERE ticket_id = ?').all(ticketId) as MembershipRow[]).map((r) => ({ ticketId: r.ticket_id, groupId: r.group_id }));
   }
 
   async addMembership(ticketId: string, groupId: string): Promise<void> {
-    this.conn.db.prepare(
-      'INSERT OR IGNORE INTO ticket_group_memberships (ticket_id, group_id) VALUES (?, ?)',
-    ).run(ticketId, groupId);
+    this.conn.db.prepare('INSERT OR IGNORE INTO ticket_group_memberships (ticket_id, group_id) VALUES (?, ?)').run(ticketId, groupId);
   }
 
   async removeMembership(ticketId: string, groupId: string): Promise<void> {
-    this.conn.db.prepare(
-      'DELETE FROM ticket_group_memberships WHERE ticket_id = ? AND group_id = ?',
-    ).run(ticketId, groupId);
+    this.conn.db.prepare('DELETE FROM ticket_group_memberships WHERE ticket_id = ? AND group_id = ?').run(ticketId, groupId);
   }
 
   async removeMembershipsByGroup(groupId: string): Promise<void> {
@@ -109,49 +134,33 @@ export class SqliteTicketGroupStoreAdapter implements TicketGroupStorePort {
   // ── Relationships ──
 
   async getChildRelationships(parentId: string): Promise<TicketRelationship[]> {
-    const rows = this.conn.db.prepare('SELECT * FROM ticket_relationships WHERE parent_id = ?').all(parentId) as RelationshipRow[];
-    return rows.map((r) => ({ parentId: r.parent_id, childId: r.child_id }));
+    return (this.conn.db.prepare('SELECT * FROM ticket_relationships WHERE parent_id = ?').all(parentId) as RelationshipRow[]).map((r) => ({ parentId: r.parent_id, childId: r.child_id }));
   }
 
   async getParentRelationships(childId: string): Promise<TicketRelationship[]> {
-    const rows = this.conn.db.prepare('SELECT * FROM ticket_relationships WHERE child_id = ?').all(childId) as RelationshipRow[];
-    return rows.map((r) => ({ parentId: r.parent_id, childId: r.child_id }));
+    return (this.conn.db.prepare('SELECT * FROM ticket_relationships WHERE child_id = ?').all(childId) as RelationshipRow[]).map((r) => ({ parentId: r.parent_id, childId: r.child_id }));
   }
 
   async addRelationship(parentId: string, childId: string): Promise<void> {
-    this.conn.db.prepare(
-      'INSERT OR IGNORE INTO ticket_relationships (parent_id, child_id) VALUES (?, ?)',
-    ).run(parentId, childId);
+    this.conn.db.prepare('INSERT OR IGNORE INTO ticket_relationships (parent_id, child_id) VALUES (?, ?)').run(parentId, childId);
   }
 
   async removeRelationship(parentId: string, childId: string): Promise<void> {
-    this.conn.db.prepare(
-      'DELETE FROM ticket_relationships WHERE parent_id = ? AND child_id = ?',
-    ).run(parentId, childId);
+    this.conn.db.prepare('DELETE FROM ticket_relationships WHERE parent_id = ? AND child_id = ?').run(parentId, childId);
   }
 
   async removeRelationshipsByTicket(ticketId: string): Promise<void> {
-    this.conn.db.prepare(
-      'DELETE FROM ticket_relationships WHERE parent_id = ? OR child_id = ?',
-    ).run(ticketId, ticketId);
+    this.conn.db.prepare('DELETE FROM ticket_relationships WHERE parent_id = ? OR child_id = ?').run(ticketId, ticketId);
   }
 
   // ── Helpers ──
 
-  private toEntity(row: TicketGroupRow): TicketGroupEntity {
+  private toEntity(row: TicketGroupRow, boardIds: string[]): TicketGroupEntity {
     return new TicketGroupEntity(
-      row.id,
-      row.board_id,
-      row.name,
-      row.emoji,
-      row.color,
-      row.description,
-      row.timeframe as TicketGroupTimeframe,
-      row.group_status as TicketGroupStatus,
-      row.blocked === 1,
-      row.favorite === 1,
-      new Date(row.created_at),
-      new Date(row.updated_at),
+      row.id, boardIds, row.name, row.emoji, row.color, row.description,
+      row.timeframe as TicketGroupTimeframe, row.group_status as TicketGroupStatus,
+      row.blocked === 1, row.favorite === 1,
+      new Date(row.created_at), new Date(row.updated_at),
     );
   }
 }

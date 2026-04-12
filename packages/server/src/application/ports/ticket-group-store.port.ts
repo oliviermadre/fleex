@@ -9,6 +9,11 @@ export interface TicketGroupStorePort {
   saveTicketGroup(group: TicketGroupEntity): Promise<void>;
   removeTicketGroup(id: string): Promise<void>;
 
+  // ── Board Associations (Epic ↔ Board) ──
+  getBoardIdsByGroup(groupId: string): Promise<string[]>;
+  addBoardToGroup(groupId: string, boardId: string): Promise<void>;
+  removeBoardFromGroup(groupId: string, boardId: string): Promise<void>;
+
   // ── Memberships (Ticket ↔ Epic) ──
   getMembershipsByGroup(groupId: string): Promise<TicketGroupMembership[]>;
   getMembershipsByTicket(ticketId: string): Promise<TicketGroupMembership[]>;

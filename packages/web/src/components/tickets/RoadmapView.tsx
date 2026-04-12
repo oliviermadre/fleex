@@ -200,18 +200,22 @@ export function RoadmapView() {
 
             {/* Cards — matches KanbanColumn card list */}
             <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 pt-2">
-              {colGroups.map((group) => (
-                <RoadmapCard
-                  key={group.id}
-                  group={group}
-                  tickets={getGroupTickets(group.id)}
-                  isDragging={draggedGroupId === group.id}
-                  showTicketList={col.id !== 'done' && col.id !== 'cancelled'}
-                  onDragStart={(e) => handleDragStart(e, group.id)}
-                  onDragEnd={handleDragEnd}
-                  onClick={() => setSelectedEpicDetail(group.id)}
-                />
-              ))}
+              {colGroups.map((group) => {
+                const tickets = getGroupTickets(group.id);
+                const boardFilteredTickets = selectedBoardId ? tickets.filter(t => t.boardId === selectedBoardId) : tickets;
+                return (
+                  <RoadmapCard
+                    key={group.id}
+                    group={group}
+                    tickets={boardFilteredTickets}
+                    isDragging={draggedGroupId === group.id}
+                    showTicketList={col.id !== 'done' && col.id !== 'cancelled'}
+                    onDragStart={(e) => handleDragStart(e, group.id)}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => setSelectedEpicDetail(group.id)}
+                  />
+                );
+              })}
             </div>
           </div>
         );

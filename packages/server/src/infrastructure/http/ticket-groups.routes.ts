@@ -33,9 +33,10 @@ export function ticketGroupRoutes(container: Container) {
     });
 
     app.post<{ Body: CreateTicketGroupRequest }>('/api/ticket-groups', async (request, reply) => {
+      const boardIds = request.body.boardIds ?? (request.body.boardId ? [request.body.boardId] : []);
       const group = TicketGroupEntity.create({
         id: randomUUID(),
-        boardId: request.body.boardId,
+        boardIds,
         name: request.body.name,
         emoji: request.body.emoji,
         color: request.body.color,
@@ -87,6 +88,58 @@ export function ticketGroupRoutes(container: Container) {
       return reply.code(204).send();
     });
 
+    // ── Board Associations (Epic ↔ Board) ──
+
+    app.get<{ Params: { id: string } }>('/api/ticket-groups/:id/boards', async (request) => {
+      const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
+      if (!group) throw new TicketGroupNotFoundError(request.params.id);
+      return group.boardIds;
+    });
+
+    app.post<{ Params: { id: string; boardId: string } }>('/api/ticket-groups/:id/boards/:boardId', async (request, reply) => {
+      const { id: groupId, boardId } = request.params;
+      const group = await container.ticketGroupStore.getTicketGroupById(groupId);
+      if (!group) throw new TicketGroupNotFoundError(groupId);
+      if (!group.hasBoard(boardId)) {
+        group.addBoard(boardId);
+        await container.ticketGroupStore.addBoardToGroup(groupId, boardId);
+        emit({ type: 'ticketGroup.boardAdded', groupId, boardId, occurredAt: new Date() });
+        container.ticketBroadcast('ticketGroup:boardAdded', { groupId, boardId });
+      }
+      return reply.code(201).send({ groupId, boardId });
+    });
+
+    app.delete<{ Params: { id: string; boardId: string } }>('/api/ticket-groups/:id/boards/:boardId', async (request, reply) => {
+      const { id: groupId, boardId } = request.params;
+      const group = await container.ticketGroupStore.getTicketGroupById(groupId);
+      if (!group) throw new TicketGroupNotFoundError(groupId);
+
+      if (group.boardIds.length <= 1) {
+        return reply.code(400).send({ error: 'Cannot remove the last board from an epic' });
+      }
+
+      // Guard: check if any tickets from this board are in the epic
+      const memberships = await container.ticketGroupStore.getMembershipsByGroup(groupId);
+      const ticketsFromBoard = await Promise.all(
+        memberships.map(async (m) => {
+          const t = await container.ticketStore.getTicketById(m.ticketId);
+          return t && t.boardId === boardId ? t : null;
+        }),
+      );
+      const blocking = ticketsFromBoard.filter(Boolean);
+      if (blocking.length > 0) {
+        return reply.code(409).send({
+          error: `Cannot remove board: ${blocking.length} ticket(s) from this board are still in the epic. Remove them first.`,
+        });
+      }
+
+      group.removeBoard(boardId);
+      await container.ticketGroupStore.removeBoardFromGroup(groupId, boardId);
+      emit({ type: 'ticketGroup.boardRemoved', groupId, boardId, occurredAt: new Date() });
+      container.ticketBroadcast('ticketGroup:boardRemoved', { groupId, boardId });
+      return reply.code(204).send();
+    });
+
     // ── Memberships (Ticket ↔ Epic) ──
 
     app.get<{ Params: { id: string } }>('/api/ticket-groups/:id/tickets', async (request) => {
@@ -104,6 +157,19 @@ export function ticketGroupRoutes(container: Container) {
       await container.ticketGroupStore.addMembership(ticketId, groupId);
       emit({ type: 'ticketGroup.memberAdded', groupId, ticketId, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:memberAdded', { groupId, ticketId });
+
+      // Auto-associate the ticket's board with the epic if not already linked
+      const ticket = await container.ticketStore.getTicketById(ticketId);
+      if (ticket) {
+        const group = await container.ticketGroupStore.getTicketGroupById(groupId);
+        if (group && !group.hasBoard(ticket.boardId)) {
+          group.addBoard(ticket.boardId);
+          await container.ticketGroupStore.addBoardToGroup(groupId, ticket.boardId);
+          emit({ type: 'ticketGroup.boardAdded', groupId, boardId: ticket.boardId, occurredAt: new Date() });
+          container.ticketBroadcast('ticketGroup:boardAdded', { groupId, boardId: ticket.boardId });
+        }
+      }
+
       return reply.code(201).send({ ticketId, groupId });
     });
 
@@ -145,14 +211,12 @@ export function ticketGroupRoutes(container: Container) {
 
     app.post<{ Params: { ticketId: string; childId: string } }>('/api/tickets/:ticketId/children/:childId', async (request, reply) => {
       const { ticketId, childId } = request.params;
-
       if (ticketId === childId) {
         return reply.code(400).send({ error: 'A ticket cannot be its own child' });
       }
       if (await hasCycle(container, childId, ticketId)) {
         return reply.code(400).send({ error: 'This relationship would create a cycle' });
       }
-
       await container.ticketGroupStore.addRelationship(ticketId, childId);
       emit({ type: 'ticketRelationship.created', parentId: ticketId, childId, occurredAt: new Date() });
       container.ticketBroadcast('ticketRelationship:created', { parentId: ticketId, childId });
@@ -169,7 +233,6 @@ export function ticketGroupRoutes(container: Container) {
   };
 }
 
-// Cycle detection: BFS from `from` following parent edges to see if we reach `to`
 async function hasCycle(container: Container, from: string, to: string): Promise<boolean> {
   const visited = new Set<string>();
   const queue = [from];
@@ -179,9 +242,7 @@ async function hasCycle(container: Container, from: string, to: string): Promise
     if (visited.has(current)) continue;
     visited.add(current);
     const children = await container.ticketGroupStore.getChildRelationships(current);
-    for (const c of children) {
-      queue.push(c.childId);
-    }
+    for (const c of children) queue.push(c.childId);
   }
   return false;
 }

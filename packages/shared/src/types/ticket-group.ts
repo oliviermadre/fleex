@@ -5,7 +5,9 @@ export type TicketGroupStatus = 'active' | 'done' | 'cancelled' | 'archived';
 
 export interface TicketGroup {
   readonly id: string;
-  readonly boardId: string;
+  readonly boardIds: string[];
+  /** @deprecated Use boardIds */
+  readonly boardId?: string;
   readonly name: string;
   readonly emoji: string;
   readonly color: string;
@@ -29,7 +31,8 @@ export interface TicketRelationship {
 }
 
 export interface CreateTicketGroupRequest {
-  readonly boardId: string;
+  readonly boardId?: string;
+  readonly boardIds?: string[];
   readonly name: string;
   readonly emoji?: string;
   readonly color?: string;
@@ -54,6 +57,8 @@ export type TicketGroupWsMessageType =
   | 'ticketGroup:deleted'
   | 'ticketGroup:memberAdded'
   | 'ticketGroup:memberRemoved'
+  | 'ticketGroup:boardAdded'
+  | 'ticketGroup:boardRemoved'
   | 'ticketRelationship:created'
   | 'ticketRelationship:deleted';
 
