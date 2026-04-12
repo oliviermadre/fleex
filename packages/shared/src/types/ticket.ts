@@ -209,6 +209,14 @@ export interface TicketSummaryRef {
 
 // ── Context ──
 
+export interface TicketContextEpic {
+  readonly name: string;
+  readonly emoji: string;
+  readonly description: string;
+  readonly timeframe: string;
+  readonly groupStatus: string;
+}
+
 export interface TicketContext {
   readonly ticket: Ticket;
   readonly comments: TicketComment[];
@@ -219,6 +227,7 @@ export interface TicketContext {
   readonly deliverables: TicketDeliverable[];
   readonly activity: TicketActivity[];
   readonly relevantSummaries: TicketSummaryRef[];
+  readonly epics: TicketContextEpic[];
 }
 
 // ── WebSocket ──

@@ -48,6 +48,18 @@ export type {
 export type { ClaudeConfigTreeEntry } from './types/claude-config.js';
 
 export type {
+  TicketGroupTimeframe,
+  TicketGroupStatus,
+  TicketGroup,
+  TicketGroupMembership,
+  TicketRelationship,
+  CreateTicketGroupRequest,
+  UpdateTicketGroupRequest,
+  TicketGroupWsMessageType,
+  TicketGroupWsMessage,
+} from './types/ticket-group.js';
+
+export type {
   TicketStatus,
   TicketPriority,
   TicketLinkType,
@@ -73,6 +85,7 @@ export type {
   TicketDeliverable,
   TicketSummaryRef,
   TicketContext,
+  TicketContextEpic,
   TicketReadCursors,
   TicketUnreadCounts,
   TicketWsMessageType,

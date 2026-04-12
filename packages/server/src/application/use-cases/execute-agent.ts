@@ -1553,6 +1553,16 @@ export class ExecuteAgentUseCase {
       }
     }
 
+    if (context.epics && context.epics.length > 0) {
+      pushText('\n## Epics\n');
+      for (const epic of context.epics) {
+        pushText(`### ${epic.emoji} ${epic.name} (${epic.timeframe}, ${epic.groupStatus})\n`);
+        if (epic.description) {
+          blocks.push(...await this.resolveText(epic.description + '\n'));
+        }
+      }
+    }
+
     if (context.relevantSummaries && context.relevantSummaries.length > 0) {
       pushText('\n## Related Ticket Summaries\n');
       pushText('Context from previously completed tickets — use to avoid reinventing solutions.\n');

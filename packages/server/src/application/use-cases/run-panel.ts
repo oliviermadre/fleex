@@ -736,7 +736,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
     return parts.join('\n');
   }
 
-  private async buildTicketContextBlocks(context: { ticket: { title: string; description: string }; comments: Array<{ authorName: string; body: string }>; deliverables: Array<{ title: string; type: string; content: string; status: string; agentName: string }> }): Promise<PromptContentBlock[]> {
+  private async buildTicketContextBlocks(context: { ticket: { title: string; description: string }; comments: Array<{ authorName: string; body: string }>; deliverables: Array<{ title: string; type: string; content: string; status: string; agentName: string }>; epics?: Array<{ name: string; emoji: string; description: string; timeframe: string; groupStatus: string }> }): Promise<PromptContentBlock[]> {
     const blocks: PromptContentBlock[] = [];
     const pushText = (text: string) => blocks.push({ type: 'text', text });
 
@@ -758,6 +758,16 @@ Be concise and decision-oriented. Write in the same language as the panel member
       for (const d of context.deliverables) {
         pushText(`\n### [${d.status}] ${d.title} (${d.type}) by ${d.agentName}`);
         pushText(d.content.length > 2000 ? d.content.substring(0, 2000) + '\n...(truncated)' : d.content);
+      }
+    }
+
+    if (context.epics && context.epics.length > 0) {
+      pushText('\n## Epics');
+      for (const epic of context.epics) {
+        pushText(`\n### ${epic.emoji} ${epic.name} (${epic.timeframe}, ${epic.groupStatus})`);
+        if (epic.description) {
+          blocks.push(...await this.resolveText(epic.description));
+        }
       }
     }
 

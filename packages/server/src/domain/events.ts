@@ -262,6 +262,61 @@ export interface SessionKilledEvent extends DomainEvent {
   sessionId: string;
 }
 
+// ── Ticket Group events ──
+
+export interface TicketGroupCreatedEvent extends DomainEvent {
+  type: 'ticketGroup.created';
+  groupId: string;
+  boardId: string;
+}
+
+export interface TicketGroupUpdatedEvent extends DomainEvent {
+  type: 'ticketGroup.updated';
+  groupId: string;
+  changes: Record<string, unknown>;
+}
+
+export interface TicketGroupDeletedEvent extends DomainEvent {
+  type: 'ticketGroup.deleted';
+  groupId: string;
+}
+
+export interface TicketGroupMemberAddedEvent extends DomainEvent {
+  type: 'ticketGroup.memberAdded';
+  groupId: string;
+  ticketId: string;
+}
+
+export interface TicketGroupMemberRemovedEvent extends DomainEvent {
+  type: 'ticketGroup.memberRemoved';
+  groupId: string;
+  ticketId: string;
+}
+
+export interface TicketRelationshipCreatedEvent extends DomainEvent {
+  type: 'ticketRelationship.created';
+  parentId: string;
+  childId: string;
+}
+
+export interface TicketRelationshipDeletedEvent extends DomainEvent {
+  type: 'ticketRelationship.deleted';
+  parentId: string;
+  childId: string;
+}
+
+export interface TicketGroupBoardAddedEvent extends DomainEvent {
+  type: 'ticketGroup.boardAdded';
+  groupId: string;
+  boardId: string;
+}
+
+export interface TicketGroupBoardRemovedEvent extends DomainEvent {
+  type: 'ticketGroup.boardRemoved';
+  groupId: string;
+  boardId: string;
+}
+
 // ── Union type ──
 
 export type AnyDomainEvent =
@@ -298,7 +353,16 @@ export type AnyDomainEvent =
   | WorktreeCreatedEvent
   | SessionCreatedEvent
   | SessionRenamedEvent
-  | SessionKilledEvent;
+  | SessionKilledEvent
+  | TicketGroupCreatedEvent
+  | TicketGroupUpdatedEvent
+  | TicketGroupDeletedEvent
+  | TicketGroupMemberAddedEvent
+  | TicketGroupMemberRemovedEvent
+  | TicketRelationshipCreatedEvent
+  | TicketRelationshipDeletedEvent
+  | TicketGroupBoardAddedEvent
+  | TicketGroupBoardRemovedEvent;
 
 // ── Event type string union ──
 

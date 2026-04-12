@@ -13,6 +13,7 @@ import type { SkillStorePort } from '../../application/ports/skill-store.port.js
 import type { PanelStorePort } from '../../application/ports/panel-store.port.js';
 import type { FileStorePort } from '../../application/ports/file-store.port.js';
 import type { FileMetaStorePort } from '../../application/ports/file-meta-store.port.js';
+import type { TicketGroupStorePort } from '../../application/ports/ticket-group-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
@@ -34,6 +35,7 @@ export interface StorageStores {
   kvStore: KvStorePort | null;
   fileStore: FileStorePort;
   fileMetaStore: FileMetaStorePort;
+  ticketGroupStore: TicketGroupStorePort;
 }
 
 export function resolveStorageDriver(): StorageDriver {
@@ -89,6 +91,7 @@ async function createJsonStores(deps: {
   const { JsonPanelStore } = await import('./json-panel-store.adapter.js');
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { JsonFileMetaStore } = await import('./json-file-meta-store.adapter.js');
+  const { JsonTicketGroupStore } = await import('./json-ticket-group-store.adapter.js');
 
   // Run pending migrations (JSON adapter — tracking via _migrations.json)
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
@@ -121,8 +124,10 @@ async function createJsonStores(deps: {
   const fileStore = new DiskFileStoreAdapter(deps.homedir);
   const fileMetaStore = new JsonFileMetaStore(deps.hostFs, deps.homedir, deps.logger);
   await fileMetaStore.init();
+  const ticketGroupStore = new JsonTicketGroupStore(deps.hostFs, deps.homedir, deps.logger);
+  await ticketGroupStore.init();
 
-  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null, fileStore, fileMetaStore };
+  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null, fileStore, fileMetaStore, ticketGroupStore };
 }
 
 async function createJsonSessionStore(deps: {
@@ -162,6 +167,7 @@ async function createSqliteStores(deps: {
   const { SqlitePanelStoreAdapter } = await import('./sqlite/sqlite-panel-store.adapter.js');
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { SqliteFileMetaStoreAdapter } = await import('./sqlite/sqlite-file-meta-store.adapter.js');
+  const { SqliteTicketGroupStoreAdapter } = await import('./sqlite/sqlite-ticket-group-store.adapter.js');
 
   const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
   const connection = new SqliteConnection(dbPath);
@@ -194,6 +200,7 @@ async function createSqliteStores(deps: {
     kvStore: new SqliteKvStoreAdapter(connection),
     fileStore: new DiskFileStoreAdapter(deps.homedir),
     fileMetaStore: new SqliteFileMetaStoreAdapter(connection),
+    ticketGroupStore: new SqliteTicketGroupStoreAdapter(connection),
   };
 }
 
@@ -223,6 +230,7 @@ async function createPgsqlStores(deps: {
   const { PgPanelStore } = await import('./pgsql/pg-panel-store.adapter.js');
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { PgFileMetaStore } = await import('./pgsql/pg-file-meta-store.adapter.js');
+  const { PgTicketGroupStore } = await import('./pgsql/pg-ticket-group-store.adapter.js');
 
   const connection = new PgConnection(url);
   await connection.init();
@@ -257,6 +265,7 @@ async function createPgsqlStores(deps: {
     kvStore: new PgKvStoreAdapter(connection),
     fileStore: new DiskFileStoreAdapter(deps.homedir),
     fileMetaStore: new PgFileMetaStore(connection),
+    ticketGroupStore: new PgTicketGroupStore(connection),
   };
 }
 
@@ -289,6 +298,7 @@ async function createSupabaseStores(deps: {
   const { SupabasePanelStore } = await import('./supabase/supabase-panel-store.adapter.js');
   const { SupabaseFileStoreAdapter } = await import('./supabase/supabase-file-store.adapter.js');
   const { SupabaseFileMetaStore } = await import('./supabase/supabase-file-meta-store.adapter.js');
+  const { SupabaseTicketGroupStore } = await import('./supabase/supabase-ticket-group-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
   const connection = new SupabaseConnection(url, key, dbUrl, deps.logger);
@@ -321,5 +331,6 @@ async function createSupabaseStores(deps: {
     kvStore: new SupabaseKvStoreAdapter(connection),
     fileStore: new SupabaseFileStoreAdapter(connection),
     fileMetaStore: new SupabaseFileMetaStore(connection),
+    ticketGroupStore: new SupabaseTicketGroupStore(connection),
   };
 }

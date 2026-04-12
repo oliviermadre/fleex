@@ -1,9 +1,10 @@
-import type { TicketContext } from '@fleex/shared';
+import type { TicketContext, TicketContextEpic } from '@fleex/shared';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
+import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
 import type { GetRelevantSummariesUseCase } from './get-relevant-summaries.js';
 
 export class GetTicketContextUseCase {
@@ -13,6 +14,7 @@ export class GetTicketContextUseCase {
     private readonly mentionStore: MentionStorePort,
     private readonly deliverableStore: DeliverableStorePort,
     private readonly getRelevantSummaries?: GetRelevantSummariesUseCase,
+    private readonly ticketGroupStore?: TicketGroupStorePort,
   ) {}
 
   async execute(params: {
@@ -55,6 +57,28 @@ export class GetTicketContextUseCase {
       }
     }
 
+    // Get epics this ticket belongs to
+    let epics: TicketContextEpic[] = [];
+    if (this.ticketGroupStore) {
+      try {
+        const memberships = await this.ticketGroupStore.getMembershipsByTicket(params.ticketId);
+        const groups = await Promise.all(
+          memberships.map((m) => this.ticketGroupStore!.getTicketGroupById(m.groupId)),
+        );
+        epics = groups
+          .filter(Boolean)
+          .map((g) => ({
+            name: g!.name,
+            emoji: g!.emoji,
+            description: g!.description,
+            timeframe: g!.timeframe,
+            groupStatus: g!.groupStatus,
+          }));
+      } catch {
+        // Non-critical — proceed without epics
+      }
+    }
+
     return {
       ticket: ticket.toDTO(),
       comments: visibleComments.map((c) => c.toDTO()),
@@ -65,6 +89,7 @@ export class GetTicketContextUseCase {
       deliverables: deliverables.map((d) => d.toDTO()),
       activity: activity.map((a) => a.toDTO()),
       relevantSummaries,
+      epics,
     };
   }
 }

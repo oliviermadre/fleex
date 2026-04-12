@@ -7,6 +7,7 @@ import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUnreadStore } from '../../stores/unreadStore';
+import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { executeSkill } from '../../services/api';
 import { cn } from '../../lib/cn';
 
@@ -59,6 +60,17 @@ export function KanbanCard({
   const archiveTicket = useTicketStore((s) => s.archiveTicket);
   const sessions = useSessionStore((s) => s.sessions);
   const unread = useUnreadStore((s) => s.getUnread(ticket.id));
+  const groups = useTicketGroupStore((s) => s.groups);
+  const ticketGroupIds = useTicketGroupStore((s) => s.ticketGroupIds);
+
+  const epicBadges = useMemo(() => {
+    const gIds = ticketGroupIds[ticket.id] ?? [];
+    if (gIds.length === 0) return [];
+    return gIds
+      .map((gId) => groups.find((g) => g.id === gId))
+      .filter(Boolean)
+      .map((g) => ({ id: g!.id, emoji: g!.emoji, name: g!.name }));
+  }, [ticket.id, ticketGroupIds, groups]);
 
   const issueLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_issue');
   const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
@@ -158,6 +170,20 @@ export function KanbanCard({
         )}
       </div>
 
+      {/* Epic badges */}
+      {epicBadges.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {epicBadges.map((epic) => (
+            <span
+              key={epic.id}
+              className="inline-flex items-center gap-1 rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]"
+            >
+              <span>{epic.emoji}</span>
+              <span className="truncate max-w-[100px]">{epic.name}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* PR badges */}
       {prLinks.length > 0 && (

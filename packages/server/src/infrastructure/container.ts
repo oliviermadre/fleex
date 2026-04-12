@@ -102,6 +102,7 @@ export async function createContainer() {
     kvStore,
     fileStore,
     fileMetaStore,
+    ticketGroupStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   // Wrap stores with write-through in-memory cache (zero DB queries on 1s tick).
@@ -189,7 +190,7 @@ export async function createContainer() {
   const resolveMention = new ResolveMentionUseCase(mentionStore, ticketStore_, logger);
   const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore_, logger);
   const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore_);
-  const getTicketContext = new GetTicketContextUseCase(ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries);
+  const getTicketContext = new GetTicketContextUseCase(ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore);
 
   // Agent personas use cases
   const createPersona = new CreatePersonaUseCase(personaStore_, logger);
@@ -336,6 +337,7 @@ export async function createContainer() {
     kvStore,
     fileStore,
     fileMetaStore,
+    ticketGroupStore,
     eventBus,
     domainEventListener,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

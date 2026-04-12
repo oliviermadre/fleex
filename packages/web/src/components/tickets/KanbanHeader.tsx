@@ -1,19 +1,22 @@
 import { useState, useRef } from 'react';
 import type { BoardWithCounts } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { BoardSelectorDropdown } from './BoardSelectorDropdown';
 import { SearchToggle } from './SearchToggle';
 import { FilterDropdown } from './FilterDropdown';
+import { cn } from '../../lib/cn';
 
 interface KanbanHeaderProps {
   board: BoardWithCounts | null;
   isAllBoards: boolean;
   onShowArchived?: () => void;
+  hideActions?: boolean;
 }
 
 const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;
 
-export function KanbanHeader({ board, isAllBoards, onShowArchived }: KanbanHeaderProps) {
+export function KanbanHeader({ board, isAllBoards, onShowArchived, hideActions }: KanbanHeaderProps) {
   const boards = useTicketStore((s) => s.boards);
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const createTicket = useTicketStore((s) => s.createTicket);
@@ -67,16 +70,53 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived }: KanbanHeade
     }
   };
 
+  const activeView = useTicketGroupStore((s) => s.activeView);
+  const setActiveView = useTicketGroupStore((s) => s.setActiveView);
+
   return (
     <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
       {/* Left: Board selector */}
       <BoardSelectorDropdown />
 
+      {/* Board / Roadmap toggle */}
+      <div className="flex items-center rounded-md border border-[var(--theme-border)] p-0.5">
+        <button
+          className={cn(
+            'flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors',
+            activeView === 'board'
+              ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]'
+              : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
+          )}
+          onClick={() => setActiveView('board')}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="1" width="4" height="14" rx="1" />
+            <rect x="6" y="1" width="4" height="10" rx="1" />
+            <rect x="11" y="1" width="4" height="12" rx="1" />
+          </svg>
+          Board
+        </button>
+        <button
+          className={cn(
+            'flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors',
+            activeView === 'roadmap'
+              ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]'
+              : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
+          )}
+          onClick={() => setActiveView('roadmap')}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 3h12M2 8h8M2 13h5" />
+          </svg>
+          Roadmap
+        </button>
+      </div>
+
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Right: Search, Filter, New ticket */}
-      <div className="flex items-center gap-2">
+      {/* Right: Search, Filter, New ticket (hidden in roadmap view) */}
+      {!hideActions && <div className="flex items-center gap-2">
         <SearchToggle />
         <FilterDropdown />
 
@@ -137,7 +177,7 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived }: KanbanHeade
             </button>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

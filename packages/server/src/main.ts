@@ -39,6 +39,7 @@ import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
 import { dashboardRoutes } from './infrastructure/http/dashboard.routes.js';
 import { githubImageProxyRoutes } from './infrastructure/http/github-image-proxy.routes.js';
 import { fileRoutes } from './infrastructure/http/files.routes.js';
+import { ticketGroupRoutes } from './infrastructure/http/ticket-groups.routes.js';
 import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 
@@ -83,6 +84,7 @@ async function main() {
   await app.register(dashboardRoutes(container));
   await app.register(githubImageProxyRoutes(container));
   await app.register(fileRoutes(container));
+  await app.register(ticketGroupRoutes(container));
 
   // Agent API with auth
   const authHook = createAgentAuthHook(container);
