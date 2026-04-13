@@ -66,7 +66,7 @@ export function DeliverableReadingOverlay() {
     >
       <div className="deliverable-overlay-panel" onMouseDown={(e) => e.stopPropagation()}>
         {/* Title bar */}
-        <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3" style={{ background: 'rgba(255,255,255,0.08)', flexShrink: 0 }}>
+        <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3" style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}>
           <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-2 py-0.5 text-[11px] font-bold tracking-wider text-[var(--theme-accent)]">
             {typeIcon(deliverable.type)}
           </span>
@@ -79,7 +79,7 @@ export function DeliverableReadingOverlay() {
             <span className="flex-shrink-0 text-[10px] text-[var(--theme-text-faint)]">v{deliverable.version}</span>
           )}
           {deliverable.status === 'draft' && (
-            <span className="flex-shrink-0 rounded-full bg-yellow-500/15 px-1.5 py-px text-[10px] font-medium text-yellow-400">draft</span>
+            <span className="flex-shrink-0 rounded-full bg-[var(--theme-warning)]/15 px-1.5 py-px text-[10px] font-medium text-[var(--theme-warning)]">draft</span>
           )}
 
           <div className="flex-1" />
@@ -98,7 +98,7 @@ export function DeliverableReadingOverlay() {
           {/* Close button */}
           <button
             onClick={close}
-            className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-red-500/15 hover:text-red-400"
+            className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-danger)]/15 hover:text-[var(--theme-danger)]"
             style={{ fontSize: 16, lineHeight: 1 }}
           >
             &times;
@@ -111,8 +111,8 @@ export function DeliverableReadingOverlay() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-2 border-t border-white/[0.06] px-5 py-2 text-[10px] text-[var(--theme-text-faint)]" style={{ background: 'rgba(255,255,255,0.08)', flexShrink: 0 }}>
-          <span className="text-purple-400">{deliverable.agentName}</span>
+        <div className="flex items-center gap-2 border-t border-white/[0.06] px-5 py-2 text-[10px] text-[var(--theme-text-faint)]" style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}>
+          <span className="text-[var(--theme-accent)]">{deliverable.agentName}</span>
           <span>&middot;</span>
           <span>{relativeTime(deliverable.createdAt)}</span>
           <div className="flex-1" />

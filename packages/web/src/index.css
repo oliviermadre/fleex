@@ -353,7 +353,7 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--theme-bg-overlay);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   animation: deliverable-overlay-fade-in 100ms ease-out forwards;
@@ -381,10 +381,10 @@ html, body {
       rgba(255, 255, 255, 0.02) 40%,
       rgba(0, 0, 0, 0.12) 100%
     ),
-    rgba(24, 24, 27, 0.82);
+    var(--theme-bg-surface);
   backdrop-filter: blur(40px) saturate(1.4);
   -webkit-backdrop-filter: blur(40px) saturate(1.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--theme-border-subtle);
   box-shadow:
     0 24px 80px rgba(0, 0, 0, 0.5),
     0 8px 32px rgba(0, 0, 0, 0.3),
@@ -425,7 +425,7 @@ html, body {
   width: 6px;
 }
 .deliverable-overlay-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--theme-border-subtle);
   border-radius: 3px;
 }
 .deliverable-overlay-content::-webkit-scrollbar-track {

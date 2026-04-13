@@ -103,13 +103,13 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
           overflow: 'hidden',
           pointerEvents: 'auto',
           border: isFocused
-            ? '1px solid rgba(255, 255, 255, 0.3)'
-            : '1px solid rgba(255, 255, 255, 0.08)',
+            ? '1px solid var(--theme-border)'
+            : '1px solid var(--theme-border-subtle)',
           boxShadow: isFocused
-            ? '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(59, 130, 246, 0.3), 0 0 40px rgba(59, 130, 246, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15)'
+            ? '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 2px var(--theme-accent), 0 0 40px var(--theme-accent), inset 0 1px 0 rgba(255, 255, 255, 0.15)'
             : '0 24px 80px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
           transition: 'border 0.15s ease, box-shadow 0.15s ease',
-          background: 'rgba(10, 10, 15, 0.45)',
+          background: 'var(--theme-bg-overlay)',
           backdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
           WebkitBackdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
         }}
@@ -124,7 +124,7 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
             padding: '0 12px',
             cursor: 'grab',
             borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-            background: 'rgba(255, 255, 255, 0.08)',
+            background: 'var(--theme-bg-hover)',
             flexShrink: 0,
             userSelect: 'none',
           }}
@@ -170,8 +170,8 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
                 fontWeight: 500,
                 padding: '0 6px',
                 borderRadius: 9999,
-                backgroundColor: 'rgba(234, 179, 8, 0.15)',
-                color: '#facc15',
+                backgroundColor: 'var(--theme-warning)/15',
+                color: 'var(--theme-warning)',
                 flexShrink: 0,
               }}
             >
@@ -199,8 +199,8 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
               lineHeight: 1,
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = '#ef4444';
-              (e.currentTarget as HTMLElement).style.background = 'rgba(239, 68, 68, 0.15)';
+              (e.currentTarget as HTMLElement).style.color = 'var(--theme-danger)';
+              (e.currentTarget as HTMLElement).style.background = 'var(--theme-danger)/15';
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-muted)';
@@ -229,13 +229,13 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
             gap: 8,
             padding: '0 12px',
             borderTop: '1px solid rgba(255, 255, 255, 0.06)',
-            background: 'rgba(255, 255, 255, 0.08)',
+            background: 'var(--theme-bg-hover)',
             fontSize: 10,
             color: 'var(--theme-text-muted)',
             flexShrink: 0,
           }}
         >
-          <span style={{ color: '#c084fc' }}>{deliverable.agentName}</span>
+          <span style={{ color: 'var(--theme-accent)' }}>{deliverable.agentName}</span>
           <span>&middot;</span>
           <span>{relativeTime(deliverable.createdAt)}</span>
         </div>
