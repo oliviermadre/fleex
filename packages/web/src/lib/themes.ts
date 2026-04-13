@@ -299,6 +299,39 @@ export const THEME_FALL: Theme = {
   },
 };
 
+export const THEME_LATTE: Theme = {
+  id: 'latte',
+  name: 'Catppuccin Latte',
+  builtIn: true,
+  colors: {
+    accent: '#1e66f5',
+    accentHover: '#7287fd',
+    accentActive: '#209fb5',
+    accentMuted: 'rgba(30, 102, 245, 0.12)',
+    bgBase: '#eff1f5',
+    bgSurface: '#e6e9ef',
+    bgOverlay: '#dce0e8',
+    bgHover: 'rgba(204, 208, 218, 0.5)',
+    border: '#ccd0da',
+    borderSubtle: 'rgba(204, 208, 218, 0.5)',
+    borderInput: '#bcc0cc',
+    textPrimary: '#4c4f69',
+    textSecondary: '#5c5f77',
+    textMuted: '#6c6f85',
+    textFaint: '#8c8fa1',
+    success: '#40a02b',
+    warning: '#df8e1d',
+    danger: '#d20f39',
+  },
+  terminal: {
+    background: '#eff1f5',
+    foreground: '#4c4f69',
+    cursor: '#dc8a78',
+    cursorAccent: '#eff1f5',
+    selectionBackground: 'rgba(124, 127, 147, 0.3)',
+  },
+};
+
 export const BUILT_IN_THEMES: Theme[] = [
   THEME_EMBER,
   THEME_OCEAN,
@@ -308,6 +341,7 @@ export const BUILT_IN_THEMES: Theme[] = [
   THEME_MATRIX,
   THEME_SUMMER,
   THEME_FALL,
+  THEME_LATTE,
 ];
 
 export const DEFAULT_THEME_ID = 'verdant';
