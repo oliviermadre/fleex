@@ -1,4 +1,4 @@
-import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, GitHubIssueMetadata } from '@fleex/shared';
+import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -95,10 +95,10 @@ export class PgTicketStore implements TicketStorePort {
   async saveTicket(ticket: TicketEntity): Promise<void> {
     await this.db.query(
       `INSERT INTO tickets (
-        id, board_id, display_id, title, description, status, priority, position,
+        id, board_id, display_id, title, description, status, priority, type, position,
         tags, links, blocked, favorite, due_date, assignee,
-        agent_claimed_at, github_metadata, archived_at, status_changed_at, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        agent_claimed_at, github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
       ON CONFLICT (id) DO UPDATE SET
         board_id = $2,
         display_id = $3,
@@ -106,19 +106,21 @@ export class PgTicketStore implements TicketStorePort {
         description = $5,
         status = $6,
         priority = $7,
-        position = $8,
-        tags = $9,
-        links = $10,
-        blocked = $11,
-        favorite = $12,
-        due_date = $13,
-        assignee = $14,
-        agent_claimed_at = $15,
-        github_metadata = $16,
-        archived_at = $17,
-        status_changed_at = $18,
-        created_at = $19,
-        updated_at = $20`,
+        type = $8,
+        position = $9,
+        tags = $10,
+        links = $11,
+        blocked = $12,
+        favorite = $13,
+        due_date = $14,
+        assignee = $15,
+        agent_claimed_at = $16,
+        github_metadata = $17,
+        archived_at = $18,
+        first_doing_at = $19,
+        status_changed_at = $20,
+        created_at = $21,
+        updated_at = $22`,
       [
         ticket.id,
         ticket.boardId,
@@ -127,6 +129,7 @@ export class PgTicketStore implements TicketStorePort {
         ticket.description,
         ticket.status,
         ticket.priority,
+        ticket.type,
         ticket.position,
         JSON.stringify(ticket.tags),
         JSON.stringify(ticket.links),
@@ -137,6 +140,7 @@ export class PgTicketStore implements TicketStorePort {
         ticket.agentClaimedAt?.toISOString() ?? null,
         ticket.githubMetadata ? JSON.stringify(ticket.githubMetadata) : null,
         ticket.archivedAt?.toISOString() ?? null,
+        ticket.firstDoingAt?.toISOString() ?? null,
         ticket.statusChangedAt.toISOString(),
         ticket.createdAt.toISOString(),
         ticket.updatedAt.toISOString(),
@@ -305,6 +309,7 @@ function rowToTicket(row: Record<string, unknown>): TicketEntity {
     (row.description as string) ?? '',
     row.status as TicketStatus,
     (row.priority as TicketPriority) ?? 'none',
+    (row.type as TicketType | null) ?? null,
     (row.position as number) ?? 0,
     (row.tags as string[]) ?? [],
     (row.links as TicketLink[]) ?? [],
@@ -315,6 +320,7 @@ function rowToTicket(row: Record<string, unknown>): TicketEntity {
     row.agent_claimed_at ? new Date(row.agent_claimed_at as string) : null,
     (row.github_metadata as GitHubIssueMetadata) ?? null,
     row.archived_at ? new Date(row.archived_at as string) : null,
+    row.first_doing_at ? new Date(row.first_doing_at as string) : null,
     new Date(row.status_changed_at as string),
     new Date(row.created_at as string),
     new Date(row.updated_at as string),

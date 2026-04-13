@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { FLEEX_DIR } from '@fleex/shared';
-import type { TicketStatus, TicketLinkType, TicketLink, GitHubIssueMetadata } from '@fleex/shared';
+import type { TicketStatus, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
@@ -10,6 +10,14 @@ import type { HostFs } from '../host/types.js';
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2, none: 3 };
 const MAX_ACTIVITY_ENTRIES = 5000;
+
+/** Map legacy 14-type values to new 6-type system */
+const LEGACY_TYPE_MAP: Record<string, TicketType> = {
+  feat: 'build', refactor: 'build', perf: 'build', test: 'build',
+  ci: 'build', chore: 'build', task: 'build',
+  fix: 'fix', review: 'review', ops: 'ops',
+  doc: 'think', research: 'think', design: 'think', data: 'think',
+};
 
 interface SerializedBoard {
   id: string;
@@ -28,6 +36,7 @@ interface SerializedTicket {
   description: string;
   status: TicketStatus;
   priority: string;
+  type?: TicketType | null;
   position: number;
   tags: string[];
   links: TicketLink[];
@@ -38,6 +47,7 @@ interface SerializedTicket {
   agentClaimedAt: string | null;
   githubMetadata?: GitHubIssueMetadata | null;
   archivedAt?: string | null;
+  firstDoingAt?: string | null;
   statusChangedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -273,12 +283,14 @@ export class JsonTicketStore implements TicketStorePort {
         const entity = new TicketEntity(
           t.id, t.boardId, t.displayId ?? 0, t.title, t.description,
           t.status, t.priority as TicketEntity['priority'],
+          (t.type ? (LEGACY_TYPE_MAP[t.type] ?? t.type as TicketType) : null),
           t.position, t.tags, t.links, t.blocked, t.favorite ?? false,
           t.dueDate ? new Date(t.dueDate) : null,
           t.assignee,
           t.agentClaimedAt ? new Date(t.agentClaimedAt) : null,
           t.githubMetadata ?? null,
           t.archivedAt ? new Date(t.archivedAt) : null,
+          t.firstDoingAt ? new Date(t.firstDoingAt) : null,
           new Date(t.statusChangedAt ?? t.updatedAt),
           new Date(t.createdAt), new Date(t.updatedAt),
         );
@@ -330,13 +342,14 @@ export class JsonTicketStore implements TicketStorePort {
     try {
       const data: SerializedTicket[] = Array.from(this.tickets.values()).map((t) => ({
         id: t.id, boardId: t.boardId, displayId: t.displayId, title: t.title, description: t.description,
-        status: t.status, priority: t.priority, position: t.position,
+        status: t.status, priority: t.priority, type: t.type ?? null, position: t.position,
         tags: t.tags, links: t.links, blocked: t.blocked, favorite: t.favorite,
         dueDate: t.dueDate?.toISOString() ?? null,
         assignee: t.assignee,
         agentClaimedAt: t.agentClaimedAt?.toISOString() ?? null,
         githubMetadata: t.githubMetadata ?? null,
         archivedAt: t.archivedAt?.toISOString() ?? null,
+        firstDoingAt: t.firstDoingAt?.toISOString() ?? null,
         statusChangedAt: t.statusChangedAt.toISOString(),
         createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(),
       }));

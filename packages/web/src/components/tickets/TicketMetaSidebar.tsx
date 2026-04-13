@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import type { Ticket, TicketLink, TicketStatus, TicketPriority, GitHubIssueMetadata, WorktreeSessionGroup } from '@fleex/shared';
-import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES } from '@fleex/shared';
+import type { Ticket, TicketLink, TicketStatus, TicketPriority, TicketType, GitHubIssueMetadata, WorktreeSessionGroup } from '@fleex/shared';
+import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
@@ -11,6 +11,7 @@ import { useUIStore } from '../../stores/uiStore';
 
 import * as api from '../../services/api';
 import { PriorityIndicator } from './PriorityIndicator';
+import { TicketTypeIcon, TYPE_ICONS, TYPE_COLORS } from './TicketTypeBadge';
 import { DueDateBadge } from './DueDateBadge';
 import { DueDatePickerPopover } from './DueDatePickerPopover';
 import { EpicPicker } from './EpicPicker';
@@ -56,6 +57,86 @@ function useCollapsedMetaTooltip() {
   }, []);
 
   return { tooltip, show, hide } as const;
+}
+
+// ── Type picker dropdown ──
+
+// Type groups removed — using flat 6-type list
+
+function TypePickerDropdown({
+  value,
+  onChange,
+}: {
+  value: TicketType | null;
+  onChange: (type: TicketType | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-colors',
+          'border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] hover:bg-[var(--theme-bg-hover)]',
+          value ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
+        )}
+      >
+        {value ? (
+          <>
+            <span className="text-xs leading-none">{TYPE_ICONS[value]}</span>
+            <span>{TICKET_TYPE_LABELS[value]}</span>
+          </>
+        ) : (
+          <span>Aucun</span>
+        )}
+        <svg className="ml-auto h-3 w-3 text-[var(--theme-text-faint)]" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 5l3 3 3-3" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[180px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] py-1 shadow-xl">
+          {/* None option */}
+          <button
+            className={cn(
+              'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+              value === null ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-muted)]',
+            )}
+            onClick={() => { onChange(null); setOpen(false); }}
+          >
+            Aucun
+          </button>
+          <div className="my-1 border-t border-[var(--theme-border)]" />
+
+          {/* Types */}
+          {(TICKET_TYPES as readonly string[]).map((t) => (
+            <button
+              key={t}
+              className={cn(
+                'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                value === t ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-primary)]',
+              )}
+              onClick={() => { onChange(t as TicketType); setOpen(false); }}
+            >
+              <span className="text-xs leading-none">{TYPE_ICONS[t as TicketType]}</span>
+              <span>{TICKET_TYPE_LABELS[t]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Status color mapping ──
@@ -170,6 +251,15 @@ function CollapsedTicketMetaSidebar({
           onMouseEnter={(e) => showTooltip(e, 'Priority', ticket.priority === 'none' ? 'None' : ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1))}
           onMouseLeave={hideTooltip}
         />
+
+        {/* Type */}
+        {ticket.type && (
+          <CollapsedIndicator
+            icon={<TicketTypeIcon type={ticket.type} />}
+            onMouseEnter={(e) => showTooltip(e, 'Type', TICKET_TYPE_LABELS[ticket.type!] ?? ticket.type!)}
+            onMouseLeave={hideTooltip}
+          />
+        )}
 
         {/* Due date */}
         {ticket.dueDate && (
@@ -359,6 +449,10 @@ function ExpandedTicketMetaSidebar({
     updateTicket(ticket.id, { priority });
   };
 
+  const handleTypeChange = (type: TicketType | null) => {
+    updateTicket(ticket.id, { type });
+  };
+
   const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
 
   const handleDelete = async () => {
@@ -498,6 +592,14 @@ function ExpandedTicketMetaSidebar({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Type */}
+      <div>
+        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+          Type
+        </label>
+        <TypePickerDropdown value={ticket.type} onChange={handleTypeChange} />
       </div>
 
       {/* Due date */}

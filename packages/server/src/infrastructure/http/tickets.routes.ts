@@ -110,7 +110,7 @@ export function ticketRoutes(container: Container) {
     });
 
     app.post<{ Body: CreateTicketRequest }>('/api/tickets', async (request, reply) => {
-      const { boardId, title, description, status, priority, tags, links, dueDate } = request.body;
+      const { boardId, title, description, status, priority, type, tags, links, dueDate } = request.body;
 
       const board = await container.ticketStore.getBoardById(boardId);
       if (!board) throw new BoardNotFoundError(boardId);
@@ -136,6 +136,7 @@ export function ticketRoutes(container: Container) {
         description,
         status: targetStatus,
         priority,
+        type,
         position: maxPos + 1,
         tags,
         links: ticketLinks,

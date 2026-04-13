@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import type { TicketPriority } from '@fleex/shared';
-import { TICKET_PRIORITIES } from '@fleex/shared';
+import type { TicketPriority, TicketType } from '@fleex/shared';
+import { TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { PriorityIndicator } from './PriorityIndicator';
+import { TYPE_ICONS } from './TicketTypeBadge';
 import { cn } from '../../lib/cn';
 
 export function FilterDropdown() {
@@ -21,6 +22,7 @@ export function FilterDropdown() {
   const activeFilterCount =
     (filters.repo ? 1 : 0) +
     (filters.priority ? 1 : 0) +
+    (filters.type ? 1 : 0) +
     (filters.hasSession !== null ? 1 : 0) +
     (filters.tag ? 1 : 0) +
     (filters.favorite !== null ? 1 : 0) +
@@ -154,6 +156,39 @@ export function FilterDropdown() {
                   >
                     <PriorityIndicator priority={p} />
                     {p === 'none' ? 'None' : p.charAt(0).toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Type */}
+            <div>
+              <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Type</label>
+              <div className="flex flex-wrap gap-1">
+                <button
+                  className={cn(
+                    'rounded px-2 py-1 text-[11px] transition-colors',
+                    !filters.type
+                      ? 'bg-[var(--theme-accent)] text-white'
+                      : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                  )}
+                  onClick={() => setFilters({ type: null })}
+                >
+                  All
+                </button>
+                {(TICKET_TYPES as readonly string[]).map((t) => (
+                  <button
+                    key={t}
+                    className={cn(
+                      'flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors',
+                      filters.type === t
+                        ? 'bg-[var(--theme-accent)] text-white'
+                        : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                    )}
+                    onClick={() => setFilters({ type: t as TicketType })}
+                  >
+                    <span className="text-[10px]">{TYPE_ICONS[t as TicketType]}</span>
+                    {TICKET_TYPE_LABELS[t]}
                   </button>
                 ))}
               </div>

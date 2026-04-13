@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Board, BoardWithCounts, Ticket, TicketLink, TicketStatus, TicketPriority, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@fleex/shared';
+import type { Board, BoardWithCounts, Ticket, TicketLink, TicketStatus, TicketPriority, TicketType, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@fleex/shared';
 import { TICKET_STATUSES } from '@fleex/shared';
 import * as api from '../services/api';
 import { useSessionStore } from './sessionStore';
@@ -10,6 +10,7 @@ export const VALID_TICKET_TABS: TicketTab[] = ['description', 'comments', 'menti
 interface TicketFilters {
   repo: string | null;        // "org/name" or null for all
   priority: TicketPriority | null;
+  type: TicketType | null;
   hasSession: boolean | null;  // true=with session, false=without, null=any
   tag: string | null;
   favorite: boolean | null;
@@ -92,7 +93,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   ticketTab: 'description',
   statusFilter: 'all',
   searchQuery: '',
-  filters: { repo: null, priority: null, hasSession: null, tag: null, favorite: null, hideOldDoneCancelled: true },
+  filters: { repo: null, priority: null, type: null, hasSession: null, tag: null, favorite: null, hideOldDoneCancelled: true },
 
   fetchBoards: async () => {
     const boards = await api.fetchBoards();
@@ -250,7 +251,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   setStatusFilter: (filter) => set({ statusFilter: filter }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setFilters: (partial) => set((s) => ({ filters: { ...s.filters, ...partial } })),
-  clearFilters: () => set({ filters: { repo: null, priority: null, hasSession: null, tag: null, favorite: null, hideOldDoneCancelled: true } }),
+  clearFilters: () => set({ filters: { repo: null, priority: null, type: null, hasSession: null, tag: null, favorite: null, hideOldDoneCancelled: true } }),
 
   ticketsByColumn: (boardId) => {
     const { tickets, searchQuery, filters } = get();
@@ -279,6 +280,11 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     // Priority filter
     if (filters.priority) {
       filtered = filtered.filter((t) => t.priority === filters.priority);
+    }
+
+    // Type filter
+    if (filters.type) {
+      filtered = filtered.filter((t) => t.type === filters.type);
     }
 
     // Has session filter (mirrors badge logic in KanbanCard)

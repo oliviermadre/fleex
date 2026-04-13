@@ -1,4 +1,4 @@
-import type { Ticket, TicketStatus, TicketPriority, TicketLink, TicketLinkType, GitHubIssueMetadata } from '@fleex/shared';
+import type { Ticket, TicketStatus, TicketPriority, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata } from '@fleex/shared';
 
 export class TicketEntity {
   constructor(
@@ -9,6 +9,7 @@ export class TicketEntity {
     public description: string,
     public status: TicketStatus,
     public priority: TicketPriority,
+    public type: TicketType | null,
     public position: number,
     public tags: string[],
     public links: TicketLink[],
@@ -19,6 +20,7 @@ export class TicketEntity {
     public agentClaimedAt: Date | null,
     public githubMetadata: GitHubIssueMetadata | null,
     public archivedAt: Date | null,
+    public firstDoingAt: Date | null,
     public statusChangedAt: Date,
     public readonly createdAt: Date,
     public updatedAt: Date,
@@ -32,6 +34,7 @@ export class TicketEntity {
     description?: string;
     status?: TicketStatus;
     priority?: TicketPriority;
+    type?: TicketType | null;
     position?: number;
     tags?: string[];
     links?: TicketLink[];
@@ -46,12 +49,14 @@ export class TicketEntity {
       params.description ?? '',
       params.status ?? 'backlog',
       params.priority ?? 'none',
+      params.type ?? null,
       params.position ?? 0,
       params.tags ?? [],
       params.links ?? [],
       false,
       false,
       params.dueDate ?? null,
+      null,
       null,
       null,
       null,
@@ -68,6 +73,7 @@ export class TicketEntity {
     description?: string;
     status?: TicketStatus;
     priority?: TicketPriority;
+    type?: TicketType | null;
     position?: number;
     tags?: string[];
     blocked?: boolean;
@@ -93,10 +99,18 @@ export class TicketEntity {
       diff['status'] = { from: this.status, to: changes.status };
       this.status = changes.status;
       this.statusChangedAt = new Date();
+      if (changes.status === 'doing' && !this.firstDoingAt) {
+        this.firstDoingAt = new Date();
+        diff['firstDoingAt'] = { from: null, to: this.firstDoingAt.toISOString() };
+      }
     }
     if (changes.priority !== undefined && changes.priority !== this.priority) {
       diff['priority'] = { from: this.priority, to: changes.priority };
       this.priority = changes.priority;
+    }
+    if (changes.type !== undefined && changes.type !== this.type) {
+      diff['type'] = { from: this.type, to: changes.type };
+      this.type = changes.type;
     }
     if (changes.position !== undefined && changes.position !== this.position) {
       diff['position'] = { from: this.position, to: changes.position };
@@ -146,7 +160,12 @@ export class TicketEntity {
     const now = new Date();
     this.statusChangedAt = now;
     this.updatedAt = now;
-    return { status: { from, to: status } };
+    const diff: Record<string, { from: unknown; to: unknown }> = { status: { from, to: status } };
+    if (status === 'doing' && !this.firstDoingAt) {
+      this.firstDoingAt = now;
+      diff['firstDoingAt'] = { from: null, to: now.toISOString() };
+    }
+    return diff;
   }
 
   setGithubMetadata(metadata: GitHubIssueMetadata | null): void {
@@ -241,6 +260,7 @@ export class TicketEntity {
       description: this.description,
       status: this.status,
       priority: this.priority,
+      type: this.type,
       position: this.position,
       tags: this.tags,
       links: this.links,
@@ -251,6 +271,7 @@ export class TicketEntity {
       agentClaimedAt: this.agentClaimedAt?.toISOString() ?? null,
       githubMetadata: this.githubMetadata,
       archivedAt: this.archivedAt?.toISOString() ?? null,
+      firstDoingAt: this.firstDoingAt?.toISOString() ?? null,
       statusChangedAt: this.statusChangedAt.toISOString(),
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),

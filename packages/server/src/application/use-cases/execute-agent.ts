@@ -1345,7 +1345,7 @@ export class ExecuteAgentUseCase {
     const blocks: PromptContentBlock[] = [];
     const pushText = (text: string) => blocks.push({ type: 'text', text });
 
-    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
+    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}${context.ticket.type ? ` | Type: ${context.ticket.type}` : ''}`);
 
     if (context.ticket.description) {
       blocks.push(...await this.resolveText(`\n## Description\n\n${context.ticket.description}`));
@@ -1528,7 +1528,7 @@ export class ExecuteAgentUseCase {
 
     const pushText = (text: string) => blocks.push({ type: 'text', text });
 
-    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
+    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}${context.ticket.type ? ` | Type: ${context.ticket.type}` : ''}`);
 
     if (context.ticket.description) {
       const descBlocks = await this.resolveText(`\n## Description\n\n${context.ticket.description}`);

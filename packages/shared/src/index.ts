@@ -62,6 +62,7 @@ export type {
 export type {
   TicketStatus,
   TicketPriority,
+  TicketType,
   TicketLinkType,
   TicketLink,
   GitHubIssueMetadata,
@@ -199,6 +200,9 @@ export {
   TICKET_STATUSES,
   TICKET_STATUS_LABELS,
   TICKET_PRIORITIES,
+  TICKET_TYPES,
+  TICKET_TYPE_LABELS,
+  TICKET_TYPE_EMOJIS,
   WS_PERSONA_PATH,
   WS_AGENT_EVENTS_PATH,
   WS_SKILL_PATH,
