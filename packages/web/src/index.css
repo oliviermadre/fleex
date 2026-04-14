@@ -298,51 +298,85 @@ html, body {
   opacity: 0.5;
 }
 
-/* ── Syntax Highlighting (lowlight / highlight.js dark theme) ── */
+/* ── Syntax Highlighting (theme-aware) ── */
 
-.hljs { color: var(--theme-text-primary); background: transparent; }
+.hljs {
+  color: var(--theme-text-primary);
+  background: transparent;
+}
 
 .hljs-comment,
-.hljs-quote       { color: var(--theme-text-muted); font-style: italic; }
+.hljs-quote {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
 
 .hljs-keyword,
 .hljs-selector-tag,
-.hljs-subst       { color: #7dd3fc; } /* sky-300 */
+.hljs-subst {
+  color: var(--syntax-keyword);
+}
 
 .hljs-number,
 .hljs-literal,
 .hljs-variable,
 .hljs-template-variable,
-.hljs-tag .hljs-attr { color: #fdba74; } /* orange-300 */
+.hljs-tag .hljs-attr {
+  color: var(--syntax-number);
+}
 
 .hljs-string,
-.hljs-doctag      { color: #86efac; } /* green-300 */
+.hljs-doctag {
+  color: var(--syntax-string);
+}
 
 .hljs-title,
 .hljs-section,
-.hljs-selector-id { color: #c4b5fd; } /* violet-300 */
+.hljs-selector-id {
+  color: var(--syntax-function);
+}
 
 .hljs-type,
-.hljs-class .hljs-title { color: #67e8f9; } /* cyan-300 */
+.hljs-class .hljs-title {
+  color: var(--syntax-type);
+}
 
 .hljs-tag,
 .hljs-name,
-.hljs-attribute   { color: #7dd3fc; } /* sky-300 */
+.hljs-attribute {
+  color: var(--syntax-operator);
+}
 
 .hljs-regexp,
-.hljs-link        { color: #f9a8d4; } /* pink-300 */
+.hljs-link {
+  color: var(--syntax-regex);
+}
 
 .hljs-symbol,
-.hljs-bullet      { color: #fdba74; } /* orange-300 */
+.hljs-bullet {
+  color: var(--syntax-constant);
+}
 
 .hljs-built_in,
-.hljs-builtin-name { color: #67e8f9; } /* cyan-300 */
+.hljs-builtin-name {
+  color: var(--syntax-type);
+}
 
-.hljs-meta        { color: var(--theme-text-muted); }
-.hljs-deletion    { background: rgba(239, 68, 68, 0.2); }
-.hljs-addition    { background: rgba(34, 197, 94, 0.2); }
-.hljs-emphasis    { font-style: italic; }
-.hljs-strong      { font-weight: bold; }
+.hljs-meta {
+  color: var(--theme-text-muted);
+}
+.hljs-deletion {
+  background: rgba(239, 68, 68, 0.2);
+}
+.hljs-addition {
+  background: rgba(34, 197, 94, 0.2);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: bold;
+}
 
 /* ── Deliverable Reading Overlay ── */
 
