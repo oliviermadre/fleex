@@ -142,7 +142,7 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
   incrementUnread: (ticketId: string, field: 'unreadComments' | 'unreadDeliverables', delta = 1) => {
     set((state) => {
       const unread = { ...state.unreadByTicket };
-      const existing = unread[ticketId] ?? { ticketId, unreadComments: 0, unreadDeliverables: 0 };
+      const existing = unread[ticketId] ?? { ticketId, totalComments: 0, totalDeliverables: 0, unreadComments: 0, unreadDeliverables: 0 };
       unread[ticketId] = { ...existing, [field]: Math.max(0, existing[field] + delta) };
       const total = Object.values(unread).reduce(
         (sum, c) => sum + c.unreadComments + c.unreadDeliverables, 0,
