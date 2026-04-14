@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo } from 'react';
+import { NameInputModal } from '../ui/NameInputModal';
 import type { TicketPriority } from '@fleex/shared';
 import { TICKET_PRIORITIES } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -30,6 +31,7 @@ export function TicketsContentPanel() {
   const quickSubmittingRef = useRef(false);
   const [renamingBoardId, setRenamingBoardId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [showCreateBoard, setShowCreateBoard] = useState(false);
 
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
 
@@ -100,9 +102,9 @@ export function TicketsContentPanel() {
     }
   };
 
-  const handleCreateBoard = async () => {
-    const name = prompt('Board name:');
-    if (!name) return;
+  const handleCreateBoard = () => setShowCreateBoard(true);
+
+  const handleConfirmCreateBoard = async (name: string) => {
     await createBoard({ name });
   };
 
@@ -124,6 +126,13 @@ export function TicketsContentPanel() {
 
   return (
     <div className="flex h-full flex-col">
+      <NameInputModal
+        open={showCreateBoard}
+        title="Créer un board"
+        placeholder="Nom du board"
+        onConfirm={handleConfirmCreateBoard}
+        onClose={() => setShowCreateBoard(false)}
+      />
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
         <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Tickets</span>
