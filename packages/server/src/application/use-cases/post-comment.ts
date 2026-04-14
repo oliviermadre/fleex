@@ -78,6 +78,22 @@ export class PostCommentUseCase {
         await this.mentionStore.save(mention);
         createdMentions.push(mention);
       }
+
+      // Create mentions for @skill:xxx found in the body
+      const skillMentions = TicketCommentEntity.extractSkillMentions(params.body);
+      for (const commandName of skillMentions) {
+        const mention = TicketMentionEntity.create({
+          id: randomUUID(),
+          ticketId: params.ticketId,
+          commentId: comment.id,
+          targetAgent: commandName,
+          sourceAgent: params.authorName,
+          targetType: 'skill',
+          executionMode: 'edit', // skills always run in edit mode
+        });
+        await this.mentionStore.save(mention);
+        createdMentions.push(mention);
+      }
     }
 
     // Create mentions for human @mentions (tracked but never auto-executed)

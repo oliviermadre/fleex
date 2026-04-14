@@ -929,7 +929,10 @@ export class ExecuteAgentUseCase {
    * Execute a skill against a ticket.
    * This bypasses the mention lifecycle and runs the agent with the skill's markdown as instructions.
    */
-  async executeForSkill(skillId: string, ticketId: string): Promise<void> {
+  async executeForSkill(skillId: string, ticketId: string, opts?: {
+    commentBody?: string;
+    mentionId?: string;
+  }): Promise<void> {
     if (!this.skillStore) {
       throw new Error('SkillStore not available');
     }
@@ -955,9 +958,12 @@ export class ExecuteAgentUseCase {
     });
 
     // 1. Post a comment announcing the skill execution
+    const announceBody = opts?.commentBody
+      ? `Running skill: **${skill.displayName}** _(via comment)_`
+      : `Running skill: **${skill.displayName}**`;
     const { comment: announceComment } = await this.postComment.execute({
       ticketId,
-      body: `Running skill: **${skill.displayName}**`,
+      body: announceBody,
       authorName: persona.displayName || persona.name,
       authorType: 'agent',
       humanMentionNames: [],
@@ -997,7 +1003,7 @@ export class ExecuteAgentUseCase {
       agentName: persona.name,
     });
 
-    const skillPromptBlocks = await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent);
+    const skillPromptBlocks = await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent, opts?.commentBody);
 
     this.logger.info('Skill execution started', {
       executionId,
@@ -1293,6 +1299,30 @@ export class ExecuteAgentUseCase {
       this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, status: 'completed', abortController });
       this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);
 
+      // Resolve the mention if this was triggered from a comment
+      if (opts?.mentionId) {
+        try {
+          const mention = await this.mentionStore.getById(opts.mentionId);
+          if (mention && mention.status !== 'resolved') {
+            mention.resolve();
+            await this.mentionStore.save(mention);
+            this.eventBus?.emit({
+              type: 'mention.resolved',
+              mentionId: mention.id,
+              ticketId: mention.ticketId,
+              targetAgent: mention.targetAgent,
+              resolvedBy: persona.name,
+              occurredAt: new Date(),
+            });
+          }
+        } catch (resolveErr) {
+          this.logger.warn('Failed to resolve skill mention', {
+            mentionId: opts.mentionId,
+            error: resolveErr instanceof Error ? resolveErr.message : String(resolveErr),
+          });
+        }
+      }
+
       this.logger.info('Skill execution completed', {
         executionId,
         skillId,
@@ -1318,6 +1348,28 @@ export class ExecuteAgentUseCase {
 
       this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, status: 'failed', abortController });
       this.onExecutionComplete?.(persona.id, 'failed', skillMentionKey);
+
+      // Resolve the mention even on failure so it doesn't stay pending
+      if (opts?.mentionId) {
+        try {
+          const mention = await this.mentionStore.getById(opts.mentionId);
+          if (mention && mention.status !== 'resolved') {
+            mention.resolve();
+            await this.mentionStore.save(mention);
+            this.eventBus?.emit({
+              type: 'mention.resolved',
+              mentionId: mention.id,
+              ticketId: mention.ticketId,
+              targetAgent: mention.targetAgent,
+              resolvedBy: persona.name,
+              occurredAt: new Date(),
+            });
+          }
+        } catch {
+          // Don't mask original error
+        }
+      }
+
       this.logger.error('Skill execution failed', {
         executionId,
         skillId,
@@ -1341,6 +1393,7 @@ export class ExecuteAgentUseCase {
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     skillDisplayName: string,
     skillMarkdown: string,
+    commentBody?: string,
   ): Promise<PromptContentBlock[]> {
     const blocks: PromptContentBlock[] = [];
     const pushText = (text: string) => blocks.push({ type: 'text', text });
@@ -1366,6 +1419,10 @@ export class ExecuteAgentUseCase {
           pushText(d.content);
         }
       }
+    }
+
+    if (commentBody) {
+      pushText(`\n## Skill Arguments (from comment)\n${commentBody}`);
     }
 
     pushText(`\n---\n\n# Skill Instructions: ${skillDisplayName}\n\n${skillMarkdown}`);
