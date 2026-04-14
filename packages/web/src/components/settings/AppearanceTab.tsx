@@ -45,6 +45,7 @@ export function AppearanceTab() {
       name: `${source.name} (Copy)`,
       builtIn: false,
       colors: { ...source.colors },
+      syntax: { ...source.syntax },
       terminal: { ...source.terminal },
     };
     const updated = [...customThemes, newTheme];
@@ -59,6 +60,7 @@ export function AppearanceTab() {
         name: `${theme.name} (Custom)`,
         builtIn: false,
         colors: { ...theme.colors },
+        syntax: { ...theme.syntax },
         terminal: { ...theme.terminal },
       };
       const updated = [...customThemes, forked];
