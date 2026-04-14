@@ -351,12 +351,33 @@ export class ExecuteAgentUseCase {
       let worktreePath: string | null = null;
       if (effectiveMode !== 'talk') {
         worktreePath = await this.ensureWorktree(mention.ticketId);
-        if (!worktreePath) {
+        if (!worktreePath && effectiveMode === 'edit') {
+          // Edit mode requires a worktree — fail with feedback
           this.logger.error('Cannot start agent: no worktree could be resolved', {
             executionId, persona: persona.name, ticketId: mention.ticketId, mentionId: mention.id,
           });
+          await this.agentEventStore.startExecution({
+            executionId,
+            personaId: persona.id,
+            ticketId: mention.ticketId,
+            mentionId: mention.id,
+          });
+          const errorEvent = AgentEventEntity.create({
+            executionId,
+            eventType: 'error',
+            data: { error: 'No repository configured — cannot create worktree for edit mode' },
+            sequence: 0,
+          });
+          await this.agentEventStore.appendEvent(errorEvent);
+          this.onEvent?.(errorEvent);
+          await this.agentEventStore.completeExecution(executionId, 'failed');
           this.activeExecutions.delete(mention.id);
           return;
+        }
+        if (!worktreePath) {
+          this.logger.info('No worktree available, running agent without code access', {
+            executionId, persona: persona.name, ticketId: mention.ticketId, mentionId: mention.id,
+          });
         }
       }
 
