@@ -198,6 +198,8 @@ export interface TicketReadCursors {
 
 export interface TicketUnreadCounts {
   readonly ticketId: string;
+  readonly totalComments: number;
+  readonly totalDeliverables: number;
   readonly unreadComments: number;
   readonly unreadDeliverables: number;
 }

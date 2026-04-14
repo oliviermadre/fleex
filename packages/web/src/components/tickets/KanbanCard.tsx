@@ -57,6 +57,7 @@ export function KanbanCard({
   prStates?: Record<string, string>;
 }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
+  const setTicketTab = useTicketStore((s) => s.setTicketTab);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const archiveTicket = useTicketStore((s) => s.archiveTicket);
   const sessions = useSessionStore((s) => s.sessions);
@@ -266,18 +267,6 @@ export function KanbanCard({
                 </span>
               )
             )}
-            {unread.unreadComments > 0 && (
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--theme-accent)]/15 px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-accent)]" title={`${unread.unreadComments} unread comments`}>
-                <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" /></svg>
-                {unread.unreadComments}
-              </span>
-            )}
-            {unread.unreadDeliverables > 0 && (
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-medium text-orange-400" title={`${unread.unreadDeliverables} unseen deliverables`}>
-                <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1h8a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm1 3h6M5 7h6M5 10h4" /></svg>
-                {unread.unreadDeliverables}
-              </span>
-            )}
             <div className="flex-1" />
           </div>
 
@@ -294,19 +283,24 @@ export function KanbanCard({
 
       {/* ── CARD FOOTER ── cycle time (left) | #ID (center) | time in column (right) */}
       <div className="flex items-center border-t border-[var(--theme-border)]/50 px-3 py-1.5 text-[10px] font-mono text-[var(--theme-text-faint)]">
-        {/* Bottom-left: Cycle time */}
-        <span className="flex-1 text-left" title={ticket.firstDoingAt ? `Cycle started: ${new Date(ticket.firstDoingAt).toLocaleString(undefined, { hour12: false })}` : 'Not started yet'}>
-          {ticket.firstDoingAt ? (
-            <>
-              <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="inline -mt-px mr-0.5">
-                <circle cx="8" cy="8" r="6.5" />
-                <path d="M8 4v4l3 2" />
-              </svg>
-              {formatTimeAgo(ticket.firstDoingAt, isCompleted ? new Date(ticket.statusChangedAt).getTime() : undefined)}
-            </>
-          ) : (
-            <span className="text-[var(--theme-text-faint)]/50">&mdash;</span>
-          )}
+        {/* Bottom-left: Comments + Deliverables counts */}
+        <span className="flex-1 flex items-center gap-2">
+          <button
+            className={cn('inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity', unread.unreadComments > 0 ? 'text-red-400' : 'text-[var(--theme-text-muted)]')}
+            title={unread.unreadComments > 0 ? `${unread.unreadComments} unread / ${unread.totalComments} comments` : `${unread.totalComments} comments`}
+            onClick={(e) => { e.stopPropagation(); selectTicket(ticket.id); setTicketTab('comments'); }}
+          >
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" /></svg>
+            {unread.totalComments}
+          </button>
+          <button
+            className={cn('inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity', unread.unreadDeliverables > 0 ? 'text-red-400' : 'text-[var(--theme-text-muted)]')}
+            title={unread.unreadDeliverables > 0 ? `${unread.unreadDeliverables} unseen / ${unread.totalDeliverables} deliverables` : `${unread.totalDeliverables} deliverables`}
+            onClick={(e) => { e.stopPropagation(); selectTicket(ticket.id); setTicketTab('deliverables'); }}
+          >
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="1.5" width="10" height="13" rx="1.5" /><path d="M5.5 5h5M5.5 8h5M5.5 11h3" /></svg>
+            {unread.totalDeliverables}
+          </button>
         </span>
 
         {/* Center: Display ID */}

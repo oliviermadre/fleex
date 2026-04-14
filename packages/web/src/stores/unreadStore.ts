@@ -40,7 +40,7 @@ interface UnreadState {
   getUnread: (ticketId: string) => TicketUnreadCounts;
 }
 
-const EMPTY_UNREAD: TicketUnreadCounts = { ticketId: '', unreadComments: 0, unreadDeliverables: 0 };
+const EMPTY_UNREAD: TicketUnreadCounts = { ticketId: '', totalComments: 0, totalDeliverables: 0, unreadComments: 0, unreadDeliverables: 0 };
 
 export const useUnreadStore = create<UnreadState>((set, get) => ({
   unreadByTicket: {},
