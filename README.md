@@ -15,7 +15,7 @@ Manage multiple Claude agents, monitor terminals in real time, track work via ka
 - **Real-time everything** — 7 WebSocket channels, live agent event streaming
 - **Claude config editor** — tree-based editor for `~/.claude` configs
 - **Scratchpads** — auto-saving markdown notes per repo
-- **9 built-in themes** — Fleex, Ember, Ocean, Verdant, Light, Dark, Matrix, Summer, Fall
+- **10 built-in themes** — Fleex, Ember, Ocean, Verdant, Light, Dark, Matrix, Summer, Fall, Catppuccin Latte
 - **Multi-machine support** — gateway architecture for remote hosts
 
 ## Architecture
