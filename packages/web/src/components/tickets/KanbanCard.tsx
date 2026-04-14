@@ -279,7 +279,6 @@ export function KanbanCard({
               </span>
             )}
             <div className="flex-1" />
-            <DueDateBadge dueDate={ticket.dueDate} status={ticket.status} size="sm" />
           </div>
 
           {/* Session button */}
@@ -315,8 +314,9 @@ export function KanbanCard({
           #{ticket.displayId}
         </span>
 
-        {/* Bottom-right: Time in column */}
-        <span className="flex-1 text-right" title={`In this column since ${new Date(ticket.statusChangedAt).toLocaleString(undefined, { hour12: false })}`}>
+        {/* Bottom-right: Due date + Time in column */}
+        <span className="flex-1 text-right flex items-center justify-end gap-1.5" title={`In this column since ${new Date(ticket.statusChangedAt).toLocaleString(undefined, { hour12: false })}`}>
+          <DueDateBadge dueDate={ticket.dueDate} status={ticket.status} size="sm" />
           {timeInColumn}
           {isCompleted && (
             <button
