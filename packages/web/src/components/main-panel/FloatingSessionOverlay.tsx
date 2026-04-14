@@ -113,22 +113,22 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   const activity = session.claudeActivity ?? 'idle';
 
   const activityColorMap: Record<string, string> = {
-    working: '#3b82f6',
-    executing: '#3b82f6',
-    waiting_tool_approval: '#f59e0b',
-    waiting_user_choice: '#f59e0b',
-    waiting_plan_approval: '#f59e0b',
-    idle: '#6b7280',
-    unknown: '#6b7280',
+    working: 'var(--theme-accent)',
+    executing: 'var(--theme-accent)',
+    waiting_tool_approval: 'var(--theme-warning)',
+    waiting_user_choice: 'var(--theme-warning)',
+    waiting_plan_approval: 'var(--theme-warning)',
+    idle: 'var(--theme-text-muted)',
+    unknown: 'var(--theme-text-muted)',
   };
-  const activityColor = activityColorMap[activity] ?? '#6b7280';
+  const activityColor = activityColorMap[activity] ?? 'var(--theme-text-muted)';
 
   const statusDotColorMap: Record<string, string> = {
-    connecting: '#f59e0b',
-    connected: '#22c55e',
-    disconnected: '#6b7280',
+    connecting: 'var(--theme-warning)',
+    connected: 'var(--theme-success)',
+    disconnected: 'var(--theme-text-muted)',
   };
-  const statusDotColor = statusDotColorMap[connectionStatus] ?? '#6b7280';
+  const statusDotColor = statusDotColorMap[connectionStatus] ?? 'var(--theme-text-muted)';
 
   const cwdDisplay = session.cwd.replace(/^\/Users\/[^/]+/, '~');
 
@@ -151,13 +151,13 @@ export const TerminalOverlay = memo(function TerminalOverlay({
           overflow: 'hidden',
           pointerEvents: 'auto',
           border: isFocused
-            ? '1px solid rgba(255, 255, 255, 0.3)'
-            : '1px solid rgba(255, 255, 255, 0.08)',
+            ? '1px solid var(--theme-border)'
+            : '1px solid var(--theme-border-subtle)',
           boxShadow: isFocused
-            ? '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(59, 130, 246, 0.3), 0 0 40px rgba(59, 130, 246, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15)'
+            ? '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 2px var(--theme-accent), 0 0 40px var(--theme-accent), inset 0 1px 0 rgba(255, 255, 255, 0.15)'
             : '0 24px 80px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
           transition: 'border 0.15s ease, box-shadow 0.15s ease',
-          background: 'rgba(10, 10, 15, 0.45)',
+          background: 'var(--theme-bg-overlay)',
           backdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
           WebkitBackdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
         }}
@@ -172,7 +172,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
             padding: '0 12px',
             cursor: 'grab',
             borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-            background: 'rgba(255, 255, 255, 0.08)',
+            background: 'var(--theme-bg-hover)',
             flexShrink: 0,
             userSelect: 'none',
           }}
@@ -241,8 +241,8 @@ export const TerminalOverlay = memo(function TerminalOverlay({
               lineHeight: 1,
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = '#ef4444';
-              (e.currentTarget as HTMLElement).style.background = 'rgba(239, 68, 68, 0.15)';
+              (e.currentTarget as HTMLElement).style.color = 'var(--theme-danger)';
+              (e.currentTarget as HTMLElement).style.background = 'var(--theme-danger)/15';
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-muted)';
@@ -259,9 +259,9 @@ export const TerminalOverlay = memo(function TerminalOverlay({
           <div
             style={{
               padding: '6px 12px',
-              background: 'rgba(245, 158, 11, 0.12)',
-              borderBottom: '1px solid rgba(245, 158, 11, 0.25)',
-              color: '#f59e0b',
+              background: 'var(--theme-warning)/12',
+              borderBottom: '1px solid var(--theme-warning)/25',
+              color: 'var(--theme-warning)',
               fontSize: 11,
               fontWeight: 600,
               textAlign: 'center',
@@ -293,7 +293,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
             gap: 8,
             padding: '0 12px',
             borderTop: '1px solid rgba(255, 255, 255, 0.06)',
-            background: 'rgba(255, 255, 255, 0.08)',
+            background: 'var(--theme-bg-hover)',
             fontSize: 10,
             color: 'var(--theme-text-muted)',
             flexShrink: 0,

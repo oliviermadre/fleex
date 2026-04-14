@@ -68,9 +68,9 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
           borderRadius: 8,
           overflow: 'hidden',
           pointerEvents: 'auto',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          boxShadow: '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-          background: 'rgba(10, 10, 15, 0.85)',
+          border: '1px solid var(--theme-border)',
+          boxShadow: '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--theme-accent), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+          background: 'var(--theme-bg-overlay)',
           backdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
           WebkitBackdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
         }}
@@ -85,7 +85,7 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
             padding: '0 12px',
             cursor: 'grab',
             borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-            background: 'rgba(255, 255, 255, 0.08)',
+            background: 'var(--theme-bg-hover)',
             flexShrink: 0,
             userSelect: 'none',
           }}
@@ -113,7 +113,7 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
               fontSize: 9,
               padding: '1px 6px',
               borderRadius: 3,
-              backgroundColor: 'rgba(255, 255, 255, 0.06)',
+              backgroundColor: 'var(--theme-bg-hover)',
               color: 'var(--theme-text-faint)',
               fontFamily: 'monospace',
               flexShrink: 0,
@@ -142,8 +142,8 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
               lineHeight: 1,
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = '#ef4444';
-              (e.currentTarget as HTMLElement).style.background = 'rgba(239, 68, 68, 0.15)';
+              (e.currentTarget as HTMLElement).style.color = 'var(--theme-danger)';
+              (e.currentTarget as HTMLElement).style.background = 'var(--theme-danger)/15';
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-muted)';
