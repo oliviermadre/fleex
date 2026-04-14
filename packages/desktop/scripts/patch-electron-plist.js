@@ -29,6 +29,7 @@ const plist = path.join(appPath, 'Contents', 'Info.plist');
 const patches = {
   CFBundleName: 'Fleex',
   CFBundleDisplayName: 'Fleex',
+  CFBundleIdentifier: 'dev.fleex.desktop',
 };
 
 for (const [key, value] of Object.entries(patches)) {
