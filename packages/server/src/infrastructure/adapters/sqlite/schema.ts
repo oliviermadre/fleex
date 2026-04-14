@@ -35,6 +35,7 @@ export const SQLITE_SCHEMA: string[] = [
     description TEXT NOT NULL,
     status TEXT NOT NULL,
     priority TEXT NOT NULL,
+    type TEXT,
     position INTEGER NOT NULL,
     tags TEXT NOT NULL,
     links TEXT NOT NULL,
@@ -44,6 +45,7 @@ export const SQLITE_SCHEMA: string[] = [
     assignee TEXT,
     agent_claimed_at TEXT,
     github_metadata TEXT,
+    first_doing_at TEXT,
     status_changed_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL

@@ -110,7 +110,7 @@ export function ticketRoutes(container: Container) {
     });
 
     app.post<{ Body: CreateTicketRequest }>('/api/tickets', async (request, reply) => {
-      const { boardId, title, description, status, priority, tags, links, dueDate } = request.body;
+      const { boardId, title, description, status, priority, type, tags, links, dueDate } = request.body;
 
       const board = await container.ticketStore.getBoardById(boardId);
       if (!board) throw new BoardNotFoundError(boardId);
@@ -136,6 +136,7 @@ export function ticketRoutes(container: Container) {
         description,
         status: targetStatus,
         priority,
+        type,
         position: maxPos + 1,
         tags,
         links: ticketLinks,
@@ -1046,7 +1047,7 @@ export function ticketRoutes(container: Container) {
         arr.push(d);
       }
 
-      const results: { ticketId: string; unreadComments: number; unreadDeliverables: number }[] = [];
+      const results: { ticketId: string; totalComments: number; totalDeliverables: number; unreadComments: number; unreadDeliverables: number }[] = [];
       for (const ticketId of ticketIds) {
         const commentCursor = commentMap.get(ticketId) ?? null;
         const seenSet = seenDeliverableMap.get(ticketId) ?? new Set<string>();
@@ -1058,9 +1059,7 @@ export function ticketRoutes(container: Container) {
           : comments.length;
         const unreadDeliverables = deliverables.filter((d) => !seenSet.has(d.id)).length;
 
-        if (unreadComments > 0 || unreadDeliverables > 0) {
-          results.push({ ticketId, unreadComments, unreadDeliverables });
-        }
+        results.push({ ticketId, totalComments: comments.length, totalDeliverables: deliverables.length, unreadComments, unreadDeliverables });
       }
 
       return results;

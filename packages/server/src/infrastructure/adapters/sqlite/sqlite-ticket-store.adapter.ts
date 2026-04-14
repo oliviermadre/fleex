@@ -1,4 +1,4 @@
-import type { TicketStatus, TicketPriority, TicketLinkType, TicketLink, GitHubIssueMetadata } from '@fleex/shared';
+import type { TicketStatus, TicketPriority, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -25,6 +25,7 @@ interface TicketRow {
   description: string;
   status: string;
   priority: string;
+  type: string | null;
   position: number;
   tags: string;
   links: string;
@@ -35,6 +36,7 @@ interface TicketRow {
   agent_claimed_at: string | null;
   github_metadata: string | null;
   archived_at: string | null;
+  first_doing_at: string | null;
   status_changed_at: string;
   created_at: string;
   updated_at: string;
@@ -132,13 +134,13 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
   async saveTicket(ticket: TicketEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO tickets
-        (id, board_id, display_id, title, description, status, priority, position,
+        (id, board_id, display_id, title, description, status, priority, type, position,
          tags, links, blocked, favorite, due_date, assignee, agent_claimed_at,
-         github_metadata, archived_at, status_changed_at, created_at, updated_at)
+         github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at)
       VALUES
-        (@id, @board_id, @display_id, @title, @description, @status, @priority, @position,
+        (@id, @board_id, @display_id, @title, @description, @status, @priority, @type, @position,
          @tags, @links, @blocked, @favorite, @due_date, @assignee, @agent_claimed_at,
-         @github_metadata, @archived_at, @status_changed_at, @created_at, @updated_at)
+         @github_metadata, @archived_at, @first_doing_at, @status_changed_at, @created_at, @updated_at)
     `);
 
     stmt.run({
@@ -149,6 +151,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       description: ticket.description,
       status: ticket.status,
       priority: ticket.priority,
+      type: ticket.type,
       position: ticket.position,
       tags: JSON.stringify(ticket.tags),
       links: JSON.stringify(ticket.links),
@@ -159,6 +162,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       agent_claimed_at: ticket.agentClaimedAt?.toISOString() ?? null,
       github_metadata: ticket.githubMetadata ? JSON.stringify(ticket.githubMetadata) : null,
       archived_at: ticket.archivedAt?.toISOString() ?? null,
+      first_doing_at: ticket.firstDoingAt?.toISOString() ?? null,
       status_changed_at: ticket.statusChangedAt.toISOString(),
       created_at: ticket.createdAt.toISOString(),
       updated_at: ticket.updatedAt.toISOString(),
@@ -335,6 +339,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       row.description,
       row.status as TicketStatus,
       row.priority as TicketPriority,
+      (row.type as TicketType | null) ?? null,
       row.position,
       JSON.parse(row.tags) as string[],
       JSON.parse(row.links) as TicketLink[],
@@ -345,6 +350,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       row.agent_claimed_at ? new Date(row.agent_claimed_at) : null,
       row.github_metadata ? (JSON.parse(row.github_metadata) as GitHubIssueMetadata) : null,
       row.archived_at ? new Date(row.archived_at) : null,
+      row.first_doing_at ? new Date(row.first_doing_at) : null,
       new Date(row.status_changed_at),
       new Date(row.created_at),
       new Date(row.updated_at),

@@ -12,6 +12,9 @@ import migration010 from './migrations/009_remove_board_repository.js';
 import migration011 from './migrations/010_ticket_groups_and_relationships.js';
 import migration012 from './migrations/011_ticket_groups_rls_policies.js';
 import migration013 from './migrations/012_ticket_group_boards.js';
+import migration014 from './migrations/013_add_ticket_type.js';
+import migration015 from './migrations/014_add_ticket_first_doing_at.js';
+import migration016 from './migrations/015_migrate_ticket_types.js';
 
 /**
  * Ordered array of all migrations.
@@ -31,4 +34,7 @@ export const allMigrations: Migration[] = [
   migration011,
   migration012,
   migration013,
+  migration014,
+  migration015,
+  migration016,
 ];

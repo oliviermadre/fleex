@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   description TEXT DEFAULT '',
   status TEXT NOT NULL,
   priority TEXT DEFAULT 'none',
+  type TEXT,
   position INT DEFAULT 0,
   tags JSONB DEFAULT '[]',
   links JSONB DEFAULT '[]',
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   assignee TEXT,
   agent_claimed_at TIMESTAMPTZ,
   github_metadata JSONB,
+  first_doing_at TIMESTAMPTZ,
   status_changed_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL
@@ -217,5 +219,13 @@ EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 
 DO $$ BEGIN
   ALTER TABLE agent_event_executions ADD COLUMN IF NOT EXISTS last_event_at TIMESTAMPTZ;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE tickets ADD COLUMN IF NOT EXISTS type TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE tickets ADD COLUMN IF NOT EXISTS first_doing_at TIMESTAMPTZ;
 EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 `;

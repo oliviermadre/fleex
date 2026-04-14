@@ -1,4 +1,4 @@
-import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, GitHubIssueMetadata } from '@fleex/shared';
+import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -27,6 +27,7 @@ interface TicketRow {
   description: string;
   status: string;
   priority: string;
+  type: string | null;
   position: number;
   tags: string[];
   links: TicketLink[];
@@ -37,6 +38,7 @@ interface TicketRow {
   agent_claimed_at: string | null;
   github_metadata: GitHubIssueMetadata | null;
   archived_at: string | null;
+  first_doing_at: string | null;
   status_changed_at: string;
   created_at: string;
   updated_at: string;
@@ -75,6 +77,7 @@ function ticketRowToEntity(r: TicketRow): TicketEntity {
     r.description,
     r.status as TicketStatus,
     r.priority as TicketPriority,
+    (r.type as TicketType | null) ?? null,
     r.position,
     r.tags ?? [],
     r.links ?? [],
@@ -85,6 +88,7 @@ function ticketRowToEntity(r: TicketRow): TicketEntity {
     r.agent_claimed_at ? new Date(r.agent_claimed_at) : null,
     r.github_metadata ?? null,
     r.archived_at ? new Date(r.archived_at) : null,
+    r.first_doing_at ? new Date(r.first_doing_at) : null,
     new Date(r.status_changed_at),
     new Date(r.created_at),
     new Date(r.updated_at),
@@ -214,6 +218,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       description: ticket.description,
       status: ticket.status,
       priority: ticket.priority,
+      type: ticket.type,
       position: ticket.position,
       tags: ticket.tags,
       links: ticket.links,
@@ -224,6 +229,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       agent_claimed_at: ticket.agentClaimedAt?.toISOString() ?? null,
       github_metadata: ticket.githubMetadata,
       archived_at: ticket.archivedAt?.toISOString() ?? null,
+      first_doing_at: ticket.firstDoingAt?.toISOString() ?? null,
       status_changed_at: ticket.statusChangedAt.toISOString(),
       created_at: ticket.createdAt.toISOString(),
       updated_at: ticket.updatedAt.toISOString(),

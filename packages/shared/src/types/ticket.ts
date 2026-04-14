@@ -1,5 +1,6 @@
 export type TicketStatus = 'backlog' | 'todo' | 'doing' | 'reviewing' | 'done' | 'cancelled';
 export type TicketPriority = 'none' | 'low' | 'medium' | 'high';
+export type TicketType = 'build' | 'fix' | 'review' | 'ops' | 'lead' | 'think';
 export type TicketLinkType = 'github_issue' | 'github_pr' | 'worktree' | 'session' | 'repository';
 
 export interface TicketLink {
@@ -28,6 +29,7 @@ export interface Ticket {
   readonly description: string;
   readonly status: TicketStatus;
   readonly priority: TicketPriority;
+  readonly type: TicketType | null;
   readonly position: number;
   readonly tags: string[];
   readonly links: TicketLink[];
@@ -38,6 +40,7 @@ export interface Ticket {
   readonly agentClaimedAt: string | null;
   readonly githubMetadata: GitHubIssueMetadata | null;
   readonly archivedAt: string | null;
+  readonly firstDoingAt: string | null;
   readonly statusChangedAt: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -62,6 +65,7 @@ export interface CreateTicketRequest {
   readonly description?: string;
   readonly status?: TicketStatus;
   readonly priority?: TicketPriority;
+  readonly type?: TicketType | null;
   readonly tags?: string[];
   readonly links?: Omit<TicketLink, 'id' | 'createdAt'>[];
   readonly dueDate?: string | null;
@@ -75,6 +79,7 @@ export interface UpdateTicketRequest {
   readonly description?: string;
   readonly status?: TicketStatus;
   readonly priority?: TicketPriority;
+  readonly type?: TicketType | null;
   readonly position?: number;
   readonly tags?: string[];
   readonly blocked?: boolean;
@@ -193,6 +198,8 @@ export interface TicketReadCursors {
 
 export interface TicketUnreadCounts {
   readonly ticketId: string;
+  readonly totalComments: number;
+  readonly totalDeliverables: number;
   readonly unreadComments: number;
   readonly unreadDeliverables: number;
 }

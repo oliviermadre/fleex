@@ -69,6 +69,28 @@ export const TICKET_STATUS_LABELS: Record<string, string> = {
 };
 export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;
 
+export const TICKET_TYPES = [
+  'build', 'fix', 'review', 'ops', 'lead', 'think',
+] as const;
+
+export const TICKET_TYPE_LABELS: Record<string, string> = {
+  build: 'Build',
+  fix: 'Fix',
+  review: 'Review',
+  ops: 'Ops',
+  lead: 'Lead',
+  think: 'Think',
+};
+
+export const TICKET_TYPE_EMOJIS: Record<string, string> = {
+  build: '🔨',
+  fix: '🐛',
+  review: '👀',
+  ops: '⚙️',
+  lead: '👔',
+  think: '💡',
+};
+
 // Agent Personas
 export const WS_PERSONA_PATH = '/ws/personas';
 
