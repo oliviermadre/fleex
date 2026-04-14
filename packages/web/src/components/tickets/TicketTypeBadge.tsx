@@ -12,6 +12,15 @@ const TYPE_ICONS: Record<TicketType, string> = {
 };
 
 const TYPE_COLORS: Record<TicketType, string> = {
+  build: 'text-emerald-400',
+  fix: 'text-red-400',
+  review: 'text-amber-400',
+  ops: 'text-teal-400',
+  lead: 'text-violet-400',
+  think: 'text-cyan-400',
+};
+
+const TYPE_BG_COLORS: Record<TicketType, string> = {
   build: 'bg-emerald-400/15 text-emerald-400',
   fix: 'bg-red-400/15 text-red-400',
   review: 'bg-amber-400/15 text-amber-400',
@@ -27,15 +36,23 @@ export function TicketTypeIcon({ type }: { type: TicketType | null }) {
 
 export function TicketTypeBadge({ type, size = 'sm' }: { type: TicketType | null; size?: 'sm' | 'md' }) {
   if (!type) return null;
+
+  if (size === 'sm') {
+    return (
+      <span className={cn('inline-flex items-center text-[10px] font-medium', TYPE_COLORS[type])}>
+        {TICKET_TYPE_LABELS[type]}
+      </span>
+    );
+  }
+
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full font-medium',
-        TYPE_COLORS[type],
-        size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]',
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+        TYPE_BG_COLORS[type],
       )}
     >
-      <span className={size === 'sm' ? 'text-[10px]' : 'text-xs'}>{TYPE_ICONS[type]}</span>
+      <span className="text-xs">{TYPE_ICONS[type]}</span>
       {TICKET_TYPE_LABELS[type]}
     </span>
   );

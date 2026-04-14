@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
 import type { Ticket, TicketLink, BoardWithCounts } from '@fleex/shared';
-import { TICKET_TYPE_LABELS } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
-import { TYPE_ICONS, TYPE_COLORS } from './TicketTypeBadge';
+import { TypePickerPopover } from './TypePickerPopover';
 import { DueDateBadge } from './DueDateBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
@@ -105,18 +104,10 @@ export function KanbanCard({
           <PriorityPickerPopover ticket={ticket} />
         </div>
 
-        {/* Type emoji */}
-        {ticket.type && (
-          <span
-            className={cn(
-              'flex-shrink-0 flex items-center justify-center h-5 w-5 rounded text-[11px] leading-none',
-              TYPE_COLORS[ticket.type],
-            )}
-            title={TICKET_TYPE_LABELS[ticket.type] ?? ticket.type}
-          >
-            {TYPE_ICONS[ticket.type]}
-          </span>
-        )}
+        {/* Type picker */}
+        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          <TypePickerPopover ticket={ticket} />
+        </div>
 
         {/* Board badge (shown in "All boards" view) */}
         {board && (

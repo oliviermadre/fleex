@@ -5,7 +5,7 @@ import { PriorityIndicator } from './PriorityIndicator';
 import { useTicketStore } from '../../stores/ticketStore';
 import { cn } from '../../lib/cn';
 
-const PRIORITIES: TicketPriority[] = ['none', 'low', 'medium', 'high'];
+const PRIORITIES: TicketPriority[] = ['high', 'medium', 'low', 'none'];
 
 const PRIORITY_LABELS: Record<TicketPriority, string> = {
   none: 'None',
