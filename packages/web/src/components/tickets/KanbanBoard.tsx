@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { NameInputModal } from '../ui/NameInputModal';
 import { TICKET_STATUSES } from '@fleex/shared';
 import type { TicketStatus, Ticket } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -75,16 +76,24 @@ export function KanbanBoard() {
   const board = selectedBoardId ? boards.find((b) => b.id === selectedBoardId) ?? null : null;
 
   const createBoard = useTicketStore((s) => s.createBoard);
+  const [showCreateBoard, setShowCreateBoard] = useState(false);
 
-  const handleCreateBoard = async () => {
-    const name = prompt('Board name:');
-    if (!name) return;
+  const handleCreateBoard = () => setShowCreateBoard(true);
+
+  const handleConfirmCreateBoard = async (name: string) => {
     await createBoard({ name });
   };
 
   if (!board && !isAllBoards && boards.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center bg-[var(--theme-bg-base)]">
+        <NameInputModal
+          open={showCreateBoard}
+          title="Créer un board"
+          placeholder="Nom du board"
+          onConfirm={handleConfirmCreateBoard}
+          onClose={() => setShowCreateBoard(false)}
+        />
         <div className="text-center">
           <p className="text-sm text-[var(--theme-text-muted)]">No board yet</p>
           <button

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { NameInputModal } from '../ui/NameInputModal';
 import { createPortal } from 'react-dom';
 import { useTicketStore } from '../../stores/ticketStore';
 import { BoardActionsDropdown } from './BoardActionsDropdown';
@@ -16,6 +17,7 @@ export function BoardSelectorDropdown() {
   const searchQuery = useTicketStore((s) => s.searchQuery);
 
   const [open, setOpen] = useState(false);
+  const [showCreateBoard, setShowCreateBoard] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -45,11 +47,13 @@ export function BoardSelectorDropdown() {
     };
   }, [open]);
 
-  const handleCreateBoard = async () => {
-    const name = prompt('Board name:');
-    if (!name) return;
-    await createBoard({ name });
+  const handleCreateBoard = () => {
     setOpen(false);
+    setShowCreateBoard(true);
+  };
+
+  const handleConfirmCreateBoard = async (name: string) => {
+    await createBoard({ name });
   };
 
   const handleSelect = (id: string | null) => {
@@ -60,6 +64,14 @@ export function BoardSelectorDropdown() {
   const rect = buttonRef.current?.getBoundingClientRect();
 
   return (
+    <>
+    <NameInputModal
+      open={showCreateBoard}
+      title="Créer un board"
+      placeholder="Nom du board"
+      onConfirm={handleConfirmCreateBoard}
+      onClose={() => setShowCreateBoard(false)}
+    />
     <div className="flex items-center gap-1">
       <button
         ref={buttonRef}
@@ -165,5 +177,6 @@ export function BoardSelectorDropdown() {
         document.body,
       )}
     </div>
+    </>
   );
 }

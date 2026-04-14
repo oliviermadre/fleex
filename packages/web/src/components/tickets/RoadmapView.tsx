@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { NameInputModal } from '../ui/NameInputModal';
 import type { TicketGroup, TicketGroupTimeframe, Ticket } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -38,6 +39,7 @@ export function RoadmapView() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ cancelled: true });
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [pendingTimeframe, setPendingTimeframe] = useState<TicketGroupTimeframe | null>(null);
 
   useEffect(() => {
     fetchGroups(selectedBoardId ?? undefined);
@@ -104,16 +106,26 @@ export function RoadmapView() {
     setDragOverColumn(null);
   };
 
-  const handleAddObjective = async (timeframe: TicketGroupTimeframe) => {
-    const name = prompt('Epic name:');
-    if (!name) return;
+  const handleAddObjective = (timeframe: TicketGroupTimeframe) => {
+    setPendingTimeframe(timeframe);
+  };
+
+  const handleConfirmAddObjective = async (name: string) => {
+    if (!pendingTimeframe) return;
     const boardId = selectedBoardId ?? useTicketStore.getState().boards[0]?.id;
     if (!boardId) return;
-    await createGroup({ boardId, name, timeframe });
+    await createGroup({ boardId, name, timeframe: pendingTimeframe });
   };
 
   return (
     <div className="flex min-h-0 flex-1 items-stretch overflow-hidden">
+      <NameInputModal
+        open={pendingTimeframe !== null}
+        title="Créer un epic"
+        placeholder="Nom de l'epic"
+        onConfirm={handleConfirmAddObjective}
+        onClose={() => setPendingTimeframe(null)}
+      />
       {COLUMNS.map((col) => {
         const colGroups = visibleGroups.filter(col.filter);
         const isCollapsed = collapsed[col.id] ?? false;
