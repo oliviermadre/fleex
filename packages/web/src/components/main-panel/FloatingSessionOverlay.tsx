@@ -1,5 +1,6 @@
 import { memo, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTerminal } from '../../hooks/useTerminal';
 import { useTerminalStore } from '../../stores/terminalStore';
 import { terminalManager } from '../../services/terminalManager';
@@ -7,6 +8,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
+import type { Session } from '@fleex/shared';
 
 const MIN_WIDTH = 480;
 const MIN_HEIGHT = 300;
@@ -15,6 +17,22 @@ const DEFAULT_HEIGHT = 500;
 
 // Position registry for spatial keyboard navigation between floating overlays
 export const floatingPositionRegistry = new Map<string, { x: number; y: number; width: number; height: number }>();
+
+/** Resolve the navigation URL for a floating session based on its worktree context. */
+function getSessionNavigationUrl(sessionId: string): string {
+  const { sessionGroups } = useSessionStore.getState();
+  for (const group of sessionGroups) {
+    const isSystem = group.repositoryOrg === '_ungrouped' && group.repositoryName === '_ungrouped';
+    for (const wt of group.worktrees) {
+      if (wt.sessions.some((s: Session) => s.id === sessionId)) {
+        if (isSystem) return `/sessions/system/s:${sessionId}`;
+        if (wt.ticketId) return `/sessions/${wt.ticketId}/s:${sessionId}`;
+        return `/sessions/${sessionId}`;
+      }
+    }
+  }
+  return `/sessions/${sessionId}`;
+}
 
 export const TerminalOverlay = memo(function TerminalOverlay({
   sessionId,
@@ -31,6 +49,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   onFocus?: () => void;
   isFocused?: boolean;
 }) {
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   useTerminal(sessionId, containerRef);
@@ -107,6 +126,13 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     window.addEventListener('mouseup', handleUp);
   }, [effectivePos, size]);
 
+  // Double-click title bar: navigate to session view and reattach
+  const handleTitleDoubleClick = useCallback(() => {
+    const url = getSessionNavigationUrl(sessionId);
+    navigate(url, { replace: true });
+    onClose();
+  }, [sessionId, navigate, onClose]);
+
   if (!session) return null;
 
   const isRobot = session.type === 'claude';
@@ -177,6 +203,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
             userSelect: 'none',
           }}
           onMouseDown={handleTitleMouseDown}
+          onDoubleClick={handleTitleDoubleClick}
         >
           <div
             style={{
