@@ -9,6 +9,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { usePanelStore } from '../../stores/panelStore';
+import { useSkillStore } from '../../stores/skillStore';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import * as api from '../../services/api';
@@ -25,7 +26,7 @@ function buildMentionLookup(mentions: TicketMention[]): Map<string, Map<string, 
       map = new Map();
       lookup.set(m.commentId, map);
     }
-    const text = m.targetType === 'human' ? `@${m.targetAgent}` : m.targetType === 'panel' ? `@panel:${m.targetAgent}` : `@agent:${m.targetAgent}`;
+    const text = m.targetType === 'human' ? `@${m.targetAgent}` : m.targetType === 'panel' ? `@panel:${m.targetAgent}` : m.targetType === 'skill' ? `@skill:${m.targetAgent}` : `@agent:${m.targetAgent}`;
     map.set(text, m.id);
   }
   return lookup;
@@ -42,8 +43,11 @@ function buildMentionLookup(mentions: TicketMention[]): Map<string, Map<string, 
  *
  * Mapping:
  *   @agent:name        →  [@agent:name](#fleex-agent:name)
+ *   @panel:name        →  [@panel:name](#fleex-panel:name)
+ *   @skill:name        →  [@skill:name](#fleex-skill:name)
  *   @username          →  [@username](#fleex-human:username)
  *   ~~@agent:name~~    →  [@agent:name](#fleex-struck:agent:name)
+ *   ~~@skill:name~~    →  [@skill:name](#fleex-struck:skill:name)
  *   ~~@username~~      →  [@username](#fleex-struck:username)
  */
 function preprocessMentions(body: string): string {
@@ -51,18 +55,22 @@ function preprocessMentions(body: string): string {
     // Group 1: code span (preserve verbatim)
     // Group 2: struck agent mention
     // Group 3: struck panel mention
-    // Group 4: struck human mention
-    // Group 5: active agent mention
-    // Group 6: active panel mention
-    // Group 7: active human mention
-    /(```[\s\S]*?```|`[^`]*`)|~~(@agent:[a-zA-Z0-9_-]+)~~|~~(@panel:[a-zA-Z0-9_-]+)~~|~~(@[a-zA-Z0-9_-]+)~~|(@agent:[a-zA-Z0-9_-]+)|(@panel:[a-zA-Z0-9_-]+)|(@[a-zA-Z0-9_-]+)/g,
-    (_match, codeSpan, struckAgent, struckPanel, struckHuman, activeAgent, activePanel, activeHuman) => {
+    // Group 4: struck skill mention
+    // Group 5: struck human mention
+    // Group 6: active agent mention
+    // Group 7: active panel mention
+    // Group 8: active skill mention
+    // Group 9: active human mention
+    /(```[\s\S]*?```|`[^`]*`)|~~(@agent:[a-zA-Z0-9_-]+)~~|~~(@panel:[a-zA-Z0-9_-]+)~~|~~(@skill:[a-zA-Z0-9_-]+)~~|~~(@[a-zA-Z0-9_-]+)~~|(@agent:[a-zA-Z0-9_-]+)|(@panel:[a-zA-Z0-9_-]+)|(@skill:[a-zA-Z0-9_-]+)|(@[a-zA-Z0-9_-]+)/g,
+    (_match, codeSpan, struckAgent, struckPanel, struckSkill, struckHuman, activeAgent, activePanel, activeSkill, activeHuman) => {
       if (codeSpan !== undefined) return codeSpan;
       if (struckAgent !== undefined) return `[${struckAgent}](#fleex-struck:${struckAgent.slice(1)})`;
       if (struckPanel !== undefined) return `[${struckPanel}](#fleex-struck:${struckPanel.slice(1)})`;
+      if (struckSkill !== undefined) return `[${struckSkill}](#fleex-struck:${struckSkill.slice(1)})`;
       if (struckHuman !== undefined) return `[${struckHuman}](#fleex-struck:${struckHuman.slice(1)})`;
       if (activeAgent !== undefined) return `[${activeAgent}](#fleex-agent:${activeAgent.slice(1)})`;
       if (activePanel !== undefined) return `[${activePanel}](#fleex-panel:${activePanel.slice(1)})`;
+      if (activeSkill !== undefined) return `[${activeSkill}](#fleex-skill:${activeSkill.slice(1)})`;
       if (activeHuman !== undefined) return `[${activeHuman}](#fleex-human:${activeHuman.slice(1)})`;
       return _match;
     },
@@ -149,6 +157,19 @@ const CommentMarkdown = memo(function CommentMarkdown({
             mentionId={mId}
             onRemove={onRemoveMention}
             className="bg-blue-500/15 text-blue-400"
+          />
+        );
+      }
+      if (href?.startsWith('#fleex-skill:')) {
+        const name = href.slice('#fleex-skill:'.length);
+        const mentionText = `@${name}`;
+        const mId = commentMentions?.get(mentionText);
+        return (
+          <MentionSpan
+            text={mentionText}
+            mentionId={mId}
+            onRemove={onRemoveMention}
+            className="bg-emerald-500/15 text-emerald-400"
           />
         );
       }
@@ -311,7 +332,7 @@ interface MentionOption {
   /** Display label shown in the dropdown */
   label: string;
   /** Secondary text (e.g. "agent" or "human") */
-  type: 'agent' | 'human' | 'panel';
+  type: 'agent' | 'human' | 'panel' | 'skill';
 }
 
 function MentionAutocomplete({
@@ -351,9 +372,9 @@ function MentionAutocomplete({
           onMouseDown={(e) => { e.preventDefault(); onSelect(opt); }}
         >
           <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[10px] font-bold ${
-            opt.type === 'agent' ? 'bg-purple-500/20 text-purple-400' : opt.type === 'panel' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'
+            opt.type === 'agent' ? 'bg-purple-500/20 text-purple-400' : opt.type === 'panel' ? 'bg-blue-500/20 text-blue-400' : opt.type === 'skill' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
           }`}>
-            {opt.type === 'agent' ? 'A' : opt.type === 'panel' ? 'P' : 'H'}
+            {opt.type === 'agent' ? 'A' : opt.type === 'panel' ? 'P' : opt.type === 'skill' ? 'S' : 'H'}
           </span>
           <span className="flex-1 truncate font-medium">{opt.label}</span>
           <span className="text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
@@ -393,18 +414,22 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     onChange: setBody,
   });
 
-  // Build mention options from personas + panels + human
+  // Build mention options from personas + panels + skills + human
   const personas = useAgentPersonaStore((s) => s.personas);
   const panels = usePanelStore((s) => s.panels);
   const panelsLoaded = usePanelStore((s) => s.loaded);
   const loadPanels = usePanelStore((s) => s.loadPanels);
+  const skills = useSkillStore((s) => s.skills);
+  const skillsLoaded = useSkillStore((s) => s.loaded);
+  const loadSkills = useSkillStore((s) => s.loadSkills);
   const humanMentionName = useSettingsStore(
     (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
   );
 
   useEffect(() => {
     if (!panelsLoaded) loadPanels();
-  }, [panelsLoaded, loadPanels]);
+    if (!skillsLoaded) loadSkills();
+  }, [panelsLoaded, loadPanels, skillsLoaded, loadSkills]);
 
   // Agent "is working" indicator
   const executionsByTicket = useAgentEventStore((s) => s.executionsByTicket);
@@ -452,6 +477,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         });
       }
     }
+    for (const skill of skills) {
+      if (skill.enabled) {
+        opts.push({
+          insertText: `@skill:${skill.commandName}`,
+          label: skill.displayName || skill.commandName,
+          type: 'skill' as const,
+        });
+      }
+    }
     if (humanMentionName) {
       opts.push({
         insertText: `@${humanMentionName}`,
@@ -460,7 +494,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       });
     }
     return opts;
-  }, [personas, panels, humanMentionName]);
+  }, [personas, panels, skills, humanMentionName]);
 
   const filteredOptions = useMemo(() => {
     if (!acOpen) return [];
@@ -677,7 +711,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         setAcOpen(true);
         setAcTriggerPos(atIdx);
         // Strip "agent:" prefix for filtering so typing "@agent:cat" matches "catalyst"
-        const q = fragment.replace(/^(agent|panel):/, '');
+        const q = fragment.replace(/^(agent|panel|skill):/, '');
         setAcQuery(q);
         setAcIndex(0);
         return;

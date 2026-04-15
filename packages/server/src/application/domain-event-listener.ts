@@ -161,6 +161,9 @@ export class DomainEventListener {
     // ── Cross-cutting: Auto-trigger panels when mentioned ──
     bus.on('mention.created', (e) => this.handleAutoTriggerPanel(e as MentionCreatedEvent));
 
+    // ── Cross-cutting: Auto-trigger skills when mentioned ──
+    bus.on('mention.created', (e) => this.handleAutoTriggerSkill(e as MentionCreatedEvent));
+
     // ── Cross-cutting: Auto-review workflow ──
     bus.on('comment.posted', (e) => this.handleCommentPostedWorkflow(e as CommentPostedEvent));
     bus.on('comment.updated', (e) => this.handleCommentUpdatedWorkflow(e as CommentUpdatedEvent));
@@ -216,6 +219,44 @@ export class DomainEventListener {
     }).catch((err) => {
       this.deps.logger.error('Panel auto-trigger failed', {
         panelName: event.targetAgent,
+        ticketId: event.ticketId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
+  // ── Auto-trigger skill execution ──
+
+  private async handleAutoTriggerSkill(event: MentionCreatedEvent): Promise<void> {
+    if (event.targetType !== 'skill') return;
+
+    const skill = await this.deps.skillStore.getByCommandName(event.targetAgent);
+    if (!skill || !skill.enabled) {
+      // Unknown or disabled skill — resolve silently
+      const mention = await this.deps.mentionStore.getById(event.mentionId);
+      if (mention && mention.status !== 'resolved') {
+        mention.resolve();
+        await this.deps.mentionStore.save(mention);
+        this.ticketBroadcast('mention:resolved', mention.toDTO());
+      }
+      return;
+    }
+
+    // Load the comment to extract arguments (body text minus @skill:xxx mentions)
+    const mention = await this.deps.mentionStore.getById(event.mentionId);
+    if (!mention) return;
+
+    const comment = await this.deps.commentStore.getById(mention.commentId);
+    const commentBody = comment
+      ? comment.body.replace(/@skill:[a-zA-Z0-9_-]+/g, '').trim()
+      : '';
+
+    this.deps.executeAgent.executeForSkill(skill.id, event.ticketId, {
+      commentBody: commentBody || undefined,
+      mentionId: event.mentionId,
+    }).catch((err) => {
+      this.deps.logger.error('Skill auto-trigger failed', {
+        skillName: event.targetAgent,
         ticketId: event.ticketId,
         error: err instanceof Error ? err.message : String(err),
       });

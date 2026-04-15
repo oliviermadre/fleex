@@ -154,7 +154,7 @@ export interface TicketComment {
 
 export type MentionStatus = 'pending' | 'acknowledged' | 'resolved' | 'waiting_for_info';
 
-export type MentionTargetType = 'agent' | 'human' | 'panel';
+export type MentionTargetType = 'agent' | 'human' | 'panel' | 'skill';
 
 export type MentionExecutionMode = 'talk' | 'plan' | 'edit';
 
