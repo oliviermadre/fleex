@@ -100,6 +100,42 @@ export class CachedTicketStore implements TicketStorePort {
     }
   }
 
+  // ── Remote sync: reload a single entity from DB into cache ──
+
+  async reloadTicket(id: string): Promise<TicketEntity | null> {
+    const ticket = await this.inner.getTicketById(id);
+    if (ticket) {
+      this.tickets.set(id, ticket);
+    } else {
+      this.tickets.delete(id);
+    }
+    return ticket;
+  }
+
+  async reloadBoard(id: string): Promise<BoardEntity | null> {
+    const board = await this.inner.getBoardById(id);
+    if (board) {
+      this.boards.set(id, board);
+    } else {
+      this.boards.delete(id);
+    }
+    return board;
+  }
+
+  evictTicket(id: string): void {
+    this.tickets.delete(id);
+  }
+
+  evictBoard(id: string): void {
+    this.boards.delete(id);
+  }
+
+  evictTicketsByBoard(boardId: string): void {
+    for (const [id, t] of this.tickets) {
+      if (t.boardId === boardId) this.tickets.delete(id);
+    }
+  }
+
   // ── Archive ──
 
   async getArchivedTickets(boardId?: string, limit?: number, offset?: number): Promise<TicketEntity[]> {

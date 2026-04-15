@@ -64,6 +64,9 @@ import { CachedPersonaStore } from './adapters/cached-persona-store.js';
 import { CachedAgentEventStore } from './adapters/cached-agent-event-store.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
+import { SyncHubClient } from './sync/sync-hub-client.js';
+import { RemoteEventHandler } from './sync/remote-event-handler.js';
+import { mapDomainEventToSync } from './sync/event-mapper.js';
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
 
@@ -247,6 +250,48 @@ export async function createContainer() {
     return domainEventLogStore.save(entry);
   });
 
+  // ── Sync Hub: cross-instance event propagation ──
+  const syncHubUrl = process.env['FLEEX_SYNC_HUB_URL'];
+  let syncHubClient: SyncHubClient | null = null;
+  const remoteEventHandler = new RemoteEventHandler({
+    ticketStore: ticketStore_,
+    personaStore: personaStore_,
+    commentStore,
+    mentionStore,
+    deliverableStore,
+    skillStore,
+    logger,
+  });
+
+  if (syncHubUrl) {
+    syncHubClient = new SyncHubClient({
+      hubUrl: syncHubUrl,
+      instanceId,
+      token: process.env['FLEEX_SYNC_TOKEN'],
+      logger,
+      onRemoteEvent: (event, senderInstanceId) => {
+        logger.info('Remote sync event received', { eventType: event.eventType, from: senderInstanceId });
+        remoteEventHandler.handle(event).catch((err) => {
+          logger.error('Remote sync event handling failed', {
+            eventType: event.eventType,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      },
+    });
+
+    // Push local domain events to the sync hub
+    eventBus.on('*', (event) => {
+      const syncEvent = mapDomainEventToSync(event);
+      if (syncEvent && syncHubClient) {
+        syncHubClient.pushEvent(syncEvent);
+      }
+    });
+
+    syncHubClient.connect();
+    logger.info('Sync hub client enabled', { hubUrl: syncHubUrl, instanceId });
+  }
+
   // Wire eventBus + config (avoids circular constructor dep)
   createWorktreeUC.eventBus = eventBus;
   executeAgent.eventBus = eventBus;
@@ -340,6 +385,8 @@ export async function createContainer() {
     ticketGroupStore,
     eventBus,
     domainEventListener,
+    remoteEventHandler,
+    syncHubClient,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     agentBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     personaBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

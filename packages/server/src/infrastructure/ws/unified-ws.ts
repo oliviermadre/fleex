@@ -175,16 +175,19 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
     const ticketBroadcast = (type: string, data: unknown) => channelBroadcast('tickets', type, data);
     container.ticketBroadcast = ticketBroadcast;
     container.domainEventListener.setTicketBroadcast(ticketBroadcast);
+    container.remoteEventHandler.setTicketBroadcast(ticketBroadcast);
 
     // Wire up persona broadcast
     const personaBroadcast = (type: string, data: unknown) => channelBroadcast('personas', type, data);
     container.personaBroadcast = personaBroadcast;
     container.domainEventListener.setPersonaBroadcast(personaBroadcast);
+    container.remoteEventHandler.setPersonaBroadcast(personaBroadcast);
 
     // Wire up skill broadcast
     const skillBroadcast = (type: string, data: unknown) => channelBroadcast('skills', type, data);
     container.skillBroadcast = skillBroadcast;
     container.domainEventListener.setSkillBroadcast(skillBroadcast);
+    container.remoteEventHandler.setSkillBroadcast(skillBroadcast);
 
     // ─── Agent events batching (ported from agent-events-ws.ts) ───
     let batchBuffer: { client: UnifiedClient; payload: string }[] = [];

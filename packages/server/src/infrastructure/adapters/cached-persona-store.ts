@@ -42,6 +42,32 @@ export class CachedPersonaStore implements PersonaStorePort {
     return this.byName.get(name) ?? null;
   }
 
+  // ── Remote sync: reload a single entity from DB into cache ──
+
+  async reloadPersona(id: string): Promise<AgentPersonaEntity | null> {
+    const persona = await this.inner.getById(id);
+    if (persona) {
+      // Remove old name entry if name changed
+      const existing = this.byId.get(id);
+      if (existing && existing.name !== persona.name) {
+        this.byName.delete(existing.name);
+      }
+      this.byId.set(id, persona);
+      this.byName.set(persona.name, persona);
+    } else {
+      const existing = this.byId.get(id);
+      if (existing) this.byName.delete(existing.name);
+      this.byId.delete(id);
+    }
+    return persona;
+  }
+
+  evictPersona(id: string): void {
+    const persona = this.byId.get(id);
+    if (persona) this.byName.delete(persona.name);
+    this.byId.delete(id);
+  }
+
   async save(persona: AgentPersonaEntity): Promise<void> {
     await this.inner.save(persona);
     // If name changed, remove old name entry
