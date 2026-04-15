@@ -49,6 +49,36 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
       }
     });
 
+    // Cmd+C / Ctrl+Shift+C: copy tmux selection via virtual User0 key,
+    // then Cmd+V / Ctrl+Shift+V: exit copy-mode before pasting
+    if (instance) {
+      instance.terminal.attachCustomKeyEventHandler((ev) => {
+        if (ev.type !== 'keydown') return true;
+        const isMac = ev.metaKey && !ev.shiftKey && !ev.ctrlKey;
+        const isLinux = ev.ctrlKey && ev.shiftKey && !ev.metaKey;
+
+        if (ev.key === 'c' && (isMac || isLinux)) {
+          // If xterm.js has a native selection, the terminalManager handler copies it.
+          // Otherwise, send User0 to tmux to copy the copy-mode selection via OSC 52.
+          // User0 is only bound in copy-mode tables — no-op outside copy-mode.
+          if (!instance.terminal.hasSelection()) {
+            appWs.sendInput(sessionId, '\x1b[99~');
+            return false;
+          }
+          return true;
+        }
+
+        if (ev.key === 'v' && (isMac || isLinux)) {
+          // Send Escape to exit tmux copy-mode (no-op if not in copy-mode)
+          appWs.sendInput(sessionId, '\x1b');
+          // Return true to let xterm.js handle the paste natively
+          return true;
+        }
+
+        return true;
+      });
+    }
+
     // Intercept wheel events for tmux scroll
     if (instance) {
       let scrollAccumulator = 0;

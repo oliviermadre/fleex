@@ -65,6 +65,36 @@ export class TmuxCliAdapter implements TmuxPort {
       'bind-key', '-T', 'copy-mode-vi', 'WheelDownPane',
       'send-keys', '-X', 'scroll-down',
     ]);
+    // Keep selection visible after mouse drag without copying to clipboard
+    // (user explicitly copies with Cmd+C / Ctrl+Shift+C)
+    await this.execFn('tmux', [
+      'bind-key', '-T', 'copy-mode', 'MouseDragEnd1Pane',
+      'send-keys', '-X', 'stop-selection',
+    ]);
+    await this.execFn('tmux', [
+      'bind-key', '-T', 'copy-mode-vi', 'MouseDragEnd1Pane',
+      'send-keys', '-X', 'stop-selection',
+    ]);
+    // Ctrl+C: copy selection in copy-mode, SIGINT outside (natural behavior)
+    await this.execFn('tmux', [
+      'bind-key', '-T', 'copy-mode', 'C-c',
+      'send-keys', '-X', 'copy-selection-no-clear',
+    ]);
+    await this.execFn('tmux', [
+      'bind-key', '-T', 'copy-mode-vi', 'C-c',
+      'send-keys', '-X', 'copy-selection-no-clear',
+    ]);
+    // Virtual key (User0) for Cmd+C on macOS (doesn't generate \x03).
+    // Only bound in copy-mode — no-op outside.
+    await this.execFn('tmux', ['set', '-s', 'user-keys[0]', '\x1b[99~']);
+    await this.execFn('tmux', [
+      'bind-key', '-T', 'copy-mode', 'User0',
+      'send-keys', '-X', 'copy-selection-no-clear',
+    ]);
+    await this.execFn('tmux', [
+      'bind-key', '-T', 'copy-mode-vi', 'User0',
+      'send-keys', '-X', 'copy-selection-no-clear',
+    ]);
     this.logger.debug('tmux session created', { name: opts.name });
   }
 
