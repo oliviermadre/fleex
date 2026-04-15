@@ -48,6 +48,23 @@ export class TmuxCliAdapter implements TmuxPort {
       'bind-key', '-T', 'root', 'WheelUpPane',
       'if-shell', '-F', '#{pane_in_mode}', 'send-keys -M', 'copy-mode -e',
     ]);
+    // Scroll 1 line at a time in copy-mode (default is 5, too aggressive for trackpads)
+    await this.execFn('tmux', [
+      'bind-key', '-T', 'copy-mode', 'WheelUpPane',
+      'send-keys', '-X', 'scroll-up',
+    ]);
+    await this.execFn('tmux', [
+      'bind-key', '-T', 'copy-mode', 'WheelDownPane',
+      'send-keys', '-X', 'scroll-down',
+    ]);
+    await this.execFn('tmux', [
+      'bind-key', '-T', 'copy-mode-vi', 'WheelUpPane',
+      'send-keys', '-X', 'scroll-up',
+    ]);
+    await this.execFn('tmux', [
+      'bind-key', '-T', 'copy-mode-vi', 'WheelDownPane',
+      'send-keys', '-X', 'scroll-down',
+    ]);
     this.logger.debug('tmux session created', { name: opts.name });
   }
 

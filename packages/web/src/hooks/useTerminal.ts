@@ -51,15 +51,22 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
 
     // Intercept wheel events for tmux scroll
     if (instance) {
+      let scrollAccumulator = 0;
+      const SCROLL_THRESHOLD = 20;
+
       instance.terminal.attachCustomWheelEventHandler((e: WheelEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        const lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 25));
-        const button = e.deltaY < 0 ? 64 : 65;
-        const seq = `\x1b[<${button};1;1M`;
-        for (let i = 0; i < lines; i++) {
+
+        scrollAccumulator += e.deltaY;
+
+        if (Math.abs(scrollAccumulator) >= SCROLL_THRESHOLD) {
+          const button = scrollAccumulator < 0 ? 64 : 65;
+          const seq = `\x1b[<${button};1;1M`;
           appWs.sendInput(sessionId, seq);
+          scrollAccumulator = 0;
         }
+
         return true;
       });
     }
