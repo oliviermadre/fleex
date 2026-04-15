@@ -162,7 +162,7 @@ const CommentMarkdown = memo(function CommentMarkdown({
       }
       if (href?.startsWith('#fleex-skill:')) {
         const name = href.slice('#fleex-skill:'.length);
-        const mentionText = `@skill:${name}`;
+        const mentionText = `@${name}`;
         const mId = commentMentions?.get(mentionText);
         return (
           <MentionSpan
