@@ -49,17 +49,54 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
       }
     });
 
+    // Cmd+C / Ctrl+Shift+C: copy tmux selection via virtual User0 key,
+    // then Cmd+V / Ctrl+Shift+V: exit copy-mode before pasting
+    if (instance) {
+      instance.terminal.attachCustomKeyEventHandler((ev) => {
+        if (ev.type !== 'keydown') return true;
+        const isMac = ev.metaKey && !ev.shiftKey && !ev.ctrlKey;
+        const isLinux = ev.ctrlKey && ev.shiftKey && !ev.metaKey;
+
+        if (ev.key === 'c' && (isMac || isLinux)) {
+          // If xterm.js has a native selection, the terminalManager handler copies it.
+          // Otherwise, send User0 to tmux to copy the copy-mode selection via OSC 52.
+          // User0 is only bound in copy-mode tables — no-op outside copy-mode.
+          if (!instance.terminal.hasSelection()) {
+            appWs.sendInput(sessionId, '\x1b[99~');
+            return false;
+          }
+          return true;
+        }
+
+        if (ev.key === 'v' && (isMac || isLinux)) {
+          // Send Escape to exit tmux copy-mode (no-op if not in copy-mode)
+          appWs.sendInput(sessionId, '\x1b');
+          // Return true to let xterm.js handle the paste natively
+          return true;
+        }
+
+        return true;
+      });
+    }
+
     // Intercept wheel events for tmux scroll
     if (instance) {
+      let scrollAccumulator = 0;
+      const SCROLL_THRESHOLD = 20;
+
       instance.terminal.attachCustomWheelEventHandler((e: WheelEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        const lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 25));
-        const button = e.deltaY < 0 ? 64 : 65;
-        const seq = `\x1b[<${button};1;1M`;
-        for (let i = 0; i < lines; i++) {
+
+        scrollAccumulator += e.deltaY;
+
+        if (Math.abs(scrollAccumulator) >= SCROLL_THRESHOLD) {
+          const button = scrollAccumulator < 0 ? 64 : 65;
+          const seq = `\x1b[<${button};1;1M`;
           appWs.sendInput(sessionId, seq);
+          scrollAccumulator = 0;
         }
+
         return true;
       });
     }
