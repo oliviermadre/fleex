@@ -1,12 +1,16 @@
-import { memo, useRef, useCallback } from 'react';
+import { memo, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AgentEventStream } from '../main-panel/AgentEventStream';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
+import { useAgentEventStore } from '../../stores/agentEventStore';
+import { cancelExecution } from '../../services/api';
 
 const MIN_WIDTH = 480;
 const MIN_HEIGHT = 300;
 const DEFAULT_WIDTH = 700;
 const DEFAULT_HEIGHT = 480;
+
+type TerminateState = 'idle' | 'confirming' | 'terminating' | 'done' | 'error';
 
 export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
   executionId,
@@ -26,6 +30,36 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
   });
 
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
+
+  // --- Terminate button state ---
+  const isRunning = useAgentEventStore((s) => {
+    if (!s.streamingExecutionIds[executionId]) return false;
+    const events = s.eventsByExecution[executionId] ?? [];
+    return !events.some((e) => e.eventType === 'execution_end');
+  });
+
+  const [terminateState, setTerminateState] = useState<TerminateState>('idle');
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTerminate = useCallback(async () => {
+    if (terminateState === 'idle') {
+      setTerminateState('confirming');
+      timerRef.current = setTimeout(() => setTerminateState('idle'), 1500);
+    } else if (terminateState === 'confirming') {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setTerminateState('terminating');
+      try {
+        await cancelExecution(executionId);
+        setTerminateState('done');
+      } catch {
+        setTerminateState('error');
+        setTimeout(() => setTerminateState('idle'), 2000);
+      }
+    }
+  }, [terminateState, executionId]);
+
+  const showTerminate = isRunning && terminateState !== 'done';
+  // --- End terminate button state ---
 
   const handleTitleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -123,6 +157,43 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
           </span>
 
           <div style={{ flex: 1 }} />
+
+          {/* Terminate button */}
+          {showTerminate && (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleTerminate(); }}
+              disabled={terminateState === 'terminating'}
+              title="Stop agent execution"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 8px',
+                borderRadius: 4,
+                border: 'none',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: terminateState === 'terminating' ? 'wait' : 'pointer',
+                background: terminateState === 'confirming' ? 'var(--theme-danger)' : 'rgba(255, 80, 80, 0.15)',
+                color: terminateState === 'confirming' ? '#fff' : 'var(--theme-danger)',
+                transition: 'all 0.15s',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10">
+                <rect x="1" y="1" width="8" height="8" rx="1" fill="currentColor" />
+              </svg>
+              {terminateState === 'idle' && 'Terminate'}
+              {terminateState === 'confirming' && 'Confirm kill?'}
+              {terminateState === 'terminating' && 'Stopping\u2026'}
+              {terminateState === 'error' && 'Failed'}
+            </button>
+          )}
+          {terminateState === 'done' && (
+            <span style={{ fontSize: 11, color: 'var(--theme-text-muted)', fontWeight: 600, flexShrink: 0 }}>
+              Terminated
+            </span>
+          )}
 
           <button
             onClick={(e) => { e.stopPropagation(); onClose(); }}
