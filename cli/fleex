@@ -266,7 +266,7 @@ check_repo() {
 }
 
 # ── Port allocation ───────────────────────────────────────────────────────────
-SERVICES=(gateway server web desktop)
+SERVICES=(gateway sync-hub server web desktop)
 
 find_free_port() {
   local port
@@ -301,17 +301,19 @@ s.close()
 }
 
 allocate_ports() {
-  local p_gateway p_server p_web
+  local p_gateway p_server p_web p_sync_hub
   p_gateway="$(find_free_port)"
+  p_sync_hub="$(find_free_port)"
   p_server="$(find_free_port)"
   p_web="$(find_free_port)"
 
   # Persist for status/stop/logs
   cat > "$PORTS_FILE" <<JSON
-{"gateway":$p_gateway,"server":$p_server,"web":$p_web}
+{"gateway":$p_gateway,"sync_hub":$p_sync_hub,"server":$p_server,"web":$p_web}
 JSON
 
   PORT_GATEWAY="$p_gateway"
+  PORT_SYNC_HUB="$p_sync_hub"
   PORT_SERVER="$p_server"
   PORT_WEB="$p_web"
 }
@@ -321,8 +323,46 @@ load_ports() {
     return 1
   fi
   PORT_GATEWAY="$(sed -n 's/.*"gateway":\([0-9]*\).*/\1/p' "$PORTS_FILE")"
+  PORT_SYNC_HUB="$(sed -n 's/.*"sync_hub":\([0-9]*\).*/\1/p' "$PORTS_FILE")"
   PORT_SERVER="$(sed -n 's/.*"server":\([0-9]*\).*/\1/p' "$PORTS_FILE")"
   PORT_WEB="$(sed -n 's/.*"web":\([0-9]*\).*/\1/p' "$PORTS_FILE")"
+}
+
+# ── Sync Hub auto-discovery ──────────────────────────────────────────────────
+# Finds a running sync hub in any instance, or uses FLEEX_SYNC_HUB_URL from .env.
+# Returns the WebSocket URL or empty string.
+_resolve_sync_hub_url() {
+  # 1) Explicit env override takes priority
+  if [[ -n "${FLEEX_SYNC_HUB_URL:-}" ]]; then
+    echo "$FLEEX_SYNC_HUB_URL"
+    return
+  fi
+
+  # 2) Check if the current instance has a sync-hub running
+  if [[ -n "${PORT_SYNC_HUB:-}" ]] && is_running sync-hub; then
+    echo "ws://localhost:$PORT_SYNC_HUB/ws"
+    return
+  fi
+
+  # 3) Scan other instances for a running sync-hub
+  local run_base="$FLEEX_HOME/.run"
+  for dir in "$run_base"/*/; do
+    [[ -d "$dir" ]] || continue
+    local pf="$dir/sync-hub.pid"
+    if [[ -f "$pf" ]] && kill -0 "$(cat "$pf")" 2>/dev/null; then
+      local ports_f="$dir/ports.json"
+      if [[ -f "$ports_f" ]]; then
+        local port
+        port="$(sed -n 's/.*"sync_hub":\([0-9]*\).*/\1/p' "$ports_f")"
+        if [[ -n "$port" ]]; then
+          echo "ws://localhost:$port/ws"
+          return
+        fi
+      fi
+    fi
+  done
+
+  echo ""
 }
 
 # ── PID management ─────────────────────────────────────────────────────────────
@@ -437,11 +477,11 @@ cmd_start() {
   if [[ -n "$FORCED_WEB_PORT" ]]; then
     PORT_WEB="$FORCED_WEB_PORT"
     cat > "$PORTS_FILE" <<JSON
-{"gateway":$PORT_GATEWAY,"server":$PORT_SERVER,"web":$PORT_WEB}
+{"gateway":$PORT_GATEWAY,"sync_hub":$PORT_SYNC_HUB,"server":$PORT_SERVER,"web":$PORT_WEB}
 JSON
   fi
 
-  info "Allocated ports — gateway:$PORT_GATEWAY  server:$PORT_SERVER  web:$PORT_WEB"
+  info "Allocated ports — gateway:$PORT_GATEWAY  sync-hub:$PORT_SYNC_HUB  server:$PORT_SERVER  web:$PORT_WEB"
 
   # Load project .env if present (set -a exports all vars to subprocesses)
   if [ -f "$REPO_DIR/.env" ]; then
@@ -464,11 +504,28 @@ JSON
   ) < /dev/null > "$(log_file gateway)" 2>&1 &
   save_pid gateway $!
 
+  # Sync Hub
+  (cd "$REPO_DIR" && \
+    SYNC_HUB_PORT="$PORT_SYNC_HUB" \
+    FLEEX_SYNC_TOKEN="${FLEEX_SYNC_TOKEN:-}" \
+    bun run dev:sync-hub \
+  ) < /dev/null > "$(log_file sync-hub)" 2>&1 &
+  save_pid sync-hub $!
+
+  # Resolve sync hub URL for the server (auto-discovery or .env override)
+  local sync_hub_url
+  sync_hub_url="ws://localhost:$PORT_SYNC_HUB/ws"
+  if [[ -n "${FLEEX_SYNC_HUB_URL:-}" ]]; then
+    sync_hub_url="$FLEEX_SYNC_HUB_URL"
+  fi
+
   # Server
   (cd "$REPO_DIR" && \
     PORT="$PORT_SERVER" \
     HOST_GATEWAY_URL="http://localhost:$PORT_GATEWAY" \
     FLEEX_STORAGE_DRIVER="${FLEEX_STORAGE_DRIVER:-json}" \
+    FLEEX_SYNC_HUB_URL="$sync_hub_url" \
+    FLEEX_SYNC_TOKEN="${FLEEX_SYNC_TOKEN:-}" \
     bun run dev:server \
   ) < /dev/null > "$(log_file server)" 2>&1 &
   save_pid server $!
@@ -491,6 +548,11 @@ JSON
     "$(cat "$(pid_file gateway)")" "$(log_file gateway)" 15 || health_ok=false
 
   if $health_ok; then
+    _wait_for_service "sync-hub" "http://localhost:$PORT_SYNC_HUB/health" \
+      "$(cat "$(pid_file sync-hub)")" "$(log_file sync-hub)" 15 || health_ok=false
+  fi
+
+  if $health_ok; then
     _wait_for_service "server" "http://localhost:$PORT_SERVER/health" \
       "$(cat "$(pid_file server)")" "$(log_file server)" 15 || health_ok=false
   fi
@@ -508,9 +570,10 @@ JSON
   fi
   echo ""
   printf "  ${CYAN}%-10s${NC} ${DIM}%-30s${NC} %s\n" "Service" "URL" "Log"
-  printf "  ${CYAN}%-10s${NC} %-30s ${DIM}%s${NC}\n" "gateway" "http://localhost:$PORT_GATEWAY" "$(log_file gateway)"
-  printf "  ${CYAN}%-10s${NC} %-30s ${DIM}%s${NC}\n" "server"  "http://localhost:$PORT_SERVER"  "$(log_file server)"
-  printf "  ${CYAN}%-10s${NC} %-30s ${DIM}%s${NC}\n" "web"     "http://localhost:$PORT_WEB"     "$(log_file web)"
+  printf "  ${CYAN}%-10s${NC} %-30s ${DIM}%s${NC}\n" "gateway"  "http://localhost:$PORT_GATEWAY"  "$(log_file gateway)"
+  printf "  ${CYAN}%-10s${NC} %-30s ${DIM}%s${NC}\n" "sync-hub" "ws://localhost:$PORT_SYNC_HUB/ws" "$(log_file sync-hub)"
+  printf "  ${CYAN}%-10s${NC} %-30s ${DIM}%s${NC}\n" "server"   "http://localhost:$PORT_SERVER"   "$(log_file server)"
+  printf "  ${CYAN}%-10s${NC} %-30s ${DIM}%s${NC}\n" "web"      "http://localhost:$PORT_WEB"      "$(log_file web)"
   echo ""
   info "Use ${BOLD}fleex status${NC} to check, ${BOLD}fleex stop${NC} to shut down."
 
@@ -764,9 +827,10 @@ cmd_status() {
     slug="$(basename "$dir")"
 
     local ports_file="$dir/ports.json"
-    local p_gw="" p_srv="" p_web=""
+    local p_gw="" p_sync="" p_srv="" p_web=""
     if [[ -f "$ports_file" ]]; then
       p_gw="$(sed -n 's/.*"gateway":\([0-9]*\).*/\1/p' "$ports_file")"
+      p_sync="$(sed -n 's/.*"sync_hub":\([0-9]*\).*/\1/p' "$ports_file")"
       p_srv="$(sed -n 's/.*"server":\([0-9]*\).*/\1/p' "$ports_file")"
       p_web="$(sed -n 's/.*"web":\([0-9]*\).*/\1/p' "$ports_file")"
     fi
@@ -780,13 +844,19 @@ cmd_status() {
       local pf="$dir/$svc.pid"
       local status_text status_color pid_label port_label inst_label
 
-      local port_val
+      local port_val port_proto
+      port_proto="http"
       case "$svc" in
-        gateway) port_val="${p_gw:-}" ;;
-        server)  port_val="${p_srv:-}" ;;
-        web)     port_val="${p_web:-}" ;;
+        gateway)  port_val="${p_gw:-}" ;;
+        sync-hub) port_val="${p_sync:-}"; port_proto="ws" ;;
+        server)   port_val="${p_srv:-}" ;;
+        web)      port_val="${p_web:-}" ;;
       esac
-      port_label="${port_val:+http://localhost:$port_val}"
+      if [[ "$port_proto" == "ws" && -n "$port_val" ]]; then
+        port_label="ws://localhost:$port_val/ws"
+      else
+        port_label="${port_val:+http://localhost:$port_val}"
+      fi
       port_label="${port_label:--}"
 
       # Only show instance name on first service row
@@ -1590,7 +1660,7 @@ cmd_help() {
     fleex <command> [options]
 
   ${BOLD}${YELLOW}Commands:${NC}
-    ${CYAN}start${NC} [--port <port>] [--desktop]  Start all services (gateway, server, web)
+    ${CYAN}start${NC} [--port <port>] [--desktop]  Start all services
     ${CYAN}desktop${NC}       Open desktop window (starts stack if not running)
     ${CYAN}stop${NC} [name]    Stop the current instance (or a named one)
     ${CYAN}stop --all${NC}    Stop ALL running instances
@@ -1612,8 +1682,15 @@ cmd_help() {
 
   ${BOLD}${YELLOW}Services:${NC}
     ${CYAN}gateway${NC}       Host gateway          ${DIM}(dynamic port)${NC}
+    ${CYAN}sync-hub${NC}      Event relay (WS)      ${DIM}(dynamic port)${NC}
     ${CYAN}server${NC}        API server (Fastify)   ${DIM}(dynamic port)${NC}
     ${CYAN}web${NC}           Frontend (Vite)        ${DIM}(dynamic port)${NC}
+
+  ${BOLD}${YELLOW}Sync Hub:${NC}
+    The sync hub enables real-time synchronization between multiple Fleex
+    instances sharing the same database. It starts automatically with the
+    stack. The server auto-discovers it — no configuration needed locally.
+    Set ${CYAN}FLEEX_SYNC_HUB_URL${NC} in .env to point to a remote sync hub.
 
   ${BOLD}${YELLOW}Paths:${NC}
     ${DIM}Home${NC}          ~/.fleex/
