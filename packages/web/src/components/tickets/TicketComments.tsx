@@ -579,7 +579,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   }, [ticketId]);
 
   useEffect(() => {
-    listEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    listEndRef.current?.scrollIntoView({ behavior: 'instant' });
   }, [comments.length]);
 
   // Auto-mark comments as read when scrolled to the bottom.
