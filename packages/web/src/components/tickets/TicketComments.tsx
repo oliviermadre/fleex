@@ -14,6 +14,7 @@ import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { useCommentDraft } from '../../hooks/useCommentDraft';
 
 /**
  * Build a lookup: commentId -> mentionText -> mentionId
@@ -389,7 +390,7 @@ function MentionAutocomplete({
 export function TicketComments({ ticketId }: { ticketId: string }) {
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [mentions, setMentions] = useState<TicketMention[]>([]);
-  const [body, setBody] = useState('');
+  const { draft: body, setDraft: setBody, clearDraft } = useCommentDraft(ticketId);
   const [modalExecutionId, setModalExecutionId] = useState<string | null>(null);
   const [modalTitle, setModalTitle] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -653,7 +654,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
       // Posting a comment means we're caught up — mark everything as read
       markCommentsRead(ticketId, comment.createdAt).catch(() => {});
-      setBody('');
+      clearDraft();
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -663,7 +664,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       setSubmitting(false);
       textareaRef.current?.focus();
     }
-  }, [body, submitting, ticketId, executionMode, markCommentsRead]);
+  }, [body, submitting, ticketId, executionMode, markCommentsRead, clearDraft]);
 
   const autoResize = useCallback(() => {
     const ta = textareaRef.current;
