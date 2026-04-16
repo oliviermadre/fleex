@@ -115,10 +115,12 @@ export function ticketRoutes(container: Container) {
       const board = await container.ticketStore.getBoardById(boardId);
       if (!board) throw new BoardNotFoundError(boardId);
 
-      // Calculate position (end of column)
+      // Calculate position (top of column)
       const targetStatus = status ?? 'backlog';
       const existing = await container.ticketStore.getTicketsByStatus(boardId, targetStatus);
-      const maxPos = existing.reduce((max, t) => Math.max(max, t.position), -1);
+      const minPos = existing.length > 0
+        ? existing.reduce((min, t) => Math.min(min, t.position), Infinity)
+        : 1;
 
       const ticketId = randomUUID();
       const displayId = await container.ticketStore.getNextDisplayId(boardId);
@@ -137,7 +139,7 @@ export function ticketRoutes(container: Container) {
         status: targetStatus,
         priority,
         type,
-        position: maxPos + 1,
+        position: minPos - 1,
         tags,
         links: ticketLinks,
         dueDate: dueDate ? new Date(dueDate) : null,
