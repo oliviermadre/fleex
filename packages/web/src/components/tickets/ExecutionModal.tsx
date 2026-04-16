@@ -104,7 +104,7 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
           pointerEvents: 'auto',
           border: '1px solid var(--theme-border)',
           boxShadow: '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--theme-accent), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-          background: 'var(--theme-bg-overlay)',
+          background: 'var(--theme-glass-overlay)',
           backdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
           WebkitBackdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
         }}
