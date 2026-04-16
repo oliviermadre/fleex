@@ -534,11 +534,11 @@ export function applyTheme(theme: Theme): void {
   // Computed glass variables (semi-transparent backgrounds for liquidglass effect)
   root.style.setProperty(
     '--theme-glass-surface',
-    hexToRgba(theme.colors.bgSurface, 0.75),
+    hexToRgba(theme.colors.bgSurface, 0.72),
   );
   root.style.setProperty(
     '--theme-glass-overlay',
-    hexToRgba(theme.colors.bgOverlay, 0.82),
+    hexToRgba(theme.colors.bgOverlay, 0.72),
   );
 }
 

@@ -37,8 +37,8 @@ html, body {
   --theme-danger: #ef4444;
 
   /* Computed glass variables — Ember defaults (overridden by JS on mount) */
-  --theme-glass-surface: rgba(24, 24, 27, 0.75);
-  --theme-glass-overlay: rgba(39, 39, 42, 0.82);
+  --theme-glass-surface: rgba(24, 24, 27, 0.72);
+  --theme-glass-overlay: rgba(39, 39, 42, 0.72);
 }
 
 /* xterm.js container - must fill available space */
@@ -53,8 +53,9 @@ html, body {
   padding: 4px 8px;
 }
 
-/* Let liquid glass show through floating terminal overlays */
-[data-floating-panel] .xterm-viewport {
+/* Let liquid glass show through floating panel content */
+[data-floating-panel] .xterm-viewport,
+[data-floating-panel] .xterm-screen {
   background-color: transparent !important;
 }
 
@@ -391,7 +392,7 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: var(--theme-bg-overlay);
+  background: var(--theme-glass-overlay);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   animation: deliverable-overlay-fade-in 100ms ease-out forwards;
