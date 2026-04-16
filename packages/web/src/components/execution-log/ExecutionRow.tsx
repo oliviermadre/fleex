@@ -4,26 +4,55 @@ import { cancelExecution } from '../../services/api';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { cn } from '../../lib/cn';
 
-// ── Type badge ──
+// ── Type icon (SVG, no emoji) ──
+
+function TypeIcon({ type }: { type: ExecutionLogEntry['type'] }) {
+  if (type === 'agent') {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 8V4H8" />
+        <rect width="16" height="12" x="4" y="8" rx="2" />
+        <path d="M2 14h2" />
+        <path d="M20 14h2" />
+        <path d="M15 13v2" />
+        <path d="M9 13v2" />
+      </svg>
+    );
+  }
+  if (type === 'panel') {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    );
+  }
+  // skill
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <path d="M8 21h8" />
+      <path d="M12 17v4" />
+      <path d="M7 8l3 3-3 3" />
+      <path d="M13 14h3" />
+    </svg>
+  );
+}
 
 function TypeBadge({ type }: { type: ExecutionLogEntry['type'] }) {
-  const config = {
-    agent: { label: 'AGENT', bg: 'bg-indigo-500/15', text: 'text-indigo-400', icon: '🤖' },
-    panel: { label: 'PANEL', bg: 'bg-violet-500/15', text: 'text-violet-400', icon: '👥' },
-    skill: { label: 'SKILL', bg: 'bg-cyan-500/15', text: 'text-cyan-400', icon: '📋' },
+  const colorClass = {
+    agent: 'text-indigo-400',
+    panel: 'text-violet-400',
+    skill: 'text-cyan-400',
   }[type];
 
   return (
-    <span
-      className={cn(
-        'inline-flex w-[76px] items-center justify-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
-        config.bg,
-        config.text,
-      )}
-    >
-      <span>{config.icon}</span>
-      <span>{config.label}</span>
-    </span>
+    <div className={cn('flex w-[90px] flex-shrink-0 items-center gap-1.5', colorClass)}>
+      <TypeIcon type={type} />
+      <span className="text-[11px] font-semibold uppercase tracking-wide">{type}</span>
+    </div>
   );
 }
 
@@ -31,24 +60,32 @@ function TypeBadge({ type }: { type: ExecutionLogEntry['type'] }) {
 
 function ModeBadge({ mode }: { mode: string | null | undefined }) {
   if (!mode) return null;
-  const config: Record<string, { icon: string; bg: string; text: string }> = {
-    edit: { icon: '✏', bg: 'bg-emerald-500/15', text: 'text-emerald-400' },
-    plan: { icon: '👁', bg: 'bg-blue-500/15', text: 'text-blue-400' },
-    talk: { icon: '💬', bg: 'bg-gray-500/15', text: 'text-gray-400' },
+  const config: Record<string, { label: string; bg: string; text: string; border: string }> = {
+    edit: { label: 'EDIT', bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
+    plan: { label: 'PLAN', bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
+    talk: { label: 'TALK', bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/20' },
   };
   const c = config[mode];
   if (!c) return null;
 
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase',
-        c.bg,
-        c.text,
+    <span className={cn('inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px] font-semibold', c.bg, c.text, c.border)}>
+      {mode === 'edit' && (
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+        </svg>
       )}
-    >
-      <span>{c.icon}</span>
-      <span>{mode.toUpperCase()}</span>
+      {mode === 'plan' && (
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" />
+        </svg>
+      )}
+      {mode === 'talk' && (
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      )}
+      {c.label}
     </span>
   );
 }
@@ -56,55 +93,18 @@ function ModeBadge({ mode }: { mode: string | null | undefined }) {
 // ── Status badge ──
 
 function StatusBadge({ status }: { status: ExecutionLogEntry['status'] }) {
-  const config: Record<
-    string,
-    { label: string; dot: string; text: string; bg: string; pulse?: boolean }
-  > = {
-    running: {
-      label: 'Running',
-      dot: 'bg-emerald-500',
-      text: 'text-emerald-400',
-      bg: 'bg-emerald-500/10',
-      pulse: true,
-    },
-    completed: {
-      label: 'Completed',
-      dot: 'bg-emerald-500',
-      text: 'text-emerald-400',
-      bg: 'bg-emerald-500/10',
-    },
-    failed: {
-      label: 'Failed',
-      dot: 'bg-red-500',
-      text: 'text-red-400',
-      bg: 'bg-red-500/10',
-    },
-    interrupted: {
-      label: 'Interrupted',
-      dot: 'bg-orange-500',
-      text: 'text-orange-400',
-      bg: 'bg-orange-500/10',
-    },
+  const config: Record<string, { label: string; dot: string; text: string; bg: string; border: string; pulse?: boolean }> = {
+    running: { label: 'Running', dot: 'bg-emerald-500', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', pulse: true },
+    completed: { label: 'Completed', dot: 'bg-emerald-500', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+    failed: { label: 'Failed', dot: 'bg-red-500', text: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
+    interrupted: { label: 'Interrupted', dot: 'bg-orange-500', text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
   };
   const c = config[status] ?? config['completed']!;
 
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold',
-        c.bg,
-        c.text,
-      )}
-    >
+    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', c.bg, c.text, c.border)}>
       <span className="relative flex h-1.5 w-1.5">
-        {c.pulse && (
-          <span
-            className={cn(
-              'absolute inline-flex h-full w-full animate-ping rounded-full opacity-75',
-              c.dot,
-            )}
-          />
-        )}
+        {c.pulse && <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', c.dot)} />}
         <span className={cn('relative inline-flex h-1.5 w-1.5 rounded-full', c.dot)} />
       </span>
       {c.label}
@@ -133,9 +133,7 @@ function LiveDuration({ startedAt }: { startedAt: string }) {
 
   useEffect(() => {
     intervalRef.current = setInterval(() => setNow(Date.now()), 1000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, []);
 
   const ms = now - new Date(startedAt).getTime();
@@ -186,108 +184,87 @@ export const ExecutionRow = memo(function ExecutionRow({
       } else if (cancelState === 'confirming') {
         if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
         setCancelState('cancelling');
-        try {
-          await cancelExecution(entry.id);
-        } catch {
-          /* ignore */
-        }
+        try { await cancelExecution(entry.id); } catch { /* ignore */ }
         setCancelState('idle');
       }
     },
     [cancelState, entry.id],
   );
 
-  const handleRowClick = useCallback(() => {
-    setShowPanel(true);
-  }, []);
-
   return (
     <>
       <div
-        onClick={handleRowClick}
-        className={cn(
-          'group flex cursor-pointer items-center gap-4 rounded-lg border border-transparent px-4 py-3 transition-colors',
-          'hover:border-[var(--theme-border)] hover:bg-[var(--theme-bg-hover)]',
-        )}
+        onClick={() => setShowPanel(true)}
+        className="group flex w-full cursor-pointer items-center gap-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-5 py-3.5 transition-colors hover:bg-[var(--theme-bg-hover)]"
       >
         {/* Type badge */}
         <TypeBadge type={entry.type} />
 
-        {/* Main info */}
+        {/* Main info — takes remaining space */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">
+            <span className="text-sm font-semibold text-[var(--theme-text-primary)]">
               {entry.executorName} on {entry.ticketSlug ?? entry.ticketId.slice(0, 6)}
             </span>
             <ModeBadge mode={entry.effectiveMode} />
           </div>
-          <div className="mt-0.5 flex items-center gap-2 text-xs text-[var(--theme-text-faint)]">
+          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--theme-text-faint)]">
             {entry.ticketTitle && (
-              <span className="max-w-[300px] truncate">{entry.ticketTitle}</span>
+              <>
+                <span className="max-w-[400px] truncate">{entry.ticketTitle}</span>
+                <span className="text-[var(--theme-text-faint)]">·</span>
+              </>
             )}
-            <span>·</span>
             <span>{relativeTime(entry.startedAt)}</span>
           </div>
         </div>
 
-        {/* Executor name (right side, like mock) */}
-        <div className="hidden min-w-[120px] text-right lg:block">
-          <div className="text-xs font-medium text-[var(--theme-text-secondary)]">
-            {entry.executorName}
-          </div>
-          {entry.model && (
-            <div className="text-[10px] text-[var(--theme-text-faint)]">
-              {entry.model}
-            </div>
-          )}
+        {/* Right side: executor + model */}
+        <div className="hidden min-w-[100px] flex-shrink-0 text-right lg:block">
+          <div className="text-xs font-medium text-[var(--theme-text-secondary)]">{entry.executorName}</div>
+          {entry.model && <div className="text-[10px] text-[var(--theme-text-faint)]">{entry.model}</div>}
         </div>
 
         {/* Token stats */}
-        {(entry.inputTokens || entry.outputTokens) && (
-          <div className="hidden min-w-[80px] text-right text-[10px] text-[var(--theme-text-faint)] xl:block">
-            {entry.inputTokens != null && (
-              <span>in: {formatTokens(entry.inputTokens)}</span>
-            )}
-            {entry.inputTokens != null && entry.outputTokens != null && <span> · </span>}
-            {entry.outputTokens != null && (
-              <span>out: {formatTokens(entry.outputTokens)}</span>
-            )}
-          </div>
-        )}
+        <div className="hidden min-w-[100px] flex-shrink-0 text-right text-[11px] text-[var(--theme-text-faint)] xl:block">
+          {entry.inputTokens != null || entry.outputTokens != null ? (
+            <>
+              {entry.inputTokens != null && <span>in: {formatTokens(entry.inputTokens)}</span>}
+              {entry.inputTokens != null && entry.outputTokens != null && <span> · </span>}
+              {entry.outputTokens != null && <span>out: {formatTokens(entry.outputTokens)}</span>}
+            </>
+          ) : null}
+        </div>
 
         {/* Cost */}
-        {entry.costUsd != null && entry.costUsd > 0 && (
-          <div className="hidden min-w-[50px] text-right text-[10px] text-[var(--theme-text-faint)] xl:block">
-            ${entry.costUsd.toFixed(2)}
-          </div>
-        )}
+        <div className="hidden min-w-[50px] flex-shrink-0 text-right text-[11px] text-[var(--theme-text-faint)] xl:block">
+          {entry.costUsd != null && entry.costUsd > 0 ? `$${entry.costUsd.toFixed(2)}` : null}
+        </div>
 
         {/* Status badge */}
-        <StatusBadge status={entry.status} />
+        <div className="flex-shrink-0">
+          <StatusBadge status={entry.status} />
+        </div>
 
         {/* Duration */}
-        <div className="min-w-[60px] text-right">
+        <div className="min-w-[60px] flex-shrink-0 text-right">
           {live ? (
             <LiveDuration startedAt={entry.startedAt} />
           ) : entry.durationMs != null ? (
-            <span className="font-mono text-xs text-[var(--theme-text-muted)]">
-              {formatDuration(entry.durationMs)}
-            </span>
+            <span className="font-mono text-xs text-[var(--theme-text-muted)]">{formatDuration(entry.durationMs)}</span>
           ) : null}
         </div>
 
         {/* Cancel / Chevron */}
-        <div className="flex w-[70px] items-center justify-end gap-1">
+        <div className="flex w-[60px] flex-shrink-0 items-center justify-end gap-1">
           {live && (
             <button
               onClick={handleCancel}
               className={cn(
-                'rounded px-2 py-0.5 text-[10px] font-semibold opacity-0 transition-opacity group-hover:opacity-100',
-                cancelState === 'confirming'
-                  ? 'bg-red-500 text-white opacity-100'
-                  : cancelState === 'cancelling'
-                    ? 'cursor-wait bg-red-500/20 text-red-400 opacity-100'
-                    : 'bg-red-500/10 text-red-400 hover:bg-red-500/20',
+                'rounded px-2 py-0.5 text-[10px] font-semibold transition-opacity',
+                cancelState === 'idle' && 'bg-red-500/10 text-red-400 opacity-0 hover:bg-red-500/20 group-hover:opacity-100',
+                cancelState === 'confirming' && 'bg-red-500 text-white',
+                cancelState === 'cancelling' && 'cursor-wait bg-red-500/20 text-red-400',
               )}
             >
               {cancelState === 'idle' && 'Cancel'}
@@ -296,22 +273,15 @@ export const ExecutionRow = memo(function ExecutionRow({
             </button>
           )}
           <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="flex-shrink-0 text-[var(--theme-text-faint)] opacity-0 transition-opacity group-hover:opacity-100"
+            width="16" height="16" viewBox="0 0 16 16" fill="none"
+            stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+            className="flex-shrink-0 text-[var(--theme-text-faint)]"
           >
             <polyline points="6,4 10,8 6,12" />
           </svg>
         </div>
       </div>
 
-      {/* Floating execution panel */}
       {showPanel && (
         <FloatingExecutionPanel
           executionId={entry.id}
