@@ -23,6 +23,8 @@ interface AgentEventState {
   unsubscribeTicket: (ticketId: string) => void;
   resubscribeAll: () => void;
   handleWsEvent: (msg: { type: string; data: unknown }) => void;
+  /** Fallback reconciliation: if execution_end was missed, force-complete executions tied to a resolved mention. */
+  reconcileOnMentionResolved: (ticketId: string, mentionId: string) => void;
 }
 
 export const useAgentEventStore = create<AgentEventState>((set) => ({
@@ -168,6 +170,13 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
           next.executionsByTicket = Object.fromEntries(
             Object.entries(state.executionsByTicket).map(([k, v]) => [k, v.map(patchExecution)]),
           );
+
+          // Clean up streamingExecutionIds so Terminate button and "is working" indicators update
+          if (state.streamingExecutionIds[event.executionId]) {
+            const cleaned = { ...state.streamingExecutionIds };
+            delete cleaned[event.executionId];
+            next.streamingExecutionIds = cleaned;
+          }
         }
 
         return next as AgentEventState;
@@ -179,5 +188,31 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
         appWs.sendChannel('agent-events',{ action: 'subscribe', executionId: event.executionId });
       }
     }
+  },
+
+  reconcileOnMentionResolved: (ticketId, mentionId) => {
+    set((state) => {
+      const execs = state.executionsByTicket[ticketId] ?? [];
+      const staleRunning = execs.find(
+        (e) => e.mentionId === mentionId && e.status === 'running',
+      );
+      if (!staleRunning) return state;
+
+      // Force-complete the stale execution and clean up streaming state
+      const cleaned = { ...state.streamingExecutionIds };
+      delete cleaned[staleRunning.id];
+
+      return {
+        executionsByTicket: {
+          ...state.executionsByTicket,
+          [ticketId]: execs.map((e) =>
+            e.id === staleRunning.id
+              ? { ...e, status: 'completed' as const, completedAt: new Date().toISOString() }
+              : e,
+          ),
+        },
+        streamingExecutionIds: cleaned,
+      };
+    });
   },
 }));
