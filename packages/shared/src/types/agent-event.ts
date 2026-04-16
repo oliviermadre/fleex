@@ -42,6 +42,21 @@ export interface AgentEvent {
   readonly createdAt: string;
 }
 
+/** Enriched execution entry for the Execution Log view */
+export interface ExecutionLogEntry extends AgentExecution {
+  readonly type: 'agent' | 'panel' | 'skill';
+  readonly executorName: string;
+  readonly ticketTitle: string | null;
+  readonly ticketSlug: string | null;
+}
+
+export interface ExecutionLogResponse {
+  readonly entries: ExecutionLogEntry[];
+  readonly total: number;
+  readonly liveCount: number;
+  readonly historyCount: number;
+}
+
 export type AgentEventWsMessageType =
   | 'agent_event:delta'
   | 'agent_event:batch'

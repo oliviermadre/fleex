@@ -4,6 +4,108 @@ import type { Container } from '../container.js';
 
 export function agentEventsRoutes(container: Container) {
   return async function (app: FastifyInstance) {
+    // GET /api/executions — list all executions (enriched for Execution Log view)
+    app.get<{
+      Querystring: {
+        status?: string;
+        type?: string;
+        q?: string;
+        limit?: string;
+        offset?: string;
+      };
+    }>('/api/executions', async (request) => {
+      const allExecutions = await container.agentEventStore.getAllExecutions();
+
+      // Collect unique IDs for bulk lookups
+      const ticketIds = new Set<string>();
+      const personaIds = new Set<string>();
+      const mentionIds = new Set<string>();
+      for (const exec of allExecutions) {
+        if (exec.ticketId) ticketIds.add(exec.ticketId);
+        if (exec.personaId) personaIds.add(exec.personaId);
+        if (exec.mentionId) mentionIds.add(exec.mentionId);
+      }
+
+      // Bulk fetch tickets, personas, mentions
+      const [allTickets, allPersonas, allMentions] = await Promise.all([
+        container.ticketStore.getAllTickets(),
+        container.personaStore.getAll(),
+        Promise.all(
+          [...mentionIds].map((id) =>
+            container.mentionStore.getById(id).catch(() => null),
+          ),
+        ),
+      ]);
+
+      const ticketMap = new Map(allTickets.map((t) => [t.id, t]));
+      const personaMap = new Map(allPersonas.map((p) => [p.id, p]));
+      const mentionMap = new Map(
+        allMentions
+          .filter((m): m is NonNullable<typeof m> => m !== null)
+          .map((m) => [m.id, m]),
+      );
+
+      // Enrich executions
+      let entries = allExecutions.map((exec) => {
+        const ticket = ticketMap.get(exec.ticketId);
+        const persona = personaMap.get(exec.personaId);
+        const mention = exec.mentionId ? mentionMap.get(exec.mentionId) : null;
+        const rawType = mention?.targetType;
+        const targetType = rawType === 'panel' ? 'panel' : rawType === 'skill' ? 'skill' : 'agent';
+
+        return {
+          ...exec,
+          type: targetType as 'agent' | 'panel' | 'skill',
+          executorName: persona?.name ?? exec.personaId,
+          ticketTitle: ticket?.title ?? null,
+          ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
+        };
+      });
+
+      // Filter by status
+      const statusFilter = request.query.status;
+      if (statusFilter) {
+        const statuses = statusFilter.split(',');
+        entries = entries.filter((e) => statuses.includes(e.status));
+      }
+
+      // Filter by type
+      const typeFilter = request.query.type;
+      if (typeFilter) {
+        const types = typeFilter.split(',');
+        entries = entries.filter((e) => types.includes(e.type));
+      }
+
+      // Filter by search query (ticket title or executor name)
+      const q = request.query.q?.toLowerCase();
+      if (q) {
+        entries = entries.filter(
+          (e) =>
+            (e.ticketTitle && e.ticketTitle.toLowerCase().includes(q)) ||
+            e.executorName.toLowerCase().includes(q),
+        );
+      }
+
+      // Sort: running first (by startedAt DESC), then completed (by completedAt DESC)
+      entries.sort((a, b) => {
+        if (a.status === 'running' && b.status !== 'running') return -1;
+        if (a.status !== 'running' && b.status === 'running') return 1;
+        const dateA = a.completedAt ?? a.startedAt;
+        const dateB = b.completedAt ?? b.startedAt;
+        return dateB.localeCompare(dateA);
+      });
+
+      // Pagination
+      const offset = request.query.offset ? parseInt(request.query.offset, 10) : 0;
+      const limit = request.query.limit ? parseInt(request.query.limit, 10) : 100;
+      const total = entries.length;
+      const liveCount = entries.filter((e) => e.status === 'running').length;
+      const historyCount = total - liveCount;
+      entries = entries.slice(offset, offset + limit);
+
+      return { entries, total, liveCount, historyCount };
+    });
+
     // GET /api/personas/:id/executions — list executions for a persona
     app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
       '/api/personas/:id/executions',

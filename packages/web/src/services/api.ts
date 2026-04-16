@@ -625,6 +625,23 @@ export async function cancelExecution(executionId: string): Promise<{ cancelled:
   return request<{ cancelled: boolean }>(`/executions/${executionId}/cancel`, { method: 'POST' });
 }
 
+export async function fetchAllExecutions(params?: {
+  status?: string;
+  type?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<import('@fleex/shared').ExecutionLogResponse> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.type) qs.set('type', params.type);
+  if (params?.q) qs.set('q', params.q);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  const query = qs.toString();
+  return request<import('@fleex/shared').ExecutionLogResponse>(`/executions${query ? `?${query}` : ''}`);
+}
+
 // ── Domain Event Log (Audit Trail) ──
 
 export async function fetchEvents(params: {

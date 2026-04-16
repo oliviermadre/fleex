@@ -32,6 +32,8 @@ interface UnifiedClient {
   // Agent events subscription state
   subscribedExecutions: Set<string>;
   subscribedTickets: Set<string>;
+  // Subscribe to ALL execution start/end events (for execution log page)
+  subscribedToAllExecutions: boolean;
 }
 
 function sendChannelJson(ws: WebSocket, channel: WsChannel, msg: { type: string; data: unknown }): void {
@@ -215,11 +217,15 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
 
       if (dto.eventType === 'execution_start' || dto.eventType === 'execution_end') {
         const ticketId = (dto.data as Record<string, unknown>)?.['ticketId'] as string | undefined;
-        if (ticketId) {
-          for (const client of clients.values()) {
-            if (client.subscribedTickets.has(ticketId) && !client.subscribedExecutions.has(executionId)) {
-              batchBuffer.push({ client, payload });
-            }
+        for (const client of clients.values()) {
+          // Skip clients already subscribed to this execution
+          if (client.subscribedExecutions.has(executionId)) continue;
+          // Send to ticket subscribers
+          if (ticketId && client.subscribedTickets.has(ticketId)) {
+            batchBuffer.push({ client, payload });
+          } else if (client.subscribedToAllExecutions) {
+            // Send to clients subscribed to all execution lifecycle events
+            batchBuffer.push({ client, payload });
           }
         }
       }
@@ -256,6 +262,7 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
         ptyHandles: new Map(),
         subscribedExecutions: new Set(),
         subscribedTickets: new Set(),
+        subscribedToAllExecutions: false,
       };
       clients.set(ws, client);
       heartbeat.register(ws);
@@ -376,9 +383,11 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
               if (msg.action === 'subscribe') {
                 if (msg.executionId) client.subscribedExecutions.add(msg.executionId);
                 if (msg.ticketId) client.subscribedTickets.add(msg.ticketId);
+                if (msg.allExecutions) client.subscribedToAllExecutions = true;
               } else if (msg.action === 'unsubscribe') {
                 if (msg.executionId) client.subscribedExecutions.delete(msg.executionId);
                 if (msg.ticketId) client.subscribedTickets.delete(msg.ticketId);
+                if (msg.allExecutions) client.subscribedToAllExecutions = false;
               }
             }
           } catch {

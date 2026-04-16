@@ -21,6 +21,7 @@ import { useSkillStore } from '../../stores/skillStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { DashboardView } from '../dashboard/DashboardView';
+import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
 
 function GroupEmptyCell() {
   return (
@@ -78,6 +79,10 @@ export function MainPanel() {
 
   if (activePanel === 'settings') {
     return <SettingsPanel />;
+  }
+
+  if (activePanel === 'execution-log') {
+    return <ExecutionLogPage />;
   }
 
   if (activePanel === 'analytics') {

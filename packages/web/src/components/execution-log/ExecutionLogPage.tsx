@@ -1,0 +1,235 @@
+import { useEffect, useCallback, useRef } from 'react';
+import { useExecutionLogStore, type ExecutionTypeFilter } from '../../stores/executionLogStore';
+import { appWs } from '../../services/websocket';
+import { ExecutionRow } from './ExecutionRow';
+import { cn } from '../../lib/cn';
+
+const TYPE_FILTERS: { key: ExecutionTypeFilter; label: string; icon: string }[] = [
+  { key: 'all', label: 'ALL', icon: '' },
+  { key: 'agent', label: 'AGENT', icon: '🤖' },
+  { key: 'panel', label: 'PANEL', icon: '👥' },
+  { key: 'skill', label: 'SKILL', icon: '📋' },
+];
+
+export function ExecutionLogPage() {
+  const liveEntries = useExecutionLogStore((s) => s.liveEntries);
+  const historyEntries = useExecutionLogStore((s) => s.historyEntries);
+  const liveCount = useExecutionLogStore((s) => s.liveCount);
+  const historyCount = useExecutionLogStore((s) => s.historyCount);
+  const typeFilter = useExecutionLogStore((s) => s.typeFilter);
+  const searchQuery = useExecutionLogStore((s) => s.searchQuery);
+  const setTypeFilter = useExecutionLogStore((s) => s.setTypeFilter);
+  const setSearchQuery = useExecutionLogStore((s) => s.setSearchQuery);
+  const load = useExecutionLogStore((s) => s.load);
+  const loaded = useExecutionLogStore((s) => s.loaded);
+  const loading = useExecutionLogStore((s) => s.loading);
+  const handleWsEvent = useExecutionLogStore((s) => s.handleWsEvent);
+  const subscribeAll = useExecutionLogStore((s) => s.subscribeAll);
+  const unsubscribeAll = useExecutionLogStore((s) => s.unsubscribeAll);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load data and subscribe to WS
+  useEffect(() => {
+    load();
+    subscribeAll();
+
+    const unsubAgent = appWs.onChannel('agent-events', (msg) => {
+      handleWsEvent(msg);
+    });
+
+    return () => {
+      unsubAgent();
+      unsubscribeAll();
+    };
+  }, [load, subscribeAll, unsubscribeAll, handleWsEvent]);
+
+  // Debounced search
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      setSearchQuery(val);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        load();
+      }, 300);
+    },
+    [setSearchQuery, load],
+  );
+
+  // Count per type
+  const allEntries = [...liveEntries, ...historyEntries];
+  const typeCounts: Record<string, number> = { all: allEntries.length };
+  for (const e of allEntries) {
+    typeCounts[e.type] = (typeCounts[e.type] ?? 0) + 1;
+  }
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-[var(--theme-border)] px-6 py-4">
+        {/* Title row */}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="text-emerald-400"
+              >
+                <polygon points="5,3 19,12 5,21" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-[var(--theme-text-primary)]">
+                Execution Log
+              </h1>
+              <p className="text-xs text-[var(--theme-text-muted)]">
+                Live & historical runs of agents, panels and skills
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            {liveCount > 0 && (
+              <span className="flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                <span className="font-medium text-emerald-400">{liveCount} live</span>
+              </span>
+            )}
+            <span className="text-[var(--theme-text-muted)]">·</span>
+            <span className="text-[var(--theme-text-muted)]">{historyCount} past</span>
+          </div>
+        </div>
+
+        {/* Search + filters */}
+        <div className="flex items-center gap-3">
+          {/* Search */}
+          <div className="relative flex-1 max-w-sm">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)]"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={handleSearchChange}
+              placeholder="Filter by title, summary or #ticket…"
+              className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] py-1.5 pl-9 pr-3 text-sm text-[var(--theme-text-primary)] placeholder-[var(--theme-text-faint)] outline-none focus:border-[var(--theme-accent)]"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  load();
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Type filter tabs */}
+          <div className="flex items-center gap-1 rounded-lg bg-[var(--theme-bg-base)] p-0.5">
+            {TYPE_FILTERS.map(({ key, label, icon }) => {
+              const count = typeCounts[key] ?? 0;
+              const active = typeFilter === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setTypeFilter(key)}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
+                    active
+                      ? 'bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
+                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
+                  )}
+                >
+                  {icon && <span>{icon}</span>}
+                  <span>{label}</span>
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-0 text-[10px]',
+                      active
+                        ? 'bg-[var(--theme-accent)] text-white'
+                        : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-faint)]',
+                    )}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto">
+        {!loaded && loading ? (
+          <div className="flex items-center justify-center py-20 text-sm text-[var(--theme-text-muted)]">
+            Loading executions…
+          </div>
+        ) : (
+          <>
+            {/* Live section */}
+            <div className="px-6 pt-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                LIVE · {liveEntries.length}
+              </div>
+              {liveEntries.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-[var(--theme-border)] py-8 text-center text-sm text-[var(--theme-text-faint)]">
+                  No active executions
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {liveEntries.map((entry) => (
+                    <ExecutionRow key={entry.id} entry={entry} live />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* History section */}
+            <div className="px-6 pb-8 pt-6">
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                <span className="h-2 w-2 rounded-full border border-[var(--theme-text-faint)]" />
+                HISTORY · {historyEntries.length}
+              </div>
+              {historyEntries.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-[var(--theme-border)] py-8 text-center text-sm text-[var(--theme-text-faint)]">
+                  No past executions
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {historyEntries.map((entry) => (
+                    <ExecutionRow key={entry.id} entry={entry} live={false} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
