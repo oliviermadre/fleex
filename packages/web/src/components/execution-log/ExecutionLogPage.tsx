@@ -83,7 +83,7 @@ export function ExecutionLogPage() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
       {/* ── Header ── */}
       <div className="flex-shrink-0 border-b border-[var(--theme-border)] px-6 py-5">
         {/* Title row */}
