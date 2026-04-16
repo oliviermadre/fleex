@@ -569,6 +569,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           const m = msg.data as TicketMention;
           if (m.ticketId === ticketId) {
             setMentions((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+            // Fallback: if execution_end was missed (WS reconnect, etc.), reconcile on mention resolution
+            if (msg.type === 'mention:resolved') {
+              useAgentEventStore.getState().reconcileOnMentionResolved(m.ticketId, m.id);
+            }
           }
         }
       } catch {

@@ -33,6 +33,7 @@ interface ActiveExecution {
   mentionId: string;
   executionId: string;
   personaId: string;
+  ticketId?: string;
   status: 'running' | 'completed' | 'failed';
   abortController: AbortController;
 }
@@ -279,7 +280,7 @@ export class ExecuteAgentUseCase {
       const cancelEvent = AgentEventEntity.create({
         executionId,
         eventType: 'execution_end',
-        data: { status: 'interrupted', reason: 'cancelled' },
+        data: { status: 'interrupted', reason: 'cancelled', ticketId: found.exec.ticketId },
         sequence: 999998,
       });
       await this.agentEventStore.appendEvent(cancelEvent);
@@ -337,7 +338,7 @@ export class ExecuteAgentUseCase {
   ): Promise<void> {
     const executionId = randomUUID();
     const abortController = new AbortController();
-    this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'running', abortController });
+    this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'running', abortController });
 
     const humanName = this.resolveHumanMentionName(persona);
 
@@ -665,9 +666,9 @@ export class ExecuteAgentUseCase {
         // Timeout path — cancelExecution didn't run, we need to do cleanup
         const reason = abortController.signal.reason instanceof Error && abortController.signal.reason.message === 'timeout'
           ? 'timeout' : 'cancelled';
-        await emitEvent('execution_end', { status: 'interrupted', reason });
+        await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId });
         await this.agentEventStore.completeExecution(executionId, 'interrupted');
-        this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'failed', abortController });
+        this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         mention.resetToPending();
         await this.mentionStore.save(mention);
         this.onExecutionComplete?.(persona.id, 'failed', mention.id);
@@ -680,6 +681,7 @@ export class ExecuteAgentUseCase {
 
       await emitEvent('execution_end', {
         status: 'completed',
+        ticketId: mention.ticketId,
         model: persona.model,
         effectiveMode,
         resultLength: resultText.length,
@@ -897,7 +899,7 @@ export class ExecuteAgentUseCase {
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
       });
-      this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'completed', abortController });
+      this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'completed', abortController });
       this.onExecutionComplete?.(persona.id, 'completed', mention.id);
 
       this.logger.info('Agent execution completed', {
@@ -923,7 +925,7 @@ export class ExecuteAgentUseCase {
         // Don't let event store errors mask the original error
       }
 
-      this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, status: 'failed', abortController });
+      this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
       this.onExecutionComplete?.(persona.id, 'failed', mention.id);
       this.logger.error('Agent execution failed', {
         executionId,
@@ -974,6 +976,7 @@ export class ExecuteAgentUseCase {
       mentionId: skillMentionKey,
       executionId,
       personaId: persona.id,
+      ticketId,
       status: 'running',
       abortController,
     });
@@ -1191,7 +1194,7 @@ export class ExecuteAgentUseCase {
       clearTimeout(timeoutHandle);
 
       if (abortController.signal.aborted) {
-        await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout' });
+        await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId });
         await this.agentEventStore.completeExecution(executionId, 'interrupted');
         return;
       }
@@ -1208,6 +1211,7 @@ export class ExecuteAgentUseCase {
 
       await emitEvent('execution_end', {
         status: 'completed',
+        ticketId,
         model: persona.model,
         effectiveMode,
         resultLength: resultText.length,
@@ -1317,7 +1321,7 @@ export class ExecuteAgentUseCase {
       }
 
       await this.agentEventStore.completeExecution(executionId, 'completed');
-      this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, status: 'completed', abortController });
+      this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'completed', abortController });
       this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);
 
       // Resolve the mention if this was triggered from a comment
@@ -1367,7 +1371,7 @@ export class ExecuteAgentUseCase {
         // Don't mask original error
       }
 
-      this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, status: 'failed', abortController });
+      this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'failed', abortController });
       this.onExecutionComplete?.(persona.id, 'failed', skillMentionKey);
 
       // Resolve the mention even on failure so it doesn't stay pending
