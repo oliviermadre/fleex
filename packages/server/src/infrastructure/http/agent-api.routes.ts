@@ -57,7 +57,9 @@ export function agentApiRoutes(container: Container) {
 
         const targetStatus = status ?? 'backlog';
         const existing = await container.ticketStore.getTicketsByStatus(boardId, targetStatus);
-        const maxPos = existing.reduce((max, t) => Math.max(max, t.position), -1);
+        const minPos = existing.length > 0
+          ? existing.reduce((min, t) => Math.min(min, t.position), Infinity)
+          : 1;
 
         const displayId = await container.ticketStore.getNextDisplayId(boardId);
         const ticket = TicketEntity.create({
@@ -68,7 +70,7 @@ export function agentApiRoutes(container: Container) {
           description,
           status: targetStatus,
           priority: priority as TicketEntity['priority'],
-          position: maxPos + 1,
+          position: minPos - 1,
           tags,
         });
 
