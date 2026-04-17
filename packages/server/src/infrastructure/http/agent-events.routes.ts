@@ -27,9 +27,9 @@ export function agentEventsRoutes(container: Container) {
         if (exec.mentionId) mentionIds.add(exec.mentionId);
       }
 
-      // Bulk fetch tickets, personas, mentions, comments, deliverables, panels
+      // Bulk fetch tickets, personas, mentions, comments, deliverables, panels, skills
       const ticketIdArr = [...ticketIds];
-      const [allTickets, allPersonas, allMentions, allComments, allDeliverables, allPanels] = await Promise.all([
+      const [allTickets, allPersonas, allMentions, allComments, allDeliverables, allPanels, allSkills] = await Promise.all([
         container.ticketStore.getAllTickets(),
         container.personaStore.getAll(),
         Promise.all(
@@ -44,6 +44,7 @@ export function agentEventsRoutes(container: Container) {
           ? container.deliverableStore.getByTicketIds(ticketIdArr)
           : Promise.resolve([]),
         container.panelStore.getAll(),
+        container.skillStore.getAll(),
       ]);
 
       // Build comment/deliverable count maps
@@ -65,6 +66,7 @@ export function agentEventsRoutes(container: Container) {
       );
       const panelByName = new Map(allPanels.map((p) => [p.name, p]));
       const panelById = new Map(allPanels.map((p) => [p.id, p]));
+      const skillById = new Map(allSkills.map((s) => [s.id, s]));
 
       // ── Split executions: panel-run groups vs. standalone ─────────────────
       const panelGroups = new Map<string, AgentExecution[]>();
@@ -96,10 +98,21 @@ export function agentEventsRoutes(container: Container) {
             : rawType === 'skill' || isSyntheticSkillMentionId
               ? 'skill'
               : 'agent';
+        // For skills, show the skill's displayName as the executor instead of
+        // the agent that happens to be running it.
+        let executorName = persona?.displayName ?? persona?.name ?? exec.personaId;
+        if (targetType === 'skill') {
+          const skillId = isSyntheticSkillMentionId
+            ? exec.mentionId!.slice('skill:'.length)
+            : mention?.targetAgent;
+          const skill = skillId ? skillById.get(skillId) : null;
+          if (skill) executorName = skill.displayName ?? skill.name;
+          else if (mention?.targetAgent) executorName = mention.targetAgent;
+        }
         return {
           ...exec,
           type: targetType,
-          executorName: persona?.displayName ?? persona?.name ?? exec.personaId,
+          executorName,
           ticketTitle: ticket?.title ?? null,
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
           ticketPriority: ticket?.priority ?? null,
