@@ -29,6 +29,43 @@ import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
 
+/**
+ * Shared JSON-schema used as `outputFormat` for all Claude Agent SDK calls
+ * (main agent execution and skill execution).
+ */
+const OUTPUT_FORMAT_SCHEMA = {
+  type: 'json_schema' as const,
+  schema: {
+    type: 'object',
+    properties: {
+      deliverable: {
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              markdown: { type: 'string' },
+              type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url', 'ticket-summary', 'html'] },
+              status: { type: 'string', enum: ['draft', 'final'] },
+            },
+            required: ['title', 'markdown', 'type', 'status'],
+          },
+          { type: 'null' },
+        ],
+      },
+      comment: {
+        oneOf: [{ type: 'string' }, { type: 'null' }],
+      },
+      mentionStatus: {
+        type: 'string',
+        enum: ['resolved', 'waiting_for_info'],
+        default: 'resolved',
+      },
+    },
+    required: ['deliverable', 'comment'],
+  },
+};
+
 interface ActiveExecution {
   mentionId: string;
   executionId: string;
@@ -503,39 +540,6 @@ export class ExecuteAgentUseCase {
       let sdkCacheReadTokens: number | undefined;
       let sdkCacheCreationTokens: number | undefined;
 
-      const outputFormatSchema = {
-        type: 'json_schema' as const,
-        schema: {
-          type: 'object',
-          properties: {
-            deliverable: {
-              oneOf: [
-                {
-                  type: 'object',
-                  properties: {
-                    title: { type: 'string' },
-                    markdown: { type: 'string' },
-                    type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url', 'ticket-summary', 'html'] },
-                    status: { type: 'string', enum: ['draft', 'final'] },
-                  },
-                  required: ['title', 'markdown', 'type', 'status'],
-                },
-                { type: 'null' },
-              ],
-            },
-            comment: {
-              oneOf: [{ type: 'string' }, { type: 'null' }],
-            },
-            mentionStatus: {
-              type: 'string',
-              enum: ['resolved', 'waiting_for_info'],
-              default: 'resolved',
-            },
-          },
-          required: ['deliverable', 'comment'],
-        },
-      };
-
       {
         const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
@@ -543,7 +547,7 @@ export class ExecuteAgentUseCase {
           model: persona.model,
           systemPrompt,
           cwd: worktreePath,
-          outputFormat: outputFormatSchema,
+          outputFormat: OUTPUT_FORMAT_SCHEMA,
           resume: previousSessionId ?? undefined,
         });
 
@@ -1086,56 +1090,15 @@ export class ExecuteAgentUseCase {
       const effectiveMode = 'edit' as const;
 
       const sessionKey = `skill:${skill.commandName}:${ticketId}`;
+      const previousSessionId = this.sessionHistory.get(sessionKey);
 
-      const queryOptions: Record<string, unknown> = {
+      const queryOptions = buildSdkOptions('edit', {
         model: persona.model,
         systemPrompt,
-        allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
-        maxTurns: 150,
-        permissionMode: 'bypassPermissions',
-        allowDangerouslySkipPermissions: true,
-        outputFormat: {
-          type: 'json_schema',
-          schema: {
-            type: 'object',
-            properties: {
-              deliverable: {
-                oneOf: [
-                  {
-                    type: 'object',
-                    properties: {
-                      title: { type: 'string' },
-                      markdown: { type: 'string' },
-                      type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url', 'ticket-summary'] },
-                      status: { type: 'string', enum: ['draft', 'final'] },
-                    },
-                    required: ['title', 'markdown', 'type', 'status'],
-                  },
-                  { type: 'null' },
-                ],
-              },
-              comment: {
-                oneOf: [{ type: 'string' }, { type: 'null' }],
-              },
-              mentionStatus: {
-                type: 'string',
-                enum: ['resolved', 'waiting_for_info'],
-                default: 'resolved',
-              },
-            },
-            required: ['deliverable', 'comment'],
-          },
-        },
-      };
-
-      if (worktreePath) {
-        queryOptions['cwd'] = worktreePath;
-      }
-
-      const previousSessionId = this.sessionHistory.get(sessionKey);
-      if (previousSessionId) {
-        queryOptions['resume'] = previousSessionId;
-      }
+        cwd: worktreePath,
+        outputFormat: OUTPUT_FORMAT_SCHEMA,
+        resume: previousSessionId ?? undefined,
+      });
 
       // Build prompt: content blocks if images, string otherwise
       const skillHasImages = skillPromptBlocks.some((b) => b.type === 'image');
