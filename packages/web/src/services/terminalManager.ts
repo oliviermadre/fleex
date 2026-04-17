@@ -196,7 +196,15 @@ class TerminalManager {
     };
     this.currentTerminalTheme = termTheme;
     for (const [, instance] of this.terminals) {
-      instance.terminal.options.theme = termTheme;
+      if (instance.isFloating) {
+        // Preserve transparent background for floating terminals; update other props
+        instance.terminal.options.theme = {
+          ...termTheme,
+          background: 'rgba(0, 0, 0, 0)',
+        };
+      } else {
+        instance.terminal.options.theme = termTheme;
+      }
     }
   }
 
@@ -230,10 +238,10 @@ class TerminalManager {
         try { instance.webglAddon.dispose(); } catch { /* ignore */ }
         instance.webglAddon = null;
       }
-      // Set transparent background
+      // Set transparent background (rgba format — xterm doesn't parse 8-digit hex)
       instance.terminal.options.theme = {
         ...instance.terminal.options.theme,
-        background: '#00000000',
+        background: 'rgba(0, 0, 0, 0)',
       };
     } else {
       // Restore opaque background
