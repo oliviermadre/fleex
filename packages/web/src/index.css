@@ -38,6 +38,7 @@ html, body {
 
   /* Computed glass variables — Ember defaults (overridden by JS on mount) */
   --theme-glass-surface: rgba(24, 24, 27, 0.55);
+  --theme-glass-surface-dense: rgba(24, 24, 27, 0.82);
   --theme-glass-overlay: rgba(39, 39, 42, 0.55);
 }
 
@@ -241,7 +242,7 @@ html, body {
   display: flex;
   flex-direction: column;
 
-  background: var(--theme-glass-surface);
+  background: var(--theme-glass-surface-dense);
   backdrop-filter: blur(40px) saturate(1.4);
   -webkit-backdrop-filter: blur(40px) saturate(1.4);
   border: 1px solid var(--theme-border-subtle);
@@ -412,7 +413,7 @@ html, body {
   display: flex;
   flex-direction: column;
 
-  /* Liquid glass effect */
+  /* Liquid glass effect — dense for readability */
   background:
     linear-gradient(
       165deg,
@@ -420,7 +421,7 @@ html, body {
       rgba(255, 255, 255, 0.01) 40%,
       rgba(0, 0, 0, 0.08) 100%
     ),
-    var(--theme-glass-surface);
+    var(--theme-glass-surface-dense);
   backdrop-filter: blur(40px) saturate(1.4);
   -webkit-backdrop-filter: blur(40px) saturate(1.4);
   border: 1px solid var(--theme-border-subtle);
