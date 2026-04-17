@@ -15,6 +15,8 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
+import { getProxiedImageSrc } from '../../lib/image';
+import { ImageThumbnail } from '../shared/ImageThumbnail';
 
 /**
  * Build a lookup: commentId -> mentionText -> mentionId
@@ -297,6 +299,11 @@ const CommentMarkdown = memo(function CommentMarkdown({
         {children}
       </td>
     ),
+
+    // ── Images ───────────────────────────────────────────────────────────────
+    img: ({ src, alt }) => {
+      return <ImageThumbnail src={getProxiedImageSrc(src)} alt={alt ?? ''} />;
+    },
   };
 
   return (

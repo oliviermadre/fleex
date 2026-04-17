@@ -5,6 +5,8 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Components } from 'react-markdown';
+import { getProxiedImageSrc } from '../../lib/image';
+import { ImageThumbnail } from '../shared/ImageThumbnail';
 
 interface MarkdownRendererProps {
   content: string;
@@ -358,13 +360,7 @@ function MarkdownSection({
 
     // ── Images ───────────────────────────────────────────────────────────────
     img: ({ src, alt }) => {
-      // Proxy GitHub user-attachment images through the backend to avoid auth issues
-      const proxiedSrc = src?.startsWith('https://github.com/user-attachments/')
-        ? `/api/github-image/${src.replace('https://github.com/', '')}`
-        : src;
-      return (
-        <img src={proxiedSrc} alt={alt ?? ''} className="max-w-full rounded-md my-2" loading="lazy" />
-      );
+      return <ImageThumbnail src={getProxiedImageSrc(src)} alt={alt ?? ''} />;
     },
   };
 
