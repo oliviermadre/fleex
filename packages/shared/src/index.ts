@@ -131,7 +131,10 @@ export type {
   AgentEventWsMessage,
   ExecutionLogEntry,
   ExecutionLogResponse,
+  PanelMemberSummary,
 } from './types/agent-event.js';
+
+export { computeInitials } from './types/agent-event.js';
 
 export type { DomainEventLog } from './types/domain-event-log.js';
 

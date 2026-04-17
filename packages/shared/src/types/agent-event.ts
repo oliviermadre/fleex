@@ -42,6 +42,15 @@ export interface AgentEvent {
   readonly createdAt: string;
 }
 
+/** One member of an aggregated panel run */
+export interface PanelMemberSummary {
+  readonly personaId: string;
+  readonly displayName: string;
+  readonly initials: string;
+  readonly status: AgentExecution['status'];
+  readonly isOrchestrator: boolean;
+}
+
 /** Enriched execution entry for the Execution Log view */
 export interface ExecutionLogEntry extends AgentExecution {
   readonly type: 'agent' | 'panel' | 'skill';
@@ -52,6 +61,24 @@ export interface ExecutionLogEntry extends AgentExecution {
   readonly ticketType: string | null;
   readonly commentCount: number;
   readonly deliverableCount: number;
+  /** Only set for aggregated panel runs (type === 'panel' with multiple members). */
+  readonly panelDisplayName?: string;
+  readonly panelMembers?: PanelMemberSummary[];
+  readonly memberCount?: number;
+}
+
+/**
+ * Derive 1–2 letter initials from a display name. "Security Nerd" → "SN";
+ * "Builder" → "BU". Returns "?" for empty input.
+ */
+export function computeInitials(displayName: string): string {
+  const trimmed = displayName.trim();
+  if (!trimmed) return '?';
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (words[0]![0]! + words[1]![0]!).toUpperCase();
+  }
+  return trimmed.slice(0, 2).toUpperCase();
 }
 
 export interface ExecutionLogResponse {

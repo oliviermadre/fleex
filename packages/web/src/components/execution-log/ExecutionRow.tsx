@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
-import type { ExecutionLogEntry, TicketType } from '@fleex/shared';
+import type { ExecutionLogEntry, TicketType, PanelMemberSummary } from '@fleex/shared';
 import { cancelExecution } from '../../services/api';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -229,6 +229,36 @@ function ExecutionLogIcon() {
   );
 }
 
+// ── Participant stack (for panel rows) ──
+
+function ParticipantStack({ members }: { members: PanelMemberSummary[] }) {
+  const visible = members.slice(0, 3);
+  const overflow = members.length - visible.length;
+  return (
+    <div className="flex items-center justify-end -space-x-1.5">
+      {visible.map((m) => (
+        <span
+          key={m.personaId}
+          title={m.isOrchestrator ? `${m.displayName} · orchestrator` : m.displayName}
+          className={cn(
+            'flex h-5 w-5 items-center justify-center rounded-full border-2 border-[var(--theme-bg-base)] bg-[var(--theme-bg-surface)] text-[9px] font-semibold',
+            m.isOrchestrator
+              ? 'ring-1 ring-amber-400 text-amber-300'
+              : 'text-[var(--theme-text-secondary)]',
+          )}
+        >
+          {m.initials}
+        </span>
+      ))}
+      {overflow > 0 && (
+        <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-[var(--theme-bg-base)] bg-[var(--theme-bg-overlay)] text-[9px] font-medium text-[var(--theme-text-muted)]">
+          +{overflow}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── Main row component ──
 
 export const ExecutionRow = memo(function ExecutionRow({
@@ -268,12 +298,23 @@ export const ExecutionRow = memo(function ExecutionRow({
     setActivePanel('tickets');
   }, [entry.ticketId, selectTicket, setTicketTab, setActivePanel]);
 
-  const title = entry.ticketTitle || entry.executorName;
+  const isPanelRun = entry.type === 'panel' && !!entry.panelMembers && entry.panelMembers.length > 0;
+  const title = isPanelRun
+    ? (entry.panelDisplayName ?? entry.executorName)
+    : (entry.ticketTitle || entry.executorName);
   const referenceTime = live ? entry.startedAt : (entry.completedAt ?? entry.startedAt);
 
   // Subtitle: mode · executorName · ticketType (ticketType colored per Kanban palette)
   const ticketTypeLabel = entry.ticketType ? (TICKET_TYPE_LABELS[entry.ticketType] ?? entry.ticketType) : null;
   const ticketTypeColor = entry.ticketType ? TICKET_TYPE_COLORS[entry.ticketType as TicketType] : '';
+  // Panel rows display "N members" instead of a single executor name
+  const subtitleAuthor = isPanelRun
+    ? `${entry.memberCount} member${(entry.memberCount ?? 0) === 1 ? '' : 's'}`
+    : entry.executorName;
+  // When it's a panel run, also surface the ticket title as a secondary line
+  const panelTicketRef = isPanelRun && entry.ticketTitle
+    ? `on ${entry.ticketSlug ?? ''} ${entry.ticketTitle}`.trim()
+    : null;
 
   return (
     <>
@@ -288,21 +329,30 @@ export const ExecutionRow = memo(function ExecutionRow({
           <div className="flex items-center gap-1.5">
             <TicketIcon priority={entry.ticketPriority} />
             <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{title}</span>
+            {panelTicketRef && (
+              <span className="truncate text-xs font-normal text-[var(--theme-text-muted)]">{panelTicketRef}</span>
+            )}
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 pl-[18px] text-xs text-[var(--theme-text-faint)]">
             <ModeBadge mode={entry.effectiveMode} />
-            {entry.executorName && <span className="truncate">{entry.executorName}</span>}
-            {entry.executorName && ticketTypeLabel && <span>·</span>}
+            {subtitleAuthor && <span className="truncate">{subtitleAuthor}</span>}
+            {subtitleAuthor && ticketTypeLabel && <span>·</span>}
             {ticketTypeLabel && (
               <span className={cn('font-medium', ticketTypeColor)}>{ticketTypeLabel}</span>
             )}
           </div>
         </div>
 
-        {/* Col 3: Agent detail (name + model) */}
+        {/* Col 3: Agent detail — participants for panels, name+model for the rest */}
         <div className="hidden w-[120px] flex-shrink-0 overflow-hidden text-right lg:block">
-          <div className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">{entry.executorName}</div>
-          {entry.model && <div className="truncate text-[10px] text-[var(--theme-text-faint)]">{entry.model}</div>}
+          {isPanelRun ? (
+            <ParticipantStack members={entry.panelMembers!} />
+          ) : (
+            <>
+              <div className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">{entry.executorName}</div>
+              {entry.model && <div className="truncate text-[10px] text-[var(--theme-text-faint)]">{entry.model}</div>}
+            </>
+          )}
         </div>
 
         {/* Col 4: Status */}

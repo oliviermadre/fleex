@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { computeInitials, type PanelMemberSummary, type ExecutionLogEntry, type AgentExecution } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import type { Container } from '../container.js';
 
@@ -26,9 +27,9 @@ export function agentEventsRoutes(container: Container) {
         if (exec.mentionId) mentionIds.add(exec.mentionId);
       }
 
-      // Bulk fetch tickets, personas, mentions, comments, deliverables
+      // Bulk fetch tickets, personas, mentions, comments, deliverables, panels
       const ticketIdArr = [...ticketIds];
-      const [allTickets, allPersonas, allMentions, allComments, allDeliverables] = await Promise.all([
+      const [allTickets, allPersonas, allMentions, allComments, allDeliverables, allPanels] = await Promise.all([
         container.ticketStore.getAllTickets(),
         container.personaStore.getAll(),
         Promise.all(
@@ -42,6 +43,7 @@ export function agentEventsRoutes(container: Container) {
         ticketIdArr.length > 0
           ? container.deliverableStore.getByTicketIds(ticketIdArr)
           : Promise.resolve([]),
+        container.panelStore.getAll(),
       ]);
 
       // Build comment/deliverable count maps
@@ -61,18 +63,35 @@ export function agentEventsRoutes(container: Container) {
           .filter((m): m is NonNullable<typeof m> => m !== null)
           .map((m) => [m.id, m]),
       );
+      const panelByName = new Map(allPanels.map((p) => [p.name, p]));
+      const panelById = new Map(allPanels.map((p) => [p.id, p]));
 
-      // Enrich executions
-      let entries = allExecutions.map((exec) => {
+      // ── Split executions: panel-run groups vs. standalone ─────────────────
+      const panelGroups = new Map<string, AgentExecution[]>();
+      const standaloneExecs: AgentExecution[] = [];
+      for (const exec of allExecutions) {
+        const mention = exec.mentionId ? mentionMap.get(exec.mentionId) : null;
+        const isPanelMention = mention?.targetType === 'panel';
+        const isSyntheticPanelMentionId = exec.mentionId?.startsWith('panel:') ?? false;
+        if (isPanelMention || isSyntheticPanelMentionId) {
+          const key = exec.mentionId!;
+          if (!panelGroups.has(key)) panelGroups.set(key, []);
+          panelGroups.get(key)!.push(exec);
+        } else {
+          standaloneExecs.push(exec);
+        }
+      }
+
+      function enrichStandalone(exec: AgentExecution): ExecutionLogEntry {
         const ticket = ticketMap.get(exec.ticketId);
         const persona = personaMap.get(exec.personaId);
         const mention = exec.mentionId ? mentionMap.get(exec.mentionId) : null;
         const rawType = mention?.targetType;
-        const targetType = rawType === 'panel' ? 'panel' : rawType === 'skill' ? 'skill' : 'agent';
-
+        const targetType: ExecutionLogEntry['type'] =
+          rawType === 'panel' ? 'panel' : rawType === 'skill' ? 'skill' : 'agent';
         return {
           ...exec,
-          type: targetType as 'agent' | 'panel' | 'skill',
+          type: targetType,
           executorName: persona?.displayName ?? persona?.name ?? exec.personaId,
           ticketTitle: ticket?.title ?? null,
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
@@ -81,7 +100,112 @@ export function agentEventsRoutes(container: Container) {
           commentCount: commentCountMap.get(exec.ticketId) ?? 0,
           deliverableCount: deliverableCountMap.get(exec.ticketId) ?? 0,
         };
-      });
+      }
+
+      function aggregatePanelRun(mentionId: string, execs: AgentExecution[]): ExecutionLogEntry {
+        // Sort by startedAt so we have deterministic ordering of members.
+        const sorted = [...execs].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+        const mention = mentionMap.get(mentionId);
+        const panel =
+          (mention && panelByName.get(mention.targetAgent)) ??
+          panelById.get(mentionId.split(':')[1] ?? '') ??
+          null;
+
+        // Panel members
+        const members: PanelMemberSummary[] = sorted.map((e) => {
+          const persona = personaMap.get(e.personaId);
+          const displayName = persona?.displayName ?? persona?.name ?? e.personaId;
+          return {
+            personaId: e.personaId,
+            displayName,
+            initials: computeInitials(displayName),
+            status: e.status,
+            isOrchestrator: panel?.orchestratorPersonaId === e.personaId,
+          };
+        });
+
+        // Aggregated status: running > failed > interrupted > completed
+        let aggStatus: AgentExecution['status'] = 'completed';
+        if (sorted.some((e) => e.status === 'running')) aggStatus = 'running';
+        else if (sorted.some((e) => e.status === 'failed')) aggStatus = 'failed';
+        else if (sorted.some((e) => e.status === 'interrupted')) aggStatus = 'interrupted';
+
+        // Aggregated timing
+        const startedAt = sorted[0]!.startedAt;
+        const completedAts = sorted.map((e) => e.completedAt).filter((x): x is string => !!x);
+        const allCompleted = aggStatus !== 'running' && completedAts.length === sorted.length;
+        const completedAt = allCompleted
+          ? completedAts.sort().slice(-1)[0] ?? null
+          : null;
+        const durationMs = allCompleted && completedAt
+          ? new Date(completedAt).getTime() - new Date(startedAt).getTime()
+          : null;
+
+        // Aggregated tokens + cost (SUM across members)
+        const sumOrNull = (vals: (number | null | undefined)[]): number | null => {
+          const nums = vals.filter((v): v is number => typeof v === 'number');
+          return nums.length > 0 ? nums.reduce((a, b) => a + b, 0) : null;
+        };
+        const inputTokens = sumOrNull(sorted.map((e) => e.inputTokens));
+        const outputTokens = sumOrNull(sorted.map((e) => e.outputTokens));
+        const cacheReadTokens = sumOrNull(sorted.map((e) => e.cacheReadTokens));
+        const cacheCreationTokens = sumOrNull(sorted.map((e) => e.cacheCreationTokens));
+        const costUsd = sumOrNull(sorted.map((e) => e.costUsd));
+
+        // Orchestrator's exec (for personaId / executorName / model anchor)
+        const orchestratorExec = sorted.find((e) => e.personaId === panel?.orchestratorPersonaId) ?? sorted[0]!;
+        const orchestratorPersona = personaMap.get(orchestratorExec.personaId);
+
+        // Ticket context — pull from any exec, they share it
+        const ticket = ticketMap.get(orchestratorExec.ticketId);
+
+        // effectiveMode / model: prefer orchestrator's
+        const effectiveMode = orchestratorExec.effectiveMode ?? sorted[0]!.effectiveMode ?? null;
+        const model = orchestratorExec.model ?? null;
+
+        // SDK session id: not meaningful at aggregate level
+        const lastEventAts = sorted.map((e) => e.lastEventAt).filter((x): x is string => !!x);
+        const lastEventAt = lastEventAts.length > 0 ? lastEventAts.sort().slice(-1)[0]! : null;
+
+        return {
+          id: `panelrun:${mentionId}`,
+          personaId: orchestratorExec.personaId,
+          ticketId: orchestratorExec.ticketId,
+          mentionId,
+          eventCount: sorted.reduce((n, e) => n + (e.eventCount ?? 0), 0),
+          status: aggStatus,
+          startedAt,
+          completedAt,
+          lastEventAt,
+          sdkSessionId: null,
+          model,
+          effectiveMode,
+          durationMs,
+          costUsd,
+          inputTokens,
+          outputTokens,
+          cacheReadTokens,
+          cacheCreationTokens,
+
+          type: 'panel',
+          executorName: orchestratorPersona?.displayName ?? orchestratorPersona?.name ?? orchestratorExec.personaId,
+          ticketTitle: ticket?.title ?? null,
+          ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
+          ticketPriority: ticket?.priority ?? null,
+          ticketType: ticket?.type ?? null,
+          commentCount: commentCountMap.get(orchestratorExec.ticketId) ?? 0,
+          deliverableCount: deliverableCountMap.get(orchestratorExec.ticketId) ?? 0,
+
+          panelDisplayName: panel?.displayName ?? mention?.targetAgent ?? 'Panel',
+          panelMembers: members,
+          memberCount: members.length,
+        };
+      }
+
+      let entries: ExecutionLogEntry[] = [
+        ...standaloneExecs.map(enrichStandalone),
+        ...[...panelGroups.entries()].map(([mid, execs]) => aggregatePanelRun(mid, execs)),
+      ];
 
       // Filter by status
       const statusFilter = request.query.status;
