@@ -33,11 +33,11 @@ function SkillIcon() {
   );
 }
 
-const TYPE_FILTERS: { key: ExecutionTypeFilter; label: string; icon: React.ReactNode | null }[] = [
-  { key: 'all', label: 'ALL', icon: null },
-  { key: 'agent', label: 'AGENT', icon: <AgentIcon /> },
-  { key: 'panel', label: 'PANEL', icon: <PanelIcon /> },
-  { key: 'skill', label: 'SKILL', icon: <SkillIcon /> },
+const TYPE_FILTERS: { key: ExecutionTypeFilter; label: string; icon: React.ReactNode | null; iconColor: string | null }[] = [
+  { key: 'all', label: 'ALL', icon: null, iconColor: null },
+  { key: 'agent', label: 'AGENT', icon: <AgentIcon />, iconColor: 'text-indigo-400' },
+  { key: 'panel', label: 'PANEL', icon: <PanelIcon />, iconColor: 'text-violet-400' },
+  { key: 'skill', label: 'SKILL', icon: <SkillIcon />, iconColor: 'text-cyan-400' },
 ];
 
 export function ExecutionLogPage() {
@@ -144,7 +144,7 @@ export function ExecutionLogPage() {
 
           {/* Type filter tabs */}
           <div className="flex items-center gap-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-0.5">
-            {TYPE_FILTERS.map(({ key, label, icon }) => {
+            {TYPE_FILTERS.map(({ key, label, icon, iconColor }) => {
               const count = typeCounts[key] ?? 0;
               const active = typeFilter === key;
               return (
@@ -158,7 +158,7 @@ export function ExecutionLogPage() {
                       : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
                   )}
                 >
-                  {icon}
+                  {icon && <span className={iconColor ?? ''}>{icon}</span>}
                   <span>{label}</span>
                   <span className={cn(
                     'ml-0.5 rounded-full px-1.5 text-[10px] font-semibold',

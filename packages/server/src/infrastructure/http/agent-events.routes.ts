@@ -76,6 +76,8 @@ export function agentEventsRoutes(container: Container) {
           executorName: persona?.name ?? exec.personaId,
           ticketTitle: ticket?.title ?? null,
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
+          ticketPriority: ticket?.priority ?? null,
+          ticketType: ticket?.type ?? null,
           commentCount: commentCountMap.get(exec.ticketId) ?? 0,
           deliverableCount: deliverableCountMap.get(exec.ticketId) ?? 0,
         };
