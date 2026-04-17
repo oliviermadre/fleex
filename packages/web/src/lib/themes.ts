@@ -502,6 +502,22 @@ const SYNTAX_CSS_VAR_MAP: Record<keyof SyntaxThemeColors, string> = {
   regex: '--syntax-regex',
 };
 
+/** Parse a hex color (#rrggbb or #rgb) and return rgba(r, g, b, alpha) */
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '');
+  const full =
+    clean.length === 3
+      ? clean
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : clean;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
 
@@ -514,6 +530,20 @@ export function applyTheme(theme: Theme): void {
   for (const [key, cssVar] of Object.entries(SYNTAX_CSS_VAR_MAP)) {
     root.style.setProperty(cssVar, theme.syntax[key as keyof SyntaxThemeColors]);
   }
+
+  // Computed glass variables (semi-transparent backgrounds for liquidglass effect)
+  root.style.setProperty(
+    '--theme-glass-surface',
+    hexToRgba(theme.colors.bgSurface, 0.55),
+  );
+  root.style.setProperty(
+    '--theme-glass-surface-dense',
+    hexToRgba(theme.colors.bgSurface, 0.92),
+  );
+  root.style.setProperty(
+    '--theme-glass-overlay',
+    hexToRgba(theme.colors.bgOverlay, 0.55),
+  );
 }
 
 export function resolveTheme(themeId: string, customThemes: Theme[]): Theme {

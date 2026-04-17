@@ -183,7 +183,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
             ? '0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 2px var(--theme-accent), 0 0 40px var(--theme-accent), inset 0 1px 0 rgba(255, 255, 255, 0.15)'
             : '0 24px 80px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
           transition: 'border 0.15s ease, box-shadow 0.15s ease',
-          background: 'var(--theme-bg-overlay)',
+          background: 'var(--theme-glass-overlay)',
           backdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
           WebkitBackdropFilter: 'blur(32px) saturate(1.8) brightness(1.1)',
         }}
