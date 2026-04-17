@@ -213,12 +213,28 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
         </div>
 
         {/* Content */}
-        <div
-          className="deliverable-overlay-content"
-          style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 20px' }}
-        >
-          <MarkdownRenderer content={deliverable.content} onToggleCheckbox={noopToggle} />
-        </div>
+        {deliverable.type === 'html' ? (
+          <iframe
+            srcDoc={deliverable.content}
+            sandbox="allow-scripts"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              width: '100%',
+              border: 'none',
+              borderRadius: 0,
+              background: '#fff',
+            }}
+            title={deliverable.title}
+          />
+        ) : (
+          <div
+            className="deliverable-overlay-content"
+            style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 20px' }}
+          >
+            <MarkdownRenderer content={deliverable.content} onToggleCheckbox={noopToggle} />
+          </div>
+        )}
 
         {/* Status bar */}
         <div

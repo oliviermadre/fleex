@@ -59,6 +59,7 @@ Your final response will be structured as JSON with two fields:
   - \`"report"\` — Analysis, audit, review, or research findings
   - \`"url"\` — External link (content should be the URL)
   - \`"ticket-summary"\` — Auto-generated ticket summary (system use only)
+  - \`"html"\` — Self-contained HTML document (rendered as iframe embed). The \`markdown\` field must contain a complete \`<!DOCTYPE html>...\` string.
   Choose the type that best matches your output. When in doubt, use \`"report"\`.
 - **deliverable.status**: Set to "draft" if your work has open questions, uncertainties, or
   needs human review before being acted upon. Set to "final" when the work is complete and
@@ -514,7 +515,7 @@ export class ExecuteAgentUseCase {
                   properties: {
                     title: { type: 'string' },
                     markdown: { type: 'string' },
-                    type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url', 'ticket-summary'] },
+                    type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url', 'ticket-summary', 'html'] },
                     status: { type: 'string', enum: ['draft', 'final'] },
                   },
                   required: ['title', 'markdown', 'type', 'status'],

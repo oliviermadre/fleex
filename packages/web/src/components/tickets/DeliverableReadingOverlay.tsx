@@ -106,9 +106,25 @@ export function DeliverableReadingOverlay() {
         </div>
 
         {/* Content */}
-        <div className="deliverable-overlay-content flex-1 overflow-y-auto px-6 py-5">
-          <MarkdownRenderer content={deliverable.content} onToggleCheckbox={noopToggle} />
-        </div>
+        {deliverable.type === 'html' ? (
+          <iframe
+            srcDoc={deliverable.content}
+            sandbox="allow-scripts"
+            className="flex-1"
+            style={{
+              width: '100%',
+              border: 'none',
+              borderRadius: 0,
+              background: '#fff',
+              minHeight: 0,
+            }}
+            title={deliverable.title}
+          />
+        ) : (
+          <div className="deliverable-overlay-content flex-1 overflow-y-auto px-6 py-5">
+            <MarkdownRenderer content={deliverable.content} onToggleCheckbox={noopToggle} />
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center gap-2 border-t border-white/[0.06] px-5 py-2 text-[10px] text-[var(--theme-text-faint)]" style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}>
