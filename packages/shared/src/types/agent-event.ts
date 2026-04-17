@@ -62,6 +62,8 @@ export interface ExecutionLogEntry extends AgentExecution {
   readonly ticketType: string | null;
   readonly commentCount: number;
   readonly deliverableCount: number;
+  /** Only set for skill executions: the agent that hosted the skill run. */
+  readonly runByName?: string;
   /** Only set for aggregated panel runs (type === 'panel' with multiple members). */
   readonly panelDisplayName?: string;
   readonly panelMembers?: PanelMemberSummary[];

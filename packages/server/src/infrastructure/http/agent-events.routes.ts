@@ -99,8 +99,11 @@ export function agentEventsRoutes(container: Container) {
               ? 'skill'
               : 'agent';
         // For skills, show the skill's displayName as the executor instead of
-        // the agent that happens to be running it.
-        let executorName = persona?.displayName ?? persona?.name ?? exec.personaId;
+        // the agent that happens to be running it. Keep the agent displayName
+        // in runByName so the UI can show "by <agent>".
+        const agentDisplayName = persona?.displayName ?? persona?.name ?? exec.personaId;
+        let executorName = agentDisplayName;
+        let runByName: string | undefined;
         if (targetType === 'skill') {
           const skillId = isSyntheticSkillMentionId
             ? exec.mentionId!.slice('skill:'.length)
@@ -108,11 +111,13 @@ export function agentEventsRoutes(container: Container) {
           const skill = skillId ? skillById.get(skillId) : null;
           if (skill) executorName = skill.displayName ?? skill.name;
           else if (mention?.targetAgent) executorName = mention.targetAgent;
+          runByName = agentDisplayName;
         }
         return {
           ...exec,
           type: targetType,
           executorName,
+          runByName,
           ticketTitle: ticket?.title ?? null,
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
           ticketPriority: ticket?.priority ?? null,

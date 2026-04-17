@@ -351,7 +351,11 @@ export const ExecutionRow = memo(function ExecutionRow({
           ) : (
             <>
               <div className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">{entry.executorName}</div>
-              {entry.model && <div className="truncate text-[10px] text-[var(--theme-text-faint)]">{entry.model}</div>}
+              {entry.runByName ? (
+                <div className="truncate text-[10px] text-[var(--theme-text-faint)]">by {entry.runByName}</div>
+              ) : (
+                entry.model && <div className="truncate text-[10px] text-[var(--theme-text-faint)]">{entry.model}</div>
+              )}
             </>
           )}
         </div>
