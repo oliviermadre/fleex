@@ -260,7 +260,7 @@ export const ExecutionRow = memo(function ExecutionRow({
     e.stopPropagation();
     selectTicket(entry.ticketId);
     if (tab) setTicketTab(tab);
-    setActivePanel('board');
+    setActivePanel('tickets');
   }, [entry.ticketId, selectTicket, setTicketTab, setActivePanel]);
 
   const title = entry.ticketTitle || entry.executorName;

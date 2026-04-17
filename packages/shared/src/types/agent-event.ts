@@ -59,6 +59,12 @@ export interface ExecutionLogResponse {
   readonly total: number;
   readonly liveCount: number;
   readonly historyCount: number;
+  readonly typeCounts: {
+    readonly all: number;
+    readonly agent: number;
+    readonly panel: number;
+    readonly skill: number;
+  };
 }
 
 export type AgentEventWsMessageType =

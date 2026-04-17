@@ -45,13 +45,16 @@ export function ExecutionLogPage() {
   const historyEntries = useExecutionLogStore((s) => s.historyEntries);
   const liveCount = useExecutionLogStore((s) => s.liveCount);
   const historyCount = useExecutionLogStore((s) => s.historyCount);
+  const typeCounts = useExecutionLogStore((s) => s.typeCounts);
   const typeFilter = useExecutionLogStore((s) => s.typeFilter);
   const searchQuery = useExecutionLogStore((s) => s.searchQuery);
   const setTypeFilter = useExecutionLogStore((s) => s.setTypeFilter);
   const setSearchQuery = useExecutionLogStore((s) => s.setSearchQuery);
   const load = useExecutionLogStore((s) => s.load);
+  const loadMore = useExecutionLogStore((s) => s.loadMore);
   const loaded = useExecutionLogStore((s) => s.loaded);
   const loading = useExecutionLogStore((s) => s.loading);
+  const loadingMore = useExecutionLogStore((s) => s.loadingMore);
   const handleWsEvent = useExecutionLogStore((s) => s.handleWsEvent);
   const subscribeAll = useExecutionLogStore((s) => s.subscribeAll);
   const unsubscribeAll = useExecutionLogStore((s) => s.unsubscribeAll);
@@ -79,12 +82,7 @@ export function ExecutionLogPage() {
     [setSearchQuery, load],
   );
 
-  // Count per type
-  const allEntries = [...liveEntries, ...historyEntries];
-  const typeCounts: Record<string, number> = { all: allEntries.length };
-  for (const e of allEntries) {
-    typeCounts[e.type] = (typeCounts[e.type] ?? 0) + 1;
-  }
+  const canLoadMore = historyEntries.length < historyCount;
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
@@ -190,7 +188,7 @@ export function ExecutionLogPage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
-            LIVE · {!loaded && loading ? '…' : liveEntries.length}
+            LIVE · {!loaded && loading ? '…' : liveCount}
           </div>
           {!loaded && loading ? (
             <SkeletonRows count={2} />
@@ -211,7 +209,12 @@ export function ExecutionLogPage() {
         <div className="px-6 pb-8 pt-6">
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
             <span className="h-2 w-2 rounded-full border border-[var(--theme-text-faint)]" />
-            HISTORY · {!loaded && loading ? '…' : historyEntries.length}
+            HISTORY · {!loaded && loading ? '…' : historyCount}
+            {loaded && historyEntries.length < historyCount && (
+              <span className="normal-case tracking-normal text-[var(--theme-text-faint)]">
+                (showing {historyEntries.length})
+              </span>
+            )}
           </div>
           {!loaded && loading ? (
             <SkeletonRows count={6} />
@@ -220,11 +223,31 @@ export function ExecutionLogPage() {
               No past executions
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              {historyEntries.map((entry) => (
-                <ExecutionRow key={entry.id} entry={entry} live={false} />
-              ))}
-            </div>
+            <>
+              <div className="flex flex-col gap-2">
+                {historyEntries.map((entry) => (
+                  <ExecutionRow key={entry.id} entry={entry} live={false} />
+                ))}
+              </div>
+              {canLoadMore && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={() => loadMore()}
+                    disabled={loadingMore}
+                    className={cn(
+                      'rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-base)] px-4 py-2 text-xs font-medium transition-colors',
+                      loadingMore
+                        ? 'cursor-not-allowed text-[var(--theme-text-faint)]'
+                        : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]',
+                    )}
+                  >
+                    {loadingMore
+                      ? 'Loading…'
+                      : `Load ${Math.min(100, historyCount - historyEntries.length)} more`}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

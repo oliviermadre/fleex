@@ -5,6 +5,8 @@ import { appWs } from '../services/websocket';
 
 export type ExecutionTypeFilter = 'all' | 'agent' | 'panel' | 'skill';
 
+const PAGE_SIZE = 100;
+
 interface ExecutionLogState {
   // Data
   liveEntries: ExecutionLogEntry[];
@@ -12,6 +14,7 @@ interface ExecutionLogState {
   liveCount: number;
   historyCount: number;
   total: number;
+  typeCounts: { all: number; agent: number; panel: number; skill: number };
 
   // Filters
   typeFilter: ExecutionTypeFilter;
@@ -20,9 +23,11 @@ interface ExecutionLogState {
   // Loading
   loaded: boolean;
   loading: boolean;
+  loadingMore: boolean;
 
   // Actions
   load: () => Promise<void>;
+  loadMore: () => Promise<void>;
   setTypeFilter: (filter: ExecutionTypeFilter) => void;
   setSearchQuery: (query: string) => void;
   handleWsEvent: (msg: { type: string; data: unknown }) => void;
@@ -36,10 +41,12 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
   liveCount: 0,
   historyCount: 0,
   total: 0,
+  typeCounts: { all: 0, agent: 0, panel: 0, skill: 0 },
   typeFilter: 'all',
   searchQuery: '',
   loaded: false,
   loading: false,
+  loadingMore: false,
 
   load: async () => {
     const { typeFilter, searchQuery } = get();
@@ -48,7 +55,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
       const res = await api.fetchAllExecutions({
         type: typeFilter === 'all' ? undefined : typeFilter,
         q: searchQuery || undefined,
-        limit: 100,
+        limit: PAGE_SIZE,
       });
 
       const live = res.entries.filter((e) => e.status === 'running');
@@ -60,12 +67,43 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
         liveCount: res.liveCount,
         historyCount: res.historyCount,
         total: res.total,
+        typeCounts: res.typeCounts,
         loaded: true,
         loading: false,
       });
     } catch (err) {
       console.error('Failed to load execution log:', err);
       set({ loading: false });
+    }
+  },
+
+  loadMore: async () => {
+    const { typeFilter, searchQuery, liveEntries, historyEntries, historyCount, loadingMore } = get();
+    if (loadingMore) return;
+    if (historyEntries.length >= historyCount) return;
+    set({ loadingMore: true });
+    try {
+      const offset = liveEntries.length + historyEntries.length;
+      const res = await api.fetchAllExecutions({
+        type: typeFilter === 'all' ? undefined : typeFilter,
+        q: searchQuery || undefined,
+        limit: PAGE_SIZE,
+        offset,
+      });
+      // The next page of past executions — filter defensively in case any
+      // live entries slipped in.
+      const more = res.entries.filter((e) => e.status !== 'running');
+      const existingIds = new Set(historyEntries.map((e) => e.id));
+      const deduped = more.filter((e) => !existingIds.has(e.id));
+      set({
+        historyEntries: [...historyEntries, ...deduped],
+        historyCount: res.historyCount,
+        typeCounts: res.typeCounts,
+        loadingMore: false,
+      });
+    } catch (err) {
+      console.error('Failed to load more executions:', err);
+      set({ loadingMore: false });
     }
   },
 

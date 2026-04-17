@@ -90,14 +90,8 @@ export function agentEventsRoutes(container: Container) {
         entries = entries.filter((e) => statuses.includes(e.status));
       }
 
-      // Filter by type
-      const typeFilter = request.query.type;
-      if (typeFilter) {
-        const types = typeFilter.split(',');
-        entries = entries.filter((e) => types.includes(e.type));
-      }
-
-      // Filter by search query (ticket title or executor name)
+      // Filter by search query (ticket title or executor name) — applied BEFORE type
+      // so type tab counts reflect the current search.
       const q = request.query.q?.toLowerCase();
       if (q) {
         entries = entries.filter(
@@ -105,6 +99,20 @@ export function agentEventsRoutes(container: Container) {
             (e.ticketTitle && e.ticketTitle.toLowerCase().includes(q)) ||
             e.executorName.toLowerCase().includes(q),
         );
+      }
+
+      // Compute per-type counts BEFORE applying the type filter, so tab badges
+      // show accurate totals across all types.
+      const typeCounts = { all: entries.length, agent: 0, panel: 0, skill: 0 };
+      for (const e of entries) {
+        typeCounts[e.type] += 1;
+      }
+
+      // Filter by type
+      const typeFilter = request.query.type;
+      if (typeFilter) {
+        const types = typeFilter.split(',');
+        entries = entries.filter((e) => types.includes(e.type));
       }
 
       // Sort: running first (by startedAt DESC), then completed (by completedAt DESC)
@@ -116,15 +124,18 @@ export function agentEventsRoutes(container: Container) {
         return dateB.localeCompare(dateA);
       });
 
-      // Pagination
-      const offset = request.query.offset ? parseInt(request.query.offset, 10) : 0;
-      const limit = request.query.limit ? parseInt(request.query.limit, 10) : 100;
+      // Live/history counts reflect the current type filter (so HISTORY · N
+      // matches the entries being shown in the list).
       const total = entries.length;
       const liveCount = entries.filter((e) => e.status === 'running').length;
       const historyCount = total - liveCount;
+
+      // Pagination
+      const offset = request.query.offset ? parseInt(request.query.offset, 10) : 0;
+      const limit = request.query.limit ? parseInt(request.query.limit, 10) : 100;
       entries = entries.slice(offset, offset + limit);
 
-      return { entries, total, liveCount, historyCount };
+      return { entries, total, liveCount, historyCount, typeCounts };
     });
 
     // GET /api/personas/:id/executions — list executions for a persona
