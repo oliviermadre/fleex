@@ -538,7 +538,7 @@ export function applyTheme(theme: Theme): void {
   );
   root.style.setProperty(
     '--theme-glass-surface-dense',
-    hexToRgba(theme.colors.bgSurface, 0.82),
+    hexToRgba(theme.colors.bgSurface, 0.92),
   );
   root.style.setProperty(
     '--theme-glass-overlay',

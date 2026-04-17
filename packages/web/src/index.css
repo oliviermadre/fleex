@@ -38,7 +38,7 @@ html, body {
 
   /* Computed glass variables — Ember defaults (overridden by JS on mount) */
   --theme-glass-surface: rgba(24, 24, 27, 0.55);
-  --theme-glass-surface-dense: rgba(24, 24, 27, 0.82);
+  --theme-glass-surface-dense: rgba(24, 24, 27, 0.92);
   --theme-glass-overlay: rgba(39, 39, 42, 0.55);
 }
 
@@ -222,8 +222,8 @@ html, body {
   display: flex;
   justify-content: center;
   padding-top: 20vh;
-  background: rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(2px);
   animation: command-palette-fade-in 100ms ease-out forwards;
 }
