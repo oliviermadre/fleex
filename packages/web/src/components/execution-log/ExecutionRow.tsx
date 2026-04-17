@@ -292,22 +292,17 @@ export const ExecutionRow = memo(function ExecutionRow({
   }, [entry.ticketId, selectTicket, setTicketTab, setActivePanel]);
 
   const isPanelRun = entry.type === 'panel' && !!entry.panelMembers && entry.panelMembers.length > 0;
-  const title = isPanelRun
-    ? (entry.panelDisplayName ?? entry.executorName)
-    : (entry.ticketTitle || entry.executorName);
+  const title = entry.ticketTitle || entry.executorName;
   const referenceTime = live ? entry.startedAt : (entry.completedAt ?? entry.startedAt);
 
-  // Subtitle: mode · executorName · ticketType (ticketType colored per Kanban palette)
+  // Subtitle: mode · author · ticketType (ticketType colored per Kanban palette)
   const ticketTypeLabel = entry.ticketType ? (TICKET_TYPE_LABELS[entry.ticketType] ?? entry.ticketType) : null;
   const ticketTypeColor = entry.ticketType ? TICKET_TYPE_COLORS[entry.ticketType as TicketType] : '';
-  // Panel rows display "N members" instead of a single executor name
+  // Panel rows show "<panel name> (N members)" as the author; agent rows show the executor.
+  const memberWord = (entry.memberCount ?? 0) === 1 ? 'member' : 'members';
   const subtitleAuthor = isPanelRun
-    ? `${entry.memberCount} member${(entry.memberCount ?? 0) === 1 ? '' : 's'}`
+    ? `${entry.panelDisplayName ?? 'Panel'} (${entry.memberCount} ${memberWord})`
     : entry.executorName;
-  // When it's a panel run, also surface the ticket title as a secondary line
-  const panelTicketRef = isPanelRun && entry.ticketTitle
-    ? `on ${entry.ticketSlug ?? ''} ${entry.ticketTitle}`.trim()
-    : null;
 
   return (
     <>
@@ -322,9 +317,6 @@ export const ExecutionRow = memo(function ExecutionRow({
           <div className="flex items-center gap-1.5">
             <TicketIcon priority={entry.ticketPriority} />
             <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{title}</span>
-            {panelTicketRef && (
-              <span className="truncate text-xs font-normal text-[var(--theme-text-muted)]">{panelTicketRef}</span>
-            )}
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 pl-[18px] text-xs text-[var(--theme-text-faint)]">
             <ModeBadge mode={entry.effectiveMode} />
