@@ -53,7 +53,7 @@ function TypeBadge({ type }: { type: ExecutionLogEntry['type'] }) {
 // ── Priority-colored ticket icon (same as session view) ──
 
 const PRIORITY_COLORS: Record<string, string> = {
-  none: 'text-[var(--theme-text-secondary)]',
+  none: 'text-[var(--theme-text-muted)]',
   low: 'text-blue-400',
   medium: 'text-yellow-400',
   high: 'text-red-400',
@@ -62,10 +62,9 @@ const PRIORITY_COLORS: Record<string, string> = {
 function TicketIcon({ priority }: { priority: string | null }) {
   const color = PRIORITY_COLORS[priority ?? 'none'] ?? PRIORITY_COLORS['none'];
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn('flex-shrink-0', color)}>
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M3 9h18" />
-      <path d="M9 21V9" />
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn('flex-shrink-0', color)}>
+      <rect x="2" y="2" width="12" height="12" rx="2" />
+      <path d="M5 6h6M5 9h4" />
     </svg>
   );
 }
