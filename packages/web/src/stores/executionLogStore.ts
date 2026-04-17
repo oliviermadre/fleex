@@ -48,7 +48,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
       const res = await api.fetchAllExecutions({
         type: typeFilter === 'all' ? undefined : typeFilter,
         q: searchQuery || undefined,
-        limit: 200,
+        limit: 100,
       });
 
       const live = res.entries.filter((e) => e.status === 'running');

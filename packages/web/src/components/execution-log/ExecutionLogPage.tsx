@@ -57,13 +57,17 @@ export function ExecutionLogPage() {
   const unsubscribeAll = useExecutionLogStore((s) => s.unsubscribeAll);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didInitRef = useRef(false);
 
   useEffect(() => {
+    if (didInitRef.current) return;
+    didInitRef.current = true;
     load();
     subscribeAll();
     const unsubAgent = appWs.onChannel('agent-events', (msg) => { handleWsEvent(msg); });
     return () => { unsubAgent(); unsubscribeAll(); };
-  }, [load, subscribeAll, unsubscribeAll, handleWsEvent]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
