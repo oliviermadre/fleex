@@ -26,8 +26,9 @@ export function agentEventsRoutes(container: Container) {
         if (exec.mentionId) mentionIds.add(exec.mentionId);
       }
 
-      // Bulk fetch tickets, personas, mentions
-      const [allTickets, allPersonas, allMentions] = await Promise.all([
+      // Bulk fetch tickets, personas, mentions, comments, deliverables
+      const ticketIdArr = [...ticketIds];
+      const [allTickets, allPersonas, allMentions, allComments, allDeliverables] = await Promise.all([
         container.ticketStore.getAllTickets(),
         container.personaStore.getAll(),
         Promise.all(
@@ -35,7 +36,23 @@ export function agentEventsRoutes(container: Container) {
             container.mentionStore.getById(id).catch(() => null),
           ),
         ),
+        ticketIdArr.length > 0
+          ? container.commentStore.getByTicketIds(ticketIdArr)
+          : Promise.resolve([]),
+        ticketIdArr.length > 0
+          ? container.deliverableStore.getByTicketIds(ticketIdArr)
+          : Promise.resolve([]),
       ]);
+
+      // Build comment/deliverable count maps
+      const commentCountMap = new Map<string, number>();
+      for (const c of allComments) {
+        commentCountMap.set(c.ticketId, (commentCountMap.get(c.ticketId) ?? 0) + 1);
+      }
+      const deliverableCountMap = new Map<string, number>();
+      for (const d of allDeliverables) {
+        deliverableCountMap.set(d.ticketId, (deliverableCountMap.get(d.ticketId) ?? 0) + 1);
+      }
 
       const ticketMap = new Map(allTickets.map((t) => [t.id, t]));
       const personaMap = new Map(allPersonas.map((p) => [p.id, p]));
@@ -59,6 +76,8 @@ export function agentEventsRoutes(container: Container) {
           executorName: persona?.name ?? exec.personaId,
           ticketTitle: ticket?.title ?? null,
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
+          commentCount: commentCountMap.get(exec.ticketId) ?? 0,
+          deliverableCount: deliverableCountMap.get(exec.ticketId) ?? 0,
         };
       });
 

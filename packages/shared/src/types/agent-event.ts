@@ -48,6 +48,8 @@ export interface ExecutionLogEntry extends AgentExecution {
   readonly executorName: string;
   readonly ticketTitle: string | null;
   readonly ticketSlug: string | null;
+  readonly commentCount: number;
+  readonly deliverableCount: number;
 }
 
 export interface ExecutionLogResponse {

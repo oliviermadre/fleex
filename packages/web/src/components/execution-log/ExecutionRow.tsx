@@ -147,6 +147,20 @@ function LiveDuration({ startedAt }: { startedAt: string }) {
   );
 }
 
+// ── Relative time ("X ago") ──
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const days = Math.floor(hr / 24);
+  return `${days}d ago`;
+}
+
 // ── Full datetime formatter ──
 
 function formatFullDatetime(iso: string): string {
@@ -159,6 +173,27 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
   return String(n);
+}
+
+// ── Comment icon (same as KanbanCard) ──
+
+function CommentIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" />
+    </svg>
+  );
+}
+
+// ── Deliverable icon (same as KanbanCard) ──
+
+function DeliverableIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="3" y="1.5" width="10" height="13" rx="1.5" />
+      <path d="M5.5 5h5M5.5 8h5M5.5 11h3" />
+    </svg>
+  );
 }
 
 // ── Main row component ──
@@ -190,15 +225,11 @@ export const ExecutionRow = memo(function ExecutionRow({
     [cancelState, entry.id],
   );
 
-  // Build the title: prefer ticket title, fallback to executor on ticketSlug/id
-  const title = entry.ticketTitle
-    ? entry.ticketTitle
-    : `${entry.executorName} on ${entry.ticketSlug ?? entry.ticketId.slice(0, 6)}`;
+  // Title: ticket title, fallback to executor name
+  const title = entry.ticketTitle || entry.executorName;
 
-  // Build subtitle: executor · ticket ref
-  const subtitleParts: string[] = [];
-  subtitleParts.push(entry.executorName);
-  if (entry.ticketSlug) subtitleParts.push(entry.ticketSlug);
+  // Reference time for "X ago" column: use completedAt for history, startedAt for live
+  const referenceTime = live ? entry.startedAt : (entry.completedAt ?? entry.startedAt);
 
   return (
     <>
@@ -218,7 +249,7 @@ export const ExecutionRow = memo(function ExecutionRow({
             <ModeBadge mode={entry.effectiveMode} />
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--theme-text-faint)]">
-            <span>{subtitleParts.join(' · ')}</span>
+            <span>{entry.executorName}</span>
           </div>
         </div>
 
@@ -244,12 +275,28 @@ export const ExecutionRow = memo(function ExecutionRow({
           {entry.costUsd != null && entry.costUsd > 0 ? `$${entry.costUsd.toFixed(2)}` : null}
         </div>
 
+        {/* Comment + Deliverable counts */}
+        <div className="flex flex-shrink-0 items-center gap-2.5 text-[var(--theme-text-faint)]">
+          {entry.commentCount > 0 && (
+            <span className="flex items-center gap-1 text-[11px]" title={`${entry.commentCount} comments`}>
+              <CommentIcon />
+              <span>{entry.commentCount}</span>
+            </span>
+          )}
+          {entry.deliverableCount > 0 && (
+            <span className="flex items-center gap-1 text-[11px]" title={`${entry.deliverableCount} deliverables`}>
+              <DeliverableIcon />
+              <span>{entry.deliverableCount}</span>
+            </span>
+          )}
+        </div>
+
         {/* Status badge */}
         <div className="flex-shrink-0">
           <StatusBadge status={entry.status} />
         </div>
 
-        {/* Elapsed time column — hover shows full datetime */}
+        {/* Execution duration */}
         <div
           className="min-w-[70px] flex-shrink-0 text-right"
           title={
@@ -265,6 +312,14 @@ export const ExecutionRow = memo(function ExecutionRow({
           ) : entry.durationMs != null ? (
             <span className="font-mono text-xs text-[var(--theme-text-muted)]">{formatDuration(entry.durationMs)}</span>
           ) : null}
+        </div>
+
+        {/* "X ago" timestamp column */}
+        <div
+          className="min-w-[60px] flex-shrink-0 text-right text-xs text-[var(--theme-text-faint)]"
+          title={formatFullDatetime(referenceTime)}
+        >
+          {relativeTime(referenceTime)}
         </div>
 
         {/* Cancel / Chevron */}
