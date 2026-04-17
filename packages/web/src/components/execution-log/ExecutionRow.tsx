@@ -232,29 +232,22 @@ function ExecutionLogIcon() {
 // ── Participant stack (for panel rows) ──
 
 function ParticipantStack({ members }: { members: PanelMemberSummary[] }) {
-  const visible = members.slice(0, 3);
-  const overflow = members.length - visible.length;
   return (
-    <div className="flex items-center justify-end -space-x-1.5">
-      {visible.map((m) => (
+    <div className="flex items-center justify-end gap-0.5 overflow-visible">
+      {members.map((m) => (
         <span
           key={m.personaId}
           title={m.isOrchestrator ? `${m.displayName} · orchestrator` : m.displayName}
           className={cn(
-            'flex h-5 w-5 items-center justify-center rounded-full border-2 border-[var(--theme-bg-base)] bg-[var(--theme-bg-surface)] text-[9px] font-semibold',
+            'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-violet-400/30 bg-violet-500/15 text-[10px] font-semibold',
             m.isOrchestrator
               ? 'ring-1 ring-amber-400 text-amber-300'
-              : 'text-[var(--theme-text-secondary)]',
+              : 'text-violet-300',
           )}
         >
           {m.initials}
         </span>
       ))}
-      {overflow > 0 && (
-        <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-[var(--theme-bg-base)] bg-[var(--theme-bg-overlay)] text-[9px] font-medium text-[var(--theme-text-muted)]">
-          +{overflow}
-        </span>
-      )}
     </div>
   );
 }
@@ -344,7 +337,12 @@ export const ExecutionRow = memo(function ExecutionRow({
         </div>
 
         {/* Col 3: Agent detail — participants for panels, name+model for the rest */}
-        <div className="hidden w-[120px] flex-shrink-0 overflow-hidden text-right lg:block">
+        <div
+          className={cn(
+            'hidden w-[160px] flex-shrink-0 text-right lg:block',
+            isPanelRun ? 'overflow-visible' : 'overflow-hidden',
+          )}
+        >
           {isPanelRun ? (
             <ParticipantStack members={entry.panelMembers!} />
           ) : (
