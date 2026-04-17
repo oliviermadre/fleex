@@ -8,6 +8,8 @@ const MIN_WIDTH = 400;
 const MIN_HEIGHT = 250;
 const DEFAULT_WIDTH = 650;
 const DEFAULT_HEIGHT = 500;
+const HTML_DEFAULT_WIDTH = 900;
+const HTML_DEFAULT_HEIGHT = 700;
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -50,11 +52,12 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
   onFocus?: () => void;
   isFocused?: boolean;
 }) {
+  const isHtml = deliverable.type === 'html';
   const { size, effectivePos, setPosition, handleResizeMouseDown } = useFloatingResize({
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
-    defaultWidth: DEFAULT_WIDTH,
-    defaultHeight: DEFAULT_HEIGHT,
+    defaultWidth: isHtml ? HTML_DEFAULT_WIDTH : DEFAULT_WIDTH,
+    defaultHeight: isHtml ? HTML_DEFAULT_HEIGHT : DEFAULT_HEIGHT,
     initialOffset,
   });
 
@@ -213,12 +216,28 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
         </div>
 
         {/* Content */}
-        <div
-          className="deliverable-overlay-content"
-          style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 20px' }}
-        >
-          <MarkdownRenderer content={deliverable.content} onToggleCheckbox={noopToggle} />
-        </div>
+        {deliverable.type === 'html' ? (
+          <iframe
+            srcDoc={deliverable.content}
+            sandbox="allow-scripts"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              width: '100%',
+              border: 'none',
+              borderRadius: 0,
+              background: '#fff',
+            }}
+            title={deliverable.title}
+          />
+        ) : (
+          <div
+            className="deliverable-overlay-content"
+            style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 20px' }}
+          >
+            <MarkdownRenderer content={deliverable.content} onToggleCheckbox={noopToggle} />
+          </div>
+        )}
 
         {/* Status bar */}
         <div

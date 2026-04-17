@@ -28,8 +28,9 @@ export function buildSdkOptions(
     case 'plan':
       return {
         ...base,
-        allowedTools: ['Read', 'Glob', 'Grep'],
+        allowedTools: ['Read', 'Glob', 'Grep', 'Skill'],
         permissionMode: 'dontAsk',
+        settingSources: ['user', 'project'],
         maxTurns: 150,
         ...(ctx.cwd ? { cwd: ctx.cwd } : {}),
       };
@@ -37,9 +38,10 @@ export function buildSdkOptions(
     case 'edit':
       return {
         ...base,
-        allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
+        allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'Skill'],
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
+        settingSources: ['user', 'project'],
         maxTurns: 150,
         ...(ctx.cwd ? { cwd: ctx.cwd } : {}),
         ...(ctx.resume ? { resume: ctx.resume } : {}),
