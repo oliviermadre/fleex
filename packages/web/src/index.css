@@ -37,8 +37,8 @@ html, body {
   --theme-danger: #ef4444;
 
   /* Computed glass variables — Ember defaults (overridden by JS on mount) */
-  --theme-glass-surface: rgba(24, 24, 27, 0.72);
-  --theme-glass-overlay: rgba(39, 39, 42, 0.72);
+  --theme-glass-surface: rgba(24, 24, 27, 0.55);
+  --theme-glass-overlay: rgba(39, 39, 42, 0.55);
 }
 
 /* xterm.js container - must fill available space */
