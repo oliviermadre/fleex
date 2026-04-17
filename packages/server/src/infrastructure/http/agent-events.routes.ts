@@ -87,8 +87,15 @@ export function agentEventsRoutes(container: Container) {
         const persona = personaMap.get(exec.personaId);
         const mention = exec.mentionId ? mentionMap.get(exec.mentionId) : null;
         const rawType = mention?.targetType;
+        // Skill executions don't create TicketMention records — they use a
+        // synthetic mentionId of the form "skill:<id>" (see execute-agent.ts).
+        const isSyntheticSkillMentionId = exec.mentionId?.startsWith('skill:') ?? false;
         const targetType: ExecutionLogEntry['type'] =
-          rawType === 'panel' ? 'panel' : rawType === 'skill' ? 'skill' : 'agent';
+          rawType === 'panel'
+            ? 'panel'
+            : rawType === 'skill' || isSyntheticSkillMentionId
+              ? 'skill'
+              : 'agent';
         return {
           ...exec,
           type: targetType,

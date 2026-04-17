@@ -63,11 +63,16 @@ export function ExecutionLogPage() {
   const didInitRef = useRef(false);
 
   useEffect(() => {
-    if (didInitRef.current) return;
-    didInitRef.current = true;
-    load();
+    // Subscribe + register on every mount (idempotent via cleanup), so the
+    // StrictMode double-mount still ends with exactly one live subscription.
     subscribeAll();
     const unsubAgent = appWs.onChannel('agent-events', (msg) => { handleWsEvent(msg); });
+    // Load only once per component instance so StrictMode doesn't fire two
+    // identical HTTP fetches on mount.
+    if (!didInitRef.current) {
+      didInitRef.current = true;
+      load();
+    }
     return () => { unsubAgent(); unsubscribeAll(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

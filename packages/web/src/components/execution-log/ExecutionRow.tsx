@@ -401,6 +401,25 @@ export const ExecutionRow = memo(function ExecutionRow({
           {relativeTime(referenceTime)}
         </div>
 
+        {/* Cancel (live only) — sits BEFORE the CTAs so the 4 right-side
+             buttons stay aligned with history rows */}
+        {live && (
+          <button
+            onClick={handleCancel}
+            className={cn(
+              'flex h-7 w-[78px] flex-shrink-0 cursor-pointer items-center justify-center rounded-md border text-[10px] font-semibold shadow-sm transition-colors active:translate-y-px',
+              cancelState === 'idle' && 'border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20',
+              cancelState === 'confirming' && 'border-red-500 bg-red-500 text-white',
+              cancelState === 'cancelling' && 'cursor-wait border-red-500/30 bg-red-500/20 text-red-400',
+            )}
+            title={cancelState === 'idle' ? 'Cancel this execution' : ''}
+          >
+            {cancelState === 'idle' && 'Cancel'}
+            {cancelState === 'confirming' && 'Confirm?'}
+            {cancelState === 'cancelling' && 'Stopping…'}
+          </button>
+        )}
+
         {/* Col 8: CTAs — comments / deliverables / ticket / execution log */}
         <div className="flex w-[188px] flex-shrink-0 items-center justify-end gap-1.5">
           {/* Comment CTA */}
@@ -440,23 +459,6 @@ export const ExecutionRow = memo(function ExecutionRow({
           >
             <ExecutionLogIcon />
           </button>
-
-          {/* Cancel (live only) — absolute so it doesn't shift row alignment */}
-          {live && (
-            <button
-              onClick={handleCancel}
-              className={cn(
-                'ml-1 w-[72px] rounded px-2 py-0.5 text-[10px] font-semibold transition-opacity',
-                cancelState === 'idle' && 'bg-red-500/10 text-red-400 opacity-0 hover:bg-red-500/20 group-hover:opacity-100',
-                cancelState === 'confirming' && 'bg-red-500 text-white',
-                cancelState === 'cancelling' && 'cursor-wait bg-red-500/20 text-red-400',
-              )}
-            >
-              {cancelState === 'idle' && 'Cancel'}
-              {cancelState === 'confirming' && 'Confirm?'}
-              {cancelState === 'cancelling' && 'Stopping…'}
-            </button>
-          )}
         </div>
       </div>
 
