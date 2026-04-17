@@ -44,6 +44,7 @@ export interface AgentEvent {
 
 /** One member of an aggregated panel run */
 export interface PanelMemberSummary {
+  readonly executionId: string;
   readonly personaId: string;
   readonly displayName: string;
   readonly initials: string;

@@ -231,22 +231,30 @@ function ExecutionLogIcon() {
 
 // ── Participant stack (for panel rows) ──
 
-function ParticipantStack({ members }: { members: PanelMemberSummary[] }) {
+function ParticipantStack({
+  members,
+  onOpen,
+}: {
+  members: PanelMemberSummary[];
+  onOpen: (executionId: string) => void;
+}) {
   return (
     <div className="flex items-center justify-end gap-0.5 overflow-visible">
       {members.map((m) => (
-        <span
-          key={m.personaId}
-          title={m.isOrchestrator ? `${m.displayName} · orchestrator` : m.displayName}
+        <button
+          key={m.executionId}
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onOpen(m.executionId); }}
+          title={m.isOrchestrator ? `${m.displayName} · orchestrator — view execution` : `${m.displayName} — view execution`}
           className={cn(
-            'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-violet-400/30 bg-violet-500/15 text-[10px] font-semibold',
+            'flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-full border border-violet-400/30 bg-violet-500/15 text-[10px] font-semibold transition-transform hover:scale-110 hover:border-violet-400/60',
             m.isOrchestrator
               ? 'ring-1 ring-amber-400 text-amber-300'
               : 'text-violet-300',
           )}
         >
           {m.initials}
-        </span>
+        </button>
       ))}
     </div>
   );
@@ -261,7 +269,7 @@ export const ExecutionRow = memo(function ExecutionRow({
   entry: ExecutionLogEntry;
   live: boolean;
 }) {
-  const [showPanel, setShowPanel] = useState(false);
+  const [openExecutionId, setOpenExecutionId] = useState<string | null>(null);
   const [cancelState, setCancelState] = useState<'idle' | 'confirming' | 'cancelling'>('idle');
   const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectTicket = useTicketStore((s) => s.selectTicket);
@@ -295,14 +303,9 @@ export const ExecutionRow = memo(function ExecutionRow({
   const title = entry.ticketTitle || entry.executorName;
   const referenceTime = live ? entry.startedAt : (entry.completedAt ?? entry.startedAt);
 
-  // Subtitle: mode · author · ticketType (ticketType colored per Kanban palette)
+  // Subtitle: mode · ticketType (ticketType colored per Kanban palette)
   const ticketTypeLabel = entry.ticketType ? (TICKET_TYPE_LABELS[entry.ticketType] ?? entry.ticketType) : null;
   const ticketTypeColor = entry.ticketType ? TICKET_TYPE_COLORS[entry.ticketType as TicketType] : '';
-  // Panel rows show "<panel name> (N members)" as the author; agent rows show the executor.
-  const memberWord = (entry.memberCount ?? 0) === 1 ? 'member' : 'members';
-  const subtitleAuthor = isPanelRun
-    ? `${entry.panelDisplayName ?? 'Panel'} (${entry.memberCount} ${memberWord})`
-    : entry.executorName;
 
   return (
     <>
@@ -320,15 +323,13 @@ export const ExecutionRow = memo(function ExecutionRow({
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 pl-[18px] text-xs text-[var(--theme-text-faint)]">
             <ModeBadge mode={entry.effectiveMode} />
-            {subtitleAuthor && <span className="truncate">{subtitleAuthor}</span>}
-            {subtitleAuthor && ticketTypeLabel && <span>·</span>}
             {ticketTypeLabel && (
               <span className={cn('font-medium', ticketTypeColor)}>{ticketTypeLabel}</span>
             )}
           </div>
         </div>
 
-        {/* Col 3: Agent detail — participants for panels, name+model for the rest */}
+        {/* Col 3: Agent detail — panel name + clickable participants, or name+model */}
         <div
           className={cn(
             'hidden w-[160px] flex-shrink-0 text-right lg:block',
@@ -336,7 +337,17 @@ export const ExecutionRow = memo(function ExecutionRow({
           )}
         >
           {isPanelRun ? (
-            <ParticipantStack members={entry.panelMembers!} />
+            <>
+              <div className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">
+                {entry.panelDisplayName}
+              </div>
+              <div className="mt-0.5">
+                <ParticipantStack
+                  members={entry.panelMembers!}
+                  onOpen={(id) => setOpenExecutionId(id)}
+                />
+              </div>
+            </>
           ) : (
             <>
               <div className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">{entry.executorName}</div>
@@ -423,7 +434,7 @@ export const ExecutionRow = memo(function ExecutionRow({
 
           {/* Execution log CTA (open floating panel) */}
           <button
-            onClick={(e) => { e.stopPropagation(); setShowPanel(true); }}
+            onClick={(e) => { e.stopPropagation(); setOpenExecutionId(entry.id); }}
             className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
             title="View execution log"
           >
@@ -449,11 +460,15 @@ export const ExecutionRow = memo(function ExecutionRow({
         </div>
       </div>
 
-      {showPanel && (
+      {openExecutionId && (
         <FloatingExecutionPanel
-          executionId={entry.id}
-          title={`${entry.executorName} — ${title}`}
-          onClose={() => setShowPanel(false)}
+          executionId={openExecutionId}
+          title={
+            openExecutionId === entry.id
+              ? `${entry.executorName} — ${title}`
+              : (entry.panelMembers?.find((m) => m.executionId === openExecutionId)?.displayName ?? 'Execution')
+          }
+          onClose={() => setOpenExecutionId(null)}
         />
       )}
     </>

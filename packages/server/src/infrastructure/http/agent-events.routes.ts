@@ -116,6 +116,7 @@ export function agentEventsRoutes(container: Container) {
           const persona = personaMap.get(e.personaId);
           const displayName = persona?.displayName ?? persona?.name ?? e.personaId;
           return {
+            executionId: e.id,
             personaId: e.personaId,
             displayName,
             initials: computeInitials(displayName),
