@@ -104,10 +104,16 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
         if (liveIdx === -1) return state;
 
         const entry = state.liveEntries[liveIdx]!;
+        const completedAt = event.createdAt;
+        const durationMs = completedAt
+          ? new Date(completedAt).getTime() - new Date(entry.startedAt).getTime()
+          : entry.durationMs ?? null;
+
         const updated: ExecutionLogEntry = {
           ...entry,
           status: finalStatus as ExecutionLogEntry['status'],
-          completedAt: event.createdAt,
+          completedAt,
+          durationMs,
         };
 
         const newLive = state.liveEntries.filter(
@@ -122,6 +128,9 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
           historyCount: newHistory.length,
         };
       });
+
+      // Background reload to get full server-side enriched data (tokens, cost, model, etc.)
+      setTimeout(() => { get().load(); }, 1500);
     }
   },
 

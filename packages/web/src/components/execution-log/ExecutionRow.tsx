@@ -137,21 +137,20 @@ function LiveDuration({ startedAt }: { startedAt: string }) {
   }, []);
 
   const ms = now - new Date(startedAt).getTime();
-  return <span className="font-mono text-xs text-[var(--theme-text-muted)]">{formatDuration(ms)}</span>;
+  return (
+    <span
+      className="font-mono text-xs text-[var(--theme-text-muted)]"
+      title={new Date(startedAt).toLocaleString()}
+    >
+      {formatDuration(ms)}
+    </span>
+  );
 }
 
-// ── Relative time ──
+// ── Full datetime formatter ──
 
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const sec = Math.floor(diff / 1000);
-  if (sec < 60) return 'just now';
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const days = Math.floor(hr / 24);
-  return `${days}d ago`;
+function formatFullDatetime(iso: string): string {
+  return new Date(iso).toLocaleString();
 }
 
 // ── Token display ──
@@ -191,6 +190,16 @@ export const ExecutionRow = memo(function ExecutionRow({
     [cancelState, entry.id],
   );
 
+  // Build the title: prefer ticket title, fallback to executor on ticketSlug/id
+  const title = entry.ticketTitle
+    ? entry.ticketTitle
+    : `${entry.executorName} on ${entry.ticketSlug ?? entry.ticketId.slice(0, 6)}`;
+
+  // Build subtitle: executor · ticket ref
+  const subtitleParts: string[] = [];
+  subtitleParts.push(entry.executorName);
+  if (entry.ticketSlug) subtitleParts.push(entry.ticketSlug);
+
   return (
     <>
       <div
@@ -203,19 +212,13 @@ export const ExecutionRow = memo(function ExecutionRow({
         {/* Main info — takes remaining space */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[var(--theme-text-primary)]">
-              {entry.executorName} on {entry.ticketSlug ?? entry.ticketId.slice(0, 6)}
+            <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+              {title}
             </span>
             <ModeBadge mode={entry.effectiveMode} />
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--theme-text-faint)]">
-            {entry.ticketTitle && (
-              <>
-                <span className="max-w-[400px] truncate">{entry.ticketTitle}</span>
-                <span className="text-[var(--theme-text-faint)]">·</span>
-              </>
-            )}
-            <span>{relativeTime(entry.startedAt)}</span>
+            <span>{subtitleParts.join(' · ')}</span>
           </div>
         </div>
 
@@ -246,8 +249,17 @@ export const ExecutionRow = memo(function ExecutionRow({
           <StatusBadge status={entry.status} />
         </div>
 
-        {/* Duration */}
-        <div className="min-w-[60px] flex-shrink-0 text-right">
+        {/* Elapsed time column — hover shows full datetime */}
+        <div
+          className="min-w-[70px] flex-shrink-0 text-right"
+          title={
+            live
+              ? `Started: ${formatFullDatetime(entry.startedAt)}`
+              : entry.completedAt
+                ? `Started: ${formatFullDatetime(entry.startedAt)}\nCompleted: ${formatFullDatetime(entry.completedAt)}`
+                : `Started: ${formatFullDatetime(entry.startedAt)}`
+          }
+        >
           {live ? (
             <LiveDuration startedAt={entry.startedAt} />
           ) : entry.durationMs != null ? (
@@ -285,7 +297,7 @@ export const ExecutionRow = memo(function ExecutionRow({
       {showPanel && (
         <FloatingExecutionPanel
           executionId={entry.id}
-          title={`${entry.executorName} on ${entry.ticketSlug ?? entry.ticketId.slice(0, 6)}`}
+          title={`${entry.executorName} — ${title}`}
           onClose={() => setShowPanel(false)}
         />
       )}
