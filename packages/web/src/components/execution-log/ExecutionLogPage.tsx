@@ -188,9 +188,9 @@ export function ExecutionLogPage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
-            LIVE · {!loaded && loading ? '…' : liveCount}
+            LIVE · {loading ? '…' : liveCount}
           </div>
-          {!loaded && loading ? (
+          {loading ? (
             <SkeletonRows count={2} />
           ) : liveEntries.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg-base)] py-8 text-center text-sm text-[var(--theme-text-faint)]">
@@ -209,14 +209,14 @@ export function ExecutionLogPage() {
         <div className="px-6 pb-8 pt-6">
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
             <span className="h-2 w-2 rounded-full border border-[var(--theme-text-faint)]" />
-            HISTORY · {!loaded && loading ? '…' : historyCount}
+            HISTORY · {loading ? '…' : historyCount}
             {loaded && historyEntries.length < historyCount && (
               <span className="normal-case tracking-normal text-[var(--theme-text-faint)]">
                 (showing {historyEntries.length})
               </span>
             )}
           </div>
-          {!loaded && loading ? (
+          {loading ? (
             <SkeletonRows count={6} />
           ) : historyEntries.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg-base)] py-8 text-center text-sm text-[var(--theme-text-faint)]">

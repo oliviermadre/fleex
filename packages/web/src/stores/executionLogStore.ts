@@ -26,7 +26,7 @@ interface ExecutionLogState {
   loadingMore: boolean;
 
   // Actions
-  load: () => Promise<void>;
+  load: (opts?: { silent?: boolean }) => Promise<void>;
   loadMore: () => Promise<void>;
   setTypeFilter: (filter: ExecutionTypeFilter) => void;
   setSearchQuery: (query: string) => void;
@@ -48,9 +48,9 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
   loading: false,
   loadingMore: false,
 
-  load: async () => {
+  load: async (opts) => {
     const { typeFilter, searchQuery } = get();
-    set({ loading: true });
+    if (!opts?.silent) set({ loading: true });
     try {
       const res = await api.fetchAllExecutions({
         type: typeFilter === 'all' ? undefined : typeFilter,
@@ -121,8 +121,9 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
     const event = msg.data as AgentEvent;
 
     if (event.eventType === 'execution_start') {
-      // A new execution started — reload to get enriched data
-      get().load();
+      // A new execution started — silently reload to get enriched data
+      // (don't flash skeletons; user didn't ask for a reload).
+      get().load({ silent: true });
     }
 
     if (event.eventType === 'execution_end') {
@@ -168,7 +169,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
       });
 
       // Background reload to get full server-side enriched data (tokens, cost, model, etc.)
-      setTimeout(() => { get().load(); }, 1500);
+      setTimeout(() => { get().load({ silent: true }); }, 1500);
     }
   },
 
