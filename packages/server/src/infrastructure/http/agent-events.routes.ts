@@ -73,7 +73,7 @@ export function agentEventsRoutes(container: Container) {
         return {
           ...exec,
           type: targetType as 'agent' | 'panel' | 'skill',
-          executorName: persona?.name ?? exec.personaId,
+          executorName: persona?.displayName ?? persona?.name ?? exec.personaId,
           ticketTitle: ticket?.title ?? null,
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
           ticketPriority: ticket?.priority ?? null,

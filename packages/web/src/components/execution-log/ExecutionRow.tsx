@@ -1,10 +1,11 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
-import type { ExecutionLogEntry } from '@fleex/shared';
+import type { ExecutionLogEntry, TicketType } from '@fleex/shared';
 import { cancelExecution } from '../../services/api';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
+import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
 
 // ── Type icon (SVG) ──
 
@@ -208,18 +209,22 @@ function DeliverableIcon() {
 
 function TicketLinkIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M3 9h18" />
-      <path d="M9 21V9" />
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="12" height="12" rx="2" />
+      <path d="M5 6h6M5 9h4" />
     </svg>
   );
 }
 
 function ExecutionLogIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6,4 10,8 6,12" />
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="5" cy="6" r="1" />
+      <path d="M9 6h11" />
+      <circle cx="5" cy="12" r="1" />
+      <path d="M9 12h9" />
+      <circle cx="5" cy="18" r="1" />
+      <path d="M9 18h11" />
     </svg>
   );
 }
@@ -266,10 +271,9 @@ export const ExecutionRow = memo(function ExecutionRow({
   const title = entry.ticketTitle || entry.executorName;
   const referenceTime = live ? entry.startedAt : (entry.completedAt ?? entry.startedAt);
 
-  // Subtitle parts: mode · executorName · ticketType
-  const subtitleParts: string[] = [];
-  if (entry.executorName) subtitleParts.push(entry.executorName);
-  if (entry.ticketType) subtitleParts.push(TICKET_TYPE_LABELS[entry.ticketType] ?? entry.ticketType);
+  // Subtitle: mode · executorName · ticketType (ticketType colored per Kanban palette)
+  const ticketTypeLabel = entry.ticketType ? (TICKET_TYPE_LABELS[entry.ticketType] ?? entry.ticketType) : null;
+  const ticketTypeColor = entry.ticketType ? TICKET_TYPE_COLORS[entry.ticketType as TicketType] : '';
 
   return (
     <>
@@ -287,7 +291,11 @@ export const ExecutionRow = memo(function ExecutionRow({
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 pl-[18px] text-xs text-[var(--theme-text-faint)]">
             <ModeBadge mode={entry.effectiveMode} />
-            <span>{subtitleParts.join(' · ')}</span>
+            {entry.executorName && <span className="truncate">{entry.executorName}</span>}
+            {entry.executorName && ticketTypeLabel && <span>·</span>}
+            {ticketTypeLabel && (
+              <span className={cn('font-medium', ticketTypeColor)}>{ticketTypeLabel}</span>
+            )}
           </div>
         </div>
 
@@ -343,31 +351,31 @@ export const ExecutionRow = memo(function ExecutionRow({
         </div>
 
         {/* Col 8: CTAs — comments / deliverables / ticket / execution log */}
-        <div className="flex w-[156px] flex-shrink-0 items-center justify-end gap-1">
+        <div className="flex w-[188px] flex-shrink-0 items-center justify-end gap-1.5">
           {/* Comment CTA */}
           <button
             onClick={(e) => navigateToTicket(e, 'comments')}
-            className="flex w-[40px] cursor-pointer items-center justify-start gap-0.5 rounded px-1.5 py-1 text-[11px] tabular-nums text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            className="flex h-7 w-[48px] cursor-pointer items-center justify-center gap-1 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[11px] tabular-nums text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
             title={`${entry.commentCount} comments — open ticket`}
           >
             <CommentIcon />
-            {entry.commentCount > 0 && <span>{entry.commentCount}</span>}
+            <span className="min-w-[12px] text-left">{entry.commentCount > 0 ? entry.commentCount : ''}</span>
           </button>
 
           {/* Deliverable CTA */}
           <button
             onClick={(e) => navigateToTicket(e, 'deliverables')}
-            className="flex w-[40px] cursor-pointer items-center justify-start gap-0.5 rounded px-1.5 py-1 text-[11px] tabular-nums text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            className="flex h-7 w-[48px] cursor-pointer items-center justify-center gap-1 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[11px] tabular-nums text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
             title={`${entry.deliverableCount} deliverables — open ticket`}
           >
             <DeliverableIcon />
-            {entry.deliverableCount > 0 && <span>{entry.deliverableCount}</span>}
+            <span className="min-w-[12px] text-left">{entry.deliverableCount > 0 ? entry.deliverableCount : ''}</span>
           </button>
 
           {/* Ticket CTA */}
           <button
             onClick={(e) => navigateToTicket(e)}
-            className="flex w-[28px] cursor-pointer items-center justify-center rounded px-1.5 py-1 text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
             title="Open ticket"
           >
             <TicketLinkIcon />
@@ -376,7 +384,7 @@ export const ExecutionRow = memo(function ExecutionRow({
           {/* Execution log CTA (open floating panel) */}
           <button
             onClick={(e) => { e.stopPropagation(); setShowPanel(true); }}
-            className="flex w-[28px] cursor-pointer items-center justify-center rounded px-1.5 py-1 text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
             title="View execution log"
           >
             <ExecutionLogIcon />
