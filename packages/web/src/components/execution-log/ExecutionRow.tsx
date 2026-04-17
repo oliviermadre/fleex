@@ -292,9 +292,9 @@ export const ExecutionRow = memo(function ExecutionRow({
         </div>
 
         {/* Col 3: Agent detail (name + model) */}
-        <div className="hidden min-w-[110px] flex-shrink-0 text-right lg:block">
-          <div className="text-xs font-medium text-[var(--theme-text-secondary)]">{entry.executorName}</div>
-          {entry.model && <div className="text-[10px] text-[var(--theme-text-faint)]">{entry.model}</div>}
+        <div className="hidden w-[120px] flex-shrink-0 overflow-hidden text-right lg:block">
+          <div className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">{entry.executorName}</div>
+          {entry.model && <div className="truncate text-[10px] text-[var(--theme-text-faint)]">{entry.model}</div>}
         </div>
 
         {/* Col 4: Status */}
@@ -303,7 +303,7 @@ export const ExecutionRow = memo(function ExecutionRow({
         </div>
 
         {/* Col 5: Execution detail (tokens + cost) */}
-        <div className="hidden min-w-[130px] flex-shrink-0 text-right text-[11px] text-[var(--theme-text-faint)] xl:block">
+        <div className="hidden w-[150px] flex-shrink-0 text-right text-[11px] tabular-nums text-[var(--theme-text-faint)] xl:block">
           {(entry.inputTokens != null || entry.outputTokens != null) ? (
             <div>
               {entry.inputTokens != null && <span>in: {formatTokens(entry.inputTokens)}</span>}
@@ -318,7 +318,7 @@ export const ExecutionRow = memo(function ExecutionRow({
 
         {/* Col 6: Duration */}
         <div
-          className="min-w-[65px] flex-shrink-0 text-right"
+          className="w-[70px] flex-shrink-0 text-right tabular-nums"
           title={
             live
               ? `Started: ${formatFullDatetime(entry.startedAt)}`
@@ -336,18 +336,18 @@ export const ExecutionRow = memo(function ExecutionRow({
 
         {/* Col 7: "X ago" */}
         <div
-          className="min-w-[55px] flex-shrink-0 text-right text-xs text-[var(--theme-text-faint)]"
+          className="w-[60px] flex-shrink-0 text-right text-xs tabular-nums text-[var(--theme-text-faint)]"
           title={formatFullDatetime(referenceTime)}
         >
           {relativeTime(referenceTime)}
         </div>
 
         {/* Col 8: CTAs — comments / deliverables / ticket / execution log */}
-        <div className="flex flex-shrink-0 items-center gap-1">
+        <div className="flex w-[156px] flex-shrink-0 items-center justify-end gap-1">
           {/* Comment CTA */}
           <button
             onClick={(e) => navigateToTicket(e, 'comments')}
-            className="flex cursor-pointer items-center gap-0.5 rounded px-1.5 py-1 text-[11px] text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            className="flex w-[40px] cursor-pointer items-center justify-start gap-0.5 rounded px-1.5 py-1 text-[11px] tabular-nums text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
             title={`${entry.commentCount} comments — open ticket`}
           >
             <CommentIcon />
@@ -357,7 +357,7 @@ export const ExecutionRow = memo(function ExecutionRow({
           {/* Deliverable CTA */}
           <button
             onClick={(e) => navigateToTicket(e, 'deliverables')}
-            className="flex cursor-pointer items-center gap-0.5 rounded px-1.5 py-1 text-[11px] text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            className="flex w-[40px] cursor-pointer items-center justify-start gap-0.5 rounded px-1.5 py-1 text-[11px] tabular-nums text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
             title={`${entry.deliverableCount} deliverables — open ticket`}
           >
             <DeliverableIcon />
@@ -367,7 +367,7 @@ export const ExecutionRow = memo(function ExecutionRow({
           {/* Ticket CTA */}
           <button
             onClick={(e) => navigateToTicket(e)}
-            className="flex cursor-pointer items-center rounded px-1.5 py-1 text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            className="flex w-[28px] cursor-pointer items-center justify-center rounded px-1.5 py-1 text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
             title="Open ticket"
           >
             <TicketLinkIcon />
@@ -376,18 +376,18 @@ export const ExecutionRow = memo(function ExecutionRow({
           {/* Execution log CTA (open floating panel) */}
           <button
             onClick={(e) => { e.stopPropagation(); setShowPanel(true); }}
-            className="flex cursor-pointer items-center rounded px-1.5 py-1 text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+            className="flex w-[28px] cursor-pointer items-center justify-center rounded px-1.5 py-1 text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
             title="View execution log"
           >
             <ExecutionLogIcon />
           </button>
 
-          {/* Cancel (live only) */}
+          {/* Cancel (live only) — absolute so it doesn't shift row alignment */}
           {live && (
             <button
               onClick={handleCancel}
               className={cn(
-                'rounded px-2 py-0.5 text-[10px] font-semibold transition-opacity',
+                'ml-1 w-[72px] rounded px-2 py-0.5 text-[10px] font-semibold transition-opacity',
                 cancelState === 'idle' && 'bg-red-500/10 text-red-400 opacity-0 hover:bg-red-500/20 group-hover:opacity-100',
                 cancelState === 'confirming' && 'bg-red-500 text-white',
                 cancelState === 'cancelling' && 'cursor-wait bg-red-500/20 text-red-400',
