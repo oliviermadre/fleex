@@ -64,7 +64,7 @@ export function DeliverableReadingOverlay() {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="deliverable-overlay-panel" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="deliverable-overlay-panel" style={deliverable.type === 'html' ? { height: '85vh' } : undefined} onMouseDown={(e) => e.stopPropagation()}>
         {/* Title bar */}
         <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3" style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}>
           <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-2 py-0.5 text-[11px] font-bold tracking-wider text-[var(--theme-accent)]">

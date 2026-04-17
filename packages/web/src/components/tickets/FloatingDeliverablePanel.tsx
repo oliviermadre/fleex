@@ -8,6 +8,8 @@ const MIN_WIDTH = 400;
 const MIN_HEIGHT = 250;
 const DEFAULT_WIDTH = 650;
 const DEFAULT_HEIGHT = 500;
+const HTML_DEFAULT_WIDTH = 900;
+const HTML_DEFAULT_HEIGHT = 700;
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -50,11 +52,12 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
   onFocus?: () => void;
   isFocused?: boolean;
 }) {
+  const isHtml = deliverable.type === 'html';
   const { size, effectivePos, setPosition, handleResizeMouseDown } = useFloatingResize({
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
-    defaultWidth: DEFAULT_WIDTH,
-    defaultHeight: DEFAULT_HEIGHT,
+    defaultWidth: isHtml ? HTML_DEFAULT_WIDTH : DEFAULT_WIDTH,
+    defaultHeight: isHtml ? HTML_DEFAULT_HEIGHT : DEFAULT_HEIGHT,
     initialOffset,
   });
 
