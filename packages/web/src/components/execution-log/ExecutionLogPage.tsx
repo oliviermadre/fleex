@@ -181,53 +181,73 @@ export function ExecutionLogPage() {
 
       {/* ── Content ── */}
       <div className="flex-1 overflow-y-auto">
-        {!loaded && loading ? (
-          <div className="flex items-center justify-center py-20 text-sm text-[var(--theme-text-muted)]">Loading executions…</div>
-        ) : (
-          <>
-            {/* Live section */}
-            <div className="px-6 pt-5">
-              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                </span>
-                LIVE · {liveEntries.length}
-              </div>
-              {liveEntries.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg-base)] py-8 text-center text-sm text-[var(--theme-text-faint)]">
-                  No active executions
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {liveEntries.map((entry) => (
-                    <ExecutionRow key={entry.id} entry={entry} live />
-                  ))}
-                </div>
-              )}
-            </div>
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes execLogSkeleton { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }` }} />
 
-            {/* History section */}
-            <div className="px-6 pb-8 pt-6">
-              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-                <span className="h-2 w-2 rounded-full border border-[var(--theme-text-faint)]" />
-                HISTORY · {historyEntries.length}
-              </div>
-              {historyEntries.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg-base)] py-8 text-center text-sm text-[var(--theme-text-faint)]">
-                  No past executions
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {historyEntries.map((entry) => (
-                    <ExecutionRow key={entry.id} entry={entry} live={false} />
-                  ))}
-                </div>
-              )}
+        {/* Live section */}
+        <div className="px-6 pt-5">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            LIVE · {!loaded && loading ? '…' : liveEntries.length}
+          </div>
+          {!loaded && loading ? (
+            <SkeletonRows count={2} />
+          ) : liveEntries.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg-base)] py-8 text-center text-sm text-[var(--theme-text-faint)]">
+              No active executions
             </div>
-          </>
-        )}
+          ) : (
+            <div className="flex flex-col gap-2">
+              {liveEntries.map((entry) => (
+                <ExecutionRow key={entry.id} entry={entry} live />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* History section */}
+        <div className="px-6 pb-8 pt-6">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            <span className="h-2 w-2 rounded-full border border-[var(--theme-text-faint)]" />
+            HISTORY · {!loaded && loading ? '…' : historyEntries.length}
+          </div>
+          {!loaded && loading ? (
+            <SkeletonRows count={6} />
+          ) : historyEntries.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg-base)] py-8 text-center text-sm text-[var(--theme-text-faint)]">
+              No past executions
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {historyEntries.map((entry) => (
+                <ExecutionRow key={entry.id} entry={entry} live={false} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function SkeletonRows({ count }: { count: number }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="h-[52px] rounded-lg border border-[var(--theme-border)]"
+          style={{
+            background:
+              'linear-gradient(90deg, var(--theme-bg-hover) 25%, var(--theme-bg-surface) 50%, var(--theme-bg-hover) 75%)',
+            backgroundSize: '200% 100%',
+            animation: 'execLogSkeleton 1.5s ease-in-out infinite',
+            animationDelay: `${i * 100}ms`,
+          }}
+        />
+      ))}
     </div>
   );
 }
