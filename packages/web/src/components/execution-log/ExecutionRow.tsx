@@ -3,7 +3,7 @@ import type { ExecutionLogEntry } from '@fleex/shared';
 import { cancelExecution } from '../../services/api';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useUiStore } from '../../stores/uiStore';
+import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
 
 // ── Type icon (SVG) ──
@@ -239,7 +239,7 @@ export const ExecutionRow = memo(function ExecutionRow({
   const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const setTicketTab = useTicketStore((s) => s.setTicketTab);
-  const setActivePanel = useUiStore((s) => s.setActivePanel);
+  const setActivePanel = useUIStore((s) => s.setActivePanel);
 
   const handleCancel = useCallback(
     async (e: React.MouseEvent) => {
