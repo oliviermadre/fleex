@@ -5,8 +5,7 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Components } from 'react-markdown';
-import { getProxiedImageSrc } from '../../lib/image';
-import { ImageThumbnail } from '../shared/ImageThumbnail';
+import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 
 interface MarkdownRendererProps {
   content: string;
@@ -148,8 +147,14 @@ function MarkdownSection({
   startLine: number;
   onToggleCheckbox: (lineIndex: number) => void;
 }) {
+  // Extract images — gallery strip at top, inline placeholders in text
+  const { images, cleaned: contentWithoutImages } = useMemo(
+    () => extractMarkdownImages(content),
+    [content],
+  );
+
   // Pre-compute checkbox line indices within this segment (0-indexed, local)
-  const lines = useMemo(() => content.split('\n'), [content]);
+  const lines = useMemo(() => contentWithoutImages.split('\n'), [contentWithoutImages]);
   const checkboxLocalLines = useMemo(
     () =>
       lines
@@ -166,17 +171,27 @@ function MarkdownSection({
 
   const components: Components = {
     // ── Links ───────────────────────────────────────────────────────────────
-    a: ({ href, children }) => (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-[var(--theme-accent)] underline underline-offset-2 hover:text-[var(--theme-accent-hover)] transition-colors break-all"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </a>
-    ),
+    a: ({ href, children }) => {
+      // Image placeholder — clickable pill that opens lightbox
+      if (href?.startsWith('#fleex-img:')) {
+        const idx = parseInt(href.slice('#fleex-img:'.length), 10);
+        const img = images[idx];
+        if (img) {
+          return <ImagePlaceholder src={img.src} alt={img.alt} index={idx} />;
+        }
+      }
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--theme-accent)] underline underline-offset-2 hover:text-[var(--theme-accent-hover)] transition-colors break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {children}
+        </a>
+      );
+    },
 
     // ── Headings ─────────────────────────────────────────────────────────────
     h1: ({ children }) => (
@@ -358,16 +373,15 @@ function MarkdownSection({
       </td>
     ),
 
-    // ── Images ───────────────────────────────────────────────────────────────
-    img: ({ src, alt }) => {
-      return <ImageThumbnail src={getProxiedImageSrc(src)} alt={alt ?? ''} />;
-    },
   };
 
   return (
-    <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
-      {content}
-    </Markdown>
+    <>
+      <ImageGalleryStrip images={images} />
+      <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+        {contentWithoutImages}
+      </Markdown>
+    </>
   );
 }
 

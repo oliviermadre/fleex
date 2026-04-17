@@ -15,8 +15,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
-import { getProxiedImageSrc } from '../../lib/image';
-import { ImageThumbnail } from '../shared/ImageThumbnail';
+import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 
 /**
  * Build a lookup: commentId -> mentionText -> mentionId
@@ -124,11 +123,24 @@ const CommentMarkdown = memo(function CommentMarkdown({
   const commentMentions = mentionLookup.get(commentId);
 
   // Normalize literal \n escape sequences from agent output, then encode mentions
-  const processed = preprocessMentions(body.replace(/\\n/g, '\n'));
+  const normalized = body.replace(/\\n/g, '\n');
+
+  // Extract images before markdown processing — they become a gallery strip + inline placeholders
+  const { images, cleaned } = useMemo(() => extractMarkdownImages(normalized), [normalized]);
+
+  const processed = preprocessMentions(cleaned);
 
   const components: Components = {
     // ── Mentions & links ─────────────────────────────────────────────────────
     a: ({ href, children }) => {
+      // Image placeholder — clickable pill that opens lightbox
+      if (href?.startsWith('#fleex-img:')) {
+        const idx = parseInt(href.slice('#fleex-img:'.length), 10);
+        const img = images[idx];
+        if (img) {
+          return <ImagePlaceholder src={img.src} alt={img.alt} index={idx} />;
+        }
+      }
       if (href?.startsWith('#fleex-struck:')) {
         // Struck-through mention (removed/resolved)
         return (
@@ -300,20 +312,19 @@ const CommentMarkdown = memo(function CommentMarkdown({
       </td>
     ),
 
-    // ── Images ───────────────────────────────────────────────────────────────
-    img: ({ src, alt }) => {
-      return <ImageThumbnail src={getProxiedImageSrc(src)} alt={alt ?? ''} />;
-    },
   };
 
   return (
-    <Markdown
-      remarkPlugins={commentRemarkPlugins}
-      rehypePlugins={commentRehypePlugins}
-      components={components}
-    >
-      {processed}
-    </Markdown>
+    <>
+      <ImageGalleryStrip images={images} />
+      <Markdown
+        remarkPlugins={commentRemarkPlugins}
+        rehypePlugins={commentRehypePlugins}
+        components={components}
+      >
+        {processed}
+      </Markdown>
+    </>
   );
 });
 
