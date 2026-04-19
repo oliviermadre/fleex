@@ -48,7 +48,12 @@ export interface PanelMemberSummary {
   readonly personaId: string;
   readonly displayName: string;
   readonly initials: string;
-  readonly status: AgentExecution['status'];
+  /**
+   * 'pending' means the member has not started yet (used for the orchestrator
+   * bubble that we surface before its execution record exists). Otherwise
+   * mirrors AgentExecution['status'].
+   */
+  readonly status: 'pending' | 'running' | 'completed' | 'failed' | 'interrupted';
   readonly isOrchestrator: boolean;
 }
 

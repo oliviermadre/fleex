@@ -663,6 +663,26 @@ Be concise and decision-oriented. Write in the same language as the panel member
       mentionId,
     });
 
+    // Broadcast orchestrator start so the Execution Log can show it live.
+    const orchestratorPersonaForEvent = panel.orchestratorPersonaId
+      ? await this.personaStore.getById(panel.orchestratorPersonaId)
+      : null;
+    const startEvent = AgentEventEntity.create({
+      executionId,
+      eventType: 'execution_start',
+      data: {
+        executionId,
+        personaId: orchestratorPersonaId,
+        personaName: orchestratorPersonaForEvent?.name ?? panel.name,
+        ticketId,
+        mentionId,
+        model: panel.orchestratorModel,
+      },
+      sequence: 0,
+    });
+    await this.agentEventStore.appendEvent(startEvent);
+    this.onEvent?.(startEvent);
+
     try {
       const { text, metrics } = await this.querySDK(synthesisPrompt, {
         model: panel.orchestratorModel,
@@ -677,14 +697,33 @@ Be concise and decision-oriented. Write in the same language as the panel member
         ...metrics,
       });
 
+      const endEvent = AgentEventEntity.create({
+        executionId,
+        eventType: 'execution_end',
+        data: { status: 'completed', ticketId, effectiveMode, model: panel.orchestratorModel, ...metrics },
+        sequence: 1,
+      });
+      await this.agentEventStore.appendEvent(endEvent);
+      this.onEvent?.(endEvent);
+
       return `**🏛️ ${panel.displayName} — Synthesis**\n\n${text}`;
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
       this.logger.error('Panel synthesis generation failed', {
         panelName: panel.name,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMsg,
       });
 
       await this.agentEventStore.completeExecution(executionId, 'failed', { model: panel.orchestratorModel, effectiveMode });
+
+      const failEvent = AgentEventEntity.create({
+        executionId,
+        eventType: 'execution_end',
+        data: { status: 'failed', ticketId, effectiveMode, model: panel.orchestratorModel, error: errorMsg },
+        sequence: 1,
+      });
+      await this.agentEventStore.appendEvent(failEvent);
+      this.onEvent?.(failEvent);
 
       return `**🏛️ ${panel.displayName} — Synthesis (auto-generated)**\n\n⚠️ Synthesis generation failed. Individual member responses are available in the full transcript deliverable.\n\n${validResponses.map((r) => `- **${r.emoji} ${r.personaDisplayName}** responded (${r.durationMs}ms)`).join('\n')}`;
     }

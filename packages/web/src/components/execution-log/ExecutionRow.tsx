@@ -231,6 +231,22 @@ function ExecutionLogIcon() {
 
 // ── Participant stack (for panel rows) ──
 
+const MEMBER_STATUS_CLASSES: Record<PanelMemberSummary['status'], string> = {
+  pending: 'border border-dashed border-[var(--theme-text-faint)] opacity-60',
+  running: 'border-2 border-blue-400 animate-pulse',
+  completed: 'border-2 border-emerald-400',
+  failed: 'border-2 border-red-400',
+  interrupted: 'border-2 border-orange-400',
+};
+
+const MEMBER_STATUS_LABELS: Record<PanelMemberSummary['status'], string> = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'done',
+  failed: 'failed',
+  interrupted: 'interrupted',
+};
+
 function ParticipantStack({
   members,
   onOpen,
@@ -239,23 +255,42 @@ function ParticipantStack({
   onOpen: (executionId: string) => void;
 }) {
   return (
-    <div className="flex items-center justify-end gap-0.5 overflow-visible">
-      {members.map((m) => (
-        <button
-          key={m.executionId}
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onOpen(m.executionId); }}
-          title={m.isOrchestrator ? `${m.displayName} · orchestrator — view execution` : `${m.displayName} — view execution`}
-          className={cn(
-            'flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-full border border-violet-400/30 bg-violet-500/15 text-[10px] font-semibold transition-transform hover:scale-110 hover:border-violet-400/60',
-            m.isOrchestrator
-              ? 'ring-1 ring-amber-400 text-amber-300'
-              : 'text-violet-300',
-          )}
-        >
-          {m.initials}
-        </button>
-      ))}
+    <div className="flex items-center justify-end gap-1 overflow-visible">
+      {members.map((m) => {
+        const isPending = m.status === 'pending';
+        const statusClasses = MEMBER_STATUS_CLASSES[m.status];
+        const baseLabel = m.isOrchestrator
+          ? `${m.displayName} · orchestrator`
+          : m.displayName;
+        const title = isPending
+          ? `${baseLabel} · ${MEMBER_STATUS_LABELS[m.status]}`
+          : `${baseLabel} · ${MEMBER_STATUS_LABELS[m.status]} — view execution`;
+        return (
+          <button
+            key={m.executionId}
+            type="button"
+            disabled={isPending}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isPending) return;
+              onOpen(m.executionId);
+            }}
+            title={title}
+            className={cn(
+              'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-[10px] font-semibold transition-transform',
+              statusClasses,
+              isPending
+                ? 'cursor-default'
+                : 'cursor-pointer hover:scale-110',
+              m.isOrchestrator
+                ? 'ring-1 ring-amber-400 ring-offset-1 ring-offset-[var(--theme-bg-base)] text-amber-300'
+                : 'text-violet-300',
+            )}
+          >
+            {m.initials}
+          </button>
+        );
+      })}
     </div>
   );
 }

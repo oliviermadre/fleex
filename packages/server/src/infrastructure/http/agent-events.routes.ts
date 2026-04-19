@@ -3,6 +3,26 @@ import { computeInitials, type PanelMemberSummary, type ExecutionLogEntry, type 
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import type { Container } from '../container.js';
 
+const VALID_STATUSES = new Set<AgentExecution['status']>(['running', 'completed', 'failed', 'interrupted']);
+const VALID_TYPES = new Set<ExecutionLogEntry['type']>(['agent', 'panel', 'skill']);
+const MAX_LIMIT = 500;
+const DEFAULT_LIMIT = 100;
+const MAX_Q_LENGTH = 200;
+
+function parseCsvWhitelist<T extends string>(raw: string | undefined, whitelist: Set<T>): T[] | null {
+  if (!raw) return null;
+  const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
+  const allowed = parts.filter((p): p is T => whitelist.has(p as T));
+  return allowed.length > 0 ? allowed : null;
+}
+
+function clampInt(raw: string | undefined, def: number, min: number, max: number): number {
+  if (!raw) return def;
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return def;
+  return Math.min(Math.max(parsed, min), max);
+}
+
 export function agentEventsRoutes(container: Container) {
   return async function (app: FastifyInstance) {
     // GET /api/executions — list all executions (enriched for Execution Log view)
@@ -15,6 +35,13 @@ export function agentEventsRoutes(container: Container) {
         offset?: string;
       };
     }>('/api/executions', async (request) => {
+      // ── Query param validation (defensive) ──────────────────────────────
+      const statusFilter = parseCsvWhitelist<AgentExecution['status']>(request.query.status, VALID_STATUSES);
+      const typeFilter = parseCsvWhitelist<ExecutionLogEntry['type']>(request.query.type, VALID_TYPES);
+      const q = request.query.q ? request.query.q.slice(0, MAX_Q_LENGTH).toLowerCase() : undefined;
+      const limit = clampInt(request.query.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
+      const offset = clampInt(request.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
+
       const allExecutions = await container.agentEventStore.getAllExecutions();
 
       // Collect unique IDs for bulk lookups
@@ -27,24 +54,44 @@ export function agentEventsRoutes(container: Container) {
         if (exec.mentionId) mentionIds.add(exec.mentionId);
       }
 
-      // Bulk fetch tickets, personas, mentions, comments, deliverables, panels, skills
+      // Bulk fetch tickets, personas, mentions, comments, deliverables, panels, skills.
+      // Each lookup falls back to an empty result on failure so a transient store
+      // error in one collection doesn't 500 the whole Execution Log view.
       const ticketIdArr = [...ticketIds];
       const [allTickets, allPersonas, allMentions, allComments, allDeliverables, allPanels, allSkills] = await Promise.all([
-        container.ticketStore.getAllTickets(),
-        container.personaStore.getAll(),
+        container.ticketStore.getAllTickets().catch((err: unknown) => {
+          request.log.error({ err }, 'executions: ticketStore.getAllTickets failed');
+          return [];
+        }),
+        container.personaStore.getAll().catch((err: unknown) => {
+          request.log.error({ err }, 'executions: personaStore.getAll failed');
+          return [];
+        }),
         Promise.all(
           [...mentionIds].map((id) =>
             container.mentionStore.getById(id).catch(() => null),
           ),
         ),
         ticketIdArr.length > 0
-          ? container.commentStore.getByTicketIds(ticketIdArr)
+          ? container.commentStore.getByTicketIds(ticketIdArr).catch((err: unknown) => {
+              request.log.error({ err }, 'executions: commentStore.getByTicketIds failed');
+              return [];
+            })
           : Promise.resolve([]),
         ticketIdArr.length > 0
-          ? container.deliverableStore.getByTicketIds(ticketIdArr)
+          ? container.deliverableStore.getByTicketIds(ticketIdArr).catch((err: unknown) => {
+              request.log.error({ err }, 'executions: deliverableStore.getByTicketIds failed');
+              return [];
+            })
           : Promise.resolve([]),
-        container.panelStore.getAll(),
-        container.skillStore.getAll(),
+        container.panelStore.getAll().catch((err: unknown) => {
+          request.log.error({ err }, 'executions: panelStore.getAll failed');
+          return [];
+        }),
+        container.skillStore.getAll().catch((err: unknown) => {
+          request.log.error({ err }, 'executions: skillStore.getAll failed');
+          return [];
+        }),
       ]);
 
       // Build comment/deliverable count maps
@@ -150,6 +197,26 @@ export function agentEventsRoutes(container: Container) {
           };
         });
 
+        // Inject a pending orchestrator bubble when the orchestrator has not
+        // started yet — keeps the panel row visually complete from the start.
+        if (panel?.orchestratorPersonaId) {
+          const hasOrchestrator = members.some((m) => m.isOrchestrator);
+          if (!hasOrchestrator) {
+            const orchestratorPersona = personaMap.get(panel.orchestratorPersonaId);
+            if (orchestratorPersona) {
+              const displayName = orchestratorPersona.displayName ?? orchestratorPersona.name ?? panel.orchestratorPersonaId;
+              members.push({
+                executionId: `orchestrator-pending:${mentionId}`,
+                personaId: panel.orchestratorPersonaId,
+                displayName,
+                initials: computeInitials(displayName),
+                status: 'pending',
+                isOrchestrator: true,
+              });
+            }
+          }
+        }
+
         // Aggregated status: running > failed > interrupted > completed
         let aggStatus: AgentExecution['status'] = 'completed';
         if (sorted.some((e) => e.status === 'running')) aggStatus = 'running';
@@ -233,16 +300,14 @@ export function agentEventsRoutes(container: Container) {
         ...[...panelGroups.entries()].map(([mid, execs]) => aggregatePanelRun(mid, execs)),
       ];
 
-      // Filter by status
-      const statusFilter = request.query.status;
+      // Filter by status (statusFilter is pre-validated)
       if (statusFilter) {
-        const statuses = statusFilter.split(',');
-        entries = entries.filter((e) => statuses.includes(e.status));
+        const statuses = new Set(statusFilter);
+        entries = entries.filter((e) => statuses.has(e.status));
       }
 
       // Filter by search query (ticket title or executor name) — applied BEFORE type
       // so type tab counts reflect the current search.
-      const q = request.query.q?.toLowerCase();
       if (q) {
         entries = entries.filter(
           (e) =>
@@ -258,11 +323,10 @@ export function agentEventsRoutes(container: Container) {
         typeCounts[e.type] += 1;
       }
 
-      // Filter by type
-      const typeFilter = request.query.type;
+      // Filter by type (typeFilter is pre-validated)
       if (typeFilter) {
-        const types = typeFilter.split(',');
-        entries = entries.filter((e) => types.includes(e.type));
+        const types = new Set(typeFilter);
+        entries = entries.filter((e) => types.has(e.type));
       }
 
       // Sort: running first (by startedAt DESC), then completed (by completedAt DESC)
@@ -280,9 +344,7 @@ export function agentEventsRoutes(container: Container) {
       const liveCount = entries.filter((e) => e.status === 'running').length;
       const historyCount = total - liveCount;
 
-      // Pagination
-      const offset = request.query.offset ? parseInt(request.query.offset, 10) : 0;
-      const limit = request.query.limit ? parseInt(request.query.limit, 10) : 100;
+      // Pagination — limit/offset are pre-validated and clamped (limit ≤ 500).
       entries = entries.slice(offset, offset + limit);
 
       return { entries, total, liveCount, historyCount, typeCounts };
