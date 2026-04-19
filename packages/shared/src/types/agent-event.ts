@@ -42,6 +42,66 @@ export interface AgentEvent {
   readonly createdAt: string;
 }
 
+/** One member of an aggregated panel run */
+export interface PanelMemberSummary {
+  readonly executionId: string;
+  readonly personaId: string;
+  readonly displayName: string;
+  readonly initials: string;
+  /**
+   * 'pending' means the member has not started yet (used for the orchestrator
+   * bubble that we surface before its execution record exists). Otherwise
+   * mirrors AgentExecution['status'].
+   */
+  readonly status: 'pending' | 'running' | 'completed' | 'failed' | 'interrupted';
+  readonly isOrchestrator: boolean;
+}
+
+/** Enriched execution entry for the Execution Log view */
+export interface ExecutionLogEntry extends AgentExecution {
+  readonly type: 'agent' | 'panel' | 'skill';
+  readonly executorName: string;
+  readonly ticketTitle: string | null;
+  readonly ticketSlug: string | null;
+  readonly ticketPriority: string | null;
+  readonly ticketType: string | null;
+  readonly commentCount: number;
+  readonly deliverableCount: number;
+  /** Only set for skill executions: the agent that hosted the skill run. */
+  readonly runByName?: string;
+  /** Only set for aggregated panel runs (type === 'panel' with multiple members). */
+  readonly panelDisplayName?: string;
+  readonly panelMembers?: PanelMemberSummary[];
+  readonly memberCount?: number;
+}
+
+/**
+ * Derive 1–2 letter initials from a display name. "Security Nerd" → "SN";
+ * "Builder" → "BU". Returns "?" for empty input.
+ */
+export function computeInitials(displayName: string): string {
+  const trimmed = displayName.trim();
+  if (!trimmed) return '?';
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (words[0]![0]! + words[1]![0]!).toUpperCase();
+  }
+  return trimmed.slice(0, 2).toUpperCase();
+}
+
+export interface ExecutionLogResponse {
+  readonly entries: ExecutionLogEntry[];
+  readonly total: number;
+  readonly liveCount: number;
+  readonly historyCount: number;
+  readonly typeCounts: {
+    readonly all: number;
+    readonly agent: number;
+    readonly panel: number;
+    readonly skill: number;
+  };
+}
+
 export type AgentEventWsMessageType =
   | 'agent_event:delta'
   | 'agent_event:batch'

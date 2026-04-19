@@ -4,6 +4,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUnreadStore } from '../../stores/unreadStore';
+import { useAgentEventStore } from '../../stores/agentEventStore';
 import { cn } from '../../lib/cn';
 
 function FleexLogo({ collapsed }: { collapsed: boolean }) {
@@ -37,6 +38,8 @@ export function NavSidebar() {
   const tickets = useTicketStore((s) => s.tickets);
   const activeTicketCount = tickets.filter((t) => t.status === 'doing' || t.status === 'reviewing').length;
   const totalUnread = useUnreadStore((s) => s.totalUnread);
+  const streamingExecutionIds = useAgentEventStore((s) => s.streamingExecutionIds);
+  const liveExecutionCount = Object.keys(streamingExecutionIds).length;
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
@@ -171,6 +174,20 @@ export function NavSidebar() {
           collapsed={navCollapsed}
 
           onClick={() => navigate('/scratchpads')}
+        />
+
+        {/* Execution Log */}
+        <NavItem
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="5,3 19,12 5,21" fill={activePanel === 'execution-log' ? 'currentColor' : 'none'} />
+            </svg>
+          }
+          label="Execution Log"
+          active={activePanel === 'execution-log'}
+          collapsed={navCollapsed}
+          badge={liveExecutionCount > 0 ? (liveExecutionCount > 9 ? '9+' : String(liveExecutionCount)) : undefined}
+          onClick={() => navigate('/execution-log')}
         />
 
         {/* Cluster - hidden for now */}

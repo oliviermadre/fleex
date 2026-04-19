@@ -18,7 +18,7 @@ import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics';
+type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log';
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
@@ -142,6 +142,11 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   }
   if (pathname === '/tickets') {
     return { ...base, panel: 'tickets' };
+  }
+
+  // Execution Log
+  if (pathname === '/execution-log') {
+    return { ...base, panel: 'execution-log' };
   }
 
   // Claude Config
@@ -311,6 +316,8 @@ export function storeToUrl(
       }
       return { pathname: '/agents', search: '' };
     }
+    case 'execution-log':
+      return { pathname: '/execution-log', search: '' };
     case 'cluster':
       return { pathname: '/cluster', search: '' };
     case 'scratchpads': {

@@ -48,7 +48,7 @@ export function AppLayout() {
   }, [loadSettings, fetchRepositories]);
 
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
-  const hideContentPanel = activePanel === 'dashboard' || activePanel === 'cluster' || activePanel === 'tickets';
+  const hideContentPanel = activePanel === 'dashboard' || activePanel === 'cluster' || activePanel === 'tickets' || activePanel === 'execution-log';
   const effectiveContentWidth = hideContentPanel
     ? 0
     : contentPanelCollapsed
