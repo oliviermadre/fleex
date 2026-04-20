@@ -68,7 +68,7 @@ export function ticketRoutes(container: Container) {
 
     // ── Tickets ──
 
-    app.get<{ Querystring: { boardId?: string; status?: TicketStatus; tag?: string } }>(
+    app.get<{ Querystring: { boardId?: string; status?: TicketStatus; tag?: string; epicId?: string } }>(
       '/api/tickets',
       async (request) => {
         let tickets: TicketEntity[];
@@ -84,6 +84,11 @@ export function ticketRoutes(container: Container) {
         if (request.query.tag) {
           const tag = request.query.tag;
           tickets = tickets.filter((t) => t.tags.includes(tag));
+        }
+        if (request.query.epicId) {
+          const memberships = await container.ticketGroupStore.getMembershipsByGroup(request.query.epicId);
+          const epicTicketIds = new Set(memberships.map((m) => m.ticketId));
+          tickets = tickets.filter((t) => epicTicketIds.has(t.id));
         }
         return tickets.map((t) => t.toDTO());
       },

@@ -1036,12 +1036,13 @@ cmd_ticket() {
 }
 
 _ticket_list() {
-  local board_id="" status="" tag=""
+  local board_id="" status="" tag="" epic_id=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --board)  board_id="${2:?Missing value for --board}"; shift 2 ;;
       --status) status="${2:?Missing value for --status}"; shift 2 ;;
       --tag)    tag="${2:?Missing value for --tag}"; shift 2 ;;
+      --epic)   epic_id="${2:?Missing value for --epic}"; shift 2 ;;
       *) die "Unknown option: $1" ;;
     esac
   done
@@ -1052,6 +1053,7 @@ _ticket_list() {
   if [[ -n "$board_id" ]]; then url="$url${sep}boardId=$board_id"; sep="&"; fi
   if [[ -n "$board_id" && -n "$status" ]]; then url="$url${sep}status=$status"; sep="&"; fi
   if [[ -n "$tag" ]]; then url="$url${sep}tag=$tag"; sep="&"; fi
+  if [[ -n "$epic_id" ]]; then url="$url${sep}epicId=$epic_id"; sep="&"; fi
 
   local tickets; tickets="$(_api_get "$url")"
 
@@ -1543,13 +1545,197 @@ _ticket_comments() {
   done
 }
 
+# ── Epic commands ──────────────────────────────────────────────────────────────
+
+cmd_epic() {
+  _check_jq
+  local subcmd="${1:-list}"
+  shift 2>/dev/null || true
+
+  case "$subcmd" in
+    list|ls)       _epic_list "$@" ;;
+    show|view)     _epic_show "$@" ;;
+    help|--help|-h) _epic_help ;;
+    *)
+      err "Unknown epic command: $subcmd"
+      _epic_help
+      exit 1
+      ;;
+  esac
+}
+
+_epic_list() {
+  local board_id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --board)  board_id="${2:?Missing value for --board}"; shift 2 ;;
+      *) die "Unknown option: $1" ;;
+    esac
+  done
+
+  local base; base="$(_api_base)"
+  local url="$base/api/epics"
+  [[ -n "$board_id" ]] && url="$url?boardId=$board_id"
+
+  local epics; epics="$(_api_get "$url")"
+  local count; count="$(echo "$epics" | jq 'length')"
+
+  if [[ "$count" -eq 0 ]]; then
+    info "No epics found."
+    return
+  fi
+
+  # Sort by timeframe (now → next → later → null), then name
+  epics="$(echo "$epics" | jq '
+    def tf_order: if . == "now" then 0 elif . == "next" then 1 elif . == "later" then 2 else 3 end;
+    sort_by((.timeframe // "zzz") | tf_order, .name)
+  ')"
+
+  echo ""
+  printf "  ${BOLD}%-10s %-11s %-11s %-6s %s${NC}\n" "ID" "Status" "Timeframe" "Emoji" "Name"
+  printf "  %-10s %-11s %-11s %-6s %s\n" "──────────" "───────────" "───────────" "──────" "─────────────────────────────"
+
+  echo "$epics" | jq -r '.[] | "\(.id | .[0:8])\t\(.groupStatus // "active")\t\(.timeframe // "-")\t\(.emoji // "-")\t\(.name)"' | \
+  while IFS=$'\t' read -r short_id gstatus timeframe emoji name; do
+    local color=""
+    case "$gstatus" in
+      active)   color="$GREEN" ;;
+      archived) color="$DIM" ;;
+      done)     color="$GREEN" ;;
+      *)        ;;
+    esac
+    printf "  %-10s %s%-11s%s %-11s %-6s %s\n" "$short_id" "$color" "$gstatus" "$NC" "$timeframe" "$emoji" "$name"
+  done
+  echo ""
+  info "$count epic(s)"
+}
+
+_epic_show() {
+  local epic_id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      *)
+        if [[ -z "$epic_id" ]]; then
+          epic_id="$1"; shift
+        else
+          die "Unknown option: $1"
+        fi
+        ;;
+    esac
+  done
+
+  [[ -n "$epic_id" ]] || die "Usage: fleex epic show <id>"
+
+  local base; base="$(_api_base)"
+
+  # Resolve short ID (8 chars prefix) to full UUID
+  local resolved_id="$epic_id"
+  if [[ ${#epic_id} -lt 36 ]]; then
+    local all_epics; all_epics="$(_api_get "$base/api/epics")"
+    resolved_id="$(echo "$all_epics" | jq -r --arg prefix "$epic_id" '[.[] | select(.id | startswith($prefix))] | .[0].id // empty')"
+    [[ -n "$resolved_id" ]] || die "Epic not found: $epic_id"
+  fi
+
+  local epic; epic="$(_api_get "$base/api/epics/$resolved_id")"
+
+  local name gstatus timeframe color emoji description created updated uuid blocked favorite
+  name="$(echo "$epic" | jq -r '.name')"
+  gstatus="$(echo "$epic" | jq -r '.groupStatus // "active"')"
+  timeframe="$(echo "$epic" | jq -r '.timeframe // "-"')"
+  color="$(echo "$epic" | jq -r '.color // "-"')"
+  emoji="$(echo "$epic" | jq -r '.emoji // ""')"
+  description="$(echo "$epic" | jq -r '.description // ""')"
+  created="$(echo "$epic" | jq -r '.createdAt // "-"')"
+  updated="$(echo "$epic" | jq -r '.updatedAt // "-"')"
+  uuid="$(echo "$epic" | jq -r '.id')"
+  blocked="$(echo "$epic" | jq -r '.blocked // false')"
+  favorite="$(echo "$epic" | jq -r '.favorite // false')"
+
+  # Fetch board names
+  local board_ids; board_ids="$(echo "$epic" | jq -r '(.boardIds // []) | join(",")')"
+  local boards_display="-"
+  if [[ -n "$board_ids" && "$board_ids" != "" ]]; then
+    local all_boards; all_boards="$(_api_get "$base/api/boards")"
+    boards_display="$(echo "$epic" | jq -r --argjson boards "$all_boards" '
+      [.boardIds[] as $bid | ($boards | map(select(.id == $bid)) | .[0]) | "\(.id | .[0:8]) (\(.name // "Unknown"))"] | join(", ")
+    ')"
+  fi
+
+  local display_emoji=""
+  [[ -n "$emoji" && "$emoji" != "null" && "$emoji" != "" ]] && display_emoji="$emoji "
+
+  echo ""
+  printf "  ${BOLD}Epic %s%s${NC}\n" "$display_emoji" "$name"
+  printf "  %s\n" "─────────────────────────────────────────────────────────"
+  printf "  ${BOLD}Status:${NC}       %s\n" "$gstatus"
+  printf "  ${BOLD}Timeframe:${NC}    %s\n" "$timeframe"
+  printf "  ${BOLD}Color:${NC}        %s\n" "$color"
+  printf "  ${BOLD}Boards:${NC}       %s\n" "$boards_display"
+  printf "  ${BOLD}Blocked:${NC}      %s\n" "$blocked"
+  printf "  ${BOLD}Favorite:${NC}     %s\n" "$favorite"
+  printf "  ${BOLD}Created:${NC}      %s\n" "$created"
+  printf "  ${BOLD}Updated:${NC}      %s\n" "$updated"
+  printf "  ${BOLD}UUID:${NC}         ${DIM}%s${NC}\n" "$uuid"
+
+  if [[ -n "$description" && "$description" != "null" && "$description" != "" ]]; then
+    echo ""
+    printf "  ${BOLD}Description:${NC}\n"
+    echo "$description" | while IFS= read -r line; do
+      printf "    %s\n" "$line"
+    done
+  fi
+
+  # Fetch and display tickets
+  local tickets; tickets="$(_api_get "$base/api/epics/$resolved_id/tickets")"
+  local ticket_count; ticket_count="$(echo "$tickets" | jq 'length')"
+
+  echo ""
+  printf "  ${BOLD}Tickets (%s):${NC}\n" "$ticket_count"
+
+  if [[ "$ticket_count" -gt 0 ]]; then
+    echo "$tickets" | jq -r 'sort_by(.displayId) | .[] | "\(.displayId)\t\(.status)\t\(.priority)\t\(.title)"' | \
+    while IFS=$'\t' read -r did status_val prio title; do
+      local padded_status; printf -v padded_status "%-11s" "$status_val"
+      local scolor; scolor="$(_status_color_code "$status_val")"
+      printf "    #%-5s %s%s%s %-8s %s\n" "$did" "$scolor" "$padded_status" "$NC" "$prio" "$title"
+    done
+  else
+    printf "    ${DIM}No tickets${NC}\n"
+  fi
+  echo ""
+}
+
+_epic_help() {
+  cat <<EOF
+
+  ${BOLD}${CYAN}fleex epic${NC} — Manage epics from the CLI
+
+  ${BOLD}${YELLOW}Commands:${NC}
+    ${CYAN}list${NC} [--board ID]        List epics
+    ${CYAN}show${NC} <id>                Show epic details + tickets
+
+  ${BOLD}${YELLOW}Aliases:${NC}
+    ls=list, view=show
+
+  ${BOLD}${YELLOW}Epic ID:${NC}
+    Use the first 8 characters of the UUID or the full UUID.
+
+  ${BOLD}${YELLOW}Examples:${NC}
+    ${GREEN}fleex epic list${NC}                          All epics
+    ${GREEN}fleex epic list --board <uuid>${NC}           Epics for a board
+    ${GREEN}fleex epic show abc12345${NC}                 Show epic details
+    ${GREEN}fleex ticket list --epic abc12345${NC}        Tickets in an epic
+
+EOF
+}
+
 _ticket_help() {
   cat <<EOF
 
   ${BOLD}${CYAN}fleex ticket${NC} — Manage tickets from the CLI
 
   ${BOLD}${YELLOW}Commands:${NC}
-    ${CYAN}list${NC} [--board ID] [--status S] [--tag T]     List tickets
+    ${CYAN}list${NC} [--board ID] [--status S] [--tag T] [--epic ID]  List tickets
     ${CYAN}show${NC} <id> [--board ID] [--full]               Show ticket details
                                                      ${DIM}--with-comments   include comments${NC}
                                                      ${DIM}--with-deliverables include deliverables${NC}
@@ -1614,6 +1800,7 @@ cmd_help() {
     ${CYAN}status${NC}        Show status of all instances
     ${CYAN}logs${NC} [svc]    Tail logs (all services, or a specific one)
     ${CYAN}ticket${NC} <cmd>   Manage tickets (list, show, create, update, move, ...)
+    ${CYAN}epic${NC} <cmd>     Manage epics (list, show)
     ${CYAN}doctor${NC}        Check system health and prerequisites
     ${CYAN}self-update${NC}   Pull latest code and update CLI
     ${CYAN}help${NC}          Show this help message
@@ -1668,6 +1855,7 @@ main() {
     status)      cmd_status "$@" ;;
     logs)        cmd_logs "$@" ;;
     ticket|t)    cmd_ticket "$@" ;;
+    epic|e)      cmd_epic "$@" ;;
     doctor)      cmd_doctor "$@" ;;
     self-update) cmd_self_update "$@" ;;
     help|--help|-h) cmd_help ;;

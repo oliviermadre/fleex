@@ -16,7 +16,7 @@ export function ticketGroupRoutes(container: Container) {
 
     // ── Ticket Groups (Epics) ──
 
-    app.get('/api/ticket-groups', async (request) => {
+    app.get('/api/epics', async (request) => {
       const { boardId } = request.query as { boardId?: string };
       if (boardId) {
         const groups = await container.ticketGroupStore.getTicketGroupsByBoard(boardId);
@@ -26,13 +26,13 @@ export function ticketGroupRoutes(container: Container) {
       return groups.map((g) => g.toDTO());
     });
 
-    app.get<{ Params: { id: string } }>('/api/ticket-groups/:id', async (request) => {
+    app.get<{ Params: { id: string } }>('/api/epics/:id', async (request) => {
       const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       return group.toDTO();
     });
 
-    app.post<{ Body: CreateTicketGroupRequest }>('/api/ticket-groups', async (request, reply) => {
+    app.post<{ Body: CreateTicketGroupRequest }>('/api/epics', async (request, reply) => {
       const boardIds = request.body.boardIds ?? (request.body.boardId ? [request.body.boardId] : []);
       const group = TicketGroupEntity.create({
         id: randomUUID(),
@@ -49,7 +49,7 @@ export function ticketGroupRoutes(container: Container) {
       return reply.code(201).send(group.toDTO());
     });
 
-    app.patch<{ Params: { id: string }; Body: UpdateTicketGroupRequest }>('/api/ticket-groups/:id', async (request) => {
+    app.patch<{ Params: { id: string }; Body: UpdateTicketGroupRequest }>('/api/epics/:id', async (request) => {
       const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       group.update(request.body);
@@ -59,7 +59,7 @@ export function ticketGroupRoutes(container: Container) {
       return group.toDTO();
     });
 
-    app.post<{ Params: { id: string } }>('/api/ticket-groups/:id/archive', async (request) => {
+    app.post<{ Params: { id: string } }>('/api/epics/:id/archive', async (request) => {
       const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       group.archive();
@@ -69,7 +69,7 @@ export function ticketGroupRoutes(container: Container) {
       return group.toDTO();
     });
 
-    app.post<{ Params: { id: string } }>('/api/ticket-groups/:id/unarchive', async (request) => {
+    app.post<{ Params: { id: string } }>('/api/epics/:id/unarchive', async (request) => {
       const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       group.unarchive();
@@ -79,7 +79,7 @@ export function ticketGroupRoutes(container: Container) {
       return group.toDTO();
     });
 
-    app.delete<{ Params: { id: string } }>('/api/ticket-groups/:id', async (request, reply) => {
+    app.delete<{ Params: { id: string } }>('/api/epics/:id', async (request, reply) => {
       const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       await container.ticketGroupStore.removeTicketGroup(group.id);
@@ -90,13 +90,13 @@ export function ticketGroupRoutes(container: Container) {
 
     // ── Board Associations (Epic ↔ Board) ──
 
-    app.get<{ Params: { id: string } }>('/api/ticket-groups/:id/boards', async (request) => {
+    app.get<{ Params: { id: string } }>('/api/epics/:id/boards', async (request) => {
       const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       return group.boardIds;
     });
 
-    app.post<{ Params: { id: string; boardId: string } }>('/api/ticket-groups/:id/boards/:boardId', async (request, reply) => {
+    app.post<{ Params: { id: string; boardId: string } }>('/api/epics/:id/boards/:boardId', async (request, reply) => {
       const { id: groupId, boardId } = request.params;
       const group = await container.ticketGroupStore.getTicketGroupById(groupId);
       if (!group) throw new TicketGroupNotFoundError(groupId);
@@ -109,7 +109,7 @@ export function ticketGroupRoutes(container: Container) {
       return reply.code(201).send({ groupId, boardId });
     });
 
-    app.delete<{ Params: { id: string; boardId: string } }>('/api/ticket-groups/:id/boards/:boardId', async (request, reply) => {
+    app.delete<{ Params: { id: string; boardId: string } }>('/api/epics/:id/boards/:boardId', async (request, reply) => {
       const { id: groupId, boardId } = request.params;
       const group = await container.ticketGroupStore.getTicketGroupById(groupId);
       if (!group) throw new TicketGroupNotFoundError(groupId);
@@ -142,7 +142,7 @@ export function ticketGroupRoutes(container: Container) {
 
     // ── Memberships (Ticket ↔ Epic) ──
 
-    app.get<{ Params: { id: string } }>('/api/ticket-groups/:id/tickets', async (request) => {
+    app.get<{ Params: { id: string } }>('/api/epics/:id/tickets', async (request) => {
       const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
       if (!group) throw new TicketGroupNotFoundError(request.params.id);
       const memberships = await container.ticketGroupStore.getMembershipsByGroup(request.params.id);
@@ -152,7 +152,7 @@ export function ticketGroupRoutes(container: Container) {
       return tickets.filter(Boolean).map((t) => t!.toDTO());
     });
 
-    app.post<{ Params: { id: string; ticketId: string } }>('/api/ticket-groups/:id/tickets/:ticketId', async (request, reply) => {
+    app.post<{ Params: { id: string; ticketId: string } }>('/api/epics/:id/tickets/:ticketId', async (request, reply) => {
       const { id: groupId, ticketId } = request.params;
       await container.ticketGroupStore.addMembership(ticketId, groupId);
       emit({ type: 'ticketGroup.memberAdded', groupId, ticketId, occurredAt: new Date() });
@@ -173,7 +173,7 @@ export function ticketGroupRoutes(container: Container) {
       return reply.code(201).send({ ticketId, groupId });
     });
 
-    app.delete<{ Params: { id: string; ticketId: string } }>('/api/ticket-groups/:id/tickets/:ticketId', async (request, reply) => {
+    app.delete<{ Params: { id: string; ticketId: string } }>('/api/epics/:id/tickets/:ticketId', async (request, reply) => {
       const { id: groupId, ticketId } = request.params;
       await container.ticketGroupStore.removeMembership(ticketId, groupId);
       emit({ type: 'ticketGroup.memberRemoved', groupId, ticketId, occurredAt: new Date() });
@@ -183,7 +183,7 @@ export function ticketGroupRoutes(container: Container) {
 
     // ── Get groups for a ticket ──
 
-    app.get<{ Params: { ticketId: string } }>('/api/tickets/:ticketId/groups', async (request) => {
+    app.get<{ Params: { ticketId: string } }>('/api/tickets/:ticketId/epics', async (request) => {
       const memberships = await container.ticketGroupStore.getMembershipsByTicket(request.params.ticketId);
       const groups = await Promise.all(
         memberships.map((m) => container.ticketGroupStore.getTicketGroupById(m.groupId)),

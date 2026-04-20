@@ -728,61 +728,61 @@ export async function uploadFile(file: File): Promise<UploadedFile> {
 
 export async function fetchTicketGroups(boardId?: string): Promise<TicketGroup[]> {
   const q = boardId ? `?boardId=${encodeURIComponent(boardId)}` : '';
-  return request<TicketGroup[]>(`/ticket-groups${q}`);
+  return request<TicketGroup[]>(`/epics${q}`);
 }
 
 export async function fetchTicketGroup(id: string): Promise<TicketGroup> {
-  return request<TicketGroup>(`/ticket-groups/${encodeURIComponent(id)}`);
+  return request<TicketGroup>(`/epics/${encodeURIComponent(id)}`);
 }
 
 export async function createTicketGroup(req: CreateTicketGroupRequest): Promise<TicketGroup> {
-  return request<TicketGroup>('/ticket-groups', {
+  return request<TicketGroup>('/epics', {
     method: 'POST',
     body: JSON.stringify(req),
   });
 }
 
 export async function updateTicketGroup(id: string, req: UpdateTicketGroupRequest): Promise<TicketGroup> {
-  return request<TicketGroup>(`/ticket-groups/${encodeURIComponent(id)}`, {
+  return request<TicketGroup>(`/epics/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(req),
   });
 }
 
 export async function deleteTicketGroup(id: string): Promise<void> {
-  return request<void>(`/ticket-groups/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return request<void>(`/epics/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function archiveTicketGroup(id: string): Promise<TicketGroup> {
-  return request<TicketGroup>(`/ticket-groups/${encodeURIComponent(id)}/archive`, { method: 'POST' });
+  return request<TicketGroup>(`/epics/${encodeURIComponent(id)}/archive`, { method: 'POST' });
 }
 
 export async function unarchiveTicketGroup(id: string): Promise<TicketGroup> {
-  return request<TicketGroup>(`/ticket-groups/${encodeURIComponent(id)}/unarchive`, { method: 'POST' });
+  return request<TicketGroup>(`/epics/${encodeURIComponent(id)}/unarchive`, { method: 'POST' });
 }
 
 export async function fetchTicketGroupTickets(groupId: string): Promise<Ticket[]> {
-  return request<Ticket[]>(`/ticket-groups/${encodeURIComponent(groupId)}/tickets`);
+  return request<Ticket[]>(`/epics/${encodeURIComponent(groupId)}/tickets`);
 }
 
 export async function addTicketToGroup(groupId: string, ticketId: string): Promise<void> {
-  await request(`/ticket-groups/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, { method: 'POST' });
+  await request(`/epics/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, { method: 'POST' });
 }
 
 export async function removeTicketFromGroup(groupId: string, ticketId: string): Promise<void> {
-  await request(`/ticket-groups/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, { method: 'DELETE' });
+  await request(`/epics/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, { method: 'DELETE' });
 }
 
 export async function addBoardToTicketGroup(groupId: string, boardId: string): Promise<void> {
-  await request(`/ticket-groups/${encodeURIComponent(groupId)}/boards/${encodeURIComponent(boardId)}`, { method: 'POST' });
+  await request(`/epics/${encodeURIComponent(groupId)}/boards/${encodeURIComponent(boardId)}`, { method: 'POST' });
 }
 
 export async function removeBoardFromTicketGroup(groupId: string, boardId: string): Promise<void> {
-  await request(`/ticket-groups/${encodeURIComponent(groupId)}/boards/${encodeURIComponent(boardId)}`, { method: 'DELETE' });
+  await request(`/epics/${encodeURIComponent(groupId)}/boards/${encodeURIComponent(boardId)}`, { method: 'DELETE' });
 }
 
 export async function fetchTicketGroups4Ticket(ticketId: string): Promise<TicketGroup[]> {
-  return request<TicketGroup[]>(`/tickets/${encodeURIComponent(ticketId)}/groups`);
+  return request<TicketGroup[]>(`/tickets/${encodeURIComponent(ticketId)}/epics`);
 }
 
 // ── Ticket Relationships ──
