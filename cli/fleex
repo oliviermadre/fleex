@@ -1588,7 +1588,7 @@ _epic_list() {
   # Sort by timeframe (now → next → later → null), then name
   epics="$(echo "$epics" | jq '
     def tf_order: if . == "now" then 0 elif . == "next" then 1 elif . == "later" then 2 else 3 end;
-    sort_by((.timeframe // "zzz") | tf_order, .name)
+    sort_by([(.timeframe // "zzz" | tf_order), .name])
   ')"
 
   echo ""
