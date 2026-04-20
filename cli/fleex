@@ -1693,11 +1693,11 @@ _epic_show() {
   printf "  ${BOLD}Tickets (%s):${NC}\n" "$ticket_count"
 
   if [[ "$ticket_count" -gt 0 ]]; then
-    echo "$tickets" | jq -r 'sort_by(.displayId) | .[] | "\(.displayId)\t\(.status)\t\(.priority)\t\(.title)"' | \
-    while IFS=$'\t' read -r did status_val prio title; do
+    echo "$tickets" | jq -r 'sort_by(.displayId) | .[] | "\(.displayId)\t\(.status)\t\(.priority)\t\(.type // "-")\t\(.title)"' | \
+    while IFS=$'\t' read -r did status_val prio ttype title; do
       local padded_status; printf -v padded_status "%-11s" "$status_val"
       local scolor; scolor="$(_status_color_code "$status_val")"
-      printf "    #%-5s %s%s%s %-8s %s\n" "$did" "$scolor" "$padded_status" "$NC" "$prio" "$title"
+      printf "    #%-5s %s%s%s %-8s %-8s %s\n" "$did" "$scolor" "$padded_status" "$NC" "$prio" "$ttype" "$title"
     done
   else
     printf "    ${DIM}No tickets${NC}\n"
