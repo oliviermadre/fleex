@@ -31,7 +31,8 @@ export function ImageLightbox({ src, alt, open, onClose }: ImageLightboxProps) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+      data-overlay-top
+      className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center"
       onClick={onClose}
     >
       <div

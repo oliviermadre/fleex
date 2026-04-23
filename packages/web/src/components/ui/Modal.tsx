@@ -19,12 +19,13 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         onClose();
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [open, onClose]);
 
   if (!open) return null;
@@ -32,6 +33,7 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
   return createPortal(
     <div
       ref={backdropRef}
+      data-overlay-top
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === backdropRef.current) onClose();
