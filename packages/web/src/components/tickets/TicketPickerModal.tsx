@@ -20,7 +20,7 @@ export function TicketPickerModal({ open, onClose, deliverable, sourceTicketId }
   const [copying, setCopying] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Load open tickets
   const loadTickets = useCallback(async (q: string) => {
