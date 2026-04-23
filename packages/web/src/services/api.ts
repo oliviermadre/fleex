@@ -432,6 +432,16 @@ export async function fetchTicketDeliverables(ticketId: string): Promise<import(
   return request<import('@fleex/shared').TicketDeliverable[]>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
 }
 
+export async function createDeliverable(
+  ticketId: string,
+  payload: { title: string; type: string; content: string; status?: 'draft' | 'final'; agentName?: string },
+): Promise<import('@fleex/shared').TicketDeliverable> {
+  return request<import('@fleex/shared').TicketDeliverable>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function deleteDeliverable(ticketId: string, deliverableId: string): Promise<void> {
   await request<void>(`/tickets/${encodeURIComponent(ticketId)}/deliverables/${encodeURIComponent(deliverableId)}`, { method: 'DELETE' });
 }

@@ -4,6 +4,8 @@ import { appWs } from '../../services/websocket';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { DeliverableReadingOverlay } from './DeliverableReadingOverlay';
+import { DeliverableFormModal } from './DeliverableFormModal';
+import { TicketPickerModal } from './TicketPickerModal';
 import * as api from '../../services/api';
 
 function relativeTime(dateStr: string): string {
@@ -36,6 +38,8 @@ function typeIcon(type: string): string {
 
 export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [copyTarget, setCopyTarget] = useState<TicketDeliverable | null>(null);
   const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
   const floatingDeliverableIds = useUIStore((s) => s.floatingDeliverableIds);
   const bringDeliverableToFront = useUIStore((s) => s.bringDeliverableToFront);
@@ -103,13 +107,22 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
 
   if (deliverables.length === 0) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
-        <div className="mb-2 text-2xl opacity-30">&#x1F4E6;</div>
-        <p className="text-sm text-[var(--theme-text-muted)]">No deliverables yet</p>
-        <p className="mt-1 text-xs text-[var(--theme-text-faint)]">
-          Agents produce deliverables as they work on this ticket
-        </p>
-      </div>
+      <>
+        <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+          <div className="mb-2 text-2xl opacity-30">&#x1F4E6;</div>
+          <p className="text-sm text-[var(--theme-text-muted)]">No deliverables yet</p>
+          <p className="mt-1 text-xs text-[var(--theme-text-faint)]">
+            Agents produce deliverables as they work on this ticket
+          </p>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="mt-3 rounded-md border border-dashed border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
+          >
+            + Add deliverable
+          </button>
+        </div>
+        <DeliverableFormModal open={showCreateModal} onClose={() => setShowCreateModal(false)} ticketId={ticketId} />
+      </>
     );
   }
 
@@ -120,6 +133,16 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto">
+      {/* Add deliverable button */}
+      <div className="mb-2 flex justify-end">
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="rounded-md border border-dashed border-[var(--theme-border)] px-2.5 py-1 text-[11px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
+        >
+          + Add deliverable
+        </button>
+      </div>
+
       <div className="flex flex-col gap-2">
         {sorted.map((d) => {
           const contentIsUrl = isUrl(d.content);
@@ -197,6 +220,21 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                   )}
                 </button>
 
+                {/* Copy to button — visible on hover */}
+                <button
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded opacity-0 transition-all hover:bg-[var(--theme-accent)]/15 hover:text-[var(--theme-accent)] group-hover/deliv:opacity-100 text-[var(--theme-text-faint)]"
+                  title="Copy to another ticket"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCopyTarget(d);
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                  </svg>
+                </button>
+
                 {/* Delete button — visible on hover */}
                 <button
                   className="mr-2 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded opacity-0 transition-all hover:bg-red-500/15 hover:text-red-400 group-hover/deliv:opacity-100 text-[var(--theme-text-faint)]"
@@ -220,7 +258,16 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
         })}
       </div>
 
-      <DeliverableReadingOverlay />
+      <DeliverableReadingOverlay ticketId={ticketId} />
+      <DeliverableFormModal open={showCreateModal} onClose={() => setShowCreateModal(false)} ticketId={ticketId} />
+      {copyTarget && (
+        <TicketPickerModal
+          open={!!copyTarget}
+          onClose={() => setCopyTarget(null)}
+          deliverable={copyTarget}
+          sourceTicketId={ticketId}
+        />
+      )}
     </div>
   );
 }

@@ -1,7 +1,8 @@
-import { useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { TicketPickerModal } from './TicketPickerModal';
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -29,10 +30,11 @@ function typeIcon(type: string): string {
 
 const noopToggle = () => {};
 
-export function DeliverableReadingOverlay() {
+export function DeliverableReadingOverlay({ ticketId }: { ticketId: string }) {
   const deliverable = useUIStore((s) => s.deliverableOverlay);
   const close = useUIStore((s) => s.closeDeliverableOverlay);
   const addFloatingDeliverable = useUIStore((s) => s.addFloatingDeliverable);
+  const [showCopyPicker, setShowCopyPicker] = useState(false);
 
   const handleEsc = useCallback(
     (e: KeyboardEvent) => {
@@ -83,6 +85,18 @@ export function DeliverableReadingOverlay() {
           )}
 
           <div className="flex-1" />
+
+          {/* Copy to button */}
+          <button
+            onClick={() => setShowCopyPicker(true)}
+            className="flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1 text-[11px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-white/20 hover:bg-white/[0.06] hover:text-[var(--theme-text-primary)]"
+          >
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+            </svg>
+            Copy to…
+          </button>
 
           {/* Detach button */}
           <button
@@ -135,6 +149,14 @@ export function DeliverableReadingOverlay() {
           <span className="opacity-50">Press ESC to close</span>
         </div>
       </div>
+      {showCopyPicker && deliverable && (
+        <TicketPickerModal
+          open={showCopyPicker}
+          onClose={() => setShowCopyPicker(false)}
+          deliverable={deliverable}
+          sourceTicketId={ticketId}
+        />
+      )}
     </div>,
     document.body,
   );

@@ -821,6 +821,36 @@ export function ticketRoutes(container: Container) {
       return deliverables.map((d) => d.toDTO());
     });
 
+    // Create a deliverable from the web UI (no agent auth needed)
+    app.post<{
+      Params: { id: string };
+      Body: { title: string; type: string; content: string; status?: 'draft' | 'final'; agentName?: string };
+    }>('/api/tickets/:id/deliverables', async (request, reply) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const agentName = request.body.agentName ?? 'user';
+      const deliverable = await container.submitDeliverable.execute({
+        ticketId: request.params.id,
+        agentName,
+        type: request.body.type,
+        title: request.body.title,
+        content: request.body.content,
+        status: request.body.status,
+      });
+
+      container.eventBus.emit({
+        type: 'deliverable.created',
+        deliverableId: deliverable.id,
+        ticketId: request.params.id,
+        agentName,
+        status: deliverable.status,
+        occurredAt: new Date(),
+      });
+
+      return reply.code(201).send(deliverable.toDTO());
+    });
+
     app.delete<{
       Params: { id: string; delivId: string };
     }>('/api/tickets/:id/deliverables/:delivId', async (request, reply) => {
