@@ -111,6 +111,7 @@ export function TicketPickerModal({ open, onClose, deliverable, sourceTicketId }
   return createPortal(
     <div
       ref={backdropRef}
+      data-overlay-top
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === backdropRef.current) onClose();

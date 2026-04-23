@@ -39,7 +39,10 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId: string }) {
   const handleEsc = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // Don't close if a child modal (lightbox or copy picker) is open above us
+        if (document.querySelector('[data-overlay-top]')) return;
         e.stopPropagation();
+        e.stopImmediatePropagation();
         close();
       }
     },
