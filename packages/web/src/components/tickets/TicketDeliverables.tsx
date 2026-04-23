@@ -116,7 +116,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
           </p>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="mt-3 rounded-md border border-dashed border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
+            className="mt-3 rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
           >
             + Add deliverable
           </button>
@@ -137,7 +137,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
       <div className="mb-2 flex justify-end">
         <button
           onClick={() => setShowCreateModal(true)}
-          className="rounded-md border border-dashed border-[var(--theme-border)] px-2.5 py-1 text-[11px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
+          className="rounded-md border border-[var(--theme-border)] px-2.5 py-1 text-[11px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
         >
           + Add deliverable
         </button>
