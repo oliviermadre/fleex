@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect } from 'react';
+import { useMemo, useCallback, useEffect, useState } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
@@ -67,25 +67,33 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
   // Worktree availability
   const isUnavailable = worktree?.worktreeStatus === 'repo_missing' || worktree?.worktreeStatus === 'unavailable';
 
-  // New tab handler
+  // Activating a brand-new tab is two-step: session enters the store asynchronously
+  // via zustand, while setActiveTab is a React setState. Calling setActiveTab with a
+  // manually-built descriptor before the session propagates to `allTabs` races the
+  // auto-select effect in useTabEngine, which then resets the activation and falls
+  // back to the ticket tab. We defer activation until the tab actually appears.
+  const [pendingActiveKey, setPendingActiveKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingActiveKey) return;
+    const found = allTabs.find((t) => t.key === pendingActiveKey);
+    if (found) {
+      engine.setActiveTab(found);
+      setPendingActiveKey(null);
+    }
+  }, [pendingActiveKey, allTabs, engine]);
+
   const handleNewTab = useCallback(async () => {
     const cwd = worktree?.path || basePath || '~';
     try {
       const session = await api.createSession({ cwd, type: 'shell' });
       addSessionToGroup(session);
       api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
-      // Select the new tab
-      engine.setActiveTab({
-        key: `s:${session.id}`,
-        kind: 'shell',
-        label: session.displayName || session.tmuxName || session.id.slice(0, 8),
-        capabilities: { closable: true, renamable: true, orderable: true },
-        meta: { sessionId: session.id, displayStatus: 'idle' },
-      });
+      setPendingActiveKey(`s:${session.id}`);
     } catch {
       // silently fail
     }
-  }, [worktree, basePath, addSessionToGroup, setSessionGroups, engine]);
+  }, [worktree, basePath, addSessionToGroup, setSessionGroups]);
 
   // Listen for ⌘N "new tab" event
   useEffect(() => {
