@@ -216,8 +216,14 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   }, []);
 
   const handleCreateSession = useCallback(async () => {
+    // An explicit parent handler wins over the ticketId-based floating fallback:
+    // the tab bar of UnifiedWorktreePanel passes both props and wants a new tab,
+    // not a floating popup.
+    if (externalOnCreateSession) {
+      externalOnCreateSession();
+      return;
+    }
     if (ticketId) {
-      // Internalized: call backend directly, then open floating session
       setInternalCreating(true);
       try {
         const { sessionId } = await openSessionFromTicket(ticketId);
@@ -234,8 +240,6 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
       } catch {
         setInternalCreating(false);
       }
-    } else if (externalOnCreateSession) {
-      externalOnCreateSession();
     }
   }, [ticketId, openSessionFromTicket, addFloatingSession, externalOnCreateSession]);
 
