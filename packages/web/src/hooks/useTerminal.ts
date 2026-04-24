@@ -49,8 +49,7 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
       }
     });
 
-    // Cmd+C / Ctrl+Shift+C: copy tmux selection via virtual User0 key,
-    // then Cmd+V / Ctrl+Shift+V: exit copy-mode before pasting
+    // Cmd+C / Ctrl+Shift+C: copy tmux selection via virtual User0 key
     if (instance) {
       instance.terminal.attachCustomKeyEventHandler((ev) => {
         if (ev.type !== 'keydown') return true;
@@ -65,13 +64,6 @@ export function useTerminal(sessionId: string | null, containerRef: React.RefObj
             appWs.sendInput(sessionId, '\x1b[99~');
             return false;
           }
-          return true;
-        }
-
-        if (ev.key === 'v' && (isMac || isLinux)) {
-          // Send Escape to exit tmux copy-mode (no-op if not in copy-mode)
-          appWs.sendInput(sessionId, '\x1b');
-          // Return true to let xterm.js handle the paste natively
           return true;
         }
 
