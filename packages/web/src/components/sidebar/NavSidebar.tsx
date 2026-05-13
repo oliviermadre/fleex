@@ -190,6 +190,23 @@ export function NavSidebar() {
           onClick={() => navigate('/execution-log')}
         />
 
+        {/* Documents */}
+        <NavItem
+          icon={
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+              stroke="currentColor" strokeWidth="1.5"
+              strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="5" width="14" height="12" rx="1.5" />
+              <path d="M6 2h8" />
+              <path d="M7 9h6M7 12h4" />
+            </svg>
+          }
+          label="Documents"
+          active={activePanel === 'documents'}
+          collapsed={navCollapsed}
+          onClick={() => navigate('/documents')}
+        />
+
         {/* Cluster - hidden for now */}
       </div>
 

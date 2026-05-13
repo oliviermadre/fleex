@@ -30,11 +30,12 @@ function typeIcon(type: string): string {
 
 const noopToggle = () => {};
 
-export function DeliverableReadingOverlay({ ticketId }: { ticketId: string }) {
+export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
   const deliverable = useUIStore((s) => s.deliverableOverlay);
   const close = useUIStore((s) => s.closeDeliverableOverlay);
   const addFloatingDeliverable = useUIStore((s) => s.addFloatingDeliverable);
   const [showCopyPicker, setShowCopyPicker] = useState(false);
+  const resolvedTicketId = ticketId ?? deliverable?.ticketId ?? '';
 
   const handleEsc = useCallback(
     (e: KeyboardEvent) => {
@@ -156,7 +157,7 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId: string }) {
           open={showCopyPicker}
           onClose={() => setShowCopyPicker(false)}
           deliverable={deliverable}
-          sourceTicketId={ticketId}
+          sourceTicketId={resolvedTicketId}
         />
       )}
     </div>,
