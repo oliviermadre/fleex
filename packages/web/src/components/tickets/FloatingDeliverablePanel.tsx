@@ -221,7 +221,6 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
         {deliverable.type === 'html' ? (
           <iframe
             src={htmlBlobUrl}
-            sandbox="allow-scripts allow-same-origin"
             style={{
               flex: 1,
               minHeight: 0,
