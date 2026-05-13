@@ -126,7 +126,7 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId: string }) {
         {deliverable.type === 'html' ? (
           <iframe
             srcDoc={deliverable.content}
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-same-origin"
             className="flex-1"
             style={{
               width: '100%',
