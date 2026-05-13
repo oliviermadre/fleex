@@ -1,29 +1,48 @@
-import { useMemo, useEffect } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 
 /**
- * Converts an HTML string into a blob: URL for use as iframe `src`.
+ * Writes HTML content directly into an iframe via document.write().
  *
- * Why blob: instead of srcDoc?
- * With srcDoc the document lives at about:srcdoc. Even with sandbox
- * "allow-scripts allow-same-origin", Chromium/Electron can break the
- * scope chain for inline event handlers (onclick, oninput, etc.) —
- * <script> blocks execute but inline handlers throw ReferenceError.
+ * This bypasses srcDoc, blob: URLs, and sandbox entirely.
+ * The iframe has no src — its document is same-origin with the parent.
+ * document.write() injects content directly, so scripts execute in the
+ * iframe's global scope and inline handlers (onclick, etc.) resolve
+ * through the normal scope chain.
  *
- * A blob: URL inherits the creator's origin, giving the iframe a real
- * origin and a normal global scope. Inline handlers work as expected.
+ * Previous approaches that all failed in Chromium/Electron:
+ * - srcDoc + allow-scripts → null origin, broken scope
+ * - srcDoc + allow-scripts allow-same-origin → still broken
+ * - blob: URL + sandbox → still broken
+ * - blob: URL without sandbox → still broken
  */
-export function useBlobUrl(html: string | undefined): string | undefined {
-  const blobUrl = useMemo(() => {
-    if (!html) return undefined;
-    const blob = new Blob([html], { type: 'text/html' });
-    return URL.createObjectURL(blob);
+export function useHtmlIframe(html: string | undefined) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const writtenRef = useRef<string | undefined>(undefined);
+
+  const writeToIframe = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || !html) return;
+
+    // Avoid re-writing the same content
+    if (writtenRef.current === html) return;
+    writtenRef.current = html;
+
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+
+    doc.open();
+    doc.write(html);
+    doc.close();
   }, [html]);
 
   useEffect(() => {
-    return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
-  }, [blobUrl]);
+    writeToIframe();
+  }, [writeToIframe]);
 
-  return blobUrl;
+  // Also write on iframe load (handles initial mount timing)
+  const onLoad = useCallback(() => {
+    writeToIframe();
+  }, [writeToIframe]);
+
+  return { iframeRef, onLoad };
 }
