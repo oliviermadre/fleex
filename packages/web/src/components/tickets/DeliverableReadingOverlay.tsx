@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { TicketPickerModal } from './TicketPickerModal';
+import { useBlobUrl } from '../../lib/useBlobUrl';
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -35,6 +36,7 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId: string }) {
   const close = useUIStore((s) => s.closeDeliverableOverlay);
   const addFloatingDeliverable = useUIStore((s) => s.addFloatingDeliverable);
   const [showCopyPicker, setShowCopyPicker] = useState(false);
+  const htmlBlobUrl = useBlobUrl(deliverable?.type === 'html' ? deliverable.content : undefined);
 
   const handleEsc = useCallback(
     (e: KeyboardEvent) => {
@@ -125,7 +127,7 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId: string }) {
         {/* Content */}
         {deliverable.type === 'html' ? (
           <iframe
-            srcDoc={deliverable.content}
+            src={htmlBlobUrl}
             sandbox="allow-scripts allow-same-origin"
             className="flex-1"
             style={{
