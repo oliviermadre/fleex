@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { TicketPickerModal } from './TicketPickerModal';
-import { useHtmlIframe } from '../../lib/useBlobUrl';
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -36,9 +35,6 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId: string }) {
   const close = useUIStore((s) => s.closeDeliverableOverlay);
   const addFloatingDeliverable = useUIStore((s) => s.addFloatingDeliverable);
   const [showCopyPicker, setShowCopyPicker] = useState(false);
-  const { iframeRef: htmlIframeRef, onLoad: htmlIframeOnLoad } = useHtmlIframe(
-    deliverable?.type === 'html' ? deliverable.content : undefined,
-  );
 
   const handleEsc = useCallback(
     (e: KeyboardEvent) => {
@@ -129,8 +125,7 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId: string }) {
         {/* Content */}
         {deliverable.type === 'html' ? (
           <iframe
-            ref={htmlIframeRef}
-            onLoad={htmlIframeOnLoad}
+            srcDoc={deliverable.content.replace(/<\\\/script\s*>/gi, '</script>')}
             className="flex-1"
             style={{
               width: '100%',
