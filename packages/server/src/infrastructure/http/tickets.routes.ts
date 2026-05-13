@@ -813,6 +813,28 @@ export function ticketRoutes(container: Container) {
 
     // ── Deliverables (web) ──
 
+    // List all deliverables globally (for Documents page)
+    app.get<{
+      Querystring: { type?: string; agent_name?: string; ticket_id?: string; status?: string };
+    }>('/api/deliverables', async (request) => {
+      let deliverables = await container.deliverableStore.getAll();
+
+      if (request.query.type) {
+        deliverables = deliverables.filter((d) => d.type === request.query.type);
+      }
+      if (request.query.agent_name) {
+        deliverables = deliverables.filter((d) => d.agentName === request.query.agent_name);
+      }
+      if (request.query.ticket_id) {
+        deliverables = deliverables.filter((d) => d.ticketId === request.query.ticket_id);
+      }
+      if (request.query.status) {
+        deliverables = deliverables.filter((d) => d.status === request.query.status);
+      }
+
+      return deliverables.map((d) => d.toDTO());
+    });
+
     app.get<{ Params: { id: string } }>('/api/tickets/:id/deliverables', async (request) => {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
