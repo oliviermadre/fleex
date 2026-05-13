@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import type { TicketDeliverable } from '@fleex/shared';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
-import { useHtmlIframe } from '../../lib/useBlobUrl';
 
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 250;
@@ -54,9 +53,6 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
   isFocused?: boolean;
 }) {
   const isHtml = deliverable.type === 'html';
-  const { iframeRef: htmlIframeRef, onLoad: htmlIframeOnLoad } = useHtmlIframe(
-    isHtml ? deliverable.content : undefined,
-  );
   const { size, effectivePos, setPosition, handleResizeMouseDown } = useFloatingResize({
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
@@ -222,8 +218,7 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
         {/* Content */}
         {deliverable.type === 'html' ? (
           <iframe
-            ref={htmlIframeRef}
-            onLoad={htmlIframeOnLoad}
+            srcDoc={deliverable.content.replace(/<\\\/script\s*>/gi, '</script>')}
             style={{
               flex: 1,
               minHeight: 0,
