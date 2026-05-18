@@ -933,9 +933,16 @@ cmd_doctor() {
 
   # gh
   if command -v gh >/dev/null 2>&1; then
-    printf "  ${GREEN}✓${NC} gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')\n"
+    local gh_ver
+    gh_ver="$(gh --version 2>/dev/null | head -1 | awk '{print $3}')"
+    if gh auth status >/dev/null 2>&1; then
+      printf "  ${GREEN}✓${NC} gh $gh_ver — authenticated\n"
+    else
+      printf "  ${YELLOW}⚠${NC} gh $gh_ver — not authenticated. Run: ${BOLD}gh auth login${NC}\n"
+      all_ok=false
+    fi
   else
-    printf "  ${YELLOW}○${NC} gh not found (optional)\n"
+    printf "  ${DIM}○${NC} gh not found (optional)\n"
   fi
 
   # Repo
