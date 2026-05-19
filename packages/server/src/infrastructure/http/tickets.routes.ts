@@ -15,6 +15,65 @@ import type { Container } from '../container.js';
 export function ticketRoutes(container: Container) {
   const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
 
+  // ── Epic enrichment helpers (used by /api/tickets and /api/tickets/:id) ──
+
+  type EpicRef = {
+    id: string;
+    name: string;
+    emoji: string;
+    color: string;
+    timeframe: string;
+    groupStatus: string;
+  };
+
+  const toEpicRef = (g: { id: string; name: string; emoji: string; color: string; timeframe: string; groupStatus: string }): EpicRef => ({
+    id: g.id,
+    name: g.name,
+    emoji: g.emoji,
+    color: g.color,
+    timeframe: g.timeframe,
+    groupStatus: g.groupStatus,
+  });
+
+  // Build a Map<ticketId, EpicRef[]> for a set of tickets.
+  // When `boardId` is set, only groups linked to that board are scanned (fast path).
+  // Otherwise all groups are scanned (needed when listing across boards).
+  async function loadEpicsByTicketIds(ticketIds: string[], opts: { boardId?: string } = {}): Promise<Map<string, EpicRef[]>> {
+    const map = new Map<string, EpicRef[]>();
+    if (ticketIds.length === 0) return map;
+    const groups = opts.boardId
+      ? await container.ticketGroupStore.getTicketGroupsByBoard(opts.boardId)
+      : await container.ticketGroupStore.getAllTicketGroups();
+    if (groups.length === 0) return map;
+    const wanted = new Set(ticketIds);
+    const memberships = await Promise.all(
+      groups.map((g) => container.ticketGroupStore.getMembershipsByGroup(g.id)),
+    );
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+      const groupMemberships = memberships[i];
+      if (!group || !groupMemberships) continue;
+      const ref = toEpicRef(group);
+      for (const m of groupMemberships) {
+        if (!wanted.has(m.ticketId)) continue;
+        const arr = map.get(m.ticketId);
+        if (arr) arr.push(ref); else map.set(m.ticketId, [ref]);
+      }
+    }
+    return map;
+  }
+
+  async function loadEpicsForTicket(ticketId: string): Promise<EpicRef[]> {
+    const memberships = await container.ticketGroupStore.getMembershipsByTicket(ticketId);
+    if (memberships.length === 0) return [];
+    const groups = await Promise.all(
+      memberships.map((m) => container.ticketGroupStore.getTicketGroupById(m.groupId)),
+    );
+    return groups
+      .filter((g): g is NonNullable<typeof g> => g != null)
+      .map(toEpicRef);
+  }
+
   return async function (app: FastifyInstance) {
 
     // ── Boards ──
@@ -68,7 +127,7 @@ export function ticketRoutes(container: Container) {
 
     // ── Tickets ──
 
-    app.get<{ Querystring: { boardId?: string; status?: TicketStatus; tag?: string } }>(
+    app.get<{ Querystring: { boardId?: string; status?: TicketStatus; tag?: string; epicId?: string } }>(
       '/api/tickets',
       async (request) => {
         let tickets: TicketEntity[];
@@ -85,7 +144,16 @@ export function ticketRoutes(container: Container) {
           const tag = request.query.tag;
           tickets = tickets.filter((t) => t.tags.includes(tag));
         }
-        return tickets.map((t) => t.toDTO());
+        if (request.query.epicId) {
+          const memberships = await container.ticketGroupStore.getMembershipsByGroup(request.query.epicId);
+          const epicTicketIds = new Set(memberships.map((m) => m.ticketId));
+          tickets = tickets.filter((t) => epicTicketIds.has(t.id));
+        }
+        const epicsByTicket = await loadEpicsByTicketIds(
+          tickets.map((t) => t.id),
+          { boardId: request.query.boardId },
+        );
+        return tickets.map((t) => ({ ...t.toDTO(), epics: epicsByTicket.get(t.id) ?? [] }));
       },
     );
 
@@ -104,9 +172,19 @@ export function ticketRoutes(container: Container) {
     );
 
     app.get<{ Params: { id: string } }>('/api/tickets/:id', async (request) => {
-      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      // Accept UUID or displayId (#161, 161). DisplayIds are globally unique.
+      const raw = request.params.id.replace(/^#/, '');
+      let ticket: TicketEntity | null;
+      if (/^\d+$/.test(raw)) {
+        const did = Number.parseInt(raw, 10);
+        const all = await container.ticketStore.getAllTickets();
+        ticket = all.find((t) => t.displayId === did) ?? null;
+      } else {
+        ticket = await container.ticketStore.getTicketById(raw);
+      }
       if (!ticket) throw new TicketNotFoundError(request.params.id);
-      return ticket.toDTO();
+      const epics = await loadEpicsForTicket(ticket.id);
+      return { ...ticket.toDTO(), epics };
     });
 
     app.post<{ Body: CreateTicketRequest }>('/api/tickets', async (request, reply) => {
