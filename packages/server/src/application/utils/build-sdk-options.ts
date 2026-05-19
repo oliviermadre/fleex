@@ -12,9 +12,11 @@ export function buildSdkOptions(
   effectiveMode: MentionExecutionMode,
   ctx: SdkOptionsContext,
 ): Record<string, unknown> {
+  const cliPath = process.env['CLAUDE_CLI_PATH'];
   const base: Record<string, unknown> = {
     model: ctx.model,
     systemPrompt: ctx.systemPrompt,
+    ...(cliPath ? { pathToClaudeCodeExecutable: cliPath } : {}),
   };
 
   if (ctx.outputFormat) base.outputFormat = ctx.outputFormat;

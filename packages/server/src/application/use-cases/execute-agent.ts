@@ -681,7 +681,26 @@ export class ExecuteAgentUseCase {
         return;
       }
 
-      // 11. Parse structured output — prefer SDK-validated output, fall back to text parser
+      // 11a. Detect SDK subprocess crash: zero messages yielded
+      if (!sdkSessionId && resultText === '' && !structuredOutput) {
+        this.logger.error('SDK query loop yielded no messages — subprocess likely crashed', {
+          executionId,
+          persona: persona.name,
+          model: persona.model,
+          worktreePath,
+        });
+        await emitEvent('error', {
+          error: 'Agent SDK produced no output (subprocess likely crashed at startup). Check ~/.fleex/.logs/main/server.log for EPIPE / spawn errors.',
+        });
+        await this.agentEventStore.completeExecution(executionId, 'failed');
+        this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
+        mention.resetToPending();
+        await this.mentionStore.save(mention);
+        this.onExecutionComplete?.(persona.id, 'failed', mention.id);
+        return;
+      }
+
+      // 11b. Parse structured output — prefer SDK-validated output, fall back to text parser
       const structured = structuredOutput ?? parseAgentOutput(resultText);
 
       await emitEvent('execution_end', {

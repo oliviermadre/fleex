@@ -46,6 +46,18 @@ import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 async function main() {
   const container = await createContainer();
 
+  process.on('uncaughtException', (err) => {
+    if ((err as NodeJS.ErrnoException).code === 'EPIPE') {
+      container.logger.error('Uncaught EPIPE — likely SDK subprocess crash', {
+        message: err.message,
+        syscall: (err as NodeJS.ErrnoException).syscall,
+      });
+      return;
+    }
+    container.logger.error('Uncaught exception', { error: err.message, stack: err.stack });
+    throw err;
+  });
+
   // Discover existing fleex_ tmux sessions
   await container.discoverSessions.execute();
 
