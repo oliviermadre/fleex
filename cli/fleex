@@ -1,0 +1,10 @@
+#!/usr/bin/env bun
+// Stable entrypoint for the fleex CLI.
+//
+// Historically a 1900-line bash script. Now a 2-line TS shim that imports the
+// actual implementation living in packages/cli. This file's PATH is the only
+// thing the install/upgrade contract depends on:
+//   ~/.fleex/bin/fleex -> <repo>/cli/fleex
+// Keeping this file at this path means upgrades from any prior install just
+// work: the symlink target never moves, only the content of this file does.
+import '../packages/cli/index.ts';

@@ -547,8 +547,8 @@ phase_install() {
 
     ui_step 3 3 "Updating CLI symlink..."
     mkdir -p "$BIN_DIR"
-    chmod +x "$REPO_DIR/packages/cli/index.ts"
-    ln -sf "$REPO_DIR/packages/cli/index.ts" "$BIN_DIR/$CLI_NAME"
+    chmod +x "$REPO_DIR/cli/$CLI_NAME"
+    ln -sf "$REPO_DIR/cli/$CLI_NAME" "$BIN_DIR/$CLI_NAME"
     ok "CLI updated"
 
     setup_path
@@ -569,8 +569,8 @@ phase_install() {
 
     ui_step 3 3 "Setting up CLI..."
     mkdir -p "$BIN_DIR"
-    chmod +x "$REPO_DIR/packages/cli/index.ts"
-    ln -sf "$REPO_DIR/packages/cli/index.ts" "$BIN_DIR/$CLI_NAME"
+    chmod +x "$REPO_DIR/cli/$CLI_NAME"
+    ln -sf "$REPO_DIR/cli/$CLI_NAME" "$BIN_DIR/$CLI_NAME"
     ok "CLI symlinked to $BIN_DIR/$CLI_NAME"
 
     setup_path

@@ -77,22 +77,28 @@ const def: CommandDef = {
       else warn(`Migration failed — check ${installLog}`);
     }
 
-    // Ensure the bin symlink points to the new TS entrypoint
+    // Ensure cli/fleex (the stable entrypoint) is executable and the bin
+    // symlink points at it. This path is unchanged from the original bash
+    // install, so upgrades from any prior version converge here.
     const binDst = path.join(FLEEX_HOME, 'bin/fleex');
-    const newSrc = path.join(updateDir, 'packages/cli/index.ts');
-    const oldSrc = path.join(updateDir, 'cli/fleex');
-    if (fs.existsSync(newSrc)) {
-      try { fs.chmodSync(newSrc, 0o755); } catch { /* ignore */ }
+    const entrySrc = path.join(updateDir, 'cli/fleex');
+    if (fs.existsSync(entrySrc)) {
+      try { fs.chmodSync(entrySrc, 0o755); } catch { /* ignore */ }
+      try { fs.mkdirSync(path.dirname(binDst), { recursive: true }); } catch { /* ignore */ }
+      // Repoint the symlink only if it's missing or pointing somewhere else.
+      let needsRelink = true;
       try {
-        fs.mkdirSync(path.dirname(binDst), { recursive: true });
-        if (fs.existsSync(binDst) || fs.lstatSync(binDst).isSymbolicLink()) {
-          fs.unlinkSync(binDst);
-        }
-      } catch { /* ignore */ }
-      try { fs.symlinkSync(newSrc, binDst); } catch { /* ignore */ }
-    } else if (fs.existsSync(oldSrc)) {
-      // Legacy fallback: still on bash CLI
-      try { fs.chmodSync(oldSrc, 0o755); } catch { /* ignore */ }
+        const current = fs.readlinkSync(binDst);
+        if (path.resolve(path.dirname(binDst), current) === entrySrc) needsRelink = false;
+      } catch { /* missing or not a symlink */ }
+      if (needsRelink) {
+        try {
+          if (fs.existsSync(binDst) || fs.lstatSync(binDst).isSymbolicLink()) {
+            fs.unlinkSync(binDst);
+          }
+        } catch { /* ignore */ }
+        try { fs.symlinkSync(entrySrc, binDst); } catch { /* ignore */ }
+      }
     }
 
     process.stdout.write('\n');
