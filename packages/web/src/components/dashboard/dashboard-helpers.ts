@@ -1,61 +1,27 @@
-import type { Session, Ticket, TicketLink, DashboardPullRequest, DashboardWorktree } from '@fleex/shared';
+import type { Session, SessionGroup, DashboardPullRequest, DashboardWorktree } from '@fleex/shared';
 
 /**
- * Find all running sessions associated with a ticket via session or worktree links.
- * Pattern from KanbanBoard.tsx:26-58
+ * Running sessions for a ticket, via the backend's authoritative worktree
+ * grouping (WorktreeSessionGroup.ticketId). Use this instead of matching
+ * against ticket.links — links can be missing or stale, the backend grouping
+ * is the source of truth and is what UnifiedWorktreePanel consumes.
  */
-export function findSessionsForTicket(
-  ticket: Ticket,
-  sessions: Session[],
+export function findSessionsForTicketId(
+  ticketId: string,
+  sessionGroups: SessionGroup[],
 ): Session[] {
-  const matched: Session[] = [];
-
-  // Check session links
-  for (const link of ticket.links) {
-    if (link.type === 'session') {
-      const session = sessions.find((s) => s.id === link.ref && s.status === 'running');
-      if (session) matched.push(session);
-    }
-  }
-
-  // Check worktree link → match sessions by org/name + branch or absolute path
-  const wtLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
-  if (wtLink) {
-    const ref = wtLink.ref;
-
-    if (ref.startsWith('/')) {
-      // Absolute path: match sessions by cwd
-      for (const s of sessions) {
-        if (
-          s.status === 'running' &&
-          s.cwd === ref &&
-          !matched.some((m) => m.id === s.id)
-        ) {
-          matched.push(s);
-        }
-      }
-    } else {
-      const colonIdx = ref.indexOf(':');
-      if (colonIdx > 0) {
-        const repoKey = ref.substring(0, colonIdx);
-        const branch = ref.substring(colonIdx + 1);
-        const [org, name] = repoKey.split('/');
-        for (const s of sessions) {
-          if (
-            s.status === 'running' &&
-            s.repositoryOrg === org &&
-            s.repositoryName === name &&
-            s.worktreeBranch === branch &&
-            !matched.some((m) => m.id === s.id)
-          ) {
-            matched.push(s);
-          }
+  const out: Session[] = [];
+  for (const group of sessionGroups) {
+    for (const wt of group.worktrees) {
+      if (wt.ticketId !== ticketId && wt.agentWorktree?.ticketId !== ticketId) continue;
+      for (const s of wt.sessions) {
+        if (s.status === 'running' && !out.some((x) => x.id === s.id)) {
+          out.push(s);
         }
       }
     }
   }
-
-  return matched;
+  return out;
 }
 
 /**

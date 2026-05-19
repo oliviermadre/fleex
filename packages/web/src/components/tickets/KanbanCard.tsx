@@ -4,7 +4,7 @@ import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { TypePickerPopover } from './TypePickerPopover';
 import { DueDateBadge } from './DueDateBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
-import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
+import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUnreadStore } from '../../stores/unreadStore';
@@ -60,7 +60,7 @@ export function KanbanCard({
   const setTicketTab = useTicketStore((s) => s.setTicketTab);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const archiveTicket = useTicketStore((s) => s.archiveTicket);
-  const sessions = useSessionStore((s) => s.sessions);
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const unread = useUnreadStore((s) => s.getUnread(ticket.id));
   const groups = useTicketGroupStore((s) => s.groups);
   const ticketGroupIds = useTicketGroupStore((s) => s.ticketGroupIds);
@@ -77,8 +77,8 @@ export function KanbanCard({
   const issueLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_issue');
   const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
   const ticketSessions = useMemo(
-    () => findSessionsForTicket(ticket, sessions),
-    [ticket, sessions],
+    () => findSessionsForTicketId(ticket.id, sessionGroups),
+    [ticket.id, sessionGroups],
   );
 
   const timeInColumn = formatTimeAgo(ticket.statusChangedAt);

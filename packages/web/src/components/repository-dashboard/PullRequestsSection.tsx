@@ -7,7 +7,7 @@ import { DataTable, type Column } from '../ui/DataTable';
 import { DiffStatsBadge } from '../ui/DiffStatsBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { ImportTaskButton } from '../dashboard/ImportTaskButton';
-import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
+import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { cn } from '../../lib/cn';
 import { importGitHubPR, executeSkill } from '../../services/api';
 
@@ -40,7 +40,7 @@ function isStale(dateStr: string): boolean {
 export function PullRequestsSection({ org, name, pullRequests, diffStats, githubUser, loading }: Props) {
   const [filter, setFilter] = useState<TabFilter>('all');
   const [importingKey, setImportingKey] = useState<string | null>(null);
-  const sessions = useSessionStore((s) => s.sessions);
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const tickets = useTicketStore((s) => s.tickets);
   const boards = useTicketStore((s) => s.boards);
   const fetchDashboard = useRepositoryDashboardStore((s) => s.fetchDashboard);
@@ -148,7 +148,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
             </span>
           );
         }
-        const prSessions = findSessionsForTicket(ticket, sessions);
+        const prSessions = findSessionsForTicketId(ticket.id, sessionGroups);
         return (
           <span className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
             <SmartSessionButton
