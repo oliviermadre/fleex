@@ -917,7 +917,14 @@ cmd_doctor() {
 
   # claude
   if command -v claude >/dev/null 2>&1; then
-    printf "  ${GREEN}✓${NC} claude CLI installed\n"
+    local claude_ver
+    claude_ver="$(claude --version 2>/dev/null | awk '{print $1}')"
+    if claude auth status 2>/dev/null | grep -q '"loggedIn"[[:space:]]*:[[:space:]]*true'; then
+      printf "  ${GREEN}✓${NC} claude $claude_ver — authenticated\n"
+    else
+      printf "  ${YELLOW}⚠${NC} claude $claude_ver — not authenticated. Run: ${BOLD}claude auth login${NC}\n"
+      all_ok=false
+    fi
   else
     printf "  ${RED}✗${NC} claude CLI not found. Install: npm install -g @anthropic-ai/claude-code\n"
     all_ok=false
