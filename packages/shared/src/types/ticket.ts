@@ -50,7 +50,6 @@ export interface Board {
   readonly id: string;
   readonly name: string;
   readonly emoji: string;
-  readonly nextDisplayId: number;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

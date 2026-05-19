@@ -16,12 +16,15 @@ export interface TicketStorePort {
   getTicketsByBoard(boardId: string): Promise<TicketEntity[]>;
   getTicketsByStatus(boardId: string, status: TicketStatus): Promise<TicketEntity[]>;
   getTicketsLinkedTo(type: TicketLinkType, ref: string): Promise<TicketEntity[]>;
+  /**
+   * Insert a brand-new ticket and assign a globally-unique display_id.
+   * Mutates `ticket.displayId` in place with the DB-assigned value.
+   * Use `saveTicket` for updates of existing tickets.
+   */
+  createTicket(ticket: TicketEntity): Promise<void>;
   saveTicket(ticket: TicketEntity): Promise<void>;
   removeTicket(id: string): Promise<void>;
   removeTicketsByBoard(boardId: string): Promise<void>;
-
-  // Display ID
-  getNextDisplayId(boardId: string): Promise<number>;
 
   // Archive
   getArchivedTickets(boardId?: string, limit?: number, offset?: number): Promise<TicketEntity[]>;

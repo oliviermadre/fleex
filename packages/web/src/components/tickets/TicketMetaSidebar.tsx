@@ -570,6 +570,9 @@ function ExpandedTicketMetaSidebar({
         </div>
       )}
 
+      {/* Epics (scoped to the ticket's board) */}
+      <EpicPicker ticketId={ticket.id} boardId={ticket.boardId} />
+
       {/* Priority */}
       <div>
         <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
@@ -635,9 +638,6 @@ function ExpandedTicketMetaSidebar({
         onAddLink={(link) => addLink(ticket.id, link)}
         onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
       />
-
-      {/* Epics */}
-      <EpicPicker ticketId={ticket.id} />
 
       {/* Pull Requests */}
       <PRLinkPicker

@@ -12,7 +12,7 @@ import { TicketDeliverables } from './TicketDeliverables';
 import { TicketMentions } from './TicketMentions';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import * as api from '../../services/api';
-import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
+import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { useFileUpload } from '../../hooks/useFileUpload';
 
@@ -24,7 +24,7 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const mainTab = useTicketStore((s) => s.ticketTab);
   const setMainTab = useTicketStore((s) => s.setTicketTab);
-  const sessions = useSessionStore((s) => s.sessions);
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const ticket = tickets.find((t) => t.id === ticketId);
   const unread = useUnreadStore((s) => s.getUnread(ticketId));
 
@@ -183,8 +183,8 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
   );
 
   const ticketSessions = useMemo(
-    () => ticket ? findSessionsForTicket(ticket, sessions) : [],
-    [ticket, sessions],
+    () => ticket ? findSessionsForTicketId(ticket.id, sessionGroups) : [],
+    [ticket?.id, sessionGroups],
   );
 
   // Session creation is now handled by SmartSessionButton internally via ticketId

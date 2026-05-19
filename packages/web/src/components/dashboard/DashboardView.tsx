@@ -7,6 +7,7 @@ import type {
   TicketStatus,
   TicketPriority,
   Session,
+  SessionGroup,
   BoardWithCounts,
   DashboardData,
   DashboardPullRequest,
@@ -29,7 +30,7 @@ import { SmartSessionButton } from './SmartSessionButton';
 import { ImportTaskButton } from './ImportTaskButton';
 import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
 import { PriorityIndicator } from '../tickets/PriorityIndicator';
-import { findSessionsForTicket, findSessionsForPR, hasLocalWorktreeForPR } from './dashboard-helpers';
+import { findSessionsForTicketId, findSessionsForPR, hasLocalWorktreeForPR } from './dashboard-helpers';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -740,6 +741,7 @@ function GithubSection({
   kind,
   allTickets,
   sessions,
+  sessionGroups,
   worktrees,
   boards,
   allPullRequests,
@@ -757,6 +759,7 @@ function GithubSection({
   kind: 'issue' | 'pr';
   allTickets: Ticket[];
   sessions: Session[];
+  sessionGroups: SessionGroup[];
   worktrees: DashboardWorktree[];
   boards: BoardWithCounts[];
   allPullRequests: DashboardPullRequest[];
@@ -816,7 +819,7 @@ function GithubSection({
     const key = `${item.org}/${item.name}#${item.number}`;
 
     const itemSessions = ticket
-      ? findSessionsForTicket(ticket, sessions)
+      ? findSessionsForTicketId(ticket.id, sessionGroups)
       : isPR(item) ? findSessionsForPR(item, sessions) : [];
 
     return (
@@ -1043,6 +1046,7 @@ export function DashboardView() {
   // Live data from stores
   const humanDisplayName = useSettingsStore((s) => s.settings.humanDisplayName);
   const sessions = useSessionStore((s) => s.sessions);
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const storeTickets = useTicketStore((s) => s.tickets);
 
   // Unread & agent activity
@@ -1232,6 +1236,7 @@ export function DashboardView() {
                 rightItems={data.assignedIssues}
                 allTickets={allTickets}
                 sessions={sessions}
+                sessionGroups={sessionGroups}
                 worktrees={data.activeWorktrees}
                 boards={boards}
                 allPullRequests={allPullRequests}
@@ -1252,6 +1257,7 @@ export function DashboardView() {
                 rightItems={data.reviewRequests}
                 allTickets={allTickets}
                 sessions={sessions}
+                sessionGroups={sessionGroups}
                 worktrees={data.activeWorktrees}
                 boards={boards}
                 allPullRequests={allPullRequests}

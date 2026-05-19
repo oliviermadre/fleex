@@ -12,7 +12,6 @@ interface BoardRow {
   id: string;
   name: string;
   emoji: string;
-  next_display_id: number;
   created_at: string;
   updated_at: string;
 }
@@ -71,16 +70,15 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
   async saveBoard(board: BoardEntity): Promise<void> {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO boards
-        (id, name, emoji, next_display_id, created_at, updated_at)
+        (id, name, emoji, created_at, updated_at)
       VALUES
-        (@id, @name, @emoji, @next_display_id, @created_at, @updated_at)
+        (@id, @name, @emoji, @created_at, @updated_at)
     `);
 
     stmt.run({
       id: board.id,
       name: board.name,
       emoji: board.emoji,
-      next_display_id: board.nextDisplayId,
       created_at: board.createdAt.toISOString(),
       updated_at: board.updatedAt.toISOString(),
     });
@@ -90,15 +88,54 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     this.conn.db.prepare('DELETE FROM boards WHERE id = ?').run(id);
   }
 
-  async getNextDisplayId(boardId: string): Promise<number> {
-    const row = this.conn.db.prepare(
-      'UPDATE boards SET next_display_id = next_display_id + 1 WHERE id = ? RETURNING next_display_id'
-    ).get(boardId) as { next_display_id: number } | undefined;
-    if (!row) throw new Error(`Board not found: ${boardId}`);
-    return row.next_display_id - 1;
+  // ── Tickets ──
+
+  async createTicket(ticket: TicketEntity): Promise<void> {
+    // Atomic: MAX+1 sub-query is evaluated within the INSERT.
+    // Safe in this app: single process, WAL mode, UNIQUE index on display_id
+    // would surface any race as an error rather than producing a duplicate.
+    const stmt = this.conn.db.prepare(`
+      INSERT INTO tickets
+        (id, board_id, display_id, title, description, status, priority, type, position,
+         tags, links, blocked, favorite, due_date, assignee, agent_claimed_at,
+         github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at)
+      VALUES
+        (@id, @board_id,
+         (SELECT COALESCE(MAX(display_id), 0) + 1 FROM tickets),
+         @title, @description, @status, @priority, @type, @position,
+         @tags, @links, @blocked, @favorite, @due_date, @assignee, @agent_claimed_at,
+         @github_metadata, @archived_at, @first_doing_at, @status_changed_at, @created_at, @updated_at)
+      RETURNING display_id
+    `);
+
+    const row = stmt.get({
+      id: ticket.id,
+      board_id: ticket.boardId,
+      title: ticket.title,
+      description: ticket.description,
+      status: ticket.status,
+      priority: ticket.priority,
+      type: ticket.type,
+      position: ticket.position,
+      tags: JSON.stringify(ticket.tags),
+      links: JSON.stringify(ticket.links),
+      blocked: ticket.blocked ? 1 : 0,
+      favorite: ticket.favorite ? 1 : 0,
+      due_date: ticket.dueDate?.toISOString() ?? null,
+      assignee: ticket.assignee,
+      agent_claimed_at: ticket.agentClaimedAt?.toISOString() ?? null,
+      github_metadata: ticket.githubMetadata ? JSON.stringify(ticket.githubMetadata) : null,
+      archived_at: ticket.archivedAt?.toISOString() ?? null,
+      first_doing_at: ticket.firstDoingAt?.toISOString() ?? null,
+      status_changed_at: ticket.statusChangedAt.toISOString(),
+      created_at: ticket.createdAt.toISOString(),
+      updated_at: ticket.updatedAt.toISOString(),
+    }) as { display_id: number } | undefined;
+
+    if (!row) throw new Error('createTicket failed to return display_id');
+    ticket.displayId = row.display_id;
   }
 
-  // ── Tickets ──
 
   async getAllTickets(): Promise<TicketEntity[]> {
     const rows = this.conn.db.prepare('SELECT * FROM tickets WHERE archived_at IS NULL').all() as TicketRow[];
@@ -324,7 +361,6 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       row.id,
       row.name,
       row.emoji,
-      row.next_display_id ?? 1,
       new Date(row.created_at),
       new Date(row.updated_at),
     );

@@ -123,7 +123,6 @@ export function ticketRoutes(container: Container) {
         : 1;
 
       const ticketId = randomUUID();
-      const displayId = await container.ticketStore.getNextDisplayId(boardId);
       const ticketLinks = (links ?? []).map((l) => ({
         ...l,
         id: randomUUID(),
@@ -133,7 +132,7 @@ export function ticketRoutes(container: Container) {
       const ticket = TicketEntity.create({
         id: ticketId,
         boardId,
-        displayId,
+        displayId: 0, // assigned by createTicket() below
         title,
         description,
         status: targetStatus,
@@ -145,7 +144,7 @@ export function ticketRoutes(container: Container) {
         dueDate: dueDate ? new Date(dueDate) : null,
       });
 
-      await container.ticketStore.saveTicket(ticket);
+      await container.ticketStore.createTicket(ticket);
       await container.ticketStore.saveActivity(TicketActivityEntity.create({
         id: randomUUID(),
         ticketId,

@@ -6,7 +6,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { DataTable, type Column } from '../ui/DataTable';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { ImportTaskButton } from '../dashboard/ImportTaskButton';
-import { findSessionsForTicket } from '../dashboard/dashboard-helpers';
+import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { importGitHubIssue, executeSkill } from '../../services/api';
 
 interface Props {
@@ -29,7 +29,7 @@ function formatRelativeTime(dateStr: string): string {
 
 export function IssuesBanner({ org, name, issues, loading }: Props) {
   const [importingKey, setImportingKey] = useState<string | null>(null);
-  const sessions = useSessionStore((s) => s.sessions);
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const tickets = useTicketStore((s) => s.tickets);
   const boards = useTicketStore((s) => s.boards);
   const fetchDashboard = useRepositoryDashboardStore((s) => s.fetchDashboard);
@@ -106,7 +106,7 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
             </span>
           );
         }
-        const issueSessions = findSessionsForTicket(ticket, sessions);
+        const issueSessions = findSessionsForTicketId(ticket.id, sessionGroups);
         return (
           <span className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
             <SmartSessionButton
