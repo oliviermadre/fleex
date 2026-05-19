@@ -275,6 +275,27 @@ check_tool() {
   return 1
 }
 
+# Verify that gh is authenticated. Warning-only, never blocks.
+check_gh_auth() {
+  if gh auth status >/dev/null 2>&1; then
+    return 0
+  fi
+  warn "gh is installed but not authenticated"
+  warn "Run: gh auth login"
+  return 1
+}
+
+# Verify that claude is authenticated. Warning-only, never blocks.
+# `claude auth status` defaults to JSON output with a `loggedIn` field.
+check_claude_auth() {
+  if claude auth status 2>/dev/null | grep -q '"loggedIn"[[:space:]]*:[[:space:]]*true'; then
+    return 0
+  fi
+  warn "claude is installed but not authenticated"
+  warn "Run: claude auth login"
+  return 1
+}
+
 # Bash 3.x-compatible semver comparison: returns 0 if $1 >= $2
 version_gte() {
   local IFS=.
@@ -477,6 +498,8 @@ phase_prerequisites() {
       die "claude CLI is required to continue. Install: npm install -g @anthropic-ai/claude-code"
     fi
   fi
+  # Auth check — warning only, never blocks install
+  check_claude_auth || true
 
   # gh
   if ! check_tool "gh" "required" "GitHub CLI for repository operations" ""; then
@@ -488,6 +511,8 @@ phase_prerequisites() {
       die "gh CLI is required to continue. Install: https://github.com/cli/cli#installation"
     fi
   fi
+  # Auth check — warning only, never blocks install
+  check_gh_auth || true
 
   # python3 (optional)
   if ! check_tool "python3" "optional" "Dynamic port allocation (has fallback)" ""; then
