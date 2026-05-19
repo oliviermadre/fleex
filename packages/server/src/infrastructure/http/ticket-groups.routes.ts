@@ -142,6 +142,22 @@ export function ticketGroupRoutes(container: Container) {
 
     // ── Memberships (Ticket ↔ Epic) ──
 
+    // Bulk endpoint: returns all (ticketId, groupId) pairs, optionally scoped to a board.
+    // Used by the CLI to enrich ticket listings with epic info without N+1 calls.
+    app.get('/api/epics/memberships', async (request) => {
+      const { boardId } = request.query as { boardId?: string };
+      const groups = boardId
+        ? await container.ticketGroupStore.getTicketGroupsByBoard(boardId)
+        : await container.ticketGroupStore.getAllTicketGroups();
+      const lists = await Promise.all(
+        groups.map(async (g) => {
+          const memberships = await container.ticketGroupStore.getMembershipsByGroup(g.id);
+          return memberships.map((m) => ({ ticketId: m.ticketId, groupId: g.id }));
+        }),
+      );
+      return lists.flat();
+    });
+
     app.get<{ Params: { id: string } }>('/api/epics/:id/tickets', async (request) => {
       const group = await container.ticketGroupStore.getTicketGroupById(request.params.id);
       if (!group) throw new TicketGroupNotFoundError(request.params.id);

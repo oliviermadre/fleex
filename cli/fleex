@@ -1069,6 +1069,29 @@ _ticket_list() {
     return
   fi
 
+  # Fetch epics + memberships once, build ticketId -> "emoji name" map
+  local epics_url="$base/api/epics"
+  local memberships_url="$base/api/epics/memberships"
+  if [[ -n "$board_id" ]]; then
+    epics_url="$epics_url?boardId=$board_id"
+    memberships_url="$memberships_url?boardId=$board_id"
+  fi
+  local epics; epics="$(_api_get "$epics_url")"
+  local memberships; memberships="$(_api_get "$memberships_url")"
+
+  # Enrich each ticket with an "epicLabel": first epic as "<emoji> <name>" (or "-")
+  tickets="$(echo "$tickets" | jq \
+    --argjson epics "$epics" \
+    --argjson memberships "$memberships" '
+    ($memberships | group_by(.ticketId) | map({key: .[0].ticketId, value: [.[].groupId]}) | from_entries) as $mbyT |
+    ($epics | map({key: .id, value: ((.emoji // "") + (if .emoji then " " else "" end) + (.name // ""))}) | from_entries) as $ebyId |
+    [.[] | . as $t |
+      ($mbyT[$t.id] // []) as $gids |
+      ($gids | map($ebyId[.]) | map(select(. != null and . != ""))) as $labels |
+      . + {epicLabel: (if ($labels | length) == 0 then "-" else $labels[0] end)}
+    ]
+  ')"
+
   # When showing tickets across boards, add a Board column and sort by board then displayId
   local show_board=false
   if [[ -z "$board_id" ]]; then
@@ -1086,33 +1109,34 @@ _ticket_list() {
       ] | sort_by(.boardName, .displayId)
     ')"
 
-    printf "  ${BOLD}%-6s %-22s %-11s %-8s %-12s %s${NC}\n" "#" "Board" "Status" "Prio" "Assignee" "Title"
-    printf "  %-6s %-22s %-11s %-8s %-12s %s\n" "──────" "──────────────────────" "───────────" "────────" "────────────" "──────────────────────────────"
+    printf "  ${BOLD}%-6s %-22s %-11s %-8s %-12s %-18s %s${NC}\n" "#" "Board" "Status" "Prio" "Assignee" "Epic" "Title"
+    printf "  %-6s %-22s %-11s %-8s %-12s %-18s %s\n" "──────" "──────────────────────" "───────────" "────────" "────────────" "──────────────────" "──────────────────────────────"
 
-    echo "$tickets" | jq -r '.[] | "\(.displayId)\t\(.boardName)\t\(.status)\t\(.priority)\t\(.assignee // "-")\t\(.title)"' | \
-    while IFS=$'\t' read -r did board_name status_val prio assignee title; do
+    echo "$tickets" | jq -r '.[] | "\(.displayId)\t\(.boardName)\t\(.status)\t\(.priority)\t\(.assignee // "-")\t\(.epicLabel)\t\(.title)"' | \
+    while IFS=$'\t' read -r did board_name status_val prio assignee epic_label title; do
       local padded_status; printf -v padded_status "%-11s" "$status_val"
       local color; color="$(_status_color_code "$status_val")"
-      printf "  %-6s %-22s %s%s%s %-8s %-12s %s\n" "#$did" "$board_name" "$color" "$padded_status" "$NC" "$prio" "$assignee" "$title"
+      local short_epic="${epic_label:0:18}"
+      printf "  %-6s %-22s %s%s%s %-8s %-12s %-18s %s\n" "#$did" "$board_name" "$color" "$padded_status" "$NC" "$prio" "$assignee" "$short_epic" "$title"
     done
   else
     # Single board: sort by displayId, no board column
     tickets="$(echo "$tickets" | jq 'sort_by(.displayId)')"
 
-    printf "  ${BOLD}%-6s %-11s %-8s %-12s %s${NC}\n" "#" "Status" "Prio" "Assignee" "Title"
-    printf "  %-6s %-11s %-8s %-12s %s\n" "──────" "───────────" "────────" "────────────" "──────────────────────────────"
+    printf "  ${BOLD}%-6s %-11s %-8s %-12s %-18s %s${NC}\n" "#" "Status" "Prio" "Assignee" "Epic" "Title"
+    printf "  %-6s %-11s %-8s %-12s %-18s %s\n" "──────" "───────────" "────────" "────────────" "──────────────────" "──────────────────────────────"
 
-    echo "$tickets" | jq -r '.[] | "\(.displayId)\t\(.status)\t\(.priority)\t\(.assignee // "-")\t\(.title)"' | \
-    while IFS=$'\t' read -r did status_val prio assignee title; do
+    echo "$tickets" | jq -r '.[] | "\(.displayId)\t\(.status)\t\(.priority)\t\(.assignee // "-")\t\(.epicLabel)\t\(.title)"' | \
+    while IFS=$'\t' read -r did status_val prio assignee epic_label title; do
       local padded_status; printf -v padded_status "%-11s" "$status_val"
       local color; color="$(_status_color_code "$status_val")"
-      printf "  %-6s %s%s%s %-8s %-12s %s\n" "#$did" "$color" "$padded_status" "$NC" "$prio" "$assignee" "$title"
+      local short_epic="${epic_label:0:18}"
+      printf "  %-6s %s%s%s %-8s %-12s %-18s %s\n" "#$did" "$color" "$padded_status" "$NC" "$prio" "$assignee" "$short_epic" "$title"
     done
   fi
   echo ""
   info "$count ticket(s)"
 }
-
 _ticket_show() {
   local ticket_id="" board_id="" with_comments=false with_deliverables=false
   while [[ $# -gt 0 ]]; do
@@ -1136,6 +1160,7 @@ _ticket_show() {
   local uuid; uuid="$(_resolve_ticket_id "$ticket_id" "$board_id")"
   local base; base="$(_api_base)"
   local ticket; ticket="$(_api_get "$base/api/tickets/$uuid")"
+  local ticket_epics; ticket_epics="$(_api_get "$base/api/tickets/$uuid/epics")"
 
   local title status_val priority assignee tags did description created updated due_date blocked favorite
   title="$(echo "$ticket" | jq -r '.title')"
@@ -1151,6 +1176,13 @@ _ticket_show() {
   blocked="$(echo "$ticket" | jq -r '.blocked')"
   favorite="$(echo "$ticket" | jq -r '.favorite')"
 
+  local epic_label
+  epic_label="$(echo "$ticket_epics" | jq -r '
+    if length == 0 then "-"
+    else [.[] | (((.emoji // "") + (if .emoji then " " else "" end) + (.name // ""))) | select(. != "")] | join(", ")
+    end
+  ')"
+
   local colored_status; colored_status="$(_status_color "$status_val")"
 
   echo ""
@@ -1159,6 +1191,7 @@ _ticket_show() {
   printf "  ${BOLD}Title:${NC}       %s\n" "$title"
   printf "  ${BOLD}Assignee:${NC}    %s\n" "$assignee"
   printf "  ${BOLD}Tags:${NC}        %s\n" "$tags"
+  printf "  ${BOLD}Epic:${NC}        %s\n" "$epic_label"
   printf "  ${BOLD}Blocked:${NC}     %s\n" "$blocked"
   printf "  ${BOLD}Favorite:${NC}    %s\n" "$favorite"
   printf "  ${BOLD}Due:${NC}         %s\n" "$due_date"
@@ -1174,12 +1207,20 @@ _ticket_show() {
     done
   fi
 
-  # Show links if any
-  local links_count; links_count="$(echo "$ticket" | jq '(.links // []) | length')"
+  # Show PRs (github_pr links) in their own section
+  local prs_count; prs_count="$(echo "$ticket" | jq '[(.links // [])[] | select(.type == "github_pr")] | length')"
+  if [[ "$prs_count" -gt 0 ]]; then
+    echo ""
+    printf "  ${BOLD}Pull Requests:${NC}\n"
+    echo "$ticket" | jq -r '(.links // [])[] | select(.type == "github_pr") | "    \(.label) \(.url // "")"'
+  fi
+
+  # Show other links (non-github_pr)
+  local links_count; links_count="$(echo "$ticket" | jq '[(.links // [])[] | select(.type != "github_pr")] | length')"
   if [[ "$links_count" -gt 0 ]]; then
     echo ""
     printf "  ${BOLD}Links:${NC}\n"
-    echo "$ticket" | jq -r '(.links // [])[] | "    [\(.type)] \(.label) \(.url // .ref // "")"'
+    echo "$ticket" | jq -r '(.links // [])[] | select(.type != "github_pr") | "    [\(.type)] \(.label) \(.url // .ref // "")"'
   fi
 
   # Show comments if requested
