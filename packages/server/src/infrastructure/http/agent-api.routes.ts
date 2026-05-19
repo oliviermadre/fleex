@@ -61,11 +61,10 @@ export function agentApiRoutes(container: Container) {
           ? existing.reduce((min, t) => Math.min(min, t.position), Infinity)
           : 1;
 
-        const displayId = await container.ticketStore.getNextDisplayId(boardId);
         const ticket = TicketEntity.create({
           id: randomUUID(),
           boardId,
-          displayId,
+          displayId: 0, // assigned by createTicket() below
           title,
           description,
           status: targetStatus,
@@ -74,7 +73,7 @@ export function agentApiRoutes(container: Container) {
           tags,
         });
 
-        await container.ticketStore.saveTicket(ticket);
+        await container.ticketStore.createTicket(ticket);
         await container.ticketStore.saveActivity(TicketActivityEntity.create({
           id: randomUUID(),
           ticketId: ticket.id,

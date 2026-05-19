@@ -25,7 +25,6 @@ export class BackfillPRTicketUseCase {
     const { org, name, prNumber, prTitle, headRefName, prUrl, boardId, role } = params;
 
     const ticketId = randomUUID();
-    const displayId = await this.ticketStore.getNextDisplayId(boardId);
 
     const title = prTitle;
 
@@ -34,7 +33,7 @@ export class BackfillPRTicketUseCase {
     const ticket = TicketEntity.create({
       id: ticketId,
       boardId,
-      displayId,
+      displayId: 0, // assigned by createTicket() below
       title,
       status,
     });
@@ -66,7 +65,7 @@ export class BackfillPRTicketUseCase {
       randomUUID(),
     );
 
-    await this.ticketStore.saveTicket(ticket);
+    await this.ticketStore.createTicket(ticket);
     await this.ticketStore.saveActivity(TicketActivityEntity.create({
       id: randomUUID(),
       ticketId,

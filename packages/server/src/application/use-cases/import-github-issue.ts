@@ -42,11 +42,10 @@ export class ImportGitHubIssueUseCase {
     const description = sections.join('\n');
 
     const ticketId = randomUUID();
-    const displayId = await this.ticketStore.getNextDisplayId(boardId);
     const ticket = TicketEntity.create({
       id: ticketId,
       boardId,
-      displayId,
+      displayId: 0, // assigned by createTicket() below
       title: detail.title,
       description,
       status: 'backlog',
@@ -78,7 +77,7 @@ export class ImportGitHubIssueUseCase {
       randomUUID(),
     );
 
-    await this.ticketStore.saveTicket(ticket);
+    await this.ticketStore.createTicket(ticket);
     await this.ticketStore.saveActivity(TicketActivityEntity.create({
       id: randomUUID(),
       ticketId,

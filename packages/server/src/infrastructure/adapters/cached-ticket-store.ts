@@ -83,6 +83,12 @@ export class CachedTicketStore implements TicketStorePort {
     );
   }
 
+  async createTicket(ticket: TicketEntity): Promise<void> {
+    await this.inner.createTicket(ticket);
+    // inner.createTicket has mutated ticket.displayId — cache the now-complete entity
+    this.tickets.set(ticket.id, ticket);
+  }
+
   async saveTicket(ticket: TicketEntity): Promise<void> {
     await this.inner.saveTicket(ticket);
     this.tickets.set(ticket.id, ticket);
@@ -111,10 +117,6 @@ export class CachedTicketStore implements TicketStorePort {
   }
 
   // ── Passthrough (not on hot path) ──
-
-  async getNextDisplayId(boardId: string): Promise<number> {
-    return this.inner.getNextDisplayId(boardId);
-  }
 
   async getNextTicketForAgent(boardId?: string): Promise<TicketEntity | null> {
     return this.inner.getNextTicketForAgent(boardId);

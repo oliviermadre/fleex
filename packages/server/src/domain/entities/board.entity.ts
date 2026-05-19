@@ -5,7 +5,6 @@ export class BoardEntity {
     public readonly id: string,
     public name: string,
     public emoji: string,
-    public nextDisplayId: number,
     public readonly createdAt: Date,
     public updatedAt: Date,
   ) {}
@@ -20,17 +19,9 @@ export class BoardEntity {
       params.id,
       params.name,
       params.emoji ?? '📋',
-      1,
       now,
       now,
     );
-  }
-
-  incrementDisplayId(): number {
-    const id = this.nextDisplayId;
-    this.nextDisplayId++;
-    this.updatedAt = new Date();
-    return id;
   }
 
   update(changes: { name?: string; emoji?: string }): void {
@@ -44,7 +35,6 @@ export class BoardEntity {
       id: this.id,
       name: this.name,
       emoji: this.emoji,
-      nextDisplayId: this.nextDisplayId,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };

@@ -23,6 +23,7 @@ interface SerializedBoard {
   id: string;
   name: string;
   emoji: string;
+  /** @deprecated — kept for backward-compat in older boards.json files; unused */
   nextDisplayId?: number;
   createdAt: string;
   updatedAt: string;
@@ -140,9 +141,23 @@ export class JsonTicketStore implements TicketStorePort {
     );
   }
 
+  async createTicket(ticket: TicketEntity): Promise<void> {
+    ticket.displayId = this.computeNextDisplayId();
+    this.tickets.set(ticket.id, ticket);
+    await this.syncTicketsToDisk();
+  }
+
   async saveTicket(ticket: TicketEntity): Promise<void> {
     this.tickets.set(ticket.id, ticket);
     await this.syncTicketsToDisk();
+  }
+
+  private computeNextDisplayId(): number {
+    let max = 0;
+    for (const t of this.tickets.values()) {
+      if (t.displayId > max) max = t.displayId;
+    }
+    return max + 1;
   }
 
   async removeTicket(id: string): Promise<void> {
@@ -173,14 +188,6 @@ export class JsonTicketStore implements TicketStorePort {
       return a.position - b.position;
     });
     return candidates[0] ?? null;
-  }
-
-  async getNextDisplayId(boardId: string): Promise<number> {
-    const board = this.boards.get(boardId);
-    if (!board) throw new Error(`Board not found: ${boardId}`);
-    const displayId = board.incrementDisplayId();
-    await this.syncBoardsToDisk();
-    return displayId;
   }
 
   async getClaimedByAgent(agentName: string): Promise<TicketEntity[]> {
@@ -261,7 +268,6 @@ export class JsonTicketStore implements TicketStorePort {
       for (const b of data) {
         const entity = new BoardEntity(
           b.id, b.name, b.emoji,
-          b.nextDisplayId ?? 1,
           new Date(b.createdAt), new Date(b.updatedAt),
         );
         this.boards.set(entity.id, entity);
@@ -327,7 +333,6 @@ export class JsonTicketStore implements TicketStorePort {
     try {
       const data: SerializedBoard[] = Array.from(this.boards.values()).map((b) => ({
         id: b.id, name: b.name, emoji: b.emoji,
-        nextDisplayId: b.nextDisplayId,
         createdAt: b.createdAt.toISOString(), updatedAt: b.updatedAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.boardsFile, JSON.stringify(data, null, 2));
