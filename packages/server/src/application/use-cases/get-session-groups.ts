@@ -1,4 +1,4 @@
-import type { SessionGroup, WorktreeSessionGroup, AgentWorktreeInfo } from '@fleex/shared';
+import type { Session, SessionGroup, WorktreeSessionGroup, AgentWorktreeInfo } from '@fleex/shared';
 import type { SessionEntity } from '../../domain/entities.js';
 import { SessionGroupingService } from '../../domain/services/session-grouping.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
@@ -81,10 +81,15 @@ export class GetSessionGroupsUseCase {
 
     const groups = await this.groupingService.groupSessions(sessions);
 
-    // Inject agent worktree info for tickets with worktree links and agent assignees
+    // Surface every ticket in doing/reviewing as a worktree group (creating phantoms when
+    // no live session matches). Tickets in other statuses are intentionally not hydrated.
     if (this.ticketStore && this.personaStore) {
       await this.injectAgentWorktreeInfo(groups);
     }
+
+    // Any worktree-with-sessions that didn't receive an agentWorktree corresponds to a tmux
+    // session not tied to a doing/reviewing ticket — move it to System > Shells.
+    this.reclassifyOrphanSessions(groups);
 
     // Reconcile worktree paths for multi-machine support
     if (this.reconcileWorktree && this.hostFs) {
@@ -95,10 +100,10 @@ export class GetSessionGroupsUseCase {
   }
 
   /**
-   * Find tickets with a worktree link that have an active agent assignment
-   * (doing/reviewing + assignee) or past agent work (agentClaimedAt set),
-   * then attach AgentWorktreeInfo to matching WorktreeSessionGroups.
-   * If no matching group exists (agent worktree has 0 tmux sessions), create one.
+   * Surface every ticket in `doing`/`reviewing` as a WorktreeSessionGroup carrying
+   * AgentWorktreeInfo. Attaches to an existing group when one matches by branch/title,
+   * otherwise creates a phantom group (sessions: []). Persona and execution data are
+   * best-effort — a ticket without either still appears.
    */
   private async injectAgentWorktreeInfo(groups: SessionGroup[]): Promise<void> {
     if (!this.ticketStore || !this.personaStore) return;
@@ -120,35 +125,32 @@ export class GetSessionGroupsUseCase {
     }
 
     const allTickets = await this.ticketStore.getAllTickets();
-    const agentTickets = allTickets.filter(
-      (t) =>
-        t.status !== 'done' && t.status !== 'cancelled' &&
-        ticketLatestExec.has(t.id),
+    const activeTickets = allTickets.filter(
+      (t) => t.status === 'doing' || t.status === 'reviewing',
     );
 
-    if (agentTickets.length === 0) return;
+    if (activeTickets.length === 0) return;
 
-    // Build persona lookups
+    // Build persona lookups (best-effort: ticket still surfaces without a resolved persona)
     const personas = await this.personaStore.getAll();
     const personaByName = new Map(personas.map((p) => [p.name, p]));
     const personaById = new Map(personas.map((p) => [p.id, p]));
 
-    for (const ticket of agentTickets) {
+    for (const ticket of activeTickets) {
       const wtLink = ticket.links.find((l) => l.type === 'worktree');
 
-      // Get execution info from pre-fetched map
-      const latestExecution = ticketLatestExec.get(ticket.id)!;
-      const latestExecutionId = latestExecution.id;
+      // Execution info is optional — without it the ticket is reported as idle
+      const latestExecution = ticketLatestExec.get(ticket.id);
+      const latestExecutionId = latestExecution?.id ?? null;
       const executionStatus: AgentWorktreeInfo['executionStatus'] =
-        latestExecution.status === 'running' ? 'running'
-        : latestExecution.status === 'completed' ? 'completed'
-        : latestExecution.status === 'failed' ? 'failed'
+        latestExecution?.status === 'running' ? 'running'
+        : latestExecution?.status === 'completed' ? 'completed'
+        : latestExecution?.status === 'failed' ? 'failed'
         : 'idle';
 
-      // Resolve persona: from current assignee, or from latest execution's personaId
+      // Persona is best-effort: try assignee first, then latest execution's persona
       const persona = (ticket.assignee ? personaByName.get(ticket.assignee) : undefined)
-        ?? personaById.get(latestExecution.personaId);
-      if (!persona) continue;
+        ?? (latestExecution ? personaById.get(latestExecution.personaId) : undefined);
 
       const branch = wtLink?.label ?? ticket.title;
 
@@ -156,9 +158,9 @@ export class GetSessionGroupsUseCase {
         ticketId: ticket.id,
         ticketDisplayId: ticket.displayId,
         ticketTitle: ticket.title,
-        agentPersonaId: persona.id,
-        agentName: persona.name,
-        agentDisplayName: persona.displayName,
+        agentPersonaId: persona?.id ?? '',
+        agentName: persona?.name ?? '',
+        agentDisplayName: persona?.displayName ?? '',
         executionStatus,
         latestExecutionId,
       };
@@ -225,6 +227,66 @@ export class GetSessionGroupsUseCase {
         };
         (repoGroup.worktrees as WorktreeSessionGroup[]).push(newWt);
       }
+    }
+  }
+
+  /**
+   * Move any tmux sessions whose worktree was not hydrated with AgentWorktreeInfo into
+   * the System (_ungrouped) bucket. These are shells not tied to a doing/reviewing
+   * ticket — they belong under "System > Shells", not in the repo's flow sections.
+   * Repo groups that become empty are removed.
+   */
+  private reclassifyOrphanSessions(groups: SessionGroup[]): void {
+    type MutableSessionGroup = {
+      repositoryOrg: string;
+      repositoryName: string;
+      worktrees: WorktreeSessionGroup[];
+    };
+
+    let systemGroup = groups.find(
+      (g) => g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped',
+    ) as MutableSessionGroup | undefined;
+
+    const orphans: Session[] = [];
+
+    for (let i = groups.length - 1; i >= 0; i--) {
+      const group = groups[i] as MutableSessionGroup;
+      if (group.repositoryOrg === '_ungrouped' && group.repositoryName === '_ungrouped') continue;
+
+      const kept: WorktreeSessionGroup[] = [];
+      for (const wt of group.worktrees) {
+        if (wt.agentWorktree) {
+          kept.push(wt);
+        } else if (wt.sessions.length > 0) {
+          orphans.push(...wt.sessions);
+        }
+        // worktrees with no sessions and no agentWorktree are dropped silently
+      }
+
+      group.worktrees = kept;
+
+      if (group.worktrees.length === 0) {
+        groups.splice(i, 1);
+      }
+    }
+
+    if (orphans.length === 0) return;
+
+    if (!systemGroup) {
+      systemGroup = { repositoryOrg: '_ungrouped', repositoryName: '_ungrouped', worktrees: [] };
+      (groups as MutableSessionGroup[]).push(systemGroup);
+    }
+
+    for (const session of orphans) {
+      const label = session.worktreeBranch ?? '_default';
+      let wt = systemGroup.worktrees.find((w) => w.branch === label) as
+        | { branch: string; path: string; sessions: Session[] }
+        | undefined;
+      if (!wt) {
+        wt = { branch: label, path: session.cwd ?? '', sessions: [] };
+        systemGroup.worktrees.push(wt as WorktreeSessionGroup);
+      }
+      wt.sessions.push(session);
     }
   }
 

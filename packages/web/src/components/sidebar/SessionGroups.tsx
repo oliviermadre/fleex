@@ -17,7 +17,12 @@ function isMultiRepoGroup(org: string): boolean {
   return org === '_multi-repo';
 }
 
-/** Split repo groups into manual (has tmux sessions) and agentic (agent-only, no tmux) worktrees */
+/**
+ * Split repo groups into manual (ticket-driven worktree with at least one tmux session)
+ * and agentic (ticket-driven worktree with no live tmux session) buckets. The backend
+ * already filters to tickets in `doing`/`reviewing` (via `agentWorktree`) and routes
+ * orphan tmux sessions to System > Shells, so the only frontend criterion is tmux liveness.
+ */
 function partitionByFlow(groups: SessionGroup[]): {
   manualGroups: SessionGroup[];
   agenticGroups: SessionGroup[];
@@ -30,9 +35,11 @@ function partitionByFlow(groups: SessionGroup[]): {
   let agenticWorktreeCount = 0;
 
   for (const group of groups) {
-    const manualWorktrees = group.worktrees.filter((wt: WorktreeSessionGroup) => wt.sessions.length > 0);
+    const manualWorktrees = group.worktrees.filter(
+      (wt: WorktreeSessionGroup) => wt.agentWorktree != null && wt.sessions.length > 0,
+    );
     const agenticWorktrees = group.worktrees.filter(
-      (wt: WorktreeSessionGroup) => wt.sessions.length === 0 && wt.agentWorktree != null
+      (wt: WorktreeSessionGroup) => wt.agentWorktree != null && wt.sessions.length === 0,
     );
 
     if (manualWorktrees.length > 0) {
