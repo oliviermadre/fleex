@@ -35,6 +35,7 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
   const close = useUIStore((s) => s.closeDeliverableOverlay);
   const addFloatingDeliverable = useUIStore((s) => s.addFloatingDeliverable);
   const [showCopyPicker, setShowCopyPicker] = useState(false);
+  const [copied, setCopied] = useState(false);
   const resolvedTicketId = ticketId ?? deliverable?.ticketId ?? '';
 
   const handleEsc = useCallback(
@@ -63,6 +64,16 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
     close();
   };
 
+  const handleCopyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(deliverable.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.warn('[Fleex] Copy to clipboard failed', err);
+    }
+  };
+
   return createPortal(
     <div
       className="deliverable-overlay-backdrop"
@@ -89,6 +100,29 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
           )}
 
           <div className="flex-1" />
+
+          {/* Copy to clipboard button */}
+          <button
+            onClick={handleCopyToClipboard}
+            className="flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1 text-[11px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:border-white/20 hover:bg-white/[0.06] hover:text-[var(--theme-text-primary)]"
+          >
+            {copied ? (
+              <>
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                </svg>
+                Copy to clipboard
+              </>
+            )}
+          </button>
 
           {/* Copy to button */}
           <button
