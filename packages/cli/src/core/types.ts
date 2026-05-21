@@ -21,4 +21,11 @@ export interface CommandDef {
    * a parent.
    */
   isParent?: boolean;
+  /**
+   * Extra help content rendered after the auto-generated sections. Use it
+   * for Examples, valid value enums, free-form notes — anything Commander
+   * can't infer from options/arguments. Returned string is appended verbatim
+   * (it should include its own newlines and section title formatting).
+   */
+  extraHelp?: string | (() => string);
 }

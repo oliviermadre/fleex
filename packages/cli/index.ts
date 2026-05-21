@@ -14,6 +14,7 @@
 import path from 'node:path';
 import { Command } from 'commander';
 import type { CommandDef } from './src/core/types.ts';
+import { applyPrettyHelp, setRootProgram } from './src/core/help.ts';
 
 const program = new Command();
 program
@@ -60,6 +61,10 @@ function attachCommand(parent: Command, def: CommandDef): void {
   cmd.description(def.description);
   if (def.aliases?.length) cmd.aliases(def.aliases);
   if (def.setup) def.setup(cmd);
+  if (def.extraHelp !== undefined) {
+    const text = typeof def.extraHelp === 'function' ? def.extraHelp() : def.extraHelp;
+    if (text && text.trim().length > 0) cmd.addHelpText('after', text);
+  }
   cmd.action(async (...args: unknown[]) => {
     try {
       await def.action(...args);
@@ -92,6 +97,11 @@ const files = await discoverCommands();
 for (const f of files) {
   await loadAndRegister(f);
 }
+
+// Install the pretty help formatter across the whole tree after every command
+// has been registered (so subcommand options are visible to the formatter).
+setRootProgram(program);
+applyPrettyHelp(program);
 
 // Default behaviour: show help when no command is given.
 if (process.argv.length <= 2) {
