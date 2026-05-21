@@ -6,6 +6,7 @@ import { FLEEX_HOME, resolveInstance, ensureDirs } from '../../core/instance.ts'
 import { loadPorts } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
 import { launchDesktop } from './_impl.ts';
+import { runStart } from '../start/_impl.ts';
 
 const def: CommandDef = {
   name: 'desktop',
@@ -25,7 +26,8 @@ const def: CommandDef = {
     // Otherwise scan ~/.fleex/.run for any other running instance.
     const runBase = path.join(FLEEX_HOME, '.run');
     if (!fs.existsSync(runBase)) {
-      info('No running instance found. Run `fleex start --desktop` to launch.');
+      info('No running instance found — starting stack and opening desktop...');
+      await runStart({ desktop: true });
       return;
     }
 
@@ -58,7 +60,8 @@ const def: CommandDef = {
       for (const s of runningSlugs) process.stdout.write(`  - ${s}\n`);
       die('Stop other instances or specify which one to use.');
     } else {
-      info('No running instance found. Use `fleex start --desktop`.');
+      info('No running instance found — starting stack and opening desktop...');
+      await runStart({ desktop: true });
     }
   },
 };
