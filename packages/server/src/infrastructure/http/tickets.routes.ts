@@ -950,6 +950,42 @@ export function ticketRoutes(container: Container) {
       return reply.code(201).send(deliverable.toDTO());
     });
 
+    // Get a single deliverable (web)
+    app.get<{
+      Params: { id: string; delivId: string };
+    }>('/api/tickets/:id/deliverables/:delivId', async (request) => {
+      const deliverable = await container.deliverableStore.getById(request.params.delivId);
+      if (!deliverable) throw new DeliverableNotFoundError(request.params.delivId);
+      return deliverable.toDTO();
+    });
+
+    // Update a deliverable from the web UI / CLI (no agent auth required;
+    // unlike the agent route there is no ownership check — the human/CLI
+    // is trusted on the web port).
+    app.patch<{
+      Params: { id: string; delivId: string };
+      Body: { title?: string; content?: string; status?: 'draft' | 'final' };
+    }>('/api/tickets/:id/deliverables/:delivId', async (request) => {
+      const deliverable = await container.deliverableStore.getById(request.params.delivId);
+      if (!deliverable) throw new DeliverableNotFoundError(request.params.delivId);
+
+      const oldStatus = deliverable.status;
+      deliverable.update(request.body);
+      await container.deliverableStore.save(deliverable);
+
+      container.eventBus.emit({
+        type: 'deliverable.updated',
+        deliverableId: deliverable.id,
+        ticketId: deliverable.ticketId,
+        agentName: deliverable.agentName,
+        oldStatus,
+        newStatus: deliverable.status,
+        occurredAt: new Date(),
+      });
+
+      return deliverable.toDTO();
+    });
+
     app.delete<{
       Params: { id: string; delivId: string };
     }>('/api/tickets/:id/deliverables/:delivId', async (request, reply) => {
