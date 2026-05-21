@@ -206,7 +206,7 @@ export function SessionGroups() {
         onDragOver={dimmed ? undefined : handleDragOver(groupId)}
         onDragLeave={dimmed ? undefined : handleDragLeave(groupId)}
         onDrop={dimmed ? undefined : handleDrop(groupId)}
-        className={`relative ${dimmed ? 'opacity-70' : ''}`}
+        className="relative"
       >
         {isOver && dropEdge === 'top' && (
           <div className="absolute left-1.5 right-1.5 top-0 z-10 h-0.5 rounded bg-[var(--theme-accent)]" />
