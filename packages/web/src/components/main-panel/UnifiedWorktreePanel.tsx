@@ -2,6 +2,7 @@ import { useMemo, useCallback, useEffect, useState } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { useWorktreeContext, type WorktreeEntry } from '../../hooks/useWorktreeContext';
 import { WorktreeHeader } from './tab-engine/WorktreeHeader';
 import { TabBar } from './tab-engine/TabBar';
@@ -30,6 +31,7 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
   const basePath = useSettingsStore((s) => s.settings.basePath);
   const personas = useAgentPersonaStore((s) => s.personas);
+  const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
 
   // Build tab descriptors from sessions + executions (grouped by agent)
   const allTabs = useMemo<TabDescriptor[]>(() => {
@@ -84,16 +86,26 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
   }, [pendingActiveKey, allTabs, engine]);
 
   const handleNewTab = useCallback(async () => {
-    const cwd = worktree?.path || basePath || '~';
     try {
-      const session = await api.createSession({ cwd, type: 'shell' });
-      addSessionToGroup(session);
+      let sessionId: string;
+      if (ticket && !worktree?.path) {
+        // No worktree path yet (pseudo-group like _unassigned/_multi-repo, or a ticket
+        // whose workspace hasn't been materialized). Route through the ticket flow so
+        // the workspace + manifest are created and the session is linked to the ticket.
+        const result = await openSessionFromTicket(ticket.id);
+        sessionId = result.sessionId;
+      } else {
+        const cwd = worktree?.path || basePath || '~';
+        const session = await api.createSession({ cwd, type: 'shell' });
+        addSessionToGroup(session);
+        sessionId = session.id;
+      }
       api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
-      setPendingActiveKey(`s:${session.id}`);
+      setPendingActiveKey(`s:${sessionId}`);
     } catch {
       // silently fail
     }
-  }, [worktree, basePath, addSessionToGroup, setSessionGroups]);
+  }, [worktree, basePath, addSessionToGroup, setSessionGroups, ticket, openSessionFromTicket]);
 
   // Listen for ⌘N "new tab" event
   useEffect(() => {

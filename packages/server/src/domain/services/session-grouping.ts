@@ -66,7 +66,8 @@ export class SessionGroupingService {
 
     // Group:
     // - Has manifest + 1 repo → under that repo, worktree label = ticket title
-    // - Has manifest + 2+ repos → under "multi-repo", worktree label = ticket title
+    // - Has manifest + 2+ repos → under "_multi-repo", worktree label = ticket title
+    // - Has manifest + 0 repos → under "_unassigned", worktree label = ticket title
     // - No manifest + has git info → under repo (legacy), worktree label = branch
     // - No manifest + no git info → _ungrouped (system/shell)
     const repoMap = new Map<string, Map<string, SessionEntity[]>>();
@@ -81,7 +82,10 @@ export class SessionGroupingService {
       let label: string;
 
       if (ticketInfo) {
-        if (ticketInfo.repoCount <= 1 && ticketInfo.firstOrg && ticketInfo.firstName) {
+        if (ticketInfo.repoCount === 0) {
+          groupOrg = '_unassigned';
+          groupName = '_unassigned';
+        } else if (ticketInfo.repoCount === 1 && ticketInfo.firstOrg && ticketInfo.firstName) {
           groupOrg = ticketInfo.firstOrg;
           groupName = ticketInfo.firstName;
         } else {

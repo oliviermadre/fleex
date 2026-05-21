@@ -183,32 +183,40 @@ export class GetSessionGroupsUseCase {
 
       // If no matching group found, create a phantom group
       if (!found) {
-        // Determine which repo group this belongs to
+        // Determine which repo group this belongs to.
+        // Three cases:
+        //   - 0 repository links → _unassigned
+        //   - 1 repository link  → that repo
+        //   - 2+ repository links → _multi-repo
         let org: string | undefined;
         let name: string | undefined;
 
-        // Try repository link first
-        const repoLink = ticket.links.find((l) => l.type === 'repository');
-        if (repoLink) {
-          [org, name] = repoLink.ref.split('/');
-        }
+        const repoLinks = ticket.links.filter((l) => l.type === 'repository');
 
-        // Fallback: parse repo from worktree link ref (format: "org/repo:branch")
-        if ((!org || !name) && wtLink) {
-          const colonIdx = wtLink.ref.indexOf(':');
-          if (colonIdx > 0) {
-            [org, name] = wtLink.ref.substring(0, colonIdx).split('/');
+        if (repoLinks.length === 1) {
+          [org, name] = repoLinks[0]!.ref.split('/');
+        } else if (repoLinks.length === 0) {
+          // Fallback: parse repo from worktree link ref (format: "org/repo:branch")
+          if (wtLink) {
+            const colonIdx = wtLink.ref.indexOf(':');
+            if (colonIdx > 0) {
+              [org, name] = wtLink.ref.substring(0, colonIdx).split('/');
+            }
           }
         }
 
-        // If repo info found, check it's a watched repo
-        if (org && name) {
+        if (repoLinks.length >= 2) {
+          // True multi-repo ticket
+          org = '_multi-repo';
+          name = '_multi-repo';
+        } else if (org && name) {
+          // Single repo — check it's a watched repo
           const resolved = this.config?.get().resolvedRepositories ?? [];
           if (!resolved.includes(`${org}/${name}`)) continue;
         } else {
-          // No repo info — use multi-repo fallback
-          org = '_multi-repo';
-          name = '_multi-repo';
+          // No repo info at all — ticket is unassigned to any repo
+          org = '_unassigned';
+          name = '_unassigned';
         }
 
         let repoGroup = groups.find(
@@ -307,9 +315,21 @@ export class GetSessionGroupsUseCase {
     const toReconcile: WorktreeRef[] = [];
 
     for (const group of groups) {
+      // Pseudo-groups (multi-repo, unassigned) don't have a bare clone to reconcile.
+      // Mark their agent worktrees as ready so the UI doesn't show "not available locally"
+      // and the SmartSessionButton stays visible — sessions can still be opened at the
+      // workspace path (or basePath fallback).
+      const isPseudoGroup =
+        (group.repositoryOrg === '_multi-repo' && group.repositoryName === '_multi-repo') ||
+        (group.repositoryOrg === '_unassigned' && group.repositoryName === '_unassigned');
+
       for (const wt of group.worktrees) {
         if (!wt.agentWorktree) {
           // Not an agent worktree — mark as ready if path exists
+          continue;
+        }
+        if (isPseudoGroup) {
+          (wt as { worktreeStatus?: string }).worktreeStatus = 'ready';
           continue;
         }
         toReconcile.push({

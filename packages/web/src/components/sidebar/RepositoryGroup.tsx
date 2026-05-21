@@ -114,9 +114,13 @@ export function RepositoryGroup({ group, flowType }: Props) {
           <path d="M3 1l5 4-5 4V1z" />
         </svg>
         <span className="truncate text-[11px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          {group.repositoryOrg === '_multi-repo' ? 'Multi-Repo' : `${group.repositoryOrg}/${group.repositoryName}`}
+          {group.repositoryOrg === '_multi-repo'
+            ? 'Multi-Repo'
+            : group.repositoryOrg === '_unassigned'
+              ? 'Unassigned'
+              : `${group.repositoryOrg}/${group.repositoryName}`}
         </span>
-        {group.repositoryOrg !== '_multi-repo' && (
+        {group.repositoryOrg !== '_multi-repo' && group.repositoryOrg !== '_unassigned' && (
           <span className="ml-auto flex items-center gap-1">
             <span
               role="button"
