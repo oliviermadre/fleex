@@ -108,33 +108,46 @@ export function repositoryRoutes(container: Container) {
           const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
           const mergedDateStr = thirtyDaysAgo.toISOString().split('T')[0];
 
-          const [openResult, mergedResult] = await Promise.all([
+          const [openResult, mergedResult, closedResult] = await Promise.all([
             container.execFn('gh', [
               'pr', 'list',
               '--repo', `${org}/${name}`,
-              '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt',
+              '--json', 'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt',
               '--limit', '50',
               '--state', 'open',
             ], { timeout: 15_000 }),
             container.execFn('gh', [
               'pr', 'list',
               '--repo', `${org}/${name}`,
-              '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt,mergedAt',
+              '--json', 'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt,mergedAt',
               '--limit', '20',
               '--state', 'merged',
               '--search', `merged:>${mergedDateStr}`,
             ], { timeout: 15_000 }),
+            container.execFn('gh', [
+              'pr', 'list',
+              '--repo', `${org}/${name}`,
+              '--json', 'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt',
+              '--limit', '20',
+              '--state', 'closed',
+              '--search', `-is:merged closed:>${mergedDateStr}`,
+            ], { timeout: 15_000 }),
           ]);
 
           const rawOpen = JSON.parse(openResult.stdout) as {
-            number: number; title: string; headRefName: string;
+            number: number; title: string; headRefName: string; isDraft: boolean;
             author: { login: string }; assignees: { login: string }[];
             createdAt: string; updatedAt: string;
           }[];
           const rawMerged = JSON.parse(mergedResult.stdout) as {
-            number: number; title: string; headRefName: string;
+            number: number; title: string; headRefName: string; isDraft: boolean;
             author: { login: string }; assignees: { login: string }[];
             createdAt: string; updatedAt: string; mergedAt: string;
+          }[];
+          const rawClosed = JSON.parse(closedResult.stdout) as {
+            number: number; title: string; headRefName: string; isDraft: boolean;
+            author: { login: string }; assignees: { login: string }[];
+            createdAt: string; updatedAt: string;
           }[];
 
           const openPRs = rawOpen.map((pr): PullRequest => ({
@@ -142,6 +155,7 @@ export function repositoryRoutes(container: Container) {
             title: pr.title,
             headRefName: pr.headRefName,
             state: 'open',
+            isDraft: pr.isDraft,
             author: pr.author.login,
             assignees: pr.assignees.map((a) => a.login),
             createdAt: pr.createdAt,
@@ -152,14 +166,26 @@ export function repositoryRoutes(container: Container) {
             title: pr.title,
             headRefName: pr.headRefName,
             state: 'merged',
+            isDraft: pr.isDraft,
             author: pr.author.login,
             assignees: pr.assignees.map((a) => a.login),
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
             mergedAt: pr.mergedAt,
           }));
+          const closedPRs = rawClosed.map((pr): PullRequest => ({
+            number: pr.number,
+            title: pr.title,
+            headRefName: pr.headRefName,
+            state: 'closed',
+            isDraft: pr.isDraft,
+            author: pr.author.login,
+            assignees: pr.assignees.map((a) => a.login),
+            createdAt: pr.createdAt,
+            updatedAt: pr.updatedAt,
+          }));
 
-          const result = [...openPRs, ...mergedPRs];
+          const result = [...openPRs, ...mergedPRs, ...closedPRs];
           container.repositoryCache.set(cacheKey, result, RepositoryCache.TTL_PULLS);
           return result;
         } catch (err) {

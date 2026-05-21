@@ -25,6 +25,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
+import { getPrBadgeClasses } from '../../lib/prBadgeStyle';
 import { notifyHookStarted } from '../../lib/hookResultToast';
 import { SmartSessionButton } from './SmartSessionButton';
 import { ImportTaskButton } from './ImportTaskButton';
@@ -534,9 +535,7 @@ function DashboardItemRow({
               rel="noopener noreferrer"
               className={cn(
                 'shrink-0 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium',
-                ticketPR.state === 'merged'
-                  ? 'bg-purple-500/15 text-purple-400 hover:bg-purple-500 hover:text-white'
-                  : 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)] hover:bg-[var(--theme-accent)] hover:text-white'
+                getPrBadgeClasses(ticketPR)
               )}
               onClick={(e) => e.stopPropagation()}
               title={ticketPR.title}

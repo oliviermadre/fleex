@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import type { Session, WorktreeSessionGroup, Ticket, PullRequest, TicketStatus } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
+import { getPrBadgeClasses } from '../../../lib/prBadgeStyle';
 import { useUIStore } from '../../../stores/uiStore';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
@@ -46,9 +47,7 @@ function PrBadge({ pr, org, name }: { pr: PullRequest; org: string; name: string
       rel="noopener noreferrer"
       className={cn(
         'shrink-0 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors',
-        pr.state === 'merged'
-          ? 'bg-purple-500/15 text-purple-400 hover:bg-purple-500 hover:text-white'
-          : 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)] hover:bg-[var(--theme-accent)] hover:text-white'
+        getPrBadgeClasses(pr)
       )}
       title={pr.title}
     >

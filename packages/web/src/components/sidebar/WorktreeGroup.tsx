@@ -5,6 +5,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
 
 import { cn } from '../../lib/cn';
+import { getPrBadgeClasses } from '../../lib/prBadgeStyle';
 import { usePullRequestStore } from '../../stores/pullRequestStore';
 import { aggregateBranchStatus } from '../../lib/deriveStatus';
 import { StatusDot } from '../ui/StatusDot';
@@ -65,7 +66,7 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
   const isAgentSelected = agentInfo && selectedAgentWorktreeTicketId === agentInfo.ticketId;
   const ticketPRs = useMemo(() => {
     if (!ticket) return [];
-    const prs: { org: string; name: string; number: number; state: string; title: string }[] = [];
+    const prs: { org: string; name: string; number: number; state: 'open' | 'merged' | 'closed'; isDraft: boolean; title: string }[] = [];
     for (const link of ticket.links) {
       if (link.type !== 'github_pr') continue;
       // ref format: "org/repo#number"
@@ -81,7 +82,14 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
       // Find PR in store to get state
       const storePRs = pullsByRepo[`${org}/${name}`];
       const storePR = storePRs ? Object.values(storePRs).find((p) => p.number === num) : undefined;
-      prs.push({ org, name, number: num, state: storePR?.state ?? 'open', title: storePR?.title ?? link.label });
+      prs.push({
+        org,
+        name,
+        number: num,
+        state: storePR?.state ?? 'open',
+        isDraft: storePR?.isDraft ?? false,
+        title: storePR?.title ?? link.label,
+      });
     }
     return prs;
   }, [ticket, pullsByRepo]);
@@ -141,9 +149,7 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
                 rel="noopener noreferrer"
                 className={cn(
                   'shrink-0 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium',
-                  tpr.state === 'merged'
-                    ? 'bg-purple-500/15 text-purple-400 hover:bg-purple-500 hover:text-white'
-                    : 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)] hover:bg-[var(--theme-accent)] hover:text-white'
+                  getPrBadgeClasses(tpr)
                 )}
                 onClick={(e) => e.stopPropagation()}
                 title={tpr.title}

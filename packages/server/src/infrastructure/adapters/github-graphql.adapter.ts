@@ -6,6 +6,7 @@ interface GraphQLPRNode {
   number: number;
   title: string;
   headRefName: string;
+  isDraft?: boolean;
   author: { login: string } | null;
   assignees: { nodes: { login: string }[] };
   reviewRequests?: { nodes: { requestedReviewer: { login: string } | null }[] };
@@ -205,6 +206,7 @@ export class GitHubGraphQLAdapter {
           number
           title
           headRefName
+          isDraft
           author { login }
           assignees(first: 10) { nodes { login } }
           reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } } } }
@@ -261,6 +263,7 @@ export class GitHubGraphQLAdapter {
           title: pr.title,
           headRefName: pr.headRefName,
           state: 'open' as const,
+          isDraft: pr.isDraft ?? false,
           author: pr.author?.login ?? 'unknown',
           assignees: pr.assignees.nodes.map((a) => a.login),
           reviewRequests: (pr.reviewRequests?.nodes ?? [])
@@ -329,12 +332,12 @@ export class GitHubGraphQLAdapter {
     // Fetch open PRs
     const { stdout: prOut } = await this.execFn('gh', [
       'pr', 'list', '--repo', repoSlug,
-      '--json', 'number,title,headRefName,author,assignees,createdAt,updatedAt',
+      '--json', 'number,title,headRefName,isDraft,author,assignees,createdAt,updatedAt',
       '--limit', '50', '--state', 'open',
     ], { timeout: 15_000 });
 
     const rawPRs = JSON.parse(prOut) as {
-      number: number; title: string; headRefName: string;
+      number: number; title: string; headRefName: string; isDraft: boolean;
       author: { login: string }; assignees: { login: string }[];
       createdAt: string; updatedAt: string;
     }[];
@@ -344,6 +347,7 @@ export class GitHubGraphQLAdapter {
       title: pr.title,
       headRefName: pr.headRefName,
       state: 'open' as const,
+      isDraft: pr.isDraft,
       author: pr.author.login,
       assignees: pr.assignees.map((a) => a.login),
       createdAt: pr.createdAt,
