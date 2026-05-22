@@ -32,11 +32,10 @@ registerTabKind('ticket', {
 // ——— Builder ———
 
 export function buildTicketTab(ticket: Ticket): TabDescriptor {
-  const label = `#${ticket.displayId} ${ticket.title}`;
   return {
     key: `t:${ticket.id}`,
     kind: 'ticket',
-    label: label.length > 30 ? label.slice(0, 27) + '...' : label,
+    label: 'Ticket Details',
     capabilities: { closable: false, renamable: false, orderable: true },
     meta: { ticketId: ticket.id },
   };
