@@ -47,13 +47,40 @@ export class CreateSessionUseCase {
     const liveNames = liveSessions.map((s) => s.name);
     const existingTmuxNames = [...new Set([...storedNames, ...liveNames])];
 
-    const { displayName, tmuxName } = this.namingService.resolveUniqueName(
-      defaultDisplayName,
-      request.type,
-      { org: repositoryOrg, repo: repositoryName, worktree: worktreeBranch },
-      existingTmuxNames,
-      storedDisplayNames,
-    );
+    // Sidebar terminal: parentSessionId + ticketDisplayId both provided —
+    // use the dedicated naming convention so the session is identifiable as a
+    // sidebar terminal and won't collide with main task tabs.
+    const isSidebar = request.parentSessionId != null && request.ticketDisplayId != null;
+    let displayName: string;
+    let tmuxName: string;
+    if (isSidebar) {
+      displayName = defaultDisplayName;
+      let suffix = Math.random().toString(36).slice(2, 7);
+      let candidate = this.namingService.buildSidebarTmuxName({
+        ticketDisplayId: request.ticketDisplayId!,
+        parentSessionId: request.parentSessionId!,
+        shortSuffix: suffix,
+      });
+      while (existingTmuxNames.includes(candidate)) {
+        suffix = Math.random().toString(36).slice(2, 7);
+        candidate = this.namingService.buildSidebarTmuxName({
+          ticketDisplayId: request.ticketDisplayId!,
+          parentSessionId: request.parentSessionId!,
+          shortSuffix: suffix,
+        });
+      }
+      tmuxName = candidate;
+    } else {
+      const resolved = this.namingService.resolveUniqueName(
+        defaultDisplayName,
+        request.type,
+        { org: repositoryOrg, repo: repositoryName, worktree: worktreeBranch },
+        existingTmuxNames,
+        storedDisplayNames,
+      );
+      displayName = resolved.displayName;
+      tmuxName = resolved.tmuxName;
+    }
 
     const command =
       request.type === 'shell' ? this.config.get().defaultShell : undefined;
@@ -81,6 +108,7 @@ export class CreateSessionUseCase {
       gitRemote,
       request.claudePrompt,
       displayName,
+      request.parentSessionId,
     );
 
     await this.sessionStore.save(session);

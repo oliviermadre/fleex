@@ -2,6 +2,7 @@ import {
   FLEEX_PREFIX,
   FLEEX_SHELL_PREFIX,
   FLEEX_CLAUDE_PREFIX,
+  FLEEX_SIDEBAR_PREFIX,
   DEFAULT_CLAUDE_DISPLAY_NAME,
   DEFAULT_SHELL_DISPLAY_NAME,
   slugify,
@@ -64,9 +65,30 @@ export class SessionNamingService {
     return name.startsWith(FLEEX_PREFIX);
   }
 
+  isSidebar(name: string): boolean {
+    return name.startsWith(FLEEX_SIDEBAR_PREFIX);
+  }
+
+  /**
+   * Build a tmux name for a sidebar terminal attached to a parent tmux session tab.
+   * Format: fleex_sidebar_{ticketDisplayId}_{parentSessionId}_{shortSuffix}
+   * The shortSuffix disambiguates multiple sidebar terminals pointing to the same parent.
+   */
+  buildSidebarTmuxName(params: {
+    ticketDisplayId: number | string;
+    parentSessionId: string;
+    shortSuffix: string;
+  }): string {
+    const display = slugify(String(params.ticketDisplayId));
+    const parent = slugify(params.parentSessionId);
+    const suffix = slugify(params.shortSuffix);
+    return `${FLEEX_SIDEBAR_PREFIX}${display}_${parent}_${suffix}`;
+  }
+
   parseType(name: string): SessionType | null {
     if (name.startsWith(FLEEX_SHELL_PREFIX)) return 'shell';
     if (name.startsWith(FLEEX_CLAUDE_PREFIX)) return 'claude';
+    if (name.startsWith(FLEEX_SIDEBAR_PREFIX)) return 'shell';
     return null;
   }
 

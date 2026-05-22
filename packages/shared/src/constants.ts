@@ -1,6 +1,7 @@
 export const FLEEX_PREFIX = 'fleex_';
 export const FLEEX_SHELL_PREFIX = 'fleex_shell_';
 export const FLEEX_CLAUDE_PREFIX = 'fleex_claude_';
+export const FLEEX_SIDEBAR_PREFIX = 'fleex_sidebar_';
 
 export const DEFAULT_COLS = 120;
 export const DEFAULT_ROWS = 30;

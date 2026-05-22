@@ -11,6 +11,8 @@ import { getTabKind } from './tab-engine/registry';
 import type { TabDescriptor } from './tab-engine/types';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import * as api from '../../services/api';
+import { SessionRightSidebar } from './right-sidebar/SessionRightSidebar';
+import { FLEEX_SIDEBAR_PREFIX } from '@fleex/shared';
 
 // Side-effect: register all tab kinds
 import './tab-engine/kinds';
@@ -33,9 +35,12 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
   const personas = useAgentPersonaStore((s) => s.personas);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
 
-  // Build tab descriptors from sessions + executions (grouped by agent)
+  // Build tab descriptors from sessions + executions (grouped by agent).
+  // Sidebar-scoped sessions (tmuxName prefixed with fleex_sidebar_) are hosted
+  // inside the right sidebar's bottom panel, NOT the main tab row — filter them out here.
   const allTabs = useMemo<TabDescriptor[]>(() => {
-    const sessionTabs = sessions.map((s) =>
+    const mainSessions = sessions.filter((s) => !s.tmuxName.startsWith(FLEEX_SIDEBAR_PREFIX));
+    const sessionTabs = mainSessions.map((s) =>
       s.type === 'shell' ? buildShellTab(s) : buildClaudeTab(s),
     );
 
@@ -141,7 +146,39 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
     const kind = getTabKind(engine.activeTab.kind);
     if (!kind) return null;
     const Content = kind.Content;
-    return <Content tab={engine.activeTab} />;
+
+    const showRightSidebar =
+      (engine.activeTab.kind === 'shell' || engine.activeTab.kind === 'claude') &&
+      typeof activeSessionId === 'string' &&
+      !!ticket;
+
+    if (!showRightSidebar) {
+      return <Content tab={engine.activeTab} />;
+    }
+
+    const repoKeys = Array.from(
+      new Set(
+        ticket!.links
+          .filter((l) => l.type === 'repository' && typeof l.ref === 'string' && l.ref.includes('/'))
+          .map((l) => l.ref),
+      ),
+    );
+    const defaultRepoKey = repoOrg && repoName ? `${repoOrg}/${repoName}` : null;
+    const sidebarCwd = activeSession?.cwd || worktree?.path || basePath || '~';
+    return (
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          <Content tab={engine.activeTab} />
+        </div>
+        <SessionRightSidebar
+          parentSessionId={activeSessionId!}
+          ticketDisplayId={ticket!.displayId}
+          cwd={sidebarCwd}
+          repoKeys={repoKeys}
+          defaultRepoKey={defaultRepoKey}
+        />
+      </div>
+    );
   };
 
   return (

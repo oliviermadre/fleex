@@ -26,6 +26,8 @@ export interface Session {
   readonly claudePrompt?: string;
   readonly claudeActivity?: import('./claude-activity.js').ClaudeActivityStatus;
   readonly foregroundProcess?: string;
+  /** Set when this session is a sidebar terminal attached to a parent tmux session tab. */
+  readonly parentSessionId?: string;
 }
 
 export interface CreateSessionRequest {
@@ -38,6 +40,14 @@ export interface CreateSessionRequest {
   readonly repositoryName?: string;
   readonly worktreeBranch?: string;
   readonly displayName?: string;
+  /**
+   * When both fields are provided, the new tmux session is named as a
+   * "sidebar terminal" attached to a parent tmux session tab, using the
+   * `fleex_sidebar_` prefix instead of the default shell/claude prefix.
+   * Used by the right sidebar bottom panel.
+   */
+  readonly parentSessionId?: string;
+  readonly ticketDisplayId?: number;
 }
 
 export interface RenameSessionRequest {
