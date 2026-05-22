@@ -174,15 +174,38 @@ export interface TicketMention {
 
 // ── Deliverables ──
 
+export const DELIVERABLE_TYPES = [
+  'prd',
+  'spec',
+  'plan',
+  'code',
+  'report',
+  'url',
+  'html',
+  'ticket-summary',
+] as const;
+export type DeliverableType = typeof DELIVERABLE_TYPES[number];
+
+export const DELIVERABLE_STATUSES = ['draft', 'final'] as const;
+export type DeliverableStatus = typeof DELIVERABLE_STATUSES[number];
+
+export function isDeliverableType(t: unknown): t is DeliverableType {
+  return typeof t === 'string' && (DELIVERABLE_TYPES as readonly string[]).includes(t);
+}
+
+export function isDeliverableStatus(s: unknown): s is DeliverableStatus {
+  return typeof s === 'string' && (DELIVERABLE_STATUSES as readonly string[]).includes(s);
+}
+
 export interface TicketDeliverable {
   readonly id: string;
   readonly ticketId: string;
   readonly agentName: string;
-  readonly type: string;
+  readonly type: DeliverableType;
   readonly title: string;
   readonly content: string;
   readonly version: number;
-  readonly status: 'draft' | 'final';
+  readonly status: DeliverableStatus;
   readonly mentionId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;

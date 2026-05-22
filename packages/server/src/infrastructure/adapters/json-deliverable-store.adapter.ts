@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { FLEEX_DIR } from '@fleex/shared';
+import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -9,11 +10,11 @@ interface SerializedDeliverable {
   id: string;
   ticketId: string;
   agentName: string;
-  type: string;
+  type: DeliverableType;
   title: string;
   content: string;
   version: number;
-  status: 'draft' | 'final';
+  status: DeliverableStatus;
   mentionId: string | null;
   createdAt: string;
   updatedAt: string;

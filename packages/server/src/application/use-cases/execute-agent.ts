@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode } from '@fleex/shared';
+import { DELIVERABLE_TYPES, DELIVERABLE_STATUSES } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
@@ -45,8 +46,8 @@ const OUTPUT_FORMAT_SCHEMA = {
             properties: {
               title: { type: 'string' },
               markdown: { type: 'string' },
-              type: { type: 'string', enum: ['prd', 'spec', 'plan', 'code', 'report', 'url', 'ticket-summary', 'html'] },
-              status: { type: 'string', enum: ['draft', 'final'] },
+              type: { type: 'string', enum: [...DELIVERABLE_TYPES] },
+              status: { type: 'string', enum: [...DELIVERABLE_STATUSES] },
             },
             required: ['title', 'markdown', 'type', 'status'],
           },

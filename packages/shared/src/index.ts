@@ -84,6 +84,8 @@ export type {
   MentionExecutionMode,
   TicketMention,
   TicketDeliverable,
+  DeliverableType,
+  DeliverableStatus,
   TicketSummaryRef,
   TicketContext,
   TicketContextEpic,
@@ -91,6 +93,13 @@ export type {
   TicketUnreadCounts,
   TicketWsMessageType,
   TicketWsMessage,
+} from './types/ticket.js';
+
+export {
+  DELIVERABLE_TYPES,
+  DELIVERABLE_STATUSES,
+  isDeliverableType,
+  isDeliverableStatus,
 } from './types/ticket.js';
 
 export type {

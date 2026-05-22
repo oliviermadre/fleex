@@ -1,28 +1,22 @@
 import { readFileSync } from 'node:fs';
+import {
+  DELIVERABLE_TYPES,
+  DELIVERABLE_STATUSES,
+  isDeliverableType,
+  isDeliverableStatus,
+} from '@fleex/shared';
+import type { DeliverableType, DeliverableStatus, TicketDeliverable } from '@fleex/shared';
 import { die } from '../../../core/colors.ts';
 
-export const VALID_DELIVERABLE_TYPES = [
-  'prd',
-  'spec',
-  'plan',
-  'code',
-  'report',
-  'url',
-  'html',
-  'ticket-summary',
-] as const;
-
-export const VALID_DELIVERABLE_STATUSES = ['draft', 'final'] as const;
-
-export function assertValidType(t: string): void {
-  if (!VALID_DELIVERABLE_TYPES.includes(t as typeof VALID_DELIVERABLE_TYPES[number])) {
-    die(`Invalid type: ${t} (valid: ${VALID_DELIVERABLE_TYPES.join(', ')})`);
+export function assertValidType(t: string): asserts t is DeliverableType {
+  if (!isDeliverableType(t)) {
+    die(`Invalid type: ${t} (valid: ${DELIVERABLE_TYPES.join(', ')})`);
   }
 }
 
-export function assertValidStatus(s: string): void {
-  if (!VALID_DELIVERABLE_STATUSES.includes(s as typeof VALID_DELIVERABLE_STATUSES[number])) {
-    die(`Invalid status: ${s} (valid: ${VALID_DELIVERABLE_STATUSES.join(', ')})`);
+export function assertValidStatus(s: string): asserts s is DeliverableStatus {
+  if (!isDeliverableStatus(s)) {
+    die(`Invalid status: ${s} (valid: ${DELIVERABLE_STATUSES.join(', ')})`);
   }
 }
 
@@ -48,15 +42,4 @@ export function resolveContent(opts: { content?: string; file?: string }, allowE
   die('Missing content: use --content "..." or --file path');
 }
 
-export interface DeliverableDTO {
-  id: string;
-  ticketId: string;
-  agentName: string;
-  type: string;
-  title: string;
-  content: string;
-  version: number;
-  status: 'draft' | 'final';
-  createdAt: string;
-  updatedAt: string;
-}
+export type DeliverableDTO = TicketDeliverable;

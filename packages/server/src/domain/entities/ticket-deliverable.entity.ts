@@ -1,15 +1,15 @@
-import type { TicketDeliverable } from '@fleex/shared';
+import type { TicketDeliverable, DeliverableType, DeliverableStatus } from '@fleex/shared';
 
 export class TicketDeliverableEntity {
   constructor(
     public readonly id: string,
     public readonly ticketId: string,
     public readonly agentName: string,
-    public readonly type: string,
+    public readonly type: DeliverableType,
     public title: string,
     public content: string,
     public version: number,
-    public status: 'draft' | 'final',
+    public status: DeliverableStatus,
     public readonly mentionId: string | null,
     public readonly createdAt: Date,
     public updatedAt: Date,
@@ -19,10 +19,10 @@ export class TicketDeliverableEntity {
     id: string;
     ticketId: string;
     agentName: string;
-    type: string;
+    type: DeliverableType;
     title: string;
     content: string;
-    status?: 'draft' | 'final';
+    status?: DeliverableStatus;
     mentionId?: string | null;
   }): TicketDeliverableEntity {
     const now = new Date();
@@ -41,7 +41,7 @@ export class TicketDeliverableEntity {
     );
   }
 
-  update(changes: { title?: string; content?: string; status?: 'draft' | 'final' }): void {
+  update(changes: { title?: string; content?: string; status?: DeliverableStatus }): void {
     if (changes.content !== undefined && changes.content !== this.content) {
       this.content = changes.content;
       this.version += 1;
