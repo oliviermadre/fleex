@@ -15,6 +15,7 @@ export class SessionEntity {
     public readonly gitRemote: string | null,
     public readonly claudePrompt?: string,
     public displayName: string = '',
+    public readonly parentSessionId?: string,
   ) {}
 
   /** Mutable, not persisted — set each broadcast cycle by enrichment. */
@@ -60,6 +61,7 @@ export class SessionEntity {
       claudePrompt: this.claudePrompt,
       claudeActivity: this.claudeActivity,
       foregroundProcess: this.foregroundProcess,
+      parentSessionId: this.parentSessionId,
     };
   }
 }

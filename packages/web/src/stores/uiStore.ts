@@ -111,7 +111,45 @@ interface UIState {
   toggleManualFlow: () => void;
   agenticFlowCollapsed: boolean;
   toggleAgenticFlow: () => void;
+
+  // Session task right sidebar (scratchpad + auxiliary terminals)
+  rightSidebarWidth: number;
+  rightSidebarSplitRatio: number; // 0..1, fraction of height for the TOP panel
+  setRightSidebarWidth: (width: number) => void;
+  setRightSidebarSplitRatio: (ratio: number) => void;
 }
+
+const RIGHT_SIDEBAR_STORAGE_KEY = 'fleex_right_sidebar';
+
+interface RightSidebarPersisted {
+  width?: number;
+  splitRatio?: number;
+}
+
+function loadRightSidebarPersisted(): RightSidebarPersisted {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(RIGHT_SIDEBAR_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveRightSidebarPersisted(state: RightSidebarPersisted): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(RIGHT_SIDEBAR_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore quota / privacy mode failures
+  }
+}
+
+const rightSidebarInitial = loadRightSidebarPersisted();
+const RIGHT_SIDEBAR_DEFAULT_WIDTH = 380;
+const RIGHT_SIDEBAR_DEFAULT_RATIO = 0.5;
 
 export const useUIStore = create<UIState>((set) => ({
   navCollapsed: true,
@@ -138,6 +176,26 @@ export const useUIStore = create<UIState>((set) => ({
   selectedAgentWorktreeTicketId: null,
   manualFlowCollapsed: false,
   agenticFlowCollapsed: true,
+  rightSidebarWidth: typeof rightSidebarInitial.width === 'number' ? rightSidebarInitial.width : RIGHT_SIDEBAR_DEFAULT_WIDTH,
+  rightSidebarSplitRatio: typeof rightSidebarInitial.splitRatio === 'number' ? rightSidebarInitial.splitRatio : RIGHT_SIDEBAR_DEFAULT_RATIO,
+
+  setRightSidebarWidth: (width) => {
+    const clamped = Math.min(Math.max(width, 280), 720);
+    set({ rightSidebarWidth: clamped });
+    saveRightSidebarPersisted({
+      width: clamped,
+      splitRatio: useUIStore.getState().rightSidebarSplitRatio,
+    });
+  },
+
+  setRightSidebarSplitRatio: (ratio) => {
+    const clamped = Math.min(Math.max(ratio, 0.15), 0.85);
+    set({ rightSidebarSplitRatio: clamped });
+    saveRightSidebarPersisted({
+      width: useUIStore.getState().rightSidebarWidth,
+      splitRatio: clamped,
+    });
+  },
 
   toggleScratchpad: () =>
     set((state) => ({
