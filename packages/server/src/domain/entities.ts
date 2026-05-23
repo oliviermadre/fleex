@@ -1,4 +1,12 @@
-import type { Session, SessionType, SessionStatus, ClaudeActivityStatus } from '@fleex/shared';
+import type {
+  Session,
+  SessionType,
+  SessionStatus,
+  ClaudeActivityStatus,
+  SessionHookStatus,
+  WaitingReason,
+  HookStatusUpdate,
+} from '@fleex/shared';
 
 export class SessionEntity {
   constructor(
@@ -16,6 +24,11 @@ export class SessionEntity {
     public readonly claudePrompt?: string,
     public displayName: string = '',
     public readonly parentSessionId?: string,
+    // ── Persisted hook-driven status (set by hook events) ──
+    public hookStatus: SessionHookStatus = 'unknown',
+    public hookWaitingReason: WaitingReason | null = null,
+    public hookLastMessage: string | null = null,
+    public hookStatusUpdatedAt: Date | null = null,
   ) {}
 
   /** Mutable, not persisted — set each broadcast cycle by enrichment. */
@@ -44,6 +57,45 @@ export class SessionEntity {
     return this.tmuxName.startsWith('fleex_');
   }
 
+  /**
+   * Apply a mapped hook event to the session.
+   * Returns `true` when the status changed (caller should persist + broadcast),
+   * `false` when no transition occurred (idempotent or guarded).
+   *
+   * Guards:
+   *   - `idle` does NOT override `complete` or `error` (terminal-by-PTY-exit is silent
+   *     if the agent already produced a semantic outcome).
+   */
+  applyHookUpdate(update: HookStatusUpdate): boolean {
+    // Guard: `idle` (PTY exit / sessionEnd) must not override an agent-driven outcome.
+    if (update.status === 'idle' && (this.hookStatus === 'complete' || this.hookStatus === 'error')) {
+      return false;
+    }
+    // Guard: `notification/idle_prompt` is the sibling Notification of `Stop` — Claude fires
+    // both within ~1s when a turn ends. Once we've recorded `complete`/`error`, the idle_prompt
+    // is semantically redundant and must not regress the state back to `waiting`.
+    // (permission_prompt and elicitation_dialog after complete are legitimate — user re-engaged.)
+    if (
+      update.status === 'waiting' &&
+      update.waitingReason === 'idle' &&
+      (this.hookStatus === 'complete' || this.hookStatus === 'error')
+    ) {
+      return false;
+    }
+    // De-dup: same status + same reason + same message → no event
+    const sameStatus = this.hookStatus === update.status;
+    const sameReason = (this.hookWaitingReason ?? null) === (update.waitingReason ?? null);
+    const sameMessage = (this.hookLastMessage ?? null) === (update.message ?? null);
+    if (sameStatus && sameReason && sameMessage) {
+      return false;
+    }
+    this.hookStatus = update.status;
+    this.hookWaitingReason = update.waitingReason ?? null;
+    this.hookLastMessage = update.message ?? null;
+    this.hookStatusUpdatedAt = new Date();
+    return true;
+  }
+
   toDTO(): Session {
     return {
       id: this.id,
@@ -62,6 +114,10 @@ export class SessionEntity {
       claudeActivity: this.claudeActivity,
       foregroundProcess: this.foregroundProcess,
       parentSessionId: this.parentSessionId,
+      hookStatus: this.hookStatus,
+      hookWaitingReason: this.hookWaitingReason ?? undefined,
+      hookLastMessage: this.hookLastMessage,
+      hookStatusUpdatedAt: this.hookStatusUpdatedAt?.toISOString() ?? null,
     };
   }
 }

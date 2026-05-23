@@ -42,6 +42,7 @@ import { fileRoutes } from './infrastructure/http/files.routes.js';
 import { ticketGroupRoutes } from './infrastructure/http/ticket-groups.routes.js';
 import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
+import { hookRoutes } from './infrastructure/http/hook.routes.js';
 
 async function main() {
   const container = await createContainer();
@@ -70,6 +71,9 @@ async function main() {
 
   // Auth routes (public — no middleware)
   await app.register(authRoutes(container));
+
+  // Claude Code hook ingress — public (localhost-only enforced inside the route)
+  await app.register(hookRoutes(container));
 
   // Auth middleware for all subsequent routes
   const authMiddleware = createAuthMiddleware(container);

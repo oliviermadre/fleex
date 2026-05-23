@@ -3,7 +3,7 @@ import { FLEEX_DIR, SESSIONS_FILE } from '@fleex/shared';
 import { SessionEntity } from '../../domain/entities.js';
 import type { SessionStorePort } from '../../application/ports/session-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
-import type { SessionType, SessionStatus } from '@fleex/shared';
+import type { SessionType, SessionStatus, SessionHookStatus, WaitingReason } from '@fleex/shared';
 import type { HostFs } from '../host/types.js';
 
 interface SerializedSession {
@@ -20,6 +20,10 @@ interface SerializedSession {
   gitRemote: string | null;
   claudePrompt?: string;
   displayName?: string;
+  hookStatus?: SessionHookStatus;
+  hookWaitingReason?: WaitingReason | null;
+  hookLastMessage?: string | null;
+  hookStatusUpdatedAt?: string | null;
 }
 
 export class JsonSessionStore implements SessionStorePort {
@@ -99,6 +103,11 @@ export class JsonSessionStore implements SessionStorePort {
           s.gitRemote,
           s.claudePrompt,
           s.displayName ?? '',
+          undefined,
+          s.hookStatus ?? 'unknown',
+          s.hookWaitingReason ?? null,
+          s.hookLastMessage ?? null,
+          s.hookStatusUpdatedAt ? new Date(s.hookStatusUpdatedAt) : null,
         );
         this.sessions.set(entity.id, entity);
       }
@@ -127,6 +136,10 @@ export class JsonSessionStore implements SessionStorePort {
         gitRemote: s.gitRemote,
         claudePrompt: s.claudePrompt,
         displayName: s.displayName,
+        hookStatus: s.hookStatus,
+        hookWaitingReason: s.hookWaitingReason,
+        hookLastMessage: s.hookLastMessage,
+        hookStatusUpdatedAt: s.hookStatusUpdatedAt?.toISOString() ?? null,
       }));
 
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));

@@ -1,4 +1,4 @@
-import type { SessionType, SessionStatus } from '@fleex/shared';
+import type { SessionType, SessionStatus, SessionHookStatus, WaitingReason } from '@fleex/shared';
 import { SessionEntity } from '../../../domain/entities.js';
 import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
 import type { PgConnection } from './connection.js';
@@ -11,8 +11,9 @@ export class PgSessionStore implements SessionStorePort {
       `INSERT INTO sessions (
         id, tmux_name, type, status, cwd, created_at,
         last_attached_at, repository_org, repository_name,
-        worktree_branch, git_remote, claude_prompt, display_name
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        worktree_branch, git_remote, claude_prompt, display_name,
+        hook_status, hook_waiting_reason, hook_last_message, hook_status_updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
       ON CONFLICT (id) DO UPDATE SET
         tmux_name = $2,
         type = $3,
@@ -25,7 +26,11 @@ export class PgSessionStore implements SessionStorePort {
         worktree_branch = $10,
         git_remote = $11,
         claude_prompt = $12,
-        display_name = $13`,
+        display_name = $13,
+        hook_status = $14,
+        hook_waiting_reason = $15,
+        hook_last_message = $16,
+        hook_status_updated_at = $17`,
       [
         session.id,
         session.tmuxName,
@@ -40,6 +45,10 @@ export class PgSessionStore implements SessionStorePort {
         session.gitRemote,
         session.claudePrompt ?? null,
         session.displayName,
+        session.hookStatus,
+        session.hookWaitingReason,
+        session.hookLastMessage,
+        session.hookStatusUpdatedAt?.toISOString() ?? null,
       ],
     );
   }
@@ -84,5 +93,10 @@ function rowToSession(row: Record<string, unknown>): SessionEntity {
     (row.git_remote as string) ?? null,
     (row.claude_prompt as string) ?? undefined,
     (row.display_name as string) ?? '',
+    undefined,
+    ((row.hook_status as string) as SessionHookStatus) ?? 'unknown',
+    ((row.hook_waiting_reason as string | null) as WaitingReason | null) ?? null,
+    (row.hook_last_message as string | null) ?? null,
+    row.hook_status_updated_at ? new Date(row.hook_status_updated_at as string) : null,
   );
 }

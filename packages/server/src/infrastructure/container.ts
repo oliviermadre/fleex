@@ -22,6 +22,7 @@ import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.
 import { ReconcileWorktreeUseCase } from '../application/use-cases/reconcile-worktree.js';
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
+import { ProcessHookEventUseCase } from '../application/use-cases/process-hook-event.js';
 import type { PgUserStore } from './adapters/pg-user-store.adapter.js';
 import type { SessionManager } from './auth/session-manager.js';
 import type { SupabaseUserStore } from './adapters/supabase/supabase-user-store.adapter.js';
@@ -270,6 +271,9 @@ export async function createContainer() {
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore_, namingService, logger, git, resolver, ticketStore_);
   const getSessionGroups = new GetSessionGroupsUseCase(sessionStore_, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore_, personaStore_, agentEventStore_, reconcileWorktree, hostFs, config);
 
+  // Claude Code hook event processor (POST /api/hook)
+  const processHookEvent = new ProcessHookEventUseCase(sessionStore_, eventBus, logger);
+
   return {
     logger,
     gatewayUrl,
@@ -297,6 +301,7 @@ export async function createContainer() {
     killSession: new KillSessionUseCase(tmux, sessionStore_, logger),
     getSessionGroups,
     discoverSessions,
+    processHookEvent,
     listRepositories: new ListRepositoriesUseCase(git, config, logger, hostFs, resolver),
     listWorktrees: new ListWorktreesUseCase(git, logger, resolver, bareCloneManager),
     createWorktree: createWorktreeUC,

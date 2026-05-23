@@ -7,6 +7,7 @@ import { resolveInstance } from '../../core/instance.ts';
 import { SERVICES, loadPorts, type Service } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
 import { MIN_BUN_VERSION, versionGte } from '../../core/version.ts';
+import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
 
 interface ToolStatus {
   installed: boolean;
@@ -57,7 +58,10 @@ function probeSimple(cmd: string, versionArgs: string[] = ['--version']): ToolSt
 const def: CommandDef = {
   name: 'doctor',
   description: 'Check system health and prerequisites (bun, tmux, gh, claude, services)',
-  action: async () => {
+  setup(cmd) {
+    cmd.option('--fix', 'Apply automatic fixes when possible (e.g. install Claude Code hooks)');
+  },
+  action: async (opts: { fix?: boolean } = {}) => {
     const ctx = resolveInstance();
     process.stdout.write(`\n  ${c.bold('fleex doctor')}\n\n`);
 
@@ -91,6 +95,28 @@ const def: CommandDef = {
     } else {
       line(`${c.yellow('⚠')} claude ${claude.version ?? ''} — not authenticated. Run: ${c.bold('claude auth login')}`);
       allOk = false;
+    }
+
+    // claude hooks — Fleex → Claude Code integration in ~/.claude/settings.json
+    if (claude.installed) {
+      const hooksStatus = checkClaudeHooks();
+      if (hooksStatus.ok) {
+        line(`${c.green('✓')} claude hooks — Fleex hooks installed`);
+      } else if (hooksStatus.settingsCorrupted) {
+        if (opts.fix) {
+          const res = installClaudeHooks();
+          line(`${c.green('✓')} claude hooks — installed (${res.installed.length} events). Backup: ${res.backupPath ?? 'none'}`);
+        } else {
+          line(`${c.red('✗')} claude hooks — settings.json is invalid JSON. Run: ${c.bold('fleex doctor --fix')}`);
+          allOk = false;
+        }
+      } else if (opts.fix) {
+        const res = installClaudeHooks();
+        line(`${c.green('✓')} claude hooks — installed (${res.installed.length} events)`);
+      } else {
+        line(`${c.yellow('⚠')} claude hooks — missing ${hooksStatus.missing.length} event(s). Run: ${c.bold('fleex doctor --fix')}`);
+        allOk = false;
+      }
     }
 
     // jq (informational — TS CLI does not require it, but the bash CLI did)
