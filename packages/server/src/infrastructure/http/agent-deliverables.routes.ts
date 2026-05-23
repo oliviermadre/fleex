@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 import { TicketNotFoundError, DeliverableNotFoundError, ForbiddenError } from '../../domain/errors.js';
 import type { Container } from '../container.js';
 
@@ -42,7 +43,7 @@ export function agentDeliverablesRoutes(container: Container) {
     // Submit a deliverable
     app.post<{
       Params: { id: string };
-      Body: { type: string; title: string; content: string; status?: 'draft' | 'final'; mentionId?: string };
+      Body: { type: DeliverableType; title: string; content: string; status?: DeliverableStatus; mentionId?: string };
     }>('/tickets/:id/deliverables', async (request, reply) => {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
@@ -73,7 +74,7 @@ export function agentDeliverablesRoutes(container: Container) {
     // Update a deliverable
     app.patch<{
       Params: { id: string; delivId: string };
-      Body: { title?: string; content?: string; status?: 'draft' | 'final' };
+      Body: { title?: string; content?: string; status?: DeliverableStatus };
     }>('/tickets/:id/deliverables/:delivId', async (request) => {
       const deliverable = await container.deliverableStore.getById(request.params.delivId);
       if (!deliverable) throw new DeliverableNotFoundError(request.params.delivId);

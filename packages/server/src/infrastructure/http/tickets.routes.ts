@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { TicketStatus, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest } from '@fleex/shared';
+import type { TicketStatus, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, DeliverableType, DeliverableStatus } from '@fleex/shared';
 import { TICKET_STATUSES } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
@@ -923,7 +923,7 @@ export function ticketRoutes(container: Container) {
     // Create a deliverable from the web UI (no agent auth needed)
     app.post<{
       Params: { id: string };
-      Body: { title: string; type: string; content: string; status?: 'draft' | 'final'; agentName?: string };
+      Body: { title: string; type: DeliverableType; content: string; status?: DeliverableStatus; agentName?: string };
     }>('/api/tickets/:id/deliverables', async (request, reply) => {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
@@ -948,6 +948,42 @@ export function ticketRoutes(container: Container) {
       });
 
       return reply.code(201).send(deliverable.toDTO());
+    });
+
+    // Get a single deliverable (web)
+    app.get<{
+      Params: { id: string; delivId: string };
+    }>('/api/tickets/:id/deliverables/:delivId', async (request) => {
+      const deliverable = await container.deliverableStore.getById(request.params.delivId);
+      if (!deliverable) throw new DeliverableNotFoundError(request.params.delivId);
+      return deliverable.toDTO();
+    });
+
+    // Update a deliverable from the web UI / CLI (no agent auth required;
+    // unlike the agent route there is no ownership check — the human/CLI
+    // is trusted on the web port).
+    app.patch<{
+      Params: { id: string; delivId: string };
+      Body: { title?: string; content?: string; status?: DeliverableStatus };
+    }>('/api/tickets/:id/deliverables/:delivId', async (request) => {
+      const deliverable = await container.deliverableStore.getById(request.params.delivId);
+      if (!deliverable) throw new DeliverableNotFoundError(request.params.delivId);
+
+      const oldStatus = deliverable.status;
+      deliverable.update(request.body);
+      await container.deliverableStore.save(deliverable);
+
+      container.eventBus.emit({
+        type: 'deliverable.updated',
+        deliverableId: deliverable.id,
+        ticketId: deliverable.ticketId,
+        agentName: deliverable.agentName,
+        oldStatus,
+        newStatus: deliverable.status,
+        occurredAt: new Date(),
+      });
+
+      return deliverable.toDTO();
     });
 
     app.delete<{

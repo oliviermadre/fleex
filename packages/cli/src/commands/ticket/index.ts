@@ -28,6 +28,8 @@ ${SECTION('Examples:')}
   ${DIM('$')} fleex ticket update 42 --priority high     ${DIM('# set priority')}
   ${DIM('$')} fleex ticket move 42 done                  ${DIM('# mark as done')}
   ${DIM('$')} fleex ticket comment 42 "Looks good"       ${DIM('# add a comment')}
+  ${DIM('$')} fleex ticket deliverable list 42           ${DIM('# list deliverables')}
+  ${DIM('$')} fleex ticket deliverable add 42 --title T --type prd --file ./prd.md
   ${DIM('$')} fleex ticket delete 42 -f                  ${DIM('# delete without confirm')}
 `,
   action: (...args: unknown[]) => {

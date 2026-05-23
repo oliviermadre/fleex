@@ -1,4 +1,5 @@
-import type { AgentStructuredOutput } from '@fleex/shared';
+import type { AgentStructuredOutput, DeliverableType, DeliverableStatus } from '@fleex/shared';
+import { isDeliverableType } from '@fleex/shared';
 
 /**
  * Attempts to extract a valid AgentStructuredOutput from raw agent result text.
@@ -81,10 +82,10 @@ function validateShape(obj: unknown): AgentStructuredOutput | null {
         ? {
             title: (deliverable as Record<string, unknown>)['title'] as string,
             markdown: (deliverable as Record<string, unknown>)['markdown'] as string,
-            type: (typeof (deliverable as Record<string, unknown>)['type'] === 'string'
-              ? (deliverable as Record<string, unknown>)['type'] as string
+            type: (isDeliverableType((deliverable as Record<string, unknown>)['type'])
+              ? (deliverable as Record<string, unknown>)['type'] as DeliverableType
               : 'report'),
-            status: ((deliverable as Record<string, unknown>)['status'] as 'draft' | 'final') ?? 'draft',
+            status: ((deliverable as Record<string, unknown>)['status'] as DeliverableStatus) ?? 'draft',
           }
         : null,
     comment: (comment as string) ?? null,

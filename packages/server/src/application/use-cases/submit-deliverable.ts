@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
@@ -15,10 +16,10 @@ export class SubmitDeliverableUseCase {
   async execute(params: {
     ticketId: string;
     agentName: string;
-    type: string;
+    type: DeliverableType;
     title: string;
     content: string;
-    status?: 'draft' | 'final';
+    status?: DeliverableStatus;
     mentionId?: string | null;
   }): Promise<TicketDeliverableEntity> {
     const deliverable = TicketDeliverableEntity.create({

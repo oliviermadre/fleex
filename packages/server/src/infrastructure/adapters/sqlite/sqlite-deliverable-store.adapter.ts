@@ -1,3 +1,4 @@
+import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliverable.entity.js';
 import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
 import type { SqliteConnection } from './connection.js';
@@ -6,11 +7,11 @@ interface DeliverableRow {
   id: string;
   ticket_id: string;
   agent_name: string;
-  type: string;
+  type: DeliverableType;
   title: string;
   content: string;
   version: number;
-  status: string;
+  status: DeliverableStatus;
   mention_id: string | null;
   created_at: string;
   updated_at: string;
@@ -101,7 +102,7 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
       row.title,
       row.content,
       row.version,
-      row.status as 'draft' | 'final',
+      row.status,
       row.mention_id,
       new Date(row.created_at),
       new Date(row.updated_at),

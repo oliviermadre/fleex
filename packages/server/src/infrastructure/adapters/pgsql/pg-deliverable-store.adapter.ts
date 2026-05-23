@@ -1,3 +1,4 @@
+import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliverable.entity.js';
 import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
 import type { PgConnection } from './connection.js';
@@ -91,11 +92,11 @@ function rowToDeliverable(row: Record<string, unknown>): TicketDeliverableEntity
     row.id as string,
     row.ticket_id as string,
     row.agent_name as string,
-    row.type as string,
+    row.type as DeliverableType,
     row.title as string,
     row.content as string,
     (row.version as number) ?? 1,
-    (row.status as 'draft' | 'final') ?? 'draft',
+    (row.status as DeliverableStatus) ?? 'draft',
     (row.mention_id as string) ?? null,
     new Date(row.created_at as string),
     new Date(row.updated_at as string),

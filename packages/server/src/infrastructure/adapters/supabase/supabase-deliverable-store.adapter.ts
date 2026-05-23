@@ -1,3 +1,4 @@
+import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliverable.entity.js';
 import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
 import type { SupabaseConnection } from './connection.js';
@@ -6,11 +7,11 @@ interface DeliverableRow {
   id: string;
   ticket_id: string;
   agent_name: string;
-  type: string;
+  type: DeliverableType;
   title: string;
   content: string;
   version: number;
-  status: string;
+  status: DeliverableStatus;
   mention_id: string | null;
   created_at: string;
   updated_at: string;
@@ -25,7 +26,7 @@ function rowToEntity(r: DeliverableRow): TicketDeliverableEntity {
     r.title,
     r.content,
     r.version,
-    r.status as 'draft' | 'final',
+    r.status,
     r.mention_id,
     new Date(r.created_at),
     new Date(r.updated_at),

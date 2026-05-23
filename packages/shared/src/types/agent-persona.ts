@@ -1,3 +1,5 @@
+import type { DeliverableType, DeliverableStatus } from './ticket.js';
+
 export type ExecutionMode = 'claude_code' | 'message';
 
 export interface AgentPersona {
@@ -37,7 +39,7 @@ export interface UpdateAgentPersonaRequest {
 }
 
 export interface AgentStructuredOutput {
-  deliverable: { title: string; markdown: string; type: string; status: 'draft' | 'final' } | null;
+  deliverable: { title: string; markdown: string; type: DeliverableType; status: DeliverableStatus } | null;
   comment: string | null;
   mentionStatus?: 'resolved' | 'waiting_for_info';
 }
