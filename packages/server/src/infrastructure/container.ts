@@ -235,9 +235,17 @@ export async function createContainer() {
   });
   domainEventListener.register();
 
-  // Persist all domain events to the audit trail
+  // Persist all domain events to the audit trail.
+  // Events listed here are intentionally excluded — they are high-frequency,
+  // ephemeral signals (driven by Claude Code hooks) whose source of truth is
+  // already the corresponding entity row. Persisting them would also create
+  // duplicates per running instance when storage is shared (Supabase/pgsql).
+  const AUDIT_EXCLUDED_EVENTS = new Set<string>([
+    'session.hookStatusChanged',
+  ]);
   const instanceId = process.env['FLEEX_INSTANCE_ID'] ?? `${hostname()}:${process.env['PORT'] ?? '3000'}`;
   eventBus.on('*', (event) => {
+    if (AUDIT_EXCLUDED_EVENTS.has(event.type)) return;
     const entry = DomainEventLogEntity.create({
       id: randomUUID(),
       eventType: event.type,
