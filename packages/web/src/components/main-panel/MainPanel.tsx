@@ -135,14 +135,9 @@ export function MainPanel() {
   // Ticket-based session view
   if (activePanel === 'sessions' && sessionTicketId) {
     if (sessionTicketId === 'system') {
-      // System shells — find the first system session to create the entry
-      const systemSession = sessions.find((s) => !s.repositoryOrg);
-      if (systemSession) {
-        return <UnifiedWorktreePanel entry={{ kind: 'session', sessionId: systemSession.id }} focused />;
-      }
-    } else {
-      return <UnifiedWorktreePanel entry={{ kind: 'ticket', ticketId: sessionTicketId }} focused />;
+      return <UnifiedWorktreePanel entry={{ kind: 'system' }} focused />;
     }
+    return <UnifiedWorktreePanel entry={{ kind: 'ticket', ticketId: sessionTicketId }} focused />;
   }
 
   // Grouped view

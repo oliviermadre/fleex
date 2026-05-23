@@ -7,7 +7,8 @@ import { useAgentEventStore } from '../stores/agentEventStore';
 export type WorktreeEntry =
   | { kind: 'session'; sessionId: string }
   | { kind: 'ticket'; ticketId: string }
-  | { kind: 'agent'; ticketId: string };
+  | { kind: 'agent'; ticketId: string }
+  | { kind: 'system' };
 
 export interface WorktreeContext {
   worktree: WorktreeSessionGroup | null;
@@ -34,9 +35,37 @@ export function useWorktreeContext(entry: WorktreeEntry): WorktreeContext {
 
   // Stable primitives for memoization (avoids re-running on object identity changes)
   const entryKind = entry.kind;
-  const entryId = entry.kind === 'session' ? entry.sessionId : entry.ticketId;
+  const entryId = entry.kind === 'system'
+    ? null
+    : entry.kind === 'session' ? entry.sessionId : entry.ticketId;
 
   const resolved = useMemo(() => {
+    if (entryKind === 'system') {
+      // Aggregate all sessions from every worktree in the `_ungrouped` group into
+      // a single virtual worktree so the Shells view shows them as one list,
+      // regardless of how the server split them by `worktreeBranch`.
+      const systemGroup = sessionGroups.find(
+        (g) => g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped',
+      );
+      const aggregated: Session[] = systemGroup
+        ? systemGroup.worktrees.flatMap((wt) => wt.sessions)
+        : [];
+      const virtualWt: WorktreeSessionGroup = {
+        branch: 'shells',
+        path: '',
+        sessions: aggregated,
+      };
+      return {
+        worktree: virtualWt,
+        repoOrg: '_ungrouped',
+        repoName: '_ungrouped',
+        groupId: '_system',
+        sessions: aggregated,
+        ticketId: null,
+        ticket: null,
+      };
+    }
+
     if (entryKind === 'agent' || entryKind === 'ticket') {
       // Find worktree by ticketId
       for (const group of sessionGroups) {
