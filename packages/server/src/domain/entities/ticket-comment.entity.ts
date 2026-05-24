@@ -3,6 +3,7 @@ import type { TicketComment, CommentVisibility } from '@fleex/shared';
 const AGENT_MENTION_PATTERN = /@agent:([a-zA-Z0-9_-]+)/g;
 const PANEL_MENTION_PATTERN = /@panel:([a-zA-Z0-9_-]+)/g;
 const SKILL_MENTION_PATTERN = /@skill:([a-zA-Z0-9_-]+)/g;
+const WORKFLOW_MENTION_PATTERN = /@workflow:([a-zA-Z0-9_-]+)/g;
 const HUMAN_MENTION_PATTERN = /@([a-zA-Z0-9_-]+)/g;
 
 export class TicketCommentEntity {
@@ -80,15 +81,26 @@ export class TicketCommentEntity {
     return Array.from(matches);
   }
 
+  static extractWorkflowMentions(body: string): string[] {
+    const matches = new Set<string>();
+    for (const match of body.matchAll(WORKFLOW_MENTION_PATTERN)) {
+      // Skip struck-through mentions: ~~@workflow:name~~
+      const prefix = match.index! >= 2 ? body.substring(match.index! - 2, match.index!) : '';
+      if (prefix === '~~') continue;
+      matches.add(match[1]!);
+    }
+    return Array.from(matches);
+  }
+
   static extractHumanMentions(body: string, humanNames: string[]): string[] {
     if (humanNames.length === 0) return [];
     const nameSet = new Set(humanNames.map((n) => n.toLowerCase()));
     const matches = new Set<string>();
     for (const match of body.matchAll(HUMAN_MENTION_PATTERN)) {
       const name = match[1]!;
-      // Skip if this is an @agent:xxx, @panel:xxx, or @skill:xxx mention (already captured)
-      const prefix = body.substring(Math.max(0, match.index! - 6), match.index!);
-      if (prefix.endsWith('agent:') || prefix.endsWith('panel:') || prefix.endsWith('skill:')) continue;
+      // Skip if this is an @agent:xxx, @panel:xxx, @skill:xxx, or @workflow:xxx mention (already captured)
+      const prefix = body.substring(Math.max(0, match.index! - 10), match.index!);
+      if (prefix.endsWith('@agent:') || prefix.endsWith('@panel:') || prefix.endsWith('@skill:') || prefix.endsWith('@workflow:')) continue;
       // Skip struck-through mentions: ~~@name~~
       const prefix2 = match.index! >= 2 ? body.substring(match.index! - 2, match.index!) : '';
       if (prefix2 === '~~') continue;
