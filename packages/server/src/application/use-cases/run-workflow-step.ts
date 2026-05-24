@@ -31,43 +31,47 @@ export class RunWorkflowStepUseCase {
     const latest = await this.deps.stepRunStore.getLatestForStep(run.id, step.id);
     const attempt = (latest?.attempt ?? 0) + 1;
 
-    // 2. Create and start step_run
+    // 2. Create the step_run entity (in-memory, no IO yet)
     const stepRun = StepRunEntity.create({ id: randomUUID(), workflowRunId: run.id, stepId: step.id, attempt });
-    stepRun.start();
-    await this.deps.stepRunStore.save(stepRun);
-    this.deps.eventBus.emit({
-      type: 'workflow.step_started', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-      ticketId: run.ticketId, occurredAt: new Date(),
-    });
 
-    // 3. Build workflow context (previousOutputs from prior step_runs)
-    const allStepRuns = await this.deps.stepRunStore.getByWorkflowRun(run.id);
-    const previousOutputs: Record<string, Record<string, unknown>> = {};
-    for (const sr of allStepRuns) {
-      if (sr.id === stepRun.id) continue;
-      if (sr.status === 'completed' && sr.output) {
-        previousOutputs[sr.stepId] = (sr.output.schemaFields as Record<string, unknown>) ?? {};
-      }
-    }
-
-    const outgoingEdges = run.outgoingEdges(step.id).map((e) => {
-      const target = run.findStep(e.target);
-      return {
-        id: e.id, label: e.label, condition: e.condition,
-        targetName: target?.name ?? e.target,
-      };
-    });
-
-    const input: StepExecutionInput = {
-      ticketId: run.ticketId, workflowRunId: run.id, stepRunId: stepRun.id, step,
-      workflowContext: {
-        workflowName: run.templateSnapshot.name, stepName: step.name,
-        outgoingEdges, previousOutputs,
-      },
-    };
-
-    // 4. Dispatch to executor
     try {
+      // 2b. Persist + emit step_started inside try so DB failures route to run.fail()
+      stepRun.start();
+      await this.deps.stepRunStore.save(stepRun);
+      this.deps.eventBus.emit({
+        type: 'workflow.step_started', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
+        ticketId: run.ticketId, occurredAt: new Date(),
+      });
+
+      // 3. Build workflow context (previousOutputs from prior step_runs)
+      // Filter excludes ALL attempts of the current step (not just this attempt) so retries
+      // don't surface stale output of previous completed attempts of the same stepId.
+      const allStepRuns = await this.deps.stepRunStore.getByWorkflowRun(run.id);
+      const previousOutputs: Record<string, Record<string, unknown>> = {};
+      for (const sr of allStepRuns) {
+        if (sr.stepId === step.id) continue;
+        if (sr.status === 'completed' && sr.output) {
+          previousOutputs[sr.stepId] = (sr.output.schemaFields as Record<string, unknown>) ?? {};
+        }
+      }
+
+      const outgoingEdges = run.outgoingEdges(step.id).map((e) => {
+        const target = run.findStep(e.target);
+        return {
+          id: e.id, label: e.label, condition: e.condition,
+          targetName: target?.name ?? e.target,
+        };
+      });
+
+      const input: StepExecutionInput = {
+        ticketId: run.ticketId, workflowRunId: run.id, stepRunId: stepRun.id, step,
+        workflowContext: {
+          workflowName: run.templateSnapshot.name, stepName: step.name,
+          outgoingEdges, previousOutputs,
+        },
+      };
+
+      // 4. Dispatch to executor
       const executor = this.deps.executors[step.executorType];
       if (!executor) throw new Error(`No executor registered for type "${step.executorType}"`);
       const result = await executor.execute(input);
