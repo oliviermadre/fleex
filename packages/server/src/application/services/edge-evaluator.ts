@@ -40,8 +40,11 @@ function getByPath(output: StepOutput, path: string): unknown {
 
 function matches(actual: unknown, op: EdgeOperator, value: string | string[]): boolean {
   switch (op) {
-    case 'eq':       return actual === value;
-    case 'neq':      return actual !== value;
+    // eq/neq coerce actual to string to match the always-string `value`
+    // (mirrors `in` and `gt`/`lt` behavior — agents may emit numbers/bools that
+    // routing edges compare against string literals like `"high"` or `"10"`)
+    case 'eq':       return typeof value === 'string' && String(actual) === value;
+    case 'neq':      return typeof value === 'string' && String(actual) !== value;
     case 'in':       return Array.isArray(value) && value.includes(String(actual));
     case 'gt': {
       const a = Number(actual), v = Number(value as string);
