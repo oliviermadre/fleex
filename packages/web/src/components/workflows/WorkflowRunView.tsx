@@ -118,18 +118,28 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
         {/* DAG canvas */}
         <div className="flex-1">
           <ReactFlow
+            colorMode="dark"
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
             nodesDraggable={false}
             nodesConnectable={false}
             elementsSelectable
+            minZoom={0.2}
+            maxZoom={2}
             fitView
-            fitViewOptions={{ padding: 0.2 }}
+            fitViewOptions={{ padding: 0.4, minZoom: 0.5, maxZoom: 1.2 }}
           >
-            <Background />
-            <Controls />
-            <MiniMap />
+            <Background gap={16} size={1} color="rgba(255,255,255,0.08)" />
+            <Controls showInteractive={false} />
+            <MiniMap
+              pannable
+              zoomable
+              maskColor="rgba(0,0,0,0.6)"
+              style={{ background: 'var(--theme-bg-surface)', border: '1px solid var(--theme-border)' }}
+              nodeColor="rgba(168,85,247,0.4)"
+              nodeStrokeColor="rgba(168,85,247,0.8)"
+            />
           </ReactFlow>
         </div>
 

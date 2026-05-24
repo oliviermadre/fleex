@@ -170,15 +170,24 @@ function EditorInner({ template, onBack }: Props) {
         <ExecutorPalette onDragStart={onPaletteDragStart} />
         <div ref={wrapperRef} className="flex-1" onDrop={onDrop} onDragOver={onDragOver}>
           <ReactFlow
+            colorMode="dark"
             nodes={nodes} edges={rfEdges} nodeTypes={nodeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
             onEdgeClick={(_, e) => { setSelectedEdgeId(e.id); setSelectedStepId(null); }}
             onPaneClick={() => { setSelectedStepId(null); setSelectedEdgeId(null); }}
-            fitView fitViewOptions={{ padding: 0.2 }}
+            defaultViewport={{ x: 200, y: 100, zoom: 1 }}
+            minZoom={0.2} maxZoom={2}
+            fitView fitViewOptions={{ padding: 0.4, minZoom: 0.5, maxZoom: 1.2 }}
           >
-            <Background />
-            <Controls />
-            <MiniMap />
+            <Background gap={16} size={1} color="rgba(255,255,255,0.08)" />
+            <Controls className="!bg-[var(--theme-bg-surface)] !border-[var(--theme-border)]" showInteractive={false} />
+            <MiniMap
+              pannable zoomable
+              maskColor="rgba(0,0,0,0.6)"
+              style={{ background: 'var(--theme-bg-surface)', border: '1px solid var(--theme-border)' }}
+              nodeColor="rgba(168,85,247,0.4)"
+              nodeStrokeColor="rgba(168,85,247,0.8)"
+            />
           </ReactFlow>
         </div>
         <div className="w-[320px] border-l p-4 overflow-y-auto" style={{ borderColor: 'var(--theme-border)' }}>
