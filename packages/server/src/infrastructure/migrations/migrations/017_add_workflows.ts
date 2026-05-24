@@ -18,7 +18,7 @@ const migration: Migration = {
       supabase: 'DEFAULT NOW()',
     });
     const boolType = ctx.dialect({ sqlite: 'INTEGER', pgsql: 'BOOLEAN', supabase: 'BOOLEAN' });
-    const boolTrueDefault = ctx.dialect({ sqlite: 'DEFAULT 1', pgsql: 'DEFAULT false', supabase: 'DEFAULT FALSE' });
+    const boolTrueDefault = ctx.dialect({ sqlite: 'DEFAULT 1', pgsql: 'DEFAULT TRUE', supabase: 'DEFAULT TRUE' });
 
     // workflow_templates
     await ctx.exec(`
