@@ -40,11 +40,13 @@ export class PanelStepExecutor implements StepExecutor {
     for (const [k, v] of Object.entries(so)) {
       if (!STANDARD_KEYS.has(k)) schemaFields[k] = v;
     }
+    const mentionStatus = so['mentionStatus'] as 'resolved' | 'waiting_for_info' | undefined;
     return {
       deliverable: (so['deliverable'] as StepOutput['deliverable']) ?? null,
       comment: (so['comment'] as string | null) ?? null,
+      mentionStatus,
       schemaFields,
-      result: 'ok',
+      result: mentionStatus === 'waiting_for_info' ? 'needs_review' : 'ok',
     };
   }
 }
