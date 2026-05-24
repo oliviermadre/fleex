@@ -2,7 +2,7 @@ import type {
   WorkflowRun, WorkflowRunStatus, WorkflowTemplateSnapshot,
 } from '@fleex/shared';
 
-const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'blocked', 'needs_review'];
+const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'needs_review'];
 
 export class WorkflowRunEntity {
   constructor(
@@ -65,6 +65,7 @@ export class WorkflowRunEntity {
 
   fail(): void {
     this.status = 'failed';
+    this.currentStepId = null;
     this.completedAt = new Date();
     this.updatedAt = new Date();
   }
