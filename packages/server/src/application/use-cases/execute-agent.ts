@@ -1361,6 +1361,135 @@ export class ExecuteAgentUseCase {
     }
   }
 
+  /**
+   * Execute an agent as part of a workflow step.
+   * Unlike `execute()` this does not consume a pending mention — the workflow
+   * orchestrator drives execution and persists output to step_runs.
+   *
+   * Returns the parsed structured output (with custom schema fields merged at
+   * top-level) and the executionId for audit linking.
+   */
+  async executeForWorkflowStep(params: {
+    personaName: string;
+    ticketId: string;
+    outputFormat: typeof OUTPUT_FORMAT_SCHEMA;
+    workflowContextPrompt: string;
+    mode: MentionExecutionMode;
+  }): Promise<{
+    structuredOutput: Record<string, unknown> | null;
+    rawText: string;
+    executionId: string;
+  }> {
+    const persona = await this.personaStore.getByName(params.personaName);
+    if (!persona) throw new AgentPersonaNotFoundError(params.personaName);
+
+    const executionId = randomUUID();
+    const abortController = new AbortController();
+    const humanName = this.resolveHumanMentionName(persona);
+
+    // Effective mode: respect persona ceiling
+    const effectiveMode: MentionExecutionMode = persona.executionMode === 'message' ? 'talk' : params.mode;
+
+    // Worktree if needed (same as executeForMention)
+    let worktreePath: string | null = null;
+    if (effectiveMode !== 'talk') {
+      worktreePath = await this.ensureWorktree(params.ticketId);
+    }
+
+    // Start tracking
+    await this.agentEventStore.startExecution({
+      executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: `workflow:${executionId}`,
+    });
+
+    // Compose prompts
+    const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
+    const context = await this.getTicketContext.execute({ ticketId: params.ticketId, agentName: persona.name });
+    const userPromptBlocks = await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt);
+    const userPromptText = userPromptBlocks.map((b) => b.type === 'text' ? b.text : '').join('');
+
+    let sequence = 0;
+    const emitEvent = async (eventType: AgentEventType, data: unknown) => {
+      const event = AgentEventEntity.create({ executionId, eventType, data, sequence: sequence++ });
+      await this.agentEventStore.appendEvent(event);
+      this.onEvent?.(event);
+    };
+
+    await emitEvent('execution_start', {
+      executionId, personaId: persona.id, personaName: persona.name, ticketId: params.ticketId,
+      model: persona.model, effectiveMode, worktreePath,
+      context: {
+        systemPromptSections: ['workflow_step'],
+        systemPromptLength: systemPrompt.length,
+        userPromptLength: userPromptText.length,
+      },
+    });
+
+    // SDK query
+    const { query } = await import('@anthropic-ai/claude-agent-sdk');
+    const queryOptions = buildSdkOptions(effectiveMode, {
+      model: persona.model, systemPrompt, cwd: worktreePath,
+      outputFormat: params.outputFormat,
+    });
+
+    let sdkSessionId: string | undefined;
+    let resultText = '';
+    let structuredOutput: Record<string, unknown> | null = null;
+    const hasImages = userPromptBlocks.some((b) => b.type === 'image');
+    const promptArg = hasImages
+      ? (async function* () { yield { type: 'user' as const, message: { role: 'user' as const, content: userPromptBlocks }, parent_tool_use_id: null, session_id: '' }; })()
+      : userPromptText;
+
+    for await (const message of query({ prompt: promptArg, options: queryOptions as Parameters<typeof query>[0]['options'] })) {
+      if (abortController.signal.aborted) break;
+      const msg = message as Record<string, unknown>;
+      if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
+        sdkSessionId = msg['session_id'] as string;
+        await emitEvent('turn_start', { sessionId: sdkSessionId });
+      }
+      if ('result' in message) {
+        resultText = (message as { result: string }).result;
+        if (msg['structured_output']) {
+          structuredOutput = msg['structured_output'] as Record<string, unknown>;
+        }
+        await emitEvent('message_stop', { result: resultText, subtype: msg['subtype'] as string | undefined });
+      } else {
+        await emitEvent('content_block_delta', msg);
+      }
+    }
+
+    await emitEvent('execution_end', { status: 'completed', ticketId: params.ticketId, resultLength: resultText.length });
+    await this.agentEventStore.completeExecution(executionId, 'completed');
+
+    return { structuredOutput, rawText: resultText, executionId };
+  }
+
+  private async composeWorkflowUserPrompt(
+    context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
+    workflowContextPrompt: string,
+  ): Promise<PromptContentBlock[]> {
+    const blocks: PromptContentBlock[] = [];
+    const pushText = (text: string) => blocks.push({ type: 'text', text });
+
+    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
+    if (context.ticket.description) {
+      blocks.push(...await this.resolveText(`\n## Description\n\n${context.ticket.description}`));
+    }
+    if (context.comments.length > 0) {
+      pushText('\n## Comments\n');
+      for (const c of context.comments) {
+        blocks.push(...await this.resolveText(`**${c.authorName}** (${c.authorType}):\n${c.body}\n`));
+      }
+    }
+    if (context.deliverables.length > 0) {
+      pushText('\n## Deliverables\n');
+      for (const d of context.deliverables) {
+        pushText(`### [${d.status}] ${d.title} (${d.type})\n${d.content ?? ''}\n`);
+      }
+    }
+    pushText('\n---\n\n' + workflowContextPrompt);
+    return blocks;
+  }
+
   private async composeSkillUserPrompt(
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     skillDisplayName: string,
