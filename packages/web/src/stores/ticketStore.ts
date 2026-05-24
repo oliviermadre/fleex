@@ -4,8 +4,8 @@ import { TICKET_STATUSES } from '@fleex/shared';
 import * as api from '../services/api';
 import { useSessionStore } from './sessionStore';
 
-export type TicketTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity';
-export const VALID_TICKET_TABS: TicketTab[] = ['description', 'comments', 'mentions', 'deliverables', 'activity'];
+export type TicketTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity' | 'workflow';
+export const VALID_TICKET_TABS: TicketTab[] = ['description', 'comments', 'mentions', 'deliverables', 'activity', 'workflow'];
 
 interface TicketFilters {
   repo: string | null;        // "org/name" or null for all

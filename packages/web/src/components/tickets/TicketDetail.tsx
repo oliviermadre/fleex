@@ -15,6 +15,8 @@ import * as api from '../../services/api';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
 
 type DescriptionMode = 'write' | 'preview' | 'split';
 
@@ -35,6 +37,11 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
   const [commentCount, setCommentCount] = useState(0);
   const [deliverableCount, setDeliverableCount] = useState(0);
   const [mentionCount, setMentionCount] = useState(0);
+
+  const workflowRuns = useWorkflowRunStore((s) => s.runsByTicket[ticketId] ?? []);
+  useEffect(() => {
+    void useWorkflowRunStore.getState().loadForTicket(ticketId);
+  }, [ticketId]);
 
   // Track initial description to know if it changed when leaving
   const initialDescRef = useRef('');
@@ -210,6 +217,7 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
     { key: 'mentions', label: `Mentions${mentionCount > 0 ? ` (${mentionCount})` : ''}` },
     { key: 'deliverables', label: deliverableLabel },
     { key: 'activity', label: 'Activity' },
+    ...(workflowRuns.length > 0 ? [{ key: 'workflow' as TicketTab, label: 'Workflow' }] : []),
   ];
 
   return (
@@ -356,6 +364,13 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
             {mainTab === 'activity' && (
               <div className="flex-1 overflow-y-auto">
                 <TicketActivityTimeline ticketId={ticketId} />
+              </div>
+            )}
+
+            {/* Workflow tab */}
+            {mainTab === 'workflow' && (
+              <div className="flex-1 overflow-hidden">
+                <TicketWorkflowTab ticketId={ticketId} />
               </div>
             )}
           </div>
