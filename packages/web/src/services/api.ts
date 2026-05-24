@@ -24,6 +24,7 @@ import type {
   UpdateTicketGroupRequest,
   Ticket,
   TicketRelationship,
+  WorkflowTemplate,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -801,4 +802,33 @@ export async function addTicketChild(parentId: string, childId: string): Promise
 
 export async function removeTicketChild(parentId: string, childId: string): Promise<void> {
   await request(`/tickets/${encodeURIComponent(parentId)}/children/${encodeURIComponent(childId)}`, { method: 'DELETE' });
+}
+
+// ── Workflow Templates ──
+
+export async function fetchWorkflowTemplates(): Promise<WorkflowTemplate[]> {
+  return request<WorkflowTemplate[]>('/workflows/templates');
+}
+
+export async function createWorkflowTemplate(
+  input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>,
+): Promise<WorkflowTemplate> {
+  return request<WorkflowTemplate>('/workflows/templates', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateWorkflowTemplate(
+  id: string,
+  input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>,
+): Promise<WorkflowTemplate> {
+  return request<WorkflowTemplate>(`/workflows/templates/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteWorkflowTemplate(id: string): Promise<void> {
+  return request<void>(`/workflows/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
