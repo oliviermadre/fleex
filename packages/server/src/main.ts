@@ -42,6 +42,7 @@ import { fileRoutes } from './infrastructure/http/files.routes.js';
 import { ticketGroupRoutes } from './infrastructure/http/ticket-groups.routes.js';
 import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
+import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 
 async function main() {
   const container = await createContainer();
@@ -97,6 +98,13 @@ async function main() {
   await app.register(githubImageProxyRoutes(container));
   await app.register(fileRoutes(container));
   await app.register(ticketGroupRoutes(container));
+
+  // Workflow template routes (requires workflowTemplateStore — available on sqlite/supabase)
+  if (container.workflowTemplateStore) {
+    await app.register(workflowTemplateRoutes({ templateStore: container.workflowTemplateStore }));
+  } else {
+    container.logger.warn('workflowTemplateStore not available — /api/workflows/templates routes skipped');
+  }
 
   // Agent API with auth
   const authHook = createAgentAuthHook(container);
