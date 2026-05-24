@@ -17,10 +17,12 @@ const migration: Migration = {
       pgsql: 'DEFAULT NOW()',
       supabase: 'DEFAULT NOW()',
     });
+    const boolType = ctx.dialect({ sqlite: 'INTEGER', pgsql: 'BOOLEAN', supabase: 'BOOLEAN' });
+    const boolTrueDefault = ctx.dialect({ sqlite: 'DEFAULT 1', pgsql: 'DEFAULT false', supabase: 'DEFAULT FALSE' });
 
     // workflow_templates
     await ctx.exec(`
-      CREATE TABLE workflow_templates (
+      CREATE TABLE IF NOT EXISTS workflow_templates (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         slug TEXT NOT NULL UNIQUE,
@@ -29,7 +31,7 @@ const migration: Migration = {
         steps ${jsonType} NOT NULL,
         edges ${jsonType} NOT NULL,
         entry_step_id TEXT NOT NULL,
-        enabled INTEGER NOT NULL DEFAULT 1,
+        enabled ${boolType} NOT NULL ${boolTrueDefault},
         created_at ${tsType} NOT NULL ${tsDefault},
         updated_at ${tsType} NOT NULL ${tsDefault}
       )
@@ -37,7 +39,7 @@ const migration: Migration = {
 
     // workflow_runs
     await ctx.exec(`
-      CREATE TABLE workflow_runs (
+      CREATE TABLE IF NOT EXISTS workflow_runs (
         id TEXT PRIMARY KEY,
         ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
         template_id TEXT NOT NULL REFERENCES workflow_templates(id),
@@ -52,11 +54,11 @@ const migration: Migration = {
         updated_at ${tsType} NOT NULL ${tsDefault}
       )
     `);
-    await ctx.exec('CREATE INDEX idx_workflow_runs_ticket_status ON workflow_runs(ticket_id, status)');
+    await ctx.exec('CREATE INDEX IF NOT EXISTS idx_workflow_runs_ticket_status ON workflow_runs(ticket_id, status)');
 
     // step_runs
     await ctx.exec(`
-      CREATE TABLE step_runs (
+      CREATE TABLE IF NOT EXISTS step_runs (
         id TEXT PRIMARY KEY,
         workflow_run_id TEXT NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
         step_id TEXT NOT NULL,
@@ -71,7 +73,7 @@ const migration: Migration = {
         created_at ${tsType} NOT NULL ${tsDefault}
       )
     `);
-    await ctx.exec('CREATE INDEX idx_step_runs_run_step ON step_runs(workflow_run_id, step_id)');
+    await ctx.exec('CREATE INDEX IF NOT EXISTS idx_step_runs_run_step ON step_runs(workflow_run_id, step_id)');
 
     // Supabase RLS (cf. CLAUDE.md)
     if (ctx.adapter === 'supabase') {
