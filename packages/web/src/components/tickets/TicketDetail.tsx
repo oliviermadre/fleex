@@ -100,6 +100,15 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
         } else if (msg.type === 'mention:deleted') {
           const { ticketId: tid } = msg.data as { ticketId: string };
           if (tid === ticketId) setMentionCount((c) => Math.max(0, c - 1));
+        } else if (raw.type.startsWith('workflow:')) {
+          const { ticketId: tid } = raw.data as { ticketId: string };
+          if (tid === ticketId) {
+            useWorkflowRunStore.getState().applyEvent({
+              type: raw.type,
+              ticketId: tid,
+              payload: raw.data as Record<string, unknown>,
+            });
+          }
         }
       } catch { /* ignore */ }
     });
