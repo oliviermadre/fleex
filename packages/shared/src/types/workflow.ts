@@ -1,3 +1,5 @@
+import type { DeliverableType, DeliverableStatus } from './ticket.js';
+
 export type WorkflowExecutorType = 'agent' | 'skill' | 'panel' | 'human_gate';
 
 export type EdgeOperator = 'eq' | 'neq' | 'in' | 'gt' | 'lt' | 'contains';
@@ -92,8 +94,8 @@ export interface StepOutput {
   deliverable?: {
     title: string;
     markdown: string;
-    type: string;
-    status: 'draft' | 'final';
+    type: DeliverableType;
+    status: DeliverableStatus;
   } | null;
   comment?: string | null;
   mentionStatus?: 'resolved' | 'waiting_for_info';
