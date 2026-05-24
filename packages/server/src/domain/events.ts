@@ -231,6 +231,15 @@ export interface PanelExecutedEvent extends DomainEvent {
   failedMembers: number;
 }
 
+// ── Workflow events ──
+
+export interface WorkflowRunCreatedEvent extends DomainEvent {
+  type: 'workflow.run_created';
+  workflowRunId: string;
+  ticketId: string;
+  templateId: string;
+}
+
 // ── Worktree events ──
 
 export interface WorktreeCreatedEvent extends DomainEvent {
@@ -362,7 +371,8 @@ export type AnyDomainEvent =
   | TicketRelationshipCreatedEvent
   | TicketRelationshipDeletedEvent
   | TicketGroupBoardAddedEvent
-  | TicketGroupBoardRemovedEvent;
+  | TicketGroupBoardRemovedEvent
+  | WorkflowRunCreatedEvent;
 
 // ── Event type string union ──
 

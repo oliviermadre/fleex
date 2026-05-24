@@ -127,3 +127,33 @@ export class PanelNameConflictError extends DomainError {
     super(`Panel name already exists: ${name}`, 'PANEL_NAME_CONFLICT');
   }
 }
+
+export class WorkflowRunAlreadyActiveError extends DomainError {
+  constructor(ticketId: string) {
+    super(`A workflow run is already active on ticket ${ticketId}`, 'WORKFLOW_RUN_ALREADY_ACTIVE');
+  }
+}
+
+export class WorkflowTemplateNotFoundError extends DomainError {
+  constructor(slugOrId: string) {
+    super(`Workflow template not found: ${slugOrId}`, 'WORKFLOW_TEMPLATE_NOT_FOUND');
+  }
+}
+
+export class WorkflowRunNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Workflow run not found: ${id}`, 'WORKFLOW_RUN_NOT_FOUND');
+  }
+}
+
+export class StepRunNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Step run not found: ${id}`, 'STEP_RUN_NOT_FOUND');
+  }
+}
+
+export class InvalidGateOutcomeError extends DomainError {
+  constructor(outcome: string, allowed: string[]) {
+    super(`Invalid gate outcome "${outcome}". Allowed: ${allowed.join(', ')}`, 'INVALID_GATE_OUTCOME');
+  }
+}
