@@ -177,6 +177,26 @@ export type {
   SessionRemovedMessage,
 } from './types/websocket.js';
 
+export type {
+  WorkflowExecutorType,
+  EdgeOperator,
+  JsonSchemaProperty,
+  JsonSchema,
+  WorkflowStep,
+  WorkflowEdgeCondition,
+  WorkflowEdge,
+  WorkflowTemplate,
+  WorkflowRunStatus,
+  WorkflowTemplateSnapshot,
+  WorkflowRun,
+  StepRunStatus,
+  StepRunResult,
+  StepOutput,
+  StepRun,
+  CreateWorkflowRunInput,
+  ResolveHumanGateInput,
+} from './types/workflow.js';
+
 export type { WsChannel } from './constants.js';
 
 export {
