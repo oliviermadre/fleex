@@ -943,7 +943,10 @@ export class ExecuteAgentUseCase {
   async executeForSkill(skillId: string, ticketId: string, opts?: {
     commentBody?: string;
     mentionId?: string;
-  }): Promise<void> {
+    outputFormatOverride?: typeof OUTPUT_FORMAT_SCHEMA;
+    workflowContextPrompt?: string;
+    returnStructured?: boolean;
+  }): Promise<{ structuredOutput: Record<string, unknown> | null; rawText: string; executionId: string } | void> {
     if (!this.skillStore) {
       throw new Error('SkillStore not available');
     }
@@ -1017,6 +1020,10 @@ export class ExecuteAgentUseCase {
 
     const skillPromptBlocks = await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent, opts?.commentBody);
 
+    if (opts?.workflowContextPrompt) {
+      skillPromptBlocks.push({ type: 'text', text: `\n---\n\n${opts.workflowContextPrompt}` });
+    }
+
     this.logger.info('Skill execution started', {
       executionId,
       skillId,
@@ -1079,7 +1086,7 @@ export class ExecuteAgentUseCase {
         model: persona.model,
         systemPrompt,
         cwd: worktreePath,
-        outputFormat: OUTPUT_FORMAT_SCHEMA,
+        outputFormat: opts?.outputFormatOverride ?? OUTPUT_FORMAT_SCHEMA,
         resume: previousSessionId ?? undefined,
       });
 
@@ -1170,6 +1177,14 @@ export class ExecuteAgentUseCase {
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
       });
+
+      // Short-circuit: workflow orchestrator handles persistence via step_runs
+      if (opts?.returnStructured) {
+        await this.agentEventStore.completeExecution(executionId, 'completed');
+        this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'completed', abortController });
+        this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);
+        return { structuredOutput: structured as Record<string, unknown> | null, rawText: resultText, executionId };
+      }
 
       if (structured) {
         if (structured.comment) {
