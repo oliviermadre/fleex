@@ -11,6 +11,8 @@ import type { ExecuteAgentUseCase } from './use-cases/execute-agent.js';
 import type { WakeWaitingAgentsUseCase } from './use-cases/wake-waiting-agents.js';
 import type { RunPanelUseCase } from './use-cases/run-panel.js';
 import type { GenerateTicketSummaryUseCase } from './use-cases/generate-ticket-summary.js';
+import type { WorkflowTemplateStorePort } from './ports/workflow-template-store.port.js';
+import type { CreateWorkflowRunUseCase } from './use-cases/create-workflow-run.js';
 import type {
   AnyDomainEvent,
   CommentPostedEvent,
@@ -43,6 +45,8 @@ export interface DomainEventListenerDeps {
   runPanel: RunPanelUseCase;
   generateTicketSummary: GenerateTicketSummaryUseCase;
   logger: LoggerPort;
+  workflowTemplateStore?: WorkflowTemplateStorePort | null;
+  createWorkflowRun?: CreateWorkflowRunUseCase | null;
 }
 
 /**
@@ -61,6 +65,12 @@ export class DomainEventListener {
   private skillBroadcast: BroadcastFn = () => {};
 
   constructor(private readonly deps: DomainEventListenerDeps) {}
+
+  /** Called after Phase B wiring to attach workflow deps (which are initialized after the listener) */
+  setWorkflowDeps(deps: { workflowTemplateStore: WorkflowTemplateStorePort | null; createWorkflowRun: CreateWorkflowRunUseCase | null }): void {
+    this.deps.workflowTemplateStore = deps.workflowTemplateStore;
+    this.deps.createWorkflowRun = deps.createWorkflowRun;
+  }
 
   /** Called by WS plugins to wire up broadcast functions */
   setTicketBroadcast(fn: BroadcastFn): void {
@@ -164,6 +174,9 @@ export class DomainEventListener {
     // ── Cross-cutting: Auto-trigger skills when mentioned ──
     bus.on('mention.created', (e) => this.handleAutoTriggerSkill(e as MentionCreatedEvent));
 
+    // ── Cross-cutting: Auto-trigger workflows when mentioned ──
+    bus.on('mention.created', (e) => this.handleAutoTriggerWorkflow(e as MentionCreatedEvent));
+
     // ── Cross-cutting: Auto-review workflow ──
     bus.on('comment.posted', (e) => this.handleCommentPostedWorkflow(e as CommentPostedEvent));
     bus.on('comment.updated', (e) => this.handleCommentUpdatedWorkflow(e as CommentUpdatedEvent));
@@ -258,6 +271,51 @@ export class DomainEventListener {
       this.deps.logger.error('Skill auto-trigger failed', {
         skillName: event.targetAgent,
         ticketId: event.ticketId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
+  // ── Auto-trigger workflow run ──
+
+  private async handleAutoTriggerWorkflow(event: MentionCreatedEvent): Promise<void> {
+    if (event.targetType !== 'workflow') return;
+
+    // workflow stores may be null on unsupported adapters
+    if (!this.deps.workflowTemplateStore || !this.deps.createWorkflowRun) {
+      this.deps.logger.warn('Workflow mention received but workflow stores not configured', {
+        slug: event.targetAgent, ticketId: event.ticketId,
+      });
+      return;
+    }
+
+    const template = await this.deps.workflowTemplateStore.getBySlug(event.targetAgent);
+    if (!template || !template.enabled) {
+      // Unknown or disabled template — resolve silently like skills do
+      const mention = await this.deps.mentionStore.getById(event.mentionId);
+      if (mention && mention.status !== 'resolved') {
+        mention.resolve();
+        await this.deps.mentionStore.save(mention);
+      }
+      return;
+    }
+
+    // Fire and forget — create the workflow run
+    this.deps.createWorkflowRun.execute({
+      ticketId: event.ticketId,
+      templateId: template.id,
+      triggeredBy: event.sourceAgent,
+      triggeredFrom: `mention:${event.mentionId}`,
+    }).then(async () => {
+      // Resolve the mention after the run is created
+      const mention = await this.deps.mentionStore.getById(event.mentionId);
+      if (mention && mention.status !== 'resolved') {
+        mention.resolve();
+        await this.deps.mentionStore.save(mention);
+      }
+    }).catch((err) => {
+      this.deps.logger.error('Workflow auto-trigger failed', {
+        slug: event.targetAgent, ticketId: event.ticketId,
         error: err instanceof Error ? err.message : String(err),
       });
     });

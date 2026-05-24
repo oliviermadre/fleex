@@ -319,6 +319,9 @@ export async function createContainer() {
     logger.info('Workflow orchestration not available for this storage driver', { driver });
   }
 
+  // Wire workflow deps into the domain event listener (initialized after Phase B)
+  domainEventListener.setWorkflowDeps({ workflowTemplateStore, createWorkflowRun });
+
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
 
