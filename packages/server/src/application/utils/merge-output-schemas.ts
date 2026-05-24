@@ -38,7 +38,7 @@ export function mergeOutputSchemas(
     schema: {
       type: 'object',
       properties: { ...standard.schema.properties, ...custom.properties },
-      required: [...(standard.schema.required ?? []), ...(custom.required ?? [])],
+      required: Array.from(new Set([...(standard.schema.required ?? []), ...(custom.required ?? [])])),
     },
   } as typeof STANDARD_OUTPUT_SCHEMA;
 }
