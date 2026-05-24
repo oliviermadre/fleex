@@ -49,6 +49,16 @@ import { UpdatePanelUseCase } from '../application/use-cases/update-panel.js';
 import { DeletePanelUseCase } from '../application/use-cases/delete-panel.js';
 import { RunPanelUseCase } from '../application/use-cases/run-panel.js';
 import { GenerateTicketSummaryUseCase } from '../application/use-cases/generate-ticket-summary.js';
+import { AgentStepExecutor } from '../application/services/step-executors/agent-step-executor.js';
+import { SkillStepExecutor } from '../application/services/step-executors/skill-step-executor.js';
+import { PanelStepExecutor } from '../application/services/step-executors/panel-step-executor.js';
+import { HumanGateStepExecutor } from '../application/services/step-executors/human-gate-step-executor.js';
+import { WorkflowOrchestrator } from '../application/services/workflow-orchestrator.js';
+import { RunWorkflowStepUseCase } from '../application/use-cases/run-workflow-step.js';
+import { CreateWorkflowRunUseCase } from '../application/use-cases/create-workflow-run.js';
+import { ResolveHumanGateUseCase } from '../application/use-cases/resolve-human-gate.js';
+import { RetryStepUseCase } from '../application/use-cases/retry-step.js';
+import { CancelWorkflowRunUseCase } from '../application/use-cases/cancel-workflow-run.js';
 import { GetRelevantSummariesUseCase } from '../application/use-cases/get-relevant-summaries.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
@@ -103,6 +113,9 @@ export async function createContainer() {
     fileStore,
     fileMetaStore,
     ticketGroupStore,
+    workflowTemplateStore,
+    workflowRunStore,
+    stepRunStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   // Wrap stores with write-through in-memory cache (zero DB queries on 1s tick).
@@ -262,6 +275,50 @@ export async function createContainer() {
   generateTicketSummary.eventBus = eventBus;
   autoReviewWorkflow.eventBus = eventBus;
 
+  // ── Phase B: Workflow orchestration ──────────────────────────────────────
+  // Stores are non-null for sqlite and supabase adapters, null for json/pgsql.
+  let createWorkflowRun: CreateWorkflowRunUseCase | null = null;
+  let resolveHumanGate: ResolveHumanGateUseCase | null = null;
+  let retryStep: RetryStepUseCase | null = null;
+  let cancelWorkflowRun: CancelWorkflowRunUseCase | null = null;
+  let workflowOrchestrator: WorkflowOrchestrator | null = null;
+
+  if (workflowTemplateStore && workflowRunStore && stepRunStore) {
+    // Step executors
+    const agentStepExecutor = new AgentStepExecutor(executeAgent);
+    const skillStepExecutor = new SkillStepExecutor(executeAgent, skillStore);
+    const panelStepExecutor = new PanelStepExecutor(runPanel);
+    const humanGateStepExecutor = new HumanGateStepExecutor(postComment);
+
+    // RunWorkflowStep — orchestrator dep resolved below (circular dep pattern)
+    const runWorkflowStep = new RunWorkflowStepUseCase({
+      runStore: workflowRunStore,
+      stepRunStore,
+      orchestrator: null as never, // wired below after WorkflowOrchestrator is created
+      eventBus,
+      executors: {
+        agent: agentStepExecutor,
+        skill: skillStepExecutor,
+        panel: panelStepExecutor,
+        human_gate: humanGateStepExecutor,
+      },
+    });
+
+    workflowOrchestrator = new WorkflowOrchestrator(runWorkflowStep, logger);
+
+    // Resolve circular dep: runWorkflowStep.deps.orchestrator = workflowOrchestrator
+    (runWorkflowStep as unknown as { deps: { orchestrator: WorkflowOrchestrator } }).deps.orchestrator = workflowOrchestrator;
+
+    createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus);
+    resolveHumanGate = new ResolveHumanGateUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus);
+    retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator);
+    cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, eventBus);
+
+    logger.info('Workflow orchestration wired', { driver });
+  } else {
+    logger.info('Workflow orchestration not available for this storage driver', { driver });
+  }
+
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
 
@@ -338,6 +395,14 @@ export async function createContainer() {
     fileStore,
     fileMetaStore,
     ticketGroupStore,
+    workflowTemplateStore,
+    workflowRunStore,
+    stepRunStore,
+    workflowOrchestrator,
+    createWorkflowRun,
+    resolveHumanGate,
+    retryStep,
+    cancelWorkflowRun,
     eventBus,
     domainEventListener,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
