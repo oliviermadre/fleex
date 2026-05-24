@@ -139,6 +139,75 @@ export class DomainEventListener {
       }
     });
 
+    // ── Workflow broadcasts ──
+    bus.on('workflow.run_created', (e) => {
+      if (e.type === 'workflow.run_created') {
+        this.ticketBroadcast('workflow:run_created', {
+          workflowRunId: e.workflowRunId,
+          templateId: e.templateId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
+    bus.on('workflow.step_started', (e) => {
+      if (e.type === 'workflow.step_started') {
+        this.ticketBroadcast('workflow:step_started', {
+          workflowRunId: e.workflowRunId,
+          stepRunId: e.stepRunId,
+          stepId: e.stepId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
+    bus.on('workflow.step_completed', (e) => {
+      if (e.type === 'workflow.step_completed') {
+        this.ticketBroadcast('workflow:step_completed', {
+          workflowRunId: e.workflowRunId,
+          stepRunId: e.stepRunId,
+          stepId: e.stepId,
+          ticketId: e.ticketId,
+          nextEdgeId: e.nextEdgeId,
+        });
+      }
+    });
+    bus.on('workflow.needs_review', (e) => {
+      if (e.type === 'workflow.needs_review') {
+        this.ticketBroadcast('workflow:needs_review', {
+          workflowRunId: e.workflowRunId,
+          stepRunId: e.stepRunId,
+          stepId: e.stepId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
+    bus.on('workflow.run_completed', (e) => {
+      if (e.type === 'workflow.run_completed') {
+        this.ticketBroadcast('workflow:run_completed', {
+          workflowRunId: e.workflowRunId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
+    bus.on('workflow.run_failed', (e) => {
+      if (e.type === 'workflow.run_failed') {
+        this.ticketBroadcast('workflow:run_failed', {
+          workflowRunId: e.workflowRunId,
+          stepRunId: e.stepRunId,
+          stepId: e.stepId,
+          ticketId: e.ticketId,
+          error: e.error,
+        });
+      }
+    });
+    bus.on('workflow.run_cancelled', (e) => {
+      if (e.type === 'workflow.run_cancelled') {
+        this.ticketBroadcast('workflow:run_cancelled', {
+          workflowRunId: e.workflowRunId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
+
     // ── Persona broadcasts ──
     bus.on('persona.created', (e) => this.broadcastPersonaEntity(e, 'persona:created'));
     bus.on('persona.updated', (e) => this.broadcastPersonaEntity(e, 'persona:updated'));
