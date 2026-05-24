@@ -25,6 +25,8 @@ import type {
   Ticket,
   TicketRelationship,
   WorkflowTemplate,
+  WorkflowRun,
+  StepRun,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -831,4 +833,47 @@ export async function updateWorkflowTemplate(
 
 export async function deleteWorkflowTemplate(id: string): Promise<void> {
   return request<void>(`/workflows/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// ── Workflow Runs ──
+
+export async function fetchWorkflowRuns(ticketId: string): Promise<WorkflowRun[]> {
+  return request<WorkflowRun[]>(`/workflows/runs?ticketId=${encodeURIComponent(ticketId)}`);
+}
+
+export async function fetchWorkflowRunDetail(runId: string): Promise<{ run: WorkflowRun; stepRuns: StepRun[] }> {
+  return request<{ run: WorkflowRun; stepRuns: StepRun[] }>(`/workflows/runs/${encodeURIComponent(runId)}`);
+}
+
+export async function startWorkflowRun(body: {
+  ticketId: string;
+  templateId: string;
+  triggeredFrom?: string;
+}): Promise<WorkflowRun> {
+  return request<WorkflowRun>('/workflows/runs', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function cancelWorkflowRun(runId: string): Promise<void> {
+  await request<void>(`/workflows/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' });
+}
+
+export async function resolveWorkflowGate(
+  runId: string,
+  stepRunId: string,
+  body: { outcome: string; notes?: string },
+): Promise<void> {
+  await request<void>(
+    `/workflows/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepRunId)}/resolve`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export async function retryWorkflowStep(runId: string, stepRunId: string): Promise<void> {
+  await request<void>(
+    `/workflows/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepRunId)}/retry`,
+    { method: 'POST' },
+  );
 }
