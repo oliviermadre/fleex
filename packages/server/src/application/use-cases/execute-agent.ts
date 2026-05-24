@@ -1384,7 +1384,6 @@ export class ExecuteAgentUseCase {
     if (!persona) throw new AgentPersonaNotFoundError(params.personaName);
 
     const executionId = randomUUID();
-    const abortController = new AbortController();
     const humanName = this.resolveHumanMentionName(persona);
 
     // Effective mode: respect persona ceiling
@@ -1439,22 +1438,27 @@ export class ExecuteAgentUseCase {
       ? (async function* () { yield { type: 'user' as const, message: { role: 'user' as const, content: userPromptBlocks }, parent_tool_use_id: null, session_id: '' }; })()
       : userPromptText;
 
-    for await (const message of query({ prompt: promptArg, options: queryOptions as Parameters<typeof query>[0]['options'] })) {
-      if (abortController.signal.aborted) break;
-      const msg = message as Record<string, unknown>;
-      if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
-        sdkSessionId = msg['session_id'] as string;
-        await emitEvent('turn_start', { sessionId: sdkSessionId });
-      }
-      if ('result' in message) {
-        resultText = (message as { result: string }).result;
-        if (msg['structured_output']) {
-          structuredOutput = msg['structured_output'] as Record<string, unknown>;
+    try {
+      for await (const message of query({ prompt: promptArg, options: queryOptions as Parameters<typeof query>[0]['options'] })) {
+        const msg = message as Record<string, unknown>;
+        if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
+          sdkSessionId = msg['session_id'] as string;
+          await emitEvent('turn_start', { sessionId: sdkSessionId });
         }
-        await emitEvent('message_stop', { result: resultText, subtype: msg['subtype'] as string | undefined });
-      } else {
-        await emitEvent('content_block_delta', msg);
+        if ('result' in message) {
+          resultText = (message as { result: string }).result;
+          if (msg['structured_output']) {
+            structuredOutput = msg['structured_output'] as Record<string, unknown>;
+          }
+          await emitEvent('message_stop', { result: resultText, subtype: msg['subtype'] as string | undefined });
+        } else {
+          await emitEvent('content_block_delta', msg);
+        }
       }
+    } catch (err) {
+      await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
+      await this.agentEventStore.completeExecution(executionId, 'failed');
+      throw err;
     }
 
     await emitEvent('execution_end', { status: 'completed', ticketId: params.ticketId, resultLength: resultText.length });
