@@ -48,10 +48,15 @@ function EditorInner({ template, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   // ReactFlow node and edge derivation
+  // NOTE: explicit width/height tell React Flow the node dimensions upfront so it
+  // doesn't wait on a ResizeObserver measurement before flipping visibility from
+  // hidden → visible. Without these, nodes can stay invisible after creation.
   const nodes: Node[] = useMemo(() => steps.map((s) => ({
     id: s.id,
     type: 'editorStep',
     position: s.position,
+    width: 180,
+    height: 80,
     data: {
       step: s, isSelected: s.id === selectedStepId, isEntry: s.id === entryStepId,
       onSelect: (id: string) => { setSelectedStepId(id); setSelectedEdgeId(null); },

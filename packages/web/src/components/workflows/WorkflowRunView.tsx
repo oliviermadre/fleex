@@ -48,6 +48,8 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
           id: step.id,
           type: 'stepRun',
           position: step.position,
+          width: 180,
+          height: 80,
           data: data as unknown as Record<string, unknown>,
         };
       }),
