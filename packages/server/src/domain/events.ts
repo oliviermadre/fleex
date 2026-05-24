@@ -280,6 +280,12 @@ export interface WorkflowRunFailedEvent extends DomainEvent {
   error: string;
 }
 
+export interface WorkflowRunCancelledEvent extends DomainEvent {
+  type: 'workflow.run_cancelled';
+  workflowRunId: string;
+  ticketId: string;
+}
+
 // ── Worktree events ──
 
 export interface WorktreeCreatedEvent extends DomainEvent {
@@ -417,7 +423,8 @@ export type AnyDomainEvent =
   | WorkflowStepCompletedEvent
   | WorkflowNeedsReviewEvent
   | WorkflowRunCompletedEvent
-  | WorkflowRunFailedEvent;
+  | WorkflowRunFailedEvent
+  | WorkflowRunCancelledEvent;
 
 // ── Event type string union ──
 
