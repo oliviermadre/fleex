@@ -1,7 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
 import { useState } from 'react';
 import type { WorkflowStep } from '@fleex/shared';
-import { cn } from '../../lib/cn';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
 
@@ -84,29 +83,55 @@ export interface EditorStepNodeData {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+const BORDER_HEX = {
+  agent: '#a855f7',       // purple-500
+  panel: '#3b82f6',       // blue-500
+  skill: '#22c55e',       // green-500
+  human_gate: '#f59e0b',  // amber-500
+} as const;
+
+const TEXT_HEX = {
+  agent: '#c4b5fd',       // purple-300
+  panel: '#93c5fd',       // blue-300
+  skill: '#86efac',       // green-300
+  human_gate: '#fcd34d',  // amber-300
+} as const;
+
 export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   const [hovered, setHovered] = useState(false);
+
+  // Defensive: if React Flow passes weird data, render a visible fallback instead of crashing
+  if (!data || !data.step) {
+    return (
+      <div style={{ padding: '10px', background: '#dc2626', color: 'white', borderRadius: 8, fontSize: 12 }}>
+        Missing step data
+      </div>
+    );
+  }
+
   const { step, isSelected, isEntry, onSelect, onDelete } = data;
   const Icon = executorIcon[step.executorType];
-
   const showUnconfigured = !step.executorRef && step.executorType !== 'human_gate';
+  const borderColor = BORDER_HEX[step.executorType];
+  const accentText = TEXT_HEX[step.executorType];
 
   return (
     <div
-      className="relative"
+      style={{ position: 'relative' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !border-2" />
+      <Handle type="target" position={Position.Left} style={{ width: 12, height: 12, background: '#52525b', border: '2px solid #18181b' }} />
 
-      {/* Delete button — visible on hover */}
       {hovered && (
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(step.id);
+          onClick={(e) => { e.stopPropagation(); onDelete(step.id); }}
+          style={{
+            position: 'absolute', top: -8, right: -8, zIndex: 10,
+            width: 20, height: 20, borderRadius: '50%',
+            background: 'rgba(220,38,38,0.85)', color: 'white', border: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
           }}
-          className="absolute -top-2 -right-2 z-10 w-5 h-5 rounded-full flex items-center justify-center bg-red-500/80 hover:bg-red-500 text-white transition-colors"
           title="Delete step"
         >
           <XIcon />
@@ -115,35 +140,35 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
 
       <div
         onClick={() => onSelect(step.id)}
-        className={cn(
-          'w-[180px] rounded-lg border-2 p-3 cursor-pointer transition-all hover:shadow-lg',
-          executorColor[step.executorType],
-          isSelected && 'ring-2 ring-white/40 ring-offset-1',
-        )}
-        style={{ background: 'var(--theme-bg-surface)' }}
+        style={{
+          width: 180,
+          padding: 12,
+          borderRadius: 8,
+          background: '#27272a', // zinc-800 — hardcoded so it never resolves to transparent
+          border: `2px ${step.executorType === 'human_gate' ? 'dashed' : 'solid'} ${borderColor}`,
+          color: accentText,
+          cursor: 'pointer',
+          boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : 'none',
+          transition: 'box-shadow 120ms ease',
+        }}
       >
-        {/* Header row */}
-        <div className="flex items-center gap-2 mb-1">
-          <Icon className="w-4 h-4 shrink-0" />
-          <span className="text-xs font-medium truncate flex-1">{step.name}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Icon className="w-4 h-4" />
+          <span style={{ fontSize: 12, fontWeight: 500, flex: 1, color: '#fafafa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {step.name || 'Unnamed'}
+          </span>
           {isEntry && (
-            <span className="text-[9px] font-semibold uppercase px-1 py-0.5 rounded bg-white/10 shrink-0">
+            <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', padding: '2px 4px', borderRadius: 3, background: 'rgba(255,255,255,0.1)', color: '#fafafa' }}>
               entry
             </span>
           )}
         </div>
-
-        {/* Executor ref or unconfigured hint */}
-        <div className="text-[10px] opacity-60 truncate">
-          {showUnconfigured ? (
-            <span className="italic opacity-50">Unconfigured</span>
-          ) : (
-            step.executorRef || '—'
-          )}
+        <div style={{ fontSize: 10, color: '#a1a1aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {showUnconfigured ? <span style={{ fontStyle: 'italic', opacity: 0.6 }}>Unconfigured</span> : (step.executorRef || '—')}
         </div>
       </div>
 
-      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !border-2" />
+      <Handle type="source" position={Position.Right} style={{ width: 12, height: 12, background: '#52525b', border: '2px solid #18181b' }} />
     </div>
   );
 }
