@@ -1,4 +1,4 @@
-import type { JsonSchema, WorkflowEdgeCondition } from '@fleex/shared';
+import type { JsonSchema, WorkflowEdgeCondition, EdgeOperator } from '@fleex/shared';
 
 export interface WorkflowContextInput {
   workflowName: string;
@@ -59,7 +59,7 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
   return parts.join('\n');
 }
 
-function opSymbol(op: string): string {
+function opSymbol(op: EdgeOperator): string {
   switch (op) {
     case 'eq': return '==';
     case 'neq': return '!=';
@@ -67,6 +67,5 @@ function opSymbol(op: string): string {
     case 'gt': return '>';
     case 'lt': return '<';
     case 'contains': return 'contains';
-    default: return op;
   }
 }
