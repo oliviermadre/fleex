@@ -4,9 +4,11 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { CreateAgentModal } from './CreateAgentModal';
 import { CreateSkillModal } from './CreateSkillModal';
 import { CreatePanelModal } from './CreatePanelModal';
+import { CreateWorkflowModal } from './CreateWorkflowModal';
 import { cn } from '../../lib/cn';
 
 export function AgentListPanel() {
@@ -26,14 +28,23 @@ export function AgentListPanel() {
   const loadPanels = usePanelStore((s) => s.loadPanels);
   const deletePanelAction = usePanelStore((s) => s.deletePanel);
   const selectPanel = usePanelStore((s) => s.selectPanel);
+  const templates = useWorkflowTemplateStore((s) => s.templates);
+  const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
+  const selectWorkflow = useWorkflowTemplateStore((s) => s.selectWorkflow);
+  const removeWorkflow = useWorkflowTemplateStore((s) => s.remove);
   const [modalOpen, setModalOpen] = useState(false);
   const [skillModalOpen, setSkillModalOpen] = useState(false);
   const [panelModalOpen, setPanelModalOpen] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ id: string; kind: 'persona' | 'skill' | 'panel'; x: number; y: number } | null>(null);
+  const [workflowModalOpen, setWorkflowModalOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ id: string; kind: 'persona' | 'skill' | 'panel' | 'workflow'; x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!panelsLoaded) loadPanels();
   }, [panelsLoaded, loadPanels]);
+
+  useEffect(() => {
+    useWorkflowTemplateStore.getState().refresh();
+  }, []);
 
   return (
     <div className="flex h-full flex-col">
@@ -280,6 +291,77 @@ export function AgentListPanel() {
             );
           })
         )}
+        {/* Workflows section header */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">Workflows</span>
+          <button
+            onClick={() => setWorkflowModalOpen(true)}
+            className="flex h-5 w-5 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+            title="Create workflow"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="8" y1="3" x2="8" y2="13" />
+              <line x1="3" y1="8" x2="13" y2="8" />
+            </svg>
+          </button>
+        </div>
+
+        {templates.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 px-4 py-6 text-center text-[var(--theme-text-muted)]">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M3 9h18" />
+              <path d="M9 21V9" />
+            </svg>
+            <p className="text-xs">No workflows yet</p>
+            <button
+              onClick={() => setWorkflowModalOpen(true)}
+              className="text-xs text-[var(--theme-accent)] hover:underline"
+            >
+              Create your first workflow
+            </button>
+          </div>
+        ) : (
+          templates.map((template) => {
+            const isSelected = selectedWorkflowId === template.id;
+
+            return (
+              <button
+                key={template.id}
+                className={cn(
+                  'flex min-w-0 w-full items-center gap-3 py-2.5 pl-6 pr-3 text-left transition-colors border-l-2',
+                  isSelected
+                    ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
+                    : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
+                )}
+                onClick={() => {
+                  selectWorkflow(template.id);
+                  navigate(`/agents/workflow/${template.id}`, { replace: true });
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({ id: template.id, kind: 'workflow', x: e.clientX, y: e.clientY });
+                }}
+              >
+                <span className="shrink-0 text-base leading-none">{template.emoji}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+                    {template.name}
+                  </div>
+                  <div className="truncate text-xs text-[var(--theme-text-muted)]">
+                    @workflow:{template.slug}
+                  </div>
+                </div>
+                <span
+                  className={cn(
+                    'h-2 w-2 shrink-0 rounded-full',
+                    template.enabled ? 'bg-green-400' : 'bg-[var(--theme-text-faint)]',
+                  )}
+                />
+              </button>
+            );
+          })
+        )}
       </div>
 
       {/* Context menu */}
@@ -297,6 +379,8 @@ export function AgentListPanel() {
                   deletePersona(contextMenu.id);
                 } else if (contextMenu.kind === 'skill') {
                   deleteSkill(contextMenu.id);
+                } else if (contextMenu.kind === 'workflow') {
+                  removeWorkflow(contextMenu.id);
                 } else {
                   deletePanelAction(contextMenu.id);
                 }
@@ -312,6 +396,7 @@ export function AgentListPanel() {
       <CreateAgentModal open={modalOpen} onClose={() => setModalOpen(false)} />
       <CreateSkillModal open={skillModalOpen} onClose={() => setSkillModalOpen(false)} />
       <CreatePanelModal open={panelModalOpen} onClose={() => setPanelModalOpen(false)} />
+      <CreateWorkflowModal open={workflowModalOpen} onClose={() => setWorkflowModalOpen(false)} />
     </div>
   );
 }

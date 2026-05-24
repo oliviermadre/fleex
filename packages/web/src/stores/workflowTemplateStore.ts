@@ -6,7 +6,9 @@ interface WorkflowTemplateState {
   templates: WorkflowTemplate[];
   loading: boolean;
   error: string | null;
+  selectedWorkflowId: string | null;
 
+  selectWorkflow(id: string | null): void;
   refresh(): Promise<void>;
   create(input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowTemplate>;
   update(id: string, input: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<WorkflowTemplate>;
@@ -18,6 +20,9 @@ export const useWorkflowTemplateStore = create<WorkflowTemplateState>((set, get)
   templates: [],
   loading: false,
   error: null,
+  selectedWorkflowId: null,
+
+  selectWorkflow: (id) => set({ selectedWorkflowId: id }),
 
   refresh: async () => {
     set({ loading: true, error: null });
@@ -48,6 +53,7 @@ export const useWorkflowTemplateStore = create<WorkflowTemplateState>((set, get)
     await api.deleteWorkflowTemplate(id);
     set((state) => ({
       templates: state.templates.filter((t) => t.id !== id),
+      selectedWorkflowId: state.selectedWorkflowId === id ? null : state.selectedWorkflowId,
     }));
   },
 
