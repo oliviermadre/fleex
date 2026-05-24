@@ -108,8 +108,8 @@ function EditorInner({ template, onBack }: Props) {
     event.preventDefault();
     const type = event.dataTransfer.getData('application/x-fleex-executor') as WorkflowExecutorType;
     if (!type) return;
-    const bounds = wrapperRef.current!.getBoundingClientRect();
-    const position = reactFlow.screenToFlowPosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+    // screenToFlowPosition expects raw screen coords (clientX/clientY), not wrapper-relative
+    const position = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
     const id = `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const step: WorkflowStep = {
       id, name: type === 'human_gate' ? 'Human Gate' : 'New Step',
@@ -158,6 +158,22 @@ function EditorInner({ template, onBack }: Props) {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs" style={{ color: 'var(--theme-text-muted)' }}>{steps.length} steps · {edges.length} edges</span>
+          <button
+            onClick={() => reactFlow.fitView({ padding: 0.3, minZoom: 0.3, maxZoom: 1.2, duration: 300 })}
+            className="text-xs px-3 py-1 rounded border"
+            style={{ borderColor: 'var(--theme-border)' }}
+            title="Fit all steps in view"
+          >Fit view</button>
+          <button
+            onClick={() => {
+              // Reset off-screen positions by re-laying out steps in a horizontal line
+              setSteps((prev) => prev.map((s, i) => ({ ...s, position: { x: i * 240, y: 100 } })));
+              setTimeout(() => reactFlow.fitView({ padding: 0.3, duration: 300 }), 50);
+            }}
+            className="text-xs px-3 py-1 rounded border"
+            style={{ borderColor: 'var(--theme-border)' }}
+            title="Reset positions (line up horizontally)"
+          >Tidy</button>
           <button onClick={save} disabled={saving}
             className="text-xs px-3 py-1 rounded border disabled:opacity-50"
             style={{ borderColor: 'var(--theme-border)' }}>{saving ? 'Saving…' : 'Save Workflow'}</button>
