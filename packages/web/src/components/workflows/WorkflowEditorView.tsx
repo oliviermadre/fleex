@@ -141,7 +141,7 @@ function EditorInner({ template, onBack }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--theme-border)' }}>
         <div className="flex items-center gap-3">
