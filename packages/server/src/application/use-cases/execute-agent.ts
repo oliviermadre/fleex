@@ -1016,11 +1016,18 @@ export class ExecuteAgentUseCase {
     }
 
     // 3. Start execution tracking
+    // Tag workflow-driven skill runs with a `workflow:` mentionId so the
+    // Execution Log can filter them out of the standalone SKILL listing
+    // (they're already represented by the parent workflow row). Non-workflow
+    // skill runs keep the `skill:` prefix used for internal lookups.
+    const startMentionId = opts?.workflowContext
+      ? `workflow:${executionId}`
+      : `skill:${skillId}`;
     await this.agentEventStore.startExecution({
       executionId,
       personaId: persona.id,
       ticketId,
-      mentionId: `skill:${skillId}`,
+      mentionId: startMentionId,
     });
 
     // 4. Compose prompts

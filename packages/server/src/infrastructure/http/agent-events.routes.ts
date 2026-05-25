@@ -137,10 +137,50 @@ export function agentEventsRoutes(container: Container) {
       const panelById = new Map(allPanels.map((p) => [p.id, p]));
       const skillById = new Map(allSkills.map((s) => [s.id, s]));
 
+      // ── Identify executions owned by a workflow step ─────────────────────
+      // Each agent/skill/panel step records the underlying agent_execution.id
+      // on its step_run.executionId. We must exclude those executions from
+      // the standalone/panel listings — otherwise the same work shows up
+      // twice in the Execution Log (once as the workflow aggregate, once as
+      // the bare agent/skill/panel run).
+      const workflowOwnedExecutionIds = new Set<string>();
+      for (const sr of allStepRuns) {
+        if (sr.executionId) workflowOwnedExecutionIds.add(sr.executionId);
+      }
+      // Belt and suspenders: also catch agent_executions tagged with a
+      // `workflow:` mentionId prefix from `executeForWorkflowStep`. The
+      // orchestrator's catch block fails the step_run WITHOUT capturing
+      // the executionId, so a failed/crashed workflow agent step otherwise
+      // leaks through as a bare AGENT row in the log.
+      for (const exec of allExecutions) {
+        if (exec.mentionId?.startsWith('workflow:')) {
+          workflowOwnedExecutionIds.add(exec.id);
+        }
+      }
+      // Panel steps: only the orchestrator's executionId is stored on the
+      // step_run. We need to hide the OTHER panel members too, otherwise the
+      // panel group renders incomplete (missing orchestrator) but with the
+      // remaining members still visible. Resolve the mentionId of every
+      // workflow-owned panel exec and propagate the hide to every member.
+      const workflowOwnedPanelMentionIds = new Set<string>();
+      for (const exec of allExecutions) {
+        if (!workflowOwnedExecutionIds.has(exec.id)) continue;
+        const mention = exec.mentionId ? mentionMap.get(exec.mentionId) : null;
+        const isPanelMention = mention?.targetType === 'panel';
+        const isSyntheticPanelMentionId = exec.mentionId?.startsWith('panel:') ?? false;
+        if ((isPanelMention || isSyntheticPanelMentionId) && exec.mentionId) {
+          workflowOwnedPanelMentionIds.add(exec.mentionId);
+        }
+      }
+
       // ── Split executions: panel-run groups vs. standalone ─────────────────
       const panelGroups = new Map<string, AgentExecution[]>();
       const standaloneExecs: AgentExecution[] = [];
       for (const exec of allExecutions) {
+        // Drop executions that are already represented by a workflow row.
+        if (workflowOwnedExecutionIds.has(exec.id)) continue;
+        if (exec.mentionId && workflowOwnedPanelMentionIds.has(exec.mentionId)) continue;
+
         const mention = exec.mentionId ? mentionMap.get(exec.mentionId) : null;
         const isPanelMention = mention?.targetType === 'panel';
         const isSyntheticPanelMentionId = exec.mentionId?.startsWith('panel:') ?? false;

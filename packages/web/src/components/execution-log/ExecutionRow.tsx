@@ -177,39 +177,58 @@ function StatusBadge({
 // ── Workflow step progress dots ──
 
 const STEP_DOT_CLASSES: Record<WorkflowStepSummary['status'], string> = {
-  pending: 'bg-[var(--theme-bg-surface)] border border-[var(--theme-text-faint)]/40',
-  queued: 'bg-[var(--theme-bg-surface)] border border-[var(--theme-text-faint)]/60',
-  running: 'bg-blue-400 animate-pulse',
-  completed: 'bg-emerald-400',
-  failed: 'bg-red-400',
-  needs_review: 'bg-amber-400',
-  cancelled: 'bg-[var(--theme-text-faint)]/30',
-  skipped: 'bg-[var(--theme-text-faint)]/30',
+  pending: 'bg-[var(--theme-bg-surface)] border border-[var(--theme-text-faint)]/50',
+  queued: 'bg-[var(--theme-bg-surface)] border border-[var(--theme-text-faint)]/70',
+  running: 'bg-blue-400 border border-blue-300 shadow-[0_0_6px_rgba(96,165,250,0.6)] animate-pulse',
+  completed: 'bg-emerald-400 border border-emerald-300',
+  failed: 'bg-red-400 border border-red-300',
+  needs_review: 'bg-amber-400 border border-amber-300',
+  cancelled: 'bg-[var(--theme-text-faint)]/30 border border-[var(--theme-text-faint)]/40',
+  skipped: 'bg-[var(--theme-text-faint)]/30 border border-[var(--theme-text-faint)]/40',
+};
+
+// Connector line color: matches the incoming step (the one the line leads
+// INTO), so the chain "lights up" as the workflow advances.
+const STEP_LINE_CLASSES: Record<WorkflowStepSummary['status'], string> = {
+  pending: 'bg-[var(--theme-text-faint)]/25',
+  queued: 'bg-[var(--theme-text-faint)]/30',
+  running: 'bg-blue-400/70',
+  completed: 'bg-emerald-400/70',
+  failed: 'bg-red-400/70',
+  needs_review: 'bg-amber-400/70',
+  cancelled: 'bg-[var(--theme-text-faint)]/25',
+  skipped: 'bg-[var(--theme-text-faint)]/25',
 };
 
 function WorkflowStepDots({ progress }: { progress: WorkflowStepSummary[] }) {
-  // Cap at ~12 visible dots, collapse the rest into a "+N" indicator so a
-  // huge workflow doesn't overflow the column. The user can still see the
-  // full DAG by opening the Workflow tab on the ticket.
-  const MAX_VISIBLE = 12;
+  // Cap visible chain — beyond this we collapse to a "+N" indicator. The
+  // full DAG is one click away on the Workflow tab.
+  const MAX_VISIBLE = 9;
   const visible = progress.slice(0, MAX_VISIBLE);
   const overflow = progress.length - visible.length;
 
   return (
-    <div className="flex items-center justify-end gap-1">
-      {visible.map((s) => (
-        <span
-          key={s.stepId}
-          title={`${s.name} — ${s.status}`}
-          className={cn(
-            'h-2 w-2 flex-shrink-0 rounded-full',
-            STEP_DOT_CLASSES[s.status],
-            s.isCurrent && 'ring-2 ring-emerald-300/60 ring-offset-1 ring-offset-[var(--theme-bg-base)]',
+    <div className="flex items-center justify-end">
+      {visible.map((s, i) => (
+        <span key={s.stepId} className="flex flex-shrink-0 items-center">
+          {i > 0 && (
+            <span
+              className={cn('h-[2px] w-2.5 flex-shrink-0', STEP_LINE_CLASSES[s.status])}
+              aria-hidden
+            />
           )}
-        />
+          <span
+            title={`${s.name} — ${s.status}${s.isCurrent ? ' (current)' : ''}`}
+            className={cn(
+              'h-3 w-3 flex-shrink-0 rounded-full',
+              STEP_DOT_CLASSES[s.status],
+              s.isCurrent && 'ring-2 ring-emerald-300/70 ring-offset-1 ring-offset-[var(--theme-bg-base)]',
+            )}
+          />
+        </span>
       ))}
       {overflow > 0 && (
-        <span className="ml-0.5 text-[10px] tabular-nums text-[var(--theme-text-faint)]" title={`+${overflow} more steps`}>
+        <span className="ml-1 text-[10px] tabular-nums text-[var(--theme-text-faint)]" title={`+${overflow} more steps`}>
           +{overflow}
         </span>
       )}
@@ -473,10 +492,13 @@ export const ExecutionRow = memo(function ExecutionRow({
         </div>
 
         {/* Col 3: Agent detail — panel name + clickable participants, or name+model,
-             OR (for workflows) step dots + completed/total counter. */}
+             OR (for workflows) step dots + completed/total counter. The wider
+             width on workflow rows (220 vs 180) is needed to fit the chain of
+             dots + connectors at MAX_VISIBLE=9 without squeezing. */}
         <div
           className={cn(
-            'hidden w-[180px] flex-shrink-0 text-right lg:block',
+            'hidden flex-shrink-0 text-right lg:block',
+            isWorkflow ? 'w-[220px]' : 'w-[180px]',
             isPanelRun || isWorkflow ? 'overflow-visible' : 'overflow-hidden',
           )}
         >
