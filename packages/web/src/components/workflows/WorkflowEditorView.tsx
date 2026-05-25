@@ -10,10 +10,12 @@ import { ExecutorPalette } from './executor-palette';
 import { EditorStepNode, type EditorStepNodeData } from './EditorStepNode';
 import { StepConfigPanel } from './StepConfigPanel';
 import { EdgeConfigPanel } from './EdgeConfigPanel';
+import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import type { WorkflowExecutorType, WorkflowStep, WorkflowEdge as WfEdge, WorkflowTemplate } from '@fleex/shared';
 
 const nodeTypes = { editorStep: EditorStepNode };
+const edgeTypes = { workflow: WorkflowDagEdge };
 
 interface Props {
   template: WorkflowTemplate;
@@ -87,6 +89,7 @@ function EditorInner({ template, onBack }: Props) {
 
   const rfEdges: Edge[] = useMemo(() => edges.map((e) => ({
     id: e.id, source: e.source, target: e.target,
+    type: 'workflow',
     label: e.label ?? (e.condition ? `${e.condition.field} ${e.condition.operator} ${String(e.condition.value)}` : ''),
     style: { strokeDasharray: e.isDefault ? undefined : '5,5' },
     markerEnd: { type: MarkerType.ArrowClosed },
@@ -205,7 +208,7 @@ function EditorInner({ template, onBack }: Props) {
         <div ref={wrapperRef} className="flex-1" onDrop={onDrop} onDragOver={onDragOver}>
           <ReactFlow
             colorMode="dark"
-            nodes={nodes} edges={rfEdges} nodeTypes={nodeTypes}
+            nodes={nodes} edges={rfEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
             onEdgeClick={(_, e) => { setSelectedEdgeId(e.id); setSelectedStepId(null); }}
             onPaneClick={() => { setSelectedStepId(null); setSelectedEdgeId(null); }}

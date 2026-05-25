@@ -3,6 +3,7 @@ import { ReactFlow, Background, Controls, MiniMap, MarkerType, Position, type Ed
 import '@xyflow/react/dist/style.css';
 import type { WorkflowRun, StepRun, WorkflowStep } from '@fleex/shared';
 import { StepRunNode, type StepRunNodeData } from './StepRunNode';
+import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { HumanGateResolvePanel } from './HumanGateResolvePanel';
 import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
 import { FailedStepRetryPanel } from './FailedStepRetryPanel';
@@ -11,6 +12,7 @@ import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { postTicketComment } from '../../services/api';
 
 const nodeTypes = { stepRun: StepRunNode };
+const edgeTypes = { workflow: WorkflowDagEdge };
 
 interface Props {
   run: WorkflowRun;
@@ -70,6 +72,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
         id: e.id,
         source: e.source,
         target: e.target,
+        type: 'workflow',
         label:
           e.label ??
           (e.condition
@@ -132,6 +135,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             nodesDraggable={false}
             nodesConnectable={false}
             elementsSelectable
