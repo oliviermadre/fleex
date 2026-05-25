@@ -16,7 +16,8 @@ describe('CreateWorkflowRunUseCase', () => {
     const runStore = { getActiveByTicket: vi.fn().mockResolvedValue(null), save: vi.fn() };
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
-    const uc = new CreateWorkflowRunUseCase(templateStore as never, runStore as never, orchestrator as never, eventBus as never);
+    const postComment = { execute: vi.fn().mockResolvedValue({ comment: {}, createdMentions: [] }) };
+    const uc = new CreateWorkflowRunUseCase(templateStore as never, runStore as never, orchestrator as never, eventBus as never, postComment as never);
 
     const run = await uc.execute({ ticketId: 't-1', templateId: 'tmpl-1', triggeredBy: '@john', triggeredFrom: 'comment:c-1' });
 
@@ -31,7 +32,8 @@ describe('CreateWorkflowRunUseCase', () => {
   it('throws WorkflowRunAlreadyActiveError if a run is active', async () => {
     const templateStore = { getById: vi.fn().mockResolvedValue(template) };
     const runStore = { getActiveByTicket: vi.fn().mockResolvedValue({ id: 'existing' }), save: vi.fn() };
-    const uc = new CreateWorkflowRunUseCase(templateStore as never, runStore as never, { runStep: vi.fn() } as never, { emit: vi.fn() } as never);
+    const postComment = { execute: vi.fn().mockResolvedValue({ comment: {}, createdMentions: [] }) };
+    const uc = new CreateWorkflowRunUseCase(templateStore as never, runStore as never, { runStep: vi.fn() } as never, { emit: vi.fn() } as never, postComment as never);
 
     await expect(uc.execute({ ticketId: 't-1', templateId: 'tmpl-1', triggeredBy: '@john', triggeredFrom: 'x' }))
       .rejects.toBeInstanceOf(WorkflowRunAlreadyActiveError);
@@ -40,7 +42,8 @@ describe('CreateWorkflowRunUseCase', () => {
   it('throws WorkflowTemplateNotFoundError if template missing', async () => {
     const templateStore = { getById: vi.fn().mockResolvedValue(null) };
     const runStore = { getActiveByTicket: vi.fn().mockResolvedValue(null), save: vi.fn() };
-    const uc = new CreateWorkflowRunUseCase(templateStore as never, runStore as never, { runStep: vi.fn() } as never, { emit: vi.fn() } as never);
+    const postComment = { execute: vi.fn().mockResolvedValue({ comment: {}, createdMentions: [] }) };
+    const uc = new CreateWorkflowRunUseCase(templateStore as never, runStore as never, { runStep: vi.fn() } as never, { emit: vi.fn() } as never, postComment as never);
 
     await expect(uc.execute({ ticketId: 't-1', templateId: 'missing', triggeredBy: '@john', triggeredFrom: 'x' }))
       .rejects.toBeInstanceOf(WorkflowTemplateNotFoundError);

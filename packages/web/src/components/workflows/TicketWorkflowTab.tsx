@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { useEffect, useMemo, useState } from 'react';
+import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunStore';
 import { WorkflowRunView } from './WorkflowRunView';
 
 interface Props {
@@ -9,11 +9,20 @@ interface Props {
 export function TicketWorkflowTab({ ticketId }: Props) {
   const loadForTicket = useWorkflowRunStore((s) => s.loadForTicket);
   const loadDetail = useWorkflowRunStore((s) => s.loadDetail);
-  const runsByTicket = useWorkflowRunStore((s) => s.runsByTicket);
+  // Subscribe to the raw per-ticket runs array. The store-level helpers
+  // (activeByTicket/historyByTicket) call .filter()/.find() and return fresh
+  // arrays each time, which breaks Zustand's equality check → infinite loop.
+  const runs = useWorkflowRunStore((s) => s.runsByTicket[ticketId]);
   const detail = useWorkflowRunStore((s) => s.detail);
-  const active = useWorkflowRunStore((s) => s.activeByTicket(ticketId));
-  const history = useWorkflowRunStore((s) => s.historyByTicket(ticketId));
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+
+  const { active, history } = useMemo(() => {
+    const list = runs ?? [];
+    return {
+      active: list.find((r) => ACTIVE_STATUSES.has(r.status)),
+      history: list.filter((r) => !ACTIVE_STATUSES.has(r.status)),
+    };
+  }, [runs]);
 
   useEffect(() => {
     void loadForTicket(ticketId);
@@ -25,7 +34,7 @@ export function TicketWorkflowTab({ ticketId }: Props) {
     if (currentRunId && !detail[currentRunId]) void loadDetail(currentRunId);
   }, [currentRunId, detail, loadDetail]);
 
-  if ((runsByTicket[ticketId]?.length ?? 0) === 0) {
+  if (!runs || runs.length === 0) {
     return (
       <div className="p-6 text-sm" style={{ color: 'var(--theme-text-muted)' }}>
         No workflow runs on this ticket yet.

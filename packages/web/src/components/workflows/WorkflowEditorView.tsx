@@ -3,7 +3,7 @@ import {
   ReactFlow, Background, Controls, MiniMap, ReactFlowProvider, useReactFlow,
   applyNodeChanges, applyEdgeChanges, addEdge,
   type Node, type Edge, type Connection, type NodeChange, type EdgeChange,
-  MarkerType,
+  MarkerType, Position,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ExecutorPalette } from './executor-palette';
@@ -48,15 +48,28 @@ function EditorInner({ template, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   // ReactFlow node and edge derivation
-  // NOTE: explicit width/height tell React Flow the node dimensions upfront so it
-  // doesn't wait on a ResizeObserver measurement before flipping visibility from
-  // hidden → visible. Without these, nodes can stay invisible after creation.
+  // NOTE: `width/height` (NOT `initialWidth/initialHeight`) make the inline size
+  // persist after the first render — `initialWidth` is dropped from the inline
+  // style once `handleBounds` is defined, which would let the node expand to
+  // fill the canvas.
+  // NOTE: `handles` are declared explicitly. Without them, React Flow's
+  // `parseHandles(userNode, internalNode)` returns `undefined` every time
+  // `useMemo` produces a fresh userNode reference (which happens on every
+  // selection/hover state change). That wipes `internals.handleBounds`, which
+  // in turn makes `isNodeInitialized()` return false and `getEdgePosition()`
+  // return null — so no edge SVG is ever painted AND connection drags abort
+  // immediately because `getHandle()` can't find a `fromHandleInternal`.
+  // Declaring handles statically keeps `handleBounds` populated across re-renders.
   const nodes: Node[] = useMemo(() => steps.map((s) => ({
     id: s.id,
     type: 'editorStep',
     position: s.position,
     width: 180,
     height: 80,
+    handles: [
+      { id: null, type: 'target' as const, position: Position.Left, x: 0, y: 40, width: 1, height: 1 },
+      { id: null, type: 'source' as const, position: Position.Right, x: 180, y: 40, width: 1, height: 1 },
+    ],
     data: {
       step: s, isSelected: s.id === selectedStepId, isEntry: s.id === entryStepId,
       onSelect: (id: string) => { setSelectedStepId(id); setSelectedEdgeId(null); },
@@ -199,6 +212,7 @@ function EditorInner({ template, onBack }: Props) {
             defaultViewport={{ x: 200, y: 100, zoom: 1 }}
             minZoom={0.2} maxZoom={2}
             fitView fitViewOptions={{ padding: 0.4, minZoom: 0.5, maxZoom: 1.2 }}
+            defaultMarkerColor="#a1a1aa"
           >
             <Background gap={16} size={1} color="rgba(255,255,255,0.08)" />
             <Controls className="!bg-[var(--theme-bg-surface)] !border-[var(--theme-border)]" showInteractive={false} />

@@ -1,10 +1,14 @@
 import { useMemo, useState } from 'react';
-import { ReactFlow, Background, Controls, MiniMap, MarkerType, type Edge } from '@xyflow/react';
+import { ReactFlow, Background, Controls, MiniMap, MarkerType, Position, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { WorkflowRun, StepRun, WorkflowStep } from '@fleex/shared';
 import { StepRunNode, type StepRunNodeData } from './StepRunNode';
 import { HumanGateResolvePanel } from './HumanGateResolvePanel';
+import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
+import { FailedStepRetryPanel } from './FailedStepRetryPanel';
+import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { postTicketComment } from '../../services/api';
 
 const nodeTypes = { stepRun: StepRunNode };
 
@@ -50,6 +54,10 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
           position: step.position,
           width: 180,
           height: 80,
+          handles: [
+            { id: null, type: 'target' as const, position: Position.Left, x: 0, y: 40, width: 1, height: 1 },
+            { id: null, type: 'source' as const, position: Position.Right, x: 180, y: 40, width: 1, height: 1 },
+          ],
           data: data as unknown as Record<string, unknown>,
         };
       }),
@@ -131,6 +139,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
             maxZoom={2}
             fitView
             fitViewOptions={{ padding: 0.4, minZoom: 0.5, maxZoom: 1.2 }}
+            defaultMarkerColor="#a1a1aa"
           >
             <Background gap={16} size={1} color="rgba(255,255,255,0.08)" />
             <Controls showInteractive={false} />
@@ -148,7 +157,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
         {/* Step detail sidebar */}
         {selectedStep && (
           <div
-            className="w-[320px] p-4 overflow-y-auto space-y-3"
+            className="w-[420px] p-4 overflow-y-auto space-y-3"
             style={{ borderLeft: '1px solid var(--theme-border)' }}
           >
             <h3 className="text-sm font-medium text-[var(--theme-text-primary)]">
@@ -191,6 +200,34 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                   onRetry={() => retry(run.id, selectedStepRun.id)}
                 />
               )}
+            {selectedStepRun?.status === 'needs_review' &&
+              selectedStep.executorType !== 'human_gate' && (
+                <NeedsReviewRespondPanel
+                  question={selectedStepRun.output?.comment}
+                  onSubmit={async (response) => {
+                    // Post the user's response as a regular ticket comment so the
+                    // agent picks it up from the ticket context on the next run,
+                    // then retry the step.
+                    await postTicketComment(run.ticketId, response);
+                    await retry(run.id, selectedStepRun.id);
+                  }}
+                />
+              )}
+            {selectedStepRun?.status === 'failed' && (
+              <FailedStepRetryPanel
+                error={
+                  (selectedStepRun.output?.schemaFields?.error as string | undefined) ??
+                  null
+                }
+                onRetry={() => retry(run.id, selectedStepRun.id)}
+              />
+            )}
+            {selectedStepRun?.status === 'running' && (
+              <RunningStepForceRestartPanel
+                startedAt={selectedStepRun.startedAt}
+                onForceRestart={() => retry(run.id, selectedStepRun.id)}
+              />
+            )}
           </div>
         )}
       </div>

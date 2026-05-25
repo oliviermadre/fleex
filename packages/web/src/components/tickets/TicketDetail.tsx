@@ -38,7 +38,10 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
   const [deliverableCount, setDeliverableCount] = useState(0);
   const [mentionCount, setMentionCount] = useState(0);
 
-  const workflowRuns = useWorkflowRunStore((s) => s.runsByTicket[ticketId] ?? []);
+  // Subscribe to a boolean (stable across renders) rather than `... ?? []`,
+  // which returns a fresh array reference every call and breaks Zustand's
+  // equality check — causing "getSnapshot should be cached" + infinite loop.
+  const hasWorkflowRuns = useWorkflowRunStore((s) => (s.runsByTicket[ticketId]?.length ?? 0) > 0);
   useEffect(() => {
     void useWorkflowRunStore.getState().loadForTicket(ticketId);
   }, [ticketId]);
@@ -226,7 +229,7 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
     { key: 'mentions', label: `Mentions${mentionCount > 0 ? ` (${mentionCount})` : ''}` },
     { key: 'deliverables', label: deliverableLabel },
     { key: 'activity', label: 'Activity' },
-    ...(workflowRuns.length > 0 ? [{ key: 'workflow' as TicketTab, label: 'Workflow' }] : []),
+    ...(hasWorkflowRuns ? [{ key: 'workflow' as TicketTab, label: 'Workflow' }] : []),
   ];
 
   return (

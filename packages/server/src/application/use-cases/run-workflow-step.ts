@@ -7,7 +7,10 @@ import type { StepRunStorePort } from '../ports/step-run-store.port.js';
 import type { OrchestratorPort } from '../ports/orchestrator.port.js';
 import type { StepExecutor, StepExecutionInput } from '../services/step-executors/types.js';
 import type { EventBus } from '../event-bus.js';
-import type { WorkflowExecutorType } from '@fleex/shared';
+import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
+import type { PostCommentUseCase } from './post-comment.js';
+import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
+import type { WorkflowExecutorType, StepOutput, WorkflowStep } from '@fleex/shared';
 
 export interface RunWorkflowStepDeps {
   runStore: WorkflowRunStorePort;
@@ -15,6 +18,8 @@ export interface RunWorkflowStepDeps {
   orchestrator: OrchestratorPort;
   eventBus: EventBus;
   executors: Record<WorkflowExecutorType, StepExecutor>;
+  submitDeliverable: SubmitDeliverableUseCase;
+  postComment: PostCommentUseCase;
 }
 
 export class RunWorkflowStepUseCase {
@@ -79,6 +84,7 @@ export class RunWorkflowStepUseCase {
 
       // 5. Handle result
       if (result.output.result === 'needs_review') {
+        await this.persistStepArtifacts(run, step, result.output);
         stepRun.markNeedsReview({ output: result.output, executionId });
         run.block();
         await this.deps.stepRunStore.save(stepRun);
@@ -93,6 +99,7 @@ export class RunWorkflowStepUseCase {
       // 6. Resolve edges
       const edges = run.outgoingEdges(step.id);
       const nextEdge = EdgeEvaluator.resolve(result.output, edges);
+      await this.persistStepArtifacts(run, step, result.output);
       stepRun.complete({ output: result.output, nextEdgeId: nextEdge?.id ?? null, executionId });
       await this.deps.stepRunStore.save(stepRun);
       this.deps.eventBus.emit({
@@ -120,6 +127,40 @@ export class RunWorkflowStepUseCase {
       this.deps.eventBus.emit({
         type: 'workflow.run_failed', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
         ticketId: run.ticketId, error: err instanceof Error ? err.message : String(err), occurredAt: new Date(),
+      });
+    }
+  }
+
+  /**
+   * Persist the agent-emitted `deliverable` and `comment` from a step output as
+   * first-class ticket artifacts (ticket_deliverable / ticket_comment), so they
+   * appear in the ticket's Deliverables and Comments tabs as soon as the step
+   * emits them — including in the `needs_review` branch (the draft is visible
+   * before the human responds). No dedup on retry: a new attempt = new
+   * artifacts; that's the audit trail.
+   */
+  private async persistStepArtifacts(
+    run: WorkflowRunEntity,
+    step: WorkflowStep,
+    output: StepOutput,
+  ): Promise<void> {
+    const author = `workflow:${run.templateSnapshot.name} → ${step.name}`;
+    if (output.deliverable) {
+      await this.deps.submitDeliverable.execute({
+        ticketId: run.ticketId,
+        agentName: author,
+        type: output.deliverable.type,
+        title: output.deliverable.title,
+        content: output.deliverable.markdown,
+        status: output.deliverable.status,
+      });
+    }
+    if (output.comment && output.comment.trim().length > 0) {
+      await this.deps.postComment.execute({
+        ticketId: run.ticketId,
+        authorType: 'agent',
+        authorName: author,
+        body: output.comment,
       });
     }
   }

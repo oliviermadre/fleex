@@ -1,4 +1,4 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, useConnection } from '@xyflow/react';
 import { useState } from 'react';
 import type { WorkflowStep } from '@fleex/shared';
 
@@ -99,6 +99,10 @@ const TEXT_HEX = {
 
 export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   const [hovered, setHovered] = useState(false);
+  // Reveal handles on hover and whenever a connection drag is in progress, so the
+  // user can see where to drop without having to hover each target node.
+  const connectionInProgress = useConnection((c) => c.inProgress);
+  const handlesVisible = hovered || connectionInProgress;
 
   // Defensive: if React Flow passes weird data, render a visible fallback instead of crashing
   if (!data || !data.step) {
@@ -114,14 +118,27 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   const showUnconfigured = !step.executorRef && step.executorType !== 'human_gate';
   const borderColor = BORDER_HEX[step.executorType];
   const accentText = TEXT_HEX[step.executorType];
+  const handleStyle = {
+    width: 12,
+    height: 12,
+    background: '#52525b',
+    border: '2px solid #18181b',
+    opacity: handlesVisible ? 1 : 0,
+    transition: 'opacity 120ms ease',
+    pointerEvents: 'all' as const,
+  };
 
   return (
     <div
-      style={{ position: 'relative' }}
+      // Explicit 180x80 matches the dimensions declared on the React Flow Node
+      // config and the static `handles` coords (y: 40). Without this, the wrapper
+      // sizes to content (~60px) and the JSX Handles end up at top:50% of that
+      // smaller box, visually misaligned with where React Flow thinks they are.
+      style={{ position: 'relative', width: 180, height: 80, boxSizing: 'border-box' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <Handle type="target" position={Position.Left} style={{ width: 12, height: 12, background: '#52525b', border: '2px solid #18181b' }} />
+      <Handle type="target" position={Position.Left} style={handleStyle} />
 
       {hovered && (
         <button
@@ -141,7 +158,8 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
       <div
         onClick={() => onSelect(step.id)}
         style={{
-          width: 180,
+          width: '100%',
+          height: '100%',
           padding: 12,
           borderRadius: 8,
           background: '#27272a', // zinc-800 — hardcoded so it never resolves to transparent
@@ -150,6 +168,11 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
           cursor: 'pointer',
           boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : 'none',
           transition: 'box-shadow 120ms ease',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          overflow: 'hidden',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -168,7 +191,7 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
         </div>
       </div>
 
-      <Handle type="source" position={Position.Right} style={{ width: 12, height: 12, background: '#52525b', border: '2px solid #18181b' }} />
+      <Handle type="source" position={Position.Right} style={handleStyle} />
     </div>
   );
 }

@@ -946,6 +946,11 @@ export class ExecuteAgentUseCase {
     outputFormatOverride?: typeof OUTPUT_FORMAT_SCHEMA;
     workflowContextPrompt?: string;
     returnStructured?: boolean;
+    // When set, the "Running skill: X" announce comment is authored with a
+    // workflow-aware label (e.g. "workflow:Smoke Test → PR FAQ") so readers
+    // of the ticket comments tab can tell at a glance which workflow run
+    // produced each comment instead of seeing just the bare persona name.
+    workflowContext?: { workflowName: string; stepName: string };
   }): Promise<{ structuredOutput: Record<string, unknown> | null; rawText: string; executionId: string } | void> {
     if (!this.skillStore) {
       throw new Error('SkillStore not available');
@@ -976,10 +981,13 @@ export class ExecuteAgentUseCase {
     const announceBody = opts?.commentBody
       ? `Running skill: **${skill.displayName}** _(via comment)_`
       : `Running skill: **${skill.displayName}**`;
+    const announceAuthor = opts?.workflowContext
+      ? `workflow:${opts.workflowContext.workflowName} → ${opts.workflowContext.stepName}`
+      : (persona.displayName || persona.name);
     const { comment: announceComment } = await this.postComment.execute({
       ticketId,
       body: announceBody,
-      authorName: persona.displayName || persona.name,
+      authorName: announceAuthor,
       authorType: 'agent',
       humanMentionNames: [],
     });
@@ -990,7 +998,7 @@ export class ExecuteAgentUseCase {
         commentId: announceComment.id,
         ticketId,
         authorType: 'agent',
-        authorName: persona.displayName || persona.name,
+        authorName: announceAuthor,
         createdMentions: [],
         occurredAt: new Date(),
       });

@@ -17,6 +17,15 @@ export class RetryStepUseCase {
     const stepRun = await this.stepRunStore.getById(params.stepRunId);
     if (!stepRun) throw new StepRunNotFoundError(params.stepRunId);
 
+    // If the target step_run is still flagged `running` (e.g. an orphan after
+    // a server crash / hot-reload that killed the underlying Claude process),
+    // cancel it so the audit trail makes it clear it was abandoned — and so
+    // it's no longer a candidate for any "active step" UI heuristic.
+    if (stepRun.status === 'running') {
+      stepRun.cancel();
+      await this.stepRunStore.save(stepRun);
+    }
+
     // The orchestrator will create a new step_run with attempt+1
     run.advanceTo(stepRun.stepId);
     await this.runStore.save(run);

@@ -16,6 +16,11 @@ const makeRun = () => WorkflowRunEntity.create({
   triggeredBy: '@john', triggeredFrom: 'x',
 });
 
+const makeArtifactStubs = () => ({
+  submitDeliverable: { execute: vi.fn().mockResolvedValue({}) },
+  postComment: { execute: vi.fn().mockResolvedValue({ comment: {}, createdMentions: [] }) },
+});
+
 describe('RunWorkflowStepUseCase', () => {
   it('executes step, persists step_run with output, advances to next step', async () => {
     const run = makeRun();
@@ -27,6 +32,7 @@ describe('RunWorkflowStepUseCase', () => {
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
 
+    const artifacts = makeArtifactStubs();
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never,
       stepRunStore: stepRunStore as never,
@@ -38,6 +44,8 @@ describe('RunWorkflowStepUseCase', () => {
         panel: { execute: vi.fn() } as never,
         human_gate: { execute: vi.fn() } as never,
       },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
@@ -62,10 +70,13 @@ describe('RunWorkflowStepUseCase', () => {
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
 
+    const artifacts = makeArtifactStubs();
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never, stepRunStore: stepRunStore as never,
       orchestrator: orchestrator as never, eventBus: eventBus as never,
       executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'final' });
@@ -86,10 +97,13 @@ describe('RunWorkflowStepUseCase', () => {
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
 
+    const artifacts = makeArtifactStubs();
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never, stepRunStore: stepRunStore as never,
       orchestrator: orchestrator as never, eventBus: eventBus as never,
       executors: { agent: {} as never, skill: {} as never, panel: {} as never, human_gate: humanGate as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
@@ -106,10 +120,13 @@ describe('RunWorkflowStepUseCase', () => {
     const orchestrator = { runStep: vi.fn() };
     const eventBus = { emit: vi.fn() };
 
+    const artifacts = makeArtifactStubs();
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never, stepRunStore: stepRunStore as never,
       orchestrator: orchestrator as never, eventBus: eventBus as never,
       executors: { agent: failing as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });

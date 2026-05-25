@@ -26,7 +26,7 @@ interface State {
   applyEvent(event: { type: string; ticketId: string; payload: Record<string, unknown> }): void;
 }
 
-const ACTIVE_STATUSES = new Set(['running', 'blocked', 'needs_review']);
+export const ACTIVE_STATUSES = new Set(['running', 'blocked', 'needs_review']);
 
 export const useWorkflowRunStore = create<State>((set, get) => ({
   runsByTicket: {},

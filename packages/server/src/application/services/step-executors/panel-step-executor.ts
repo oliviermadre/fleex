@@ -25,6 +25,10 @@ export class PanelStepExecutor implements StepExecutor {
       extraContextPrompt: ctxPrompt,
       outputFormatOverride: outputFormat,
       returnStructured: true,
+      workflowContext: {
+        workflowName: input.workflowContext.workflowName,
+        stepName: input.workflowContext.stepName,
+      },
     });
 
     if (!result || !('structuredOutput' in result)) {

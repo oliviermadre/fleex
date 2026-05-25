@@ -101,7 +101,7 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
       const run = await deps.runStore.getById(request.params.id);
       if (!run) return reply.code(404).send({ error: 'WORKFLOW_RUN_NOT_FOUND' });
       const stepRuns = await deps.stepRunStore.getByWorkflowRun(run.id);
-      return { ...run.toDTO(), stepRuns: stepRuns.map((s) => s.toDTO()) };
+      return { run: run.toDTO(), stepRuns: stepRuns.map((s) => s.toDTO()) };
     });
 
     // POST /api/workflows/runs — create a run

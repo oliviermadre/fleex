@@ -59,6 +59,7 @@ import { CreateWorkflowRunUseCase } from '../application/use-cases/create-workfl
 import { ResolveHumanGateUseCase } from '../application/use-cases/resolve-human-gate.js';
 import { RetryStepUseCase } from '../application/use-cases/retry-step.js';
 import { CancelWorkflowRunUseCase } from '../application/use-cases/cancel-workflow-run.js';
+import { RecoverOrphanedWorkflowStepsUseCase } from '../application/use-cases/recover-orphaned-workflow-steps.js';
 import { GetRelevantSummariesUseCase } from '../application/use-cases/get-relevant-summaries.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
@@ -302,6 +303,8 @@ export async function createContainer() {
         panel: panelStepExecutor,
         human_gate: humanGateStepExecutor,
       },
+      submitDeliverable,
+      postComment,
     });
 
     workflowOrchestrator = new WorkflowOrchestrator(runWorkflowStep, logger);
@@ -309,7 +312,7 @@ export async function createContainer() {
     // Resolve circular dep: runWorkflowStep.deps.orchestrator = workflowOrchestrator
     (runWorkflowStep as unknown as { deps: { orchestrator: WorkflowOrchestrator } }).deps.orchestrator = workflowOrchestrator;
 
-    createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus);
+    createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus, postComment);
     resolveHumanGate = new ResolveHumanGateUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus);
     retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator);
     cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, eventBus);
@@ -324,6 +327,14 @@ export async function createContainer() {
 
   // Startup recovery: mark orphaned executions, reset mentions, reload session history
   await executeAgent.init();
+
+  // Startup recovery (workflows): mark step_runs that were running when the
+  // server died as failed, and fail their parent runs, so the UI shows them
+  // with a retry affordance instead of forever spinning on a dead process.
+  if (workflowRunStore && stepRunStore) {
+    const recoverOrphans = new RecoverOrphanedWorkflowStepsUseCase(workflowRunStore, stepRunStore, eventBus, logger);
+    await recoverOrphans.execute();
+  }
 
   const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, resolver, hostFs, bareCloneManager, git, logger);
 

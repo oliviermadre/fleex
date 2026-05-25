@@ -152,12 +152,14 @@ function StatusIcon({ status }: { status: StepRunStatus | 'pending' }) {
 export function StepRunNode({ data }: { data: StepRunNodeData }) {
   const Icon = executorIcon[data.step.executorType];
   return (
-    <div className="relative">
+    // Explicit 180x80 matches the Node config + static handles y:40 — keeps the
+    // JSX Handles' top:50% aligned with where React Flow positions the edges.
+    <div className="relative" style={{ width: 180, height: 80, boxSizing: 'border-box' }}>
       <Handle type="target" position={Position.Left} className="!w-3 !h-3 !border-2" />
       <div
         onClick={() => data.onSelect(data.step.id)}
         className={cn(
-          'w-[180px] rounded-lg border-2 p-3 bg-card cursor-pointer transition-all hover:shadow-lg',
+          'w-full h-full rounded-lg border-2 p-3 bg-card cursor-pointer transition-all hover:shadow-lg flex flex-col justify-center overflow-hidden',
           executorColor[data.step.executorType],
           data.isCurrent && 'ring-2 ring-green-400 ring-offset-2 ring-offset-background',
         )}

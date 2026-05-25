@@ -30,6 +30,10 @@ export class SkillStepExecutor implements StepExecutor {
       outputFormatOverride: outputFormat,
       workflowContextPrompt,
       returnStructured: true,
+      workflowContext: {
+        workflowName: input.workflowContext.workflowName,
+        stepName: input.workflowContext.stepName,
+      },
     });
 
     if (!result || !('structuredOutput' in result)) {

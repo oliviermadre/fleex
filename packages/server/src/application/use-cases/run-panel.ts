@@ -101,6 +101,12 @@ export class RunPanelUseCase {
     outputFormatOverride?: typeof STANDARD_OUTPUT_SCHEMA;
     /** Workflow orchestrator: return structured output and skip all side effects */
     returnStructured?: boolean;
+    /**
+     * Workflow orchestrator: identifies the workflow run that triggered this
+     * panel, so the announce comment is authored with a workflow-aware label
+     * instead of the bare `panel:<name>`.
+     */
+    workflowContext?: { workflowName: string; stepName: string };
   }): Promise<PanelResult | { structuredOutput: Record<string, unknown> | null; executionId: string }> {
     const startTime = Date.now();
 
@@ -145,7 +151,9 @@ export class RunPanelUseCase {
     }
 
     // 4. Post announcement comment
-    const panelAuthor = `panel:${panel.name}`;
+    const panelAuthor = params.workflowContext
+      ? `workflow:${params.workflowContext.workflowName} → ${params.workflowContext.stepName}`
+      : `panel:${panel.name}`;
     const { comment: announceComment } = await this.postComment.execute({
       ticketId: params.ticketId,
       body: `🏛️ **${panel.displayName}** — Panel discussion started on: **${topic}**\n\n_${panel.members.length} members participating..._`,

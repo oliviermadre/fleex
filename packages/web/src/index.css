@@ -492,3 +492,90 @@ html, body {
 .github-glow-icon:hover {
   filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6)) drop-shadow(0 0 12px rgba(255, 255, 255, 0.3));
 }
+
+/* React Flow dark-mode edge colors — defaults (#3e3e3e) are invisible on our near-black canvas. */
+.react-flow.dark {
+  --xy-edge-stroke: #71717a;
+  --xy-edge-stroke-selected: #fafafa;
+  --xy-connectionline-stroke: #a1a1aa;
+  --xy-edge-stroke-width: 1.5;
+}
+
+/* Markdown rendering inside the workflow needs_review side panel.
+   The default react-markdown output has no tailwind/typography reset, so
+   `**bold**`, lists and code spans render flat. These rules give a tight
+   readable layout for a 420px sidebar. */
+.needs-review-markdown p {
+  margin: 0 0 0.6em;
+  line-height: 1.5;
+}
+.needs-review-markdown p:last-child {
+  margin-bottom: 0;
+}
+.needs-review-markdown strong {
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+.needs-review-markdown em {
+  font-style: italic;
+}
+.needs-review-markdown ul,
+.needs-review-markdown ol {
+  margin: 0 0 0.6em;
+  padding-left: 1.25em;
+}
+.needs-review-markdown ul { list-style: disc outside; }
+.needs-review-markdown ol { list-style: decimal outside; }
+.needs-review-markdown li {
+  margin: 0.15em 0;
+  line-height: 1.45;
+}
+.needs-review-markdown li::marker {
+  color: var(--theme-text-muted);
+}
+.needs-review-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--theme-bg-overlay);
+  color: var(--theme-text-primary);
+}
+.needs-review-markdown pre {
+  margin: 0 0 0.6em;
+  padding: 0.6em 0.75em;
+  border-radius: 6px;
+  background: var(--theme-bg-overlay);
+  overflow-x: auto;
+  font-size: 0.92em;
+  line-height: 1.5;
+}
+.needs-review-markdown pre code {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+.needs-review-markdown h1,
+.needs-review-markdown h2,
+.needs-review-markdown h3,
+.needs-review-markdown h4 {
+  font-weight: 600;
+  margin: 0.4em 0 0.4em;
+  color: var(--theme-text-primary);
+}
+.needs-review-markdown h1 { font-size: 1.05em; }
+.needs-review-markdown h2 { font-size: 1em; }
+.needs-review-markdown h3 { font-size: 0.96em; }
+.needs-review-markdown h4 { font-size: 0.92em; }
+.needs-review-markdown a {
+  color: var(--theme-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.needs-review-markdown blockquote {
+  margin: 0 0 0.6em;
+  padding-left: 0.75em;
+  border-left: 2px solid var(--theme-border-input);
+  color: var(--theme-text-secondary);
+}
