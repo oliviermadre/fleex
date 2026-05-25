@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { useUIStore } from '../../../stores/uiStore';
+import { useEffect, useRef } from 'react';
+import { clampRightSidebarWidth, useUIStore } from '../../../stores/uiStore';
 import { SidebarTopPanel } from './SidebarTopPanel';
 import { SidebarBottomPanel } from './SidebarBottomPanel';
 import { SidebarSplitHandle } from './SidebarSplitHandle';
@@ -18,6 +18,8 @@ interface Props {
   repoKeys: string[];
   /** Repo key of the current worktree session — selected by default in the scratchpad tab strip. */
   defaultRepoKey: string | null;
+  /** Ref to the container wrapping (main panel + this sidebar) — used to cap width at 75% of that area. */
+  parentRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function SessionRightSidebar({
@@ -26,12 +28,30 @@ export function SessionRightSidebar({
   cwd,
   repoKeys,
   defaultRepoKey,
+  parentRef,
 }: Props) {
   const width = useUIStore((s) => s.rightSidebarWidth);
   const ratio = useUIStore((s) => s.rightSidebarSplitRatio);
   const collapsed = useUIStore((s) => s.rightSidebarCollapsed);
   const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
+  const setRightSidebarWidth = useUIStore((s) => s.setRightSidebarWidth);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Re-clamp width whenever the parent area changes (window resize, nav expand/collapse,
+  // contentPanel resize). Also fires once on mount to clamp any out-of-bounds persisted value.
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const parentWidth = entries[0]?.contentRect.width ?? el.getBoundingClientRect().width;
+      if (parentWidth <= 0) return;
+      const current = useUIStore.getState().rightSidebarWidth;
+      const clamped = clampRightSidebarWidth(current, parentWidth);
+      if (clamped !== current) setRightSidebarWidth(clamped);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [parentRef, setRightSidebarWidth]);
 
   if (collapsed) {
     return <CollapsedSidebar onExpand={toggleRightSidebar} />;
@@ -39,7 +59,7 @@ export function SessionRightSidebar({
 
   return (
     <>
-      <SidebarWidthHandle />
+      <SidebarWidthHandle parentRef={parentRef} />
       <div
         ref={containerRef}
         className="flex flex-col bg-[var(--theme-bg-surface)] border-l border-white/[0.06] flex-shrink-0 overflow-hidden"

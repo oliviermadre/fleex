@@ -155,6 +155,15 @@ const rightSidebarInitial = loadRightSidebarPersisted();
 const RIGHT_SIDEBAR_DEFAULT_WIDTH = 380;
 const RIGHT_SIDEBAR_DEFAULT_RATIO = 0.5;
 
+export const RIGHT_SIDEBAR_MIN_WIDTH = 280;
+export const RIGHT_SIDEBAR_MAX_RATIO = 0.75;
+
+export function clampRightSidebarWidth(width: number, availableWidth: number): number {
+  const max = Math.floor(availableWidth * RIGHT_SIDEBAR_MAX_RATIO);
+  const effectiveMax = Math.max(max, RIGHT_SIDEBAR_MIN_WIDTH);
+  return Math.min(Math.max(width, RIGHT_SIDEBAR_MIN_WIDTH), effectiveMax);
+}
+
 export const useUIStore = create<UIState>((set) => ({
   navCollapsed: true,
   contentPanelWidth: 320,
@@ -185,7 +194,10 @@ export const useUIStore = create<UIState>((set) => ({
   rightSidebarCollapsed: rightSidebarInitial.collapsed === true,
 
   setRightSidebarWidth: (width) => {
-    const clamped = Math.min(Math.max(width, 280), 720);
+    // Floor only — the max is enforced by callers that know the parent container's width
+    // (see SidebarWidthHandle + SessionRightSidebar's ResizeObserver, which pass the value
+    // through clampRightSidebarWidth before calling this setter).
+    const clamped = Math.max(width, RIGHT_SIDEBAR_MIN_WIDTH);
     set({ rightSidebarWidth: clamped });
     saveRightSidebarPersisted({
       width: clamped,
