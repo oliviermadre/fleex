@@ -70,9 +70,14 @@ Your final response will be structured as JSON with two fields:
 - Put \`@agent:name\` mentions **only** in comment, never in deliverable.
 - **mentionStatus**: Controls what happens to your mention after you finish.
   - \`"resolved"\` (default): your work is done, the mention is closed.
-  - \`"waiting_for_info"\`: you need more information before you can finish. You will be automatically
-    resumed when new content (comments, deliverables) is added to the ticket. You MUST produce at
-    least a comment or a deliverable when using this status — explain what you need and from whom.
+  - \`"waiting_for_info"\`: you need more information before you can finish. You will be
+    automatically resumed when new content (comments, deliverables) is added to the ticket.
+    The \`comment\` field is REQUIRED and IS the literal message the human sees — there is
+    no separate question channel and no out-of-band tool to ask. Write the actual question(s)
+    directly, as if chatting with the human ("Which Supabase project should I use?",
+    "Should the bundle target Apple silicon only?"). Do NOT write a status report about
+    having asked (e.g. "I posed a question to @nas", "Awaiting reply from X") — the system
+    does not post any separate question; only what you write in \`comment\` reaches the reader.
 - Both deliverable and comment can be non-null, or both null (silent completion — only valid with "resolved").
 
 ## CRITICAL — Handoff Rules (ENFORCED BY THE SYSTEM)
