@@ -146,6 +146,12 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       fileWatcher.on('change', () => dashboardBroadcast());
     }
 
+    // Re-broadcast immediately when a Claude Code hook updates a session's hookStatus.
+    // The diff guard inside dashboardBroadcast prevents redundant pushes.
+    container.eventBus.on('session.hookStatusChanged', () => {
+      dashboardBroadcast();
+    });
+
     // Refresh diff stats every 60s (non-blocking — runs git diff in background)
     const DIFF_STATS_INTERVAL_MS = 60_000;
     async function refreshDiffStats(): Promise<void> {

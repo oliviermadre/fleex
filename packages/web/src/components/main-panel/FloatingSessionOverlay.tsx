@@ -161,16 +161,29 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   if (!session) return null;
 
   const isRobot = session.type === 'claude';
-  const activity = session.claudeActivity ?? 'idle';
+
+  // Resolve display status — hookStatus takes precedence over the legacy claudeActivity (JSONL).
+  // `waiting/idle` (Claude at rest awaiting next prompt) renders neutrally rather than as alarm.
+  const hookStatus = session.hookStatus && session.hookStatus !== 'unknown' ? session.hookStatus : null;
+  const legacyActivity = session.claudeActivity ?? 'idle';
+  const activity: string =
+    hookStatus === 'waiting' && session.hookWaitingReason === 'idle'
+      ? 'idle'
+      : (hookStatus ?? legacyActivity);
 
   const activityColorMap: Record<string, string> = {
+    // hookStatus values (waiting/idle is rewritten to 'idle' above)
     working: 'var(--theme-accent)',
+    waiting: 'var(--theme-warning)',
+    complete: 'var(--theme-success)',
+    error: 'var(--theme-danger)',
+    idle: 'var(--theme-text-muted)',
+    unknown: 'var(--theme-text-muted)',
+    // legacy claudeActivity values
     executing: 'var(--theme-accent)',
     waiting_tool_approval: 'var(--theme-warning)',
     waiting_user_choice: 'var(--theme-warning)',
     waiting_plan_approval: 'var(--theme-warning)',
-    idle: 'var(--theme-text-muted)',
-    unknown: 'var(--theme-text-muted)',
   };
   const activityColor = activityColorMap[activity] ?? 'var(--theme-text-muted)';
 

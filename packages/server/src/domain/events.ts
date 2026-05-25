@@ -262,6 +262,14 @@ export interface SessionKilledEvent extends DomainEvent {
   sessionId: string;
 }
 
+export interface SessionHookStatusChangedEvent extends DomainEvent {
+  type: 'session.hookStatusChanged';
+  sessionId: string;
+  previousStatus: string;
+  nextStatus: string;
+  waitingReason: string | null;
+}
+
 // ── Ticket Group events ──
 
 export interface TicketGroupCreatedEvent extends DomainEvent {
@@ -354,6 +362,7 @@ export type AnyDomainEvent =
   | SessionCreatedEvent
   | SessionRenamedEvent
   | SessionKilledEvent
+  | SessionHookStatusChangedEvent
   | TicketGroupCreatedEvent
   | TicketGroupUpdatedEvent
   | TicketGroupDeletedEvent
