@@ -11,6 +11,7 @@ import { useSkills } from '../../hooks/useSkills';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { NavSidebar } from '../sidebar/NavSidebar';
 import { ContentPanel } from '../sidebar/ContentPanel';
 import { MainPanel } from '../main-panel/MainPanel';
@@ -47,8 +48,12 @@ export function AppLayout() {
     fetchRepositories();
   }, [loadSettings, fetchRepositories]);
 
+  const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
+
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
-  const hideContentPanel = activePanel === 'dashboard' || activePanel === 'cluster' || activePanel === 'tickets' || activePanel === 'execution-log' || activePanel === 'documents';
+  // Hide the content panel when editing a workflow so the editor takes the full viewport width
+  const editingWorkflow = activePanel === 'agents' && !!selectedWorkflowId;
+  const hideContentPanel = activePanel === 'dashboard' || activePanel === 'cluster' || activePanel === 'tickets' || activePanel === 'execution-log' || activePanel === 'documents' || editingWorkflow;
   const effectiveContentWidth = hideContentPanel
     ? 0
     : contentPanelCollapsed

@@ -17,6 +17,8 @@ import migration015 from './migrations/014_add_ticket_first_doing_at.js';
 import migration016 from './migrations/015_migrate_ticket_types.js';
 import migration017 from './migrations/016_global_display_id.js';
 import migration018 from './migrations/017_add_session_hook_status.js';
+import migration019 from './migrations/018_add_workflows.js';
+import migration020 from './migrations/019_fix_workflow_templates_enabled_type.js';
 
 /**
  * Ordered array of all migrations.
@@ -41,4 +43,6 @@ export const allMigrations: Migration[] = [
   migration016,
   migration017,
   migration018,
+  migration019,
+  migration020,
 ];

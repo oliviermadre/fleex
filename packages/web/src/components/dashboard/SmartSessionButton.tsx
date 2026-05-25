@@ -8,6 +8,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSkillStore } from '../../stores/skillStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { cn } from '../../lib/cn';
 
 interface SmartSessionButtonProps {
@@ -83,13 +85,15 @@ function SkillWrenchIcon() {
   );
 }
 
-/** Shared dropdown content — sessions list + skills list */
+/** Shared dropdown content — sessions list + skills list + workflows list */
 function DropdownContent({
   sessions,
   enabledSkills,
+  enabledTemplates,
   onOpenFloating,
   onCreateSession,
   onExecuteSkill,
+  onStartWorkflow,
   onClose,
   creating,
   hasTicketId,
@@ -98,9 +102,11 @@ function DropdownContent({
 }: {
   sessions: Session[];
   enabledSkills: { id: string; displayName: string; commandName: string }[];
+  enabledTemplates: { id: string; name: string; slug: string; emoji: string }[];
   onOpenFloating: (sessionId: string) => void;
   onCreateSession: () => void;
   onExecuteSkill?: (skillId: string) => void;
+  onStartWorkflow?: (templateId: string) => void;
   onClose: () => void;
   creating: boolean;
   hasTicketId: boolean;
@@ -187,6 +193,28 @@ function DropdownContent({
           ))}
         </>
       )}
+
+      {/* Workflows group */}
+      {enabledTemplates.length > 0 && hasTicketId && onStartWorkflow && (
+        <>
+          <div className="mx-2 my-1 border-t border-[var(--theme-border)]" />
+          <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">Workflows</div>
+          {enabledTemplates.map((t) => (
+            <button
+              key={t.id}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartWorkflow(t.id);
+              }}
+            >
+              <span className="shrink-0">{t.emoji}</span>
+              <span className="truncate text-[var(--theme-text-primary)]">{t.name}</span>
+              <span className="ml-auto text-[9px] font-mono text-[var(--theme-text-faint)]">/{t.slug}</span>
+            </button>
+          ))}
+        </>
+      )}
     </div>
   );
 
@@ -247,6 +275,13 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
 
   const enabledSkills = skills.filter((s) => s.enabled);
 
+  const templates = useWorkflowTemplateStore((s) => s.templates);
+  const refreshTemplates = useWorkflowTemplateStore((s) => s.refresh);
+  const startRun = useWorkflowRunStore((s) => s.start);
+  const enabledTemplates = templates.filter((t) => t.enabled);
+
+  useEffect(() => { void refreshTemplates(); }, [refreshTemplates]);
+
   useEffect(() => {
     if (!dropdownOpen) return;
     const handler = (e: MouseEvent) => {
@@ -281,6 +316,13 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
       }
     : undefined;
 
+  const handleStartWorkflow = ticketId
+    ? (templateId: string) => {
+        void startRun(ticketId, templateId).catch((err) => console.error('Failed to start workflow:', err));
+        setDropdownOpen(false);
+      }
+    : undefined;
+
   const textSize = size === 'sm' ? 'text-[11px]' : 'text-xs';
 
   // Shape shared by every state — colors come from the theme param
@@ -294,7 +336,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
       'active:scale-[0.97]',
     );
 
-  const hasSkills = enabledSkills.length > 0 && !!ticketId && !!onExecuteSkill;
+  const hasSkills = (enabledSkills.length > 0 && !!ticketId && !!onExecuteSkill) || (enabledTemplates.length > 0 && !!ticketId);
 
   // ── State 1: No sessions — "Start" ──
   if (sessions.length === 0 && !alwaysShowMenu) {
@@ -324,9 +366,11 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
             <DropdownContent
               sessions={sessions}
               enabledSkills={enabledSkills}
+              enabledTemplates={enabledTemplates}
               onOpenFloating={handleOpenFloating}
               onCreateSession={onCreateSession}
               onExecuteSkill={handleExecuteSkill}
+              onStartWorkflow={handleStartWorkflow}
               onClose={() => setDropdownOpen(false)}
               creating={creating}
               hasTicketId={!!ticketId}
@@ -410,9 +454,11 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
         <DropdownContent
           sessions={sessions}
           enabledSkills={enabledSkills}
+          enabledTemplates={enabledTemplates}
           onOpenFloating={handleOpenFloating}
           onCreateSession={onCreateSession}
           onExecuteSkill={handleExecuteSkill}
+          onStartWorkflow={handleStartWorkflow}
           onClose={() => setDropdownOpen(false)}
           creating={creating}
           hasTicketId={!!ticketId}

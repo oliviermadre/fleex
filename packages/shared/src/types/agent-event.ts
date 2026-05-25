@@ -57,9 +57,21 @@ export interface PanelMemberSummary {
   readonly isOrchestrator: boolean;
 }
 
+/**
+ * One step in a workflow run, summarised for the Execution Log dots row.
+ * `status` mirrors `StepRunStatus` from `workflow.ts` but is kept as a string
+ * here to avoid cross-imports.
+ */
+export interface WorkflowStepSummary {
+  readonly stepId: string;
+  readonly name: string;
+  readonly status: 'pending' | 'queued' | 'running' | 'completed' | 'failed' | 'needs_review' | 'cancelled' | 'skipped';
+  readonly isCurrent: boolean;
+}
+
 /** Enriched execution entry for the Execution Log view */
 export interface ExecutionLogEntry extends AgentExecution {
-  readonly type: 'agent' | 'panel' | 'skill';
+  readonly type: 'agent' | 'panel' | 'skill' | 'workflow';
   readonly executorName: string;
   readonly ticketTitle: string | null;
   readonly ticketSlug: string | null;
@@ -73,6 +85,20 @@ export interface ExecutionLogEntry extends AgentExecution {
   readonly panelDisplayName?: string;
   readonly panelMembers?: PanelMemberSummary[];
   readonly memberCount?: number;
+  /**
+   * Workflow-specific fields. Only set for type === 'workflow'.
+   * `workflowSubStatus` carries the `needs_review` / `blocked` nuance that
+   * doesn't fit `AgentExecution['status']` (which is the broader running/completed/...),
+   * so the UI can show a distinct "Needs Review" badge.
+   */
+  readonly workflowRunId?: string;
+  readonly workflowSubStatus?: 'needs_review' | 'blocked';
+  readonly workflowCurrentStepName?: string;
+  readonly workflowStepProgress?: WorkflowStepSummary[];
+  /** Number of steps completed (status === 'completed') in this run. */
+  readonly workflowCompletedSteps?: number;
+  /** Total number of steps in the run's snapshot. */
+  readonly workflowTotalSteps?: number;
 }
 
 /**
@@ -99,6 +125,7 @@ export interface ExecutionLogResponse {
     readonly agent: number;
     readonly panel: number;
     readonly skill: number;
+    readonly workflow: number;
   };
 }
 

@@ -21,11 +21,13 @@ import type { EventBus } from '../event-bus.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { MentionExecutionMode } from '@fleex/shared';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
+import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
+import type { STANDARD_OUTPUT_SCHEMA } from '../utils/merge-output-schemas.js';
 
 interface SdkMetrics {
   durationMs?: number;
@@ -81,13 +83,31 @@ export class RunPanelUseCase {
    * Execute a panel discussion on a ticket.
    * Called by DomainEventListener when a @panel:name mention is created,
    * or by skill execution route.
+   *
+   * When `returnStructured: true` is provided (workflow orchestrator path):
+   *  - `extraContextPrompt` is appended to the orchestrator synthesis prompt
+   *  - `outputFormatOverride` overrides the orchestrator's output schema
+   *  - Returns `{ structuredOutput, executionId }` and skips all side effects
+   *    (comment posts, deliverable creation, mention resolution, activity log)
    */
   async execute(params: {
     panelName: string;
     ticketId: string;
     mentionId?: string; // the mention that triggered this panel (if from @panel:name)
     topic?: string; // override topic (if not provided, derived from ticket)
-  }): Promise<PanelResult> {
+    /** Workflow orchestrator: extra instructions injected into the synthesis prompt */
+    extraContextPrompt?: string;
+    /** Workflow orchestrator: override the orchestrator's output schema */
+    outputFormatOverride?: typeof STANDARD_OUTPUT_SCHEMA;
+    /** Workflow orchestrator: return structured output and skip all side effects */
+    returnStructured?: boolean;
+    /**
+     * Workflow orchestrator: identifies the workflow run that triggered this
+     * panel, so the announce comment is authored with a workflow-aware label
+     * instead of the bare `panel:<name>`.
+     */
+    workflowContext?: { workflowName: string; stepName: string };
+  }): Promise<PanelResult | { structuredOutput: Record<string, unknown> | null; executionId: string }> {
     const startTime = Date.now();
 
     // 1. Load panel config
@@ -131,7 +151,9 @@ export class RunPanelUseCase {
     }
 
     // 4. Post announcement comment
-    const panelAuthor = `panel:${panel.name}`;
+    const panelAuthor = params.workflowContext
+      ? `workflow:${params.workflowContext.workflowName} → ${params.workflowContext.stepName}`
+      : `panel:${panel.name}`;
     const { comment: announceComment } = await this.postComment.execute({
       ticketId: params.ticketId,
       body: `🏛️ **${panel.displayName}** — Panel discussion started on: **${topic}**\n\n_${panel.members.length} members participating..._`,
@@ -180,16 +202,28 @@ export class RunPanelUseCase {
     );
 
     // 8. Generate synthesis
-    const synthesis = await this.generateSynthesis(
+    const { text: synthesis, structuredOutput: synthStructured, executionId: synthExecutionId } = await this.generateSynthesis(
       panel,
       topic,
       memberResponses,
       worktreePath,
       params.ticketId,
       panelMentionId,
+      params.extraContextPrompt,
+      params.outputFormatOverride,
     );
 
     const durationMs = Date.now() - startTime;
+
+    // Short-circuit for workflow orchestrator: skip side effects, return structured output
+    if (params.returnStructured) {
+      this.logger.info('Panel execution completed (structured return)', {
+        panelName: panel.name,
+        ticketId: params.ticketId,
+        durationMs,
+      });
+      return { structuredOutput: synthStructured, executionId: synthExecutionId };
+    }
 
     const result: PanelResult = {
       panelName: panel.name,
@@ -409,8 +443,9 @@ export class RunPanelUseCase {
       cwd?: string | null;
       maxTurns?: number;
       effectiveMode?: MentionExecutionMode;
+      outputFormat?: Record<string, unknown>;
     },
-  ): Promise<{ text: string; metrics: SdkMetrics }> {
+  ): Promise<{ text: string; structuredOutput: Record<string, unknown> | null; metrics: SdkMetrics }> {
     const { query } = await import('@anthropic-ai/claude-agent-sdk');
     const mode = options.effectiveMode ?? 'edit';
 
@@ -418,6 +453,7 @@ export class RunPanelUseCase {
       model: options.model,
       systemPrompt: options.systemPrompt ?? '',
       cwd: options.cwd,
+      outputFormat: options.outputFormat,
     });
 
     // For non-talk modes, override maxTurns if explicitly provided
@@ -426,6 +462,7 @@ export class RunPanelUseCase {
     }
 
     let resultText = '';
+    let structuredOutput: Record<string, unknown> | null = null;
     let messageCount = 0;
     const metrics: SdkMetrics = {};
 
@@ -457,6 +494,10 @@ export class RunPanelUseCase {
       }
       if ('result' in message) {
         resultText = (message as { result: string }).result;
+        // Capture structured output when outputFormat was requested
+        if (msg['structured_output']) {
+          structuredOutput = msg['structured_output'] as Record<string, unknown>;
+        }
         // Capture instrumentation from SDK result message
         if (typeof msg['duration_ms'] === 'number') metrics.durationMs = msg['duration_ms'] as number;
         if (typeof msg['total_cost_usd'] === 'number') metrics.costUsd = msg['total_cost_usd'] as number;
@@ -483,7 +524,7 @@ export class RunPanelUseCase {
       resultLength: resultText.length,
       costUsd: metrics.costUsd,
     });
-    return { text: resultText, metrics };
+    return { text: resultText, structuredOutput, metrics };
   }
 
   private async queryMember(
@@ -608,11 +649,14 @@ export class RunPanelUseCase {
     worktreePath: string | null,
     ticketId: string,
     mentionId: string,
-  ): Promise<string> {
+    extraContextPrompt?: string,
+    outputFormatOverride?: typeof STANDARD_OUTPUT_SCHEMA,
+  ): Promise<{ text: string; structuredOutput: Record<string, unknown> | null; executionId: string }> {
     const validResponses = memberResponses.filter((r) => !r.error && r.response);
 
     if (validResponses.length === 0) {
-      return `**${panel.displayName} — Synthesis**\n\n⚠️ No panel members responded successfully. Panel execution failed.`;
+      const fallbackText = `**${panel.displayName} — Synthesis**\n\n⚠️ No panel members responded successfully. Panel execution failed.`;
+      return { text: fallbackText, structuredOutput: null, executionId: randomUUID() };
     }
 
     const responsesText = validResponses
@@ -650,7 +694,7 @@ ${panel.orchestratorPrompt ? `${panel.orchestratorPrompt}\n\n` : ''}Synthesize t
 3. **Final recommendation**
 4. **Concrete next steps**
 
-Be concise and decision-oriented. Write in the same language as the panel members' responses.`;
+Be concise and decision-oriented. Write in the same language as the panel members' responses.${extraContextPrompt ? `\n\n---\n\n${extraContextPrompt}` : ''}`;
 
     const executionId = randomUUID();
     const orchestratorPersonaId = panel.orchestratorPersonaId ?? `orchestrator:${panel.id}`;
@@ -684,11 +728,12 @@ Be concise and decision-oriented. Write in the same language as the panel member
     this.onEvent?.(startEvent);
 
     try {
-      const { text, metrics } = await this.querySDK(synthesisPrompt, {
+      const { text, structuredOutput: rawStructured, metrics } = await this.querySDK(synthesisPrompt, {
         model: panel.orchestratorModel,
         systemPrompt: orchestratorSystemPrompt,
         cwd: worktreePath,
         effectiveMode,
+        outputFormat: outputFormatOverride,
       });
 
       await this.agentEventStore.completeExecution(executionId, 'completed', {
@@ -706,7 +751,8 @@ Be concise and decision-oriented. Write in the same language as the panel member
       await this.agentEventStore.appendEvent(endEvent);
       this.onEvent?.(endEvent);
 
-      return `**🏛️ ${panel.displayName} — Synthesis**\n\n${text}`;
+      const structuredOutput = (rawStructured ?? parseAgentOutput(text)) as Record<string, unknown> | null;
+      return { text: `**🏛️ ${panel.displayName} — Synthesis**\n\n${text}`, structuredOutput, executionId };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.logger.error('Panel synthesis generation failed', {
@@ -725,7 +771,8 @@ Be concise and decision-oriented. Write in the same language as the panel member
       await this.agentEventStore.appendEvent(failEvent);
       this.onEvent?.(failEvent);
 
-      return `**🏛️ ${panel.displayName} — Synthesis (auto-generated)**\n\n⚠️ Synthesis generation failed. Individual member responses are available in the full transcript deliverable.\n\n${validResponses.map((r) => `- **${r.emoji} ${r.personaDisplayName}** responded (${r.durationMs}ms)`).join('\n')}`;
+      const fallbackText = `**🏛️ ${panel.displayName} — Synthesis (auto-generated)**\n\n⚠️ Synthesis generation failed. Individual member responses are available in the full transcript deliverable.\n\n${validResponses.map((r) => `- **${r.emoji} ${r.personaDisplayName}** responded (${r.durationMs}ms)`).join('\n')}`;
+      return { text: fallbackText, structuredOutput: null, executionId };
     }
   }
 

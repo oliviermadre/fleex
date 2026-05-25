@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode } from '@fleex/shared';
-import { DELIVERABLE_TYPES, DELIVERABLE_STATUSES } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
@@ -29,43 +28,7 @@ import type { EventBus } from '../event-bus.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
-
-/**
- * Shared JSON-schema used as `outputFormat` for all Claude Agent SDK calls
- * (main agent execution and skill execution).
- */
-const OUTPUT_FORMAT_SCHEMA = {
-  type: 'json_schema' as const,
-  schema: {
-    type: 'object',
-    properties: {
-      deliverable: {
-        oneOf: [
-          {
-            type: 'object',
-            properties: {
-              title: { type: 'string' },
-              markdown: { type: 'string' },
-              type: { type: 'string', enum: [...DELIVERABLE_TYPES] },
-              status: { type: 'string', enum: [...DELIVERABLE_STATUSES] },
-            },
-            required: ['title', 'markdown', 'type', 'status'],
-          },
-          { type: 'null' },
-        ],
-      },
-      comment: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-      },
-      mentionStatus: {
-        type: 'string',
-        enum: ['resolved', 'waiting_for_info'],
-        default: 'resolved',
-      },
-    },
-    required: ['deliverable', 'comment'],
-  },
-};
+import { STANDARD_OUTPUT_SCHEMA as OUTPUT_FORMAT_SCHEMA } from '../utils/merge-output-schemas.js';
 
 interface ActiveExecution {
   mentionId: string;
@@ -107,9 +70,14 @@ Your final response will be structured as JSON with two fields:
 - Put \`@agent:name\` mentions **only** in comment, never in deliverable.
 - **mentionStatus**: Controls what happens to your mention after you finish.
   - \`"resolved"\` (default): your work is done, the mention is closed.
-  - \`"waiting_for_info"\`: you need more information before you can finish. You will be automatically
-    resumed when new content (comments, deliverables) is added to the ticket. You MUST produce at
-    least a comment or a deliverable when using this status — explain what you need and from whom.
+  - \`"waiting_for_info"\`: you need more information before you can finish. You will be
+    automatically resumed when new content (comments, deliverables) is added to the ticket.
+    The \`comment\` field is REQUIRED and IS the literal message the human sees — there is
+    no separate question channel and no out-of-band tool to ask. Write the actual question(s)
+    directly, as if chatting with the human ("Which Supabase project should I use?",
+    "Should the bundle target Apple silicon only?"). Do NOT write a status report about
+    having asked (e.g. "I posed a question to @nas", "Awaiting reply from X") — the system
+    does not post any separate question; only what you write in \`comment\` reaches the reader.
 - Both deliverable and comment can be non-null, or both null (silent completion — only valid with "resolved").
 
 ## CRITICAL — Handoff Rules (ENFORCED BY THE SYSTEM)
@@ -980,7 +948,15 @@ export class ExecuteAgentUseCase {
   async executeForSkill(skillId: string, ticketId: string, opts?: {
     commentBody?: string;
     mentionId?: string;
-  }): Promise<void> {
+    outputFormatOverride?: typeof OUTPUT_FORMAT_SCHEMA;
+    workflowContextPrompt?: string;
+    returnStructured?: boolean;
+    // When set, the "Running skill: X" announce comment is authored with a
+    // workflow-aware label (e.g. "workflow:Smoke Test → PR FAQ") so readers
+    // of the ticket comments tab can tell at a glance which workflow run
+    // produced each comment instead of seeing just the bare persona name.
+    workflowContext?: { workflowName: string; stepName: string };
+  }): Promise<{ structuredOutput: Record<string, unknown> | null; rawText: string; executionId: string } | void> {
     if (!this.skillStore) {
       throw new Error('SkillStore not available');
     }
@@ -1010,10 +986,13 @@ export class ExecuteAgentUseCase {
     const announceBody = opts?.commentBody
       ? `Running skill: **${skill.displayName}** _(via comment)_`
       : `Running skill: **${skill.displayName}**`;
+    const announceAuthor = opts?.workflowContext
+      ? `workflow:${opts.workflowContext.workflowName} → ${opts.workflowContext.stepName}`
+      : (persona.displayName || persona.name);
     const { comment: announceComment } = await this.postComment.execute({
       ticketId,
       body: announceBody,
-      authorName: persona.displayName || persona.name,
+      authorName: announceAuthor,
       authorType: 'agent',
       humanMentionNames: [],
     });
@@ -1024,7 +1003,7 @@ export class ExecuteAgentUseCase {
         commentId: announceComment.id,
         ticketId,
         authorType: 'agent',
-        authorName: persona.displayName || persona.name,
+        authorName: announceAuthor,
         createdMentions: [],
         occurredAt: new Date(),
       });
@@ -1037,11 +1016,18 @@ export class ExecuteAgentUseCase {
     }
 
     // 3. Start execution tracking
+    // Tag workflow-driven skill runs with a `workflow:` mentionId so the
+    // Execution Log can filter them out of the standalone SKILL listing
+    // (they're already represented by the parent workflow row). Non-workflow
+    // skill runs keep the `skill:` prefix used for internal lookups.
+    const startMentionId = opts?.workflowContext
+      ? `workflow:${executionId}`
+      : `skill:${skillId}`;
     await this.agentEventStore.startExecution({
       executionId,
       personaId: persona.id,
       ticketId,
-      mentionId: `skill:${skillId}`,
+      mentionId: startMentionId,
     });
 
     // 4. Compose prompts
@@ -1053,6 +1039,10 @@ export class ExecuteAgentUseCase {
     });
 
     const skillPromptBlocks = await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent, opts?.commentBody);
+
+    if (opts?.workflowContextPrompt) {
+      skillPromptBlocks.push({ type: 'text', text: `\n---\n\n${opts.workflowContextPrompt}` });
+    }
 
     this.logger.info('Skill execution started', {
       executionId,
@@ -1116,7 +1106,7 @@ export class ExecuteAgentUseCase {
         model: persona.model,
         systemPrompt,
         cwd: worktreePath,
-        outputFormat: OUTPUT_FORMAT_SCHEMA,
+        outputFormat: opts?.outputFormatOverride ?? OUTPUT_FORMAT_SCHEMA,
         resume: previousSessionId ?? undefined,
       });
 
@@ -1207,6 +1197,14 @@ export class ExecuteAgentUseCase {
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
       });
+
+      // Short-circuit: workflow orchestrator handles persistence via step_runs
+      if (opts?.returnStructured) {
+        await this.agentEventStore.completeExecution(executionId, 'completed');
+        this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'completed', abortController });
+        this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);
+        return { structuredOutput: structured as Record<string, unknown> | null, rawText: resultText, executionId };
+      }
 
       if (structured) {
         if (structured.comment) {
@@ -1396,6 +1394,139 @@ export class ExecuteAgentUseCase {
         }
       }, 30000);
     }
+  }
+
+  /**
+   * Execute an agent as part of a workflow step.
+   * Unlike `execute()` this does not consume a pending mention — the workflow
+   * orchestrator drives execution and persists output to step_runs.
+   *
+   * Returns the parsed structured output (with custom schema fields merged at
+   * top-level) and the executionId for audit linking.
+   */
+  async executeForWorkflowStep(params: {
+    personaName: string;
+    ticketId: string;
+    outputFormat: typeof OUTPUT_FORMAT_SCHEMA;
+    workflowContextPrompt: string;
+    mode: MentionExecutionMode;
+  }): Promise<{
+    structuredOutput: Record<string, unknown> | null;
+    rawText: string;
+    executionId: string;
+  }> {
+    const persona = await this.personaStore.getByName(params.personaName);
+    if (!persona) throw new AgentPersonaNotFoundError(params.personaName);
+
+    const executionId = randomUUID();
+    const humanName = this.resolveHumanMentionName(persona);
+
+    // Effective mode: respect persona ceiling
+    const effectiveMode: MentionExecutionMode = persona.executionMode === 'message' ? 'talk' : params.mode;
+
+    // Worktree if needed (same as executeForMention)
+    let worktreePath: string | null = null;
+    if (effectiveMode !== 'talk') {
+      worktreePath = await this.ensureWorktree(params.ticketId);
+    }
+
+    // Start tracking
+    await this.agentEventStore.startExecution({
+      executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: `workflow:${executionId}`,
+    });
+
+    // Compose prompts
+    const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
+    const context = await this.getTicketContext.execute({ ticketId: params.ticketId, agentName: persona.name });
+    const userPromptBlocks = await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt);
+    const userPromptText = userPromptBlocks.map((b) => b.type === 'text' ? b.text : '').join('');
+
+    let sequence = 0;
+    const emitEvent = async (eventType: AgentEventType, data: unknown) => {
+      const event = AgentEventEntity.create({ executionId, eventType, data, sequence: sequence++ });
+      await this.agentEventStore.appendEvent(event);
+      this.onEvent?.(event);
+    };
+
+    await emitEvent('execution_start', {
+      executionId, personaId: persona.id, personaName: persona.name, ticketId: params.ticketId,
+      model: persona.model, effectiveMode, worktreePath,
+      context: {
+        systemPromptSections: ['workflow_step'],
+        systemPromptLength: systemPrompt.length,
+        userPromptLength: userPromptText.length,
+      },
+    });
+
+    // SDK query
+    const { query } = await import('@anthropic-ai/claude-agent-sdk');
+    const queryOptions = buildSdkOptions(effectiveMode, {
+      model: persona.model, systemPrompt, cwd: worktreePath,
+      outputFormat: params.outputFormat,
+    });
+
+    let sdkSessionId: string | undefined;
+    let resultText = '';
+    let structuredOutput: Record<string, unknown> | null = null;
+    const hasImages = userPromptBlocks.some((b) => b.type === 'image');
+    const promptArg = hasImages
+      ? (async function* () { yield { type: 'user' as const, message: { role: 'user' as const, content: userPromptBlocks }, parent_tool_use_id: null, session_id: '' }; })()
+      : userPromptText;
+
+    try {
+      for await (const message of query({ prompt: promptArg, options: queryOptions as Parameters<typeof query>[0]['options'] })) {
+        const msg = message as Record<string, unknown>;
+        if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
+          sdkSessionId = msg['session_id'] as string;
+          await emitEvent('turn_start', { sessionId: sdkSessionId });
+        }
+        if ('result' in message) {
+          resultText = (message as { result: string }).result;
+          if (msg['structured_output']) {
+            structuredOutput = msg['structured_output'] as Record<string, unknown>;
+          }
+          await emitEvent('message_stop', { result: resultText, subtype: msg['subtype'] as string | undefined });
+        } else {
+          await emitEvent('content_block_delta', msg);
+        }
+      }
+    } catch (err) {
+      await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
+      await this.agentEventStore.completeExecution(executionId, 'failed');
+      throw err;
+    }
+
+    await emitEvent('execution_end', { status: 'completed', ticketId: params.ticketId, resultLength: resultText.length });
+    await this.agentEventStore.completeExecution(executionId, 'completed');
+
+    return { structuredOutput, rawText: resultText, executionId };
+  }
+
+  private async composeWorkflowUserPrompt(
+    context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
+    workflowContextPrompt: string,
+  ): Promise<PromptContentBlock[]> {
+    const blocks: PromptContentBlock[] = [];
+    const pushText = (text: string) => blocks.push({ type: 'text', text });
+
+    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
+    if (context.ticket.description) {
+      blocks.push(...await this.resolveText(`\n## Description\n\n${context.ticket.description}`));
+    }
+    if (context.comments.length > 0) {
+      pushText('\n## Comments\n');
+      for (const c of context.comments) {
+        blocks.push(...await this.resolveText(`**${c.authorName}** (${c.authorType}):\n${c.body}\n`));
+      }
+    }
+    if (context.deliverables.length > 0) {
+      pushText('\n## Deliverables\n');
+      for (const d of context.deliverables) {
+        pushText(`### [${d.status}] ${d.title} (${d.type})\n${d.content ?? ''}\n`);
+      }
+    }
+    pushText('\n---\n\n' + workflowContextPrompt);
+    return blocks;
   }
 
   private async composeSkillUserPrompt(

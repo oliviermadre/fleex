@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
-import type { ExecutionLogEntry, TicketType, PanelMemberSummary } from '@fleex/shared';
+import type { ExecutionLogEntry, TicketType, PanelMemberSummary, WorkflowStepSummary } from '@fleex/shared';
 import { cancelExecution } from '../../services/api';
 import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -27,6 +27,18 @@ function TypeIcon({ type }: { type: ExecutionLogEntry['type'] }) {
       </svg>
     );
   }
+  if (type === 'workflow') {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="6" height="5" rx="1" />
+        <rect x="15" y="3" width="6" height="5" rx="1" />
+        <rect x="9" y="16" width="6" height="5" rx="1" />
+        <path d="M9 5.5h6" />
+        <path d="M6 8v4a2 2 0 0 0 2 2h1" />
+        <path d="M18 8v4a2 2 0 0 1-2 2h-1" />
+      </svg>
+    );
+  }
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" />
@@ -41,6 +53,7 @@ function TypeBadge({ type }: { type: ExecutionLogEntry['type'] }) {
     agent: 'text-indigo-400',
     panel: 'text-violet-400',
     skill: 'text-cyan-400',
+    workflow: 'text-amber-400',
   }[type];
 
   return (
@@ -112,7 +125,36 @@ const TICKET_TYPE_LABELS: Record<string, string> = {
 
 // ── Status badge ──
 
-function StatusBadge({ status }: { status: ExecutionLogEntry['status'] }) {
+function StatusBadge({
+  status,
+  workflowSubStatus,
+}: {
+  status: ExecutionLogEntry['status'];
+  workflowSubStatus?: 'needs_review' | 'blocked';
+}) {
+  // Workflow sub-status overrides the default badge — a workflow run in
+  // `needs_review`/`blocked` reports `status='running'` (it's still alive),
+  // but the user needs to see the amber "needs your attention" signal.
+  if (workflowSubStatus === 'needs_review') {
+    return (
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+        </span>
+        Needs Review
+      </span>
+    );
+  }
+  if (workflowSubStatus === 'blocked') {
+    return (
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-orange-500/20 bg-orange-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-orange-400">
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-orange-500" />
+        Blocked
+      </span>
+    );
+  }
+
   const config: Record<string, { label: string; dot: string; text: string; bg: string; border: string; pulse?: boolean }> = {
     running: { label: 'Running', dot: 'bg-emerald-500', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', pulse: true },
     completed: { label: 'Completed', dot: 'bg-emerald-500', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
@@ -129,6 +171,68 @@ function StatusBadge({ status }: { status: ExecutionLogEntry['status'] }) {
       </span>
       {c.label}
     </span>
+  );
+}
+
+// ── Workflow step progress dots ──
+
+const STEP_DOT_CLASSES: Record<WorkflowStepSummary['status'], string> = {
+  pending: 'bg-[var(--theme-bg-surface)] border border-[var(--theme-text-faint)]/50',
+  queued: 'bg-[var(--theme-bg-surface)] border border-[var(--theme-text-faint)]/70',
+  running: 'bg-blue-400 border border-blue-300 shadow-[0_0_6px_rgba(96,165,250,0.6)] animate-pulse',
+  completed: 'bg-emerald-400 border border-emerald-300',
+  failed: 'bg-red-400 border border-red-300',
+  needs_review: 'bg-amber-400 border border-amber-300',
+  cancelled: 'bg-[var(--theme-text-faint)]/30 border border-[var(--theme-text-faint)]/40',
+  skipped: 'bg-[var(--theme-text-faint)]/30 border border-[var(--theme-text-faint)]/40',
+};
+
+// Connector line color: matches the incoming step (the one the line leads
+// INTO), so the chain "lights up" as the workflow advances.
+const STEP_LINE_CLASSES: Record<WorkflowStepSummary['status'], string> = {
+  pending: 'bg-[var(--theme-text-faint)]/25',
+  queued: 'bg-[var(--theme-text-faint)]/30',
+  running: 'bg-blue-400/70',
+  completed: 'bg-emerald-400/70',
+  failed: 'bg-red-400/70',
+  needs_review: 'bg-amber-400/70',
+  cancelled: 'bg-[var(--theme-text-faint)]/25',
+  skipped: 'bg-[var(--theme-text-faint)]/25',
+};
+
+function WorkflowStepDots({ progress }: { progress: WorkflowStepSummary[] }) {
+  // Cap visible chain — beyond this we collapse to a "+N" indicator. The
+  // full DAG is one click away on the Workflow tab.
+  const MAX_VISIBLE = 9;
+  const visible = progress.slice(0, MAX_VISIBLE);
+  const overflow = progress.length - visible.length;
+
+  return (
+    <div className="flex items-center justify-end">
+      {visible.map((s, i) => (
+        <span key={s.stepId} className="flex flex-shrink-0 items-center">
+          {i > 0 && (
+            <span
+              className={cn('h-[2px] w-2.5 flex-shrink-0', STEP_LINE_CLASSES[s.status])}
+              aria-hidden
+            />
+          )}
+          <span
+            title={`${s.name} — ${s.status}${s.isCurrent ? ' (current)' : ''}`}
+            className={cn(
+              'h-3 w-3 flex-shrink-0 rounded-full',
+              STEP_DOT_CLASSES[s.status],
+              s.isCurrent && 'ring-2 ring-emerald-300/70 ring-offset-1 ring-offset-[var(--theme-bg-base)]',
+            )}
+          />
+        </span>
+      ))}
+      {overflow > 0 && (
+        <span className="ml-1 text-[10px] tabular-nums text-[var(--theme-text-faint)]" title={`+${overflow} more steps`}>
+          +{overflow}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -327,7 +431,7 @@ export const ExecutionRow = memo(function ExecutionRow({
     [cancelState, entry.id],
   );
 
-  const navigateToTicket = useCallback((e: React.MouseEvent, tab?: 'comments' | 'deliverables') => {
+  const navigateToTicket = useCallback((e: React.MouseEvent, tab?: 'comments' | 'deliverables' | 'workflow') => {
     e.stopPropagation();
     selectTicket(entry.ticketId);
     if (tab) setTicketTab(tab);
@@ -335,6 +439,7 @@ export const ExecutionRow = memo(function ExecutionRow({
   }, [entry.ticketId, selectTicket, setTicketTab, setActivePanel]);
 
   const isPanelRun = entry.type === 'panel' && !!entry.panelMembers && entry.panelMembers.length > 0;
+  const isWorkflow = entry.type === 'workflow';
   const title = entry.ticketTitle || entry.executorName;
   const referenceTime = live ? entry.startedAt : (entry.completedAt ?? entry.startedAt);
 
@@ -357,21 +462,60 @@ export const ExecutionRow = memo(function ExecutionRow({
             <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{title}</span>
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 pl-[18px] text-xs text-[var(--theme-text-faint)]">
-            <ModeBadge mode={entry.effectiveMode} />
-            {ticketTypeLabel && (
-              <span className={cn('font-medium', ticketTypeColor)}>{ticketTypeLabel}</span>
+            {isWorkflow ? (
+              <>
+                <span className="flex-shrink-0 font-medium text-amber-300/90">
+                  {entry.executorName}
+                </span>
+                <span className="text-[var(--theme-text-faint)]">·</span>
+                <span className="truncate" title={entry.workflowCurrentStepName ?? undefined}>
+                  {entry.workflowSubStatus === 'needs_review'
+                    ? `Awaiting decision on "${entry.workflowCurrentStepName ?? '?'}"`
+                    : entry.status === 'completed'
+                      ? `Completed · ${entry.workflowTotalSteps ?? 0} steps`
+                      : entry.status === 'failed'
+                        ? `Failed at "${entry.workflowCurrentStepName ?? '?'}"`
+                        : entry.workflowCurrentStepName
+                          ? `Step ${(entry.workflowCompletedSteps ?? 0) + 1}/${entry.workflowTotalSteps ?? 0} · ${entry.workflowCurrentStepName}`
+                          : `${entry.workflowCompletedSteps ?? 0}/${entry.workflowTotalSteps ?? 0} steps`}
+                </span>
+              </>
+            ) : (
+              <>
+                <ModeBadge mode={entry.effectiveMode} />
+                {ticketTypeLabel && (
+                  <span className={cn('font-medium', ticketTypeColor)}>{ticketTypeLabel}</span>
+                )}
+              </>
             )}
           </div>
         </div>
 
-        {/* Col 3: Agent detail — panel name + clickable participants, or name+model */}
+        {/* Col 3: Agent detail — panel name + clickable participants, or name+model,
+             OR (for workflows) step dots + completed/total counter. The wider
+             width on workflow rows (220 vs 180) is needed to fit the chain of
+             dots + connectors at MAX_VISIBLE=9 without squeezing. */}
         <div
           className={cn(
-            'hidden w-[160px] flex-shrink-0 text-right lg:block',
-            isPanelRun ? 'overflow-visible' : 'overflow-hidden',
+            'hidden flex-shrink-0 text-right lg:block',
+            isWorkflow ? 'w-[220px]' : 'w-[180px]',
+            isPanelRun || isWorkflow ? 'overflow-visible' : 'overflow-hidden',
           )}
         >
-          {isPanelRun ? (
+          {isWorkflow ? (
+            <>
+              <div className="mb-1">
+                {entry.workflowStepProgress && entry.workflowStepProgress.length > 0 ? (
+                  <WorkflowStepDots progress={entry.workflowStepProgress} />
+                ) : (
+                  <span className="text-[10px] text-[var(--theme-text-faint)]">no steps</span>
+                )}
+              </div>
+              <div className="text-[10px] tabular-nums text-[var(--theme-text-faint)]">
+                {entry.workflowCompletedSteps ?? 0}/{entry.workflowTotalSteps ?? 0} steps
+              </div>
+            </>
+          ) : isPanelRun ? (
             <>
               <div className="truncate text-xs font-medium text-[var(--theme-text-secondary)]">
                 {entry.panelDisplayName}
@@ -396,8 +540,8 @@ export const ExecutionRow = memo(function ExecutionRow({
         </div>
 
         {/* Col 4: Status */}
-        <div className="w-[100px] flex-shrink-0 text-center">
-          <StatusBadge status={entry.status} />
+        <div className="w-[110px] flex-shrink-0 text-center">
+          <StatusBadge status={entry.status} workflowSubStatus={entry.workflowSubStatus} />
         </div>
 
         {/* Col 5: Execution detail (tokens + cost) */}
@@ -483,23 +627,28 @@ export const ExecutionRow = memo(function ExecutionRow({
             <span className="min-w-[12px] text-left">{entry.deliverableCount > 0 ? entry.deliverableCount : ''}</span>
           </button>
 
-          {/* Ticket CTA */}
+          {/* Ticket CTA — for workflow rows, land on the Workflow tab. */}
           <button
-            onClick={(e) => navigateToTicket(e)}
+            onClick={(e) => navigateToTicket(e, isWorkflow ? 'workflow' : undefined)}
             className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
-            title="Open ticket"
+            title={isWorkflow ? 'Open ticket — Workflow tab' : 'Open ticket'}
           >
             <TicketLinkIcon />
           </button>
 
-          {/* Execution log CTA (open floating panel) */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setOpenExecutionId(entry.id); }}
-            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
-            title="View execution log"
-          >
-            <ExecutionLogIcon />
-          </button>
+          {/* Execution log CTA (open floating panel) — workflow runs are
+              aggregates over multiple agent executions, so there's no single
+              event timeline to surface; the Workflow tab on the ticket is
+              the right entry point. */}
+          {!isWorkflow && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setOpenExecutionId(entry.id); }}
+              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] shadow-sm transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] active:translate-y-px"
+              title="View execution log"
+            >
+              <ExecutionLogIcon />
+            </button>
+          )}
         </div>
       </div>
 

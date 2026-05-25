@@ -11,6 +11,8 @@ import type { ExecuteAgentUseCase } from './use-cases/execute-agent.js';
 import type { WakeWaitingAgentsUseCase } from './use-cases/wake-waiting-agents.js';
 import type { RunPanelUseCase } from './use-cases/run-panel.js';
 import type { GenerateTicketSummaryUseCase } from './use-cases/generate-ticket-summary.js';
+import type { WorkflowTemplateStorePort } from './ports/workflow-template-store.port.js';
+import type { CreateWorkflowRunUseCase } from './use-cases/create-workflow-run.js';
 import type {
   AnyDomainEvent,
   CommentPostedEvent,
@@ -43,6 +45,8 @@ export interface DomainEventListenerDeps {
   runPanel: RunPanelUseCase;
   generateTicketSummary: GenerateTicketSummaryUseCase;
   logger: LoggerPort;
+  workflowTemplateStore?: WorkflowTemplateStorePort | null;
+  createWorkflowRun?: CreateWorkflowRunUseCase | null;
 }
 
 /**
@@ -61,6 +65,12 @@ export class DomainEventListener {
   private skillBroadcast: BroadcastFn = () => {};
 
   constructor(private readonly deps: DomainEventListenerDeps) {}
+
+  /** Called after Phase B wiring to attach workflow deps (which are initialized after the listener) */
+  setWorkflowDeps(deps: { workflowTemplateStore: WorkflowTemplateStorePort | null; createWorkflowRun: CreateWorkflowRunUseCase | null }): void {
+    this.deps.workflowTemplateStore = deps.workflowTemplateStore;
+    this.deps.createWorkflowRun = deps.createWorkflowRun;
+  }
 
   /** Called by WS plugins to wire up broadcast functions */
   setTicketBroadcast(fn: BroadcastFn): void {
@@ -129,6 +139,75 @@ export class DomainEventListener {
       }
     });
 
+    // ── Workflow broadcasts ──
+    bus.on('workflow.run_created', (e) => {
+      if (e.type === 'workflow.run_created') {
+        this.ticketBroadcast('workflow:run_created', {
+          workflowRunId: e.workflowRunId,
+          templateId: e.templateId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
+    bus.on('workflow.step_started', (e) => {
+      if (e.type === 'workflow.step_started') {
+        this.ticketBroadcast('workflow:step_started', {
+          workflowRunId: e.workflowRunId,
+          stepRunId: e.stepRunId,
+          stepId: e.stepId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
+    bus.on('workflow.step_completed', (e) => {
+      if (e.type === 'workflow.step_completed') {
+        this.ticketBroadcast('workflow:step_completed', {
+          workflowRunId: e.workflowRunId,
+          stepRunId: e.stepRunId,
+          stepId: e.stepId,
+          ticketId: e.ticketId,
+          nextEdgeId: e.nextEdgeId,
+        });
+      }
+    });
+    bus.on('workflow.needs_review', (e) => {
+      if (e.type === 'workflow.needs_review') {
+        this.ticketBroadcast('workflow:needs_review', {
+          workflowRunId: e.workflowRunId,
+          stepRunId: e.stepRunId,
+          stepId: e.stepId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
+    bus.on('workflow.run_completed', (e) => {
+      if (e.type === 'workflow.run_completed') {
+        this.ticketBroadcast('workflow:run_completed', {
+          workflowRunId: e.workflowRunId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
+    bus.on('workflow.run_failed', (e) => {
+      if (e.type === 'workflow.run_failed') {
+        this.ticketBroadcast('workflow:run_failed', {
+          workflowRunId: e.workflowRunId,
+          stepRunId: e.stepRunId,
+          stepId: e.stepId,
+          ticketId: e.ticketId,
+          error: e.error,
+        });
+      }
+    });
+    bus.on('workflow.run_cancelled', (e) => {
+      if (e.type === 'workflow.run_cancelled') {
+        this.ticketBroadcast('workflow:run_cancelled', {
+          workflowRunId: e.workflowRunId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
+
     // ── Persona broadcasts ──
     bus.on('persona.created', (e) => this.broadcastPersonaEntity(e, 'persona:created'));
     bus.on('persona.updated', (e) => this.broadcastPersonaEntity(e, 'persona:updated'));
@@ -163,6 +242,9 @@ export class DomainEventListener {
 
     // ── Cross-cutting: Auto-trigger skills when mentioned ──
     bus.on('mention.created', (e) => this.handleAutoTriggerSkill(e as MentionCreatedEvent));
+
+    // ── Cross-cutting: Auto-trigger workflows when mentioned ──
+    bus.on('mention.created', (e) => this.handleAutoTriggerWorkflow(e as MentionCreatedEvent));
 
     // ── Cross-cutting: Auto-review workflow ──
     bus.on('comment.posted', (e) => this.handleCommentPostedWorkflow(e as CommentPostedEvent));
@@ -258,6 +340,51 @@ export class DomainEventListener {
       this.deps.logger.error('Skill auto-trigger failed', {
         skillName: event.targetAgent,
         ticketId: event.ticketId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
+  // ── Auto-trigger workflow run ──
+
+  private async handleAutoTriggerWorkflow(event: MentionCreatedEvent): Promise<void> {
+    if (event.targetType !== 'workflow') return;
+
+    // workflow stores may be null on unsupported adapters
+    if (!this.deps.workflowTemplateStore || !this.deps.createWorkflowRun) {
+      this.deps.logger.warn('Workflow mention received but workflow stores not configured', {
+        slug: event.targetAgent, ticketId: event.ticketId,
+      });
+      return;
+    }
+
+    const template = await this.deps.workflowTemplateStore.getBySlug(event.targetAgent);
+    if (!template || !template.enabled) {
+      // Unknown or disabled template — resolve silently like skills do
+      const mention = await this.deps.mentionStore.getById(event.mentionId);
+      if (mention && mention.status !== 'resolved') {
+        mention.resolve();
+        await this.deps.mentionStore.save(mention);
+      }
+      return;
+    }
+
+    // Fire and forget — create the workflow run
+    this.deps.createWorkflowRun.execute({
+      ticketId: event.ticketId,
+      templateId: template.id,
+      triggeredBy: event.sourceAgent,
+      triggeredFrom: `mention:${event.mentionId}`,
+    }).then(async () => {
+      // Resolve the mention after the run is created
+      const mention = await this.deps.mentionStore.getById(event.mentionId);
+      if (mention && mention.status !== 'resolved') {
+        mention.resolve();
+        await this.deps.mentionStore.save(mention);
+      }
+    }).catch((err) => {
+      this.deps.logger.error('Workflow auto-trigger failed', {
+        slug: event.targetAgent, ticketId: event.ticketId,
         error: err instanceof Error ? err.message : String(err),
       });
     });

@@ -17,6 +17,7 @@ import { useScratchpadStore } from '../stores/scratchpadStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
+import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
 
 type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents';
 
@@ -59,6 +60,7 @@ interface ParsedUrl {
   personaTab: PersonaTab | null;
   skillId: string | null;
   panelId: string | null;
+  workflowId: string | null;
   settingsTab: SettingsTab | null;
   analyticsTab: AnalyticsTab | null;
   agentWorktreeTicketId: string | null;
@@ -68,7 +70,7 @@ interface ParsedUrl {
 export function parseUrl(pathname: string, search: string): ParsedUrl {
   const params = new URLSearchParams(search);
 
-  const base = { sessionId: null, splitId: null, sessionTicketId: null as string | null, sessionTabKey: null as string | null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, ticketsView: null as 'board' | 'roadmap' | null, epicId: null as string | null, epicDetailTab: null as EpicDetailTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
+  const base = { sessionId: null, splitId: null, sessionTicketId: null as string | null, sessionTabKey: null as string | null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, ticketsView: null as 'board' | 'roadmap' | null, epicId: null as string | null, epicDetailTab: null as EpicDetailTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, workflowId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
 
   // Root: redirect to /dashboard
   if (pathname === '/') {
@@ -171,6 +173,12 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
     return { ...base, panel: 'agents', skillId: skillMatch[1]! };
   }
 
+  // Agents — workflow routes
+  const workflowMatch = pathname.match(/^\/agents\/workflow\/([^/]+)$/);
+  if (workflowMatch) {
+    return { ...base, panel: 'agents', workflowId: workflowMatch[1]! };
+  }
+
   // Agents — more specific patterns first
   const agentTabMatch = pathname.match(/^\/agents\/([^/]+)\/([^/]+)$/);
   if (agentTabMatch) {
@@ -257,6 +265,7 @@ export function storeToUrl(
   activeView?: 'board' | 'roadmap',
   epicDetailId?: string | null,
   epicDetailTab?: EpicDetailTab,
+  selectedWorkflowId?: string | null,
 ): { pathname: string; search: string } {
   switch (activePanel) {
     case 'dashboard':
@@ -312,6 +321,9 @@ export function storeToUrl(
       }
       if (selectedSkillId) {
         return { pathname: `/agents/skill/${selectedSkillId}`, search: '' };
+      }
+      if (selectedWorkflowId) {
+        return { pathname: `/agents/workflow/${selectedWorkflowId}`, search: '' };
       }
       if (selectedPersonaId) {
         if (personaTab !== 'config') {
@@ -399,6 +411,8 @@ export function RouterSync() {
   const selectSkill = useSkillStore((s) => s.selectSkill);
   const selectedPanelId = usePanelStore((s) => s.selectedPanelId);
   const selectPanel = usePanelStore((s) => s.selectPanel);
+  const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
+  const selectWorkflow = useWorkflowTemplateStore((s) => s.selectWorkflow);
 
   // Track whether we're currently syncing from URL to prevent circular updates
   const syncingFromUrl = useRef(false);
@@ -483,29 +497,40 @@ export function RouterSync() {
       }
     }
 
-    // Update agent persona / skill / panel selection
+    // Update agent persona / skill / panel / workflow selection
     if (parsed.panel === 'agents') {
       if (parsed.panelId) {
-        // Panel selected — clear persona and skill selection
+        // Panel selected — clear persona, skill, and workflow selection
         if (parsed.panelId !== selectedPanelId) {
           selectPanel(parsed.panelId);
         }
         if (selectedPersonaId) selectPersona(null);
         if (selectedSkillId) selectSkill(null);
+        if (selectedWorkflowId) selectWorkflow(null);
       } else if (parsed.skillId) {
-        // Skill selected — clear persona and panel selection
+        // Skill selected — clear persona, panel, and workflow selection
         if (parsed.skillId !== selectedSkillId) {
           selectSkill(parsed.skillId);
         }
         if (selectedPersonaId) selectPersona(null);
         if (selectedPanelId) selectPanel(null);
+        if (selectedWorkflowId) selectWorkflow(null);
+      } else if (parsed.workflowId) {
+        // Workflow selected — clear persona, skill, and panel selection
+        if (parsed.workflowId !== selectedWorkflowId) {
+          selectWorkflow(parsed.workflowId);
+        }
+        if (selectedPersonaId) selectPersona(null);
+        if (selectedSkillId) selectSkill(null);
+        if (selectedPanelId) selectPanel(null);
       } else {
-        // Persona selected — clear skill and panel selection
+        // Persona selected — clear skill, panel, and workflow selection
         if (parsed.personaId !== selectedPersonaId) {
           selectPersona(parsed.personaId);
         }
         if (selectedSkillId) selectSkill(null);
         if (selectedPanelId) selectPanel(null);
+        if (selectedWorkflowId) selectWorkflow(null);
         if (parsed.personaTab && parsed.personaTab !== personaTab) {
           setPersonaTab(parsed.personaTab);
         }
@@ -554,6 +579,7 @@ export function RouterSync() {
       activeView,
       epicDetailId,
       epicDetailTab,
+      selectedWorkflowId,
     );
 
     const currentPath = location.pathname;
@@ -583,6 +609,7 @@ export function RouterSync() {
     analyticsTab,
     ticketTab,
     selectedPanelId,
+    selectedWorkflowId,
     activeView,
     epicDetailId,
     epicDetailTab,

@@ -10,6 +10,7 @@ import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { useSkillStore } from '../../stores/skillStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import * as api from '../../services/api';
@@ -351,7 +352,7 @@ interface MentionOption {
   /** Display label shown in the dropdown */
   label: string;
   /** Secondary text (e.g. "agent" or "human") */
-  type: 'agent' | 'human' | 'panel' | 'skill';
+  type: 'agent' | 'human' | 'panel' | 'skill' | 'workflow';
 }
 
 function MentionAutocomplete({
@@ -391,9 +392,9 @@ function MentionAutocomplete({
           onMouseDown={(e) => { e.preventDefault(); onSelect(opt); }}
         >
           <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[10px] font-bold ${
-            opt.type === 'agent' ? 'bg-purple-500/20 text-purple-400' : opt.type === 'panel' ? 'bg-blue-500/20 text-blue-400' : opt.type === 'skill' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+            opt.type === 'agent' ? 'bg-purple-500/20 text-purple-400' : opt.type === 'panel' ? 'bg-blue-500/20 text-blue-400' : opt.type === 'skill' ? 'bg-emerald-500/20 text-emerald-400' : opt.type === 'workflow' ? 'bg-orange-500/20 text-orange-400' : 'bg-amber-500/20 text-amber-400'
           }`}>
-            {opt.type === 'agent' ? 'A' : opt.type === 'panel' ? 'P' : opt.type === 'skill' ? 'S' : 'H'}
+            {opt.type === 'agent' ? 'A' : opt.type === 'panel' ? 'P' : opt.type === 'skill' ? 'S' : opt.type === 'workflow' ? 'W' : 'H'}
           </span>
           <span className="flex-1 truncate font-medium">{opt.label}</span>
           <span className="text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
@@ -433,7 +434,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     onChange: setBody,
   });
 
-  // Build mention options from personas + panels + skills + human
+  // Build mention options from personas + panels + skills + workflows + human
   const personas = useAgentPersonaStore((s) => s.personas);
   const panels = usePanelStore((s) => s.panels);
   const panelsLoaded = usePanelStore((s) => s.loaded);
@@ -441,6 +442,8 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const skills = useSkillStore((s) => s.skills);
   const skillsLoaded = useSkillStore((s) => s.loaded);
   const loadSkills = useSkillStore((s) => s.loadSkills);
+  const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
+  const refreshWorkflowTemplates = useWorkflowTemplateStore((s) => s.refresh);
   const humanMentionName = useSettingsStore(
     (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
   );
@@ -448,7 +451,11 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   useEffect(() => {
     if (!panelsLoaded) loadPanels();
     if (!skillsLoaded) loadSkills();
-  }, [panelsLoaded, loadPanels, skillsLoaded, loadSkills]);
+    // No `loaded` flag on the workflow template store, so we just fetch once
+    // when the comments mount. Cheap and avoids stale autocomplete data after
+    // creating a new workflow elsewhere in the session.
+    if (workflowTemplates.length === 0) void refreshWorkflowTemplates();
+  }, [panelsLoaded, loadPanels, skillsLoaded, loadSkills, workflowTemplates.length, refreshWorkflowTemplates]);
 
   // Agent "is working" indicator
   const executionsByTicket = useAgentEventStore((s) => s.executionsByTicket);
@@ -505,6 +512,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         });
       }
     }
+    for (const wf of workflowTemplates) {
+      if (wf.enabled) {
+        opts.push({
+          insertText: `@workflow:${wf.slug}`,
+          label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name,
+          type: 'workflow' as const,
+        });
+      }
+    }
     if (humanMentionName) {
       opts.push({
         insertText: `@${humanMentionName}`,
@@ -513,7 +529,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       });
     }
     return opts;
-  }, [personas, panels, skills, humanMentionName]);
+  }, [personas, panels, skills, workflowTemplates, humanMentionName]);
 
   const filteredOptions = useMemo(() => {
     if (!acOpen) return [];

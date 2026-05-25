@@ -231,6 +231,61 @@ export interface PanelExecutedEvent extends DomainEvent {
   failedMembers: number;
 }
 
+// ── Workflow events ──
+
+export interface WorkflowRunCreatedEvent extends DomainEvent {
+  type: 'workflow.run_created';
+  workflowRunId: string;
+  ticketId: string;
+  templateId: string;
+}
+
+export interface WorkflowStepStartedEvent extends DomainEvent {
+  type: 'workflow.step_started';
+  workflowRunId: string;
+  stepRunId: string;
+  stepId: string;
+  ticketId: string;
+}
+
+export interface WorkflowStepCompletedEvent extends DomainEvent {
+  type: 'workflow.step_completed';
+  workflowRunId: string;
+  stepRunId: string;
+  stepId: string;
+  ticketId: string;
+  nextEdgeId: string | null;
+}
+
+export interface WorkflowNeedsReviewEvent extends DomainEvent {
+  type: 'workflow.needs_review';
+  workflowRunId: string;
+  stepRunId: string;
+  stepId: string;
+  ticketId: string;
+}
+
+export interface WorkflowRunCompletedEvent extends DomainEvent {
+  type: 'workflow.run_completed';
+  workflowRunId: string;
+  ticketId: string;
+}
+
+export interface WorkflowRunFailedEvent extends DomainEvent {
+  type: 'workflow.run_failed';
+  workflowRunId: string;
+  stepRunId: string;
+  stepId: string;
+  ticketId: string;
+  error: string;
+}
+
+export interface WorkflowRunCancelledEvent extends DomainEvent {
+  type: 'workflow.run_cancelled';
+  workflowRunId: string;
+  ticketId: string;
+}
+
 // ── Worktree events ──
 
 export interface WorktreeCreatedEvent extends DomainEvent {
@@ -371,7 +426,14 @@ export type AnyDomainEvent =
   | TicketRelationshipCreatedEvent
   | TicketRelationshipDeletedEvent
   | TicketGroupBoardAddedEvent
-  | TicketGroupBoardRemovedEvent;
+  | TicketGroupBoardRemovedEvent
+  | WorkflowRunCreatedEvent
+  | WorkflowStepStartedEvent
+  | WorkflowStepCompletedEvent
+  | WorkflowNeedsReviewEvent
+  | WorkflowRunCompletedEvent
+  | WorkflowRunFailedEvent
+  | WorkflowRunCancelledEvent;
 
 // ── Event type string union ──
 

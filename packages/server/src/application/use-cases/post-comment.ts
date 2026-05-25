@@ -94,6 +94,22 @@ export class PostCommentUseCase {
         await this.mentionStore.save(mention);
         createdMentions.push(mention);
       }
+
+      // Create mentions for @workflow:xxx found in the body
+      const workflowMentions = TicketCommentEntity.extractWorkflowMentions(params.body);
+      for (const workflowSlug of workflowMentions) {
+        const mention = TicketMentionEntity.create({
+          id: randomUUID(),
+          ticketId: params.ticketId,
+          commentId: comment.id,
+          targetAgent: workflowSlug,
+          sourceAgent: params.authorName,
+          targetType: 'workflow',
+          executionMode: 'talk', // workflows delegate execution to step executors
+        });
+        await this.mentionStore.save(mention);
+        createdMentions.push(mention);
+      }
     }
 
     // Create mentions for human @mentions (tracked but never auto-executed)

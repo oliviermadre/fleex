@@ -33,11 +33,26 @@ function SkillIcon() {
   );
 }
 
+function WorkflowIcon() {
+  // Three stacked nodes connected by lines — read as "DAG / pipeline".
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="6" height="5" rx="1" />
+      <rect x="15" y="3" width="6" height="5" rx="1" />
+      <rect x="9" y="16" width="6" height="5" rx="1" />
+      <path d="M9 5.5h6" />
+      <path d="M6 8v4a2 2 0 0 0 2 2h1" />
+      <path d="M18 8v4a2 2 0 0 1-2 2h-1" />
+    </svg>
+  );
+}
+
 const TYPE_FILTERS: { key: ExecutionTypeFilter; label: string; icon: React.ReactNode | null; iconColor: string | null }[] = [
   { key: 'all', label: 'ALL', icon: null, iconColor: null },
   { key: 'agent', label: 'AGENT', icon: <AgentIcon />, iconColor: 'text-indigo-400' },
   { key: 'panel', label: 'PANEL', icon: <PanelIcon />, iconColor: 'text-violet-400' },
   { key: 'skill', label: 'SKILL', icon: <SkillIcon />, iconColor: 'text-cyan-400' },
+  { key: 'workflow', label: 'WORKFLOW', icon: <WorkflowIcon />, iconColor: 'text-amber-400' },
 ];
 
 export function ExecutionLogPage() {
@@ -103,7 +118,7 @@ export function ExecutionLogPage() {
             </div>
             <div>
               <h1 className="text-lg font-semibold text-[var(--theme-text-primary)]">Execution Log</h1>
-              <p className="text-xs text-[var(--theme-text-muted)]">Live & historical runs of agents, panels and skills</p>
+              <p className="text-xs text-[var(--theme-text-muted)]">Live & historical runs of agents, panels, skills and workflows</p>
             </div>
           </div>
           <div className="flex items-center gap-3 text-sm">

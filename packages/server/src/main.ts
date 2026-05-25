@@ -42,6 +42,8 @@ import { fileRoutes } from './infrastructure/http/files.routes.js';
 import { ticketGroupRoutes } from './infrastructure/http/ticket-groups.routes.js';
 import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
+import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
+import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
 
 async function main() {
@@ -101,6 +103,35 @@ async function main() {
   await app.register(githubImageProxyRoutes(container));
   await app.register(fileRoutes(container));
   await app.register(ticketGroupRoutes(container));
+
+  // Workflow template routes (requires workflowTemplateStore — available on sqlite/supabase)
+  if (container.workflowTemplateStore) {
+    await app.register(workflowTemplateRoutes({ templateStore: container.workflowTemplateStore }));
+  } else {
+    container.logger.warn('workflowTemplateStore not available — /api/workflows/templates routes skipped');
+  }
+
+  // Workflow run routes (requires run/step stores + all use cases)
+  if (
+    container.workflowRunStore &&
+    container.stepRunStore &&
+    container.createWorkflowRun &&
+    container.resolveHumanGate &&
+    container.retryStep &&
+    container.cancelWorkflowRun
+  ) {
+    await app.register(workflowRunRoutes({
+      runStore: container.workflowRunStore,
+      stepRunStore: container.stepRunStore,
+      createWorkflowRun: container.createWorkflowRun,
+      resolveHumanGate: container.resolveHumanGate,
+      retryStep: container.retryStep,
+      cancelWorkflowRun: container.cancelWorkflowRun,
+      authorNameResolver: () => 'workflow-trigger',
+    }));
+  } else {
+    container.logger.warn('workflowRunStore or use cases not available — /api/workflows/runs routes skipped');
+  }
 
   // Agent API with auth
   const authHook = createAgentAuthHook(container);

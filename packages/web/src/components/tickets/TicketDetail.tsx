@@ -15,6 +15,8 @@ import * as api from '../../services/api';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
 
 type DescriptionMode = 'write' | 'preview' | 'split';
 
@@ -35,6 +37,14 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
   const [commentCount, setCommentCount] = useState(0);
   const [deliverableCount, setDeliverableCount] = useState(0);
   const [mentionCount, setMentionCount] = useState(0);
+
+  // Subscribe to a boolean (stable across renders) rather than `... ?? []`,
+  // which returns a fresh array reference every call and breaks Zustand's
+  // equality check — causing "getSnapshot should be cached" + infinite loop.
+  const hasWorkflowRuns = useWorkflowRunStore((s) => (s.runsByTicket[ticketId]?.length ?? 0) > 0);
+  useEffect(() => {
+    void useWorkflowRunStore.getState().loadForTicket(ticketId);
+  }, [ticketId]);
 
   // Track initial description to know if it changed when leaving
   const initialDescRef = useRef('');
@@ -93,6 +103,15 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
         } else if (msg.type === 'mention:deleted') {
           const { ticketId: tid } = msg.data as { ticketId: string };
           if (tid === ticketId) setMentionCount((c) => Math.max(0, c - 1));
+        } else if (raw.type.startsWith('workflow:')) {
+          const { ticketId: tid } = raw.data as { ticketId: string };
+          if (tid === ticketId) {
+            useWorkflowRunStore.getState().applyEvent({
+              type: raw.type,
+              ticketId: tid,
+              payload: raw.data as Record<string, unknown>,
+            });
+          }
         }
       } catch { /* ignore */ }
     });
@@ -210,6 +229,7 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
     { key: 'mentions', label: `Mentions${mentionCount > 0 ? ` (${mentionCount})` : ''}` },
     { key: 'deliverables', label: deliverableLabel },
     { key: 'activity', label: 'Activity' },
+    ...(hasWorkflowRuns ? [{ key: 'workflow' as TicketTab, label: 'Workflow' }] : []),
   ];
 
   return (
@@ -356,6 +376,13 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
             {mainTab === 'activity' && (
               <div className="flex-1 overflow-y-auto">
                 <TicketActivityTimeline ticketId={ticketId} />
+              </div>
+            )}
+
+            {/* Workflow tab */}
+            {mainTab === 'workflow' && (
+              <div className="flex-1 overflow-hidden">
+                <TicketWorkflowTab ticketId={ticketId} />
               </div>
             )}
           </div>

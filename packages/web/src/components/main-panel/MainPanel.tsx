@@ -17,8 +17,11 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { AgentPersonaView } from '../agents/AgentPersonaView';
 import { SkillEditor } from '../agents/SkillEditor';
 import { PanelDetailView } from '../agents/PanelDetailView';
+import { WorkflowEditorView } from '../workflows/WorkflowEditorView';
 import { useSkillStore } from '../../stores/skillStore';
 import { usePanelStore } from '../../stores/panelStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { useNavigate } from 'react-router-dom';
 import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { DashboardView } from '../dashboard/DashboardView';
 import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
@@ -70,6 +73,10 @@ export function MainPanel() {
   const selectedTicketId = useTicketStore((s) => s.selectedTicketId);
   const selectedSkillId = useSkillStore((s) => s.selectedSkillId);
   const selectedPanelId = usePanelStore((s) => s.selectedPanelId);
+  const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
+  const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
+  const selectWorkflow = useWorkflowTemplateStore((s) => s.selectWorkflow);
+  const navigate = useNavigate();
   const splitSession = splitSessionId
     ? sessions.find((s) => s.id === splitSessionId) ?? null
     : null;
@@ -109,6 +116,20 @@ export function MainPanel() {
     }
     if (selectedSkillId) {
       return <SkillEditor />;
+    }
+    if (selectedWorkflowId) {
+      const template = workflowTemplates.find((t) => t.id === selectedWorkflowId);
+      if (template) {
+        return (
+          <WorkflowEditorView
+            template={template}
+            onBack={() => {
+              selectWorkflow(null);
+              navigate('/agents', { replace: true });
+            }}
+          />
+        );
+      }
     }
     return <AgentPersonaView />;
   }
