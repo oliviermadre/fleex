@@ -115,8 +115,11 @@ interface UIState {
   // Session task right sidebar (scratchpad + auxiliary terminals)
   rightSidebarWidth: number;
   rightSidebarSplitRatio: number; // 0..1, fraction of height for the TOP panel
+  rightSidebarCollapsed: boolean;
   setRightSidebarWidth: (width: number) => void;
   setRightSidebarSplitRatio: (ratio: number) => void;
+  toggleRightSidebar: () => void;
+  setRightSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 const RIGHT_SIDEBAR_STORAGE_KEY = 'fleex_right_sidebar';
@@ -124,6 +127,7 @@ const RIGHT_SIDEBAR_STORAGE_KEY = 'fleex_right_sidebar';
 interface RightSidebarPersisted {
   width?: number;
   splitRatio?: number;
+  collapsed?: boolean;
 }
 
 function loadRightSidebarPersisted(): RightSidebarPersisted {
@@ -178,6 +182,7 @@ export const useUIStore = create<UIState>((set) => ({
   agenticFlowCollapsed: true,
   rightSidebarWidth: typeof rightSidebarInitial.width === 'number' ? rightSidebarInitial.width : RIGHT_SIDEBAR_DEFAULT_WIDTH,
   rightSidebarSplitRatio: typeof rightSidebarInitial.splitRatio === 'number' ? rightSidebarInitial.splitRatio : RIGHT_SIDEBAR_DEFAULT_RATIO,
+  rightSidebarCollapsed: rightSidebarInitial.collapsed === true,
 
   setRightSidebarWidth: (width) => {
     const clamped = Math.min(Math.max(width, 280), 720);
@@ -185,6 +190,7 @@ export const useUIStore = create<UIState>((set) => ({
     saveRightSidebarPersisted({
       width: clamped,
       splitRatio: useUIStore.getState().rightSidebarSplitRatio,
+      collapsed: useUIStore.getState().rightSidebarCollapsed,
     });
   },
 
@@ -194,6 +200,26 @@ export const useUIStore = create<UIState>((set) => ({
     saveRightSidebarPersisted({
       width: useUIStore.getState().rightSidebarWidth,
       splitRatio: clamped,
+      collapsed: useUIStore.getState().rightSidebarCollapsed,
+    });
+  },
+
+  toggleRightSidebar: () => {
+    const next = !useUIStore.getState().rightSidebarCollapsed;
+    set({ rightSidebarCollapsed: next });
+    saveRightSidebarPersisted({
+      width: useUIStore.getState().rightSidebarWidth,
+      splitRatio: useUIStore.getState().rightSidebarSplitRatio,
+      collapsed: next,
+    });
+  },
+
+  setRightSidebarCollapsed: (collapsed) => {
+    set({ rightSidebarCollapsed: collapsed });
+    saveRightSidebarPersisted({
+      width: useUIStore.getState().rightSidebarWidth,
+      splitRatio: useUIStore.getState().rightSidebarSplitRatio,
+      collapsed,
     });
   },
 
