@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useState } from 'react';
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
@@ -28,6 +28,10 @@ interface Props {
 export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props) {
   const ctx = useWorktreeContext(entry);
   const { worktree, repoOrg, repoName, groupId, sessions, executions, ticket } = ctx;
+
+  // Wraps (main panel + right sidebar) — used by the right sidebar to cap its width at
+  // 75% of this area and to re-clamp live when the area resizes.
+  const mainAndSidebarRef = useRef<HTMLDivElement>(null);
 
   const addSessionToGroup = useSessionStore((s) => s.addSessionToGroup);
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
@@ -166,7 +170,7 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
     const defaultRepoKey = repoOrg && repoName ? `${repoOrg}/${repoName}` : null;
     const sidebarCwd = activeSession?.cwd || worktree?.path || basePath || '~';
     return (
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div ref={mainAndSidebarRef} className="flex flex-1 min-h-0 overflow-hidden">
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
           <Content tab={engine.activeTab} />
         </div>
@@ -176,6 +180,7 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
           cwd={sidebarCwd}
           repoKeys={repoKeys}
           defaultRepoKey={defaultRepoKey}
+          parentRef={mainAndSidebarRef}
         />
       </div>
     );

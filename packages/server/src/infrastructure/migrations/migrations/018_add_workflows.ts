@@ -5,7 +5,7 @@ import type { Migration } from '../types.js';
  * Supports SQLite (json adapter computes nothing) + PostgreSQL + Supabase (with RLS).
  */
 const migration: Migration = {
-  name: '017_add_workflows',
+  name: '018_add_workflows',
 
   async up(ctx) {
     if (ctx.adapter === 'json') return;

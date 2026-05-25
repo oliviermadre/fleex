@@ -12,6 +12,7 @@ import { SERVICES, allocatePorts, writePorts } from '../../core/ports.ts';
 import { isRunning, savePid, waitForService } from '../../core/process.ts';
 import { runStatus } from '../status/_impl.ts';
 import { launchDesktop } from '../desktop/_impl.ts';
+import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
 
 export interface StartOptions {
   port?: string;
@@ -46,6 +47,20 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
     await runCommand('bun', ['install'], ctx.repoDir, logFile('install', ctx));
   });
   ok('Dependencies installed.');
+
+  // Claude Code hooks: install silently if missing. Non-blocking on failure.
+  try {
+    const status = checkClaudeHooks();
+    if (!status.ok) {
+      const res = installClaudeHooks();
+      info(`Claude Code hooks installed in ${res.settingsPath} (${res.installed.length} events).`);
+      if (res.backupPath) {
+        warn(`Existing settings.json was invalid JSON — backup saved at ${res.backupPath}.`);
+      }
+    }
+  } catch (err) {
+    warn(`Could not install Claude Code hooks: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   let ports = await allocatePorts(ctx);
   if (forcedWebPort !== undefined) {

@@ -5,6 +5,7 @@ import type { CommandDef } from '../../core/types.ts';
 import { c, info, ok, warn, die } from '../../core/colors.ts';
 import { FLEEX_HOME, DEFAULT_REPO_DIR } from '../../core/instance.ts';
 import { checkBun } from '../../core/version.ts';
+import { installClaudeHooks } from '../../core/claude-hooks.ts';
 
 function runLogged(cmd: string, args: string[], cwd: string, logPath: string, env?: NodeJS.ProcessEnv): Promise<number> {
   return new Promise((resolve) => {
@@ -99,6 +100,17 @@ const def: CommandDef = {
         } catch { /* ignore */ }
         try { fs.symlinkSync(entrySrc, binDst); } catch { /* ignore */ }
       }
+    }
+
+    // Refresh Claude Code hooks (idempotent) so the command path stays in sync after self-update.
+    try {
+      const res = installClaudeHooks();
+      info(`Claude Code hooks refreshed in ${res.settingsPath} (${res.installed.length} events).`);
+      if (res.backupPath) {
+        warn(`Existing settings.json was invalid JSON — backup saved at ${res.backupPath}.`);
+      }
+    } catch (err) {
+      warn(`Could not refresh Claude Code hooks: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     process.stdout.write('\n');

@@ -44,6 +44,7 @@ import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
+import { hookRoutes } from './infrastructure/http/hook.routes.js';
 
 async function main() {
   const container = await createContainer();
@@ -72,6 +73,9 @@ async function main() {
 
   // Auth routes (public — no middleware)
   await app.register(authRoutes(container));
+
+  // Claude Code hook ingress — public (localhost-only enforced inside the route)
+  await app.register(hookRoutes(container));
 
   // Auth middleware for all subsequent routes
   const authMiddleware = createAuthMiddleware(container);

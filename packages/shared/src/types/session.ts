@@ -28,6 +28,14 @@ export interface Session {
   readonly foregroundProcess?: string;
   /** Set when this session is a sidebar terminal attached to a parent tmux session tab. */
   readonly parentSessionId?: string;
+  /** Semantic status derived from Claude Code hooks (UserPromptSubmit/Notification/Stop…). */
+  readonly hookStatus?: import('./hook-events.js').SessionHookStatus;
+  /** Sub-reason when hookStatus === 'waiting'. */
+  readonly hookWaitingReason?: import('./hook-events.js').WaitingReason;
+  /** Free-form tooltip text from the last hook (notification message, error type, etc.). */
+  readonly hookLastMessage?: string | null;
+  /** ISO timestamp of the last hook-driven status change. */
+  readonly hookStatusUpdatedAt?: string | null;
 }
 
 export interface CreateSessionRequest {

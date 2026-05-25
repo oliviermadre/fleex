@@ -3,15 +3,16 @@ import type { Migration } from '../types.js';
 /**
  * Fix workflow_templates.enabled column type on pgsql/supabase.
  *
- * Migration 017 was initially shipped with `enabled INTEGER` for all dialects,
- * then fixed in a later commit to use BOOLEAN on pgsql/supabase. The fix
- * relies on `CREATE TABLE IF NOT EXISTS`, so instances that ran the original
- * 017 keep the broken INTEGER column and reject boolean inserts.
+ * The add_workflows migration was initially shipped with `enabled INTEGER`
+ * for all dialects, then fixed in a later commit to use BOOLEAN on
+ * pgsql/supabase. The fix relies on `CREATE TABLE IF NOT EXISTS`, so
+ * instances that ran the original keep the broken INTEGER column and reject
+ * boolean inserts.
  *
  * This migration ALTERs the column type. SQLite keeps INTEGER (no change).
  */
 const migration: Migration = {
-  name: '018_fix_workflow_templates_enabled_type',
+  name: '019_fix_workflow_templates_enabled_type',
 
   async up(ctx) {
     if (ctx.adapter === 'json' || ctx.adapter === 'sqlite') return;

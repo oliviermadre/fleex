@@ -105,12 +105,19 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
       )}
       style={{ height: 'var(--header-height)' }}
     >
-      {/* Branch icon + name */}
+      {/* Icon + ticket id/title (or branch fallback when no ticket) */}
       <div className="flex items-center gap-1.5 min-w-0">
         <BranchIcon />
-        <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)] truncate">
-          {worktree?.branch ?? activeSession?.worktreeBranch ?? activeSession?.tmuxName ?? 'session'}
-        </span>
+        {ticket ? (
+          <span className="text-sm font-semibold text-[var(--theme-text-primary)] truncate">
+            <span className="font-mono text-[var(--theme-text-secondary)]">#{ticket.displayId}</span>
+            <span className="ml-1.5">{ticket.title}</span>
+          </span>
+        ) : (
+          <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)] truncate">
+            {worktree?.branch ?? activeSession?.worktreeBranch ?? activeSession?.tmuxName ?? 'session'}
+          </span>
+        )}
       </div>
 
       {/* Worktree sync status */}
@@ -132,13 +139,6 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
 
       {/* PR badge */}
       {pr && repoKey && <PrBadge pr={pr} org={repoOrg} name={repoName} />}
-
-      {/* Ticket info (when linked to a ticket) */}
-      {ticket && (
-        <span className="text-xs text-[var(--theme-text-faint)] truncate">
-          #{ticket.displayId} {ticket.title}
-        </span>
-      )}
 
       {/* Agent assignee badge */}
       {ticket?.assignee && (

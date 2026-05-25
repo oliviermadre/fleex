@@ -390,7 +390,12 @@ function CollapsedBranchesPanel() {
           <CollapsedSystemItem
             status={systemStatus.status}
             isSelected={systemSelected}
-            onClick={() => navigateToWorktree('_system', systemSessions)}
+            onClick={() => {
+              const lastActive = lastActiveTabByWorktree['_system'];
+              const isValidTabKey = lastActive && systemSessions.some((s) => `s:${s.id}` === lastActive);
+              const tabSuffix = isValidTabKey ? `/${encodeURIComponent(lastActive!)}` : '';
+              navigate(`/sessions/system${tabSuffix}`, { replace: true });
+            }}
             onMouseEnter={(e) => showTooltip(e, 'Shells', `${systemSessions.length} session${systemSessions.length !== 1 ? 's' : ''}`)}
             onMouseLeave={hideTooltip}
           />

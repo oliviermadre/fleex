@@ -27,6 +27,10 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
         </svg>
       </button>
 
+      <span className="text-xs font-medium text-[var(--theme-text-muted)]">
+        #{ticket.displayId}
+      </span>
+
       <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', STATUS_BADGE_COLOR[ticket.status] ?? 'text-[var(--theme-text-secondary)] bg-[var(--theme-bg-overlay)]')}>
         {TICKET_STATUS_LABELS[ticket.status]}
       </span>

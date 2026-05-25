@@ -1,4 +1,4 @@
-import type { SessionType, SessionStatus } from '@fleex/shared';
+import type { SessionType, SessionStatus, SessionHookStatus, WaitingReason } from '@fleex/shared';
 import { SessionEntity } from '../../../domain/entities.js';
 import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
 import type { SupabaseConnection } from './connection.js';
@@ -17,6 +17,10 @@ interface SessionRow {
   git_remote: string | null;
   claude_prompt: string | null;
   display_name: string | null;
+  hook_status: string | null;
+  hook_waiting_reason: string | null;
+  hook_last_message: string | null;
+  hook_status_updated_at: string | null;
 }
 
 function rowToEntity(r: SessionRow): SessionEntity {
@@ -34,6 +38,11 @@ function rowToEntity(r: SessionRow): SessionEntity {
     r.git_remote,
     r.claude_prompt ?? undefined,
     r.display_name ?? '',
+    undefined,
+    (r.hook_status as SessionHookStatus) ?? 'unknown',
+    (r.hook_waiting_reason as WaitingReason | null) ?? null,
+    r.hook_last_message ?? null,
+    r.hook_status_updated_at ? new Date(r.hook_status_updated_at) : null,
   );
 }
 
@@ -55,6 +64,10 @@ export class SupabaseSessionStore implements SessionStorePort {
       git_remote: session.gitRemote,
       claude_prompt: session.claudePrompt ?? null,
       display_name: session.displayName,
+      hook_status: session.hookStatus,
+      hook_waiting_reason: session.hookWaitingReason,
+      hook_last_message: session.hookLastMessage,
+      hook_status_updated_at: session.hookStatusUpdatedAt?.toISOString() ?? null,
     });
     if (error) throw new Error(`SupabaseSessionStore.save failed: ${error.message}`);
   }

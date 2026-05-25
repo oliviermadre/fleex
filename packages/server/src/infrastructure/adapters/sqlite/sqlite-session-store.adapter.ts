@@ -1,4 +1,4 @@
-import type { SessionType, SessionStatus } from '@fleex/shared';
+import type { SessionType, SessionStatus, SessionHookStatus, WaitingReason } from '@fleex/shared';
 import { SessionEntity } from '../../../domain/entities.js';
 import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
 import type { SqliteConnection } from './connection.js';
@@ -17,6 +17,10 @@ interface SessionRow {
   git_remote: string | null;
   claude_prompt: string | null;
   display_name: string | null;
+  hook_status: string | null;
+  hook_waiting_reason: string | null;
+  hook_last_message: string | null;
+  hook_status_updated_at: string | null;
 }
 
 export class SqliteSessionStoreAdapter implements SessionStorePort {
@@ -27,11 +31,13 @@ export class SqliteSessionStoreAdapter implements SessionStorePort {
       INSERT OR REPLACE INTO sessions
         (id, tmux_name, type, status, cwd, created_at, last_attached_at,
          repository_org, repository_name, worktree_branch, git_remote,
-         claude_prompt, display_name)
+         claude_prompt, display_name,
+         hook_status, hook_waiting_reason, hook_last_message, hook_status_updated_at)
       VALUES
         (@id, @tmux_name, @type, @status, @cwd, @created_at, @last_attached_at,
          @repository_org, @repository_name, @worktree_branch, @git_remote,
-         @claude_prompt, @display_name)
+         @claude_prompt, @display_name,
+         @hook_status, @hook_waiting_reason, @hook_last_message, @hook_status_updated_at)
     `);
 
     stmt.run({
@@ -48,6 +54,10 @@ export class SqliteSessionStoreAdapter implements SessionStorePort {
       git_remote: session.gitRemote,
       claude_prompt: session.claudePrompt ?? null,
       display_name: session.displayName,
+      hook_status: session.hookStatus,
+      hook_waiting_reason: session.hookWaitingReason,
+      hook_last_message: session.hookLastMessage,
+      hook_status_updated_at: session.hookStatusUpdatedAt?.toISOString() ?? null,
     });
   }
 
@@ -94,6 +104,11 @@ export class SqliteSessionStoreAdapter implements SessionStorePort {
       row.git_remote,
       row.claude_prompt ?? undefined,
       row.display_name ?? '',
+      undefined,
+      (row.hook_status as SessionHookStatus) ?? 'unknown',
+      (row.hook_waiting_reason as WaitingReason | null) ?? null,
+      row.hook_last_message ?? null,
+      row.hook_status_updated_at ? new Date(row.hook_status_updated_at) : null,
     );
   }
 }

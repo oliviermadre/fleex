@@ -1,4 +1,4 @@
-import { memo, useRef, useEffect, useCallback } from 'react';
+import { memo, useRef, useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTerminal } from '../../hooks/useTerminal';
@@ -55,7 +55,32 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   useTerminal(sessionId, containerRef);
 
   const sessions = useSessionStore((s) => s.sessions);
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const session = sessions.find((s) => s.id === sessionId) ?? null;
+
+  let ticketDisplayId: number | null = null;
+  let ticketTitle: string | null = null;
+  for (const group of sessionGroups) {
+    const wt = group.worktrees.find((w) => w.sessions.some((s: Session) => s.id === sessionId));
+    if (wt?.agentWorktree?.ticketDisplayId != null) {
+      ticketDisplayId = wt.agentWorktree.ticketDisplayId;
+      ticketTitle = wt.agentWorktree.ticketTitle ?? null;
+      break;
+    }
+  }
+
+  const [pathCopied, setPathCopied] = useState(false);
+  const handleCopyPath = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!session) return;
+    try {
+      await navigator.clipboard.writeText(session.cwd);
+      setPathCopied(true);
+      setTimeout(() => setPathCopied(false), 1200);
+    } catch (err) {
+      console.warn('[Fleex] Copy path failed', err);
+    }
+  }, [session]);
 
   const connectionStatus = useTerminalStore(
     (s) => s.connectionStatus[sessionId] ?? 'disconnected',
@@ -136,16 +161,29 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   if (!session) return null;
 
   const isRobot = session.type === 'claude';
-  const activity = session.claudeActivity ?? 'idle';
+
+  // Resolve display status — hookStatus takes precedence over the legacy claudeActivity (JSONL).
+  // `waiting/idle` (Claude at rest awaiting next prompt) renders neutrally rather than as alarm.
+  const hookStatus = session.hookStatus && session.hookStatus !== 'unknown' ? session.hookStatus : null;
+  const legacyActivity = session.claudeActivity ?? 'idle';
+  const activity: string =
+    hookStatus === 'waiting' && session.hookWaitingReason === 'idle'
+      ? 'idle'
+      : (hookStatus ?? legacyActivity);
 
   const activityColorMap: Record<string, string> = {
+    // hookStatus values (waiting/idle is rewritten to 'idle' above)
     working: 'var(--theme-accent)',
+    waiting: 'var(--theme-warning)',
+    complete: 'var(--theme-success)',
+    error: 'var(--theme-danger)',
+    idle: 'var(--theme-text-muted)',
+    unknown: 'var(--theme-text-muted)',
+    // legacy claudeActivity values
     executing: 'var(--theme-accent)',
     waiting_tool_approval: 'var(--theme-warning)',
     waiting_user_choice: 'var(--theme-warning)',
     waiting_plan_approval: 'var(--theme-warning)',
-    idle: 'var(--theme-text-muted)',
-    unknown: 'var(--theme-text-muted)',
   };
   const activityColor = activityColorMap[activity] ?? 'var(--theme-text-muted)';
 
@@ -216,19 +254,47 @@ export const TerminalOverlay = memo(function TerminalOverlay({
             }}
           />
 
+          {ticketDisplayId != null && (
+            <span
+              style={{
+                color: 'var(--theme-text-secondary)',
+                fontSize: 12,
+                fontWeight: 600,
+                fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, monospace)',
+                flexShrink: 0,
+              }}
+            >
+              #{ticketDisplayId}
+            </span>
+          )}
+
+          {ticketTitle && (
+            <span
+              style={{
+                color: 'var(--theme-text-primary)',
+                fontSize: 12,
+                fontWeight: 600,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {ticketTitle}
+            </span>
+          )}
+
           <span
             style={{
-              color: 'var(--theme-text-primary)',
+              color: ticketDisplayId != null ? 'var(--theme-text-muted)' : 'var(--theme-text-primary)',
               fontSize: 12,
-              fontWeight: 600,
+              fontWeight: ticketDisplayId != null ? 400 : 600,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              flexShrink: ticketDisplayId != null ? 1 : 0,
             }}
           >
-            {session.worktreeBranch
-              ? `${session.repositoryOrg}/${session.repositoryName} \u2192 ${session.worktreeBranch} \u2192 ${session.displayName || displayName || session.tmuxName}`
-              : session.displayName || displayName || session.tmuxName}
+            {session.displayName || displayName || session.tmuxName}
           </span>
 
           <div style={{ flex: 1 }} />
@@ -336,6 +402,42 @@ export const TerminalOverlay = memo(function TerminalOverlay({
           >
             {cwdDisplay}
           </span>
+
+          <button
+            onClick={handleCopyPath}
+            title={pathCopied ? 'Copied!' : 'Copy path'}
+            style={{
+              width: 18,
+              height: 18,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 3,
+              border: 'none',
+              background: 'transparent',
+              color: pathCopied ? 'var(--theme-success)' : 'var(--theme-text-muted)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              padding: 0,
+            }}
+            onMouseEnter={(e) => {
+              if (!pathCopied) (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-secondary)';
+            }}
+            onMouseLeave={(e) => {
+              if (!pathCopied) (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-muted)';
+            }}
+          >
+            {pathCopied ? (
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="13,4 6,11 3,8" />
+              </svg>
+            ) : (
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="5" y="5" width="9" height="9" rx="1.5" />
+                <path d="M3 11V3a1 1 0 0 1 1-1h7" />
+              </svg>
+            )}
+          </button>
 
           <div style={{ flex: 1 }} />
 

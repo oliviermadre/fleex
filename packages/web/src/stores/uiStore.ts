@@ -115,8 +115,11 @@ interface UIState {
   // Session task right sidebar (scratchpad + auxiliary terminals)
   rightSidebarWidth: number;
   rightSidebarSplitRatio: number; // 0..1, fraction of height for the TOP panel
+  rightSidebarCollapsed: boolean;
   setRightSidebarWidth: (width: number) => void;
   setRightSidebarSplitRatio: (ratio: number) => void;
+  toggleRightSidebar: () => void;
+  setRightSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 const RIGHT_SIDEBAR_STORAGE_KEY = 'fleex_right_sidebar';
@@ -124,6 +127,7 @@ const RIGHT_SIDEBAR_STORAGE_KEY = 'fleex_right_sidebar';
 interface RightSidebarPersisted {
   width?: number;
   splitRatio?: number;
+  collapsed?: boolean;
 }
 
 function loadRightSidebarPersisted(): RightSidebarPersisted {
@@ -150,6 +154,15 @@ function saveRightSidebarPersisted(state: RightSidebarPersisted): void {
 const rightSidebarInitial = loadRightSidebarPersisted();
 const RIGHT_SIDEBAR_DEFAULT_WIDTH = 380;
 const RIGHT_SIDEBAR_DEFAULT_RATIO = 0.5;
+
+export const RIGHT_SIDEBAR_MIN_WIDTH = 280;
+export const RIGHT_SIDEBAR_MAX_RATIO = 0.75;
+
+export function clampRightSidebarWidth(width: number, availableWidth: number): number {
+  const max = Math.floor(availableWidth * RIGHT_SIDEBAR_MAX_RATIO);
+  const effectiveMax = Math.max(max, RIGHT_SIDEBAR_MIN_WIDTH);
+  return Math.min(Math.max(width, RIGHT_SIDEBAR_MIN_WIDTH), effectiveMax);
+}
 
 export const useUIStore = create<UIState>((set) => ({
   navCollapsed: true,
@@ -178,13 +191,18 @@ export const useUIStore = create<UIState>((set) => ({
   agenticFlowCollapsed: true,
   rightSidebarWidth: typeof rightSidebarInitial.width === 'number' ? rightSidebarInitial.width : RIGHT_SIDEBAR_DEFAULT_WIDTH,
   rightSidebarSplitRatio: typeof rightSidebarInitial.splitRatio === 'number' ? rightSidebarInitial.splitRatio : RIGHT_SIDEBAR_DEFAULT_RATIO,
+  rightSidebarCollapsed: rightSidebarInitial.collapsed === true,
 
   setRightSidebarWidth: (width) => {
-    const clamped = Math.min(Math.max(width, 280), 720);
+    // Floor only — the max is enforced by callers that know the parent container's width
+    // (see SidebarWidthHandle + SessionRightSidebar's ResizeObserver, which pass the value
+    // through clampRightSidebarWidth before calling this setter).
+    const clamped = Math.max(width, RIGHT_SIDEBAR_MIN_WIDTH);
     set({ rightSidebarWidth: clamped });
     saveRightSidebarPersisted({
       width: clamped,
       splitRatio: useUIStore.getState().rightSidebarSplitRatio,
+      collapsed: useUIStore.getState().rightSidebarCollapsed,
     });
   },
 
@@ -194,6 +212,26 @@ export const useUIStore = create<UIState>((set) => ({
     saveRightSidebarPersisted({
       width: useUIStore.getState().rightSidebarWidth,
       splitRatio: clamped,
+      collapsed: useUIStore.getState().rightSidebarCollapsed,
+    });
+  },
+
+  toggleRightSidebar: () => {
+    const next = !useUIStore.getState().rightSidebarCollapsed;
+    set({ rightSidebarCollapsed: next });
+    saveRightSidebarPersisted({
+      width: useUIStore.getState().rightSidebarWidth,
+      splitRatio: useUIStore.getState().rightSidebarSplitRatio,
+      collapsed: next,
+    });
+  },
+
+  setRightSidebarCollapsed: (collapsed) => {
+    set({ rightSidebarCollapsed: collapsed });
+    saveRightSidebarPersisted({
+      width: useUIStore.getState().rightSidebarWidth,
+      splitRatio: useUIStore.getState().rightSidebarSplitRatio,
+      collapsed,
     });
   },
 

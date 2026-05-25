@@ -16,6 +16,16 @@ export { slugify } from './slugify.js';
 
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
 
+export type {
+  HookEventType,
+  NotificationKind,
+  SessionHookStatus,
+  WaitingReason,
+  HookEventPayload,
+  HookStatusUpdate,
+} from './types/hook-events.js';
+export { mapHookEventToStatus } from './types/hook-events.js';
+
 export type { ClaudeUsageMetric, ClaudeUsage } from './types/claude-usage.js';
 
 export type {
