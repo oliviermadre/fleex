@@ -6,5 +6,7 @@ export interface WorkflowRunStorePort {
   getByTicket(ticketId: string): Promise<WorkflowRunEntity[]>;
   getActiveByTicket(ticketId: string): Promise<WorkflowRunEntity | null>;
   getByStatus(status: WorkflowRunStatus): Promise<WorkflowRunEntity[]>;
+  /** Returns every workflow run, ordered by startedAt DESC. Used by the Execution Log view. */
+  getAll(): Promise<WorkflowRunEntity[]>;
   save(run: WorkflowRunEntity): Promise<void>;
 }

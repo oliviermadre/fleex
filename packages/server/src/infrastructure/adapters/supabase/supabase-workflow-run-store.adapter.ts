@@ -81,6 +81,15 @@ export class SupabaseWorkflowRunStore implements WorkflowRunStorePort {
     return (data as WorkflowRunRow[]).map(rowToEntity);
   }
 
+  async getAll(): Promise<WorkflowRunEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('workflow_runs')
+      .select('*')
+      .order('started_at', { ascending: false });
+    if (error) throw new Error(`SupabaseWorkflowRunStore.getAll failed: ${error.message}`);
+    return (data as WorkflowRunRow[]).map(rowToEntity);
+  }
+
   async save(run: WorkflowRunEntity): Promise<void> {
     const { error } = await this.conn.client.from('workflow_runs').upsert({
       id: run.id,

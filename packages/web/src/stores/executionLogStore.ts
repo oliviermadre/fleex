@@ -3,7 +3,7 @@ import type { ExecutionLogEntry, AgentEvent } from '@fleex/shared';
 import * as api from '../services/api';
 import { appWs } from '../services/websocket';
 
-export type ExecutionTypeFilter = 'all' | 'agent' | 'panel' | 'skill';
+export type ExecutionTypeFilter = 'all' | 'agent' | 'panel' | 'skill' | 'workflow';
 
 const PAGE_SIZE = 100;
 
@@ -14,7 +14,7 @@ interface ExecutionLogState {
   liveCount: number;
   historyCount: number;
   total: number;
-  typeCounts: { all: number; agent: number; panel: number; skill: number };
+  typeCounts: { all: number; agent: number; panel: number; skill: number; workflow: number };
 
   // Filters
   typeFilter: ExecutionTypeFilter;
@@ -41,7 +41,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
   liveCount: 0,
   historyCount: 0,
   total: 0,
-  typeCounts: { all: 0, agent: 0, panel: 0, skill: 0 },
+  typeCounts: { all: 0, agent: 0, panel: 0, skill: 0, workflow: 0 },
   typeFilter: 'all',
   searchQuery: '',
   loaded: false,

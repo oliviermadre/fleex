@@ -141,6 +141,7 @@ export type {
   ExecutionLogEntry,
   ExecutionLogResponse,
   PanelMemberSummary,
+  WorkflowStepSummary,
 } from './types/agent-event.js';
 
 export { computeInitials } from './types/agent-event.js';

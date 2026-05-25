@@ -39,6 +39,11 @@ export class SqliteStepRunStoreAdapter implements StepRunStorePort {
     return r ? this.toEntity(r) : null;
   }
 
+  async getAll(): Promise<StepRunEntity[]> {
+    const rows = this.conn.db.prepare('SELECT * FROM step_runs ORDER BY created_at ASC, attempt ASC').all() as Row[];
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async save(sr: StepRunEntity): Promise<void> {
     this.conn.db.prepare(`
       INSERT OR REPLACE INTO step_runs

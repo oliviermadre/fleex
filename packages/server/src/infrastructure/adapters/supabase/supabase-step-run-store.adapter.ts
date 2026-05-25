@@ -72,6 +72,16 @@ export class SupabaseStepRunStore implements StepRunStorePort {
     return data ? rowToEntity(data as StepRunRow) : null;
   }
 
+  async getAll(): Promise<StepRunEntity[]> {
+    const { data, error } = await this.conn.client
+      .from('step_runs')
+      .select('*')
+      .order('created_at')
+      .order('attempt');
+    if (error) throw new Error(`SupabaseStepRunStore.getAll failed: ${error.message}`);
+    return (data as StepRunRow[]).map(rowToEntity);
+  }
+
   async save(stepRun: StepRunEntity): Promise<void> {
     const { error } = await this.conn.client.from('step_runs').upsert({
       id: stepRun.id,

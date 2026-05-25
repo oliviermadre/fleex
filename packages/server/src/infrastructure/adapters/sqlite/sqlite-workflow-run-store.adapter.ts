@@ -43,6 +43,11 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
     return rows.map((r) => this.toEntity(r));
   }
 
+  async getAll(): Promise<WorkflowRunEntity[]> {
+    const rows = this.conn.db.prepare('SELECT * FROM workflow_runs ORDER BY started_at DESC').all() as Row[];
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async save(run: WorkflowRunEntity): Promise<void> {
     this.conn.db.prepare(`
       INSERT OR REPLACE INTO workflow_runs
