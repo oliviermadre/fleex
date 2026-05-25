@@ -1,0 +1,5 @@
+# Staged bundle artifacts (produced by scripts/stage-bundle.js)
+build/
+
+# electron-builder output (DMGs, .app bundles, blockmaps)
+release/

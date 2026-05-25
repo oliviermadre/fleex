@@ -51,6 +51,14 @@ const tabIcons: Record<SettingsTab, React.ReactNode> = {
       <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
     </svg>
   ),
+  credentials: (
+    // Shield/lock icon — API keys & secrets
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2L4 6v6c0 5 3.5 9.5 8 10 4.5-.5 8-5 8-10V6l-8-4z" />
+      <circle cx="12" cy="11" r="1.5" />
+      <line x1="12" y1="12.5" x2="12" y2="15" />
+    </svg>
+  ),
 };
 
 const tabs: { key: SettingsTab; label: string }[] = [
@@ -60,6 +68,7 @@ const tabs: { key: SettingsTab; label: string }[] = [
   { key: 'pinned-icons', label: 'Pinned Icons' },
   { key: 'worktree-actions', label: 'Worktree Actions' },
   { key: 'agent-tokens', label: 'Agent Tokens' },
+  { key: 'credentials', label: 'Credentials' },
 ];
 
 export function SettingsNav() {

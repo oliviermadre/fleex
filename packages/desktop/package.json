@@ -3,13 +3,73 @@
   "version": "0.1.0",
   "private": true,
   "productName": "Fleex",
+  "description": "Fleex desktop app — orchestrate AI coding agents from a native macOS window.",
+  "author": "Fleex <hello@fleex.dev>",
   "main": "src/main.js",
   "scripts": {
     "dev": "electron --inspect .",
     "start": "electron .",
-    "postinstall": "node scripts/patch-electron-plist.js"
+    "test": "vitest run",
+    "postinstall": "node scripts/patch-electron-plist.js",
+    "stage": "node scripts/stage-bundle.js",
+    "build:dmg": "node scripts/stage-bundle.js && electron-builder --mac dmg --publish never"
   },
   "devDependencies": {
-    "electron": "^35.0.0"
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.fleex.desktop",
+    "productName": "Fleex",
+    "copyright": "Copyright © 2026 Fleex",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "assets/icon.icns",
+      "!**/node_modules/${/*}",
+      "!scripts/${/*}",
+      "!tests/${/*}",
+      "!vitest.config.js"
+    ],
+    "extraResources": [
+      {
+        "from": "build/gateway",
+        "to": "gateway"
+      },
+      {
+        "from": "build/server",
+        "to": "server"
+      },
+      {
+        "from": "build/web",
+        "to": "web"
+      }
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "assets/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": "arm64"
+        }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null
+    },
+    "dmg": {
+      "title": "Fleex",
+      "icon": "assets/icon.icns",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ],
+      "window": { "width": 540, "height": 380 }
+    }
   }
 }

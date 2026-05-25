@@ -2,6 +2,7 @@
   "name": "@fleex/host-gateway",
   "private": true,
   "scripts": {
-    "dev": "bun run --watch src/main.ts"
+    "dev": "bun run --watch src/main.ts",
+    "build": "mkdir -p dist && bun build --compile --minify --sourcemap --target=bun src/main.ts --outfile dist/gateway"
   }
 }

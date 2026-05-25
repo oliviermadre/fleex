@@ -1,18 +1,37 @@
-const { app, BrowserWindow, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, shell, nativeImage, dialog } = require('electron');
 const path = require('path');
+const {
+  resolveBundlePaths,
+  bootStack,
+  shutdownChild,
+  probeTmux,
+  logOrchestrator,
+  LOG_DIR,
+} = require('./lib/orchestrator');
 
 // ── Configuration ────────────────────────────────────────────────────────────
-// When launched by `fleex start --desktop`, the CLI passes the server port.
-// Fallback to 3000 for standalone usage.
+// Two modes:
+//   1. Dev (CLI-launched via `fleex start --desktop` or `bun run dev:desktop`):
+//      services are already running externally. The CLI sets FLEEX_SERVER_PORT
+//      so we just point at it.
+//   2. Packaged (.app from DMG): no CLI, no external services. The main
+//      process spawns gateway + server itself and waits for /health.
 app.setName('Fleex');
 
-const serverPort = process.env['FLEEX_SERVER_PORT'] || '3000';
-const serverUrl = `http://localhost:${serverPort}`;
+const isPackaged = app.isPackaged;
+
+// Dev fallback — preserves existing `fleex start --desktop` behaviour.
+let serverPort = process.env['FLEEX_SERVER_PORT'] || '3000';
+let serverUrl = `http://localhost:${serverPort}`;
+
+// In packaged mode, these get populated by bootStack().
+let bundledServices = null; // { gateway, server, gatewayPort, serverPort, serverUrl }
 
 function isExternalUrl(url) {
   try {
     const parsed = new URL(url);
-    if (parsed.hostname === 'localhost' && parsed.port === serverPort) return false;
+    const isLoopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    if (isLoopback && parsed.port === serverPort) return false;
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
     return false;
@@ -278,12 +297,17 @@ function createWindow() {
         syncUsage();
         setInterval(syncUsage, 30000);
 
-        // Intercept ALL link clicks so external URLs open in the OS browser
+        // Intercept ALL link clicks so external URLs open in the OS browser.
+        // "Internal" = same origin as the server we loaded (loopback:PORT), regardless of
+        // whether the user typed "localhost" or "127.0.0.1".
+        const __FLEEX_SERVER_HOSTS__ = ['localhost:${serverPort}', '127.0.0.1:${serverPort}'];
         document.addEventListener('click', function(e) {
           var link = e.target.closest('a[href]');
           if (!link) return;
           var href = link.href;
-          if (href && /^https?:\\/\\//.test(href) && href.indexOf('localhost:${serverPort}') === -1) {
+          if (!href || !/^https?:\\/\\//.test(href)) return;
+          var isInternal = __FLEEX_SERVER_HOSTS__.some(function(h) { return href.indexOf(h) !== -1; });
+          if (!isInternal) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
@@ -339,17 +363,125 @@ function createWindow() {
   });
 }
 
-// ── App lifecycle ────────────────────────────────────────────────────────────
+// ── Boot + lifecycle ─────────────────────────────────────────────────────────
 
-app.whenReady().then(() => {
+let splashWindow = null;
+
+function showSplash() {
+  splashWindow = new BrowserWindow({
+    width: 460,
+    height: 280,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    icon: iconPath,
+    webPreferences: { contextIsolation: true },
+  });
+  splashWindow.loadFile(path.join(__dirname, 'splash.html')).catch(() => {});
+  splashWindow.on('closed', () => {
+    splashWindow = null;
+  });
+}
+
+function closeSplash() {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.close();
+  }
+  splashWindow = null;
+}
+
+async function bootBundledStack() {
+  // Resolve where the bundled artifacts live (Resources/ inside the .app).
+  const appRoot = path.join(__dirname, '..', '..', '..');
+  const paths = resolveBundlePaths({
+    isPackaged: true,
+    resourcesPath: process.resourcesPath,
+    appRoot,
+  });
+
+  try {
+    const result = await bootStack({
+      gatewayBin: paths.gatewayBin,
+      serverEntry: paths.serverEntry,
+      electronBin: process.execPath,
+      bootTimeoutMs: 30000,
+    });
+    bundledServices = result;
+    serverPort = String(result.serverPort);
+    serverUrl = result.serverUrl;
+
+    // OQ-1 — log tmux availability so users have a paper trail when tmux
+    // features misbehave. Non-blocking: the .app boots either way.
+    probeTmux(result.serverUrl).then(({ available }) => {
+      logOrchestrator(
+        available
+          ? 'tmux: available'
+          : 'tmux: NOT FOUND — tmux-dependent features (PTY sessions) will be unavailable until tmux is installed (brew install tmux)',
+      );
+    });
+
+    // Surface unexpected child deaths after boot.
+    result.gateway.once('exit', (code) => {
+      if (code !== 0 && code !== null) {
+        showFatal(`Gateway exited unexpectedly (code ${code}). See ${LOG_DIR}/gateway.log`);
+      }
+    });
+    result.server.once('exit', (code) => {
+      if (code !== 0 && code !== null) {
+        showFatal(`Server exited unexpectedly (code ${code}). See ${LOG_DIR}/server.log`);
+      }
+    });
+  } catch (err) {
+    closeSplash();
+    dialog.showErrorBox(
+      'Fleex failed to start',
+      `${err && err.message ? err.message : String(err)}\n\nLogs: ${LOG_DIR}`,
+    );
+    app.exit(1);
+    throw err;
+  }
+}
+
+function showFatal(message) {
+  // Don't quit — let the user see the error and retry by relaunching.
+  dialog.showErrorBox('Fleex', message);
+}
+
+async function shutdownBundledStack() {
+  if (!bundledServices) return;
+  const { gateway, server } = bundledServices;
+  // Server first (it can clean up tmux sessions etc), then gateway.
+  await shutdownChild(server, 3000);
+  await shutdownChild(gateway, 3000);
+  bundledServices = null;
+}
+
+app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(nativeImage.createFromPath(iconPath));
   }
+
+  if (isPackaged) {
+    showSplash();
+    await bootBundledStack();
+    closeSplash();
+  }
+
   createWindow();
 });
 
 app.on('window-all-closed', () => {
   app.quit();
+});
+
+app.on('before-quit', (event) => {
+  if (!bundledServices) return;
+  event.preventDefault();
+  shutdownBundledStack().finally(() => app.exit(0));
 });
 
 app.on('activate', () => {

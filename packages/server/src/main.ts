@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadFleexEnv } from './infrastructure/load-fleex-env.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
@@ -12,6 +13,7 @@ import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
 import { healthRoutes } from './infrastructure/http/health.routes.js';
 import { versionRoutes } from './infrastructure/http/version.routes.js';
 import { configRoutes } from './infrastructure/http/config.routes.js';
+import { credentialsRoutes } from './infrastructure/http/credentials.routes.js';
 import { execRoutes } from './infrastructure/http/exec.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
@@ -44,6 +46,11 @@ import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 
 async function main() {
+  // Merge persisted credentials from ~/.fleex/.env BEFORE the container reads
+  // anything from process.env (storage driver selection, Supabase URL/key,
+  // Anthropic API key, etc.).
+  loadFleexEnv();
+
   const container = await createContainer();
 
   process.on('uncaughtException', (err) => {
@@ -81,6 +88,7 @@ async function main() {
   await app.register(healthRoutes(container));
   await app.register(versionRoutes());
   await app.register(configRoutes(container));
+  await app.register(credentialsRoutes());
   await app.register(execRoutes(container));
   await app.register(claudeConfigRoutes(container));
   await app.register(scratchpadRoutes(container));
