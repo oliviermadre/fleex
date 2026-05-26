@@ -836,6 +836,14 @@ export function ticketRoutes(container: Container) {
       return mention.toDTO();
     });
 
+    // POST /api/mentions/:id/run — run this specific mention (▶ button).
+    // Mention-scoped: wakes a waiting_for_info mention, enqueues a pending one.
+    app.post<{ Params: { id: string } }>('/api/mentions/:id/run', async (request) => {
+      const mention = await container.mentionStore.getById(request.params.id);
+      if (!mention) throw new MentionNotFoundError(request.params.id);
+      return container.executeAgent.runMention(mention);
+    });
+
     // PATCH /api/mentions/:id/execution-mode — update mention execution mode
     app.patch<{
       Params: { id: string };

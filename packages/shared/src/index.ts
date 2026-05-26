@@ -93,6 +93,7 @@ export type {
   MentionTargetType,
   MentionExecutionMode,
   TicketMention,
+  MentionExecutionFailedPayload,
   TicketDeliverable,
   DeliverableType,
   DeliverableStatus,
