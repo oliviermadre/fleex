@@ -129,6 +129,23 @@ export interface MentionDeletedEvent extends DomainEvent {
   commentId: string;
 }
 
+/**
+ * Emitted when an agent execution triggered by a mention fails to start
+ * (i.e. crashes before the mention reaches `acknowledged`). The mention
+ * stays in `pending` and the UI uses this event to surface the failure
+ * instead of waiting forever on a `mention.acknowledged` that never comes.
+ */
+export interface MentionExecutionFailedEvent extends DomainEvent {
+  type: 'mention.execution_failed';
+  mentionId: string;
+  ticketId: string;
+  targetAgent: string;
+  /** Short machine code: 'workspace_error' | 'startup_error' | 'no_persona' | ... */
+  reason: string;
+  /** Human-readable message for the UI to display verbatim. */
+  message: string;
+}
+
 // ── Deliverable events ──
 
 export interface DeliverableCreatedEvent extends DomainEvent {
@@ -398,6 +415,7 @@ export type AnyDomainEvent =
   | MentionWaitingForInfoEvent
   | MentionWokenUpEvent
   | MentionDeletedEvent
+  | MentionExecutionFailedEvent
   | DeliverableCreatedEvent
   | DeliverableUpdatedEvent
   | DeliverableDeletedEvent

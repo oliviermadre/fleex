@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import type { TicketMention, MentionStatus, MentionExecutionMode, AgentExecution, TicketWsMessage } from '@fleex/shared';
+import type { TicketMention, MentionStatus, MentionExecutionMode, AgentExecution, TicketWsMessage, MentionExecutionFailedPayload } from '@fleex/shared';
 import { appWs } from '../../services/websocket';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
+import { useToastStore } from '../../stores/toastStore';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import * as api from '../../services/api';
 
@@ -164,6 +165,10 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
   }, [ticketId]);
 
+  // Per-mention startup failures (server emitted mention:execution_failed
+  // before the mention could reach `acknowledged`). Keyed by mentionId.
+  const [failures, setFailures] = useState<Record<string, { reason: string; message: string }>>({});
+
   // Real-time updates
   useEffect(() => {
     const unsub = appWs.onChannel('tickets', (raw) => {
@@ -186,6 +191,21 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
           const m = msg.data as TicketMention;
           if (m.ticketId === ticketId) {
             setMentions((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+            // A subsequent successful state change clears any prior failure.
+            setFailures((prev) => {
+              if (!(m.id in prev)) return prev;
+              const { [m.id]: _drop, ...rest } = prev;
+              return rest;
+            });
+          }
+        } else if (msg.type === 'mention:execution_failed') {
+          const d = msg.data as MentionExecutionFailedPayload;
+          if (d.ticketId === ticketId) {
+            setFailures((prev) => ({
+              ...prev,
+              [d.mentionId]: { reason: d.reason, message: d.message },
+            }));
+            useToastStore.getState().addToast('error', `${d.targetAgent}: ${d.message}`);
           }
         } else if (msg.type === 'mention:deleted') {
           const d = msg.data as { id: string; ticketId: string };
@@ -236,12 +256,23 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     setModalExecutionId(exec.id);
   }, [executionByMention]);
 
-  const handleExecute = useCallback(async (agentName: string) => {
-    const personaId = personaByName.get(agentName);
-    if (!personaId) return;
+  const handleExecute = useCallback(async (mention: TicketMention) => {
+    const agentName = mention.targetAgent;
     setExecuting((prev) => new Set(prev).add(agentName));
+    // Clear any stale failure chip for this mention — a fresh ▶ is a fresh
+    // attempt; the chip will come back if it fails again.
+    setFailures((prev) => {
+      if (!prev[mention.id]) return prev;
+      const { [mention.id]: _drop, ...rest } = prev;
+      return rest;
+    });
     try {
-      await api.executeAgent(personaId);
+      const result = await api.runMention(mention.id);
+      if (result.status === 'no_work') {
+        useToastStore.getState().addToast('info', `Nothing to execute for ${agentName}`);
+      } else if (result.status === 'already_running') {
+        useToastStore.getState().addToast('info', `${agentName} is already running`);
+      }
     } catch {
       // ignore
     } finally {
@@ -251,7 +282,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
         return next;
       });
     }
-  }, [personaByName]);
+  }, []);
 
   const handleStatusChange = async (mentionId: string, newStatus: MentionStatus) => {
     try {
@@ -402,7 +433,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                           ? 'animate-pulse text-emerald-400'
                           : 'text-[var(--theme-text-faint)] opacity-0 hover:bg-emerald-500/15 hover:text-emerald-400 group-hover:opacity-100'
                       }`}
-                      onClick={() => handleExecute(m.targetAgent)}
+                      onClick={() => handleExecute(m)}
                       disabled={executing.has(m.targetAgent)}
                       title={`Execute ${m.targetAgent}`}
                     >
@@ -429,6 +460,17 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                     onChange={(mode) => handleModeChange(m.id, mode)}
                     disabled={m.status === 'acknowledged' || m.status === 'resolved'}
                   />
+
+                  {/* Startup-failure chip — last server attempt could not start the agent */}
+                  {failures[m.id] && (
+                    <span
+                      className="inline-flex max-w-[220px] items-center gap-1 truncate rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-medium text-red-400"
+                      title={failures[m.id]!.message}
+                    >
+                      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
+                      <span className="truncate">Failed to start</span>
+                    </span>
+                  )}
 
                   {/* Status badge (clickable dropdown) */}
                   <StatusDropdown

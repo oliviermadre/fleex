@@ -129,6 +129,17 @@ export class DomainEventListener {
         this.ticketBroadcast('mention:deleted', { id: e.mentionId, ticketId: e.ticketId, commentId: e.commentId });
       }
     });
+    bus.on('mention.execution_failed', (e) => {
+      if (e.type === 'mention.execution_failed') {
+        this.ticketBroadcast('mention:execution_failed', {
+          mentionId: e.mentionId,
+          ticketId: e.ticketId,
+          targetAgent: e.targetAgent,
+          reason: e.reason,
+          message: e.message,
+        });
+      }
+    });
 
     // ── Deliverable broadcasts ──
     bus.on('deliverable.created', (e) => this.broadcastDeliverableEntity(e, 'deliverable:created'));

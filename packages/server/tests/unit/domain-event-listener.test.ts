@@ -177,6 +177,30 @@ describe('DomainEventListener', () => {
       expect(ticketBroadcast).toHaveBeenCalledWith('mention:created', mention.toDTO());
     });
 
+    it('should broadcast mention.execution_failed with reason and message', async () => {
+      const mentionId = randomUUID();
+      const ticketId = randomUUID();
+
+      eventBus.emit({
+        type: 'mention.execution_failed',
+        mentionId,
+        ticketId,
+        targetAgent: 'tldr',
+        reason: 'startup_error',
+        message: 'Could not create workspace directory for ticket',
+        occurredAt: new Date(),
+      });
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(ticketBroadcast).toHaveBeenCalledWith('mention:execution_failed', {
+        mentionId,
+        ticketId,
+        targetAgent: 'tldr',
+        reason: 'startup_error',
+        message: 'Could not create workspace directory for ticket',
+      });
+    });
+
     it('should broadcast persona.created via personaBroadcast', async () => {
       const personaId = randomUUID();
       const persona = AgentPersonaEntity.create({

@@ -172,6 +172,21 @@ export interface TicketMention {
   readonly createdAt: string;
 }
 
+/**
+ * Payload broadcast on the `mention:execution_failed` WS message. Sent when
+ * an agent execution triggered by ▶ fails before the mention can transition
+ * from `pending` to `acknowledged`. The mention DTO itself does not change;
+ * the UI uses this to surface an error toast / chip without waiting for an
+ * `acknowledged` event that will never arrive.
+ */
+export interface MentionExecutionFailedPayload {
+  readonly mentionId: string;
+  readonly ticketId: string;
+  readonly targetAgent: string;
+  readonly reason: string;
+  readonly message: string;
+}
+
 // ── Deliverables ──
 
 export const DELIVERABLE_TYPES = [
@@ -276,6 +291,7 @@ export type TicketWsMessageType =
   | 'mention:updated'
   | 'mention:waiting_for_info'
   | 'mention:deleted'
+  | 'mention:execution_failed'
   | 'deliverable:created'
   | 'deliverable:updated'
   | 'deliverable:deleted';

@@ -539,6 +539,10 @@ export async function executeAgent(id: string): Promise<import('@fleex/shared').
   return request<import('@fleex/shared').AgentExecutionResult>(`/personas/${encodeURIComponent(id)}/execute`, { method: 'POST' });
 }
 
+export async function runMention(mentionId: string): Promise<import('@fleex/shared').AgentExecutionResult> {
+  return request<import('@fleex/shared').AgentExecutionResult>(`/mentions/${encodeURIComponent(mentionId)}/run`, { method: 'POST' });
+}
+
 export async function fetchAgentStatus(id: string): Promise<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }> {
   return request<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>(`/personas/${encodeURIComponent(id)}/status`);
 }

@@ -218,6 +218,44 @@ export class ExecuteAgentUseCase {
   }
 
   /**
+   * Run a single mention by the per-mention ▶ button. Unlike `execute()`
+   * (persona-scoped, pending-only) this is mention-scoped and also resumes a
+   * mention parked in `waiting_for_info` — matching the user's expectation
+   * that clicking ▶ on a waiting mention wakes it, exactly like posting a
+   * follow-up comment does.
+   */
+  async runMention(mention: TicketMentionEntity): Promise<AgentExecutionResult> {
+    // waiting_for_info → wake it up (transitions to pending and enqueues)
+    if (mention.status === 'waiting_for_info') {
+      await this.wakeUp(mention);
+      return { status: 'started', mentionIds: [mention.id] };
+    }
+
+    // acknowledged → an execution is already in flight
+    if (mention.status === 'acknowledged') {
+      return { status: 'already_running', mentionIds: [] };
+    }
+
+    // resolved → nothing to run
+    if (mention.status === 'resolved') {
+      return { status: 'no_work', mentionIds: [] };
+    }
+
+    // pending → enqueue this specific mention (skip if already active/queued)
+    const persona = await this.personaStore.getByName(mention.targetAgent);
+    if (!persona) {
+      throw new AgentPersonaNotFoundError(mention.targetAgent);
+    }
+    const alreadyQueued = this.queue.some((q) => q.mention.id === mention.id);
+    if (this.activeExecutions.has(mention.id) || alreadyQueued) {
+      return { status: 'already_running', mentionIds: [] };
+    }
+    this.queue.push({ persona, mention });
+    this.drainQueue();
+    return { status: 'started', mentionIds: [mention.id] };
+  }
+
+  /**
    * Wake up a mention that was in waiting_for_info state.
    * Transitions it to pending and enqueues for execution.
    */
@@ -330,6 +368,9 @@ export class ExecuteAgentUseCase {
       const item = this.queue.shift()!;
       this.runningCount++;
       this.executeForMention(item.persona, item.mention).catch((err) => {
+        // Last-resort safety net — executeForMention's own finally already
+        // decrements runningCount and schedules activeExecutions cleanup.
+        // We still log so an unexpected throw never disappears silently.
         this.logger.error('Agent execution failed', {
           persona: item.persona.name,
           mentionId: item.mention.id,
@@ -348,6 +389,10 @@ export class ExecuteAgentUseCase {
     this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'running', abortController });
 
     const humanName = this.resolveHumanMentionName(persona);
+    // Tracks whether `mention.acknowledge()` succeeded. Drives the catch
+    // branch below: pre-ack failures emit a dedicated `mention.execution_failed`
+    // event so the UI never silently hangs in Pending.
+    let acknowledged = false;
 
     try {
       // 0. Compute effective execution mode: min(mention grant, persona ceiling)
@@ -355,43 +400,27 @@ export class ExecuteAgentUseCase {
         ? 'talk'
         : mention.executionMode;
 
-      // 1. Ensure worktree exists BEFORE acknowledging (skip for talk mode)
+      // 1. Ensure workspace exists BEFORE acknowledging (skip for talk mode).
+      // The workspace is created for every ticket; git worktrees are added
+      // inside it only when the ticket links a repository. Edit mode runs
+      // either way — tickets without a repo get an empty workspace and the
+      // agent uses MCP / web / file tools.
       let worktreePath: string | null = null;
       if (effectiveMode !== 'talk') {
-        worktreePath = await this.ensureWorktree(mention.ticketId);
-        if (!worktreePath && effectiveMode === 'edit') {
-          // Edit mode requires a worktree — fail with feedback
-          this.logger.error('Cannot start agent: no worktree could be resolved', {
-            executionId, persona: persona.name, ticketId: mention.ticketId, mentionId: mention.id,
-          });
-          await this.agentEventStore.startExecution({
-            executionId,
-            personaId: persona.id,
-            ticketId: mention.ticketId,
-            mentionId: mention.id,
-          });
-          const errorEvent = AgentEventEntity.create({
-            executionId,
-            eventType: 'error',
-            data: { error: 'No repository configured — cannot create worktree for edit mode' },
-            sequence: 0,
-          });
-          await this.agentEventStore.appendEvent(errorEvent);
-          this.onEvent?.(errorEvent);
-          await this.agentEventStore.completeExecution(executionId, 'failed');
-          this.activeExecutions.delete(mention.id);
-          return;
-        }
+        worktreePath = await this.ensureWorkspace(mention.ticketId);
         if (!worktreePath) {
-          this.logger.info('No worktree available, running agent without code access', {
-            executionId, persona: persona.name, ticketId: mention.ticketId, mentionId: mention.id,
-          });
+          // The ticket exists but workspace creation failed (FS error,
+          // missing ticket, etc.). Throwing here triggers the pre-ack
+          // catch below which emits `mention.execution_failed` so the UI
+          // surfaces the error instead of staying Pending silently.
+          throw new Error('Could not create workspace directory for ticket');
         }
       }
 
       // 2. Acknowledge mention
       mention.acknowledge();
       await this.mentionStore.save(mention);
+      acknowledged = true;
       this.eventBus?.emit({
         type: 'mention.acknowledged',
         mentionId: mention.id,
@@ -422,7 +451,8 @@ export class ExecuteAgentUseCase {
       });
 
       // 4. Compose system prompt from persona files
-      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
+      const repoCount = ticket ? ticket.links.filter((l) => l.type === 'repository').length : 0;
+      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount);
 
       // 5. Load ticket context
       const context = await this.getTicketContext.execute({
@@ -903,6 +933,22 @@ export class ExecuteAgentUseCase {
         structuredOutputParsed: structured !== null,
       });
     } catch (err) {
+      // Pre-acknowledge failure: the mention is still `pending` in the DB.
+      // The UI is waiting on a `mention:*` event to flip its state — without
+      // one it stays "Pending" forever. Emit a dedicated event the
+      // frontend can surface as an error toast.
+      if (!acknowledged) {
+        this.eventBus?.emit({
+          type: 'mention.execution_failed',
+          mentionId: mention.id,
+          ticketId: mention.ticketId,
+          targetAgent: mention.targetAgent,
+          reason: 'startup_error',
+          message: err instanceof Error ? err.message : 'Agent failed to start',
+          occurredAt: new Date(),
+        });
+      }
+
       // Emit error event
       try {
         const errorEvent = AgentEventEntity.create({
@@ -924,6 +970,7 @@ export class ExecuteAgentUseCase {
         executionId,
         persona: persona.name,
         mentionId: mention.id,
+        acknowledged,
         error: err instanceof Error ? err.message : String(err),
       });
       throw err;
@@ -1009,10 +1056,10 @@ export class ExecuteAgentUseCase {
       });
     }
 
-    // 2. Try to resolve worktree (optional for skills — many don't need file access)
-    const worktreePath = await this.ensureWorktree(ticketId);
+    // 2. Try to resolve workspace (optional for skills — many don't need file access)
+    const worktreePath = await this.ensureWorkspace(ticketId);
     if (!worktreePath) {
-      this.logger.info('Skill execution proceeding without worktree', { executionId, ticketId, skillId });
+      this.logger.info('Skill execution proceeding without workspace', { executionId, ticketId, skillId });
     }
 
     // 3. Start execution tracking
@@ -1424,10 +1471,10 @@ export class ExecuteAgentUseCase {
     // Effective mode: respect persona ceiling
     const effectiveMode: MentionExecutionMode = persona.executionMode === 'message' ? 'talk' : params.mode;
 
-    // Worktree if needed (same as executeForMention)
+    // Workspace if needed (same as executeForMention)
     let worktreePath: string | null = null;
     if (effectiveMode !== 'talk') {
-      worktreePath = await this.ensureWorktree(params.ticketId);
+      worktreePath = await this.ensureWorkspace(params.ticketId);
     }
 
     // Start tracking
@@ -1571,16 +1618,39 @@ export class ExecuteAgentUseCase {
   }
 
   /**
-   * Ensure a git worktree exists for agent work on the given ticket.
-   * Returns the filesystem path to the worktree, or null if no repo/worktree could be resolved.
+   * Ensure a workspace directory exists for agent work on the given ticket,
+   * and create a git worktree for each linked repository when present.
    *
-   * Priority for resolving org/repo/branch:
-   * 1. Ticket worktree link (source of truth) — if ref = "org/repo:branch", extract all three
-   * 2. No repo resolved → return null (agent cannot start)
+   * Returns the workspace path. Edit mode runs against this path as `cwd`
+   * whether or not any repo is attached — tickets without a linked
+   * repository get an empty workspace so the agent can still use MCP,
+   * web, and file tools.
+   *
+   * Returns null only on a genuine error (ticket not found, FS creation
+   * failure). Individual repo / worktree failures are logged and skipped;
+   * the workspace path is still returned.
    */
-  private async ensureWorktree(ticketId: string): Promise<string | null> {
+  private async ensureWorkspace(ticketId: string): Promise<string | null> {
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) return null;
+
+    // Create workspace + manifest first — independent of repos.
+    let workspaceRoot: string;
+    try {
+      const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+      workspaceRoot = this.resolver!.workspacePath(workspaceId);
+      mkdirSync(workspaceRoot, { recursive: true });
+      const manifestPath = join(workspaceRoot, '.fleex.json');
+      if (!existsSync(manifestPath)) {
+        writeFileSync(manifestPath, JSON.stringify({ ticketId: ticket.id }, null, 2));
+      }
+    } catch (err) {
+      this.logger.error('Failed to create workspace for ticket', {
+        ticketId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
 
     // Collect all repos from ticket links
     const repoLinks = ticket.links.filter((l) => l.type === 'repository');
@@ -1591,10 +1661,14 @@ export class ExecuteAgentUseCase {
         repos.push({ org: link.ref.substring(0, slashIdx), name: link.ref.substring(slashIdx + 1) });
       }
     }
-    if (repos.length === 0) return null;
+    if (repos.length === 0) {
+      this.logger.info('Workspace ready with no linked repository', { ticketId, workspaceRoot });
+      return workspaceRoot;
+    }
 
     // Determine branch: use existing worktree link's branch, or generate a new one
     const existingWorktreeLink = ticket.links.find((l) => l.type === 'worktree');
+    const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
     let branchName: string;
     let createNewBranch: boolean;
     if (existingWorktreeLink) {
@@ -1609,15 +1683,6 @@ export class ExecuteAgentUseCase {
         .slice(0, 40);
       branchName = `agent/${ticket.displayId}-${slug}`;
       createNewBranch = true;
-    }
-
-    // Create workspace + manifest
-    const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
-    const workspaceRoot = this.resolver!.workspacePath(workspaceId);
-    mkdirSync(workspaceRoot, { recursive: true });
-    const manifestPath = join(workspaceRoot, '.fleex.json');
-    if (!existsSync(manifestPath)) {
-      writeFileSync(manifestPath, JSON.stringify({ ticketId: ticket.id }, null, 2));
     }
 
     // Ensure worktree for each repo
@@ -1675,7 +1740,7 @@ export class ExecuteAgentUseCase {
     return workspaceRoot;
   }
 
-  private composeSystemPrompt(persona: AgentPersonaEntity, humanName: string | null, worktreePath: string | null = null): string {
+  private composeSystemPrompt(persona: AgentPersonaEntity, humanName: string | null, worktreePath: string | null = null, repoCount?: number): string {
     const parts: string[] = [];
 
     if (persona.soulMd) {
@@ -1705,11 +1770,15 @@ export class ExecuteAgentUseCase {
     }
 
     if (worktreePath) {
+      const workdirNote = repoCount === 0
+        ? `\n\nNote: this ticket has **no repository attached**. The workspace is empty — there is no codebase to read, edit, or run git against. Rely on MCP tools, web search, and file operations within this workspace as appropriate.`
+        : '';
       parts.push(
         `## Working Directory\n\n`
         + `Your working directory is:\n\`${worktreePath}\`\n\n`
         + `Always use relative paths (e.g. \`packages/server/src/...\`) or this exact path for absolute references. `
-        + `Do NOT guess or infer the project root from other context — use this path.`,
+        + `Do NOT guess or infer the project root from other context — use this path.`
+        + workdirNote,
       );
     }
 
