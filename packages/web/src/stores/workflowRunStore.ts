@@ -28,6 +28,16 @@ interface State {
 
 export const ACTIVE_STATUSES = new Set(['running', 'blocked', 'needs_review']);
 
+// Monotonic request counters keyed by ticketId / runId. The view is updated by a
+// burst of WebSocket events (each one fires a fetch), so multiple requests for the
+// same key are in flight at once. Without ordering, the LAST response to resolve
+// wins — and a slow stale one (e.g. "agent step running") can clobber a fresher one
+// (e.g. "gate / needs_review"), pinning the UI on the wrong step until a manual
+// refresh. Only the most-recently-issued request for a key may write; older
+// responses are discarded.
+const ticketSeq = new Map<string, number>();
+const detailSeq = new Map<string, number>();
+
 export const useWorkflowRunStore = create<State>((set, get) => ({
   runsByTicket: {},
   detail: {},
@@ -35,28 +45,36 @@ export const useWorkflowRunStore = create<State>((set, get) => ({
   error: null,
 
   loadForTicket: async (ticketId) => {
+    const seq = (ticketSeq.get(ticketId) ?? 0) + 1;
+    ticketSeq.set(ticketId, seq);
     set({ loading: true, error: null });
     try {
       const runs = await api.fetchWorkflowRuns(ticketId);
+      if (ticketSeq.get(ticketId) !== seq) return; // superseded by a newer request
       set((state) => ({
         runsByTicket: { ...state.runsByTicket, [ticketId]: runs },
         loading: false,
       }));
     } catch (err) {
+      if (ticketSeq.get(ticketId) !== seq) return;
       const message = err instanceof Error ? err.message : String(err);
       set({ loading: false, error: message });
     }
   },
 
   loadDetail: async (runId) => {
+    const seq = (detailSeq.get(runId) ?? 0) + 1;
+    detailSeq.set(runId, seq);
     set({ loading: true, error: null });
     try {
       const detail = await api.fetchWorkflowRunDetail(runId);
+      if (detailSeq.get(runId) !== seq) return; // superseded by a newer request
       set((state) => ({
         detail: { ...state.detail, [runId]: detail },
         loading: false,
       }));
     } catch (err) {
+      if (detailSeq.get(runId) !== seq) return;
       const message = err instanceof Error ? err.message : String(err);
       set({ loading: false, error: message });
     }
