@@ -113,13 +113,16 @@ describe('ResolveHumanGateUseCase', () => {
     // other workflow step comment (workflow:<workflow> → <step>) with the decision spelled out.
     // Agent authorship is deliberate: it harmonizes the rendering AND keeps any @mention a
     // reviewer types inside their notes inert (agent comments don't create actionable mentions).
+    // WHY (body): bold titles, the outcome in italics, and the reason in a verbatim code
+    // fence; blocks are blank-line separated because the renderer is GFM without `breaks`
+    // (a single newline would collapse onto the previous line, which was the reported bug).
     expect(postComment.execute).toHaveBeenCalledTimes(1);
     expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
       ticketId: 't-1',
       authorType: 'agent',
       authorName: 'workflow:W → Gate',
       visibility: 'public',
-      body: 'User decision : approve\nReason : LGTM',
+      body: '**User decision :** *approve*\n\n**Reason :**\n\n```\nLGTM\n```',
     }));
   });
 
@@ -189,7 +192,30 @@ describe('ResolveHumanGateUseCase', () => {
     expect(postComment.execute).toHaveBeenCalledTimes(1);
     expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
       authorName: 'workflow:W → Gate',
-      body: 'User decision : approve\nReason : LGTM',
+      body: '**User decision :** *approve*\n\n**Reason :**\n\n```\nLGTM\n```',
+    }));
+  });
+
+  it('widens the code fence so a reason containing ``` can never break out of the raw block', async () => {
+    const run = makeRun(); run.block();
+    const stepRun = makeResolvableStepRun();
+    const postComment = makePostComment();
+    const uc = new ResolveHumanGateUseCase(
+      { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
+      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() } as never,
+      { runStep: vi.fn() } as never,
+      { emit: vi.fn() } as never,
+      postComment as never,
+      makeLogger() as never,
+    );
+
+    // WHY: the reason is shown verbatim ("en raw"). If a reviewer pastes a fenced code block
+    // in their notes, a fixed ``` fence would let their markdown break out — exactly the leak
+    // we promised to prevent. The fence must be longer than any backtick run in the notes.
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve', notes: 'see ```js\nx()\n```' });
+
+    expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
+      body: '**User decision :** *approve*\n\n**Reason :**\n\n````\nsee ```js\nx()\n```\n````',
     }));
   });
 });
