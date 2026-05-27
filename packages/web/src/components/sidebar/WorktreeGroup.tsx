@@ -124,8 +124,13 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
           )}
           onClick={handleBranchClick}
         >
-          {/* Row 1: [icon colored by priority] [ticket name] [time in column : right] */}
-          <div className="flex items-center gap-1.5">
+          {/* Row 1: [icon colored by priority] [ticket name] [time in column : right] — favorite star floats in the left gutter (absolute, no layout shift) */}
+          <div className="relative flex items-center gap-1.5">
+            {ticket?.favorite && (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" className="absolute right-full top-1/2 mr-1.5 -translate-y-1/2 text-yellow-400" aria-label="Favorite">
+                <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
+              </svg>
+            )}
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn('shrink-0', iconColor)}>
               <rect x="2" y="2" width="12" height="12" rx="2" />
               <path d="M5 6h6M5 9h4" />
