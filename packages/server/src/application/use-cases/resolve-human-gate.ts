@@ -6,6 +6,8 @@ import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
 import type { OrchestratorPort } from '../ports/orchestrator.port.js';
 import type { EventBus } from '../event-bus.js';
+import type { PostCommentUseCase } from './post-comment.js';
+import type { LoggerPort } from '../ports/logger.port.js';
 
 export class ResolveHumanGateUseCase {
   constructor(
@@ -13,6 +15,8 @@ export class ResolveHumanGateUseCase {
     private readonly stepRunStore: StepRunStorePort,
     private readonly orchestrator: OrchestratorPort,
     private readonly eventBus: EventBus,
+    private readonly postComment: PostCommentUseCase,
+    private readonly logger: LoggerPort,
   ) {}
 
   async execute(params: {
@@ -39,6 +43,11 @@ export class ResolveHumanGateUseCase {
 
     stepRun.resolveGate(params.outcome, params.notes);
 
+    // Decision Trail: persist the reviewer's rationale as a ticket comment so it can be
+    // found later in the thread. Non-critical side effect — a failure here must never
+    // block gate resolution.
+    await this.postResolutionComment(run.ticketId, run.templateSnapshot.name, step.name, params.outcome, params.notes, stepRun.id);
+
     const edges = run.outgoingEdges(step.id);
     const nextEdge = EdgeEvaluator.resolve(stepRun.output!, edges);
     stepRun.nextEdgeId = nextEdge?.id ?? null;
@@ -58,6 +67,49 @@ export class ResolveHumanGateUseCase {
       await this.runStore.save(run);
       this.eventBus.emit({
         type: 'workflow.run_completed', workflowRunId: run.id, ticketId: run.ticketId, occurredAt: new Date(),
+      });
+    }
+  }
+
+  private async postResolutionComment(
+    ticketId: string,
+    workflowName: string,
+    stepName: string,
+    outcome: string,
+    notes: string | undefined,
+    stepRunId: string,
+  ): Promise<void> {
+    const trimmedNotes = notes?.trim();
+    if (!trimmedNotes) return; // no rationale → no comment (avoids empty-comment noise)
+
+    // The comment renderer uses GFM *without* `breaks`, so a single newline collapses to a
+    // space — blocks must be separated by blank lines. The reason is dropped in as-is (not
+    // escaped) so any markdown the reviewer wrote is rendered in the comments view.
+    const body = [
+      `**User decision :** *${outcome}*`,
+      '',
+      '**Reason :**',
+      '',
+      trimmedNotes,
+    ].join('\n');
+
+    try {
+      await this.postComment.execute({
+        ticketId,
+        // Attributed like every other workflow step comment, so it renders consistently
+        // in the thread (e.g. "workflow:Spec Dev PR → Check Spec"). Agent authorship also
+        // means any @mention a reviewer types inside their notes stays inert (no chaining).
+        authorName: `workflow:${workflowName} → ${stepName}`,
+        authorType: 'agent',
+        body,
+        visibility: 'public',
+        parentId: null,
+      });
+    } catch (err) {
+      this.logger.error('Failed to post human gate resolution comment', {
+        ticketId,
+        stepRunId,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   }

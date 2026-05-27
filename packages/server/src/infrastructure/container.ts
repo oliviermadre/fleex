@@ -322,7 +322,7 @@ export async function createContainer() {
     (runWorkflowStep as unknown as { deps: { orchestrator: WorkflowOrchestrator } }).deps.orchestrator = workflowOrchestrator;
 
     createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus, postComment);
-    resolveHumanGate = new ResolveHumanGateUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus);
+    resolveHumanGate = new ResolveHumanGateUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
     retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator);
     cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, eventBus);
 
