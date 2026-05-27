@@ -9,15 +9,6 @@ import type { EventBus } from '../event-bus.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 
-/** Longest consecutive run of backticks in `text`, floored at 2 so a fence is always ≥ 3. */
-function longestBacktickRun(text: string): number {
-  let longest = 2;
-  for (const match of text.matchAll(/`+/g)) {
-    longest = Math.max(longest, match[0].length);
-  }
-  return longest;
-}
-
 export class ResolveHumanGateUseCase {
   constructor(
     private readonly runStore: WorkflowRunStorePort,
@@ -92,19 +83,14 @@ export class ResolveHumanGateUseCase {
     if (!trimmedNotes) return; // no rationale → no comment (avoids empty-comment noise)
 
     // The comment renderer uses GFM *without* `breaks`, so a single newline collapses to a
-    // space — blocks must be separated by blank lines. The reason is wrapped in a code fence
-    // so the user's words show up verbatim (markdown they typed is never interpreted); the
-    // fence is sized longer than any backtick run in the notes so a reason that itself
-    // contains ``` can't break out of the block.
-    const fence = '`'.repeat(longestBacktickRun(trimmedNotes) + 1);
+    // space — blocks must be separated by blank lines. The reason is dropped in as-is (not
+    // escaped) so any markdown the reviewer wrote is rendered in the comments view.
     const body = [
       `**User decision :** *${outcome}*`,
       '',
       '**Reason :**',
       '',
-      fence,
       trimmedNotes,
-      fence,
     ].join('\n');
 
     try {
