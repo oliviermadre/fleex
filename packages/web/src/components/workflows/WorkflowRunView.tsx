@@ -9,6 +9,7 @@ import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
 import { FailedStepRetryPanel } from './FailedStepRetryPanel';
 import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { countCompletedSteps } from './workflowProgress';
 import { postTicketComment } from '../../services/api';
 
 const nodeTypes = { stepRun: StepRunNode };
@@ -90,7 +91,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
     : undefined;
   const selectedStepRun = selectedStepId ? latestPerStep.get(selectedStepId) : undefined;
 
-  const completed = stepRuns.filter((s) => s.status === 'completed').length;
+  const completed = countCompletedSteps(stepRuns);
   const total = run.templateSnapshot.steps.length;
 
   return (
