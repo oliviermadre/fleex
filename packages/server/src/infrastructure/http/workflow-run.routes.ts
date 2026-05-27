@@ -154,7 +154,6 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
             stepRunId: request.params.stepRunId,
             outcome: parsed.data.outcome,
             notes: parsed.data.notes,
-            authorName: deps.authorNameResolver(),
           });
           return reply.code(204).send();
         } catch (err) {

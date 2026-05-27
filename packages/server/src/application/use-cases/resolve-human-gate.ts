@@ -24,7 +24,6 @@ export class ResolveHumanGateUseCase {
     stepRunId: string;
     outcome: string;
     notes?: string;
-    authorName: string;
   }): Promise<void> {
     const run = await this.runStore.getById(params.workflowRunId);
     if (!run) throw new WorkflowRunNotFoundError(params.workflowRunId);
@@ -47,7 +46,7 @@ export class ResolveHumanGateUseCase {
     // Decision Trail: persist the reviewer's rationale as a ticket comment so it can be
     // found later in the thread. Non-critical side effect — a failure here must never
     // block gate resolution.
-    await this.postResolutionComment(run.ticketId, step.name, params.outcome, params.notes, params.authorName, stepRun.id);
+    await this.postResolutionComment(run.ticketId, run.templateSnapshot.name, step.name, params.outcome, params.notes, stepRun.id);
 
     const edges = run.outgoingEdges(step.id);
     const nextEdge = EdgeEvaluator.resolve(stepRun.output!, edges);
@@ -74,27 +73,28 @@ export class ResolveHumanGateUseCase {
 
   private async postResolutionComment(
     ticketId: string,
+    workflowName: string,
     stepName: string,
     outcome: string,
     notes: string | undefined,
-    authorName: string,
     stepRunId: string,
   ): Promise<void> {
     const trimmedNotes = notes?.trim();
     if (!trimmedNotes) return; // no rationale → no comment (avoids empty-comment noise)
 
     const body = [
-      `via workflow:${stepName} [${outcome}] :`,
-      notes,
+      `User decision : ${outcome}`,
+      `Reason : ${trimmedNotes}`,
     ].join('\n');
 
     try {
       await this.postComment.execute({
         ticketId,
-        // Never drop the user's words: if identity is unavailable, fall back to a clear
-        // author rather than swallowing the comment (the bug this feature fixes).
-        authorName: authorName.trim() || 'system',
-        authorType: 'user',
+        // Attributed like every other workflow step comment, so it renders consistently
+        // in the thread (e.g. "workflow:Spec Dev PR → Check Spec"). Agent authorship also
+        // means any @mention a reviewer types inside their notes stays inert (no chaining).
+        authorName: `workflow:${workflowName} → ${stepName}`,
+        authorType: 'agent',
         body,
         visibility: 'public',
         parentId: null,

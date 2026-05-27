@@ -48,7 +48,7 @@ describe('ResolveHumanGateUseCase', () => {
       postComment as never, logger as never,
     );
 
-    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve', notes: 'LGTM', authorName: 'alice' });
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve', notes: 'LGTM' });
 
     expect(stepRun.status).toBe('completed');
     expect(stepRun.output?.schemaFields.outcome).toBe('approve');
@@ -70,7 +70,7 @@ describe('ResolveHumanGateUseCase', () => {
       makePostComment() as never,
       makeLogger() as never,
     );
-    await expect(uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'unknown', authorName: 'alice' }))
+    await expect(uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'unknown' }))
       .rejects.toBeInstanceOf(InvalidGateOutcomeError);
   });
 
@@ -86,7 +86,7 @@ describe('ResolveHumanGateUseCase', () => {
       makePostComment() as never, makeLogger() as never,
     );
 
-    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'reject', authorName: 'alice' });
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'reject' });
 
     expect(run.status).toBe('completed');
     expect(orchestrator.runStep).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('ResolveHumanGateUseCase', () => {
 
   // ── Decision Trail: persist the human gate comment ─────────────────────────
 
-  it('posts a ticket comment authored by the user when notes are provided', async () => {
+  it('posts a ticket comment attributed to the workflow step when notes are provided', async () => {
     const run = makeRun(); run.block();
     const stepRun = makeResolvableStepRun();
     const postComment = makePostComment();
@@ -107,17 +107,19 @@ describe('ResolveHumanGateUseCase', () => {
       makeLogger() as never,
     );
 
-    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve', notes: 'LGTM', authorName: 'alice' });
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve', notes: 'LGTM' });
 
-    // WHY: the reviewer must be able to find their rationale later, in the ticket thread,
-    // attributed to them, with the gate + outcome as context.
+    // WHY: the reviewer must find their rationale later in the thread, rendered like every
+    // other workflow step comment (workflow:<workflow> → <step>) with the decision spelled out.
+    // Agent authorship is deliberate: it harmonizes the rendering AND keeps any @mention a
+    // reviewer types inside their notes inert (agent comments don't create actionable mentions).
     expect(postComment.execute).toHaveBeenCalledTimes(1);
     expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
       ticketId: 't-1',
-      authorType: 'user',
-      authorName: 'alice',
+      authorType: 'agent',
+      authorName: 'workflow:W → Gate',
       visibility: 'public',
-      body: 'via workflow:Gate [approve] :\nLGTM',
+      body: 'User decision : approve\nReason : LGTM',
     }));
   });
 
@@ -135,7 +137,7 @@ describe('ResolveHumanGateUseCase', () => {
     );
 
     // WHY: an outcome with no note carries no rationale — posting an empty comment is noise.
-    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'reject', notes: '   ', authorName: 'alice' });
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'reject', notes: '   ' });
 
     expect(postComment.execute).not.toHaveBeenCalled();
     expect(run.status).toBe('completed');
@@ -159,7 +161,7 @@ describe('ResolveHumanGateUseCase', () => {
     // WHY: resolving the gate is the critical operation; the comment is a non-critical
     // side effect. A posting failure must never block the workflow.
     await expect(
-      uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve', notes: 'LGTM', authorName: 'alice' }),
+      uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve', notes: 'LGTM' }),
     ).resolves.toBeUndefined();
 
     expect(stepRun.status).toBe('completed');
@@ -167,7 +169,7 @@ describe('ResolveHumanGateUseCase', () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
-  it('never drops the user words: falls back to a clear author when identity is blank', async () => {
+  it('trims surrounding whitespace from notes so it never leaks into the comment body', async () => {
     const run = makeRun(); run.block();
     const stepRun = makeResolvableStepRun();
     const postComment = makePostComment();
@@ -180,14 +182,14 @@ describe('ResolveHumanGateUseCase', () => {
       makeLogger() as never,
     );
 
-    // WHY (OQ-3): the bug we fix is "the words disappear". If identity is unavailable we
-    // still post — with a clear fallback author — rather than swallowing the comment.
-    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve', notes: 'LGTM', authorName: '' });
+    // WHY: the emptiness check trims, so the body must use the same trimmed value — otherwise
+    // leading/trailing newlines from the textarea leak into the rendered comment as blank lines.
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve', notes: '\n\nLGTM\n\n' });
 
     expect(postComment.execute).toHaveBeenCalledTimes(1);
     expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
-      authorName: 'system',
-      body: 'via workflow:Gate [approve] :\nLGTM',
+      authorName: 'workflow:W → Gate',
+      body: 'User decision : approve\nReason : LGTM',
     }));
   });
 });
