@@ -21,8 +21,15 @@ ${SECTION('Usage:')}
 ${SECTION('Examples:')}
   ${DIM('$')} fleex hub start                       ${DIM('# random free port')}
   ${DIM('$')} fleex hub start --port 3002           ${DIM('# fixed port')}
+  ${DIM('$')} fleex hub start --rotate-token        ${DIM('# regenerate the shared secret')}
   ${DIM('$')} fleex hub status                      ${DIM('# clients connected, uptime')}
-  ${DIM('$')} fleex hub stop                        ${DIM('# shut down')}
+  ${DIM('$')} fleex hub stop                        ${DIM('# shut down (token is kept)')}
+
+${SECTION('Token:')}
+  The shared secret is generated once and persisted at ${chalk.cyan('~/.fleex/hub.token')}.
+  Hub restarts reuse it so already-running Fleex servers reconnect without
+  having to re-export their env. Use ${chalk.cyan('--rotate-token')} to invalidate
+  all connected clients (they must re-export FLEEX_EVENT_HUB_TOKEN).
 
 ${SECTION('Environment variables (for fleex start):')}
   FLEEX_EVENT_HUB_URL    WS URL printed by ${chalk.cyan('fleex hub start')}

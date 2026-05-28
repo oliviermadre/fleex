@@ -1,21 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { Option } from 'commander';
 import { c, info, ok, warn, die } from '../../../core/colors.ts';
 import { resolveInstance, ensureDirs } from '../../../core/instance.ts';
 import { findFreePort } from '../../../core/ports.ts';
 import {
   HUB_LOG_FILE,
+  HUB_TOKEN_FILE,
   readHubState,
   writeHubState,
   isAlive,
   clearHubState,
+  resolveHubToken,
 } from '../_state.ts';
 
 export interface HubStartOptions {
   port?: string;
+  token?: string;
+  rotateToken?: boolean;
 }
 
 export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
@@ -44,7 +47,7 @@ export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
     port = await findFreePort();
   }
 
-  const token = randomBytes(16).toString('hex');
+  const token = resolveHubToken({ override: opts.token, rotate: opts.rotateToken });
   const url = `ws://127.0.0.1:${port}/events`;
 
   const hubMain = path.join(ctx.repoDir, 'packages/event-hub/src/main.ts');
@@ -91,6 +94,7 @@ export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
   process.stdout.write(`  ${c.cyan('export FLEEX_EVENT_HUB_URL=')}${url}\n`);
   process.stdout.write(`  ${c.cyan('export FLEEX_EVENT_HUB_TOKEN=')}${token}\n`);
   process.stdout.write('\n');
+  info(`Token is persisted at ${HUB_TOKEN_FILE} and reused across restarts.`);
   info(`Log: ${HUB_LOG_FILE}`);
   info(`Use ${c.bold('fleex hub status')} to inspect, ${c.bold('fleex hub stop')} to shut down.`);
 }
@@ -98,4 +102,6 @@ export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
 // Re-export the commander option setup for the command index.
 export function setupOptions(cmd: import('commander').Command): void {
   cmd.addOption(new Option('--port <port>', 'Force the hub to listen on a specific port (default: random free port)'));
+  cmd.addOption(new Option('--token <token>', 'Use an explicit shared secret (persisted to ~/.fleex/hub.token)'));
+  cmd.addOption(new Option('--rotate-token', 'Generate a fresh token even if one is already persisted (invalidates connected clients)'));
 }
