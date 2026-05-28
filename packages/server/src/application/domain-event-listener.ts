@@ -1,4 +1,5 @@
 import type { EventBus } from './event-bus.js';
+import { BroadcastRegistrar, type BroadcastFn } from './broadcast-registrar.js';
 import type { PersonaStorePort } from './ports/persona-store.port.js';
 import type { SkillStorePort } from './ports/skill-store.port.js';
 import type { TicketStorePort } from './ports/ticket-store.port.js';
@@ -14,7 +15,6 @@ import type { GenerateTicketSummaryUseCase } from './use-cases/generate-ticket-s
 import type { WorkflowTemplateStorePort } from './ports/workflow-template-store.port.js';
 import type { CreateWorkflowRunUseCase } from './use-cases/create-workflow-run.js';
 import type {
-  AnyDomainEvent,
   CommentPostedEvent,
   CommentUpdatedEvent,
   MentionCreatedEvent,
@@ -25,11 +25,6 @@ import type {
   DeliverableCreatedEvent,
   DeliverableUpdatedEvent,
 } from '../domain/events.js';
-
-/**
- * Broadcast function signature — sends typed messages to WebSocket clients.
- */
-type BroadcastFn = (type: string, data: unknown) => void;
 
 export interface DomainEventListenerDeps {
   eventBus: EventBus;
@@ -50,21 +45,31 @@ export interface DomainEventListenerDeps {
 }
 
 /**
- * Central listener that reacts to all domain events.
+ * Local listener — reacts to domain events emitted by THIS server's use-cases.
  *
  * Handles:
- * 1. WebSocket broadcasting (ticket, persona channels)
- * 2. Auto-triggering agents when mentioned
- * 3. Auto-review workflow transitions
- * 4. Waking waiting agents on new content
- * 5. Auto-resolving mentions when ticket → done
+ * 1. WebSocket broadcasts (via embedded BroadcastRegistrar) to local clients.
+ * 2. Cross-cutting side-effects: auto-trigger agents/panels/skills/workflows on
+ *    mention, auto-review workflow transitions, wake waiting agents, auto-resolve
+ *    mentions on done, auto-generate summary on close.
+ *
+ * The side-effects MUST only run on the originator (the server that received
+ * the HTTP request). They are intentionally NOT registered on the remote bus
+ * fed by the hub — see RemoteDomainEventListener.
  */
 export class DomainEventListener {
-  private ticketBroadcast: BroadcastFn = () => {};
-  private personaBroadcast: BroadcastFn = () => {};
-  private skillBroadcast: BroadcastFn = () => {};
+  private readonly broadcastRegistrar: BroadcastRegistrar;
 
-  constructor(private readonly deps: DomainEventListenerDeps) {}
+  constructor(private readonly deps: DomainEventListenerDeps) {
+    this.broadcastRegistrar = new BroadcastRegistrar({
+      personaStore: deps.personaStore,
+      skillStore: deps.skillStore,
+      ticketStore: deps.ticketStore,
+      mentionStore: deps.mentionStore,
+      commentStore: deps.commentStore,
+      deliverableStore: deps.deliverableStore,
+    });
+  }
 
   /** Called after Phase B wiring to attach workflow deps (which are initialized after the listener) */
   setWorkflowDeps(deps: { workflowTemplateStore: WorkflowTemplateStorePort | null; createWorkflowRun: CreateWorkflowRunUseCase | null }): void {
@@ -74,176 +79,30 @@ export class DomainEventListener {
 
   /** Called by WS plugins to wire up broadcast functions */
   setTicketBroadcast(fn: BroadcastFn): void {
-    this.ticketBroadcast = fn;
+    this.broadcastRegistrar.setTicketBroadcast(fn);
   }
 
   setPersonaBroadcast(fn: BroadcastFn): void {
-    this.personaBroadcast = fn;
+    this.broadcastRegistrar.setPersonaBroadcast(fn);
   }
 
   setSkillBroadcast(fn: BroadcastFn): void {
-    this.skillBroadcast = fn;
+    this.broadcastRegistrar.setSkillBroadcast(fn);
+  }
+
+  /** Exposes the underlying registrar so the remote listener can share the same WS broadcast funcs. */
+  getBroadcastRegistrar(): BroadcastRegistrar {
+    return this.broadcastRegistrar;
   }
 
   /**
-   * Register all event handlers on the bus.
+   * Register all event handlers (broadcasts + side-effects) on the bus.
    */
   register(): void {
     const bus = this.deps.eventBus;
 
-    // ── Ticket broadcasts ──
-    bus.on('ticket.created', (e) => this.broadcastTicketEntity(e, 'ticket:created'));
-    bus.on('ticket.updated', (e) => this.broadcastTicketEntity(e, 'ticket:updated'));
-    bus.on('ticket.moved', (e) => this.broadcastTicketEntity(e, 'ticket:moved'));
-    bus.on('ticket.deleted', (e) => {
-      if (e.type === 'ticket.deleted') {
-        this.ticketBroadcast('ticket:deleted', { id: e.ticketId });
-      }
-    });
-
-    // ── Board broadcasts ──
-    bus.on('board.updated', (e) => this.broadcastBoardEntity(e, 'board:updated'));
-    bus.on('board.deleted', (e) => {
-      if (e.type === 'board.deleted') {
-        this.ticketBroadcast('board:updated', { deleted: e.boardId });
-      }
-    });
-
-    // ── Comment broadcasts ──
-    bus.on('comment.posted', (e) => this.broadcastCommentEntity(e, 'comment:created'));
-    bus.on('comment.updated', (e) => this.broadcastCommentEntity(e, 'comment:updated'));
-    bus.on('comment.deleted', (e) => {
-      if (e.type === 'comment.deleted') {
-        this.ticketBroadcast('comment:deleted', { id: e.commentId, ticketId: e.ticketId });
-      }
-    });
-
-    // ── Mention broadcasts ──
-    bus.on('mention.created', (e) => this.broadcastMentionEntity(e, 'mention:created'));
-    bus.on('mention.acknowledged', (e) => this.broadcastMentionEntity(e, 'mention:acknowledged'));
-    bus.on('mention.resolved', (e) => this.broadcastMentionEntity(e, 'mention:resolved'));
-    bus.on('mention.waiting_for_info', (e) => this.broadcastMentionEntity(e, 'mention:waiting_for_info'));
-    bus.on('mention.woken_up', (e) => this.broadcastMentionEntity(e, 'mention:updated'));
-    bus.on('mention.deleted', (e) => {
-      if (e.type === 'mention.deleted') {
-        this.ticketBroadcast('mention:deleted', { id: e.mentionId, ticketId: e.ticketId, commentId: e.commentId });
-      }
-    });
-    bus.on('mention.execution_failed', (e) => {
-      if (e.type === 'mention.execution_failed') {
-        this.ticketBroadcast('mention:execution_failed', {
-          mentionId: e.mentionId,
-          ticketId: e.ticketId,
-          targetAgent: e.targetAgent,
-          reason: e.reason,
-          message: e.message,
-        });
-      }
-    });
-
-    // ── Deliverable broadcasts ──
-    bus.on('deliverable.created', (e) => this.broadcastDeliverableEntity(e, 'deliverable:created'));
-    bus.on('deliverable.updated', (e) => this.broadcastDeliverableEntity(e, 'deliverable:updated'));
-    bus.on('deliverable.deleted', (e) => {
-      if (e.type === 'deliverable.deleted') {
-        this.ticketBroadcast('deliverable:deleted', { deliverableId: e.deliverableId, ticketId: e.ticketId });
-      }
-    });
-
-    // ── Workflow broadcasts ──
-    bus.on('workflow.run_created', (e) => {
-      if (e.type === 'workflow.run_created') {
-        this.ticketBroadcast('workflow:run_created', {
-          workflowRunId: e.workflowRunId,
-          templateId: e.templateId,
-          ticketId: e.ticketId,
-        });
-      }
-    });
-    bus.on('workflow.step_started', (e) => {
-      if (e.type === 'workflow.step_started') {
-        this.ticketBroadcast('workflow:step_started', {
-          workflowRunId: e.workflowRunId,
-          stepRunId: e.stepRunId,
-          stepId: e.stepId,
-          ticketId: e.ticketId,
-        });
-      }
-    });
-    bus.on('workflow.step_completed', (e) => {
-      if (e.type === 'workflow.step_completed') {
-        this.ticketBroadcast('workflow:step_completed', {
-          workflowRunId: e.workflowRunId,
-          stepRunId: e.stepRunId,
-          stepId: e.stepId,
-          ticketId: e.ticketId,
-          nextEdgeId: e.nextEdgeId,
-        });
-      }
-    });
-    bus.on('workflow.needs_review', (e) => {
-      if (e.type === 'workflow.needs_review') {
-        this.ticketBroadcast('workflow:needs_review', {
-          workflowRunId: e.workflowRunId,
-          stepRunId: e.stepRunId,
-          stepId: e.stepId,
-          ticketId: e.ticketId,
-        });
-      }
-    });
-    bus.on('workflow.run_completed', (e) => {
-      if (e.type === 'workflow.run_completed') {
-        this.ticketBroadcast('workflow:run_completed', {
-          workflowRunId: e.workflowRunId,
-          ticketId: e.ticketId,
-        });
-      }
-    });
-    bus.on('workflow.run_failed', (e) => {
-      if (e.type === 'workflow.run_failed') {
-        this.ticketBroadcast('workflow:run_failed', {
-          workflowRunId: e.workflowRunId,
-          stepRunId: e.stepRunId,
-          stepId: e.stepId,
-          ticketId: e.ticketId,
-          error: e.error,
-        });
-      }
-    });
-    bus.on('workflow.run_cancelled', (e) => {
-      if (e.type === 'workflow.run_cancelled') {
-        this.ticketBroadcast('workflow:run_cancelled', {
-          workflowRunId: e.workflowRunId,
-          ticketId: e.ticketId,
-        });
-      }
-    });
-
-    // ── Persona broadcasts ──
-    bus.on('persona.created', (e) => this.broadcastPersonaEntity(e, 'persona:created'));
-    bus.on('persona.updated', (e) => this.broadcastPersonaEntity(e, 'persona:updated'));
-    bus.on('persona.deleted', (e) => {
-      if (e.type === 'persona.deleted') {
-        this.personaBroadcast('persona:deleted', { id: e.personaId });
-      }
-    });
-    bus.on('persona.execution_started', (e) => {
-      if (e.type === 'persona.execution_started') {
-        this.personaBroadcast('persona:execution_started', {
-          personaId: e.personaId,
-          mentionIds: e.mentionIds,
-        });
-      }
-    });
-
-    // ── Skill broadcasts ──
-    bus.on('skill.created', (e) => this.broadcastSkillEntity(e, 'skill:created'));
-    bus.on('skill.updated', (e) => this.broadcastSkillEntity(e, 'skill:updated'));
-    bus.on('skill.deleted', (e) => {
-      if (e.type === 'skill.deleted') {
-        this.skillBroadcast('skill:deleted', { id: e.skillId });
-      }
-    });
+    // ── UI broadcasts (delegated to BroadcastRegistrar) ──
+    this.broadcastRegistrar.register(bus);
 
     // ── Cross-cutting: Auto-trigger agents when mentioned ──
     bus.on('mention.created', (e) => this.handleAutoTriggerAgent(e as MentionCreatedEvent));
@@ -330,7 +189,7 @@ export class DomainEventListener {
       if (mention && mention.status !== 'resolved') {
         mention.resolve();
         await this.deps.mentionStore.save(mention);
-        this.ticketBroadcast('mention:resolved', mention.toDTO());
+        this.broadcastRegistrar.pushTicket('mention:resolved', mention.toDTO());
       }
       return;
     }
@@ -541,50 +400,5 @@ export class DomainEventListener {
     if (event.authorType === 'user') {
       await this.deps.autoReviewWorkflow.handleHumanCommentPosted({ ticketId: event.ticketId });
     }
-  }
-
-  // ── Entity broadcast helpers ──
-  // These load the full entity from the store to broadcast the latest DTO.
-
-  private async broadcastTicketEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
-    if (!('ticketId' in event)) return;
-    const ticket = await this.deps.ticketStore.getTicketById((event as { ticketId: string }).ticketId);
-    if (ticket) this.ticketBroadcast(wsType, ticket.toDTO());
-  }
-
-  private async broadcastBoardEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
-    if (!('boardId' in event)) return;
-    const board = await this.deps.ticketStore.getBoardById((event as { boardId: string }).boardId);
-    if (board) this.ticketBroadcast(wsType, board.toDTO());
-  }
-
-  private async broadcastCommentEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
-    if (!('commentId' in event)) return;
-    const comment = await this.deps.commentStore.getById((event as { commentId: string }).commentId);
-    if (comment) this.ticketBroadcast(wsType, comment.toDTO());
-  }
-
-  private async broadcastMentionEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
-    if (!('mentionId' in event)) return;
-    const mention = await this.deps.mentionStore.getById((event as { mentionId: string }).mentionId);
-    if (mention) this.ticketBroadcast(wsType, mention.toDTO());
-  }
-
-  private async broadcastDeliverableEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
-    if (!('deliverableId' in event)) return;
-    const deliverable = await this.deps.deliverableStore.getById((event as { deliverableId: string }).deliverableId);
-    if (deliverable) this.ticketBroadcast(wsType, deliverable.toDTO());
-  }
-
-  private async broadcastPersonaEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
-    if (!('personaId' in event)) return;
-    const persona = await this.deps.personaStore.getById((event as { personaId: string }).personaId);
-    if (persona) this.personaBroadcast(wsType, persona.toDTO());
-  }
-
-  private async broadcastSkillEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
-    if (!('skillId' in event)) return;
-    const skill = await this.deps.skillStore.getById((event as { skillId: string }).skillId);
-    if (skill) this.skillBroadcast(wsType, skill.toDTO());
   }
 }

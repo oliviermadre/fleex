@@ -159,6 +159,15 @@ export { computeInitials } from './types/agent-event.js';
 
 export type { DomainEventLog } from './types/domain-event-log.js';
 
+export type {
+  HubHelloMessage,
+  HubEventMessage,
+  HubPingMessage,
+  HubPongMessage,
+  HubMessage,
+} from './types/event-hub.js';
+export { HUB_SHARED_EXCLUDED } from './types/event-hub.js';
+
 export type { FileMetadata } from './types/file.js';
 
 export type {

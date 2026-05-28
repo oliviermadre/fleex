@@ -1,0 +1,7 @@
+{
+  "name": "@fleex/event-hub",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/main.ts"
+  }
+}

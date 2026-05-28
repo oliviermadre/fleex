@@ -15,13 +15,16 @@ export interface Ports {
 /**
  * Bind to port 0 and let the kernel assign a free port, then close.
  * Mirrors the python socket trick used in the original bash script.
+ *
+ * Tries IPv6 first (dual-stack on most systems), falls back to IPv4 only
+ * for environments without IPv6 (containers, CI sandboxes).
  */
 export function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
+  const tryHost = (host: string | undefined) => new Promise<number>((resolve, reject) => {
     const srv = net.createServer();
     srv.unref();
     srv.on('error', reject);
-    srv.listen(0, () => {
+    const cb = () => {
       const addr = srv.address();
       if (!addr || typeof addr === 'string') {
         srv.close();
@@ -30,8 +33,11 @@ export function findFreePort(): Promise<number> {
       }
       const port = addr.port;
       srv.close(() => resolve(port));
-    });
+    };
+    if (host === undefined) srv.listen(0, cb);
+    else srv.listen(0, host, cb);
   });
+  return tryHost(undefined).catch(() => tryHost('127.0.0.1'));
 }
 
 export async function allocatePorts(ctx: InstanceContext = resolveInstance()): Promise<Ports> {
