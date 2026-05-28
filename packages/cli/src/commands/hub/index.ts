@@ -14,26 +14,25 @@ const def: CommandDef = {
   so frontends connected to any instance receive updates from writes that
   happened on other instances. Side-effects stay on the originator.
 
-${SECTION('Usage:')}
-  Start the hub once on the machine that will host it, then point every Fleex
-  instance at it via the FLEEX_EVENT_HUB_URL environment variable.
+${SECTION('Auth model:')}
+  Each instance authenticates with its own token (modelled after SSH's
+  authorized_keys). Tokens are stored as sha256 hashes at
+  ${chalk.cyan('~/.fleex/hub.clients.json')} and sent in the
+  ${chalk.cyan('Authorization: Bearer …')} header on the WS upgrade.
+  The hub watches the file and hot-disconnects revoked clients.
 
-${SECTION('Examples:')}
-  ${DIM('$')} fleex hub start                       ${DIM('# random free port')}
-  ${DIM('$')} fleex hub start --port 3002           ${DIM('# fixed port')}
-  ${DIM('$')} fleex hub start --rotate-token        ${DIM('# regenerate the shared secret')}
+${SECTION('Usual workflow:')}
+  ${DIM('$')} fleex hub start                       ${DIM('# starts the hub')}
+  ${DIM('$')} fleex hub client add my-laptop        ${DIM('# prints the token (once)')}
+  ${DIM('$')} export FLEEX_EVENT_HUB_URL=…          ${DIM('# from hub start output')}
+  ${DIM('$')} export FLEEX_EVENT_HUB_TOKEN=…        ${DIM('# from client add output')}
+  ${DIM('$')} fleex start                           ${DIM('# instance connects')}
+
+${SECTION('More:')}
   ${DIM('$')} fleex hub status                      ${DIM('# clients connected, uptime')}
-  ${DIM('$')} fleex hub stop                        ${DIM('# shut down (token is kept)')}
-
-${SECTION('Token:')}
-  The shared secret is generated once and persisted at ${chalk.cyan('~/.fleex/hub.token')}.
-  Hub restarts reuse it so already-running Fleex servers reconnect without
-  having to re-export their env. Use ${chalk.cyan('--rotate-token')} to invalidate
-  all connected clients (they must re-export FLEEX_EVENT_HUB_TOKEN).
-
-${SECTION('Environment variables (for fleex start):')}
-  FLEEX_EVENT_HUB_URL    WS URL printed by ${chalk.cyan('fleex hub start')}
-  FLEEX_EVENT_HUB_TOKEN  Shared secret, also printed by start
+  ${DIM('$')} fleex hub client list                 ${DIM('# show authorized clients')}
+  ${DIM('$')} fleex hub client revoke my-laptop     ${DIM('# kick + deny')}
+  ${DIM('$')} fleex hub stop                        ${DIM('# shut down (clients file kept)')}
 `,
   action: (...args: unknown[]) => {
     const cmd = args[args.length - 1] as Command;

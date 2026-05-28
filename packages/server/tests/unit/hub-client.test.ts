@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import net from 'node:net';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { HubClient } from '../../src/infrastructure/hub/hub-client.js';
 import type { AnyDomainEvent } from '../../src/domain/events.js';
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
@@ -45,18 +47,47 @@ async function waitForHealth(port: number, timeoutMs = 3000): Promise<void> {
   throw new Error(`hub not healthy on port ${port}`);
 }
 
+function hashToken(token: string): string {
+  return 'sha256:' + createHash('sha256').update(token).digest('hex');
+}
+
+interface ProvisionedClient { name: string; token: string }
+
+function writeClientsFile(file: string, clients: ProvisionedClient[]): void {
+  writeFileSync(file, JSON.stringify({
+    version: 1,
+    clients: clients.map((c) => ({
+      name: c.name,
+      tokenHash: hashToken(c.token),
+      createdAt: new Date().toISOString(),
+    })),
+  }, null, 2));
+}
+
 describe('HubClient ↔ event-hub fan-out', () => {
   let hub: ChildProcess | null = null;
   let port: number;
-  const token = 'test-token';
+  let clientsFile: string;
+  let tmpDir: string;
+  let tokenA: string;
+  let tokenB: string;
 
   beforeEach(async () => {
     port = await findFreePort();
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'fleex-hub-test-'));
+    clientsFile = path.join(tmpDir, 'hub.clients.json');
+    tokenA = randomBytes(16).toString('hex');
+    tokenB = randomBytes(16).toString('hex');
+    writeClientsFile(clientsFile, [
+      { name: 'server-a', token: tokenA },
+      { name: 'server-b', token: tokenB },
+    ]);
+
     hub = spawn('bun', ['run', HUB_ENTRY], {
       env: {
         ...process.env,
         FLEEX_EVENT_HUB_PORT: String(port),
-        FLEEX_EVENT_HUB_TOKEN: token,
+        FLEEX_HUB_CLIENTS_FILE: clientsFile,
       },
       stdio: ['ignore', 'ignore', 'ignore'],
     });
@@ -69,6 +100,7 @@ describe('HubClient ↔ event-hub fan-out', () => {
       await new Promise((r) => setTimeout(r, 100));
     }
     hub = null;
+    try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
   it('forwards events to other servers but not to the originator', async () => {
@@ -77,20 +109,18 @@ describe('HubClient ↔ event-hub fan-out', () => {
     const receivedByB: AnyDomainEvent[] = [];
 
     const clientA = new HubClient({
-      url, token, serverId: 'server-a',
+      url, token: tokenA, serverId: 'sid-a',
       logger: silentLogger(),
       onRemoteEvent: (e) => receivedByA.push(e),
     });
     const clientB = new HubClient({
-      url, token, serverId: 'server-b',
+      url, token: tokenB, serverId: 'sid-b',
       logger: silentLogger(),
       onRemoteEvent: (e) => receivedByB.push(e),
     });
 
     clientA.start();
     clientB.start();
-
-    // Wait for both connections to register + hello.
     await new Promise((r) => setTimeout(r, 400));
 
     const event: AnyDomainEvent = {
@@ -100,7 +130,6 @@ describe('HubClient ↔ event-hub fan-out', () => {
       changes: { title: { from: 'old', to: 'new' } },
     };
     clientA.publish(event);
-
     await new Promise((r) => setTimeout(r, 200));
 
     expect(receivedByA).toEqual([]);
@@ -109,7 +138,6 @@ describe('HubClient ↔ event-hub fan-out', () => {
     expect(got.type).toBe('ticket.updated');
     expect(got.occurredAt).toBeInstanceOf(Date);
     expect(got.occurredAt.toISOString()).toBe('2025-01-01T12:00:00.000Z');
-    // payload survives round trip
     expect((got as { ticketId: string }).ticketId).toBe('t-1');
 
     clientA.close();
@@ -121,14 +149,12 @@ describe('HubClient ↔ event-hub fan-out', () => {
     const receivedByB: AnyDomainEvent[] = [];
 
     const clientA = new HubClient({
-      url, token, serverId: 'server-a',
-      logger: silentLogger(),
-      onRemoteEvent: () => {},
+      url, token: tokenA, serverId: 'sid-a',
+      logger: silentLogger(), onRemoteEvent: () => {},
     });
     const clientB = new HubClient({
-      url, token, serverId: 'server-b',
-      logger: silentLogger(),
-      onRemoteEvent: (e) => receivedByB.push(e),
+      url, token: tokenB, serverId: 'sid-b',
+      logger: silentLogger(), onRemoteEvent: (e) => receivedByB.push(e),
     });
 
     clientA.start();
@@ -153,29 +179,51 @@ describe('HubClient ↔ event-hub fan-out', () => {
     clientB.close();
   });
 
-  it('queues events while disconnected and drains on reconnect', async () => {
-    const url = `ws://127.0.0.1:${port}/events`;
-    const receivedByB: AnyDomainEvent[] = [];
-
-    const clientB = new HubClient({
-      url, token, serverId: 'server-b',
-      logger: silentLogger(),
-      onRemoteEvent: (e) => receivedByB.push(e),
+  it('rejects unknown tokens with 401', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/events`, {
+      headers: { Authorization: 'Bearer not-a-real-token' },
     });
-    clientB.start();
-    await new Promise((r) => setTimeout(r, 300));
+    expect(res.status).toBe(401);
+  });
 
-    // Build a client whose URL points to a dead port — initial connect fails.
+  it('rejects requests without Authorization header', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/events`);
+    expect(res.status).toBe(401);
+  });
+
+  it('hot-disconnects a client when its entry is revoked', async () => {
+    const url = `ws://127.0.0.1:${port}/events`;
+    const clientA = new HubClient({
+      url, token: tokenA, serverId: 'sid-a',
+      logger: silentLogger(), onRemoteEvent: () => {},
+    });
+    clientA.start();
+    await new Promise((r) => setTimeout(r, 400));
+    expect(clientA.stats().connected).toBe(true);
+
+    // Remove server-a from the authorized clients file.
+    writeClientsFile(clientsFile, [{ name: 'server-b', token: tokenB }]);
+    // Wait for fs.watch to fire on the hub side.
+    await new Promise((r) => setTimeout(r, 500));
+
+    // Hub should have closed our socket with code 4001. The client will then
+    // attempt to reconnect with the (now-invalid) token and get 401'd — its
+    // .connected flag will stay false.
+    expect(clientA.stats().connected).toBe(false);
+
+    clientA.close();
+  });
+
+  it('queues events while disconnected', async () => {
     const deadClient = new HubClient({
       url: `ws://127.0.0.1:${port}/events`,
       token: 'wrong-token',
-      serverId: 'server-c',
+      serverId: 'sid-x',
       logger: silentLogger(),
       onRemoteEvent: () => {},
     });
     deadClient.start();
 
-    // Publish before any connection succeeds — should be queued.
     deadClient.publish({
       type: 'ticket.created',
       occurredAt: new Date(),
@@ -184,6 +232,5 @@ describe('HubClient ↔ event-hub fan-out', () => {
     expect(deadClient.stats().queueLength).toBeGreaterThanOrEqual(1);
 
     deadClient.close();
-    clientB.close();
   });
 });

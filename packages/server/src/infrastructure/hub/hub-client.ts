@@ -117,9 +117,11 @@ export class HubClient {
 
   private connect(): void {
     if (this.closed) return;
-    const url = appendTokenParam(this.opts.url, this.opts.token);
 
-    const ws = new WebSocket(url);
+    const wsOpts: ConstructorParameters<typeof WebSocket>[2] = this.opts.token
+      ? { headers: { Authorization: `Bearer ${this.opts.token}` } }
+      : undefined;
+    const ws = new WebSocket(this.opts.url, wsOpts);
     this.ws = ws;
 
     ws.on('open', () => {
@@ -254,12 +256,6 @@ export class HubClient {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-function appendTokenParam(url: string, token: string | undefined): string {
-  if (!token) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}token=${encodeURIComponent(token)}`;
-}
 
 function cryptoRandomUUID(): string {
   return randomUUID();

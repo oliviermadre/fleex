@@ -1,20 +1,56 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { FLEEX_HOME } from '../../core/instance.ts';
 
 export interface HubState {
   pid: number;
   port: number;
-  token: string;
   url: string;
   startedAt: number;
   logFile: string;
 }
 
 export const HUB_STATE_FILE = path.join(FLEEX_HOME, 'hub.json');
-export const HUB_TOKEN_FILE = path.join(FLEEX_HOME, 'hub.token');
+export const HUB_CLIENTS_FILE = path.join(FLEEX_HOME, 'hub.clients.json');
 export const HUB_LOG_FILE = path.join(FLEEX_HOME, '.logs', 'event-hub.log');
+
+export interface ClientEntry {
+  name: string;
+  tokenHash: string;
+  createdAt: string;
+}
+
+export interface ClientsFile {
+  version: 1;
+  clients: ClientEntry[];
+}
+
+export function hashHubToken(token: string): string {
+  return 'sha256:' + createHash('sha256').update(token).digest('hex');
+}
+
+export function generateHubToken(): string {
+  return randomBytes(32).toString('hex');
+}
+
+export function readClientsFile(): ClientsFile {
+  if (!fs.existsSync(HUB_CLIENTS_FILE)) return { version: 1, clients: [] };
+  try {
+    const raw = fs.readFileSync(HUB_CLIENTS_FILE, 'utf8');
+    const j = JSON.parse(raw);
+    if (j && j.version === 1 && Array.isArray(j.clients)) return j as ClientsFile;
+  } catch { /* fall through */ }
+  return { version: 1, clients: [] };
+}
+
+export function writeClientsFile(file: ClientsFile): void {
+  fs.mkdirSync(path.dirname(HUB_CLIENTS_FILE), { recursive: true });
+  // Write atomically so the hub's fs.watch sees a single coherent change.
+  const tmp = HUB_CLIENTS_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(file, null, 2), { mode: 0o600 });
+  fs.renameSync(tmp, HUB_CLIENTS_FILE);
+}
 
 export function readHubState(): HubState | null {
   if (!fs.existsSync(HUB_STATE_FILE)) return null;
@@ -24,7 +60,6 @@ export function readHubState(): HubState | null {
     if (
       typeof j.pid === 'number' &&
       typeof j.port === 'number' &&
-      typeof j.token === 'string' &&
       typeof j.url === 'string' &&
       typeof j.startedAt === 'number' &&
       typeof j.logFile === 'string'
@@ -44,36 +79,6 @@ export function writeHubState(state: HubState): void {
 
 export function clearHubState(): void {
   try { fs.unlinkSync(HUB_STATE_FILE); } catch { /* ignore */ }
-}
-
-/**
- * Persistent token: generated once and reused across hub restarts so already-running
- * Fleex servers (which hold the token in their env) don't get 401'd on reconnect.
- *
- * Lookup order:
- *   1. explicit override (e.g. --token CLI flag)
- *   2. ~/.fleex/hub.token (created on first run, 0600 permissions)
- *   3. generate a fresh one and persist it
- */
-export function resolveHubToken(opts: { override?: string; rotate?: boolean } = {}): string {
-  if (opts.override) {
-    persistHubToken(opts.override);
-    return opts.override;
-  }
-  if (!opts.rotate && fs.existsSync(HUB_TOKEN_FILE)) {
-    try {
-      const t = fs.readFileSync(HUB_TOKEN_FILE, 'utf8').trim();
-      if (t.length > 0) return t;
-    } catch { /* fall through to regenerate */ }
-  }
-  const fresh = randomBytes(16).toString('hex');
-  persistHubToken(fresh);
-  return fresh;
-}
-
-function persistHubToken(token: string): void {
-  fs.mkdirSync(path.dirname(HUB_TOKEN_FILE), { recursive: true });
-  fs.writeFileSync(HUB_TOKEN_FILE, token, { mode: 0o600 });
 }
 
 export function isAlive(pid: number): boolean {

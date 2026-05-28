@@ -7,18 +7,16 @@ import { resolveInstance, ensureDirs } from '../../../core/instance.ts';
 import { findFreePort } from '../../../core/ports.ts';
 import {
   HUB_LOG_FILE,
-  HUB_TOKEN_FILE,
+  HUB_CLIENTS_FILE,
   readHubState,
   writeHubState,
   isAlive,
   clearHubState,
-  resolveHubToken,
+  readClientsFile,
 } from '../_state.ts';
 
 export interface HubStartOptions {
   port?: string;
-  token?: string;
-  rotateToken?: boolean;
 }
 
 export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
@@ -47,7 +45,6 @@ export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
     port = await findFreePort();
   }
 
-  const token = resolveHubToken({ override: opts.token, rotate: opts.rotateToken });
   const url = `ws://127.0.0.1:${port}/events`;
 
   const hubMain = path.join(ctx.repoDir, 'packages/event-hub/src/main.ts');
@@ -63,7 +60,6 @@ export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
     env: {
       ...process.env,
       FLEEX_EVENT_HUB_PORT: String(port),
-      FLEEX_EVENT_HUB_TOKEN: token,
     },
     detached: true,
     stdio: ['ignore', out, out],
@@ -76,7 +72,6 @@ export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
   writeHubState({
     pid: pid as number,
     port,
-    token,
     url,
     startedAt: Date.now(),
     logFile: HUB_LOG_FILE,
@@ -89,19 +84,21 @@ export async function runHubStart(opts: HubStartOptions = {}): Promise<void> {
     die(`Event hub died immediately. Check the log: ${HUB_LOG_FILE}`);
   }
 
+  const clientCount = readClientsFile().clients.length;
   ok(`Event hub started on port ${c.bold(String(port))} (PID ${pid}).`);
   process.stdout.write('\n');
-  process.stdout.write(`  ${c.cyan('export FLEEX_EVENT_HUB_URL=')}${url}\n`);
-  process.stdout.write(`  ${c.cyan('export FLEEX_EVENT_HUB_TOKEN=')}${token}\n`);
+  process.stdout.write(`  ${c.cyan('URL'.padEnd(20))} ${url}\n`);
+  process.stdout.write(`  ${c.cyan('Clients file'.padEnd(20))} ${HUB_CLIENTS_FILE}\n`);
+  process.stdout.write(`  ${c.cyan('Authorized'.padEnd(20))} ${clientCount} client(s)\n`);
+  process.stdout.write(`  ${c.cyan('Log'.padEnd(20))} ${HUB_LOG_FILE}\n`);
   process.stdout.write('\n');
-  info(`Token is persisted at ${HUB_TOKEN_FILE} and reused across restarts.`);
-  info(`Log: ${HUB_LOG_FILE}`);
-  info(`Use ${c.bold('fleex hub status')} to inspect, ${c.bold('fleex hub stop')} to shut down.`);
+  if (clientCount === 0) {
+    warn(`No clients authorized yet. Provision one with: ${c.bold('fleex hub client add <name>')}`);
+  } else {
+    info(`Use ${c.bold('fleex hub client list')} to see who's allowed, ${c.bold('fleex hub status')} for live state.`);
+  }
 }
 
-// Re-export the commander option setup for the command index.
 export function setupOptions(cmd: import('commander').Command): void {
   cmd.addOption(new Option('--port <port>', 'Force the hub to listen on a specific port (default: random free port)'));
-  cmd.addOption(new Option('--token <token>', 'Use an explicit shared secret (persisted to ~/.fleex/hub.token)'));
-  cmd.addOption(new Option('--rotate-token', 'Generate a fresh token even if one is already persisted (invalidates connected clients)'));
 }
