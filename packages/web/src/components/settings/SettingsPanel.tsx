@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { TagInput } from '../ui/TagInput';
 import { AppearanceTab } from './AppearanceTab';
+import { TriggersTab } from './TriggersTab';
 import { cn } from '../../lib/cn';
 import type { AgentToken } from '@fleex/shared';
 import * as api from '../../services/api';
@@ -16,6 +17,7 @@ const tabLabels: Record<SettingsTab, string> = {
   'pinned-icons': 'Pinned Icons',
   'worktree-actions': 'Worktree Actions',
   'agent-tokens': 'Agent Tokens',
+  triggers: 'Triggers',
 };
 
 export function SettingsPanel() {
@@ -163,6 +165,8 @@ export function SettingsPanel() {
             />
           )}
           {settingsTab === 'agent-tokens' && <AgentTokensTab />}
+
+          {settingsTab === 'triggers' && <TriggersTab />}
 
           {/* Save button */}
           <div className="mt-8 flex justify-end">

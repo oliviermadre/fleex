@@ -618,6 +618,32 @@ export async function executePanel(id: string, ticketId: string, topic?: string)
   });
 }
 
+// ── Triggers API ──
+
+export async function fetchTriggers(): Promise<import('@fleex/shared').Trigger[]> {
+  return request<import('@fleex/shared').Trigger[]>('/triggers');
+}
+
+export async function createTrigger(req: import('@fleex/shared').CreateTriggerInput): Promise<import('@fleex/shared').Trigger> {
+  return request<import('@fleex/shared').Trigger>('/triggers', { method: 'POST', body: JSON.stringify(req) });
+}
+
+export async function updateTrigger(id: string, req: import('@fleex/shared').UpdateTriggerInput): Promise<import('@fleex/shared').Trigger> {
+  return request<import('@fleex/shared').Trigger>(`/triggers/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+}
+
+export async function deleteTrigger(id: string): Promise<void> {
+  await request<void>(`/triggers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function runTrigger(id: string): Promise<import('@fleex/shared').TriggerRun> {
+  return request<import('@fleex/shared').TriggerRun>(`/triggers/${encodeURIComponent(id)}/run`, { method: 'POST' });
+}
+
+export async function fetchTriggerRuns(id: string, limit = 50): Promise<import('@fleex/shared').TriggerRun[]> {
+  return request<import('@fleex/shared').TriggerRun[]>(`/triggers/${encodeURIComponent(id)}/runs?limit=${limit}`);
+}
+
 // Claude Usage API
 
 export async function fetchClaudeUsage(force = false): Promise<ClaudeUsage | null> {

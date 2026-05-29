@@ -51,6 +51,13 @@ const tabIcons: Record<SettingsTab, React.ReactNode> = {
       <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
     </svg>
   ),
+  triggers: (
+    // Clock icon
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  ),
 };
 
 const tabs: { key: SettingsTab; label: string }[] = [
@@ -60,6 +67,7 @@ const tabs: { key: SettingsTab; label: string }[] = [
   { key: 'pinned-icons', label: 'Pinned Icons' },
   { key: 'worktree-actions', label: 'Worktree Actions' },
   { key: 'agent-tokens', label: 'Agent Tokens' },
+  { key: 'triggers', label: 'Triggers' },
 ];
 
 export function SettingsNav() {
