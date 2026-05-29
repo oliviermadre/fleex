@@ -221,6 +221,20 @@ export type {
   ResolveHumanGateInput,
 } from './types/workflow.js';
 
+export type {
+  TriggerKind,
+  TriggerScheduleKind,
+  TriggerTargetType,
+  TriggerMode,
+  TriggerCronConfig,
+  TriggerConfig,
+  Trigger,
+  TriggerRunStatus,
+  TriggerRun,
+  CreateTriggerInput,
+  UpdateTriggerInput,
+} from './types/trigger.js';
+
 export type { WsChannel } from './constants.js';
 
 export {
