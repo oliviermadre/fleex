@@ -4,6 +4,7 @@ import { AgentEmptyState } from './AgentEmptyState';
 import { AgentConfigTab } from './AgentConfigTab';
 import { AgentMarkdownTab } from './AgentMarkdownTab';
 import { AgentEventsTab } from './AgentEventsTab';
+import { ModelBadge } from './ModelBadge';
 import { cn } from '../../lib/cn';
 
 const TABS = [
@@ -65,9 +66,7 @@ export function AgentPersonaView() {
           </span>
         </div>
 
-        <span className="shrink-0 rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
-          {persona.model.replace('claude-', '').replace('-4-6', ' 4.6').replace('-4-5', ' 4.5')}
-        </span>
+        <ModelBadge modelId={persona.model} size="normal" />
 
         {isRunning && (
           <div className="flex items-center gap-1.5 shrink-0">

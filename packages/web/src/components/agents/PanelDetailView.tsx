@@ -4,6 +4,7 @@ import type { ExecutionMode, PanelMember } from '@fleex/shared';
 import { usePanelStore } from '../../stores/panelStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useModels } from '../../hooks/useModels';
+import { ModelBadge } from './ModelBadge';
 import { cn } from '../../lib/cn';
 
 function PanelEmptyState() {
@@ -144,10 +145,7 @@ export function PanelDetailView() {
           </span>
         </div>
 
-        <span className="shrink-0 rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
-          {(models.find((m) => m.id === panel.orchestratorModel)?.label
-            ?? panel.orchestratorModel).replace(/^Claude /, '')}
-        </span>
+        <ModelBadge modelId={panel.orchestratorModel} size="normal" />
 
         <span className="shrink-0 truncate text-xs text-[var(--theme-text-faint)]">
           @panel:{panel.name}
