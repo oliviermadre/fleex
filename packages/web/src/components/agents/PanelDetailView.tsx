@@ -3,18 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import type { ExecutionMode, PanelMember } from '@fleex/shared';
 import { usePanelStore } from '../../stores/panelStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useModels } from '../../hooks/useModels';
+import { ModelBadge } from './ModelBadge';
 import { cn } from '../../lib/cn';
-
-const MODEL_OPTIONS = [
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-];
-
-const MEMBER_MODEL_OPTIONS = [
-  { value: 'inherited', label: 'Inherited from persona' },
-  ...MODEL_OPTIONS,
-];
 
 function PanelEmptyState() {
   return (
@@ -39,6 +30,11 @@ export function PanelDetailView() {
   const updatePanel = usePanelStore((s) => s.updatePanel);
   const deletePanel = usePanelStore((s) => s.deletePanel);
   const personas = useAgentPersonaStore((s) => s.personas);
+  const { models } = useModels();
+  const memberModelOptions = [
+    { value: 'inherited', label: 'Inherited from persona' },
+    ...models.map((m) => ({ value: m.id, label: m.label })),
+  ];
 
   const panel = panels.find((p) => p.id === selectedPanelId);
 
@@ -149,9 +145,7 @@ export function PanelDetailView() {
           </span>
         </div>
 
-        <span className="shrink-0 rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
-          {panel.orchestratorModel.replace('claude-', '').replace('-4-5', ' 4.5').replace('-4-6', ' 4.6')}
-        </span>
+        <ModelBadge modelId={panel.orchestratorModel} size="normal" />
 
         <span className="shrink-0 truncate text-xs text-[var(--theme-text-faint)]">
           @panel:{panel.name}
@@ -271,8 +265,8 @@ export function PanelDetailView() {
                 value={orchestratorModel}
                 onChange={(e) => setOrchestratorModel(e.target.value)}
               >
-                {MODEL_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                {models.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
                 ))}
               </select>
               <p className="mt-1 text-xs text-[var(--theme-text-muted)]">Model used to generate the synthesis</p>
@@ -284,8 +278,8 @@ export function PanelDetailView() {
                 value={defaultMemberModel}
                 onChange={(e) => setDefaultMemberModel(e.target.value)}
               >
-                {MODEL_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                {models.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
                 ))}
               </select>
               <p className="mt-1 text-xs text-[var(--theme-text-muted)]">Fallback model for members set to "inherited"</p>
@@ -323,7 +317,7 @@ export function PanelDetailView() {
                     value={member.modelOverride}
                     onChange={(e) => updateMemberModel(i, e.target.value)}
                   >
-                    {MEMBER_MODEL_OPTIONS.map((opt) => (
+                    {memberModelOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>

@@ -9,6 +9,7 @@ import { CreateAgentModal } from './CreateAgentModal';
 import { CreateSkillModal } from './CreateSkillModal';
 import { CreatePanelModal } from './CreatePanelModal';
 import { CreateWorkflowModal } from './CreateWorkflowModal';
+import { ModelBadge } from './ModelBadge';
 import { cn } from '../../lib/cn';
 
 export function AgentListPanel() {
@@ -140,9 +141,7 @@ export function AgentListPanel() {
                     @agent:{persona.name}
                   </div>
                 </div>
-                <span className="shrink-0 rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--theme-text-muted)]">
-                  {persona.model.replace('claude-', '').replace('-4-6', '').replace('-4-5', '')}
-                </span>
+                <ModelBadge modelId={persona.model} size="compact" />
               </button>
             );
           })

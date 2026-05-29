@@ -16,6 +16,9 @@ export { slugify } from './slugify.js';
 
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
 
+export type { ModelFamily, ModelOption, ModelsResponse } from './types/model.js';
+export { FALLBACK_MODELS } from './types/model.js';
+
 export type {
   HookEventType,
   NotificationKind,

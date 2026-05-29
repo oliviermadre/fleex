@@ -63,6 +63,22 @@ fleex status
 
 Check the status of all running instances.
 
+## Optional environment
+
+Some features rely on third-party APIs and are gracefully skipped when their
+credentials are absent.
+
+| Variable | Used for | If missing |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Dynamic discovery of available Claude models via `GET /api/models` (drives every model dropdown in the UI). | A static fallback list is served — Fleex stays usable, but new Anthropic releases won't appear until the fallback is updated in code. |
+
+Export the key in the shell that launches Fleex (`fleex start`), e.g.:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+fleex start
+```
+
 ## CLI Reference
 
 | Command | Description |

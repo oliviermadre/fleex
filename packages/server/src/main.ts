@@ -45,6 +45,8 @@ import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
+import { modelsRoutes } from './infrastructure/http/models.routes.js';
+import { ModelService } from './application/services/model.service.js';
 
 async function main() {
   const container = await createContainer();
@@ -103,6 +105,10 @@ async function main() {
   await app.register(githubImageProxyRoutes(container));
   await app.register(fileRoutes(container));
   await app.register(ticketGroupRoutes(container));
+
+  // Anthropic model discovery (cached server-side)
+  const modelService = new ModelService(container.logger);
+  await app.register(modelsRoutes(modelService));
 
   // Workflow template routes (requires workflowTemplateStore — available on sqlite/supabase)
   if (container.workflowTemplateStore) {
