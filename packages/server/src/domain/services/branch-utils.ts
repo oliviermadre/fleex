@@ -33,3 +33,12 @@ export function buildTicketWorkspaceId(title: string, ticketId: string): string 
 export function buildWorktreeDirName(repoName: string, branchName: string): string {
   return `${repoName}.${sanitizeBranchForPath(branchName)}`;
 }
+
+/**
+ * Build the workspace id for a single trigger run: `trigger-<slug>-<runShort>`.
+ * Each trigger run gets its own isolated workspace (unlike tickets, which share
+ * one workspace across runs).
+ */
+export function buildTriggerWorkspaceId(slug: string, runId: string): string {
+  return `trigger-${slug}-${runId.slice(0, 8)}`;
+}

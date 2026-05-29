@@ -44,6 +44,7 @@ import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
+import { triggerRoutes } from './infrastructure/http/trigger.routes.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
 import { modelsRoutes } from './infrastructure/http/models.routes.js';
 import { ModelService } from './application/services/model.service.js';
@@ -139,6 +140,9 @@ async function main() {
     container.logger.warn('workflowRunStore or use cases not available — /api/workflows/runs routes skipped');
   }
 
+  // Trigger routes (requires trigger stores — available on sqlite/supabase)
+  await app.register(triggerRoutes(container));
+
   // Agent API with auth
   const authHook = createAgentAuthHook(container);
   await app.register(async function (v1) {
@@ -219,6 +223,13 @@ async function main() {
     }
   });
 
+  // Start the trigger scheduler (cron/interval launchers). Tick interval is
+  // configurable via FLEEX_TRIGGER_TICK_MS (default 30s).
+  if (container.triggerScheduler) {
+    const tickMs = Number(process.env['FLEEX_TRIGGER_TICK_MS'] ?? 30_000);
+    container.triggerScheduler.start(tickMs);
+  }
+
   // Serve frontend static files in production
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const webDistPath = join(__dirname, '../../web/dist');
@@ -266,6 +277,9 @@ async function main() {
     try {
       // Stop repository refresh scheduler
       container.repositoryRefreshScheduler.stop();
+
+      // Stop trigger scheduler
+      container.triggerScheduler?.stop();
 
       // Stop WebSocket heartbeat
       heartbeat.stop();

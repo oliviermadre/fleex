@@ -303,6 +303,21 @@ export interface WorkflowRunCancelledEvent extends DomainEvent {
   ticketId: string | null;
 }
 
+// ── Trigger events ──
+
+export interface TriggerRunStartedEvent extends DomainEvent {
+  type: 'trigger.run_started';
+  triggerId: string;
+  triggerRunId: string;
+}
+
+export interface TriggerRunCompletedEvent extends DomainEvent {
+  type: 'trigger.run_completed';
+  triggerId: string;
+  triggerRunId: string;
+  status: 'running' | 'completed' | 'failed' | 'skipped';
+}
+
 // ── Worktree events ──
 
 export interface WorktreeCreatedEvent extends DomainEvent {
@@ -451,7 +466,9 @@ export type AnyDomainEvent =
   | WorkflowNeedsReviewEvent
   | WorkflowRunCompletedEvent
   | WorkflowRunFailedEvent
-  | WorkflowRunCancelledEvent;
+  | WorkflowRunCancelledEvent
+  | TriggerRunStartedEvent
+  | TriggerRunCompletedEvent;
 
 // ── Event type string union ──
 

@@ -128,6 +128,12 @@ export class PanelNameConflictError extends DomainError {
   }
 }
 
+export class TriggerNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Trigger not found: ${id}`, 'TRIGGER_NOT_FOUND');
+  }
+}
+
 export class WorkflowRunAlreadyActiveError extends DomainError {
   constructor(ticketId: string) {
     super(`A workflow run is already active on ticket ${ticketId}`, 'WORKFLOW_RUN_ALREADY_ACTIVE');

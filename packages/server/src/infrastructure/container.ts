@@ -66,6 +66,13 @@ import { ResolveHumanGateUseCase } from '../application/use-cases/resolve-human-
 import { RetryStepUseCase } from '../application/use-cases/retry-step.js';
 import { CancelWorkflowRunUseCase } from '../application/use-cases/cancel-workflow-run.js';
 import { RecoverOrphanedWorkflowStepsUseCase } from '../application/use-cases/recover-orphaned-workflow-steps.js';
+import { CreateTriggerUseCase } from '../application/use-cases/create-trigger.js';
+import { UpdateTriggerUseCase } from '../application/use-cases/update-trigger.js';
+import { DeleteTriggerUseCase } from '../application/use-cases/delete-trigger.js';
+import { RunTriggerUseCase } from '../application/use-cases/run-trigger.js';
+import { ListTriggerRunsUseCase } from '../application/use-cases/list-trigger-runs.js';
+import { RecoverOrphanedTriggerRunsUseCase } from '../application/use-cases/recover-orphaned-trigger-runs.js';
+import { TriggerScheduler } from '../domain/services/trigger-scheduler.js';
 import { GetRelevantSummariesUseCase } from '../application/use-cases/get-relevant-summaries.js';
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
@@ -124,6 +131,8 @@ export async function createContainer() {
     workflowTemplateStore,
     workflowRunStore,
     stepRunStore,
+    triggerStore,
+    triggerRunStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
 
   // Wrap stores with write-through in-memory cache (zero DB queries on 1s tick).
@@ -422,6 +431,41 @@ export async function createContainer() {
     await recoverOrphans.execute();
   }
 
+  // ── Triggers (persisted launchers) — available on the same backends as workflows ──
+  let createTrigger: CreateTriggerUseCase | null = null;
+  let updateTrigger: UpdateTriggerUseCase | null = null;
+  let deleteTrigger: DeleteTriggerUseCase | null = null;
+  let runTrigger: RunTriggerUseCase | null = null;
+  let listTriggerRuns: ListTriggerRunsUseCase | null = null;
+  let triggerScheduler: TriggerScheduler | null = null;
+
+  if (triggerStore && triggerRunStore) {
+    createTrigger = new CreateTriggerUseCase(triggerStore);
+    updateTrigger = new UpdateTriggerUseCase(triggerStore);
+    deleteTrigger = new DeleteTriggerUseCase(triggerStore);
+    listTriggerRuns = new ListTriggerRunsUseCase(triggerRunStore);
+    runTrigger = new RunTriggerUseCase({
+      triggerStore,
+      triggerRunStore,
+      resolver,
+      workflowTemplateStore,
+      createWorkflowRun,
+      executeAgent,
+      eventBus,
+      logger,
+    });
+
+    // Fail trigger runs orphaned by a previous crash before the scheduler starts.
+    await new RecoverOrphanedTriggerRunsUseCase(triggerRunStore, logger).execute();
+
+    triggerScheduler = new TriggerScheduler(triggerStore, logger);
+    const runner = runTrigger;
+    triggerScheduler.setRunner(async (claimed) => { await runner.execute(claimed); });
+    logger.info('Trigger scheduling wired', { driver });
+  } else {
+    logger.info('Triggers not available for this storage driver', { driver });
+  }
+
   const reconcileWorktree = new ReconcileWorktreeUseCase(createWorktreeUC, resolver, hostFs, bareCloneManager, git, logger);
 
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore_, namingService, logger, git, resolver, ticketStore_);
@@ -507,6 +551,14 @@ export async function createContainer() {
     resolveHumanGate,
     retryStep,
     cancelWorkflowRun,
+    triggerStore,
+    triggerRunStore,
+    createTrigger,
+    updateTrigger,
+    deleteTrigger,
+    runTrigger,
+    listTriggerRuns,
+    triggerScheduler,
     eventBus,
     remoteEventBus,
     domainEventListener,
