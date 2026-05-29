@@ -27,16 +27,21 @@ export class CreateSessionFromTicketUseCase {
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) throw new TicketNotFoundError(ticketId);
 
-    // Move ticket to doing
-    const moveDiff = ticket.moveTo('doing');
-    if (Object.keys(moveDiff).length > 0) {
-      await this.ticketStore.saveActivity(TicketActivityEntity.create({
-        id: randomUUID(),
-        ticketId: ticket.id,
-        action: 'moved',
-        changes: moveDiff,
-        source: 'web',
-      }));
+    // Move ticket to doing only when starting work (backlog/todo).
+    // Opening a session on a reviewing/done/cancelled ticket (e.g. to run
+    // review agents or re-read a merged PR) must not reopen it as doing.
+    const STARTABLE_STATUSES = ['backlog', 'todo'] as const;
+    if (STARTABLE_STATUSES.includes(ticket.status as (typeof STARTABLE_STATUSES)[number])) {
+      const moveDiff = ticket.moveTo('doing');
+      if (Object.keys(moveDiff).length > 0) {
+        await this.ticketStore.saveActivity(TicketActivityEntity.create({
+          id: randomUUID(),
+          ticketId: ticket.id,
+          action: 'moved',
+          changes: moveDiff,
+          source: 'web',
+        }));
+      }
     }
 
     // Collect repos and branch info from ticket links
