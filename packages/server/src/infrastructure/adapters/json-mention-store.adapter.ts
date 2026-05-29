@@ -50,6 +50,12 @@ export class JsonMentionStore implements MentionStorePort {
     return this.mentions.get(id) ?? null;
   }
 
+  async getByIds(ids: string[]): Promise<TicketMentionEntity[]> {
+    if (ids.length === 0) return [];
+    const idSet = new Set(ids);
+    return Array.from(this.mentions.values()).filter((m) => idSet.has(m.id));
+  }
+
   async getAll(): Promise<TicketMentionEntity[]> {
     return Array.from(this.mentions.values());
   }

@@ -82,11 +82,12 @@ export function agentEventsRoutes(container: Container) {
           request.log.error({ err }, 'executions: personaStore.getAll failed');
           return [];
         }),
-        Promise.all(
-          [...mentionIds].map((id) =>
-            container.mentionStore.getById(id).catch(() => null),
-          ),
-        ),
+        mentionIds.size > 0
+          ? container.mentionStore.getByIds([...mentionIds]).catch((err: unknown) => {
+              request.log.error({ err }, 'executions: mentionStore.getByIds failed');
+              return [];
+            })
+          : Promise.resolve([]),
         ticketIdArr.length > 0
           ? container.commentStore.getByTicketIds(ticketIdArr).catch((err: unknown) => {
               request.log.error({ err }, 'executions: commentStore.getByTicketIds failed');
@@ -128,11 +129,7 @@ export function agentEventsRoutes(container: Container) {
 
       const ticketMap = new Map(allTickets.map((t) => [t.id, t]));
       const personaMap = new Map(allPersonas.map((p) => [p.id, p]));
-      const mentionMap = new Map(
-        allMentions
-          .filter((m): m is NonNullable<typeof m> => m !== null)
-          .map((m) => [m.id, m]),
-      );
+      const mentionMap = new Map(allMentions.map((m) => [m.id, m]));
       const panelByName = new Map(allPanels.map((p) => [p.name, p]));
       const panelById = new Map(allPanels.map((p) => [p.id, p]));
       const skillById = new Map(allSkills.map((s) => [s.id, s]));

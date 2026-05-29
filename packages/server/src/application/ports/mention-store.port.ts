@@ -3,6 +3,7 @@ import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.e
 export interface MentionStorePort {
   getByTicket(ticketId: string): Promise<TicketMentionEntity[]>;
   getById(id: string): Promise<TicketMentionEntity | null>;
+  getByIds(ids: string[]): Promise<TicketMentionEntity[]>;
   getByComment(commentId: string): Promise<TicketMentionEntity[]>;
   getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]>;
   getPendingCountForTicket(ticketId: string): Promise<number>;
