@@ -73,6 +73,13 @@ function TimeRangeSelector({
 
 // ── Stat Card ──
 
+function formatTokens(n: number): string {
+  if (!n || n <= 0) return '0';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
+}
+
 function StatCard({ icon, value, label }: { icon: React.ReactNode; value: string | number; label: string }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
@@ -185,6 +192,45 @@ function TimeSeriesChart({ data }: { data: StatisticsTimeBucket[] }) {
         </div>
       </div>
       <StackedBarChart data={data} metrics={METRICS} />
+    </div>
+  );
+}
+
+// ── Token Usage Over Time (agentic vs manual) ──
+
+const TOKEN_METRICS: { key: keyof StatisticsTimeBucket; label: string; color: string }[] = [
+  { key: 'agenticInputTokens', label: 'Agentic in', color: '#f59e0b' },
+  { key: 'agenticOutputTokens', label: 'Agentic out', color: '#fbbf24' },
+  { key: 'manualInputTokens', label: 'Manual in', color: '#8b5cf6' },
+  { key: 'manualOutputTokens', label: 'Manual out', color: '#c4b5fd' },
+];
+
+function TokenUsageChart({ data }: { data: StatisticsTimeBucket[] }) {
+  const hasAny = data.some((d) =>
+    TOKEN_METRICS.some((m) => ((d[m.key] as number) ?? 0) > 0),
+  );
+
+  return (
+    <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Token Usage Over Time</h3>
+        <div className="flex gap-1.5">
+          {TOKEN_METRICS.map((m) => (
+            <span
+              key={String(m.key)}
+              className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+              style={{ backgroundColor: `${m.color}30`, color: m.color, border: `1px solid ${m.color}40` }}
+            >
+              {m.label}
+            </span>
+          ))}
+        </div>
+      </div>
+      {hasAny ? (
+        <StackedBarChart data={data} metrics={TOKEN_METRICS} />
+      ) : (
+        <p className="py-8 text-center text-xs text-[var(--theme-text-faint)]">No token usage in this range</p>
+      )}
     </div>
   );
 }
@@ -520,19 +566,30 @@ export function StatisticsView() {
               <StatCard
                 icon={<CostIcon />}
                 value={data.summary.totalCostUsd > 0 ? `$${data.summary.totalCostUsd.toFixed(2)}` : '$0'}
-                label="Total Cost"
+                label="Agentic Cost"
               />
               <StatCard
                 icon={<TokenIcon />}
-                value={data.summary.totalInputTokens + data.summary.totalOutputTokens > 0
-                  ? `${Math.round((data.summary.totalInputTokens + data.summary.totalOutputTokens) / 1000)}k`
-                  : '0'}
-                label="Total Tokens"
+                value={formatTokens(data.summary.totalInputTokens + data.summary.totalOutputTokens)}
+                label="Agentic Tokens"
+              />
+              <StatCard
+                icon={<ManualIcon />}
+                value={data.summary.manualSessionsCount}
+                label="Manual Sessions"
+              />
+              <StatCard
+                icon={<ManualIcon />}
+                value={formatTokens(data.summary.manualInputTokens + data.summary.manualOutputTokens)}
+                label="Manual Tokens"
               />
             </div>
 
             {/* Time Series */}
             <TimeSeriesChart data={data.timeSeries} />
+
+            {/* Token usage: agentic vs manual */}
+            <TokenUsageChart data={data.timeSeries} />
 
             {/* Cost Over Time */}
             <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
@@ -661,6 +718,14 @@ function TokenIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
+    </svg>
+  );
+}
+
+function ManualIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" /><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" /><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
     </svg>
   );
 }

@@ -16,6 +16,9 @@ export interface StatisticsTimeBucket {
   readonly panelsExecuted: number;
   readonly totalCostUsd: number;
   readonly costByAgent: Record<string, number>; // personaName → costUsd
+  // Token usage split by origin, so a stacked "agentic vs manual" chart can be drawn.
+  readonly agenticInputTokens: number;
+  readonly agenticOutputTokens: number;
   // Manual (human-driven Claude Code) sessions, kept separate from agentic usage.
   readonly manualSessionsCount: number;
   readonly manualInputTokens: number;
@@ -93,4 +96,26 @@ export interface PanelLeaderboardEntry {
   readonly failedCount: number;
   readonly avgDurationMs: number | null;
   readonly avgRespondedMembers: number | null;
+}
+
+/** Token/cost rollup for one origin (auto or manual) on a single ticket. */
+export interface TicketUsageBreakdown {
+  readonly executionCount: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly cacheCreationTokens: number;
+  /** USD is only known for agentic runs (SDK-reported); manual is always 0. */
+  readonly costUsd: number;
+}
+
+/**
+ * Per-ticket token usage, split auto (agent/skill/panel/workflow) vs manual.
+ * Enables avg cost per ticket, manual-vs-auto ratio, and "full-auto" share.
+ */
+export interface TicketUsage {
+  readonly ticketId: string;
+  readonly auto: TicketUsageBreakdown;
+  readonly manual: TicketUsageBreakdown;
+  readonly total: TicketUsageBreakdown;
 }

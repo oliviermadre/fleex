@@ -188,6 +188,8 @@ export type {
   PanelLeaderboardEntry,
   StatisticsSummary,
   StatisticsResponse,
+  TicketUsage,
+  TicketUsageBreakdown,
 } from './types/statistics.js';
 
 export {

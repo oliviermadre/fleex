@@ -4,6 +4,7 @@ import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import type { StepRunEntity } from '../../domain/entities/step-run.entity.js';
 import type { Container } from '../container.js';
+import { aggregateTicketUsage } from '../../application/utils/aggregate-ticket-usage.js';
 
 const VALID_STATUSES = new Set<AgentExecution['status']>(['running', 'completed', 'failed', 'interrupted']);
 const VALID_TYPES = new Set<ExecutionLogEntry['type']>(['agent', 'panel', 'skill', 'workflow']);
@@ -576,6 +577,15 @@ export function agentEventsRoutes(container: Container) {
       '/api/tickets/:id/executions',
       async (request) => {
         return container.agentEventStore.getExecutionsByTicket(request.params.id);
+      },
+    );
+
+    // GET /api/tickets/:id/usage — token/cost rollup, split auto vs manual
+    app.get<{ Params: { id: string } }>(
+      '/api/tickets/:id/usage',
+      async (request) => {
+        const executions = await container.agentEventStore.getExecutionsByTicket(request.params.id);
+        return aggregateTicketUsage(request.params.id, executions);
       },
     );
 

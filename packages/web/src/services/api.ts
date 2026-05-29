@@ -18,6 +18,7 @@ import type {
   AgentEvent,
   DomainEventLog,
   StatisticsResponse,
+  TicketUsage,
   DashboardData,
   TicketGroup,
   CreateTicketGroupRequest,
@@ -637,6 +638,10 @@ export async function fetchExecutionsForPersona(personaId: string, limit = 50): 
 
 export async function fetchExecutionsForTicket(ticketId: string): Promise<AgentExecution[]> {
   return request<AgentExecution[]>(`/tickets/${ticketId}/executions`);
+}
+
+export async function fetchTicketUsage(ticketId: string): Promise<TicketUsage> {
+  return request<TicketUsage>(`/tickets/${encodeURIComponent(ticketId)}/usage`);
 }
 
 export async function fetchEventsForExecution(executionId: string): Promise<AgentEvent[]> {

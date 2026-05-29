@@ -187,6 +187,8 @@ export class GetStatisticsUseCase {
           }
           return byAgent;
         })(),
+        agenticInputTokens: bAgentic.reduce((sum, e) => sum + (e.inputTokens ?? 0), 0),
+        agenticOutputTokens: bAgentic.reduce((sum, e) => sum + (e.outputTokens ?? 0), 0),
         manualSessionsCount: bManual.length,
         manualInputTokens: bManual.reduce((sum, e) => sum + (e.inputTokens ?? 0), 0),
         manualOutputTokens: bManual.reduce((sum, e) => sum + (e.outputTokens ?? 0), 0),

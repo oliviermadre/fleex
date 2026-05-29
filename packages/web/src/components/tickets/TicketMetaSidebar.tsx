@@ -15,6 +15,7 @@ import { TicketTypeIcon, TYPE_ICONS, TYPE_COLORS } from './TicketTypeBadge';
 import { DueDateBadge } from './DueDateBadge';
 import { DueDatePickerPopover } from './DueDatePickerPopover';
 import { EpicPicker } from './EpicPicker';
+import { TicketUsageSection } from './TicketUsageSection';
 import { cn } from '../../lib/cn';
 
 // ── Collapsed sidebar tooltip (portal-based, appears to the LEFT) ──
@@ -631,6 +632,9 @@ function ExpandedTicketMetaSidebar({
       {ticket.githubMetadata && (
         <GitHubMetadataSection metadata={ticket.githubMetadata} />
       )}
+
+      {/* Usage & Cost (auto vs manual) */}
+      <TicketUsageSection ticketId={ticket.id} />
 
       {/* Repository & Worktree */}
       <RepoWorktreePicker
