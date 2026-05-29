@@ -10,6 +10,7 @@
     "packages/cli"
   ],
   "scripts": {
+    "postinstall": "cd packages/shared && bun run build",
     "dev": "trap 'kill 0' INT; bun run dev:gateway & bun run dev:server & bun run dev:web & wait",
     "dev:server": "cd packages/server && bun run dev",
     "dev:web": "cd packages/web && bun run dev",
