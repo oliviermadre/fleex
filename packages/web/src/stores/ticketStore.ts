@@ -287,23 +287,23 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       filtered = filtered.filter((t) => t.type === filters.type);
     }
 
-    // Has session filter (mirrors badge logic in KanbanCard)
+    // Has session filter (mirrors badge logic in KanbanCard).
+    // Derived from currently-running sessions matching the ticket's repo/branch —
+    // there is no persisted session link anymore.
     if (filters.hasSession !== null) {
       const runningSessions = useSessionStore.getState().sessions;
       filtered = filtered.filter((t) => {
-        let has = t.links.some((l: TicketLink) => l.type === 'session');
-        if (!has) {
-          const repoInfo = getTicketRepoWorktreeInfo(t);
-          if (repoInfo) {
-            const [org, name] = repoInfo.repo.split('/');
-            has = runningSessions.some(
-              (s) =>
-                s.status === 'running' &&
-                s.repositoryOrg === org &&
-                s.repositoryName === name &&
-                s.worktreeBranch === repoInfo.branch,
-            );
-          }
+        let has = false;
+        const repoInfo = getTicketRepoWorktreeInfo(t);
+        if (repoInfo) {
+          const [org, name] = repoInfo.repo.split('/');
+          has = runningSessions.some(
+            (s) =>
+              s.status === 'running' &&
+              s.repositoryOrg === org &&
+              s.repositoryName === name &&
+              s.worktreeBranch === repoInfo.branch,
+          );
         }
         return filters.hasSession ? has : !has;
       });

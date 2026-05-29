@@ -128,9 +128,8 @@ export class CreateSessionFromTicketUseCase {
       displayName: `ticket-${ticketShortId}-session`,
     });
 
-    // Auto-link session to ticket
-    ticket.addLink('session', session.id, session.tmuxName, null, randomUUID());
-
+    // The session↔ticket relationship is resolved from the workspace's `.fleex.json`
+    // manifest (walk-up from the session cwd), so no explicit link is persisted here.
     await this.ticketStore.saveTicket(ticket);
     await this.ticketStore.saveActivity(TicketActivityEntity.create({
       id: randomUUID(),
