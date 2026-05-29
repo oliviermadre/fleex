@@ -19,6 +19,7 @@ describe('AutoReviewWorkflowUseCase', () => {
     mentionStore = {
       getByTicket: vi.fn(),
       getById: vi.fn(),
+      getByIds: vi.fn(),
       getByComment: vi.fn(),
       getPendingForAgent: vi.fn(),
       getPendingCountForTicket: vi.fn(),

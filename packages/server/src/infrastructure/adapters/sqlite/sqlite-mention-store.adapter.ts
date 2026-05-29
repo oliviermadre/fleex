@@ -35,6 +35,15 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
     return row ? this.toEntity(row) : null;
   }
 
+  async getByIds(ids: string[]): Promise<TicketMentionEntity[]> {
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = this.conn.db
+      .prepare(`SELECT * FROM mentions WHERE id IN (${placeholders})`)
+      .all(...ids) as MentionRow[];
+    return rows.map((r) => this.toEntity(r));
+  }
+
   async getAll(): Promise<TicketMentionEntity[]> {
     const rows = this.conn.db
       .prepare('SELECT * FROM mentions ORDER BY created_at ASC')
