@@ -3,7 +3,7 @@ import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { FLEEX_DIR } from '@fleex/shared';
-import type { AgentExecution } from '@fleex/shared';
+import type { AgentExecution, ExecutionSource } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort } from '../../../application/ports/agent-event-store.port.js';
 import type { SupabaseConnection } from './connection.js';
@@ -27,6 +27,7 @@ interface ExecutionRow {
   output_tokens: number | null;
   cache_read_tokens: number | null;
   cache_creation_tokens: number | null;
+  source: string | null;
 }
 
 export class SupabaseAgentEventStore implements AgentEventStorePort {
@@ -47,6 +48,7 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    source?: ExecutionSource;
   }): Promise<void> {
     const { error } = await this.conn.client.from('agent_event_executions').insert({
       execution_id: params.executionId,
@@ -56,6 +58,7 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       event_count: 0,
       status: 'running',
       started_at: new Date().toISOString(),
+      source: params.source ?? 'agent',
     });
     if (error) throw new Error(`SupabaseAgentEventStore.startExecution failed: ${error.message}`);
   }
@@ -221,5 +224,6 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     outputTokens: row.output_tokens ?? null,
     cacheReadTokens: row.cache_read_tokens ?? null,
     cacheCreationTokens: row.cache_creation_tokens ?? null,
+    source: (row.source as AgentExecution['source']) ?? 'agent',
   };
 }

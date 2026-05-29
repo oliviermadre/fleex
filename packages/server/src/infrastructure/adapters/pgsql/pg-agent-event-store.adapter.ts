@@ -3,7 +3,7 @@ import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { FLEEX_DIR } from '@fleex/shared';
-import type { AgentExecution } from '@fleex/shared';
+import type { AgentExecution, ExecutionSource } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort } from '../../../application/ports/agent-event-store.port.js';
 import type { PgConnection } from './connection.js';
@@ -26,12 +26,13 @@ export class PgAgentEventStore implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    source?: ExecutionSource;
   }): Promise<void> {
     await this.db.query(
       `INSERT INTO agent_event_executions
-        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at)
-       VALUES ($1, $2, $3, $4, 0, 'running', $5)`,
-      [params.executionId, params.personaId, params.ticketId, params.mentionId, new Date().toISOString()],
+        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, source)
+       VALUES ($1, $2, $3, $4, 0, 'running', $5, $6)`,
+      [params.executionId, params.personaId, params.ticketId, params.mentionId, new Date().toISOString(), params.source ?? 'agent'],
     );
   }
 
@@ -167,5 +168,6 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     outputTokens: (row.output_tokens as number) ?? null,
     cacheReadTokens: (row.cache_read_tokens as number) ?? null,
     cacheCreationTokens: (row.cache_creation_tokens as number) ?? null,
+    source: (row.source as AgentExecution['source']) ?? 'agent',
   };
 }

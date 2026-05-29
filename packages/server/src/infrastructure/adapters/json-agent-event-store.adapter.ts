@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { FLEEX_DIR } from '@fleex/shared';
-import type { AgentExecution } from '@fleex/shared';
+import type { AgentExecution, ExecutionSource } from '@fleex/shared';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort } from '../../application/ports/agent-event-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -25,6 +25,7 @@ interface ExecutionIndex {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
+  source?: ExecutionSource;
 }
 
 export class JsonAgentEventStore implements AgentEventStorePort {
@@ -56,6 +57,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    source?: ExecutionSource;
   }): Promise<void> {
     const entry: ExecutionIndex = {
       id: params.executionId,
@@ -67,6 +69,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       startedAt: new Date().toISOString(),
       completedAt: null,
       lastEventAt: null,
+      source: params.source ?? 'agent',
     };
     this.index.push(entry);
     await this.syncIndex();
@@ -204,6 +207,15 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       completedAt: entry.completedAt,
       lastEventAt: entry.lastEventAt ?? null,
       sdkSessionId: entry.sdkSessionId,
+      model: entry.model ?? null,
+      effectiveMode: entry.effectiveMode ?? null,
+      durationMs: entry.durationMs ?? null,
+      costUsd: entry.costUsd ?? null,
+      inputTokens: entry.inputTokens ?? null,
+      outputTokens: entry.outputTokens ?? null,
+      cacheReadTokens: entry.cacheReadTokens ?? null,
+      cacheCreationTokens: entry.cacheCreationTokens ?? null,
+      source: entry.source ?? 'agent',
     };
   }
 

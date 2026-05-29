@@ -28,6 +28,7 @@ import { ReconcileWorktreeUseCase } from '../application/use-cases/reconcile-wor
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
 import { ProcessHookEventUseCase } from '../application/use-cases/process-hook-event.js';
+import { ProcessSessionEndUseCase } from '../application/use-cases/process-session-end.js';
 import type { PgUserStore } from './adapters/pg-user-store.adapter.js';
 import type { SessionManager } from './auth/session-manager.js';
 import type { SupabaseUserStore } from './adapters/supabase/supabase-user-store.adapter.js';
@@ -72,8 +73,10 @@ import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
+import { SdkSessionSummarizer } from './adapters/sdk-session-summarizer.adapter.js';
 import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
 import { DomainEventLogEntity } from '../domain/entities/domain-event-log.entity.js';
+import type { SessionEndedEvent } from '../domain/events.js';
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
 import { CachedSessionStore } from './adapters/cached-session-store.js';
 import { CachedTicketStore } from './adapters/cached-ticket-store.js';
@@ -220,6 +223,19 @@ export async function createContainer() {
   const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore_);
   const getTicketContext = new GetTicketContextUseCase(ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore);
 
+  // SessionEnd reconciliation: tally manual-session token cost + store a summary.
+  const sessionSummarizer = new SdkSessionSummarizer(logger);
+  const processSessionEnd = new ProcessSessionEndUseCase(
+    resolver,
+    ticketStore_,
+    agentEventStore_,
+    claudeState,
+    sessionSummarizer,
+    submitDeliverable,
+    hostFs,
+    logger,
+  );
+
   // Agent personas use cases
   const createPersona = new CreatePersonaUseCase(personaStore_, logger);
   const updatePersona = new UpdatePersonaUseCase(personaStore_, logger);
@@ -345,6 +361,17 @@ export async function createContainer() {
       occurredAt: event.occurredAt,
     });
     return domainEventLogStore.save(entry);
+  });
+
+  // Background handler: an ended Claude Code session → reconcile ticket from cwd,
+  // tally manual token cost, store an LLM summary. Fire-and-forget; never blocks.
+  eventBus.on('session.ended', async (event) => {
+    const e = event as SessionEndedEvent;
+    await processSessionEnd.execute({
+      cwd: e.cwd,
+      transcriptPath: e.transcriptPath,
+      claudeSessionId: e.claudeSessionId,
+    });
   });
 
   // Wire eventBus + config (avoids circular constructor dep)

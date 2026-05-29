@@ -16,6 +16,10 @@ export interface StatisticsTimeBucket {
   readonly panelsExecuted: number;
   readonly totalCostUsd: number;
   readonly costByAgent: Record<string, number>; // personaName → costUsd
+  // Manual (human-driven Claude Code) sessions, kept separate from agentic usage.
+  readonly manualSessionsCount: number;
+  readonly manualInputTokens: number;
+  readonly manualOutputTokens: number;
 }
 
 export interface AgentLeaderboardEntry {
@@ -54,6 +58,10 @@ export interface StatisticsSummary {
   readonly totalCostUsd: number;
   readonly totalInputTokens: number;
   readonly totalOutputTokens: number;
+  // Manual (human-driven Claude Code) sessions, kept separate from agentic usage above.
+  readonly manualSessionsCount: number;
+  readonly manualInputTokens: number;
+  readonly manualOutputTokens: number;
 }
 
 export interface StatisticsResponse {

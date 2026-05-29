@@ -448,6 +448,7 @@ export class ExecuteAgentUseCase {
         personaId: persona.id,
         ticketId: mention.ticketId,
         mentionId: mention.id,
+        source: 'agent',
       });
 
       // 4. Compose system prompt from persona files
@@ -1075,6 +1076,7 @@ export class ExecuteAgentUseCase {
       personaId: persona.id,
       ticketId,
       mentionId: startMentionId,
+      source: opts?.workflowContext ? 'workflow' : 'skill',
     });
 
     // 4. Compose prompts
@@ -1480,6 +1482,7 @@ export class ExecuteAgentUseCase {
     // Start tracking
     await this.agentEventStore.startExecution({
       executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: `workflow:${executionId}`,
+      source: 'workflow',
     });
 
     // Compose prompts

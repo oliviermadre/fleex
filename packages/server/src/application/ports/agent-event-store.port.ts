@@ -1,4 +1,4 @@
-import type { AgentExecution } from '@fleex/shared';
+import type { AgentExecution, ExecutionSource } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 
 export interface AgentEventStorePort {
@@ -7,6 +7,8 @@ export interface AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    /** Defaults to 'agent'. Use 'manual' for human-driven Claude Code sessions. */
+    source?: ExecutionSource;
   }): Promise<void>;
 
   appendEvent(event: AgentEventEntity): Promise<void>;

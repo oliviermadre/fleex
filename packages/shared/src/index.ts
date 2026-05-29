@@ -148,6 +148,7 @@ export type {
 
 export type {
   AgentExecution,
+  ExecutionSource,
   AgentEventType,
   AgentEvent,
   AgentEventWsMessageType,

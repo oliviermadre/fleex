@@ -73,6 +73,10 @@ export class GetStatisticsUseCase {
     const filteredMentions = mentions.filter((m) => inRange(m.toDTO().createdAt));
     const filteredDeliverables = deliverables.filter((d) => inRange(d.toDTO().createdAt));
     const filteredExecutions = executions.filter((e) => inRange(e.startedAt));
+    // Split agentic (agent/skill/panel/workflow) from manual (human-driven Claude Code)
+    // sessions so consumption can be reported separately.
+    const agenticExecutions = filteredExecutions.filter((e) => e.source !== 'manual');
+    const manualExecutions = filteredExecutions.filter((e) => e.source === 'manual');
     const filteredSessions = sessions.filter((s) => inRange(s.createdAt.toISOString()));
 
     // Compute summary
@@ -92,20 +96,20 @@ export class GetStatisticsUseCase {
     const agentComments = filteredComments.filter((c) => c.toDTO().authorType === 'agent');
     const resolvedMentions = filteredMentions.filter((m) => m.toDTO().status === 'resolved');
 
-    const durations = filteredExecutions
+    const durations = agenticExecutions
       .filter((e) => e.completedAt)
       .map((e) => new Date(e.completedAt!).getTime() - new Date(e.startedAt).getTime());
     const avgDuration = durations.length > 0
       ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
       : null;
 
-    const skillExecutions = filteredExecutions.filter((e) => e.mentionId.startsWith('skill:'));
+    const skillExecutions = agenticExecutions.filter((e) => e.mentionId.startsWith('skill:'));
 
     const summary: StatisticsSummary = {
       worktreesCreated: worktreeSessions.length,
       prsCreated: prLinks.length,
       prsMerged: mergedTickets.length,
-      agentsSpawned: filteredExecutions.length,
+      agentsSpawned: agenticExecutions.length,
       avgAgentDurationMs: avgDuration,
       deliverablesCreated: filteredDeliverables.length,
       commentsCreated: filteredComments.length,
@@ -117,13 +121,16 @@ export class GetStatisticsUseCase {
       ticketsCompleted: completedTickets.length,
       skillsExecuted: skillExecutions.length,
       panelsExecuted: 0, // Will be updated after panel events are fetched
-      totalCostUsd: filteredExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
-      totalInputTokens: filteredExecutions.reduce((sum, e) => sum + (e.inputTokens ?? 0), 0),
-      totalOutputTokens: filteredExecutions.reduce((sum, e) => sum + (e.outputTokens ?? 0), 0),
+      totalCostUsd: agenticExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
+      totalInputTokens: agenticExecutions.reduce((sum, e) => sum + (e.inputTokens ?? 0), 0),
+      totalOutputTokens: agenticExecutions.reduce((sum, e) => sum + (e.outputTokens ?? 0), 0),
       activeSessions: sessions.filter((s) => {
         const dto = s as unknown as Record<string, unknown>;
         return dto.status === 'active' || dto.status === 'running';
       }).length,
+      manualSessionsCount: manualExecutions.length,
+      manualInputTokens: manualExecutions.reduce((sum, e) => sum + (e.inputTokens ?? 0), 0),
+      manualOutputTokens: manualExecutions.reduce((sum, e) => sum + (e.outputTokens ?? 0), 0),
     };
 
     // Persona lookup (used by time series + leaderboard)
@@ -144,6 +151,8 @@ export class GetStatisticsUseCase {
       const bMentions = filteredMentions.filter((m) => inBucket(m.toDTO().createdAt));
       const bDeliverables = filteredDeliverables.filter((d) => inBucket(d.toDTO().createdAt));
       const bExecutions = filteredExecutions.filter((e) => inBucket(e.startedAt));
+      const bAgentic = bExecutions.filter((e) => e.source !== 'manual');
+      const bManual = bExecutions.filter((e) => e.source === 'manual');
       const bSessions = filteredSessions.filter((s) => inBucket(s.createdAt.toISOString()));
 
       return {
@@ -156,7 +165,7 @@ export class GetStatisticsUseCase {
           t.toDTO().links.filter((l: TicketLink) => l.type === 'github_pr'),
         ).length,
         prsMerged: 0, // Approximation: merge detection is event-based
-        agentsSpawned: bExecutions.length,
+        agentsSpawned: bAgentic.length,
         deliverablesCreated: bDeliverables.length,
         commentsCreated: bComments.length,
         commentsCreatedByUser: bComments.filter((c) => c.toDTO().authorType === 'user').length,
@@ -165,12 +174,12 @@ export class GetStatisticsUseCase {
         mentionsResolved: bMentions.filter((m) => m.toDTO().status === 'resolved').length,
         ticketsCreated: bTickets.length,
         ticketsCompleted: bTickets.filter((t) => t.toDTO().status === 'done').length,
-        skillsExecuted: bExecutions.filter((e) => e.mentionId.startsWith('skill:')).length,
+        skillsExecuted: bAgentic.filter((e) => e.mentionId.startsWith('skill:')).length,
         panelsExecuted: 0, // Panel events are in domain log, not in agent executions
-        totalCostUsd: bExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
+        totalCostUsd: bAgentic.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
         costByAgent: (() => {
           const byAgent: Record<string, number> = {};
-          for (const e of bExecutions) {
+          for (const e of bAgentic) {
             if (e.costUsd == null || e.costUsd === 0) continue;
             const p = personaMap.get(e.personaId);
             const name = p?.displayName ?? p?.name ?? e.personaId;
@@ -178,12 +187,15 @@ export class GetStatisticsUseCase {
           }
           return byAgent;
         })(),
+        manualSessionsCount: bManual.length,
+        manualInputTokens: bManual.reduce((sum, e) => sum + (e.inputTokens ?? 0), 0),
+        manualOutputTokens: bManual.reduce((sum, e) => sum + (e.outputTokens ?? 0), 0),
       };
     });
 
-    // Compute agent leaderboard
+    // Compute agent leaderboard (agentic executions only — manual sessions have no persona)
     const execByPersona = new Map<string, AgentExecution[]>();
-    for (const exec of filteredExecutions) {
+    for (const exec of agenticExecutions) {
       const list = execByPersona.get(exec.personaId) ?? [];
       list.push(exec);
       execByPersona.set(exec.personaId, list);

@@ -1,4 +1,4 @@
-import type { AgentExecution } from '@fleex/shared';
+import type { AgentExecution, ExecutionSource } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort } from '../../application/ports/agent-event-store.port.js';
 
@@ -56,6 +56,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    source?: ExecutionSource;
   }): Promise<void> {
     await this.inner.startExecution(params);
     this.executions.set(params.executionId, {
@@ -77,6 +78,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
       outputTokens: null,
       cacheReadTokens: null,
       cacheCreationTokens: null,
+      source: params.source ?? 'agent',
     });
   }
 

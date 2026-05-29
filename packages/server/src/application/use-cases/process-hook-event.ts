@@ -51,6 +51,21 @@ export class ProcessHookEventUseCase {
       return { matched: false, sessionsTouched: 0, observedOnly: true, decisions: [] };
     }
 
+    // SessionEnd → emit a domain event so a background handler can reconcile the
+    // ticket from the cwd (via the `.fleex.json` manifest), tally token cost, and
+    // store a summary. Emitted independently of fleex session matching because a
+    // purely manual session may have no SessionEntity at all.
+    if (event.event === 'sessionEnd') {
+      const payload = event.payload ?? {};
+      this.eventBus.emit({
+        type: 'session.ended',
+        cwd: event.cwd,
+        transcriptPath: typeof payload['transcript_path'] === 'string' ? (payload['transcript_path'] as string) : null,
+        claudeSessionId: typeof payload['session_id'] === 'string' ? (payload['session_id'] as string) : null,
+        occurredAt: new Date(),
+      });
+    }
+
     const allSessions = await this.sessionStore.getAll();
     const matched = allSessions.filter((s) => isCwdMatch(event.cwd, s.cwd));
     if (matched.length === 0) {

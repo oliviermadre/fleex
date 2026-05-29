@@ -547,6 +547,7 @@ export class RunPanelUseCase {
       personaId: persona.id,
       ticketId,
       mentionId,
+      source: 'panel',
     });
 
     const startEvent = AgentEventEntity.create({
@@ -705,6 +706,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
       personaId: orchestratorPersonaId,
       ticketId,
       mentionId,
+      source: 'panel',
     });
 
     // Broadcast orchestrator start so the Execution Log can show it live.

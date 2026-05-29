@@ -342,6 +342,19 @@ export interface SessionHookStatusChangedEvent extends DomainEvent {
   waitingReason: string | null;
 }
 
+/**
+ * A Claude Code session ended (SessionEnd hook). Carries the cwd and transcript
+ * path so a background handler can reconcile the ticket (via the workspace
+ * `.fleex.json` manifest), tally token cost, and store a summary deliverable.
+ * Not tied to a fleex SessionEntity — fires for purely manual sessions too.
+ */
+export interface SessionEndedEvent extends DomainEvent {
+  type: 'session.ended';
+  cwd: string;
+  transcriptPath: string | null;
+  claudeSessionId: string | null;
+}
+
 // ── Ticket Group events ──
 
 export interface TicketGroupCreatedEvent extends DomainEvent {
@@ -436,6 +449,7 @@ export type AnyDomainEvent =
   | SessionRenamedEvent
   | SessionKilledEvent
   | SessionHookStatusChangedEvent
+  | SessionEndedEvent
   | TicketGroupCreatedEvent
   | TicketGroupUpdatedEvent
   | TicketGroupDeletedEvent

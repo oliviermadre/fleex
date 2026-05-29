@@ -1,3 +1,10 @@
+/**
+ * Where an execution came from. Distinguishes manually-run Claude Code sessions
+ * (no persona/mention) from fleex-orchestrated agentic runs, so cost/usage can be
+ * split in statistics.
+ */
+export type ExecutionSource = 'agent' | 'skill' | 'panel' | 'workflow' | 'manual';
+
 export interface AgentExecution {
   readonly id: string;
   readonly personaId: string;
@@ -17,6 +24,8 @@ export interface AgentExecution {
   readonly outputTokens?: number | null;
   readonly cacheReadTokens?: number | null;
   readonly cacheCreationTokens?: number | null;
+  /** Defaults to 'agent' for rows created before source tracking existed. */
+  readonly source?: ExecutionSource | null;
 }
 
 export type AgentEventType =
