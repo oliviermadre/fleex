@@ -11,6 +11,11 @@ import { BareCloneManager } from '../application/services/bare-clone-manager.js'
 import { OverlayManager } from '../application/services/overlay-manager.js';
 import { EventBus } from '../application/event-bus.js';
 import { DomainEventListener } from '../application/domain-event-listener.js';
+import { RemoteDomainEventListener } from '../application/remote-domain-event-listener.js';
+import { HubClient } from './hub/hub-client.js';
+import { HubEventPublisher } from './hub/hub-event-publisher.adapter.js';
+import { NullHubEventPublisher } from './hub/null-hub-event-publisher.js';
+import type { HubEventPublisherPort } from '../application/ports/hub-event-publisher.port.js';
 import { CreateSessionUseCase } from '../application/use-cases/create-session.js';
 import { ListSessionsUseCase } from '../application/use-cases/list-sessions.js';
 import { KillSessionUseCase } from '../application/use-cases/kill-session.js';
@@ -74,6 +79,7 @@ import { CachedSessionStore } from './adapters/cached-session-store.js';
 import { CachedTicketStore } from './adapters/cached-ticket-store.js';
 import { CachedPersonaStore } from './adapters/cached-persona-store.js';
 import { CachedAgentEventStore } from './adapters/cached-agent-event-store.js';
+import { isRemoteCacheSync, type RemoteCacheSync } from '../application/ports/remote-cache-sync.port.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 
@@ -130,6 +136,13 @@ export async function createContainer() {
   await personaStore_.warmUp();
   const agentEventStore_ = new CachedAgentEventStore(agentEventStore);
   await agentEventStore_.warmUp();
+
+  // Caches that can re-sync themselves from shared storage when a sibling
+  // instance's write arrives over the hub. Any cache implementing
+  // RemoteCacheSync is picked up automatically — see onRemoteEvent below.
+  const remoteCaches: RemoteCacheSync[] = [sessionStore_, ticketStore_, personaStore_, agentEventStore_].filter(
+    isRemoteCacheSync,
+  );
 
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
@@ -231,7 +244,18 @@ export async function createContainer() {
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
   // Domain event bus
+  // Two buses to support multi-instance fan-out without duplicating side-effects:
+  //   - eventBus: events emitted by THIS server's use-cases. Carries side-effects
+  //     (auto-trigger, auto-review, etc.) AND broadcasts to local WS clients AND
+  //     publishes to the hub.
+  //   - remoteEventBus: events received FROM the hub (other servers). Carries
+  //     broadcasts only — never side-effects, never re-audited, never re-published.
   const eventBus = new EventBus();
+  const remoteEventBus = new EventBus();
+
+  // Unique per-process server identifier — used to filter our own events on the hub fan-out.
+  const serverId = process.env['FLEEX_INSTANCE_ID'] ?? randomUUID();
+
   const domainEventListener = new DomainEventListener({
     eventBus,
     personaStore: personaStore_,
@@ -249,7 +273,60 @@ export async function createContainer() {
   });
   domainEventListener.register();
 
-  // Persist all domain events to the audit trail.
+  // Remote listener — only broadcasts UI updates from events received via the hub.
+  // It SHARES the BroadcastRegistrar instance with the local listener so that
+  // setTicketBroadcast / setPersonaBroadcast / setSkillBroadcast (called by WS
+  // plugins on `domainEventListener`) also affect remote events.
+  const remoteDomainEventListener = new RemoteDomainEventListener(
+    remoteEventBus,
+    domainEventListener.getBroadcastRegistrar(),
+  );
+  remoteDomainEventListener.register();
+
+  // Hub wiring — active only when FLEEX_EVENT_HUB_URL is set. Works with any
+  // storage driver (cloud mode with Supabase/PgSQL, but also local dev with
+  // SQLite when two instances share ~/.fleex/fleex.db via main + worktree).
+  let hubClient: HubClient | null = null;
+  let hubPublisher: HubEventPublisherPort = new NullHubEventPublisher();
+  const hubUrl = process.env['FLEEX_EVENT_HUB_URL'];
+  if (hubUrl) {
+    hubClient = new HubClient({
+      url: hubUrl,
+      token: process.env['FLEEX_EVENT_HUB_TOKEN'],
+      serverId,
+      logger,
+      onRemoteEvent: async (e) => {
+        // Re-sync write-through caches from shared storage BEFORE dispatching,
+        // so downstream listeners (UI broadcasts) read the sibling's write
+        // rather than our stale cache. Failures must not block the broadcast.
+        for (const cache of remoteCaches) {
+          try {
+            await cache.applyRemoteEvent(e);
+          } catch (err) {
+            logger.warn('Remote cache sync failed', {
+              eventType: e.type,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        remoteEventBus.emit(e);
+      },
+    });
+    hubClient.start();
+    hubPublisher = new HubEventPublisher(hubClient);
+    logger.info('Event hub configured', { url: hubUrl, serverId });
+  } else {
+    logger.info('Event hub disabled (FLEEX_EVENT_HUB_URL not set) — running single-instance');
+  }
+
+  // Publish every locally-emitted event to the hub (no-op if hub disabled).
+  // The publisher itself filters HUB_SHARED_EXCLUDED — session/worktree events
+  // reference process-local resources (PTYs, host paths) and have no meaning
+  // on other instances.
+  eventBus.on('*', (event) => hubPublisher.publish(event));
+
+  // Persist all domain events to the audit trail (originator only — remoteEventBus
+  // is NOT audited so each event keeps a single audit row across the cluster).
   // Events listed here are intentionally excluded — they are high-frequency,
   // ephemeral signals (driven by Claude Code hooks) whose source of truth is
   // already the corresponding entity row. Persisting them would also create
@@ -431,7 +508,11 @@ export async function createContainer() {
     retryStep,
     cancelWorkflowRun,
     eventBus,
+    remoteEventBus,
     domainEventListener,
+    remoteDomainEventListener,
+    hubClient,
+    serverId,
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     agentBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     personaBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

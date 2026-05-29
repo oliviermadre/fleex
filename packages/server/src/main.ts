@@ -249,23 +249,48 @@ async function main() {
   }
 
   // Graceful shutdown
-  const shutdown = async () => {
-    container.logger.info('Shutting down server...');
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    container.logger.info('Shutting down server...', { signal });
 
-    // Stop repository refresh scheduler
-    container.repositoryRefreshScheduler.stop();
+    // Watchdog: if a clean shutdown stalls, force the process out so we never
+    // leave an orphaned worker reconnecting to the hub forever.
+    const forceExit = setTimeout(() => {
+      container.logger.warn('Shutdown timed out — forcing exit');
+      process.exit(1);
+    }, 5000);
+    forceExit.unref();
 
-    // Stop WebSocket heartbeat
-    heartbeat.stop();
+    try {
+      // Stop repository refresh scheduler
+      container.repositoryRefreshScheduler.stop();
 
-    // Close Fastify server
-    await app.close();
+      // Stop WebSocket heartbeat
+      heartbeat.stop();
 
-    container.logger.info('Server shutdown complete');
+      // Close the hub client — releases its reconnect + ping timers, which
+      // otherwise keep the event loop (and the process) alive indefinitely.
+      container.hubClient?.close();
+
+      // Close Fastify server
+      await app.close();
+
+      container.logger.info('Server shutdown complete');
+    } catch (err) {
+      container.logger.error('Error during shutdown', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      clearTimeout(forceExit);
+      // Explicit exit: any lingering handle would otherwise keep us running.
+      process.exit(0);
+    }
   };
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
 }
 
 main().catch(console.error);

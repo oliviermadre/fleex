@@ -3,13 +3,15 @@ import type { BoardEntity } from '../../domain/entities/board.entity.js';
 import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
+import type { RemoteCacheSync } from '../../application/ports/remote-cache-sync.port.js';
+import type { AnyDomainEvent } from '../../domain/events.js';
 
 /**
  * Write-through in-memory cache over any TicketStorePort.
  * Hot path (getAll, getById, getByBoard) never touches the DB.
  * Activity queries still go to the inner store (infrequent, not on hot path).
  */
-export class CachedTicketStore implements TicketStorePort {
+export class CachedTicketStore implements TicketStorePort, RemoteCacheSync {
   private tickets = new Map<string, TicketEntity>();
   private boards = new Map<string, BoardEntity>();
   private warmedUp = false;
@@ -30,6 +32,35 @@ export class CachedTicketStore implements TicketStorePort {
 
   private async ensureWarmed(): Promise<void> {
     if (!this.warmedUp) await this.warmUp();
+  }
+
+  // ── Cross-instance cache coherence (RemoteCacheSync) ──
+  // A sibling instance wrote tickets/boards to the shared store and forwarded
+  // the event over the hub. Our write-through cache never saw that write, so we
+  // re-read the touched entity from source (updating or evicting the entry)
+  // before the event is broadcast to UI clients.
+
+  async applyRemoteEvent(event: AnyDomainEvent): Promise<void> {
+    // Only the entity's own events mutate it. comment/mention/deliverable
+    // events also carry a ticketId, but as a reference — the ticket itself is
+    // unchanged, so re-reading it would be a wasted query.
+    if (event.type.startsWith('ticket.') && 'ticketId' in event) {
+      await this.refreshTicket((event as { ticketId: string }).ticketId);
+    } else if (event.type.startsWith('board.') && 'boardId' in event) {
+      await this.refreshBoard((event as { boardId: string }).boardId);
+    }
+  }
+
+  private async refreshTicket(id: string): Promise<void> {
+    const fresh = await this.inner.getTicketById(id);
+    if (fresh) this.tickets.set(id, fresh);
+    else this.tickets.delete(id);
+  }
+
+  private async refreshBoard(id: string): Promise<void> {
+    const fresh = await this.inner.getBoardById(id);
+    if (fresh) this.boards.set(id, fresh);
+    else this.boards.delete(id);
   }
 
   // ── Boards ──

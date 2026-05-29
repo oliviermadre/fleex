@@ -3,7 +3,7 @@ import path from 'node:path';
 import { info, warn, ok } from '../../core/colors.ts';
 import { FLEEX_HOME, resolveInstance, ensureDirs } from '../../core/instance.ts';
 import { SERVICES } from '../../core/ports.ts';
-import { isAlive, killGroup, killTree, sleep } from '../../core/process.ts';
+import { isAlive, killByPort, killGroup, killTree, sleep } from '../../core/process.ts';
 
 export async function stopInstance(slug: string): Promise<void> {
   const runDir = path.join(FLEEX_HOME, '.run', slug);
@@ -36,7 +36,24 @@ export async function stopInstance(slug: string): Promise<void> {
     try { fs.unlinkSync(pf); } catch { /* ignore */ }
   }
 
-  try { fs.unlinkSync(path.join(runDir, 'ports.json')); } catch { /* ignore */ }
+  // Defense in depth: reap anything still bound to this instance's ports.
+  // Catches orphans that escaped the PID/group kill — e.g. a `bun --watch`
+  // worker reparented to init that would otherwise keep reconnecting to the hub.
+  const portsFile = path.join(runDir, 'ports.json');
+  try {
+    const ports = JSON.parse(fs.readFileSync(portsFile, 'utf8')) as Record<string, unknown>;
+    for (const key of ['gateway', 'server', 'web']) {
+      const port = ports[key];
+      if (typeof port !== 'number') continue;
+      const reaped = killByPort(port);
+      if (reaped.length > 0) {
+        info(`[${slug}] Reaped orphan(s) on ${key} port ${port}: ${reaped.join(', ')}`);
+        stopped += 1;
+      }
+    }
+  } catch { /* no ports file — nothing to reap */ }
+
+  try { fs.unlinkSync(portsFile); } catch { /* ignore */ }
 
   if (stopped === 0) warn(`[${slug}] No services were running.`);
   else ok(`[${slug}] All services stopped.`);
