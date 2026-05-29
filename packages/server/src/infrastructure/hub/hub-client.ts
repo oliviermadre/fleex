@@ -164,7 +164,8 @@ export class HubClient {
     });
 
     ws.on('error', (err) => {
-      this.opts.logger.warn('Hub WS error', { error: err instanceof Error ? err.message : String(err) });
+      const { message, code } = describeWsError(err);
+      this.opts.logger.warn('Hub WS error', { error: message, code, url: this.opts.url });
       // 'close' will fire right after.
     });
   }
@@ -259,6 +260,26 @@ export class HubClient {
 
 function cryptoRandomUUID(): string {
   return randomUUID();
+}
+
+/**
+ * `ws` emits either an `Error` (EventEmitter style) or an `ErrorEvent`-like
+ * object on 'error'. The latter stringifies to "[object ErrorEvent]", hiding
+ * the real cause — so normalize both into a readable message + optional code
+ * (e.g. ECONNREFUSED, ENOTFOUND, or "Unexpected server response: 401").
+ */
+function describeWsError(err: unknown): { message: string; code?: string } {
+  const e = err as { message?: unknown; code?: unknown; error?: { message?: unknown; code?: unknown } };
+  const inner = e?.error;
+  const message =
+    (typeof e?.message === 'string' && e.message) ||
+    (typeof inner?.message === 'string' && inner.message) ||
+    String(err);
+  const code =
+    (typeof e?.code === 'string' && e.code) ||
+    (typeof inner?.code === 'string' && inner.code) ||
+    undefined;
+  return { message, code };
 }
 
 /** Strip the base DomainEvent fields and keep event-type-specific payload. */
