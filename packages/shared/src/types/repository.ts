@@ -29,6 +29,13 @@ export interface CreateWorktreeRequest {
   readonly baseBranch?: string;
   readonly prNumber?: number;
   readonly issueNumber?: number;
+  /**
+   * Absolute target directory for the worktree. When omitted, the server
+   * derives a path under the managed `worktrees/` layout (legacy behavior).
+   * Used for on-demand worktree creation in an arbitrary location (e.g. a
+   * trigger run materializing a repo inside its own workspace via the CLI).
+   */
+  readonly targetPath?: string;
 }
 
 export interface HookResult {

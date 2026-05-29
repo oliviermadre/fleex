@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary, Worktree } from '@fleex/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
@@ -42,16 +43,26 @@ export function repositoryRoutes(container: Container) {
       async (request, reply) => {
         const { org, name } = request.params;
         const sanitized = sanitizeBranchForPath(request.body.branch);
-        const { prNumber, issueNumber } = request.body;
-        let dirName: string;
-        if (prNumber) {
-          dirName = `${name}.pr-${prNumber}-${sanitized}`;
-        } else if (issueNumber) {
-          dirName = `${name}.issue-${issueNumber}-${sanitized}`;
+        const { prNumber, issueNumber, targetPath } = request.body;
+        // Caller-chosen absolute target (on-demand worktrees), else derive a
+        // path under the managed `worktrees/` layout (legacy behavior).
+        let wtPath: string;
+        if (targetPath && targetPath.trim().length > 0) {
+          if (!path.isAbsolute(targetPath)) {
+            return reply.code(400).send({ error: 'targetPath must be an absolute path' });
+          }
+          wtPath = targetPath;
         } else {
-          dirName = `${name}.${sanitized}`;
+          let dirName: string;
+          if (prNumber) {
+            dirName = `${name}.pr-${prNumber}-${sanitized}`;
+          } else if (issueNumber) {
+            dirName = `${name}.issue-${issueNumber}-${sanitized}`;
+          } else {
+            dirName = `${name}.${sanitized}`;
+          }
+          wtPath = container.resolver.worktreeDir(org, dirName);
         }
-        const wtPath = container.resolver.worktreeDir(org, dirName);
         const result = await container.createWorktree.executeWithHook(org, name, wtPath, request.body);
         return reply.code(201).send({
           path: result.existingPath ?? wtPath,
