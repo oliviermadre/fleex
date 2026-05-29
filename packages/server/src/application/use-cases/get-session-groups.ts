@@ -244,8 +244,13 @@ export class GetSessionGroupsUseCase {
       for (const group of groups) {
         for (const wt of group.worktrees) {
           if (wt.ticketId === ticket.id || wt.branch === branch || wt.branch === ticket.title) {
-            // Attach agent info to existing group (cast to mutable)
-            (wt as { agentWorktree?: AgentWorktreeInfo }).agentWorktree = agentInfo;
+            // Attach agent info to existing group (cast to mutable). Also stamp the
+            // resolved ticketId: worktrees matched by branch label/title (rather than a
+            // pre-set ticketId from manifest resolution) would otherwise stay undefined,
+            // which breaks the sidebar row's favorite star, priority color, and selection
+            // highlight — all of which key off worktree.ticketId.
+            (wt as { agentWorktree?: AgentWorktreeInfo; ticketId?: string }).agentWorktree = agentInfo;
+            (wt as { ticketId?: string }).ticketId = ticket.id;
             found = true;
             break;
           }
