@@ -17,6 +17,8 @@ import type { TicketGroupStorePort } from '../../application/ports/ticket-group-
 import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
 import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
+import type { TriggerStorePort } from '../../application/ports/trigger-store.port.js';
+import type { TriggerRunStorePort } from '../../application/ports/trigger-run-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
@@ -42,6 +44,8 @@ export interface StorageStores {
   workflowTemplateStore: WorkflowTemplateStorePort | null;
   workflowRunStore: WorkflowRunStorePort | null;
   stepRunStore: StepRunStorePort | null;
+  triggerStore: TriggerStorePort | null;
+  triggerRunStore: TriggerRunStorePort | null;
 }
 
 export function resolveStorageDriver(): StorageDriver {
@@ -133,7 +137,7 @@ async function createJsonStores(deps: {
   const ticketGroupStore = new JsonTicketGroupStore(deps.hostFs, deps.homedir, deps.logger);
   await ticketGroupStore.init();
 
-  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null, fileStore, fileMetaStore, ticketGroupStore, workflowTemplateStore: null, workflowRunStore: null, stepRunStore: null };
+  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null, fileStore, fileMetaStore, ticketGroupStore, workflowTemplateStore: null, workflowRunStore: null, stepRunStore: null, triggerStore: null, triggerRunStore: null };
 }
 
 async function createJsonSessionStore(deps: {
@@ -177,6 +181,8 @@ async function createSqliteStores(deps: {
   const { SqliteWorkflowTemplateStoreAdapter } = await import('./sqlite/sqlite-workflow-template-store.adapter.js');
   const { SqliteWorkflowRunStoreAdapter } = await import('./sqlite/sqlite-workflow-run-store.adapter.js');
   const { SqliteStepRunStoreAdapter } = await import('./sqlite/sqlite-step-run-store.adapter.js');
+  const { SqliteTriggerStoreAdapter } = await import('./sqlite/sqlite-trigger-store.adapter.js');
+  const { SqliteTriggerRunStoreAdapter } = await import('./sqlite/sqlite-trigger-run-store.adapter.js');
 
   const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
   const connection = new SqliteConnection(dbPath);
@@ -213,6 +219,8 @@ async function createSqliteStores(deps: {
     workflowTemplateStore: new SqliteWorkflowTemplateStoreAdapter(connection),
     workflowRunStore: new SqliteWorkflowRunStoreAdapter(connection),
     stepRunStore: new SqliteStepRunStoreAdapter(connection),
+    triggerStore: new SqliteTriggerStoreAdapter(connection),
+    triggerRunStore: new SqliteTriggerRunStoreAdapter(connection),
   };
 }
 
@@ -281,6 +289,8 @@ async function createPgsqlStores(deps: {
     workflowTemplateStore: null,
     workflowRunStore: null,
     stepRunStore: null,
+    triggerStore: null,
+    triggerRunStore: null,
   };
 }
 
@@ -317,6 +327,8 @@ async function createSupabaseStores(deps: {
   const { SupabaseWorkflowTemplateStore } = await import('./supabase/supabase-workflow-template-store.adapter.js');
   const { SupabaseWorkflowRunStore } = await import('./supabase/supabase-workflow-run-store.adapter.js');
   const { SupabaseStepRunStore } = await import('./supabase/supabase-step-run-store.adapter.js');
+  const { SupabaseTriggerStore } = await import('./supabase/supabase-trigger-store.adapter.js');
+  const { SupabaseTriggerRunStore } = await import('./supabase/supabase-trigger-run-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
   const connection = new SupabaseConnection(url, key, dbUrl, deps.logger);
@@ -353,5 +365,7 @@ async function createSupabaseStores(deps: {
     workflowTemplateStore: new SupabaseWorkflowTemplateStore(connection),
     workflowRunStore: new SupabaseWorkflowRunStore(connection),
     stepRunStore: new SupabaseStepRunStore(connection),
+    triggerStore: new SupabaseTriggerStore(connection),
+    triggerRunStore: new SupabaseTriggerRunStore(connection),
   };
 }
