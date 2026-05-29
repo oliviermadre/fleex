@@ -52,7 +52,15 @@ export class BroadcastRegistrar {
     this.ticketBroadcast(type, data);
   }
 
-  /** Register all broadcast handlers on the given bus. */
+  /**
+   * Register all broadcast handlers on the given bus.
+   *
+   * Cache coherence on the remote (hub) path is handled upstream, before the
+   * event reaches this bus: see RemoteCacheSync / the onRemoteEvent wiring in
+   * the container. By the time a handler reads from a cached store here, the
+   * cache has already been re-synced from the source, so handlers stay
+   * cache-agnostic and identical for the local and remote paths.
+   */
   register(bus: EventBus): void {
     // ── Ticket broadcasts ──
     bus.on('ticket.created', (e) => this.broadcastTicketEntity(e, 'ticket:created'));

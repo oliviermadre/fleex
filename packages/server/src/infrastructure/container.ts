@@ -79,6 +79,7 @@ import { CachedSessionStore } from './adapters/cached-session-store.js';
 import { CachedTicketStore } from './adapters/cached-ticket-store.js';
 import { CachedPersonaStore } from './adapters/cached-persona-store.js';
 import { CachedAgentEventStore } from './adapters/cached-agent-event-store.js';
+import { isRemoteCacheSync, type RemoteCacheSync } from '../application/ports/remote-cache-sync.port.js';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 
@@ -135,6 +136,13 @@ export async function createContainer() {
   await personaStore_.warmUp();
   const agentEventStore_ = new CachedAgentEventStore(agentEventStore);
   await agentEventStore_.warmUp();
+
+  // Caches that can re-sync themselves from shared storage when a sibling
+  // instance's write arrives over the hub. Any cache implementing
+  // RemoteCacheSync is picked up automatically — see onRemoteEvent below.
+  const remoteCaches: RemoteCacheSync[] = [sessionStore_, ticketStore_, personaStore_, agentEventStore_].filter(
+    isRemoteCacheSync,
+  );
 
   const tmux = new TmuxCliAdapter(execFn, logger);
   const git = new GitCliAdapter(execFn, logger);
@@ -287,7 +295,22 @@ export async function createContainer() {
       token: process.env['FLEEX_EVENT_HUB_TOKEN'],
       serverId,
       logger,
-      onRemoteEvent: (e) => remoteEventBus.emit(e),
+      onRemoteEvent: async (e) => {
+        // Re-sync write-through caches from shared storage BEFORE dispatching,
+        // so downstream listeners (UI broadcasts) read the sibling's write
+        // rather than our stale cache. Failures must not block the broadcast.
+        for (const cache of remoteCaches) {
+          try {
+            await cache.applyRemoteEvent(e);
+          } catch (err) {
+            logger.warn('Remote cache sync failed', {
+              eventType: e.type,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        remoteEventBus.emit(e);
+      },
     });
     hubClient.start();
     hubPublisher = new HubEventPublisher(hubClient);
