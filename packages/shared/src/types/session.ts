@@ -72,6 +72,8 @@ export interface AgentWorktreeInfo {
   readonly ticketId: string;
   readonly ticketDisplayId: number;
   readonly ticketTitle: string;
+  /** Kanban status of the linked ticket — drives which sidebar flow the worktree lands in. */
+  readonly ticketStatus: import('./ticket.js').TicketStatus;
   readonly agentPersonaId: string;
   readonly agentName: string;
   readonly agentDisplayName: string;

@@ -17,29 +17,52 @@ function isMultiRepoGroup(org: string): boolean {
   return org === '_multi-repo';
 }
 
+function isActiveStatus(status: string | undefined): boolean {
+  return status === 'doing' || status === 'reviewing';
+}
+
 /**
- * Split repo groups into manual (ticket-driven worktree with at least one tmux session)
- * and agentic (ticket-driven worktree with no live tmux session) buckets. The backend
- * already filters to tickets in `doing`/`reviewing` (via `agentWorktree`) and routes
- * orphan tmux sessions to System > Shells, so the only frontend criterion is tmux liveness.
+ * Split repo groups into three buckets, keyed on the worktree's `agentWorktree`
+ * (present only for ticket-driven worktrees):
+ * - manual:  active ticket (doing/reviewing) with ≥1 live tmux session
+ * - agentic: active ticket with no live tmux session (phantom worktree)
+ * - done:    non-active ticket (done/cancelled/…) that still owns a live tmux session.
+ *            The backend never emits a phantom for these, so they vanish once their
+ *            last session closes. Orphan shells (no ticket) live under System > Shells.
  */
 function partitionByFlow(groups: SessionGroup[]): {
   manualGroups: SessionGroup[];
   agenticGroups: SessionGroup[];
+  doneGroups: SessionGroup[];
   manualWorktreeCount: number;
   agenticWorktreeCount: number;
+  doneWorktreeCount: number;
 } {
   const manualGroups: SessionGroup[] = [];
   const agenticGroups: SessionGroup[] = [];
+  const doneGroups: SessionGroup[] = [];
   let manualWorktreeCount = 0;
   let agenticWorktreeCount = 0;
+  let doneWorktreeCount = 0;
 
   for (const group of groups) {
     const manualWorktrees = group.worktrees.filter(
-      (wt: WorktreeSessionGroup) => wt.agentWorktree != null && wt.sessions.length > 0,
+      (wt: WorktreeSessionGroup) =>
+        wt.agentWorktree != null &&
+        isActiveStatus(wt.agentWorktree.ticketStatus) &&
+        wt.sessions.length > 0,
     );
     const agenticWorktrees = group.worktrees.filter(
-      (wt: WorktreeSessionGroup) => wt.agentWorktree != null && wt.sessions.length === 0,
+      (wt: WorktreeSessionGroup) =>
+        wt.agentWorktree != null &&
+        isActiveStatus(wt.agentWorktree.ticketStatus) &&
+        wt.sessions.length === 0,
+    );
+    const doneWorktrees = group.worktrees.filter(
+      (wt: WorktreeSessionGroup) =>
+        wt.agentWorktree != null &&
+        !isActiveStatus(wt.agentWorktree.ticketStatus) &&
+        wt.sessions.length > 0,
     );
 
     if (manualWorktrees.length > 0) {
@@ -50,9 +73,20 @@ function partitionByFlow(groups: SessionGroup[]): {
       agenticGroups.push({ ...group, worktrees: agenticWorktrees });
       agenticWorktreeCount += agenticWorktrees.length;
     }
+    if (doneWorktrees.length > 0) {
+      doneGroups.push({ ...group, worktrees: doneWorktrees });
+      doneWorktreeCount += doneWorktrees.length;
+    }
   }
 
-  return { manualGroups, agenticGroups, manualWorktreeCount, agenticWorktreeCount };
+  return {
+    manualGroups,
+    agenticGroups,
+    doneGroups,
+    manualWorktreeCount,
+    agenticWorktreeCount,
+    doneWorktreeCount,
+  };
 }
 
 function SectionDivider({ label, count, collapsed, onToggle }: {
@@ -110,6 +144,8 @@ export function SessionGroups() {
   const toggleManualFlow = useUIStore((s) => s.toggleManualFlow);
   const agenticFlowCollapsed = useUIStore((s) => s.agenticFlowCollapsed);
   const toggleAgenticFlow = useUIStore((s) => s.toggleAgenticFlow);
+  const doneFlowCollapsed = useUIStore((s) => s.doneFlowCollapsed);
+  const toggleDoneFlow = useUIStore((s) => s.toggleDoneFlow);
 
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dropEdge, setDropEdge] = useState<'top' | 'bottom'>('bottom');
@@ -130,11 +166,15 @@ export function SessionGroups() {
     );
   }, [sessionGroups]);
 
-  // Partition into manual vs agentic flow
-  const { manualGroups, agenticGroups, manualWorktreeCount, agenticWorktreeCount } = useMemo(
-    () => partitionByFlow(repoGroups),
-    [repoGroups]
-  );
+  // Partition into manual / agentic / done flow
+  const {
+    manualGroups,
+    agenticGroups,
+    doneGroups,
+    manualWorktreeCount,
+    agenticWorktreeCount,
+    doneWorktreeCount,
+  } = useMemo(() => partitionByFlow(repoGroups), [repoGroups]);
 
   const sortedManualGroups = useMemo(
     () => sortGroups(manualGroups, repoOrder),
@@ -144,6 +184,11 @@ export function SessionGroups() {
   const sortedAgenticGroups = useMemo(
     () => sortGroups(agenticGroups, repoOrder),
     [agenticGroups, repoOrder]
+  );
+
+  const sortedDoneGroups = useMemo(
+    () => sortGroups(doneGroups, repoOrder),
+    [doneGroups, repoOrder]
   );
 
   const handleDragStart = useCallback((groupId: string) => (e: React.DragEvent) => {
@@ -248,6 +293,19 @@ export function SessionGroups() {
             onToggle={toggleAgenticFlow}
           />
           {!agenticFlowCollapsed && sortedAgenticGroups.map((g) => renderRepoGroup(g, true, 'agentic'))}
+        </>
+      )}
+
+      {/* Done — finished tickets that still own live tmux sessions (kept until closed) */}
+      {sortedDoneGroups.length > 0 && (
+        <>
+          <SectionDivider
+            label="Done"
+            count={doneWorktreeCount}
+            collapsed={doneFlowCollapsed}
+            onToggle={toggleDoneFlow}
+          />
+          {!doneFlowCollapsed && sortedDoneGroups.map((g) => renderRepoGroup(g, false, 'manual'))}
         </>
       )}
 

@@ -85,6 +85,19 @@ export class SessionNamingService {
     return `${FLEEX_SIDEBAR_PREFIX}${display}_${parent}_${suffix}`;
   }
 
+  /**
+   * Extract the parent session id (a UUID) embedded in a sidebar tmux name.
+   * Format: fleex_sidebar_{ticketDisplayId}_{parentSessionId}_{shortSuffix}.
+   * Returns null when the name is not a sidebar name or no UUID is present.
+   */
+  parseSidebarParentId(name: string): string | null {
+    if (!name.startsWith(FLEEX_SIDEBAR_PREFIX)) return null;
+    const match = name.match(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    );
+    return match ? match[0] : null;
+  }
+
   parseType(name: string): SessionType | null {
     if (name.startsWith(FLEEX_SHELL_PREFIX)) return 'shell';
     if (name.startsWith(FLEEX_CLAUDE_PREFIX)) return 'claude';

@@ -111,6 +111,8 @@ interface UIState {
   toggleManualFlow: () => void;
   agenticFlowCollapsed: boolean;
   toggleAgenticFlow: () => void;
+  doneFlowCollapsed: boolean;
+  toggleDoneFlow: () => void;
 
   // Session task right sidebar (scratchpad + auxiliary terminals)
   rightSidebarWidth: number;
@@ -189,6 +191,7 @@ export const useUIStore = create<UIState>((set) => ({
   selectedAgentWorktreeTicketId: null,
   manualFlowCollapsed: false,
   agenticFlowCollapsed: true,
+  doneFlowCollapsed: true,
   rightSidebarWidth: typeof rightSidebarInitial.width === 'number' ? rightSidebarInitial.width : RIGHT_SIDEBAR_DEFAULT_WIDTH,
   rightSidebarSplitRatio: typeof rightSidebarInitial.splitRatio === 'number' ? rightSidebarInitial.splitRatio : RIGHT_SIDEBAR_DEFAULT_RATIO,
   rightSidebarCollapsed: rightSidebarInitial.collapsed === true,
@@ -411,4 +414,7 @@ export const useUIStore = create<UIState>((set) => ({
 
   toggleAgenticFlow: () =>
     set((state) => ({ agenticFlowCollapsed: !state.agenticFlowCollapsed })),
+
+  toggleDoneFlow: () =>
+    set((state) => ({ doneFlowCollapsed: !state.doneFlowCollapsed })),
 }));
