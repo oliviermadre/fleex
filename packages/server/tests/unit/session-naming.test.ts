@@ -200,4 +200,31 @@ describe('SessionNamingService', () => {
       expect(service.extractDisplayName('random-session')).toBe('');
     });
   });
+
+  describe('parseSidebarParentId', () => {
+    it('extracts the parent UUID from a sidebar tmux name', () => {
+      const parent = '7107eecd-fdb4-410b-9b7d-a20acd5c8772';
+      const name = service.buildSidebarTmuxName({
+        ticketDisplayId: 244,
+        parentSessionId: parent,
+        shortSuffix: 'kswkd',
+      });
+      expect(service.parseSidebarParentId(name)).toBe(parent);
+    });
+
+    it('parses real-world sidebar names', () => {
+      expect(
+        service.parseSidebarParentId('fleex_sidebar_244_7107eecd-fdb4-410b-9b7d-a20acd5c8772_kswkd'),
+      ).toBe('7107eecd-fdb4-410b-9b7d-a20acd5c8772');
+    });
+
+    it('returns null for non-sidebar names', () => {
+      expect(service.parseSidebarParentId('fleex_shell_org_repo_main_claude')).toBeNull();
+      expect(service.parseSidebarParentId('random-session')).toBeNull();
+    });
+
+    it('returns null for a sidebar name without a UUID', () => {
+      expect(service.parseSidebarParentId('fleex_sidebar_244_notauuid_kswkd')).toBeNull();
+    });
+  });
 });

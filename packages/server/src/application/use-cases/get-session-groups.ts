@@ -1,6 +1,7 @@
 import type { Session, SessionGroup, WorktreeSessionGroup, AgentWorktreeInfo } from '@fleex/shared';
 import type { SessionEntity } from '../../domain/entities.js';
 import { SessionGroupingService } from '../../domain/services/session-grouping.js';
+import type { SessionNamingService } from '../../domain/services/session-naming.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
@@ -30,6 +31,7 @@ export class GetSessionGroupsUseCase {
     private readonly reconcileWorktree?: ReconcileWorktreeUseCase,
     private readonly hostFs?: HostFs,
     private readonly config?: ConfigPort,
+    private readonly namingService?: SessionNamingService,
   ) {
     this.listSessions = new ListSessionsUseCase(sessionStore, tmux, logger);
   }
@@ -52,6 +54,12 @@ export class GetSessionGroupsUseCase {
       paneCommands = new Map();
       paneCwds = new Map();
     }
+
+    // Kill sidebar terminals whose parent session is gone. A sidebar terminal is hosted
+    // inside its parent's right panel and is filtered out of the main tab bar; once the
+    // parent is closed it can never be displayed again, so it would linger as an invisible
+    // (yet running) tmux session — reachable only via dropdowns. Reap it.
+    sessions = await this.reapOrphanedSidebarSessions(sessions);
 
     // Enrich foreground process and pane CWD from tmux
     for (const session of sessions) {
@@ -82,13 +90,14 @@ export class GetSessionGroupsUseCase {
     const groups = await this.groupingService.groupSessions(sessions);
 
     // Surface every ticket in doing/reviewing as a worktree group (creating phantoms when
-    // no live session matches). Tickets in other statuses are intentionally not hydrated.
+    // no live session matches). Tickets in other statuses are hydrated only when they still
+    // own a live tmux session, so a "done" ticket keeps its sessions instead of orphaning them.
     if (this.ticketStore && this.personaStore) {
       await this.injectAgentWorktreeInfo(groups);
     }
 
     // Any worktree-with-sessions that didn't receive an agentWorktree corresponds to a tmux
-    // session not tied to a doing/reviewing ticket — move it to System > Shells.
+    // session not tied to any ticket (raw shell, deleted ticket) — move it to System > Shells.
     this.reclassifyOrphanSessions(groups);
 
     // Reconcile worktree paths for multi-machine support
@@ -100,10 +109,55 @@ export class GetSessionGroupsUseCase {
   }
 
   /**
-   * Surface every ticket in `doing`/`reviewing` as a WorktreeSessionGroup carrying
-   * AgentWorktreeInfo. Attaches to an existing group when one matches by branch/title,
-   * otherwise creates a phantom group (sessions: []). Persona and execution data are
-   * best-effort — a ticket without either still appears.
+   * Kill sidebar terminals (fleex_sidebar_*) whose parent session no longer exists, and
+   * drop them from the returned list. The parent session id is taken from the entity when
+   * recorded, otherwise parsed from the tmux name. A sidebar terminal with no live parent
+   * cannot be hosted anywhere in the UI, so leaving it alive is pure leakage.
+   */
+  private async reapOrphanedSidebarSessions(sessions: SessionEntity[]): Promise<SessionEntity[]> {
+    if (!this.namingService) return sessions;
+
+    const liveIds = new Set(sessions.map((s) => s.id));
+    const survivors: SessionEntity[] = [];
+
+    for (const session of sessions) {
+      if (!this.namingService.isSidebar(session.tmuxName)) {
+        survivors.push(session);
+        continue;
+      }
+
+      const parentId =
+        session.parentSessionId ?? this.namingService.parseSidebarParentId(session.tmuxName);
+
+      // Keep when the parent is unknown (can't prove it's orphaned) or still alive.
+      if (!parentId || liveIds.has(parentId)) {
+        survivors.push(session);
+        continue;
+      }
+
+      try {
+        await this.tmux.killSession(session.tmuxName);
+      } catch {
+        // Tmux session may already be dead — fall through to store cleanup.
+      }
+      await this.sessionStore.remove(session.id);
+      this.logger.info('Reaped orphaned sidebar session', {
+        id: session.id,
+        tmuxName: session.tmuxName,
+        parentId,
+      });
+    }
+
+    return survivors;
+  }
+
+  /**
+   * Surface tickets as WorktreeSessionGroups carrying AgentWorktreeInfo.
+   * - `doing`/`reviewing` tickets are always surfaced; when no live session matches they
+   *   get a phantom group (sessions: []).
+   * - Tickets in any other status are surfaced only when they still own a live tmux session,
+   *   so a "done" ticket keeps its sessions grouped under it. These never spawn a phantom.
+   * Persona and execution data are best-effort — a ticket without either still appears.
    */
   private async injectAgentWorktreeInfo(groups: SessionGroup[]): Promise<void> {
     if (!this.ticketStore || !this.personaStore) return;
@@ -125,18 +179,35 @@ export class GetSessionGroupsUseCase {
     }
 
     const allTickets = await this.ticketStore.getAllTickets();
-    const activeTickets = allTickets.filter(
-      (t) => t.status === 'doing' || t.status === 'reviewing',
+    const isActive = (status: string) => status === 'doing' || status === 'reviewing';
+
+    // Tickets in doing/reviewing are always surfaced (and may spawn a phantom worktree).
+    // Tickets in any other status are surfaced ONLY when they still own a live tmux session,
+    // so a "done" ticket keeps its sessions grouped under it instead of being orphaned to
+    // System > Shells. Such tickets never spawn a phantom — once their last session closes
+    // they leave the sidebar.
+    const ticketsWithLiveSessions = new Set<string>();
+    for (const group of groups) {
+      for (const wt of group.worktrees) {
+        if (wt.ticketId && wt.sessions.length > 0) {
+          ticketsWithLiveSessions.add(wt.ticketId);
+        }
+      }
+    }
+
+    const ticketsToHydrate = allTickets.filter(
+      (t) => isActive(t.status) || ticketsWithLiveSessions.has(t.id),
     );
 
-    if (activeTickets.length === 0) return;
+    if (ticketsToHydrate.length === 0) return;
 
     // Build persona lookups (best-effort: ticket still surfaces without a resolved persona)
     const personas = await this.personaStore.getAll();
     const personaByName = new Map(personas.map((p) => [p.name, p]));
     const personaById = new Map(personas.map((p) => [p.id, p]));
 
-    for (const ticket of activeTickets) {
+    for (const ticket of ticketsToHydrate) {
+      const ticketActive = isActive(ticket.status);
       const wtLink = ticket.links.find((l) => l.type === 'worktree');
 
       // Execution info is optional — without it the ticket is reported as idle
@@ -158,6 +229,7 @@ export class GetSessionGroupsUseCase {
         ticketId: ticket.id,
         ticketDisplayId: ticket.displayId,
         ticketTitle: ticket.title,
+        ticketStatus: ticket.status,
         agentPersonaId: persona?.id ?? '',
         agentName: persona?.name ?? '',
         agentDisplayName: persona?.displayName ?? '',
@@ -165,13 +237,13 @@ export class GetSessionGroupsUseCase {
         latestExecutionId,
       };
 
-      // Find matching worktree group by branch label OR by ticket title
-      // (the grouping service uses ticket title as the branch label for manifest-resolved sessions)
+      // Find matching worktree group by ticketId (set by the grouping service for
+      // manifest-resolved sessions), then fall back to branch label or ticket title.
       let found = false;
 
       for (const group of groups) {
         for (const wt of group.worktrees) {
-          if (wt.branch === branch || wt.branch === ticket.title) {
+          if (wt.ticketId === ticket.id || wt.branch === branch || wt.branch === ticket.title) {
             // Attach agent info to existing group (cast to mutable)
             (wt as { agentWorktree?: AgentWorktreeInfo }).agentWorktree = agentInfo;
             found = true;
@@ -181,8 +253,9 @@ export class GetSessionGroupsUseCase {
         if (found) break;
       }
 
-      // If no matching group found, create a phantom group
-      if (!found) {
+      // If no matching group found, create a phantom group — but only for active
+      // tickets. A non-active ticket without a live session must NOT linger in the sidebar.
+      if (!found && ticketActive) {
         // Determine which repo group this belongs to.
         // Three cases:
         //   - 0 repository links → _unassigned
@@ -240,9 +313,9 @@ export class GetSessionGroupsUseCase {
 
   /**
    * Move any tmux sessions whose worktree was not hydrated with AgentWorktreeInfo into
-   * the System (_ungrouped) bucket. These are shells not tied to a doing/reviewing
-   * ticket — they belong under "System > Shells", not in the repo's flow sections.
-   * Repo groups that become empty are removed.
+   * the System (_ungrouped) bucket. These are shells not tied to any ticket (raw shells,
+   * or a session whose ticket was deleted) — they belong under "System > Shells", not in
+   * the repo's flow sections. Repo groups that become empty are removed.
    */
   private reclassifyOrphanSessions(groups: SessionGroup[]): void {
     type MutableSessionGroup = {
