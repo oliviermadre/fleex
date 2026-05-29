@@ -19,13 +19,17 @@ export class CreateWorkflowRunUseCase {
   ) {}
 
   async execute(params: {
-    ticketId: string;
+    ticketId: string | null;
     templateId: string;
     triggeredBy: string;
     triggeredFrom: string;
   }): Promise<WorkflowRunEntity> {
-    const existing = await this.runStore.getActiveByTicket(params.ticketId);
-    if (existing) throw new WorkflowRunAlreadyActiveError(params.ticketId);
+    // The "one active run per ticket" guard only applies to ticket-bound runs.
+    // Ticketless runs (e.g. launched by a trigger) have no such uniqueness.
+    if (params.ticketId) {
+      const existing = await this.runStore.getActiveByTicket(params.ticketId);
+      if (existing) throw new WorkflowRunAlreadyActiveError(params.ticketId);
+    }
 
     const template = await this.templateStore.getById(params.templateId);
     if (!template) throw new WorkflowTemplateNotFoundError(params.templateId);
@@ -50,12 +54,15 @@ export class CreateWorkflowRunUseCase {
     // Post a "starting" marker comment in the ticket timeline so it's obvious
     // to readers that the next bursts of activity belong to this workflow run.
     // Emoji + bold name keep it scannable; the trigger source helps debugging.
-    await this.postComment.execute({
-      ticketId: run.ticketId,
-      authorType: 'agent',
-      authorName: `workflow:${template.name}`,
-      body: `🚦 Starting workflow ${template.emoji ? `${template.emoji} ` : ''}**${template.name}** _(triggered ${params.triggeredFrom === 'mention' ? 'via @mention' : `from ${params.triggeredFrom}`})_`,
-    });
+    // Skipped for ticketless runs — there is no timeline to post into.
+    if (run.ticketId) {
+      await this.postComment.execute({
+        ticketId: run.ticketId,
+        authorType: 'agent',
+        authorName: `workflow:${template.name}`,
+        body: `🚦 Starting workflow ${template.emoji ? `${template.emoji} ` : ''}**${template.name}** _(triggered ${params.triggeredFrom === 'mention' ? 'via @mention' : `from ${params.triggeredFrom}`})_`,
+      });
+    }
 
     this.eventBus.emit({
       type: 'workflow.run_created',

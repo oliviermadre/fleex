@@ -11,7 +11,7 @@ import type { SupabaseConnection } from './connection.js';
 interface ExecutionRow {
   execution_id: string;
   persona_id: string;
-  ticket_id: string;
+  ticket_id: string | null;
   mention_id: string;
   event_count: number;
   status: string;
@@ -45,13 +45,13 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
   async startExecution(params: {
     executionId: string;
     personaId: string;
-    ticketId: string;
+    ticketId: string | null;
     mentionId: string;
   }): Promise<void> {
     const { error } = await this.conn.client.from('agent_event_executions').insert({
       execution_id: params.executionId,
       persona_id: params.personaId,
-      ticket_id: params.ticketId,
+      ticket_id: params.ticketId ?? null,
       mention_id: params.mentionId,
       event_count: 0,
       status: 'running',
@@ -191,7 +191,9 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     if (error) throw new Error(`SupabaseAgentEventStore.getSessionHistory failed: ${error.message}`);
 
     const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
-    for (const row of data as { persona_id: string; ticket_id: string; sdk_session_id: string }[]) {
+    for (const row of data as { persona_id: string; ticket_id: string | null; sdk_session_id: string }[]) {
+      // Ticket-keyed session resume only applies to ticket-bound executions.
+      if (!row.ticket_id) continue;
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
         result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id });

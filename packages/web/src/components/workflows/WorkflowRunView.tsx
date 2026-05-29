@@ -211,8 +211,9 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                   onSubmit={async (response) => {
                     // Post the user's response as a regular ticket comment so the
                     // agent picks it up from the ticket context on the next run,
-                    // then retry the step.
-                    await postTicketComment(run.ticketId, response);
+                    // then retry the step. (Needs-review responses only apply to
+                    // ticket-bound runs.)
+                    if (run.ticketId) await postTicketComment(run.ticketId, response);
                     await retry(run.id, selectedStepRun.id);
                   }}
                 />

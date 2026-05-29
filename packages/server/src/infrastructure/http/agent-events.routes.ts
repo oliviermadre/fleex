@@ -66,7 +66,7 @@ export function agentEventsRoutes(container: Container) {
         if (exec.mentionId) mentionIds.add(exec.mentionId);
       }
       for (const run of allWorkflowRuns) {
-        ticketIds.add(run.ticketId);
+        if (run.ticketId) ticketIds.add(run.ticketId);
       }
 
       // Bulk fetch tickets, personas, mentions, comments, deliverables, panels, skills.
@@ -191,7 +191,7 @@ export function agentEventsRoutes(container: Container) {
       }
 
       function enrichStandalone(exec: AgentExecution): ExecutionLogEntry {
-        const ticket = ticketMap.get(exec.ticketId);
+        const ticket = exec.ticketId ? ticketMap.get(exec.ticketId) : undefined;
         const persona = personaMap.get(exec.personaId);
         const mention = exec.mentionId ? mentionMap.get(exec.mentionId) : null;
         const rawType = mention?.targetType;
@@ -228,8 +228,8 @@ export function agentEventsRoutes(container: Container) {
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
           ticketPriority: ticket?.priority ?? null,
           ticketType: ticket?.type ?? null,
-          commentCount: commentCountMap.get(exec.ticketId) ?? 0,
-          deliverableCount: deliverableCountMap.get(exec.ticketId) ?? 0,
+          commentCount: exec.ticketId ? commentCountMap.get(exec.ticketId) ?? 0 : 0,
+          deliverableCount: exec.ticketId ? deliverableCountMap.get(exec.ticketId) ?? 0 : 0,
         };
       }
 
@@ -309,7 +309,7 @@ export function agentEventsRoutes(container: Container) {
         const orchestratorPersona = personaMap.get(orchestratorExec.personaId);
 
         // Ticket context — pull from any exec, they share it
-        const ticket = ticketMap.get(orchestratorExec.ticketId);
+        const ticket = orchestratorExec.ticketId ? ticketMap.get(orchestratorExec.ticketId) : undefined;
 
         // effectiveMode / model: prefer orchestrator's
         const effectiveMode = orchestratorExec.effectiveMode ?? sorted[0]!.effectiveMode ?? null;
@@ -345,8 +345,8 @@ export function agentEventsRoutes(container: Container) {
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
           ticketPriority: ticket?.priority ?? null,
           ticketType: ticket?.type ?? null,
-          commentCount: commentCountMap.get(orchestratorExec.ticketId) ?? 0,
-          deliverableCount: deliverableCountMap.get(orchestratorExec.ticketId) ?? 0,
+          commentCount: orchestratorExec.ticketId ? commentCountMap.get(orchestratorExec.ticketId) ?? 0 : 0,
+          deliverableCount: orchestratorExec.ticketId ? deliverableCountMap.get(orchestratorExec.ticketId) ?? 0 : 0,
 
           panelDisplayName: panel?.displayName ?? mention?.targetAgent ?? 'Panel',
           panelMembers: members,
@@ -366,7 +366,7 @@ export function agentEventsRoutes(container: Container) {
       }
 
       function enrichWorkflowRun(run: WorkflowRunEntity): ExecutionLogEntry {
-        const ticket = ticketMap.get(run.ticketId);
+        const ticket = run.ticketId ? ticketMap.get(run.ticketId) : undefined;
         const allSteps = run.templateSnapshot.steps;
         const stepRuns = stepRunsByRun.get(run.id) ?? [];
 
@@ -491,8 +491,8 @@ export function agentEventsRoutes(container: Container) {
           ticketSlug: ticket ? `#t-${ticket.displayId}` : null,
           ticketPriority: ticket?.priority ?? null,
           ticketType: ticket?.type ?? null,
-          commentCount: commentCountMap.get(run.ticketId) ?? 0,
-          deliverableCount: deliverableCountMap.get(run.ticketId) ?? 0,
+          commentCount: run.ticketId ? commentCountMap.get(run.ticketId) ?? 0 : 0,
+          deliverableCount: run.ticketId ? deliverableCountMap.get(run.ticketId) ?? 0 : 0,
 
           workflowRunId: run.id,
           workflowSubStatus: subStatus,

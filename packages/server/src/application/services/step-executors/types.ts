@@ -5,7 +5,8 @@ import type {
 } from '@fleex/shared';
 
 export interface StepExecutionInput {
-  ticketId: string;
+  /** Null when the workflow run is not bound to a ticket (e.g. trigger-launched). */
+  ticketId: string | null;
   workflowRunId: string;
   stepRunId: string;
   step: WorkflowStep;

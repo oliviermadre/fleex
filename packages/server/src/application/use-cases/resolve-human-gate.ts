@@ -45,8 +45,10 @@ export class ResolveHumanGateUseCase {
 
     // Decision Trail: persist the reviewer's rationale as a ticket comment so it can be
     // found later in the thread. Non-critical side effect — a failure here must never
-    // block gate resolution.
-    await this.postResolutionComment(run.ticketId, run.templateSnapshot.name, step.name, params.outcome, params.notes, stepRun.id);
+    // block gate resolution. (Human gates only exist on ticket-bound runs.)
+    if (run.ticketId) {
+      await this.postResolutionComment(run.ticketId, run.templateSnapshot.name, step.name, params.outcome, params.notes, stepRun.id);
+    }
 
     const edges = run.outgoingEdges(step.id);
     const nextEdge = EdgeEvaluator.resolve(stepRun.output!, edges);

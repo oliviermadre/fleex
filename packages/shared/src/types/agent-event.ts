@@ -1,7 +1,8 @@
 export interface AgentExecution {
   readonly id: string;
   readonly personaId: string;
-  readonly ticketId: string;
+  /** Null for executions not bound to a ticket (e.g. trigger-launched). */
+  readonly ticketId: string | null;
   readonly mentionId: string;
   readonly eventCount: number;
   readonly status: 'running' | 'completed' | 'failed' | 'interrupted';
@@ -138,6 +139,6 @@ export type AgentEventWsMessageType =
 export interface AgentEventWsMessage {
   readonly type: AgentEventWsMessageType;
   readonly executionId: string;
-  readonly ticketId: string;
+  readonly ticketId: string | null;
   readonly data: AgentEvent | AgentEvent[] | AgentExecution;
 }

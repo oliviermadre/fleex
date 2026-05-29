@@ -11,7 +11,7 @@ import type { SqliteConnection } from './connection.js';
 interface ExecutionRow {
   execution_id: string;
   persona_id: string;
-  ticket_id: string;
+  ticket_id: string | null;
   mention_id: string;
   event_count: number;
   status: string;
@@ -45,7 +45,7 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
   async startExecution(params: {
     executionId: string;
     personaId: string;
-    ticketId: string;
+    ticketId: string | null;
     mentionId: string;
   }): Promise<void> {
     this.conn.db.prepare(`
@@ -55,7 +55,7 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     `).run({
       execution_id: params.executionId,
       persona_id: params.personaId,
-      ticket_id: params.ticketId,
+      ticket_id: params.ticketId ?? null,
       mention_id: params.mentionId,
       started_at: new Date().toISOString(),
     });
@@ -168,10 +168,12 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
         WHERE sdk_session_id IS NOT NULL
         ORDER BY started_at DESC
       `)
-      .all() as { persona_id: string; ticket_id: string; sdk_session_id: string }[];
+      .all() as { persona_id: string; ticket_id: string | null; sdk_session_id: string }[];
 
     const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
     for (const row of rows) {
+      // Ticket-keyed session resume only applies to ticket-bound executions.
+      if (!row.ticket_id) continue;
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
         result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id });

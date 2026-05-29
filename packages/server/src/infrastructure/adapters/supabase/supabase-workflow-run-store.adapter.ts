@@ -5,7 +5,7 @@ import type { WorkflowRunStatus, WorkflowTemplateSnapshot } from '@fleex/shared'
 
 interface WorkflowRunRow {
   id: string;
-  ticket_id: string;
+  ticket_id: string | null;
   template_id: string;
   template_snapshot: WorkflowTemplateSnapshot;
   status: string;

@@ -5,7 +5,8 @@ export interface AgentEventStorePort {
   startExecution(params: {
     executionId: string;
     personaId: string;
-    ticketId: string;
+    /** Null for executions not bound to a ticket (e.g. trigger-launched). */
+    ticketId: string | null;
     mentionId: string;
   }): Promise<void>;
 

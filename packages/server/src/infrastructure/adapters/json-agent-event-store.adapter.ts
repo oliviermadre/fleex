@@ -9,7 +9,7 @@ import type { HostFs } from '../host/types.js';
 interface ExecutionIndex {
   id: string;
   personaId: string;
-  ticketId: string;
+  ticketId: string | null;
   mentionId: string;
   eventCount: number;
   status: 'running' | 'completed' | 'failed' | 'interrupted';
@@ -54,7 +54,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
   async startExecution(params: {
     executionId: string;
     personaId: string;
-    ticketId: string;
+    ticketId: string | null;
     mentionId: string;
   }): Promise<void> {
     const entry: ExecutionIndex = {
@@ -184,6 +184,8 @@ export class JsonAgentEventStore implements AgentEventStorePort {
 
     const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
     for (const entry of sorted) {
+      // Ticket-keyed session resume only applies to ticket-bound executions.
+      if (!entry.ticketId) continue;
       const key = `${entry.personaId}:${entry.ticketId}`;
       if (!result.has(key)) {
         result.set(key, { sdkSessionId: entry.sdkSessionId!, personaId: entry.personaId, ticketId: entry.ticketId });

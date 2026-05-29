@@ -14,6 +14,15 @@ export class SkillStepExecutor implements StepExecutor {
   ) {}
 
   async execute(input: StepExecutionInput): Promise<StepExecutorResult> {
+    // Skill steps post announce/result comments and resolve mentions on the
+    // ticket, so they require a ticket-bound run. Ticketless workflows (e.g.
+    // trigger-launched) should use agent steps until executeForSkill is made
+    // ticket-optional.
+    const ticketId = input.ticketId;
+    if (ticketId === null) {
+      throw new Error(`skill step "${input.step.executorRef}" requires a ticket-bound workflow run`);
+    }
+
     const skill = await this.skillStore.getByCommandName(input.step.executorRef);
     if (!skill) throw new Error(`skill "${input.step.executorRef}" not found`);
 
@@ -26,7 +35,7 @@ export class SkillStepExecutor implements StepExecutor {
       previousOutputs: input.workflowContext.previousOutputs,
     });
 
-    const result = await this.executeAgent.executeForSkill(skill.id, input.ticketId, {
+    const result = await this.executeAgent.executeForSkill(skill.id, ticketId, {
       outputFormatOverride: outputFormat,
       workflowContextPrompt,
       returnStructured: true,

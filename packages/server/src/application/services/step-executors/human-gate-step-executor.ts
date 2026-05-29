@@ -5,6 +5,13 @@ export class HumanGateStepExecutor implements StepExecutor {
   constructor(private readonly postComment: PostCommentUseCase) {}
 
   async execute(input: StepExecutionInput): Promise<StepExecutorResult> {
+    // A human gate posts a decision prompt as a ticket comment, so it requires
+    // a ticket-bound run (there is nowhere to surface the gate otherwise).
+    const ticketId = input.ticketId;
+    if (ticketId === null) {
+      throw new Error(`human_gate step ${input.step.id} requires a ticket-bound workflow run`);
+    }
+
     const outcomes = input.step.humanGateOutcomes ?? [];
     if (outcomes.length === 0) {
       throw new Error(`human_gate step ${input.step.id}: must have at least one outcome`);
@@ -19,7 +26,7 @@ export class HumanGateStepExecutor implements StepExecutor {
     ].join('\n');
 
     await this.postComment.execute({
-      ticketId: input.ticketId,
+      ticketId,
       body,
       authorName: 'workflow',
       authorType: 'agent',

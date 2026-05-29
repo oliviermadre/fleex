@@ -253,7 +253,7 @@ export interface PanelExecutedEvent extends DomainEvent {
 export interface WorkflowRunCreatedEvent extends DomainEvent {
   type: 'workflow.run_created';
   workflowRunId: string;
-  ticketId: string;
+  ticketId: string | null;
   templateId: string;
 }
 
@@ -262,7 +262,7 @@ export interface WorkflowStepStartedEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  ticketId: string | null;
 }
 
 export interface WorkflowStepCompletedEvent extends DomainEvent {
@@ -270,7 +270,7 @@ export interface WorkflowStepCompletedEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  ticketId: string | null;
   nextEdgeId: string | null;
 }
 
@@ -279,13 +279,13 @@ export interface WorkflowNeedsReviewEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  ticketId: string | null;
 }
 
 export interface WorkflowRunCompletedEvent extends DomainEvent {
   type: 'workflow.run_completed';
   workflowRunId: string;
-  ticketId: string;
+  ticketId: string | null;
 }
 
 export interface WorkflowRunFailedEvent extends DomainEvent {
@@ -293,14 +293,14 @@ export interface WorkflowRunFailedEvent extends DomainEvent {
   workflowRunId: string;
   stepRunId: string;
   stepId: string;
-  ticketId: string;
+  ticketId: string | null;
   error: string;
 }
 
 export interface WorkflowRunCancelledEvent extends DomainEvent {
   type: 'workflow.run_cancelled';
   workflowRunId: string;
-  ticketId: string;
+  ticketId: string | null;
 }
 
 // ── Worktree events ──

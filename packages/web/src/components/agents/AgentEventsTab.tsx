@@ -102,7 +102,7 @@ export function AgentEventsTab() {
             <StatusBadge status={exec.status} />
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-sm text-[var(--theme-text-primary)] truncate">
-                Ticket: {exec.ticketId.slice(0, 8)}...
+                {exec.ticketId ? `Ticket: ${exec.ticketId.slice(0, 8)}...` : 'No ticket'}
               </span>
               <span className="text-xs text-[var(--theme-text-faint)]">
                 {new Date(exec.startedAt).toLocaleString(undefined, { hour12: false })}

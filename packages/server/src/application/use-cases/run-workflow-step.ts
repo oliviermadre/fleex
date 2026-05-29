@@ -144,10 +144,15 @@ export class RunWorkflowStepUseCase {
     step: WorkflowStep,
     output: StepOutput,
   ): Promise<void> {
+    // Deliverables and comments are ticket artifacts. For ticketless runs the
+    // structured output still lives in step_runs.output (the audit trail); we
+    // simply have no ticket timeline to surface it into.
+    if (!run.ticketId) return;
+    const ticketId = run.ticketId;
     const author = `workflow:${run.templateSnapshot.name} → ${step.name}`;
     if (output.deliverable) {
       await this.deps.submitDeliverable.execute({
-        ticketId: run.ticketId,
+        ticketId,
         agentName: author,
         type: output.deliverable.type,
         title: output.deliverable.title,
@@ -157,7 +162,7 @@ export class RunWorkflowStepUseCase {
     }
     if (output.comment && output.comment.trim().length > 0) {
       await this.deps.postComment.execute({
-        ticketId: run.ticketId,
+        ticketId,
         authorType: 'agent',
         authorName: author,
         body: output.comment,

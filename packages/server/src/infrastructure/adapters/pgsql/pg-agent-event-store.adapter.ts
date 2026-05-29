@@ -24,14 +24,14 @@ export class PgAgentEventStore implements AgentEventStorePort {
   async startExecution(params: {
     executionId: string;
     personaId: string;
-    ticketId: string;
+    ticketId: string | null;
     mentionId: string;
   }): Promise<void> {
     await this.db.query(
       `INSERT INTO agent_event_executions
         (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at)
        VALUES ($1, $2, $3, $4, 0, 'running', $5)`,
-      [params.executionId, params.personaId, params.ticketId, params.mentionId, new Date().toISOString()],
+      [params.executionId, params.personaId, params.ticketId ?? null, params.mentionId, new Date().toISOString()],
     );
   }
 
@@ -134,6 +134,8 @@ export class PgAgentEventStore implements AgentEventStorePort {
     );
     const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
     for (const row of rows as Record<string, unknown>[]) {
+      // Ticket-keyed session resume only applies to ticket-bound executions.
+      if (!row.ticket_id) continue;
       const key = `${row.persona_id}:${row.ticket_id}`;
       if (!result.has(key)) {
         result.set(key, {
@@ -151,7 +153,7 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
   return {
     id: row.execution_id as string,
     personaId: row.persona_id as string,
-    ticketId: row.ticket_id as string,
+    ticketId: (row.ticket_id as string | null) ?? null,
     mentionId: row.mention_id as string,
     eventCount: row.event_count as number,
     status: row.status as AgentExecution['status'],

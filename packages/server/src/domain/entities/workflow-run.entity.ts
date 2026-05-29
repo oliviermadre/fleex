@@ -7,7 +7,7 @@ const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'needs_review'];
 export class WorkflowRunEntity {
   constructor(
     public readonly id: string,
-    public readonly ticketId: string,
+    public readonly ticketId: string | null,
     public readonly templateId: string,
     public readonly templateSnapshot: WorkflowTemplateSnapshot,
     public status: WorkflowRunStatus,
@@ -22,7 +22,7 @@ export class WorkflowRunEntity {
 
   static create(params: {
     id: string;
-    ticketId: string;
+    ticketId: string | null;
     templateId: string;
     templateSnapshot: WorkflowTemplateSnapshot;
     triggeredBy: string;

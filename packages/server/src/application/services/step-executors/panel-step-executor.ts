@@ -10,6 +10,13 @@ export class PanelStepExecutor implements StepExecutor {
   constructor(private readonly runPanel: RunPanelUseCase) {}
 
   async execute(input: StepExecutionInput): Promise<StepExecutorResult> {
+    // Panel steps run against a ticket (comments / context). Ticketless
+    // workflows should use agent steps until runPanel is made ticket-optional.
+    const ticketId = input.ticketId;
+    if (ticketId === null) {
+      throw new Error(`panel step "${input.step.executorRef}" requires a ticket-bound workflow run`);
+    }
+
     const outputFormat = mergeOutputSchemas(STANDARD_OUTPUT_SCHEMA, input.step.outputSchema);
     const ctxPrompt = composeWorkflowContextPrompt({
       workflowName: input.workflowContext.workflowName,
@@ -21,7 +28,7 @@ export class PanelStepExecutor implements StepExecutor {
 
     const result = await this.runPanel.execute({
       panelName: input.step.executorRef,
-      ticketId: input.ticketId,
+      ticketId,
       extraContextPrompt: ctxPrompt,
       outputFormatOverride: outputFormat,
       returnStructured: true,

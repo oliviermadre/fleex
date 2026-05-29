@@ -7,7 +7,7 @@ const ACTIVE = "('running','needs_review')";
 
 interface Row {
   id: string;
-  ticket_id: string;
+  ticket_id: string | null;
   template_id: string;
   template_snapshot: string;
   status: string;
@@ -58,7 +58,7 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
          @triggered_by, @triggered_from, @started_at, @completed_at, @created_at, @updated_at)
     `).run({
       id: run.id,
-      ticket_id: run.ticketId,
+      ticket_id: run.ticketId ?? null,
       template_id: run.templateId,
       template_snapshot: JSON.stringify(run.templateSnapshot),
       status: run.status,

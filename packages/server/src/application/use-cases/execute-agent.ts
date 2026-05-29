@@ -1453,7 +1453,7 @@ export class ExecuteAgentUseCase {
    */
   async executeForWorkflowStep(params: {
     personaName: string;
-    ticketId: string;
+    ticketId: string | null;
     outputFormat: typeof OUTPUT_FORMAT_SCHEMA;
     workflowContextPrompt: string;
     mode: MentionExecutionMode;
@@ -1471,9 +1471,11 @@ export class ExecuteAgentUseCase {
     // Effective mode: respect persona ceiling
     const effectiveMode: MentionExecutionMode = persona.executionMode === 'message' ? 'talk' : params.mode;
 
-    // Workspace if needed (same as executeForMention)
+    // Workspace if needed (same as executeForMention). Ticketless runs get no
+    // ticket workspace here — a trigger run provisions its own and can
+    // materialize repos on demand via the CLI.
     let worktreePath: string | null = null;
-    if (effectiveMode !== 'talk') {
+    if (effectiveMode !== 'talk' && params.ticketId) {
       worktreePath = await this.ensureWorkspace(params.ticketId);
     }
 
@@ -1482,9 +1484,11 @@ export class ExecuteAgentUseCase {
       executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: `workflow:${executionId}`,
     });
 
-    // Compose prompts
+    // Compose prompts. Ticket context only exists for ticket-bound runs.
     const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
-    const context = await this.getTicketContext.execute({ ticketId: params.ticketId, agentName: persona.name });
+    const context = params.ticketId
+      ? await this.getTicketContext.execute({ ticketId: params.ticketId, agentName: persona.name })
+      : null;
     const userPromptBlocks = await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt);
     const userPromptText = userPromptBlocks.map((b) => b.type === 'text' ? b.text : '').join('');
 
@@ -1550,29 +1554,35 @@ export class ExecuteAgentUseCase {
   }
 
   private async composeWorkflowUserPrompt(
-    context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
+    context: Awaited<ReturnType<GetTicketContextUseCase['execute']>> | null,
     workflowContextPrompt: string,
   ): Promise<PromptContentBlock[]> {
     const blocks: PromptContentBlock[] = [];
     const pushText = (text: string) => blocks.push({ type: 'text', text });
 
-    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
-    if (context.ticket.description) {
-      blocks.push(...await this.resolveText(`\n## Description\n\n${context.ticket.description}`));
-    }
-    if (context.comments.length > 0) {
-      pushText('\n## Comments\n');
-      for (const c of context.comments) {
-        blocks.push(...await this.resolveText(`**${c.authorName}** (${c.authorType}):\n${c.body}\n`));
+    // Ticket block is included only for ticket-bound runs. A ticketless run
+    // (e.g. trigger-launched) is driven entirely by the workflow context.
+    if (context) {
+      pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
+      if (context.ticket.description) {
+        blocks.push(...await this.resolveText(`\n## Description\n\n${context.ticket.description}`));
       }
-    }
-    if (context.deliverables.length > 0) {
-      pushText('\n## Deliverables\n');
-      for (const d of context.deliverables) {
-        pushText(`### [${d.status}] ${d.title} (${d.type})\n${d.content ?? ''}\n`);
+      if (context.comments.length > 0) {
+        pushText('\n## Comments\n');
+        for (const c of context.comments) {
+          blocks.push(...await this.resolveText(`**${c.authorName}** (${c.authorType}):\n${c.body}\n`));
+        }
       }
+      if (context.deliverables.length > 0) {
+        pushText('\n## Deliverables\n');
+        for (const d of context.deliverables) {
+          pushText(`### [${d.status}] ${d.title} (${d.type})\n${d.content ?? ''}\n`);
+        }
+      }
+      pushText('\n---\n\n' + workflowContextPrompt);
+    } else {
+      pushText(workflowContextPrompt);
     }
-    pushText('\n---\n\n' + workflowContextPrompt);
     return blocks;
   }
 

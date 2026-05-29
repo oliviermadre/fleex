@@ -65,12 +65,12 @@ export function AgentExecutionsPanel({ executions }: Props) {
 
   const loadExecutions = useAgentEventStore((s) => s.loadExecutionsForTicket);
 
-  const handleCancel = useCallback(async (executionId: string, ticketId: string, e: React.MouseEvent) => {
+  const handleCancel = useCallback(async (executionId: string, ticketId: string | null, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm('Cancel this execution? The agent will be interrupted and the mention reset to pending.')) return;
     try {
       await api.cancelExecution(executionId);
-      loadExecutions(ticketId);
+      if (ticketId) loadExecutions(ticketId);
     } catch (err) {
       console.error('Failed to cancel execution:', err);
     }

@@ -168,7 +168,9 @@ export class GetSessionGroupsUseCase {
       try {
         const allExecs = await this.agentEventStore.getAllExecutions();
         for (const exec of allExecs) {
-          // getAllExecutions returns newest first; keep only the first (latest) per ticket
+          // getAllExecutions returns newest first; keep only the first (latest) per ticket.
+          // Ticketless executions (e.g. trigger-launched) have no session group here.
+          if (!exec.ticketId) continue;
           if (!ticketLatestExec.has(exec.ticketId)) {
             ticketLatestExec.set(exec.ticketId, exec);
           }

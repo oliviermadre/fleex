@@ -71,7 +71,8 @@ export interface WorkflowTemplateSnapshot {
 
 export interface WorkflowRun {
   id: string;
-  ticketId: string;
+  /** Optional: a run launched without a ticket (e.g. by a trigger) has none. */
+  ticketId: string | null;
   templateId: string;
   templateSnapshot: WorkflowTemplateSnapshot;
   status: WorkflowRunStatus;
@@ -120,7 +121,7 @@ export interface StepRun {
 }
 
 export interface CreateWorkflowRunInput {
-  ticketId: string;
+  ticketId: string | null;
   templateId: string;
   triggeredBy: string;
   triggeredFrom: string;
