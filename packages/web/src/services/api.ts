@@ -27,6 +27,7 @@ import type {
   WorkflowTemplate,
   WorkflowRun,
   StepRun,
+  ModelsResponse,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -55,6 +56,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+export async function fetchModels(): Promise<ModelsResponse> {
+  return request<ModelsResponse>('/models');
 }
 
 export async function fetchSessions(): Promise<Session[]> {
