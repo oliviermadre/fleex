@@ -1,0 +1,14 @@
+# Playwright-based screenshotter for the Fleex test stack.
+#
+# The base image ships Chromium (+ system deps) at a pinned version; we install
+# the matching `playwright` npm package so no browser download happens here.
+FROM mcr.microsoft.com/playwright:v1.49.1-jammy
+
+WORKDIR /app
+
+RUN npm init -y >/dev/null 2>&1 && npm install --no-audit --no-fund playwright@1.49.1
+
+COPY screenshot.mjs ./screenshot.mjs
+
+# Args: <url> <output-filename> [--full]
+ENTRYPOINT ["node", "screenshot.mjs"]

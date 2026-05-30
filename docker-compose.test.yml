@@ -1,0 +1,102 @@
+# Fleex — dockerized test stack.
+#
+# Boots the full app (gateway → server → web) under Bun with live-reload, so a
+# feature can be exercised in a real browser and screenshotted via the bundled
+# Playwright helper.
+#
+#   docker compose -f docker-compose.test.yml up -d --build      # start
+#   open http://localhost:5173                                   # use the UI
+#   ./test-stack/shot.sh /board board.png                        # screenshot
+#   docker compose -f docker-compose.test.yml down -v            # stop + wipe
+#
+# See test-stack/README.md for details.
+name: fleex-test
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: test-stack/Dockerfile.app
+  image: fleex-test-app
+  volumes:
+    - .:/app
+    - app_node_modules:/app/node_modules
+
+services:
+  # Host gateway — fs / exec / pty (Bun.serve).
+  gateway:
+    <<: *app
+    command: bun run --watch packages/host-gateway/src/main.ts
+    environment:
+      GATEWAY_PORT: "3001"
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Fastify API + WebSocket server.
+  server:
+    <<: *app
+    command: bun --conditions development --watch packages/server/src/main.ts
+    environment:
+      PORT: "3000"
+      HOST_GATEWAY_URL: http://gateway:3001
+      HOST_HOMEDIR: /home/fleex
+      FLEEX_STORAGE_DRIVER: sqlite
+      FLEEX_SQLITE_PATH: /data/fleex.db
+      # Optional: enables live model discovery in the UI when set in your shell.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - .:/app
+      - app_node_modules:/app/node_modules
+      - fleex_data:/data
+      - fleex_home:/home/fleex
+    ports:
+      - "3000:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  # Vite dev server (React 19) — proxies /api, /ws, /health to the server.
+  web:
+    <<: *app
+    command: bun run dev --host 0.0.0.0
+    working_dir: /app/packages/web
+    environment:
+      VITE_DEV_PORT: "5173"
+      VITE_PROXY_TARGET: http://server:3000
+      # Vite blocks unknown Host headers; allow the compose service name so the
+      # Playwright container can reach it as http://web:5173.
+      VITE_ALLOWED_HOSTS: web,localhost
+    ports:
+      - "5173:5173"
+    depends_on:
+      server:
+        condition: service_started
+
+  # On-demand Playwright screenshotter (profile "tools" → not started by `up`).
+  screenshot:
+    profiles: ["tools"]
+    build:
+      context: test-stack
+      dockerfile: Dockerfile.screenshot
+    image: fleex-test-screenshot
+    environment:
+      FLEEX_URL: http://web:5173
+    volumes:
+      - ./test-stack/screenshots:/screenshots
+      - ./test-stack/screenshot.mjs:/app/screenshot.mjs
+    depends_on:
+      - web
+
+volumes:
+  app_node_modules:
+  fleex_data:
+  fleex_home:
