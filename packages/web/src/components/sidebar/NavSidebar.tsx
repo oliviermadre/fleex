@@ -1,9 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
-import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useUnreadStore } from '../../stores/unreadStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { cn } from '../../lib/cn';
 import { RepositoriesIcon } from './icons';
@@ -34,11 +31,6 @@ export function NavSidebar() {
   const toggleNav = useUIStore((s) => s.toggleNav);
   const activePanel = useUIStore((s) => s.activePanel);
   const sessions = useSessionStore((s) => s.sessions);
-  const summaries = useRepositoryDashboardStore((s) => s.summaries);
-  const repoCount = Object.keys(summaries).length;
-  const tickets = useTicketStore((s) => s.tickets);
-  const activeTicketCount = tickets.filter((t) => t.status === 'doing' || t.status === 'reviewing').length;
-  const totalUnread = useUnreadStore((s) => s.totalUnread);
   const streamingExecutionIds = useAgentEventStore((s) => s.streamingExecutionIds);
   const liveExecutionCount = Object.keys(streamingExecutionIds).length;
   return (
@@ -59,7 +51,6 @@ export function NavSidebar() {
           active={activePanel === 'dashboard'}
           collapsed={navCollapsed}
           onClick={() => navigate('/dashboard')}
-          badge={totalUnread > 0 ? (totalUnread > 9 ? '9+' : String(totalUnread)) : undefined}
         />
 
         {/* Sessions (live agent runs) */}
@@ -102,7 +93,6 @@ export function NavSidebar() {
           shortLabel="Kanban"
           active={activePanel === 'tickets'}
           collapsed={navCollapsed}
-          badge={activeTicketCount > 0 ? (activeTicketCount > 9 ? '9+' : String(activeTicketCount)) : undefined}
           onClick={() => navigate('/tickets')}
         />
 
@@ -113,7 +103,6 @@ export function NavSidebar() {
           shortLabel="Repos"
           active={activePanel === 'repositories'}
           collapsed={navCollapsed}
-          badge={repoCount > 0 ? (repoCount > 9 ? '9+' : String(repoCount)) : undefined}
           onClick={() => navigate('/repositories')}
         />
 
