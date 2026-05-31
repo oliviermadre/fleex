@@ -8,6 +8,7 @@ import type {
   MarketplaceSkill,
   MarketplacePanel,
   MarketplaceWorkflow,
+  MarketplacePrimitiveEntry,
   PrimitiveKind,
   PrimitiveRef,
 } from '@fleex/shared';
@@ -128,4 +129,59 @@ export function deriveWorkflowDeps(w: MarketplaceWorkflow): PrimitiveRef[] {
     refs.set(`${kind}:${step.executorRef}`, { kind, slug: step.executorRef });
   }
   return [...refs.values()];
+}
+
+// ── removal closure (reverse-dependency walk) ──
+
+/** Stable key for a primitive within a manifest. */
+export function refKey(ref: PrimitiveRef): string {
+  return `${ref.kind}:${ref.slug}`;
+}
+
+/**
+ * Given manifest entries and a set of targets to remove, return the full set of
+ * entries that must go so no dangling dependency is left behind: the targets
+ * plus every entry that (transitively) depends on a target.
+ *
+ * Pure — no I/O. `toRemove` is the complete set; `dependents` is `toRemove`
+ * minus the originally-requested targets (i.e. the cascade fallout to surface
+ * to the user).
+ */
+export function computeRemovalClosure(
+  primitives: readonly MarketplacePrimitiveEntry[],
+  targets: readonly PrimitiveRef[],
+): { toRemove: MarketplacePrimitiveEntry[]; dependents: MarketplacePrimitiveEntry[] } {
+  const byKey = new Map<string, MarketplacePrimitiveEntry>();
+  for (const e of primitives) byKey.set(refKey(e), e);
+
+  // Reverse graph: depKey -> entries that depend on it.
+  const dependsOn = new Map<string, MarketplacePrimitiveEntry[]>();
+  for (const e of primitives) {
+    for (const dep of e.dependencies) {
+      const k = refKey(dep);
+      (dependsOn.get(k) ?? dependsOn.set(k, []).get(k)!).push(e);
+    }
+  }
+
+  const targetKeys = new Set(
+    targets.map(refKey).filter((k) => byKey.has(k)),
+  );
+
+  // BFS over the reverse graph starting from the targets.
+  const removeKeys = new Set<string>(targetKeys);
+  const queue = [...targetKeys];
+  while (queue.length > 0) {
+    const k = queue.shift()!;
+    for (const dependent of dependsOn.get(k) ?? []) {
+      const dk = refKey(dependent);
+      if (!removeKeys.has(dk)) {
+        removeKeys.add(dk);
+        queue.push(dk);
+      }
+    }
+  }
+
+  const toRemove = [...removeKeys].map((k) => byKey.get(k)!);
+  const dependents = toRemove.filter((e) => !targetKeys.has(refKey(e)));
+  return { toRemove, dependents };
 }
