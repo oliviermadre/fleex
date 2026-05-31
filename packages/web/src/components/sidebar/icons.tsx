@@ -282,3 +282,34 @@ export function PlusIcon({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Repositories icon: a folder (a repo checked out on disk — what Fleex manages)
+ * carrying a compact git branch graph. Tuned for legibility at 16–20px:
+ * one clear container + a small, well-spaced commit graph, no competing detail.
+ */
+export function RepositoriesIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {/* Folder */}
+      <path d="M3 7A2 2 0 0 1 5 5H8.7A2 2 0 0 1 10.3 5.8L11.4 7.2A2 2 0 0 0 13 8H19A2 2 0 0 1 21 10V17.5A2 2 0 0 1 19 19.5H5A2 2 0 0 1 3 17.5Z" />
+
+      {/* Git branch: two commits on a trunk, one branched off */}
+      <circle cx="8.6" cy="12.4" r="1.15" />
+      <circle cx="8.6" cy="16.2" r="1.15" />
+      <path d="M8.6 13.55V15.05" />
+      <path d="M8.6 13.9c0 1.5 1.05 2 2.3 2" />
+      <circle cx="12.2" cy="15.9" r="1.15" />
+    </svg>
+  );
+}

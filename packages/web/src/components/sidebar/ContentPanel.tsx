@@ -18,6 +18,7 @@ import { ClaudeConfigTree } from '../claude-config/ClaudeConfigTree';
 import { ScratchpadsContent } from '../scratchpad/ScratchpadsContent';
 import { TicketsContentPanel } from '../tickets/TicketsContentPanel';
 import { AgentListPanel } from '../agents/AgentListPanel';
+import { RepositoriesIcon } from './icons';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { aggregateBranchStatus, type DisplayStatus } from '../../lib/deriveStatus';
 import { StatusDot } from '../ui/StatusDot';
@@ -441,9 +442,7 @@ function CollapsedRepositoriesPanel() {
       <div className="flex-1 overflow-y-auto w-full">
         {orgGroups.length === 0 ? (
           <div className="flex items-center justify-center py-6">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
-              <rect x="2" y="10" width="12" height="2.5" rx="0.5" /><rect x="3" y="6" width="10" height="2.5" rx="0.5" /><rect x="1.5" y="2" width="13" height="2.5" rx="0.5" />
-            </svg>
+            <RepositoriesIcon size={16} className="text-[var(--theme-text-faint)]" />
           </div>
         ) : orgGroups.map(([org, repos]) => {
           const orgGroupId = `org:${org}`;

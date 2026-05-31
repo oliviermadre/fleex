@@ -1,11 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
-import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useUnreadStore } from '../../stores/unreadStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { cn } from '../../lib/cn';
+import { RepositoriesIcon } from './icons';
 
 function FleexLogo({ collapsed }: { collapsed: boolean }) {
   return (
@@ -33,17 +31,13 @@ export function NavSidebar() {
   const toggleNav = useUIStore((s) => s.toggleNav);
   const activePanel = useUIStore((s) => s.activePanel);
   const sessions = useSessionStore((s) => s.sessions);
-  const summaries = useRepositoryDashboardStore((s) => s.summaries);
-  const repoCount = Object.keys(summaries).length;
-  const tickets = useTicketStore((s) => s.tickets);
-  const activeTicketCount = tickets.filter((t) => t.status === 'doing' || t.status === 'reviewing').length;
-  const totalUnread = useUnreadStore((s) => s.totalUnread);
   const streamingExecutionIds = useAgentEventStore((s) => s.streamingExecutionIds);
   const liveExecutionCount = Object.keys(streamingExecutionIds).length;
   return (
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
       <div className="flex flex-1 flex-col gap-1 pt-2">
+        {/* === Operational === */}
         {/* Dashboard */}
         <NavItem
           icon={
@@ -53,13 +47,13 @@ export function NavSidebar() {
             </svg>
           }
           label="Dashboard"
+          shortLabel="Dash"
           active={activePanel === 'dashboard'}
           collapsed={navCollapsed}
           onClick={() => navigate('/dashboard')}
-          badge={totalUnread > 0 ? (totalUnread > 9 ? '9+' : String(totalUnread)) : undefined}
         />
 
-        {/* Tasks */}
+        {/* Sessions (live agent runs) */}
         <NavItem
           icon={
             <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -69,30 +63,15 @@ export function NavSidebar() {
               <path d="M5 5v6M5 7.5c0-1.5 1-3 4.5-3" />
             </svg>
           }
-          label="Session Tasks"
+          label="Sessions"
+          shortLabel="Sessions"
           active={activePanel === 'sessions'}
           collapsed={navCollapsed}
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
           onClick={() => navigate('/sessions')}
         />
 
-        {/* Repositories */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="10" width="12" height="2.5" rx="0.5" />
-              <rect x="3" y="6" width="10" height="2.5" rx="0.5" />
-              <rect x="1.5" y="2" width="13" height="2.5" rx="0.5" />
-            </svg>
-          }
-          label="Repositories"
-          active={activePanel === 'repositories'}
-          collapsed={navCollapsed}
-          badge={repoCount > 0 ? (repoCount > 9 ? '9+' : String(repoCount)) : undefined}
-
-          onClick={() => navigate('/repositories')}
-        />
-        {/* Backlog (was Tickets) */}
+        {/* Kanban (was Backlog / Tickets) */}
         <NavItem
           icon={
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
@@ -110,54 +89,42 @@ export function NavSidebar() {
               <rect x="17" y="14" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
             </svg>
           }
-          label="Backlog"
+          label="Kanban"
+          shortLabel="Kanban"
           active={activePanel === 'tickets'}
           collapsed={navCollapsed}
-          badge={activeTicketCount > 0 ? (activeTicketCount > 9 ? '9+' : String(activeTicketCount)) : undefined}
-
           onClick={() => navigate('/tickets')}
         />
 
-        {/* Claude Config */}
+        {/* Repositories */}
         <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
-              {/* Document */}
-              <path d="M9 1.5H4.5A1.5 1.5 0 0 0 3 3v10a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V5.5L9 1.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <polyline points="9,1.5 9,5.5 13,5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              {/* Claude sparkle overflowing */}
-              <g transform="translate(0.5, 0.5) scale(0.029)">
-                <path d="M142.27 316.619l73.655-41.326 1.238-3.589-1.238-1.996-3.589-.001-12.31-.759-42.084-1.138-36.498-1.516-35.361-1.896-8.897-1.895-8.34-10.995.859-5.484 7.482-5.03 10.717.935 23.683 1.617 35.537 2.452 25.782 1.517 38.193 3.968h6.064l.86-2.451-2.073-1.517-1.618-1.517-36.776-24.922-39.81-26.338-20.852-15.166-11.273-7.683-5.687-7.204-2.451-15.721 10.237-11.273 13.75.935 3.513.936 13.928 10.716 29.749 23.027 38.848 28.612 5.687 4.727 2.275-1.617.278-1.138-2.553-4.271-21.13-38.193-22.546-38.848-10.035-16.101-2.654-9.655c-.935-3.968-1.617-7.304-1.617-11.374l11.652-15.823 6.445-2.073 15.545 2.073 6.547 5.687 9.655 22.092 15.646 34.78 24.265 47.291 7.103 14.028 3.791 12.992 1.416 3.968 2.449-.001v-2.275l1.997-26.641 3.69-32.707 3.589-42.084 1.239-11.854 5.863-14.206 11.652-7.683 9.099 4.348 7.482 10.716-1.036 6.926-4.449 28.915-8.72 45.294-5.687 30.331h3.313l3.792-3.791 15.342-20.372 25.782-32.227 11.374-12.789 13.27-14.129 8.517-6.724 16.1-.001 11.854 17.617-5.307 18.199-16.581 21.029-13.75 17.819-19.716 26.54-12.309 21.231 1.138 1.694 2.932-.278 44.536-9.479 24.062-4.347 28.714-4.928 12.992 6.066 1.416 6.167-5.106 12.613-30.71 7.583-36.018 7.204-53.636 12.689-.657.48.758.935 24.164 2.275 10.337.556h25.301l47.114 3.514 12.309 8.139 7.381 9.959-1.238 7.583-18.957 9.655-25.579-6.066-59.702-14.205-20.474-5.106-2.83-.001v1.694l17.061 16.682 31.266 28.233 39.152 36.397 1.997 8.999-5.03 7.102-5.307-.758-34.401-25.883-13.27-11.651-30.053-25.302-1.996-.001v2.654l6.926 10.136 36.574 54.975 1.895 16.859-2.653 5.485-9.479 3.311-10.414-1.895-21.408-30.054-22.092-33.844-17.819-30.331-2.173 1.238-10.515 113.261-4.929 5.788-11.374 4.348-9.478-7.204-5.03-11.652 5.03-23.027 6.066-30.052 4.928-23.886 4.449-29.674 2.654-9.858-.177-.657-2.173.278-22.37 30.71-34.021 45.977-26.919 28.815-6.445 2.553-11.173-5.789 1.037-10.337 6.243-9.2 37.257-47.392 22.47-29.371 14.508-16.961-.101-2.451h-.859l-98.954 64.251-17.618 2.275-7.583-7.103.936-11.652 3.589-3.791 29.749-20.474z" fill="#D97706" />
-              </g>
-            </svg>
-          }
-          label="Claude Config"
-          active={activePanel === 'claude-config'}
+          icon={<RepositoriesIcon size={20} />}
+          label="Repositories"
+          shortLabel="Repos"
+          active={activePanel === 'repositories'}
           collapsed={navCollapsed}
-
-          onClick={() => navigate('/claude-config')}
+          onClick={() => navigate('/repositories')}
         />
 
-        {/* Agents */}
+        {/* Execution Log */}
         <NavItem
           icon={
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 8V4H8" />
-              <rect width="16" height="12" x="4" y="8" rx="2" />
-              <path d="M2 14h2" />
-              <path d="M20 14h2" />
-              <path d="M15 13v2" />
-              <path d="M9 13v2" />
+              <polygon points="5,3 19,12 5,21" fill={activePanel === 'execution-log' ? 'currentColor' : 'none'} />
             </svg>
           }
-          label="Agents"
-          active={activePanel === 'agents'}
+          label="Execution Log"
+          shortLabel="Logs"
+          active={activePanel === 'execution-log'}
           collapsed={navCollapsed}
-
-          onClick={() => navigate('/agents')}
+          badge={liveExecutionCount > 0 ? (liveExecutionCount > 9 ? '9+' : String(liveExecutionCount)) : undefined}
+          onClick={() => navigate('/execution-log')}
         />
 
-        {/* Scratchpads */}
+        {/* === Content === */}
+        <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
+
+        {/* Notes (was Scratchpads) */}
         <NavItem
           icon={
             <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
@@ -169,25 +136,11 @@ export function NavSidebar() {
               <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
             </svg>
           }
-          label="Scratchpads"
+          label="Notes"
+          shortLabel="Notes"
           active={activePanel === 'scratchpads'}
           collapsed={navCollapsed}
-
           onClick={() => navigate('/scratchpads')}
-        />
-
-        {/* Execution Log */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="5,3 19,12 5,21" fill={activePanel === 'execution-log' ? 'currentColor' : 'none'} />
-            </svg>
-          }
-          label="Execution Log"
-          active={activePanel === 'execution-log'}
-          collapsed={navCollapsed}
-          badge={liveExecutionCount > 0 ? (liveExecutionCount > 9 ? '9+' : String(liveExecutionCount)) : undefined}
-          onClick={() => navigate('/execution-log')}
         />
 
         {/* Documents */}
@@ -202,6 +155,7 @@ export function NavSidebar() {
             </svg>
           }
           label="Documents"
+          shortLabel="Docs"
           active={activePanel === 'documents'}
           collapsed={navCollapsed}
           onClick={() => navigate('/documents')}
@@ -210,8 +164,26 @@ export function NavSidebar() {
         {/* Cluster - hidden for now */}
       </div>
 
-      {/* Analytics & Settings - bottom of sidebar */}
-      <div className="flex flex-col gap-1">
+      {/* Config & meta - bottom of sidebar */}
+      <div className="flex flex-col gap-1 border-t border-[var(--theme-border-subtle)] pt-1">
+        {/* Agents */}
+        <NavItem
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 8V4H8" />
+              <rect width="16" height="12" x="4" y="8" rx="2" />
+              <path d="M2 14h2" />
+              <path d="M20 14h2" />
+              <path d="M15 13v2" />
+              <path d="M9 13v2" />
+            </svg>
+          }
+          label="Agents"
+          shortLabel="Agents"
+          active={activePanel === 'agents'}
+          collapsed={navCollapsed}
+          onClick={() => navigate('/agents')}
+        />
         <NavItem
           icon={
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -219,9 +191,9 @@ export function NavSidebar() {
             </svg>
           }
           label="Analytics"
+          shortLabel="Stats"
           active={activePanel === 'analytics'}
           collapsed={navCollapsed}
-
           onClick={() => navigate('/analytics')}
         />
         <NavItem
@@ -232,9 +204,9 @@ export function NavSidebar() {
             </svg>
           }
           label="Settings"
+          shortLabel="Config"
           active={activePanel === 'settings'}
           collapsed={navCollapsed}
-
           onClick={() => navigate('/settings')}
         />
       </div>
@@ -269,6 +241,7 @@ export function NavSidebar() {
 function NavItem({
   icon,
   label,
+  shortLabel,
   active,
   collapsed,
   badge,
@@ -276,6 +249,7 @@ function NavItem({
 }: {
   icon: React.ReactNode;
   label: string;
+  shortLabel?: string;
   active: boolean;
   collapsed: boolean;
   badge?: string;
@@ -284,11 +258,13 @@ function NavItem({
   return (
     <button
       className={cn(
-        'relative flex items-center gap-2.5 border-l-2 px-4 py-3 text-[15px] transition-colors',
+        'relative border-l-2 transition-colors',
         active
           ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)]'
           : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
-        collapsed ? 'justify-center' : ''
+        collapsed
+          ? 'flex flex-col items-center gap-1 px-1 py-2'
+          : 'flex items-center gap-2.5 px-4 py-3 text-[15px]'
       )}
       onClick={onClick}
       title={collapsed ? label : undefined}
@@ -301,7 +277,16 @@ function NavItem({
           </span>
         )}
       </span>
-      {!collapsed && (
+      {collapsed ? (
+        <span
+          className={cn(
+            'max-w-full truncate text-[10px] font-medium leading-none tracking-tight',
+            active ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-faint)]'
+          )}
+        >
+          {shortLabel ?? label}
+        </span>
+      ) : (
         <>
           <span className="truncate">{label}</span>
           {badge && (

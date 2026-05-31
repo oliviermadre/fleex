@@ -21,7 +21,7 @@ import { ScratchpadHint } from '../scratchpad/ScratchpadHint';
 import { FloatingSessionOverlay } from '../main-panel/FloatingSessionOverlay';
 import { FloatingDeliverableOverlay } from '../tickets/FloatingDeliverableOverlay';
 
-const NAV_COLLAPSED_WIDTH = 55;
+const NAV_COLLAPSED_WIDTH = 64;
 const NAV_EXPANDED_WIDTH = 200;
 const CONTENT_PANEL_COLLAPSED_WIDTH = 55;
 

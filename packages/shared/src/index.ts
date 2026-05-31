@@ -221,6 +221,20 @@ export type {
   ResolveHumanGateInput,
 } from './types/workflow.js';
 
+export type {
+  PrimitiveKind,
+  PrimitiveRef,
+  MarketplacePersona,
+  MarketplaceSkill,
+  MarketplacePanelMember,
+  MarketplacePanel,
+  MarketplaceWorkflow,
+  MarketplacePrimitiveContent,
+  MarketplacePrimitiveEntry,
+  MarketplaceManifest,
+} from './types/marketplace.js';
+export { MARKETPLACE_SCHEMA_VERSION } from './types/marketplace.js';
+
 export type { WsChannel } from './constants.js';
 
 export {
