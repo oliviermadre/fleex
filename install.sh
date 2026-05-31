@@ -25,6 +25,10 @@ CONFIG_FILE="$FLEEX_HOME/config.json"
 PROJECTS_DIR="$FLEEX_HOME/projects"
 ENV_FILE="$REPO_DIR/.env"
 DB_FILE="$FLEEX_HOME/fleex.db"
+MARKETPLACES_FILE="$FLEEX_HOME/marketplaces.json"
+MARKETPLACE_URL="git@github.com:oliviermadre/fleex-marketplace.git"
+MARKETPLACE_NAME="default"   # local name registered via `marketplace add --name`
+MARKETPLACE_REGISTERED=false
 IS_FRESH_INSTALL=false
 SPINNER_PID=""
 
@@ -985,6 +989,26 @@ await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n");
   IFS="$IFS_OLD"
 }
 
+# ── Phase 5b: Default Marketplace ─────────────────────────────────────────────
+
+phase_marketplace() {
+  ui_section "Marketplace"
+  info "Registering the default fleex marketplace…"
+  echo ""
+
+  # `marketplace add` is standalone (git clone + registry write, no server needed).
+  # Guarded so a missing/inaccessible repo never aborts the install (set -e safe).
+  if "$BIN_DIR/$CLI_NAME" marketplace add "$MARKETPLACE_URL" --name "$MARKETPLACE_NAME" >/dev/null 2>&1; then
+    MARKETPLACE_REGISTERED=true
+    ok "Registered $MARKETPLACE_NAME"
+    printf "    ${DIM}Import primitives with:${NC} ${BOLD}fleex import --marketplace %s${NC}\n" "$MARKETPLACE_NAME"
+  else
+    warn "Could not register the default marketplace automatically."
+    warn "You can add it later once your shell is reloaded:"
+    printf "    ${BOLD}fleex marketplace add %s --name %s${NC}\n" "$MARKETPLACE_URL" "$MARKETPLACE_NAME"
+  fi
+}
+
 # ── Phase 6: Completion ───────────────────────────────────────────────────────
 
 phase_complete_update() {
@@ -1008,6 +1032,14 @@ phase_complete_update() {
 DONE
   printf "${NC}"
   echo ""
+
+  # Remind about the default marketplace if it isn't registered yet.
+  if ! { [ -f "$MARKETPLACES_FILE" ] && grep -q "\"$MARKETPLACE_NAME\"" "$MARKETPLACES_FILE" 2>/dev/null; }; then
+    info "Add the default marketplace:"
+    printf "    ${BOLD}fleex marketplace add %s --name %s${NC}\n" "$MARKETPLACE_URL" "$MARKETPLACE_NAME"
+    echo ""
+  fi
+
   info "Start the stack:"
   printf "    ${BOLD}fleex start${NC}\n"
   echo ""
@@ -1042,6 +1074,14 @@ DONE
   printf "    ${CYAN}Jarvis${NC}         Personal AI assistant\n"
   printf "    ${CYAN}The Catalyst${NC}   Project manager agent\n"
   printf "    ${CYAN}The Builder${NC}    Software developer agent\n"
+  echo ""
+
+  printf "  ${BOLD}Marketplace:${NC}\n"
+  if [ "$MARKETPLACE_REGISTERED" = true ]; then
+    printf "    ${CYAN}%s${NC}  registered — ${DIM}fleex import --marketplace %s${NC}\n" "$MARKETPLACE_NAME" "$MARKETPLACE_NAME"
+  else
+    printf "    ${DIM}Add it with:${NC} ${BOLD}fleex marketplace add %s --name %s${NC}\n" "$MARKETPLACE_URL" "$MARKETPLACE_NAME"
+  fi
   echo ""
 
   # Shell reload instructions
@@ -1090,6 +1130,9 @@ main() {
 
     # Phase 5: Repository Registration
     phase_repositories
+
+    # Phase 5b: Default Marketplace
+    phase_marketplace
 
     # Phase 6: Completion (fresh)
     phase_complete_fresh
