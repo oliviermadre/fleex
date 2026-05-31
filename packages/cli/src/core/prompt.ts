@@ -67,6 +67,23 @@ function parseSelection(expr: string, count: number): Set<number> {
   return selected;
 }
 
+/** Numbered single-select. Returns the chosen item, or undefined if none. */
+export async function promptSelectOne<T>(
+  label: string,
+  items: readonly T[],
+  render: (item: T) => string,
+): Promise<T | undefined> {
+  if (items.length === 0) return undefined;
+  output.write(`\n${c.bold(label)}\n`);
+  items.forEach((item, i) => {
+    output.write(`  ${c.cyan(String(i + 1))}) ${render(item)}\n`);
+  });
+  const answer = (await io().question(c.dim('  select one: '))).trim();
+  const idx = Number(answer);
+  if (!Number.isInteger(idx) || idx < 1 || idx > items.length) return undefined;
+  return items[idx - 1];
+}
+
 /**
  * Numbered multi-select. Prints a labeled, numbered list and lets the user
  * pick with a comma/range expression ("1,3,5-7", "all", or empty for none).

@@ -55,6 +55,38 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   }
 }
 
+/**
+ * Like the api* helpers but throws on error instead of exiting the process.
+ * Use when the caller wants to recover (e.g. continue a batch on failure).
+ */
+export async function apiCall<T = any>(method: string, url: string, body?: unknown): Promise<T> {
+  const opts: RequestInit = { method };
+  if (body !== undefined) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
+  }
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 10000);
+  opts.signal = ctrl.signal;
+  let res: Response;
+  try {
+    res = await fetch(url, opts);
+  } catch {
+    throw new Error(`connection error: ${method} ${url}`);
+  } finally {
+    clearTimeout(tid);
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await parseErrorMessage(res)}`);
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return text as unknown as T;
+  }
+}
+
 export function apiGet<T = any>(url: string): Promise<T> {
   return request<T>('GET', url);
 }
