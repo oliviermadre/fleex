@@ -2,81 +2,16 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { ClaudeUsage, ClaudeUsageMetric } from '@fleex/shared';
 
-function parseTimeLeft(resetStr: string): string {
-  // Formats: "Resets 12:59pm (Europe/Paris)", "Resets Feb 18 at 9am (Europe/Paris)"
-  const tzMatch = resetStr.match(/\(([^)]+)\)/);
-  const tz = tzMatch?.[1] ?? 'UTC';
+function parseTimeLeft(resetsAt: string): string {
+  // resetsAt is an ISO 8601 timestamp from the OAuth usage endpoint.
+  if (!resetsAt) return '—';
+  const target = new Date(resetsAt);
+  if (Number.isNaN(target.getTime())) return '—';
 
-  const now = new Date();
-
-  // Try "Resets <time> (<tz>)" — same-day reset like "Resets 1pm" or "Resets 12:59pm"
-  const sameDayMatch = resetStr.match(/Resets?\s+(\d{1,2}(?::\d{2})?)\s*(am|pm)/i);
-  // Try "Resets <Month> <Day> at <time> (<tz>)" — future-day reset
-  const futureDayMatch = resetStr.match(/Resets?\s+(\w+)\s+(\d{1,2})\s+at\s+(\d{1,2}(?::\d{2})?)\s*(am|pm)/i);
-
-  let target: Date | null = null;
-
-  if (sameDayMatch) {
-    const [, timePart, ampm] = sameDayMatch;
-    target = buildDate(now.getFullYear(), now.getMonth(), now.getDate(), timePart!, ampm!, tz);
-    // If target is in the past, it resets tomorrow
-    if (target <= now) {
-      target = buildDate(now.getFullYear(), now.getMonth(), now.getDate() + 1, timePart!, ampm!, tz);
-    }
-  } else if (futureDayMatch) {
-    const [, monthStr, dayStr, timePart, ampm] = futureDayMatch;
-    const monthIndex = parseMonth(monthStr!);
-    if (monthIndex >= 0) {
-      let year = now.getFullYear();
-      if (monthIndex < now.getMonth() || (monthIndex === now.getMonth() && parseInt(dayStr!) < now.getDate())) {
-        year++;
-      }
-      target = buildDate(year, monthIndex, parseInt(dayStr!), timePart!, ampm!, tz);
-    }
-  }
-
-  if (!target) return resetStr;
-
-  const diffMs = target.getTime() - now.getTime();
+  const diffMs = target.getTime() - Date.now();
   if (diffMs <= 0) return 'any moment';
 
   return formatDuration(diffMs);
-}
-
-function buildDate(year: number, month: number, day: number, timePart: string, ampm: string, tz: string): Date {
-  const [hourStr, minuteStr] = timePart.includes(':') ? timePart.split(':') : [timePart, '0'];
-  let hour = parseInt(hourStr!);
-  const minute = parseInt(minuteStr!);
-
-  if (ampm.toLowerCase() === 'pm' && hour !== 12) hour += 12;
-  if (ampm.toLowerCase() === 'am' && hour === 12) hour = 0;
-
-  const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
-
-  try {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      hour12: false,
-    });
-
-    const utcGuess = new Date(dateStr + 'Z');
-    const parts = formatter.formatToParts(utcGuess);
-    const get = (type: string) => parseInt(parts.find((p) => p.type === type)?.value ?? '0');
-
-    const tzDate = new Date(Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second')));
-    const offsetMs = tzDate.getTime() - utcGuess.getTime();
-
-    return new Date(utcGuess.getTime() - offsetMs);
-  } catch {
-    return new Date(dateStr);
-  }
-}
-
-function parseMonth(str: string): number {
-  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-  return months.findIndex((m) => str.toLowerCase().startsWith(m));
 }
 
 function formatDuration(ms: number): string {
@@ -190,7 +125,7 @@ function Gauge({ metric, label }: GaugeProps) {
 function UsageTooltipRow({ metric, label }: { metric: ClaudeUsageMetric; label: string }) {
   const remaining = 100 - metric.percentage;
   const fillColor = getFillColor(remaining);
-  const timeLeft = parseTimeLeft(metric.reset);
+  const timeLeft = parseTimeLeft(metric.resetsAt);
 
   return (
     <div className="space-y-1">

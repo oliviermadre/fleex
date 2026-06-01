@@ -180,30 +180,11 @@ function createWindow() {
             + '</div>';
         }
 
-        function formatResetTime(resetStr) {
-          if (!resetStr) return '';
-          const tzMatch = resetStr.match(/\\(([^)]+)\\)/);
-          const tz = tzMatch ? tzMatch[1] : 'UTC';
-          const now = new Date();
-
-          const sameDayMatch = resetStr.match(/Resets?\\s+(\\d{1,2}(?::\\d{2})?)\\s*(am|pm)/i);
-          const futureDayMatch = resetStr.match(/Resets?\\s+(\\w+)\\s+(\\d{1,2})\\s+at\\s+(\\d{1,2}(?::\\d{2})?)\\s*(am|pm)/i);
-
-          let target = null;
-          if (sameDayMatch) {
-            target = buildResetDate(now.getFullYear(), now.getMonth(), now.getDate(), sameDayMatch[1], sameDayMatch[2], tz);
-            if (target <= now) target = buildResetDate(now.getFullYear(), now.getMonth(), now.getDate() + 1, sameDayMatch[1], sameDayMatch[2], tz);
-          } else if (futureDayMatch) {
-            const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
-            const monthIdx = months.findIndex(m => futureDayMatch[1].toLowerCase().startsWith(m));
-            if (monthIdx >= 0) {
-              let year = now.getFullYear();
-              if (monthIdx < now.getMonth() || (monthIdx === now.getMonth() && parseInt(futureDayMatch[2]) < now.getDate())) year++;
-              target = buildResetDate(year, monthIdx, parseInt(futureDayMatch[2]), futureDayMatch[3], futureDayMatch[4], tz);
-            }
-          }
-          if (!target) return resetStr;
-          const diffMs = target.getTime() - now.getTime();
+        function formatResetTime(resetsAt) {
+          if (!resetsAt) return '—';
+          const target = new Date(resetsAt);
+          if (isNaN(target.getTime())) return '—';
+          const diffMs = target.getTime() - Date.now();
           if (diffMs <= 0) return 'any moment';
           const totalMin = Math.floor(diffMs / 60000);
           const totalHrs = Math.floor(totalMin / 60);
@@ -215,27 +196,10 @@ function createWindow() {
           return rh > 0 ? totalDays + 'd ' + rh + 'h' : totalDays + 'd';
         }
 
-        function buildResetDate(year, month, day, timePart, ampm, tz) {
-          const parts = timePart.includes(':') ? timePart.split(':') : [timePart, '0'];
-          let hour = parseInt(parts[0]);
-          const minute = parseInt(parts[1]);
-          if (ampm.toLowerCase() === 'pm' && hour !== 12) hour += 12;
-          if (ampm.toLowerCase() === 'am' && hour === 12) hour = 0;
-          const dateStr = year + '-' + String(month+1).padStart(2,'0') + '-' + String(day).padStart(2,'0') + 'T' + String(hour).padStart(2,'0') + ':' + String(minute).padStart(2,'0') + ':00';
-          try {
-            const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
-            const utcGuess = new Date(dateStr + 'Z');
-            const p = fmt.formatToParts(utcGuess);
-            const g = (t) => parseInt(p.find(x => x.type === t)?.value ?? '0');
-            const tzDate = new Date(Date.UTC(g('year'), g('month')-1, g('day'), g('hour'), g('minute'), g('second')));
-            return new Date(utcGuess.getTime() - (tzDate.getTime() - utcGuess.getTime()));
-          } catch { return new Date(dateStr); }
-        }
-
         function renderTooltipRow(label, metric) {
           const remaining = 100 - metric.percentage;
           const fillColor = getFillColor(remaining);
-          const resetTime = formatResetTime(metric.reset);
+          const resetTime = formatResetTime(metric.resetsAt);
           return '<div>'
             + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'
             + '<span style="font-size:11px;font-weight:600;color:var(--theme-text-primary,#e4e4e7);">' + label + '</span>'

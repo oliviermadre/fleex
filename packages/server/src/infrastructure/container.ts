@@ -72,7 +72,7 @@ import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
-import { TmuxClaudeUsageAdapter } from './adapters/tmux-claude-usage.adapter.js';
+import { ApiClaudeUsageAdapter } from './adapters/api-claude-usage.adapter.js';
 import { DomainEventLogEntity } from '../domain/entities/domain-event-log.entity.js';
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
 import { CachedSessionStore } from './adapters/cached-session-store.js';
@@ -188,7 +188,7 @@ export async function createContainer() {
   const enrichClaudeActivity = new EnrichClaudeActivityUseCase(claudeState, logger);
 
   // Claude usage
-  const claudeUsageAdapter = new TmuxClaudeUsageAdapter(execFn, config, logger);
+  const claudeUsageAdapter = new ApiClaudeUsageAdapter(execFn, hostFs, hostHomedir, logger);
   const getClaudeUsage = new GetClaudeUsageUseCase(claudeUsageAdapter, logger);
 
   // Repository dashboard services
