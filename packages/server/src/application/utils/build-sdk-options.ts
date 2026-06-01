@@ -20,6 +20,9 @@ export function buildSdkOptions(
   const base: Record<string, unknown> = {
     model: ctx.model,
     systemPrompt: ctx.systemPrompt,
+    // Verbose debug trace from the CLI subprocess, captured via the `stderr`
+    // callback wired at each call site. Only surfaced to the logs on failure.
+    debug: true,
     ...(cliPath ? { pathToClaudeCodeExecutable: cliPath } : {}),
   };
 

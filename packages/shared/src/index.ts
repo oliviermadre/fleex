@@ -47,6 +47,7 @@ export type { ClaudeUsageMetric, ClaudeUsage } from './types/claude-usage.js';
 export type {
   Repository,
   Worktree,
+  WorktreeDetail,
   GitRemoteInfo,
   CreateWorktreeRequest,
   HookResult,
@@ -214,6 +215,14 @@ export type {
   DashboardWorktree,
   DashboardGitHubIssue,
   DashboardData,
+  DashboardStats,
+  NeedsYouKind,
+  NeedsYouItem,
+  InFlightKind,
+  InFlightItem,
+  DashboardDeliverable,
+  TicketActivitySource,
+  ActiveRecentTicket,
 } from './types/dashboard.js';
 
 export type {

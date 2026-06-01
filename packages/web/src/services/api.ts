@@ -4,6 +4,7 @@ import type {
   CreateSessionRequest,
   Repository,
   Worktree,
+  WorktreeDetail,
   CreateWorktreeRequest,
   CreateWorktreeResponse,
   PullRequest,
@@ -100,6 +101,10 @@ export async function fetchBranches(org: string, name: string): Promise<string[]
 
 export async function fetchWorktrees(org: string, name: string): Promise<Worktree[]> {
   return request<Worktree[]>(`/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`);
+}
+
+export async function fetchWorktreeDetails(org: string, name: string): Promise<WorktreeDetail[]> {
+  return request<WorktreeDetail[]>(`/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktree-details`);
 }
 
 export async function createWorktree(

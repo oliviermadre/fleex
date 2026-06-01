@@ -1,6 +1,28 @@
 import type { FastifyInstance } from 'fastify';
-import type { DashboardPullRequest, DashboardWorktree, DashboardGitHubIssue, DashboardData } from '@fleex/shared';
+import type {
+  DashboardPullRequest,
+  DashboardWorktree,
+  DashboardGitHubIssue,
+  DashboardData,
+  DashboardStats,
+  ActiveRecentTicket,
+  NeedsYouItem,
+} from '@fleex/shared';
 import type { Container } from '../container.js';
+import { getDashboardLaunchpad, type LaunchpadResult } from '../../application/use-cases/get-dashboard-launchpad.js';
+import { getActiveRecentTickets } from '../../application/use-cases/get-active-recent-tickets.js';
+
+const EMPTY_LAUNCHPAD: LaunchpadResult = {
+  liveRuns: 0,
+  liveRunsNeedReview: 0,
+  needsReview: 0,
+  needsReviewFailed: 0,
+  deliverablesToday: 0,
+  spendTodayUsd: 0,
+  needsYou: [],
+  inFlight: [],
+  recentOutputs: [],
+};
 
 // Raw shape returned by `gh search issues --json ...`
 interface GhSearchIssue {
@@ -64,17 +86,73 @@ export function dashboardRoutes(container: Container) {
           }
         }
 
+        // Tickets as DTOs — reused for activeTickets and the launchpad aggregation.
+        const ticketDtos = allTickets.map((t) => t.toDTO());
+        const activeTickets = ticketDtos.filter((t) => t.status !== 'done' && t.status !== 'cancelled');
+
+        // ── Launchpad: live/agentic half (sessions, executions, deliverables, mentions, workflows, stale) ──
+        let launchpad: LaunchpadResult;
+        try {
+          launchpad = await getDashboardLaunchpad({
+            sessionStore: container.sessionStore,
+            agentEventStore: container.agentEventStore,
+            deliverableStore: container.deliverableStore,
+            mentionStore: container.mentionStore,
+            personaStore: container.personaStore,
+            workflowRunStore: container.workflowRunStore,
+            tickets: ticketDtos.map((t) => ({
+              id: t.id,
+              displayId: t.displayId,
+              title: t.title,
+              status: t.status,
+              updatedAt: t.updatedAt,
+            })),
+            now: new Date(),
+          });
+        } catch (e) {
+          container.logger.warn('Dashboard launchpad aggregation failed', { error: String(e) });
+          launchpad = EMPTY_LAUNCHPAD;
+        }
+
+        // ── Active tickets with activity in the last 7 days (replaces "Today's Branches") ──
+        let activeRecentTickets: ActiveRecentTicket[] = [];
+        try {
+          activeRecentTickets = await getActiveRecentTickets({
+            tickets: activeTickets.map((t) => ({
+              id: t.id,
+              displayId: t.displayId,
+              title: t.title,
+              status: t.status,
+              updatedAt: t.updatedAt,
+            })),
+            commentStore: container.commentStore,
+            deliverableStore: container.deliverableStore,
+            mentionStore: container.mentionStore,
+            now: new Date(),
+          });
+        } catch (e) {
+          container.logger.warn('Dashboard active-recent-tickets aggregation failed', { error: String(e) });
+        }
+
         const myPullRequests: DashboardPullRequest[] = [];
         const reviewRequests: DashboardPullRequest[] = [];
         const myIssues: DashboardGitHubIssue[] = [];
         const assignedIssues: DashboardGitHubIssue[] = [];
         const activeWorktrees: DashboardWorktree[] = [];
 
-        // Skip GitHub fetches if rate-limited — return tickets-only dashboard
+        // Skip GitHub fetches if rate-limited — return tickets + launchpad (no GitHub-derived bits)
         if (rateLimited) {
-          const activeTickets = allTickets
-            .filter((t) => t.status !== 'done' && t.status !== 'cancelled')
-            .map((t) => t.toDTO());
+          const stats: DashboardStats = {
+            liveRuns: launchpad.liveRuns,
+            liveRunsNeedReview: launchpad.liveRunsNeedReview,
+            needsReview: launchpad.needsReview,
+            needsReviewFailed: launchpad.needsReviewFailed,
+            prsMine: 0,
+            prsDraft: 0,
+            prsConflict: 0,
+            deliverablesToday: launchpad.deliverablesToday,
+            spendTodayUsd: launchpad.spendTodayUsd,
+          };
           return {
             activeTickets,
             myPullRequests,
@@ -83,6 +161,11 @@ export function dashboardRoutes(container: Container) {
             assignedIssues,
             activeWorktrees,
             githubUser,
+            stats,
+            needsYou: launchpad.needsYou,
+            inFlight: launchpad.inFlight,
+            recentOutputs: launchpad.recentOutputs,
+            activeRecentTickets,
           } satisfies DashboardData;
         }
 
@@ -158,6 +241,8 @@ export function dashboardRoutes(container: Container) {
                 title: pr.title,
                 headRefName: pr.headRefName,
                 state: 'open',
+                isDraft: pr.isDraft ?? false,
+                mergeable: pr.mergeable ?? 'UNKNOWN',
                 author: pr.author,
                 assignees: pr.assignees,
                 createdAt: pr.createdAt,
@@ -250,10 +335,33 @@ export function dashboardRoutes(container: Container) {
           }
         }
 
-        // Return all non-terminal tickets so linked items can always resolve their ticket
-        const activeTickets = allTickets
-          .filter((t) => t.status !== 'done' && t.status !== 'cancelled')
-          .map((t) => t.toDTO());
+        // ── GitHub-derived launchpad bits ──
+        const prsDraft = myPullRequests.filter((p) => p.isDraft).length;
+        const prsConflict = myPullRequests.filter((p) => p.mergeable === 'CONFLICTING').length;
+
+        const reviewItems: NeedsYouItem[] = reviewRequests.map((pr) => ({
+          id: `review:${pr.org}/${pr.name}#${pr.number}`,
+          kind: 'review_requested',
+          title: `Review requested — ${pr.headRefName} #${pr.number}`,
+          subtitle: `${pr.org}/${pr.name}`,
+          ticketId: pr.linkedTicketId ?? null,
+          ticketDisplayId: null,
+          at: pr.updatedAt,
+          href: `https://github.com/${pr.org}/${pr.name}/pull/${pr.number}`,
+        }));
+        const needsYou = [...launchpad.needsYou, ...reviewItems].sort((a, b) => b.at.localeCompare(a.at));
+
+        const stats: DashboardStats = {
+          liveRuns: launchpad.liveRuns,
+          liveRunsNeedReview: launchpad.liveRunsNeedReview,
+          needsReview: launchpad.needsReview,
+          needsReviewFailed: launchpad.needsReviewFailed,
+          prsMine: myPullRequests.length,
+          prsDraft,
+          prsConflict,
+          deliverablesToday: launchpad.deliverablesToday,
+          spendTodayUsd: launchpad.spendTodayUsd,
+        };
 
         return {
           activeTickets,
@@ -263,6 +371,11 @@ export function dashboardRoutes(container: Container) {
           assignedIssues,
           activeWorktrees,
           githubUser,
+          stats,
+          needsYou,
+          inFlight: launchpad.inFlight,
+          recentOutputs: launchpad.recentOutputs,
+          activeRecentTickets,
         } satisfies DashboardData;
       } catch (err) {
         container.logger.error('Dashboard aggregation failed', { error: String(err) });

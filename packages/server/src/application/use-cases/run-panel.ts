@@ -25,6 +25,7 @@ import { normalizeDeliverableTypes } from '@fleex/shared';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import { streamSdkQuery } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
+import { createSdkTraceCapture } from '../utils/sdk-trace-capture.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
@@ -489,13 +490,29 @@ export class RunPanelUseCase {
       queryOptions.maxTurns = options.maxTurns;
     }
 
+    // Captures the SDK subprocess stderr; surfaced to the logs only on failure.
+    const sdkTrace = createSdkTraceCapture();
+    queryOptions['stderr'] = sdkTrace.onStderr;
+
     const noopEmit = () => {};
-    const result = await streamSdkQuery({
-      prompt,
-      queryOptions: queryOptions as Record<string, unknown>,
-      emitEvent: options.emitEvent ?? noopEmit,
-      ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
-    });
+    let result: Awaited<ReturnType<typeof streamSdkQuery>>;
+    try {
+      result = await streamSdkQuery({
+        prompt,
+        queryOptions: queryOptions as Record<string, unknown>,
+        emitEvent: options.emitEvent ?? noopEmit,
+        ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
+      });
+    } catch (err) {
+      this.logger.error('Panel SDK query failed', {
+        model: options.model,
+        mode,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        sdkTrace: sdkTrace.getTrace(),
+      });
+      throw err;
+    }
 
     this.logger.info('SDK query done', {
       model: options.model,

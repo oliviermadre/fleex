@@ -5,9 +5,10 @@ import { IssuesBanner } from './IssuesBanner';
 import { PullRequestsSection } from './PullRequestsSection';
 import { MergedPRsSection } from './MergedPRsSection';
 import { RepoConfigPanel } from './RepoConfigPanel';
+import { WorktreesSection } from './WorktreesSection';
 import { cn } from '../../lib/cn';
 
-type Tab = 'pulls' | 'issues' | 'merged' | 'settings';
+type Tab = 'pulls' | 'issues' | 'merged' | 'worktrees' | 'settings';
 
 interface Props {
   repoKey: string;
@@ -35,6 +36,7 @@ export function RepositoryDashboard({ repoKey }: Props) {
   const openPRs = data?.openPullRequests ?? [];
   const issues = data?.openIssues ?? [];
   const mergedPRs = data?.recentlyMergedPullRequests ?? [];
+  const worktreeCount = data?.worktrees?.filter((w) => !w.isMain && !w.isBare).length;
 
   if (!org || !name) return null;
 
@@ -42,6 +44,7 @@ export function RepositoryDashboard({ repoKey }: Props) {
     { key: 'pulls', label: 'Pull Requests', count: openPRs.length },
     { key: 'issues', label: 'Issues', count: issues.length },
     { key: 'merged', label: 'Merged', count: mergedPRs.length },
+    { key: 'worktrees', label: 'Worktrees', count: worktreeCount },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -115,6 +118,9 @@ export function RepositoryDashboard({ repoKey }: Props) {
             mergedPRs={mergedPRs}
             loading={isLoading}
           />
+        )}
+        {activeTab === 'worktrees' && (
+          <WorktreesSection org={org} name={name} />
         )}
         {activeTab === 'settings' && (
           <RepoConfigPanel org={org} name={name} />

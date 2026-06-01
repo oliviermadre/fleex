@@ -7,6 +7,7 @@ interface GraphQLPRNode {
   title: string;
   headRefName: string;
   isDraft?: boolean;
+  mergeable?: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
   author: { login: string } | null;
   assignees: { nodes: { login: string }[] };
   reviewRequests?: { nodes: { requestedReviewer: { login: string } | null }[] };
@@ -207,6 +208,7 @@ export class GitHubGraphQLAdapter {
           title
           headRefName
           isDraft
+          mergeable
           author { login }
           assignees(first: 10) { nodes { login } }
           reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } } } }
@@ -264,6 +266,7 @@ export class GitHubGraphQLAdapter {
           headRefName: pr.headRefName,
           state: 'open' as const,
           isDraft: pr.isDraft ?? false,
+          mergeable: pr.mergeable ?? 'UNKNOWN',
           author: pr.author?.login ?? 'unknown',
           assignees: pr.assignees.nodes.map((a) => a.login),
           reviewRequests: (pr.reviewRequests?.nodes ?? [])

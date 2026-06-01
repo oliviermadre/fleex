@@ -37,6 +37,18 @@ export function repositoryRoutes(container: Container) {
       },
     );
 
+    // Enriched worktree list for the cleanup view (last activity, ahead/behind, linked ticket).
+    app.get<{ Params: { org: string; name: string } }>(
+      '/api/repositories/:org/:name/worktree-details',
+      async (request) => {
+        const { org, name } = request.params;
+        const barePath = container.resolver.barePath(org, name);
+        const exists = await container.hostFs.exists(barePath);
+        if (!exists) return [];
+        return container.listWorktreeDetails.execute(org, name);
+      },
+    );
+
     app.post<{ Params: { org: string; name: string }; Body: CreateWorktreeRequest }>(
       '/api/repositories/:org/:name/worktrees',
       async (request, reply) => {
@@ -65,19 +77,29 @@ export function repositoryRoutes(container: Container) {
       async (request, reply) => {
         const { org, name } = request.params;
         const barePath = container.resolver.barePath(org, name);
+        const wtPath = request.body.path;
         // Resolve the branch before removal so the audit event is informative.
         let branch: string | undefined;
         try {
           const worktrees = await container.git.listWorktrees(barePath);
-          branch = worktrees.find((wt) => wt.path === request.body.path)?.branch;
+          branch = worktrees.find((wt) => wt.path === wtPath)?.branch;
         } catch {
           // Best-effort — don't block deletion on a failed branch lookup.
         }
-        await container.git.removeWorktree(barePath, request.body.path);
+        try {
+          await container.git.removeWorktree(barePath, wtPath);
+        } catch (err) {
+          // git refused (locked, missing metadata, …) — fall back to a plain rm
+          // so the user can still reclaim the disk space.
+          container.logger.warn('git removeWorktree failed, falling back to rm', { wtPath, error: String(err) });
+          await container.hostFs.rm(wtPath, { recursive: true }).catch(() => {});
+        }
+        // Clean stale worktree metadata left behind regardless of the path taken.
+        await container.git.pruneWorktrees(barePath).catch(() => {});
         container.eventBus.emit({
           type: 'worktree.deleted',
           repoPath: barePath,
-          worktreePath: request.body.path,
+          worktreePath: wtPath,
           ...(branch ? { branch } : {}),
           occurredAt: new Date(),
         });
