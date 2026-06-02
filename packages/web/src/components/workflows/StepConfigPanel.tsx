@@ -126,6 +126,20 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
         </label>
       )}
 
+      {/* Custom prompt — agent steps only */}
+      {step.executorType === 'agent' && (
+        <label className="block text-xs space-y-1">
+          <span style={{ color: 'var(--theme-text-muted)' }}>Prompt (optional)</span>
+          <textarea
+            value={step.prompt ?? ''}
+            onChange={(e) => onChange({ ...step, prompt: e.target.value || undefined })}
+            className="w-full font-mono text-[11px] min-h-[80px] p-2 rounded border"
+            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }}
+            placeholder="Custom instructions injected into the agent's workflow context…"
+          />
+        </label>
+      )}
+
       {/* Human gate outcomes */}
       {step.executorType === 'human_gate' && (
         <label className="block text-xs space-y-1">

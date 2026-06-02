@@ -3,6 +3,7 @@ import type { JsonSchema, WorkflowEdgeCondition, EdgeOperator } from '@fleex/sha
 export interface WorkflowContextInput {
   workflowName: string;
   stepName: string;
+  stepPrompt?: string;
   outputSchema: JsonSchema | undefined;
   outgoingEdges: {
     id: string;
@@ -20,6 +21,11 @@ export function composeWorkflowContextPrompt(input: WorkflowContextInput): strin
   parts.push('');
   parts.push(`You are executing step **${input.stepName}** of workflow **${input.workflowName}**.`);
   parts.push('');
+
+  if (input.stepPrompt && input.stepPrompt.trim()) {
+    parts.push(input.stepPrompt.trim());
+    parts.push('');
+  }
 
   if (input.outputSchema && Object.keys(input.outputSchema.properties).length > 0) {
     parts.push(`**Expected output fields** (in addition to the standard \`deliverable\`/\`comment\`/\`mentionStatus\`):`);

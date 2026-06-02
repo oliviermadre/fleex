@@ -23,6 +23,7 @@ export interface WorkflowStep {
   executorType: WorkflowExecutorType;
   executorRef: string;
   mode?: 'talk' | 'plan' | 'edit';
+  prompt?: string;
   outputSchema?: JsonSchema;
   humanGateOutcomes?: string[];
   position: { x: number; y: number };
