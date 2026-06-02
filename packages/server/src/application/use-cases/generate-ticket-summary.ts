@@ -9,6 +9,7 @@ import type { GitPort } from '../ports/git.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { EventBus } from '../event-bus.js';
+import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
@@ -58,6 +59,7 @@ export class GenerateTicketSummaryUseCase {
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
     private readonly resolver: RepoPathResolver,
+    private readonly sdkLimiter: SdkConcurrencyLimiter,
   ) {}
 
   async execute(params: { ticketId: string; status: TicketStatus }): Promise<void> {
@@ -101,6 +103,7 @@ export class GenerateTicketSummaryUseCase {
 
     // Call Claude via Agent SDK (same auth as all other agents — no API key needed)
     let summaryText: string;
+    const releaseSdkSlot = await this.sdkLimiter.acquire();
     try {
       const { query } = await import('@anthropic-ai/claude-agent-sdk');
       let resultText = '';
@@ -129,6 +132,8 @@ export class GenerateTicketSummaryUseCase {
         error: err instanceof Error ? err.message : String(err),
       });
       return;
+    } finally {
+      releaseSdkSlot();
     }
 
     // Upsert deliverable

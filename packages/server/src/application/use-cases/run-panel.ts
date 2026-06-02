@@ -25,6 +25,7 @@ import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
+import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
 import type { STANDARD_OUTPUT_SCHEMA } from '../utils/merge-output-schemas.js';
@@ -77,6 +78,7 @@ export class RunPanelUseCase {
     private readonly agentEventStore: AgentEventStorePort,
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
+    private readonly sdkLimiter: SdkConcurrencyLimiter,
   ) {}
 
   /**
@@ -376,41 +378,39 @@ export class RunPanelUseCase {
     ticketId: string,
     mentionId: string,
   ): Promise<MemberResponse[]> {
-    const CONCURRENCY = 3;
     const sortedMembers = [...panel.members].sort((a, b) => a.order - b.order);
-    const results: MemberResponse[] = [];
+    this.logger.info('Panel members starting', {
+      panelName: panel.name,
+      members: sortedMembers.map((m) => memberPersonas.get(m.personaId)?.name ?? m.personaId),
+      hasWorktree: !!worktreePath,
+    });
 
-    for (let i = 0; i < sortedMembers.length; i += CONCURRENCY) {
-      const batch = sortedMembers.slice(i, i + CONCURRENCY);
-      this.logger.info('Panel member batch starting', {
-        panelName: panel.name,
-        batch: batch.map((m) => memberPersonas.get(m.personaId)?.name ?? m.personaId),
-        batchIndex: Math.floor(i / CONCURRENCY) + 1,
-        totalBatches: Math.ceil(sortedMembers.length / CONCURRENCY),
-        hasWorktree: !!worktreePath,
-      });
+    // All members are dispatched at once; the global SdkConcurrencyLimiter (one
+    // limit shared with mentions/skills/workflows) decides how many actually run
+    // in parallel — no per-panel batching or fixed pause anymore.
+    return Promise.all(
+      sortedMembers.map((member) => {
+        const persona = memberPersonas.get(member.personaId);
+        if (!persona) {
+          return Promise.resolve({
+            personaName: member.personaId,
+            personaDisplayName: 'Unknown',
+            emoji: '❓',
+            response: '',
+            model: '',
+            durationMs: 0,
+            error: `Persona not found: ${member.personaId}`,
+          } satisfies MemberResponse);
+        }
 
-      const batchResults = await Promise.all(
-        batch.map(async (member) => {
-          const persona = memberPersonas.get(member.personaId);
-          if (!persona) {
-            return {
-              personaName: member.personaId,
-              personaDisplayName: 'Unknown',
-              emoji: '❓',
-              response: '',
-              model: '',
-              durationMs: 0,
-              error: `Persona not found: ${member.personaId}`,
-            } satisfies MemberResponse;
-          }
+        const model = member.modelOverride === 'inherited'
+          ? (persona.model || panel.defaultMemberModel)
+          : member.modelOverride;
 
-          const model = member.modelOverride === 'inherited'
-            ? (persona.model || panel.defaultMemberModel)
-            : member.modelOverride;
+        const identityEmoji = this.extractEmojiFromIdentity(persona.identityMd);
+        const panelMode: MentionExecutionMode = panel.executionMode === 'message' ? 'talk' : 'edit';
 
-          const identityEmoji = this.extractEmojiFromIdentity(persona.identityMd);
-          const panelMode: MentionExecutionMode = panel.executionMode === 'message' ? 'talk' : 'edit';
+        return this.sdkLimiter.run(async () => {
           const response = await this.queryMember(persona, model, topic, ticketContextBlocks, identityEmoji, worktreePath, panelMode, ticketId, mentionId);
 
           this.logger.info('Panel member completed', {
@@ -422,17 +422,9 @@ export class RunPanelUseCase {
           });
 
           return response;
-        }),
-      );
-      results.push(...batchResults);
-
-      // Pause between batches
-      if (i + CONCURRENCY < sortedMembers.length) {
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-    }
-
-    return results;
+        });
+      }),
+    );
   }
 
   private async querySDK(
