@@ -1,0 +1,81 @@
+import type { CommandDef } from '../../../core/types.ts';
+import { ok, die, err, c } from '../../../core/colors.ts';
+import { apiBase, apiGet, apiPost } from '../../../core/api.ts';
+import { accumulate, parseGithubRef, resolveTicketId } from '../_shared.ts';
+
+interface LinkOptions {
+  repo?: string[];
+  pr?: string[];
+  issue?: string[];
+  board?: string;
+}
+
+interface Repository {
+  org: string;
+  name: string;
+}
+
+const def: CommandDef = {
+  name: 'link',
+  description: 'Link repositories / PRs / issues to a ticket (link <id> --repo org/name | --pr org/name#n | --issue org/name#n)',
+  setup(cmd) {
+    cmd.argument('<id>', 'Ticket display ID or UUID');
+    cmd.option('--repo <org/name>', 'Repository to link (repeatable)', accumulate, [] as string[]);
+    cmd.option('--pr <org/name#n>', 'GitHub PR to link (repeatable)', accumulate, [] as string[]);
+    cmd.option('--issue <org/name#n>', 'GitHub issue to link (repeatable)', accumulate, [] as string[]);
+    cmd.option('--board <id>', 'Disambiguate by board');
+  },
+  action: async (idArg: string, opts: LinkOptions) => {
+    const repos = opts.repo ?? [];
+    const prs = opts.pr ?? [];
+    const issues = opts.issue ?? [];
+    if (repos.length === 0 && prs.length === 0 && issues.length === 0) {
+      die('Nothing to link. Use --repo org/name, --pr org/name#n, or --issue org/name#n.');
+    }
+
+    // Validate repo format (org/name, exactly one slash, non-empty parts).
+    for (const r of repos) {
+      const slashIdx = r.indexOf('/');
+      if (slashIdx <= 0 || slashIdx !== r.lastIndexOf('/') || slashIdx === r.length - 1) {
+        die(`Invalid --repo "${r}" (expected format org/name, e.g. github/fleex)`);
+      }
+    }
+    // Validate PR/issue refs up-front (org/name#number).
+    const prRefs = prs.map((p) => parseGithubRef(p, 'pull'));
+    const issueRefs = issues.map((i) => parseGithubRef(i, 'issues'));
+
+    const uuid = await resolveTicketId(idArg, opts.board);
+    const base = apiBase();
+
+    // Validate each repo is known (consistent with the web picker).
+    if (repos.length > 0) {
+      const known = await apiGet<Repository[]>(`${base}/api/repositories`);
+      const knownSet = new Set(known.map((rp) => `${rp.org}/${rp.name}`));
+      const unknown = repos.filter((r) => !knownSet.has(r));
+      if (unknown.length > 0) {
+        err(`Unknown repository: ${unknown.join(', ')}`);
+        process.stderr.write(`${c.blue('[fleex]')} Available repositories:\n`);
+        for (const rp of known) {
+          process.stderr.write(`  - ${rp.org}/${rp.name}\n`);
+        }
+        if (known.length === 0) process.stderr.write('  (none — add a repository in the web UI first)\n');
+        process.exit(1);
+      }
+    }
+
+    for (const r of repos) {
+      await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'repository', ref: r, label: r });
+      ok(`Linked repo ${r} to ticket`);
+    }
+    for (const p of prRefs) {
+      await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'github_pr', ref: p.ref, label: p.ref, url: p.url });
+      ok(`Linked PR ${p.ref} to ticket`);
+    }
+    for (const i of issueRefs) {
+      await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'github_issue', ref: i.ref, label: i.ref, url: i.url });
+      ok(`Linked issue ${i.ref} to ticket`);
+    }
+  },
+};
+
+export default def;

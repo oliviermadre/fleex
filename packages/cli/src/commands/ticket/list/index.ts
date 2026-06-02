@@ -1,6 +1,7 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { c, info, statusColor } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
+import { resolveEpicId } from '../_shared.ts';
 
 interface ListOptions {
   board?: string;
@@ -39,7 +40,9 @@ const def: CommandDef = {
     if (opts.board) params.push(`boardId=${encodeURIComponent(opts.board)}`);
     if (opts.board && opts.status) params.push(`status=${encodeURIComponent(opts.status)}`);
     if (opts.tag) params.push(`tag=${encodeURIComponent(opts.tag)}`);
-    if (opts.epic) params.push(`epicId=${encodeURIComponent(opts.epic)}`);
+    // The server filters memberships by exact group id, so resolve any 8-char
+    // prefix to a full UUID before querying.
+    if (opts.epic) params.push(`epicId=${encodeURIComponent(await resolveEpicId(opts.epic))}`);
     const url = params.length ? `${base}/api/tickets?${params.join('&')}` : `${base}/api/tickets`;
 
     let tickets = await apiGet<Ticket[]>(url);

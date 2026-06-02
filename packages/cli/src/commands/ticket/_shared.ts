@@ -3,6 +3,7 @@ import { apiBase, apiGet } from '../../core/api.ts';
 
 export const VALID_STATUSES = ['backlog', 'todo', 'doing', 'reviewing', 'done', 'cancelled'] as const;
 export const VALID_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;
+export const VALID_TYPES = ['build', 'fix', 'review', 'ops', 'lead', 'think'] as const;
 
 export function assertValidStatus(s: string): void {
   if (!VALID_STATUSES.includes(s as typeof VALID_STATUSES[number])) {
@@ -14,6 +15,53 @@ export function assertValidPriority(p: string): void {
   if (!VALID_PRIORITIES.includes(p as typeof VALID_PRIORITIES[number])) {
     die(`Invalid priority: ${p} (valid: ${VALID_PRIORITIES.join(', ')})`);
   }
+}
+
+export function assertValidType(t: string): void {
+  if (!VALID_TYPES.includes(t as typeof VALID_TYPES[number])) {
+    die(`Invalid type: ${t} (valid: ${VALID_TYPES.join(', ')})`);
+  }
+}
+
+/** Repeatable-option accumulator for Commander (e.g. --add-tag a --add-tag b). */
+export function accumulate(val: string, prev: string[] = []): string[] {
+  return [...prev, val];
+}
+
+/**
+ * Parse and validate a GitHub PR/issue reference in the form `org/name#123`.
+ * Exits with a helpful message on malformed input. Returns the canonical ref
+ * plus its parts and a GitHub URL (`/pull/` or `/issues/` per `kind`).
+ */
+export function parseGithubRef(
+  input: string,
+  kind: 'pull' | 'issues',
+): { ref: string; org: string; name: string; number: number; url: string } {
+  const m = input.match(/^([^/]+)\/([^#/]+)#(\d+)$/);
+  if (!m) {
+    die(`Invalid reference "${input}" (expected format org/name#number, e.g. odys-travel/odys-api#123)`);
+  }
+  const [, org, name, num] = m as RegExpMatchArray;
+  return {
+    ref: input,
+    org: org!,
+    name: name!,
+    number: parseInt(num!, 10),
+    url: `https://github.com/${org}/${name}/${kind}/${num}`,
+  };
+}
+
+/**
+ * Normalize a due date input (`YYYY-MM-DD` or a full ISO string) to an ISO
+ * 8601 string. Exits if the value can't be parsed into a real date.
+ */
+export function normalizeDueDate(input: string): string {
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(input);
+  const ms = Date.parse(isDateOnly ? `${input}T00:00:00.000Z` : input);
+  if (Number.isNaN(ms)) {
+    die(`Invalid due date: ${input} (expected YYYY-MM-DD or an ISO 8601 timestamp)`);
+  }
+  return new Date(ms).toISOString();
 }
 
 interface Board { id: string; name: string; emoji?: string }
