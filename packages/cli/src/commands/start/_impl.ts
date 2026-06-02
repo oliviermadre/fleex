@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { c, info, ok, warn, die } from '../../core/colors.ts';
 import { checkBun } from '../../core/version.ts';
@@ -70,6 +71,22 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   info(`Allocated ports — gateway:${ports.gateway}  server:${ports.server}  web:${ports.web}`);
 
   info(`Starting stack for ${c.bold(ctx.instanceSlug)}...`);
+
+  // Load repo .env so installer-written vars (e.g. FLEEX_STORAGE_DRIVER) are honoured.
+  const dotEnvPath = path.join(ctx.repoDir, '.env');
+  if (fs.existsSync(dotEnvPath)) {
+    for (const line of fs.readFileSync(dotEnvPath, 'utf8').split('\n')) {
+      const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+      if (m) {
+        const k = m[1]!;
+        let v = m[2] ?? '';
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+          v = v.slice(1, -1);
+        }
+        if (process.env[k] === undefined) process.env[k] = v;
+      }
+    }
+  }
 
   // Spawn each service detached, captured in its own log file.
   const env = { ...process.env };
