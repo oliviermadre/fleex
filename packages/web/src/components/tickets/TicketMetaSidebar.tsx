@@ -63,6 +63,8 @@ function useCollapsedMetaTooltip() {
 
 // Type groups removed — using flat 6-type list
 
+const LABEL_NONE = 'Aucun';
+
 function TypePickerDropdown({
   value,
   onChange,
@@ -98,7 +100,7 @@ function TypePickerDropdown({
             <span>{TICKET_TYPE_LABELS[value]}</span>
           </>
         ) : (
-          <span>Aucun</span>
+          <span>{LABEL_NONE}</span>
         )}
         <svg className="ml-auto h-3 w-3 text-[var(--theme-text-faint)]" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M3 5l3 3 3-3" />
@@ -115,7 +117,7 @@ function TypePickerDropdown({
             )}
             onClick={() => { onChange(null); setOpen(false); }}
           >
-            Aucun
+            {LABEL_NONE}
           </button>
           <div className="my-1 border-t border-[var(--theme-border)]" />
 
