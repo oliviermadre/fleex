@@ -8,6 +8,7 @@ import { RepositoryRefreshScheduler } from '../domain/services/repository-refres
 import { RepositoryResolver } from '../domain/services/repository-resolver.js';
 import { RepoPathResolver } from '../domain/services/repo-path-resolver.js';
 import { BareCloneManager } from '../application/services/bare-clone-manager.js';
+import { SdkConcurrencyLimiter, DEFAULT_AGENT_MAX_CONCURRENCY } from '../application/services/sdk-concurrency-limiter.js';
 import { OverlayManager } from '../application/services/overlay-manager.js';
 import { EventBus } from '../application/event-bus.js';
 import { DomainEventListener } from '../application/domain-event-listener.js';
@@ -234,12 +235,16 @@ export async function createContainer() {
   const createPanel = new CreatePanelUseCase(panelStore, personaStore_, logger);
   const updatePanel = new UpdatePanelUseCase(panelStore, personaStore_, logger);
   const deletePanel = new DeletePanelUseCase(panelStore, logger);
-  const runPanel = new RunPanelUseCase(panelStore, personaStore_, mentionStore, ticketStore_, postComment, submitDeliverable, getTicketContext, createWorktreeUC, agentEventStore_, config, logger);
+  // The ONE global limit on concurrent Claude Agent SDK executions, shared by
+  // every source (mentions, skills, panels, workflow steps, summaries).
+  const sdkLimiter = new SdkConcurrencyLimiter(() => config.get().agentMaxConcurrency ?? DEFAULT_AGENT_MAX_CONCURRENCY);
+
+  const runPanel = new RunPanelUseCase(panelStore, personaStore_, mentionStore, ticketStore_, postComment, submitDeliverable, getTicketContext, createWorktreeUC, agentEventStore_, config, logger, sdkLimiter);
 
   const autoReviewWorkflow = new AutoReviewWorkflowUseCase(mentionStore, ticketStore_, config, logger);
-  const executeAgent = new ExecuteAgentUseCase(personaStore_, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore_, ticketStore_, createWorktreeUC, config, logger, autoReviewWorkflow, skillStore);
+  const executeAgent = new ExecuteAgentUseCase(personaStore_, mentionStore, postComment, resolveMention, submitDeliverable, getTicketContext, agentEventStore_, ticketStore_, createWorktreeUC, config, logger, autoReviewWorkflow, sdkLimiter, skillStore);
 
-  const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore_, commentStore, deliverableStore, git, config, logger, resolver);
+  const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore_, commentStore, deliverableStore, git, config, logger, resolver, sdkLimiter);
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 

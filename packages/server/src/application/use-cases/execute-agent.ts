@@ -25,6 +25,7 @@ import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
 import type { EventBus } from '../event-bus.js';
+import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
@@ -95,7 +96,6 @@ Your final response will be structured as JSON with two fields:
 export class ExecuteAgentUseCase {
   private activeExecutions = new Map<string, ActiveExecution>();
   private sessionHistory = new Map<string, string>(); // `${agentName}:${ticketId}` -> sdkSessionId
-  private runningCount = 0;
   private queue: QueueItem[] = [];
 
   /** Set by WS plugin to broadcast agent events in real-time */
@@ -128,6 +128,7 @@ export class ExecuteAgentUseCase {
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
     private readonly autoReviewWorkflow: AutoReviewWorkflowUseCase,
+    private readonly sdkLimiter: SdkConcurrencyLimiter,
     private readonly skillStore?: SkillStorePort,
   ) {}
 
@@ -179,10 +180,6 @@ export class ExecuteAgentUseCase {
       interruptedExecutions: interruptedMentionIds.length,
       restoredSessions: this.sessionHistory.size,
     });
-  }
-
-  get maxConcurrency(): number {
-    return this.config.get().agentMaxConcurrency ?? 1;
   }
 
   async execute(personaId: string): Promise<AgentExecutionResult> {
@@ -364,19 +361,25 @@ export class ExecuteAgentUseCase {
   }
 
   private drainQueue(): void {
-    while (this.runningCount < this.maxConcurrency && this.queue.length > 0) {
+    // Dispatch every queued mention; the global SDK limiter (acquired inside
+    // executeForMention via sdkLimiter.run) is the only thing that throttles how
+    // many actually run at once. A mention parked on the limiter has not yet
+    // created a worktree, emitted execution_start, or acknowledged — so this is
+    // not a "storm": side-effects start only once a slot is granted.
+    while (this.queue.length > 0) {
       const item = this.queue.shift()!;
-      this.runningCount++;
-      this.executeForMention(item.persona, item.mention).catch((err) => {
-        // Last-resort safety net — executeForMention's own finally already
-        // decrements runningCount and schedules activeExecutions cleanup.
-        // We still log so an unexpected throw never disappears silently.
-        this.logger.error('Agent execution failed', {
-          persona: item.persona.name,
-          mentionId: item.mention.id,
-          error: err instanceof Error ? err.message : String(err),
+      void this.sdkLimiter
+        .run(() => this.executeForMention(item.persona, item.mention))
+        .catch((err) => {
+          // Last-resort safety net — executeForMention's own finally already
+          // schedules activeExecutions cleanup. We still log so an unexpected
+          // throw never disappears silently.
+          this.logger.error('Agent execution failed', {
+            persona: item.persona.name,
+            mentionId: item.mention.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
-      });
     }
   }
 
@@ -975,16 +978,15 @@ export class ExecuteAgentUseCase {
       });
       throw err;
     } finally {
-      this.runningCount--;
-      // Clean up completed/failed executions after a delay
+      // The global SDK slot is released by the sdkLimiter.run() wrapper in
+      // drainQueue once this method settles. Clean up completed/failed
+      // executions after a delay.
       setTimeout(() => {
         const exec = this.activeExecutions.get(mention.id);
         if (exec && exec.status !== 'running') {
           this.activeExecutions.delete(mention.id);
         }
       }, 30000);
-      // Drain queue for next item
-      this.drainQueue();
     }
   }
 
@@ -1124,7 +1126,11 @@ export class ExecuteAgentUseCase {
       worktreePath,
     });
 
-    // 6. Setup timeout + abort
+    // 6. Acquire a global SDK slot before arming the timeout, so time spent
+    // waiting behind other executions never counts toward the execution timeout.
+    const releaseSdkSlot = await this.sdkLimiter.acquire();
+
+    // 7. Setup timeout + abort
     const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
     const timeoutHandle = setTimeout(() => {
       this.logger.warn('Skill execution timed out', { executionId, persona: persona.name, timeoutMs });
@@ -1132,7 +1138,7 @@ export class ExecuteAgentUseCase {
     }, timeoutMs);
 
     try {
-      // 7. Call Claude Agent SDK
+      // 8. Call Claude Agent SDK
       const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
       let sdkSessionId: string | undefined;
@@ -1433,6 +1439,7 @@ export class ExecuteAgentUseCase {
       });
       throw err;
     } finally {
+      releaseSdkSlot();
       // Clean up completed/failed executions after a delay
       setTimeout(() => {
         const exec = this.activeExecutions.get(skillMentionKey);
@@ -1465,88 +1472,96 @@ export class ExecuteAgentUseCase {
     const persona = await this.personaStore.getByName(params.personaName);
     if (!persona) throw new AgentPersonaNotFoundError(params.personaName);
 
-    const executionId = randomUUID();
-    const humanName = this.resolveHumanMentionName(persona);
-
-    // Effective mode: respect persona ceiling
-    const effectiveMode: MentionExecutionMode = persona.executionMode === 'message' ? 'talk' : params.mode;
-
-    // Workspace if needed (same as executeForMention)
-    let worktreePath: string | null = null;
-    if (effectiveMode !== 'talk') {
-      worktreePath = await this.ensureWorkspace(params.ticketId);
-    }
-
-    // Start tracking
-    await this.agentEventStore.startExecution({
-      executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: `workflow:${executionId}`,
-    });
-
-    // Compose prompts
-    const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
-    const context = await this.getTicketContext.execute({ ticketId: params.ticketId, agentName: persona.name });
-    const userPromptBlocks = await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt);
-    const userPromptText = userPromptBlocks.map((b) => b.type === 'text' ? b.text : '').join('');
-
-    let sequence = 0;
-    const emitEvent = async (eventType: AgentEventType, data: unknown) => {
-      const event = AgentEventEntity.create({ executionId, eventType, data, sequence: sequence++ });
-      await this.agentEventStore.appendEvent(event);
-      this.onEvent?.(event);
-    };
-
-    await emitEvent('execution_start', {
-      executionId, personaId: persona.id, personaName: persona.name, ticketId: params.ticketId,
-      model: persona.model, effectiveMode, worktreePath,
-      context: {
-        systemPromptSections: ['workflow_step'],
-        systemPromptLength: systemPrompt.length,
-        userPromptLength: userPromptText.length,
-      },
-    });
-
-    // SDK query
-    const { query } = await import('@anthropic-ai/claude-agent-sdk');
-    const queryOptions = buildSdkOptions(effectiveMode, {
-      model: persona.model, systemPrompt, cwd: worktreePath,
-      outputFormat: params.outputFormat,
-    });
-
-    let sdkSessionId: string | undefined;
-    let resultText = '';
-    let structuredOutput: Record<string, unknown> | null = null;
-    const hasImages = userPromptBlocks.some((b) => b.type === 'image');
-    const promptArg = hasImages
-      ? (async function* () { yield { type: 'user' as const, message: { role: 'user' as const, content: userPromptBlocks }, parent_tool_use_id: null, session_id: '' }; })()
-      : userPromptText;
-
+    // Hold a global SDK slot for the whole step (worktree setup + query), so
+    // concurrent workflow runs are throttled by the one global limit rather than
+    // a serial queue. The release fn is idempotent and runs in finally.
+    const releaseSdkSlot = await this.sdkLimiter.acquire();
     try {
-      for await (const message of query({ prompt: promptArg, options: queryOptions as Parameters<typeof query>[0]['options'] })) {
-        const msg = message as Record<string, unknown>;
-        if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
-          sdkSessionId = msg['session_id'] as string;
-          await emitEvent('turn_start', { sessionId: sdkSessionId });
-        }
-        if ('result' in message) {
-          resultText = (message as { result: string }).result;
-          if (msg['structured_output']) {
-            structuredOutput = msg['structured_output'] as Record<string, unknown>;
-          }
-          await emitEvent('message_stop', { result: resultText, subtype: msg['subtype'] as string | undefined });
-        } else {
-          await emitEvent('content_block_delta', msg);
-        }
+      const executionId = randomUUID();
+      const humanName = this.resolveHumanMentionName(persona);
+
+      // Effective mode: respect persona ceiling
+      const effectiveMode: MentionExecutionMode = persona.executionMode === 'message' ? 'talk' : params.mode;
+
+      // Workspace if needed (same as executeForMention)
+      let worktreePath: string | null = null;
+      if (effectiveMode !== 'talk') {
+        worktreePath = await this.ensureWorkspace(params.ticketId);
       }
-    } catch (err) {
-      await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
-      await this.agentEventStore.completeExecution(executionId, 'failed');
-      throw err;
+
+      // Start tracking
+      await this.agentEventStore.startExecution({
+        executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: `workflow:${executionId}`,
+      });
+
+      // Compose prompts
+      const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
+      const context = await this.getTicketContext.execute({ ticketId: params.ticketId, agentName: persona.name });
+      const userPromptBlocks = await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt);
+      const userPromptText = userPromptBlocks.map((b) => b.type === 'text' ? b.text : '').join('');
+
+      let sequence = 0;
+      const emitEvent = async (eventType: AgentEventType, data: unknown) => {
+        const event = AgentEventEntity.create({ executionId, eventType, data, sequence: sequence++ });
+        await this.agentEventStore.appendEvent(event);
+        this.onEvent?.(event);
+      };
+
+      await emitEvent('execution_start', {
+        executionId, personaId: persona.id, personaName: persona.name, ticketId: params.ticketId,
+        model: persona.model, effectiveMode, worktreePath,
+        context: {
+          systemPromptSections: ['workflow_step'],
+          systemPromptLength: systemPrompt.length,
+          userPromptLength: userPromptText.length,
+        },
+      });
+
+      // SDK query
+      const { query } = await import('@anthropic-ai/claude-agent-sdk');
+      const queryOptions = buildSdkOptions(effectiveMode, {
+        model: persona.model, systemPrompt, cwd: worktreePath,
+        outputFormat: params.outputFormat,
+      });
+
+      let sdkSessionId: string | undefined;
+      let resultText = '';
+      let structuredOutput: Record<string, unknown> | null = null;
+      const hasImages = userPromptBlocks.some((b) => b.type === 'image');
+      const promptArg = hasImages
+        ? (async function* () { yield { type: 'user' as const, message: { role: 'user' as const, content: userPromptBlocks }, parent_tool_use_id: null, session_id: '' }; })()
+        : userPromptText;
+
+      try {
+        for await (const message of query({ prompt: promptArg, options: queryOptions as Parameters<typeof query>[0]['options'] })) {
+          const msg = message as Record<string, unknown>;
+          if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
+            sdkSessionId = msg['session_id'] as string;
+            await emitEvent('turn_start', { sessionId: sdkSessionId });
+          }
+          if ('result' in message) {
+            resultText = (message as { result: string }).result;
+            if (msg['structured_output']) {
+              structuredOutput = msg['structured_output'] as Record<string, unknown>;
+            }
+            await emitEvent('message_stop', { result: resultText, subtype: msg['subtype'] as string | undefined });
+          } else {
+            await emitEvent('content_block_delta', msg);
+          }
+        }
+      } catch (err) {
+        await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
+        await this.agentEventStore.completeExecution(executionId, 'failed');
+        throw err;
+      }
+
+      await emitEvent('execution_end', { status: 'completed', ticketId: params.ticketId, resultLength: resultText.length });
+      await this.agentEventStore.completeExecution(executionId, 'completed');
+
+      return { structuredOutput, rawText: resultText, executionId };
+    } finally {
+      releaseSdkSlot();
     }
-
-    await emitEvent('execution_end', { status: 'completed', ticketId: params.ticketId, resultLength: resultText.length });
-    await this.agentEventStore.completeExecution(executionId, 'completed');
-
-    return { structuredOutput, rawText: resultText, executionId };
   }
 
   private async composeWorkflowUserPrompt(
