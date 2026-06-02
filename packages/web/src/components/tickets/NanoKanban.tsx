@@ -1,15 +1,7 @@
 import type { TicketStatus } from '@fleex/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-
-const COLORS: Record<string, { text: string; bg: string; bar: string; hoverBg: string; hoverText: string }> = {
-  backlog:   { text: 'text-[var(--theme-text-muted)]', bg: 'bg-[var(--theme-bg-overlay)]',  bar: 'bg-[var(--theme-text-muted)]', hoverBg: 'hover:bg-[var(--theme-bg-hover)]',   hoverText: 'group-hover:text-gray-300' },
-  todo:      { text: 'text-orange-400',                bg: 'bg-orange-400/15',               bar: 'bg-orange-400',                hoverBg: 'hover:bg-orange-400/15',              hoverText: 'group-hover:text-orange-400' },
-  doing:     { text: 'text-blue-400',                  bg: 'bg-blue-400/15',                 bar: 'bg-blue-400',                  hoverBg: 'hover:bg-blue-400/15',                hoverText: 'group-hover:text-blue-400' },
-  reviewing: { text: 'text-purple-400',                bg: 'bg-purple-400/15',               bar: 'bg-purple-400',                hoverBg: 'hover:bg-purple-400/15',              hoverText: 'group-hover:text-purple-400' },
-  done:      { text: 'text-green-400',                 bg: 'bg-green-400/15',                bar: 'bg-green-400',                 hoverBg: 'hover:bg-green-400/15',               hoverText: 'group-hover:text-green-400' },
-  cancelled: { text: 'text-red-400/70',                bg: 'bg-red-400/10',                  bar: 'bg-red-400/70',                hoverBg: 'hover:bg-red-400/10',                 hoverText: 'group-hover:text-red-400/70' },
-};
+import { STATUS_COLORS } from '../../lib/statusColors';
 
 const ABBREVS: Record<string, string> = {
   backlog: 'BKLG',
@@ -31,7 +23,7 @@ export function NanoKanban({ status, onStatusChange, size = 'md' }: {
     <div className="flex overflow-hidden rounded-md border border-[var(--theme-border)]">
       {(TICKET_STATUSES as readonly TicketStatus[]).map((s) => {
         const active = status === s;
-        const colors = COLORS[s] ?? COLORS.backlog!;
+        const colors = STATUS_COLORS[s] ?? STATUS_COLORS.backlog!;
         return (
           <button
             key={s}
