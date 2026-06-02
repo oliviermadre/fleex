@@ -14,6 +14,7 @@ export class AgentStepExecutor implements StepExecutor {
     const workflowContextPrompt = composeWorkflowContextPrompt({
       workflowName: input.workflowContext.workflowName,
       stepName: input.workflowContext.stepName,
+      stepPrompt: input.step.prompt,
       outputSchema: input.step.outputSchema,
       outgoingEdges: input.workflowContext.outgoingEdges,
       previousOutputs: input.workflowContext.previousOutputs,

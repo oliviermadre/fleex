@@ -38,6 +38,41 @@ describe('composeWorkflowContextPrompt', () => {
     expect(out).toContain('standard');
   });
 
+  it('injects stepPrompt after the step identification when provided', () => {
+    const out = composeWorkflowContextPrompt({
+      workflowName: 'Auto Review', stepName: 'Review PR',
+      stepPrompt: 'Focus on security issues and backward compatibility.',
+      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+    });
+    // The prompt must appear, and after the step identification line so the
+    // agent reads its custom instruction in context, before output/branching.
+    expect(out).toContain('Focus on security issues and backward compatibility.');
+    const idIdx = out.indexOf('Review PR');
+    const promptIdx = out.indexOf('Focus on security issues');
+    expect(promptIdx).toBeGreaterThan(idIdx);
+  });
+
+  it('omits stepPrompt when undefined or blank (treated as absent)', () => {
+    const baseline = composeWorkflowContextPrompt({
+      workflowName: 'X', stepName: 'Y',
+      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+    });
+    const blank = composeWorkflowContextPrompt({
+      workflowName: 'X', stepName: 'Y', stepPrompt: '   ',
+      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+    });
+    expect(blank).toBe(baseline);
+  });
+
+  it('passes markdown in stepPrompt through unescaped', () => {
+    const md = '## Be careful\n- check `null` cases';
+    const out = composeWorkflowContextPrompt({
+      workflowName: 'X', stepName: 'Y', stepPrompt: md,
+      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+    });
+    expect(out).toContain(md);
+  });
+
   it('handles no outgoing edges (terminal step)', () => {
     const out = composeWorkflowContextPrompt({
       workflowName: 'X', stepName: 'Final',
