@@ -6,6 +6,7 @@ import { InlineCardCreator } from './InlineCardCreator';
 import { useTicketStore } from '../../stores/ticketStore';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
+import { getStatusBadgeClass } from '../../lib/statusColors';
 
 const COLUMN_TITLE_COLOR: Record<string, string> = {
   backlog: 'text-[var(--theme-text-muted)]',
@@ -14,15 +15,6 @@ const COLUMN_TITLE_COLOR: Record<string, string> = {
   reviewing: 'text-purple-400',
   done: 'text-green-400',
   cancelled: 'text-red-400/70',
-};
-
-const COLUMN_BADGE_COLOR: Record<string, string> = {
-  backlog: 'text-[var(--theme-text-muted)] bg-[var(--theme-bg-overlay)]',
-  todo: 'text-orange-400 bg-orange-400/10',
-  doing: 'text-blue-400 bg-blue-400/10',
-  reviewing: 'text-purple-400 bg-purple-400/10',
-  done: 'text-green-400 bg-green-400/10',
-  cancelled: 'text-red-400/70 bg-red-400/10',
 };
 
 export function KanbanColumn({
@@ -153,7 +145,7 @@ export function KanbanColumn({
           </svg>
         </button>
         {/* Badge */}
-        <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', COLUMN_BADGE_COLOR[status])}>
+        <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', getStatusBadgeClass(status))}>
           {tickets.length}
         </span>
         {/* Vertical label */}
@@ -182,7 +174,7 @@ export function KanbanColumn({
         <span className={cn('text-sm font-bold uppercase tracking-wider', COLUMN_TITLE_COLOR[status])}>
           {TICKET_STATUS_LABELS[status]}
         </span>
-        <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', COLUMN_BADGE_COLOR[status])}>
+        <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', getStatusBadgeClass(status))}>
           {tickets.length}
         </span>
         {onToggleCollapse && (
