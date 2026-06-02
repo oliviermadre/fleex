@@ -145,8 +145,9 @@ export class RunWorkflowStepUseCase {
     output: StepOutput,
   ): Promise<void> {
     const author = `workflow:${run.templateSnapshot.name} → ${step.name}`;
+    const now = new Date();
     if (output.deliverable) {
-      await this.deps.submitDeliverable.execute({
+      const deliverable = await this.deps.submitDeliverable.execute({
         ticketId: run.ticketId,
         agentName: author,
         type: output.deliverable.type,
@@ -154,13 +155,36 @@ export class RunWorkflowStepUseCase {
         content: output.deliverable.markdown,
         status: output.deliverable.status,
       });
+      // Emit deliverable.created so the BroadcastRegistrar pushes it to the UI in
+      // real time — mirrors execute-agent/run-panel. Without this, the deliverable
+      // only appears after a manual refresh.
+      this.deps.eventBus.emit({
+        type: 'deliverable.created',
+        deliverableId: deliverable.id,
+        ticketId: run.ticketId,
+        agentName: author,
+        status: (output.deliverable.status ?? 'final') as 'draft' | 'final',
+        occurredAt: now,
+      });
     }
     if (output.comment && output.comment.trim().length > 0) {
-      await this.deps.postComment.execute({
+      const { comment } = await this.deps.postComment.execute({
         ticketId: run.ticketId,
         authorType: 'agent',
         authorName: author,
         body: output.comment,
+      });
+      // Emit comment.posted for the real-time UI broadcast. createdMentions is left
+      // empty on purpose: workflows orchestrate via edges, not mentions, so we don't
+      // want a step comment to auto-trigger agents or the auto-review workflow.
+      this.deps.eventBus.emit({
+        type: 'comment.posted',
+        commentId: comment.id,
+        ticketId: run.ticketId,
+        authorType: 'agent',
+        authorName: author,
+        createdMentions: [],
+        occurredAt: now,
       });
     }
   }

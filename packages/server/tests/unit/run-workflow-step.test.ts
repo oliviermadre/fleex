@@ -17,8 +17,8 @@ const makeRun = () => WorkflowRunEntity.create({
 });
 
 const makeArtifactStubs = () => ({
-  submitDeliverable: { execute: vi.fn().mockResolvedValue({}) },
-  postComment: { execute: vi.fn().mockResolvedValue({ comment: {}, createdMentions: [] }) },
+  submitDeliverable: { execute: vi.fn().mockResolvedValue({ id: 'd-1' }) },
+  postComment: { execute: vi.fn().mockResolvedValue({ comment: { id: 'c-1' }, createdMentions: [] }) },
 });
 
 describe('RunWorkflowStepUseCase', () => {
@@ -56,6 +56,40 @@ describe('RunWorkflowStepUseCase', () => {
     expect(orchestrator.runStep).toHaveBeenCalledWith('run-1', 'b');
     expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.step_started' }));
     expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.step_completed' }));
+  });
+
+  it('emits comment.posted and deliverable.created for real-time UI broadcast when a step produces artifacts', async () => {
+    const run = makeRun();
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { save: vi.fn(), getLatestForStep: vi.fn().mockResolvedValue(null), getByWorkflowRun: vi.fn().mockResolvedValue([]) };
+    const agentExecutor = { execute: vi.fn().mockResolvedValue({
+      output: {
+        schemaFields: {}, result: 'ok',
+        comment: 'Step done',
+        deliverable: { type: 'report', title: 'T', markdown: '# T', status: 'final' },
+      },
+      executionId: 'exec-1',
+    }) };
+    const orchestrator = { runStep: vi.fn() };
+    const eventBus = { emit: vi.fn() };
+
+    const artifacts = makeArtifactStubs();
+    const uc = new RunWorkflowStepUseCase({
+      runStore: runStore as never, stepRunStore: stepRunStore as never,
+      orchestrator: orchestrator as never, eventBus: eventBus as never,
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
+    });
+
+    await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
+
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'comment.posted', commentId: 'c-1', ticketId: 't-1', authorType: 'agent', createdMentions: [],
+    }));
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'deliverable.created', deliverableId: 'd-1', ticketId: 't-1', status: 'final',
+    }));
   });
 
   it('completes the run when no outgoing edges match', async () => {
