@@ -8,6 +8,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useClickOutside } from '../../hooks/useClickOutside';
 
 import * as api from '../../services/api';
 import { PriorityIndicator } from './PriorityIndicator';
@@ -75,14 +76,7 @@ function TypePickerDropdown({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
+  useClickOutside(ref, () => setOpen(false), open);
 
   return (
     <div ref={ref} className="relative">
@@ -1287,16 +1281,7 @@ function AssigneeField({
   }, [loaded, loadPersonas]);
 
   // Close dropdown on outside click
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+  useClickOutside(containerRef, () => setOpen(false), open);
 
   const handleSelect = (name: string | null) => {
     onChange(name);

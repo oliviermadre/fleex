@@ -25,6 +25,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { getPrBadgeClasses } from '../../lib/prBadgeStyle';
 import { notifyHookStarted } from '../../lib/hookResultToast';
 import { SmartSessionButton } from './SmartSessionButton';
@@ -337,16 +338,7 @@ function DashboardItemRow({
   const statusMenuRef = useRef<HTMLDivElement>(null);
   const updateTicket = useTicketStore.getState().updateTicket;
 
-  useEffect(() => {
-    if (!statusMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) {
-        setStatusMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [statusMenuOpen]);
+  useClickOutside(statusMenuRef, () => setStatusMenuOpen(false), statusMenuOpen);
 
   const ghUrl = kind === 'issue'
     ? `https://github.com/${item.org}/${item.name}/issues/${item.number}`
@@ -594,22 +586,8 @@ function SectionToolbar({
   const filterRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!filterOpen && !sortOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (filterOpen && filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
-      if (sortOpen && sortRef.current && !sortRef.current.contains(e.target as Node)) setSortOpen(false);
-    };
-    const keyHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setFilterOpen(false); setSortOpen(false); }
-    };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('keydown', keyHandler);
-    return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('keydown', keyHandler);
-    };
-  }, [filterOpen, sortOpen]);
+  useClickOutside(filterRef, () => setFilterOpen(false), filterOpen);
+  useClickOutside(sortRef, () => setSortOpen(false), sortOpen);
 
   const isFilterActive = repoFilter !== 'all';
 
@@ -948,17 +926,7 @@ function SyncToolbar() {
   const syncBtnRef = useRef<HTMLButtonElement>(null);
   const syncMenuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!syncOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (syncMenuRef.current && !syncMenuRef.current.contains(e.target as Node) &&
-          syncBtnRef.current && !syncBtnRef.current.contains(e.target as Node)) setSyncOpen(false);
-    };
-    const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSyncOpen(false); };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('keydown', keyHandler);
-    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', keyHandler); };
-  }, [syncOpen]);
+  useClickOutside([syncBtnRef, syncMenuRef], () => setSyncOpen(false), syncOpen);
 
   const syncAge = useLiveSyncAge(lastFetchedAt);
   const currentLabel = SYNC_OPTIONS.find((o) => o.ms === autoSyncIntervalMs)?.label ?? 'Disabled';

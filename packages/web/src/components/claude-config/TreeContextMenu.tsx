@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
+import { useClickOutside } from '../../hooks/useClickOutside';
 
 export function TreeContextMenu() {
   const contextMenu = useClaudeConfigStore((s) => s.contextMenu);
@@ -9,28 +10,7 @@ export function TreeContextMenu() {
   const requestDelete = useClaudeConfigStore((s) => s.requestDelete);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!contextMenu) return;
-
-    function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        closeContextMenu();
-      }
-    }
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        closeContextMenu();
-      }
-    }
-
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [contextMenu, closeContextMenu]);
+  useClickOutside(menuRef, closeContextMenu, !!contextMenu);
 
   if (!contextMenu) return null;
 

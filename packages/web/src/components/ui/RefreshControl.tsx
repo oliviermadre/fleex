@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { REPO_REFRESH_INTERVALS, REPO_REFRESH_LABELS } from '@fleex/shared';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { cn } from '../../lib/cn';
 
 interface RefreshControlProps {
@@ -44,16 +45,7 @@ export function RefreshControl({
     return () => clearInterval(interval);
   }, [lastRefreshedAt]);
 
-  useEffect(() => {
-    if (!dropdownOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [dropdownOpen]);
+  useClickOutside(dropdownRef, () => setDropdownOpen(false), dropdownOpen);
 
   const handleIntervalSelect = useCallback((ms: number) => {
     onIntervalChange(ms);
