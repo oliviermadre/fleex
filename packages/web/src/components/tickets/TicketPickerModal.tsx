@@ -11,6 +11,9 @@ interface TicketPickerModalProps {
   sourceTicketId: string;
 }
 
+const FOCUS_DELAY_MS = 50;      // let the modal finish opening before focusing input
+const SEARCH_DEBOUNCE_MS = 300; // debounce search input to avoid excessive API calls
+
 const OPEN_STATUSES = new Set(['backlog', 'todo', 'doing', 'reviewing']);
 
 export function TicketPickerModal({ open, onClose, deliverable, sourceTicketId }: TicketPickerModalProps) {
@@ -48,7 +51,7 @@ export function TicketPickerModal({ open, onClose, deliverable, sourceTicketId }
   useEffect(() => {
     if (open) {
       loadTickets('');
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setTimeout(() => inputRef.current?.focus(), FOCUS_DELAY_MS);
     } else {
       setQuery('');
       setTickets([]);
@@ -59,7 +62,7 @@ export function TicketPickerModal({ open, onClose, deliverable, sourceTicketId }
   useEffect(() => {
     if (!open) return;
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => loadTickets(query), 300);
+    debounceRef.current = setTimeout(() => loadTickets(query), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(debounceRef.current);
   }, [query, open, loadTickets]);
 
