@@ -6,6 +6,7 @@ import { c, info, ok, warn, die } from '../../core/colors.ts';
 import { FLEEX_HOME, DEFAULT_REPO_DIR } from '../../core/instance.ts';
 import { checkBun } from '../../core/version.ts';
 import { installClaudeHooks } from '../../core/claude-hooks.ts';
+import { parseDotEnv } from '../../core/env.ts';
 
 function runLogged(cmd: string, args: string[], cwd: string, logPath: string, env?: NodeJS.ProcessEnv): Promise<number> {
   return new Promise((resolve) => {
@@ -58,19 +59,8 @@ const def: CommandDef = {
     const envFile = path.join(updateDir, '.env');
     if (fs.existsSync(envFile)) {
       info('Running database migrations...');
-      const envExtra: NodeJS.ProcessEnv = { ...process.env };
-      for (const line of fs.readFileSync(envFile, 'utf8').split('\n')) {
-        const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-        if (m) {
-          const key = m[1]!;
-          let val = m[2] ?? '';
-          // Strip surrounding quotes if present
-          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-            val = val.slice(1, -1);
-          }
-          envExtra[key] = val;
-        }
-      }
+      const dotVars = parseDotEnv(envFile);
+      const envExtra: NodeJS.ProcessEnv = { ...process.env, ...dotVars };
       envExtra.FLEEX_SQLITE_PATH = envExtra.FLEEX_SQLITE_PATH ?? path.join(FLEEX_HOME, 'fleex.db');
       const migrateScript = path.join(updateDir, 'packages/server/src/infrastructure/migrations/cli-migrate.ts');
       rc = await runLogged('bun', ['run', migrateScript], updateDir, installLog, envExtra);

@@ -1,5 +1,7 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { loadDotEnv } from '../../core/env.ts';
 import { c, info, ok, warn, die } from '../../core/colors.ts';
 import { checkBun } from '../../core/version.ts';
 import {
@@ -70,6 +72,9 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   info(`Allocated ports — gateway:${ports.gateway}  server:${ports.server}  web:${ports.web}`);
 
   info(`Starting stack for ${c.bold(ctx.instanceSlug)}...`);
+
+  // Load repo .env so installer-written vars (e.g. FLEEX_STORAGE_DRIVER) are honoured.
+  loadDotEnv(path.join(ctx.repoDir, '.env'));
 
   // Spawn each service detached, captured in its own log file.
   const env = { ...process.env };
