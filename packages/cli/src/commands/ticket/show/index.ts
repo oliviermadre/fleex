@@ -17,6 +17,7 @@ interface Ticket {
   title: string;
   status: string;
   priority: string;
+  type?: string | null;
   assignee?: string | null;
   tags?: string[];
   description?: string | null;
@@ -62,6 +63,7 @@ const def: CommandDef = {
     process.stdout.write(`  ${c.bold(`Ticket #${ticket.displayId}`)}  ${colored} | ${ticket.priority}\n`);
     process.stdout.write(`  ─────────────────────────────────────────────────────────\n`);
     process.stdout.write(`  ${c.bold('Title:')}       ${ticket.title}\n`);
+    process.stdout.write(`  ${c.bold('Type:')}        ${ticket.type ?? '-'}\n`);
     process.stdout.write(`  ${c.bold('Assignee:')}    ${ticket.assignee ?? '-'}\n`);
     process.stdout.write(`  ${c.bold('Tags:')}        ${ticket.tags?.length ? ticket.tags.join(', ') : '-'}\n`);
     process.stdout.write(`  ${c.bold('Epic:')}        ${epicLabel}\n`);

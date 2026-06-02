@@ -26,8 +26,17 @@ ${SECTION('Examples:')}
   ${DIM('$')} fleex ticket show 42 --full                ${DIM('# include comments + deliverables')}
   ${DIM('$')} fleex ticket create --title "Fix bug"      ${DIM('# create a new ticket')}
   ${DIM('$')} fleex ticket update 42 --priority high     ${DIM('# set priority')}
+  ${DIM('$')} fleex ticket update 42 --type fix --due 2026-07-01
+  ${DIM('$')} fleex ticket update 42 --favorite --blocked ${DIM('# toggle flags (use --no-* to clear)')}
+  ${DIM('$')} fleex ticket update 42 --add-tag urgent --rm-tag wip
+  ${DIM('$')} fleex ticket update 42 --to-board ${GREEN('<board-id>')}    ${DIM('# move to another board')}
+  ${DIM('$')} fleex ticket update 42 --add-epic abc12345  ${DIM('# add/remove from an epic')}
   ${DIM('$')} fleex ticket move 42 done                  ${DIM('# mark as done')}
   ${DIM('$')} fleex ticket comment 42 "Looks good"       ${DIM('# add a comment')}
+  ${DIM('$')} fleex ticket link 42 --repo github/fleex    ${DIM('# link a repo (auto-creates worktree)')}
+  ${DIM('$')} fleex ticket link 42 --pr org/name#123      ${DIM('# attach a PR (link PR before repo)')}
+  ${DIM('$')} fleex ticket link 42 --issue org/name#45    ${DIM('# attach a GitHub issue')}
+  ${DIM('$')} fleex ticket unlink 42 --repo github/fleex  ${DIM('# unlink a repo / --pr / --issue')}
   ${DIM('$')} fleex ticket deliverable list 42           ${DIM('# list deliverables')}
   ${DIM('$')} fleex ticket deliverable add 42 --title T --type prd --file ./prd.md
   ${DIM('$')} fleex ticket delete 42 -f                  ${DIM('# delete without confirm')}

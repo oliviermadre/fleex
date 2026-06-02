@@ -1,7 +1,15 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { ok, die } from '../../../core/colors.ts';
-import { apiBase, apiPatch } from '../../../core/api.ts';
-import { assertValidStatus, assertValidPriority, resolveTicketId } from '../_shared.ts';
+import { ok, die, info } from '../../../core/colors.ts';
+import { apiBase, apiGet, apiPost, apiPatch, apiDelete } from '../../../core/api.ts';
+import {
+  assertValidStatus,
+  assertValidPriority,
+  assertValidType,
+  normalizeDueDate,
+  accumulate,
+  resolveTicketId,
+  resolveEpicId,
+} from '../_shared.ts';
 
 interface UpdateOptions {
   board?: string;
@@ -9,7 +17,17 @@ interface UpdateOptions {
   description?: string;
   status?: string;
   priority?: string;
+  type?: string;
   assignee?: string;
+  favorite?: boolean;
+  blocked?: boolean;
+  due?: string;
+  clearDue?: boolean;
+  toBoard?: string;
+  addTag?: string[];
+  rmTag?: string[];
+  addEpic?: string[];
+  removeEpic?: string[];
 }
 
 const def: CommandDef = {
@@ -23,23 +41,83 @@ const def: CommandDef = {
     cmd.option('--description <description>', 'New description');
     cmd.option('--status <status>', 'New status');
     cmd.option('--priority <priority>', 'New priority');
+    cmd.option('--type <type>', 'Type: build | fix | review | ops | lead | think');
     cmd.option('--assignee <name>', 'Assignee');
+    cmd.option('--favorite', 'Mark as favorite');
+    cmd.option('--no-favorite', 'Unmark favorite');
+    cmd.option('--blocked', 'Mark as blocked');
+    cmd.option('--no-blocked', 'Unmark blocked');
+    cmd.option('--due <date>', 'Set due date (YYYY-MM-DD or ISO 8601)');
+    cmd.option('--clear-due', 'Clear the due date');
+    cmd.option('--to-board <id>', 'Move the ticket to another board');
+    cmd.option('--add-tag <tag>', 'Add a tag (repeatable)', accumulate, [] as string[]);
+    cmd.option('--rm-tag <tag>', 'Remove a tag (repeatable)', accumulate, [] as string[]);
+    cmd.option('--add-epic <epic>', 'Add the ticket to an epic (id/prefix, repeatable)', accumulate, [] as string[]);
+    cmd.option('--remove-epic <epic>', 'Remove the ticket from an epic (id/prefix, repeatable)', accumulate, [] as string[]);
   },
   action: async (idArg: string, opts: UpdateOptions) => {
+    const addTags = opts.addTag ?? [];
+    const rmTags = opts.rmTag ?? [];
+    const addEpics = opts.addEpic ?? [];
+    const removeEpics = opts.removeEpic ?? [];
+    const hasTagOps = addTags.length > 0 || rmTags.length > 0;
+    const hasEpicOps = addEpics.length > 0 || removeEpics.length > 0;
+
+    if (opts.status !== undefined) assertValidStatus(opts.status);
+    if (opts.priority !== undefined) assertValidPriority(opts.priority);
+    if (opts.type !== undefined) assertValidType(opts.type);
+    if (opts.due !== undefined && opts.clearDue) die('Use either --due or --clear-due, not both.');
+
     const body: Record<string, unknown> = {};
     if (opts.title !== undefined) body.title = opts.title;
     if (opts.description !== undefined) body.description = opts.description;
-    if (opts.status !== undefined) { assertValidStatus(opts.status); body.status = opts.status; }
-    if (opts.priority !== undefined) { assertValidPriority(opts.priority); body.priority = opts.priority; }
+    if (opts.status !== undefined) body.status = opts.status;
+    if (opts.priority !== undefined) body.priority = opts.priority;
+    if (opts.type !== undefined) body.type = opts.type;
     if (opts.assignee !== undefined) body.assignee = opts.assignee;
-    if (Object.keys(body).length === 0) {
-      die('No updates specified. Use --title, --description, --status, --priority, or --assignee.');
+    if (opts.favorite !== undefined) body.favorite = opts.favorite;
+    if (opts.blocked !== undefined) body.blocked = opts.blocked;
+    if (opts.due !== undefined) body.dueDate = normalizeDueDate(opts.due);
+    if (opts.clearDue) body.dueDate = null;
+    if (opts.toBoard !== undefined) body.boardId = opts.toBoard;
+
+    if (Object.keys(body).length === 0 && !hasTagOps && !hasEpicOps) {
+      die('No updates specified. Use --title, --description, --status, --priority, --type, --assignee, --favorite/--no-favorite, --blocked/--no-blocked, --due/--clear-due, --to-board, --add-tag/--rm-tag, or --add-epic/--remove-epic.');
     }
 
     const uuid = await resolveTicketId(idArg, opts.board);
     const base = apiBase();
-    const result = await apiPatch<{ displayId: number; title: string }>(`${base}/api/tickets/${uuid}`, body);
-    ok(`Updated ticket #${result.displayId}: ${result.title}`);
+
+    // Incremental tag editing: read current tags, merge add/remove, send the result.
+    if (hasTagOps) {
+      const current = await apiGet<{ tags: string[] }>(`${base}/api/tickets/${uuid}`);
+      const next = new Set(current.tags ?? []);
+      for (const t of addTags) next.add(t);
+      for (const t of rmTags) next.delete(t);
+      body.tags = [...next];
+    }
+
+    let displayId: number | undefined;
+    let title: string | undefined;
+    if (Object.keys(body).length > 0) {
+      const result = await apiPatch<{ displayId: number; title: string }>(`${base}/api/tickets/${uuid}`, body);
+      displayId = result.displayId;
+      title = result.title;
+    }
+
+    // Epic membership lives on a separate endpoint, not the ticket PATCH.
+    for (const epic of addEpics) {
+      const epicId = await resolveEpicId(epic);
+      await apiPost(`${base}/api/epics/${epicId}/tickets/${uuid}`, undefined);
+      info(`Added to epic ${epic}`);
+    }
+    for (const epic of removeEpics) {
+      const epicId = await resolveEpicId(epic);
+      await apiDelete(`${base}/api/epics/${epicId}/tickets/${uuid}`);
+      info(`Removed from epic ${epic}`);
+    }
+
+    ok(displayId !== undefined ? `Updated ticket #${displayId}: ${title}` : 'Updated ticket');
   },
 };
 
