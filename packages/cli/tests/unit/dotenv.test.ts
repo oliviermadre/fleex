@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { parseDotEnv, loadDotEnv } from '../../src/core/env.ts';
+import { parseDotEnv, loadDotEnv, applyEnv } from '../../src/core/env.ts';
 
 let tmpDir: string;
 
@@ -96,5 +96,49 @@ describe('loadDotEnv', () => {
     loadDotEnv(path.join(tmpDir, 'ghost.env'));
     const keysAfter = Object.keys(process.env).sort();
     expect(keysAfter).toEqual(keysBefore);
+  });
+});
+
+describe('applyEnv', () => {
+  let envSnapshot: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    envSnapshot = { ...process.env };
+  });
+
+  afterEach(() => {
+    process.env = envSnapshot;
+  });
+
+  it('sets new variables', () => {
+    delete process.env.FLEEX_TEST_APPLY_NEW;
+    applyEnv({ FLEEX_TEST_APPLY_NEW: 'v' });
+    expect(process.env.FLEEX_TEST_APPLY_NEW).toBe('v');
+  });
+
+  it('does not override existing vars by default', () => {
+    process.env.FLEEX_TEST_APPLY_EXISTING = 'original';
+    applyEnv({ FLEEX_TEST_APPLY_EXISTING: 'changed' });
+    expect(process.env.FLEEX_TEST_APPLY_EXISTING).toBe('original');
+  });
+
+  it('overrides existing vars when override is true', () => {
+    process.env.FLEEX_TEST_APPLY_OVERRIDE = 'original';
+    applyEnv({ FLEEX_TEST_APPLY_OVERRIDE: 'changed' }, { override: true });
+    expect(process.env.FLEEX_TEST_APPLY_OVERRIDE).toBe('changed');
+  });
+
+  it('precedence: workspace (override) wins over shell, then .env fills the rest', () => {
+    // Simulate the start command ordering: shell already set, workspace injected
+    // with override, then .env loaded without override.
+    delete process.env.FLEEX_TEST_ONLY_ENV;
+    process.env.FLEEX_TEST_SHARED = 'shell';
+    // workspace env injected with override
+    applyEnv({ FLEEX_TEST_SHARED: 'workspace' }, { override: true });
+    // .env loaded afterwards, non-override
+    const envFile = writeEnv('precedence.env', 'FLEEX_TEST_SHARED=dotenv\nFLEEX_TEST_ONLY_ENV=fromdotenv');
+    loadDotEnv(envFile);
+    expect(process.env.FLEEX_TEST_SHARED).toBe('workspace'); // workspace beats shell + .env
+    expect(process.env.FLEEX_TEST_ONLY_ENV).toBe('fromdotenv'); // .env still fills gaps
   });
 });

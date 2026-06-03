@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CommandDef } from '../../core/types.ts';
 import { info, die, warn } from '../../core/colors.ts';
-import { FLEEX_HOME, resolveInstance, ensureDirs } from '../../core/instance.ts';
+import { FLEEX_HOME, resolveInstance, ensureDirs, slugify } from '../../core/instance.ts';
+import { activateWorkspace } from '../../core/workspaces.ts';
 import { loadPorts } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
 import { launchDesktop } from './_impl.ts';
@@ -11,7 +12,12 @@ import { runStart } from '../start/_impl.ts';
 const def: CommandDef = {
   name: 'desktop',
   description: 'Open the Electron desktop window (starts stack if not running)',
-  action: async () => {
+  setup(cmd) {
+    cmd.option('--workspace <name>', 'Use the named workspace from ~/.fleex/workspaces.json (defaults to the is_default workspace)');
+  },
+  action: async (opts: { workspace?: string } = {}) => {
+    // Activate the workspace first so the resolved instance is workspace@branch.
+    const ws = activateWorkspace(opts.workspace);
     const ctx = resolveInstance();
     ensureDirs(ctx);
 
@@ -23,16 +29,20 @@ const def: CommandDef = {
       return;
     }
 
-    // Otherwise scan ~/.fleex/.run for any other running instance.
+    // Otherwise scan ~/.fleex/.run for any other running instance. When a
+    // workspace is active, only consider instances for THIS workspace (slugs
+    // prefixed `<workspace>@`).
     const runBase = path.join(FLEEX_HOME, '.run');
     if (!fs.existsSync(runBase)) {
       info('No running instance found — starting stack and opening desktop...');
-      await runStart({ desktop: true });
+      await runStart({ desktop: true, workspace: opts.workspace });
       return;
     }
 
+    const workspacePrefix = ws ? `${slugify(ws.name)}@` : null;
     const runningSlugs: string[] = [];
     for (const entry of fs.readdirSync(runBase)) {
+      if (workspacePrefix && !entry.startsWith(workspacePrefix)) continue;
       const pidPath = path.join(runBase, entry, 'server.pid');
       if (!fs.existsSync(pidPath)) continue;
       try {
@@ -61,7 +71,7 @@ const def: CommandDef = {
       die('Stop other instances or specify which one to use.');
     } else {
       info('No running instance found — starting stack and opening desktop...');
-      await runStart({ desktop: true });
+      await runStart({ desktop: true, workspace: opts.workspace });
     }
   },
 };

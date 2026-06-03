@@ -6,7 +6,17 @@ import { c, info, ok, warn, die } from '../../core/colors.ts';
 import { FLEEX_HOME, DEFAULT_REPO_DIR } from '../../core/instance.ts';
 import { checkBun } from '../../core/version.ts';
 import { installClaudeHooks } from '../../core/claude-hooks.ts';
-import { parseDotEnv } from '../../core/env.ts';
+import {
+  parseWorkspacesFile,
+  resolveWorkspace,
+  bootstrapWorkspacesFromEnv,
+  workspacesFilePath,
+} from '../../core/workspaces.ts';
+
+interface SelfUpdateOptions {
+  workspace?: string;
+  allWorkspaces?: boolean;
+}
 
 function runLogged(cmd: string, args: string[], cwd: string, logPath: string, env?: NodeJS.ProcessEnv): Promise<number> {
   return new Promise((resolve) => {
@@ -24,13 +34,39 @@ function runInherit(cmd: string, args: string[], cwd: string): number {
   return r.status ?? 1;
 }
 
+/** Run DB migrations against the DB described by `envVars`. */
+async function runMigrations(
+  label: string | null,
+  envVars: Record<string, string>,
+  updateDir: string,
+  installLog: string,
+): Promise<void> {
+  info(`Running database migrations${label ? ` for workspace '${label}'` : ''}...`);
+  const envExtra: NodeJS.ProcessEnv = { ...process.env, ...envVars };
+  envExtra.FLEEX_SQLITE_PATH = envExtra.FLEEX_SQLITE_PATH ?? path.join(FLEEX_HOME, 'fleex.db');
+  const migrateScript = path.join(updateDir, 'packages/server/src/infrastructure/migrations/cli-migrate.ts');
+  const rc = await runLogged('bun', ['run', migrateScript], updateDir, installLog, envExtra);
+  if (rc === 0) ok(`Migrations applied${label ? ` for '${label}'` : ''}.`);
+  else warn(`Migration failed${label ? ` for '${label}'` : ''} — check ${installLog}`);
+}
+
 const def: CommandDef = {
   name: 'self-update',
   description: 'Pull latest code and update the fleex CLI',
-  action: async () => {
+  setup(cmd) {
+    cmd.option('--workspace <name>', 'Migrate only the named workspace database (defaults to the is_default workspace)');
+    cmd.option('--all-workspaces', 'Migrate the database of every workspace');
+  },
+  action: async (opts: SelfUpdateOptions = {}) => {
     const updateDir = DEFAULT_REPO_DIR;
     if (spawnSync('git', ['-C', updateDir, 'rev-parse', '--git-dir'], { stdio: 'ignore' }).status !== 0) {
       die(`Default repo not found at ${updateDir}. Nothing to update.`);
+    }
+
+    // Migrate legacy .env users to workspaces.json before anything else.
+    const created = bootstrapWorkspacesFromEnv(path.join(updateDir, '.env'));
+    if (created) {
+      info(`Created ${workspacesFilePath()} from existing .env (workspace 'default').`);
     }
 
     info('Updating fleex...');
@@ -55,18 +91,33 @@ const def: CommandDef = {
     if (rc !== 0) die(`Build failed. See ${installLog}`);
     ok('Build complete.');
 
-    // Migrations (preserve bash behaviour: load .env then run migration script)
-    const envFile = path.join(updateDir, '.env');
-    if (fs.existsSync(envFile)) {
-      info('Running database migrations...');
-      const dotVars = parseDotEnv(envFile);
-      const envExtra: NodeJS.ProcessEnv = { ...process.env, ...dotVars };
-      envExtra.FLEEX_SQLITE_PATH = envExtra.FLEEX_SQLITE_PATH ?? path.join(FLEEX_HOME, 'fleex.db');
-      const migrateScript = path.join(updateDir, 'packages/server/src/infrastructure/migrations/cli-migrate.ts');
-      rc = await runLogged('bun', ['run', migrateScript], updateDir, installLog, envExtra);
-      if (rc === 0) ok('Migrations applied.');
-      else warn(`Migration failed — check ${installLog}`);
+    // Migrations — workspace-aware. Each workspace's env selects its DB.
+    let workspaces = null;
+    try {
+      workspaces = parseWorkspacesFile();
+    } catch (e) {
+      warn(`Skipping migrations — ${e instanceof Error ? e.message : String(e)}`);
     }
+
+    if (opts.allWorkspaces) {
+      if (workspaces && workspaces.length > 0) {
+        for (const ws of workspaces) {
+          await runMigrations(ws.name, ws.env, updateDir, installLog);
+        }
+      } else {
+        warn('No workspaces found to migrate.');
+      }
+    } else if (workspaces) {
+      const ws = (() => {
+        try {
+          return resolveWorkspace(workspaces, opts.workspace);
+        } catch (e) {
+          return die(e instanceof Error ? e.message : String(e));
+        }
+      })();
+      await runMigrations(ws.name, ws.env, updateDir, installLog);
+    }
+    // No workspaces.json and no .env → nothing to migrate (fresh/legacy).
 
     // Ensure cli/fleex (the stable entrypoint) is executable and the bin
     // symlink points at it. This path is unchanged from the original bash

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { c, padEndVisible, visibleLength } from '../../core/colors.ts';
-import { FLEEX_HOME, resolveInstance } from '../../core/instance.ts';
+import { FLEEX_HOME, resolveInstance, readInstanceMetaAt, type InstanceMeta } from '../../core/instance.ts';
 import { SERVICES, type Ports } from '../../core/ports.ts';
 import { isAlive } from '../../core/process.ts';
 
@@ -26,13 +26,23 @@ export async function runStatus(): Promise<void> {
     return;
   }
 
-  // Compute Instance column width
+  // Compute column widths and preload per-instance metadata (workspace/driver).
   const entries = fs.readdirSync(runBase).filter((e) => fs.statSync(path.join(runBase, e)).isDirectory());
+  const metaBySlug = new Map<string, InstanceMeta | null>();
   let maxIw = 'Instance'.length;
+  let maxWs = 'Workspace'.length;
+  let maxDr = 'Driver'.length;
   for (const slug of entries) {
     let w = slug.length;
     if (slug === ctx.instanceSlug) w += 2; // " *"
     if (w > maxIw) maxIw = w;
+
+    const meta = readInstanceMetaAt(path.join(runBase, slug));
+    metaBySlug.set(slug, meta);
+    const wsLabel = meta?.workspace ?? '-';
+    if (wsLabel.length > maxWs) maxWs = wsLabel.length;
+    const drLabel = meta?.driver ?? '-';
+    if (drLabel.length > maxDr) maxDr = drLabel.length;
   }
 
   // Header
@@ -42,6 +52,8 @@ export async function runStatus(): Promise<void> {
 
   writeRow([
     c.cyan(padEndVisible('Instance', maxIw)),
+    'Workspace'.padEnd(maxWs),
+    'Driver'.padEnd(maxDr),
     'Service'.padEnd(10),
     'Status'.padEnd(10),
     'PID'.padEnd(8),
@@ -49,6 +61,8 @@ export async function runStatus(): Promise<void> {
   ]);
   writeRow([
     '─'.repeat(maxIw),
+    '─'.repeat(maxWs),
+    '─'.repeat(maxDr),
     '─'.repeat(10),
     '─'.repeat(10),
     '─'.repeat(8),
@@ -63,6 +77,9 @@ export async function runStatus(): Promise<void> {
     const portsFile = path.join(dir, 'ports.json');
     const ports = readPorts(portsFile);
     const isCurrent = slug === ctx.instanceSlug ? ' *' : '';
+    const meta = metaBySlug.get(slug) ?? null;
+    const wsLabel = meta?.workspace ?? '-';
+    const drLabel = meta?.driver ?? '-';
 
     for (const svc of SERVICES) {
       if (svc === 'desktop') continue; // bash status doesn't list desktop
@@ -95,9 +112,14 @@ export async function runStatus(): Promise<void> {
       const portLabel = portVal ? `http://localhost:${portVal}` : '-';
 
       const inst = svc === 'gateway' ? `${slug}${isCurrent}` : '';
+      // Workspace/Driver are per-instance: show them only on the first row.
+      const wsCell = svc === 'gateway' ? wsLabel : '';
+      const drCell = svc === 'gateway' ? drLabel : '';
 
       writeRow([
         padEndVisible(inst, maxIw),
+        wsCell.padEnd(maxWs),
+        drCell.padEnd(maxDr),
         c.cyan(svc.padEnd(10)),
         statusFn(statusText.padEnd(10)),
         pidLabel.padEnd(8),
