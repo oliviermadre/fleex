@@ -21,6 +21,29 @@ function isExternalUrl(url) {
 
 const TITLEBAR_HEIGHT = 38;
 
+/**
+ * Build the `| workspace : <name>` markup for the titlebar from the active
+ * workspace (set by the CLI as FLEEX_WORKSPACE before launching Electron).
+ * Returns '' in legacy mode (no workspace) so the header stays just "fleex.dev".
+ * The name is escaped for both HTML and the JS template literal it's injected into.
+ */
+function titlebarWorkspaceHtml() {
+  const ws = (process.env['FLEEX_WORKSPACE'] || '').trim();
+  if (!ws) return '';
+  const safe = ws
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+    .replace(/\$\{/g, '\\${');
+  return (
+    '<span style="margin:0 2px;color:var(--theme-border-subtle,#2a2a3e);">|</span>' +
+    '<span style="font-size:12px;font-weight:500;color:var(--theme-text-muted,#a1a1aa);">workspace : ' +
+    '<span style="color:var(--theme-text-secondary,#d4d4d8);">' + safe + '</span></span>'
+  );
+}
+
 const iconPath = path.join(__dirname, '..', 'assets', 'icon.png');
 
 let mainWindow = null;
@@ -113,6 +136,7 @@ function createWindow() {
     `);
 
     // Inject the titlebar element + sync script
+    const workspaceLabelHtml = titlebarWorkspaceHtml();
     mainWindow.webContents.executeJavaScript(`
       (function() {
         // Create titlebar
@@ -128,6 +152,7 @@ function createWindow() {
             <span style="font-size: 13px; font-weight: 700; letter-spacing: -0.02em;">
               <span style="color: var(--theme-text-primary, #e4e4e7);">fleex</span><span style="color: var(--theme-accent, #6ee7b7);">.dev</span>
             </span>
+            ${workspaceLabelHtml}
           </div>
           <div id="fleex-titlebar-right">
             <div id="fleex-titlebar-usage"></div>
