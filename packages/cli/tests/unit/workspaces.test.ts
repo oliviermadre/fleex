@@ -8,6 +8,7 @@ import {
   activateWorkspace,
   bootstrapWorkspacesFromEnv,
   validateWorkspacesConfig,
+  defaultWorkspaceName,
   workspacesFilePath,
   type Workspace,
 } from '../../src/core/workspaces.ts';
@@ -283,5 +284,43 @@ describe('validateWorkspacesConfig', () => {
     const res = validateWorkspacesConfig(p);
     expect(res.ok).toBe(false);
     expect(res.ok === false && res.error).toMatch(/duplicate/);
+  });
+});
+
+describe('defaultWorkspaceName', () => {
+  it('returns null in legacy mode (no file)', () => {
+    expect(defaultWorkspaceName(path.join(tmpDir, 'absent.json'))).toBeNull();
+  });
+
+  it('returns the name of the single default', () => {
+    const p = writeWs('d-one.json', JSON.stringify({
+      workspaces: [
+        { name: 'default', is_default: true },
+        { name: 'sqlite' },
+      ],
+    }));
+    expect(defaultWorkspaceName(p)).toBe('default');
+  });
+
+  it('returns null when there is no default (explicit --workspace setup)', () => {
+    const p = writeWs('d-zero.json', JSON.stringify({
+      workspaces: [{ name: 'a' }, { name: 'b' }],
+    }));
+    expect(defaultWorkspaceName(p)).toBeNull();
+  });
+
+  it('returns null when the config is ambiguous (>1 default)', () => {
+    const p = writeWs('d-two.json', JSON.stringify({
+      workspaces: [
+        { name: 'a', is_default: true },
+        { name: 'b', is_default: true },
+      ],
+    }));
+    expect(defaultWorkspaceName(p)).toBeNull();
+  });
+
+  it('returns null on a corrupt config instead of throwing', () => {
+    const p = writeWs('d-bad.json', '{ not json');
+    expect(defaultWorkspaceName(p)).toBeNull();
   });
 });

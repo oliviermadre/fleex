@@ -10,6 +10,7 @@ interface DeleteOptions {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'delete',
   aliases: ['rm'],
   description: 'Delete a ticket (prompts unless -f is given)',

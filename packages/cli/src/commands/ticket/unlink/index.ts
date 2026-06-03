@@ -15,6 +15,7 @@ interface TicketWithLinks {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'unlink',
   description: 'Unlink repositories / PRs / issues from a ticket (unlink <id> --repo org/name | --pr org/name#n | --issue org/name#n)',
   setup(cmd) {

@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { die } from './colors.ts';
+import { defaultWorkspaceName } from './workspaces.ts';
 
 export const FLEEX_HOME = process.env.FLEEX_HOME ?? path.join(os.homedir(), '.fleex');
 export const DEFAULT_REPO_DIR = path.join(FLEEX_HOME, 'repo');
@@ -74,8 +75,11 @@ export function resolveInstance(): InstanceContext {
   const branchName = (branch.status === 0 ? branch.stdout.trim() : 'default') || 'default';
 
   // FLEEX_WORKSPACE is set by activateWorkspace() before the first call here.
+  // When it isn't (e.g. read-only commands that never activate a workspace),
+  // fall back to the single default workspace so the slug resolves to the
+  // running `default@branch` instance instead of the branch-only legacy slug.
   const wsEnv = process.env.FLEEX_WORKSPACE;
-  const workspace = wsEnv && wsEnv.trim() !== '' ? wsEnv : null;
+  const workspace = wsEnv && wsEnv.trim() !== '' ? wsEnv : defaultWorkspaceName();
   const slug = instanceSlug(workspace, branchName);
 
   cached = {

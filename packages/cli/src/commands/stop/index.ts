@@ -11,6 +11,7 @@ interface StopOptions {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'stop',
   description: 'Stop the current instance (or a named one with [name])',
   setup(cmd) {

@@ -6,6 +6,7 @@ import { die } from '../../core/colors.ts';
 import { resolveInstance, ensureDirs, logFile } from '../../core/instance.ts';
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'logs',
   description: 'Tail logs (all services, or a specific one via [service])',
   setup(cmd) {

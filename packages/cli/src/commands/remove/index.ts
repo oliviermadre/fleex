@@ -25,6 +25,7 @@ function instanceIsRunning(runDir: string): boolean {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'remove',
   description: 'Remove a stopped instance (its .run and .logs directories)',
   setup(cmd) {

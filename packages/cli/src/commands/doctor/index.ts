@@ -57,6 +57,7 @@ function probeSimple(cmd: string, versionArgs: string[] = ['--version']): ToolSt
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'doctor',
   description: 'Check system health and prerequisites (bun, tmux, gh, claude, services)',
   setup(cmd) {

@@ -71,6 +71,7 @@ async function loadExisting(manifestPath: string): Promise<MarketplaceManifest |
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'export',
   description: 'Export agentic primitives (personas, skills, panels, workflows) into a marketplace repo',
   setup(cmd: Command) {

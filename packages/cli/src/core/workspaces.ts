@@ -160,6 +160,31 @@ export function validateWorkspacesConfig(
 }
 
 /**
+ * Name of the single default workspace, WITHOUT activating anything.
+ *
+ * For callers that only need the default instance identity (the slug) and must
+ * not inject env — chiefly {@link resolveInstance}, so every instance-scoped
+ * command (ticket/epic/import/export/logs/doctor/stop/remove) targets the
+ * default workspace's running stack when no `--workspace` is given.
+ *
+ * Non-throwing by design: returns `null` in legacy mode, on a read/parse error,
+ * or when there isn't exactly one default (0 or >1). Callers then fall back to
+ * the branch-only slug; real corruption is surfaced by
+ * {@link assertValidWorkspacesConfig} and `fleex doctor`, not here.
+ */
+export function defaultWorkspaceName(filePath: string = workspacesFilePath()): string | null {
+  let workspaces: Workspace[] | null;
+  try {
+    workspaces = parseWorkspacesFile(filePath);
+  } catch {
+    return null;
+  }
+  if (workspaces === null) return null;
+  const defaults = workspaces.filter((w) => w.is_default);
+  return defaults.length === 1 ? defaults[0]!.name : null;
+}
+
+/**
  * CLI guard for state-changing commands (start/restart/stop/desktop/self-update).
  *
  * Call at the very top of a command — before any workspace activation or

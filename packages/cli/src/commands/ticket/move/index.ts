@@ -6,6 +6,7 @@ import { assertValidStatus, resolveTicketId } from '../_shared.ts';
 interface MoveOptions { board?: string }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'move',
   aliases: ['mv'],
   description: 'Change a ticket status (move <id> <status>)',

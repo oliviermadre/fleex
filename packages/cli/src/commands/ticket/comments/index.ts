@@ -7,6 +7,7 @@ interface CommentsOptions { board?: string }
 interface Comment { authorType: string; authorName: string; createdAt: string; body: string }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'comments',
   description: 'List comments on a ticket',
   setup(cmd) {

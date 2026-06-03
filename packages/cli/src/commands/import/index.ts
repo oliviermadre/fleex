@@ -147,6 +147,7 @@ interface ImportOptions {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'import',
   description: 'Install primitives from a registered marketplace into this instance',
   setup(cmd: Command) {

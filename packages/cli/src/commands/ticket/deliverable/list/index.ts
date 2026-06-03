@@ -7,6 +7,7 @@ import type { DeliverableDTO } from '../_shared.ts';
 interface ListOptions { board?: string }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'list',
   aliases: ['ls'],
   description: 'List deliverables on a ticket',
