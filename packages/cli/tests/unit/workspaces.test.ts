@@ -67,6 +67,22 @@ describe('parseWorkspacesFile', () => {
     expect(parseWorkspacesFile(p)).toEqual([{ name: 'bare', is_default: false, env: {} }]);
   });
 
+  it('parses a top-level basePath when present', () => {
+    const p = writeWs('with-base.json', JSON.stringify({
+      workspaces: [{ name: 'tada', is_default: true, basePath: '~/projects-tada', env: {} }],
+    }));
+    expect(parseWorkspacesFile(p)).toEqual([
+      { name: 'tada', is_default: true, env: {}, basePath: '~/projects-tada' },
+    ]);
+  });
+
+  it('throws on an invalid basePath (non-empty string required)', () => {
+    const p = writeWs('bad-base.json', JSON.stringify({
+      workspaces: [{ name: 'tada', is_default: true, basePath: '' }],
+    }));
+    expect(() => parseWorkspacesFile(p)).toThrow(/invalid "basePath"/i);
+  });
+
   it('throws on invalid JSON', () => {
     const p = writeWs('bad.json', '{ not json');
     expect(() => parseWorkspacesFile(p)).toThrow(/valid JSON/i);
@@ -181,6 +197,23 @@ describe('activateWorkspace', () => {
     expect(process.env.FLEEX_WORKSPACE).toBe('perso');
     expect(process.env.K).toBe('perso');
   });
+
+  it('injects basePath as FLEEX_REPOSITORIES_BASE_PATH', () => {
+    writeGlobalWs(
+      JSON.stringify({ workspaces: [{ name: 'tada', is_default: true, basePath: '~/projects-tada', env: {} }] }),
+    );
+    delete process.env.FLEEX_REPOSITORIES_BASE_PATH;
+    const result = activateWorkspace();
+    expect(result?.basePath).toBe('~/projects-tada');
+    expect(process.env.FLEEX_REPOSITORIES_BASE_PATH).toBe('~/projects-tada');
+  });
+
+  it('does not set FLEEX_REPOSITORIES_BASE_PATH when the workspace has no basePath', () => {
+    writeGlobalWs(JSON.stringify({ workspaces: [{ name: 'tada', is_default: true, env: {} }] }));
+    delete process.env.FLEEX_REPOSITORIES_BASE_PATH;
+    activateWorkspace();
+    expect(process.env.FLEEX_REPOSITORIES_BASE_PATH).toBeUndefined();
+  });
 });
 
 describe('bootstrapWorkspacesFromEnv', () => {
@@ -249,6 +282,28 @@ describe('validateWorkspacesConfig', () => {
       workspaces: [
         { name: 'a', env: {} },
         { name: 'b', env: {} },
+      ],
+    }));
+    expect(validateWorkspacesConfig(p)).toEqual({ ok: true });
+  });
+
+  it('is invalid when two workspaces share the same basePath', () => {
+    const p = writeWs('v-dup-base.json', JSON.stringify({
+      workspaces: [
+        { name: 'a', is_default: true, basePath: '~/projects' },
+        { name: 'b', basePath: '~/projects' },
+      ],
+    }));
+    const res = validateWorkspacesConfig(p);
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.error).toMatch(/share the same basePath/);
+  });
+
+  it('is valid when basePaths are distinct', () => {
+    const p = writeWs('v-distinct-base.json', JSON.stringify({
+      workspaces: [
+        { name: 'a', is_default: true, basePath: '~/projects-a' },
+        { name: 'b', basePath: '~/projects-b' },
       ],
     }));
     expect(validateWorkspacesConfig(p)).toEqual({ ok: true });

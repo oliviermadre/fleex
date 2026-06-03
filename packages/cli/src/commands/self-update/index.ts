@@ -51,6 +51,56 @@ async function runMigrations(
   else warn(`Migration failed${label ? ` for '${label}'` : ''} — check ${installLog}`);
 }
 
+/** Read the persisted basePath for a workspace's backend via the headless reader. */
+function readBasePathFromDb(envVars: Record<string, string>, updateDir: string): string | null {
+  const script = path.join(updateDir, 'packages/server/src/infrastructure/migrations/cli-read-config.ts');
+  const env: NodeJS.ProcessEnv = { ...process.env, ...envVars };
+  env.FLEEX_SQLITE_PATH = env.FLEEX_SQLITE_PATH ?? path.join(FLEEX_HOME, 'fleex.db');
+  const r = spawnSync('bun', ['run', script], { cwd: updateDir, encoding: 'utf8', env });
+  if (r.status !== 0 || !r.stdout) return null;
+  try {
+    // The reader prints a single JSON line; tolerate any preceding noise.
+    const last = r.stdout.trim().split('\n').pop() ?? '{}';
+    const parsed = JSON.parse(last) as { basePath?: unknown };
+    return typeof parsed.basePath === 'string' && parsed.basePath.trim() !== '' ? parsed.basePath : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One-time migration for existing users: copy each workspace's basePath OUT of
+ * its DB config INTO workspaces.json (the new source of truth). Idempotent —
+ * only fills workspaces that have no basePath yet. Mutates the raw JSON so any
+ * extra fields/formatting survive; preserves 0600.
+ */
+function migrateBasePathToWorkspaces(updateDir: string): void {
+  const file = workspacesFilePath();
+  let raw: { workspaces?: unknown };
+  try {
+    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return; // no/invalid file — nothing to migrate (the guard already ran)
+  }
+  const list = Array.isArray(raw.workspaces) ? raw.workspaces : [];
+  let changed = false;
+  for (const ws of list as Array<Record<string, unknown>>) {
+    if (!ws || typeof ws !== 'object' || typeof ws['basePath'] === 'string') continue;
+    const env = (ws['env'] ?? {}) as Record<string, string>;
+    const bp = readBasePathFromDb(env, updateDir);
+    if (bp) {
+      ws['basePath'] = bp;
+      changed = true;
+      info(`Workspace '${String(ws['name'])}': basePath migrated from DB → ${bp}`);
+    }
+  }
+  if (changed) {
+    fs.writeFileSync(file, JSON.stringify(raw, null, 2) + '\n', { mode: 0o600 });
+    try { fs.chmodSync(file, 0o600); } catch { /* best effort */ }
+    ok('workspaces.json updated with per-workspace basePath.');
+  }
+}
+
 const def: CommandDef = {
   name: 'self-update',
   description: 'Pull latest code and update the fleex CLI',
@@ -96,6 +146,10 @@ const def: CommandDef = {
     rc = await runLogged('bun', ['run', 'build'], updateDir, installLog);
     if (rc !== 0) die(`Build failed. See ${installLog}`);
     ok('Build complete.');
+
+    // One-time: lift basePath from each workspace's DB config into workspaces.json
+    // (new source of truth). Idempotent — skips workspaces that already have one.
+    migrateBasePathToWorkspaces(updateDir);
 
     // Migrations — workspace-aware. Each workspace's env selects its DB.
     let workspaces = null;

@@ -203,12 +203,19 @@ function GeneralTab({
         placeholder="/home/user/repos"
         value={basePath}
         onChange={(e) => setBasePath(e.target.value)}
+        disabled
+        readOnly
       />
       <p className="text-xs text-[var(--theme-text-muted)]">
-        Base directory for repositories. Repos are stored as{' '}
+        Base directory for repositories (stored as{' '}
         <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
           basePath/orgName/repoName
         </code>
+        ). Managed per workspace in{' '}
+        <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+          ~/.fleex/workspaces.json
+        </code>
+        — edit it there, then restart the workspace.
       </p>
 
       <div className="mt-4 border-t border-[var(--theme-border)] pt-4">

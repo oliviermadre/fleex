@@ -742,6 +742,7 @@ db.close();
   # where secrets live, so the file is created with 0600 permissions.
   mkdir -p "$(dirname "$WORKSPACES_FILE")"
   FLEEX_WS_DRIVER="$storage_driver" \
+  FLEEX_WS_BASE_PATH="$base_path" \
   FLEEX_WS_OUT="$WORKSPACES_FILE" \
   bun -e '
     const workspaces = {
@@ -749,6 +750,7 @@ db.close();
         {
           name: "default",
           is_default: true,
+          basePath: process.env.FLEEX_WS_BASE_PATH,
           env: {
             FLEEX_STORAGE_DRIVER: process.env.FLEEX_WS_DRIVER,
           },

@@ -8,7 +8,8 @@ import { SERVICES, loadPorts, type Service } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
 import { MIN_BUN_VERSION, versionGte } from '../../core/version.ts';
 import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
-import { validateWorkspacesConfig, parseWorkspacesFile, workspacesFilePath } from '../../core/workspaces.ts';
+import { parseWorkspacesFile, workspacesFilePath } from '../../core/workspaces.ts';
+import { runRules, makeRuleContext } from '../../core/workspaces-validation.ts';
 
 interface ToolStatus {
   installed: boolean;
@@ -152,21 +153,32 @@ const def: CommandDef = {
       line(`${c.yellow('○')} node_modules missing — run: ${c.bold(`cd ${ctx.repoDir} && bun install`)}`);
     }
 
-    // workspaces config — global ~/.fleex/workspaces.json validity
-    const wsRes = validateWorkspacesConfig();
-    if (!wsRes.ok) {
-      line(`${c.red('✗')} workspaces config — ${wsRes.error} Fix: ${workspacesFilePath()}`);
+    // workspaces config — global ~/.fleex/workspaces.json validity, via the
+    // shared rule engine (config + state rules; same rules the command guard uses).
+    let wsList = null;
+    try {
+      wsList = parseWorkspacesFile();
+    } catch (e) {
+      line(`${c.red('✗')} workspaces config — ${e instanceof Error ? e.message : String(e)} Fix: ${workspacesFilePath()}`);
       allOk = false;
+    }
+    if (wsList === null) {
+      line(`${c.dim('○')} workspaces — legacy .env mode (no ${path.basename(workspacesFilePath())})`);
     } else {
-      let list = null;
-      try { list = parseWorkspacesFile(); } catch { /* validated ok just above */ }
-      if (list === null) {
-        line(`${c.dim('○')} workspaces — legacy .env mode (no ${path.basename(workspacesFilePath())})`);
-      } else {
-        const defaultWs = list.find((w) => w.is_default);
+      const issues = runRules(makeRuleContext(wsList));
+      for (const issue of issues) {
+        if (issue.level === 'error') {
+          line(`${c.red('✗')} workspaces config — ${issue.message}`);
+          allOk = false;
+        } else {
+          line(`${c.yellow('⚠')} workspaces config — ${issue.message}`);
+        }
+      }
+      if (!issues.some((i) => i.level === 'error')) {
+        const defaultWs = wsList.find((w) => w.is_default);
         const defLabel = defaultWs ? defaultWs.name : '(none — pass --workspace)';
-        const plural = list.length === 1 ? '' : 's';
-        line(`${c.green('✓')} workspaces config — valid (${list.length} workspace${plural}, default: ${defLabel})`);
+        const plural = wsList.length === 1 ? '' : 's';
+        line(`${c.green('✓')} workspaces config — valid (${wsList.length} workspace${plural}, default: ${defLabel})`);
       }
     }
 

@@ -3,17 +3,29 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseDotEnv, applyEnv } from './env.ts';
 import { warn, die, err } from './colors.ts';
+import { runRules, makeRuleContext } from './workspaces-validation.ts';
 
 /**
  * A workspace is a named, isolated configuration context. Its `env` block is
  * injected into the environment of every service started for that workspace,
  * overriding both the shell and the repo .env.
+ *
+ * `basePath` is the worktree/repository root for this workspace — first-class
+ * (not a secret, so it lives alongside `name`/`is_default`, not in `env`). It is
+ * the source of truth for the server's `repositoriesBasePath`: on activation it
+ * is injected as `FLEEX_REPOSITORIES_BASE_PATH`, overriding the DB config. Two
+ * workspaces must not share the same basePath (else their sessions collide on
+ * the cwd-routed hook fan-out).
  */
 export interface Workspace {
   name: string;
   is_default: boolean;
   env: Record<string, string>;
+  basePath?: string;
 }
+
+/** Env var that carries a workspace's basePath to the server (overrides DB config). */
+export const BASE_PATH_ENV = 'FLEEX_REPOSITORIES_BASE_PATH';
 
 interface WorkspacesFile {
   workspaces: unknown;
@@ -62,12 +74,15 @@ export function parseWorkspacesFile(filePath: string = workspacesFilePath()): Wo
   const seen = new Set<string>();
   const result: Workspace[] = [];
   for (const entry of list) {
-    const w = entry as Partial<Workspace> & { env?: unknown };
+    const w = entry as Partial<Workspace> & { env?: unknown; basePath?: unknown };
     if (!w || typeof w.name !== 'string' || w.name.trim() === '') {
       throw new Error(`workspaces.json: every workspace needs a non-empty "name".`);
     }
     if (w.env != null && (typeof w.env !== 'object' || Array.isArray(w.env))) {
       throw new Error(`workspaces.json: workspace '${w.name}' has an invalid "env" (must be an object).`);
+    }
+    if (w.basePath != null && (typeof w.basePath !== 'string' || w.basePath.trim() === '')) {
+      throw new Error(`workspaces.json: workspace '${w.name}' has an invalid "basePath" (must be a non-empty string).`);
     }
     if (seen.has(w.name)) {
       throw new Error(`workspaces.json is corrupt: duplicate workspace name '${w.name}'.`);
@@ -77,6 +92,7 @@ export function parseWorkspacesFile(filePath: string = workspacesFilePath()): Wo
       name: w.name,
       is_default: w.is_default === true,
       env: (w.env ?? {}) as Record<string, string>,
+      ...(typeof w.basePath === 'string' ? { basePath: w.basePath } : {}),
     });
   }
   return result;
@@ -124,19 +140,14 @@ export function resolveWorkspace(workspaces: Workspace[], name?: string): Worksp
 /**
  * Validate the global workspaces config WITHOUT activating anything.
  *
- * Checks only invariants that are global — true regardless of which workspace a
- * command targets — so the result is meaningful even for `--workspace <name>`
- * invocations (which {@link resolveWorkspace} would otherwise let through
- * without ever inspecting `is_default`):
+ * Structural validity is delegated to {@link parseWorkspacesFile} (JSON shape,
+ * unique non-empty names, env/basePath types). The higher-level invariants live
+ * in the extensible rule engine ({@link runRules}); this runs the `config`-kind
+ * rules (at-most-one default, unique basePath, …) and returns the first error so
+ * the contract stays `{ ok } | { ok:false, error }` for {@link assertValidWorkspacesConfig}.
  *
- *  - structural validity (delegated to {@link parseWorkspacesFile}: JSON shape,
- *    unique non-empty names, env objects);
- *  - **at most one** `is_default: true`.
- *
- * Zero defaults is intentionally VALID: a fully-explicit setup driven entirely
- * by `--workspace` is legitimate, and bare `fleex start` already reports a
- * helpful message at resolution time. Returns `{ ok: true }` in legacy mode
- * (no workspaces.json). Never throws, never exits — callers decide what to do.
+ * Returns `{ ok: true }` in legacy mode (no workspaces.json). Never throws,
+ * never exits — callers decide what to do.
  */
 export function validateWorkspacesConfig(
   filePath: string = workspacesFilePath(),
@@ -149,14 +160,8 @@ export function validateWorkspacesConfig(
   }
   if (workspaces === null) return { ok: true }; // legacy mode — nothing to validate
 
-  const defaults = workspaces.filter((w) => w.is_default);
-  if (defaults.length > 1) {
-    return {
-      ok: false,
-      error: `only one default workspace is allowed (found: ${defaults.map((w) => w.name).join(', ')}).`,
-    };
-  }
-  return { ok: true };
+  const firstError = runRules(makeRuleContext(workspaces), ['config']).find((i) => i.level === 'error');
+  return firstError ? { ok: false, error: firstError.message } : { ok: true };
 }
 
 /**
@@ -254,6 +259,11 @@ export function activateWorkspace(name?: string): Workspace | null {
   checkPermissions(filePath);
   process.env.FLEEX_WORKSPACE = ws.name;
   applyEnv(ws.env, { override: true });
+  // basePath is the source of truth for the server's repositoriesBasePath —
+  // carry it via env so the config adapter overrides the DB value.
+  if (ws.basePath) {
+    applyEnv({ [BASE_PATH_ENV]: ws.basePath }, { override: true });
+  }
   return ws;
 }
 
