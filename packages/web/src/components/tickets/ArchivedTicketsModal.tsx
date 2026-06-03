@@ -3,8 +3,7 @@ import type { Ticket, BoardWithCounts } from '@fleex/shared';
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { fetchArchivedTickets } from '../../services/api';
 import { useTicketStore } from '../../stores/ticketStore';
-
-const PAGE_SIZE = 20;
+import { PAGE_SIZE_ARCHIVED_TICKETS } from '../../lib/constants';
 
 export function ArchivedTicketsModal({
   boardId,
@@ -24,7 +23,7 @@ export function ArchivedTicketsModal({
   const load = useCallback(async (off: number) => {
     setLoading(true);
     try {
-      const res = await fetchArchivedTickets(boardId ?? undefined, PAGE_SIZE, off);
+      const res = await fetchArchivedTickets(boardId ?? undefined, PAGE_SIZE_ARCHIVED_TICKETS, off);
       setTickets(res.tickets);
       setTotal(res.total);
       setOffset(off);
@@ -43,8 +42,8 @@ export function ArchivedTicketsModal({
     await load(offset);
   };
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-  const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+  const totalPages = Math.ceil(total / PAGE_SIZE_ARCHIVED_TICKETS);
+  const currentPage = Math.floor(offset / PAGE_SIZE_ARCHIVED_TICKETS) + 1;
 
   const boardName = (bid: string) => {
     const b = boards.find((x) => x.id === bid);
@@ -162,7 +161,7 @@ export function ArchivedTicketsModal({
             <button
               className="rounded px-3 py-1.5 text-xs text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               disabled={offset === 0}
-              onClick={() => load(Math.max(0, offset - PAGE_SIZE))}
+              onClick={() => load(Math.max(0, offset - PAGE_SIZE_ARCHIVED_TICKETS))}
             >
               Previous
             </button>
@@ -171,8 +170,8 @@ export function ArchivedTicketsModal({
             </span>
             <button
               className="rounded px-3 py-1.5 text-xs text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              disabled={offset + PAGE_SIZE >= total}
-              onClick={() => load(offset + PAGE_SIZE)}
+              disabled={offset + PAGE_SIZE_ARCHIVED_TICKETS >= total}
+              onClick={() => load(offset + PAGE_SIZE_ARCHIVED_TICKETS)}
             >
               Next
             </button>

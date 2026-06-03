@@ -1,6 +1,7 @@
 import { Handle, Position, useConnection } from '@xyflow/react';
 import { useState } from 'react';
 import type { WorkflowStep } from '@fleex/shared';
+import { COLOR_ERROR_RED } from '../../lib/constants';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
 
@@ -107,7 +108,7 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   // Defensive: if React Flow passes weird data, render a visible fallback instead of crashing
   if (!data || !data.step) {
     return (
-      <div style={{ padding: '10px', background: '#dc2626', color: 'white', borderRadius: 8, fontSize: 12 }}>
+      <div style={{ padding: '10px', background: COLOR_ERROR_RED, color: 'white', borderRadius: 8, fontSize: 12 }}>
         Missing step data
       </div>
     );

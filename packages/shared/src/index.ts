@@ -235,7 +235,7 @@ export type {
 } from './types/marketplace.js';
 export { MARKETPLACE_SCHEMA_VERSION } from './types/marketplace.js';
 
-export type { WsChannel } from './constants.js';
+export type { WsChannel, ExecutionState } from './constants.js';
 
 export {
   FLEEX_PREFIX,
@@ -271,6 +271,7 @@ export {
   WS_TICKET_PATH,
   WS_AGENT_PATH,
   TICKET_STATUSES,
+  TICKET_STATUS,
   TICKET_STATUS_LABELS,
   TICKET_PRIORITIES,
   TICKET_TYPES,
@@ -279,4 +280,15 @@ export {
   WS_PERSONA_PATH,
   WS_AGENT_EVENTS_PATH,
   WS_SKILL_PATH,
+  CONFIRM_KILL_TIMEOUT_MS,
+  KILL_GRACE_MS,
+  ADD_GRACE_MS,
+  EXECUTION_LOG_REFRESH_MS,
+  TOOLTIP_HIDE_DELAY_MS,
+  EXECUTION_STATES,
+  USAGE_WARN_THRESHOLD_PCT,
+  USAGE_DANGER_THRESHOLD_PCT,
+  MS_IN_MINUTE,
+  MINUTES_IN_HOUR,
+  HOURS_IN_DAY,
 } from './constants.js';

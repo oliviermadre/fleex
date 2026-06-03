@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { DomainEventLog } from '@fleex/shared';
 import * as api from '../services/api';
+import { PAGE_SIZE_AUDIT_TRAIL } from '../lib/constants';
 
 interface AuditTrailState {
   events: DomainEventLog[];
@@ -31,12 +32,12 @@ export const useAuditTrailStore = create<AuditTrailState>((set, get) => ({
     try {
       const { filters } = get();
       const events = await api.fetchEvents({
-        limit: 50,
+        limit: PAGE_SIZE_AUDIT_TRAIL,
         eventType: filters.eventType || undefined,
         instanceId: filters.instanceId || undefined,
         since: filters.since || undefined,
       });
-      set({ events, hasMore: events.length >= 50, loading: false });
+      set({ events, hasMore: events.length >= PAGE_SIZE_AUDIT_TRAIL, loading: false });
     } catch {
       set({ loading: false });
     }
@@ -49,7 +50,7 @@ export const useAuditTrailStore = create<AuditTrailState>((set, get) => ({
     try {
       const lastEvent = events[events.length - 1]!;
       const more = await api.fetchEvents({
-        limit: 50,
+        limit: PAGE_SIZE_AUDIT_TRAIL,
         before: lastEvent.id,
         eventType: filters.eventType || undefined,
         instanceId: filters.instanceId || undefined,
@@ -57,7 +58,7 @@ export const useAuditTrailStore = create<AuditTrailState>((set, get) => ({
       });
       set({
         events: [...events, ...more],
-        hasMore: more.length >= 50,
+        hasMore: more.length >= PAGE_SIZE_AUDIT_TRAIL,
         loading: false,
       });
     } catch {

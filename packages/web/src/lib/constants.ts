@@ -30,3 +30,18 @@ export const TERMINAL_SCROLLBACK = 10000;
 
 export const API_URL = '/api';
 export const WS_BASE_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+
+// Storage keys
+export const STORAGE_KEY_SETTINGS = 'fleex-settings';
+
+// Pagination — page sizes per view
+export const PAGE_SIZE_EXECUTIONS = 100;
+export const PAGE_SIZE_AUDIT_TRAIL = 50;
+export const PAGE_SIZE_ARCHIVED_TICKETS = 20;
+
+// UI — semantic colors (inline styles only; Tailwind classes unaffected)
+export const COLOR_ERROR_RED = '#dc2626';
+
+// UI — semantic dimensions
+export const TITLE_BAR_HEIGHT = 36;     // floating panel drag/title bar
+export const PILL_BORDER_RADIUS = 9999; // fully rounded badge

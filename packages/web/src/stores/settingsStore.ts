@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { API_URL, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE } from '../lib/constants';
+import { API_URL, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, STORAGE_KEY_SETTINGS } from '../lib/constants';
 import { resolveTemplate, type WorktreeContext } from '../lib/templateUtils';
 import type { Theme } from '../lib/themes';
 import * as api from '../services/api';
@@ -78,8 +78,6 @@ interface SettingsState {
   setRepoConfig: (org: string, name: string, config: RepoConfig) => void;
 }
 
-const STORAGE_KEY = 'fleex-settings';
-
 const defaultSettings: AppSettings = {
   basePath: '',
   repositories: [],
@@ -104,7 +102,7 @@ const defaultSettings: AppSettings = {
 
 function loadFromStorage(): AppSettings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY_SETTINGS);
     if (!raw) return defaultSettings;
     const parsed = JSON.parse(raw);
     return { ...defaultSettings, ...parsed };
@@ -113,7 +111,7 @@ function loadFromStorage(): AppSettings {
 }
 
 function saveToStorage(settings: AppSettings) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings, null, 2));
+  localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings, null, 2));
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({

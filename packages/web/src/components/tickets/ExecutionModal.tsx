@@ -1,5 +1,6 @@
 import { memo, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { EXECUTION_STATES, type ExecutionState } from '@fleex/shared';
 import { AgentEventStream } from '../main-panel/AgentEventStream';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 import { useAgentEventStore } from '../../stores/agentEventStore';
@@ -9,8 +10,6 @@ const MIN_WIDTH = 480;
 const MIN_HEIGHT = 300;
 const DEFAULT_WIDTH = 700;
 const DEFAULT_HEIGHT = 480;
-
-type TerminateState = 'idle' | 'confirming' | 'terminating' | 'done' | 'error';
 
 export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
   executionId,
@@ -38,27 +37,27 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
     return !events.some((e) => e.eventType === 'execution_end');
   });
 
-  const [terminateState, setTerminateState] = useState<TerminateState>('idle');
+  const [terminateState, setTerminateState] = useState<ExecutionState>(EXECUTION_STATES.IDLE);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTerminate = useCallback(async () => {
-    if (terminateState === 'idle') {
-      setTerminateState('confirming');
-      timerRef.current = setTimeout(() => setTerminateState('idle'), 1500);
-    } else if (terminateState === 'confirming') {
+    if (terminateState === EXECUTION_STATES.IDLE) {
+      setTerminateState(EXECUTION_STATES.CONFIRMING);
+      timerRef.current = setTimeout(() => setTerminateState(EXECUTION_STATES.IDLE), 1500);
+    } else if (terminateState === EXECUTION_STATES.CONFIRMING) {
       if (timerRef.current) clearTimeout(timerRef.current);
-      setTerminateState('terminating');
+      setTerminateState(EXECUTION_STATES.TERMINATING);
       try {
         await cancelExecution(executionId);
-        setTerminateState('done');
+        setTerminateState(EXECUTION_STATES.DONE);
       } catch {
-        setTerminateState('error');
-        setTimeout(() => setTerminateState('idle'), 2000);
+        setTerminateState(EXECUTION_STATES.ERROR);
+        setTimeout(() => setTerminateState(EXECUTION_STATES.IDLE), 2000);
       }
     }
   }, [terminateState, executionId]);
 
-  const showTerminate = isRunning && terminateState !== 'done';
+  const showTerminate = isRunning && terminateState !== EXECUTION_STATES.DONE;
   // --- End terminate button state ---
 
   const handleTitleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -162,7 +161,7 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
           {showTerminate && (
             <button
               onClick={(e) => { e.stopPropagation(); handleTerminate(); }}
-              disabled={terminateState === 'terminating'}
+              disabled={terminateState === EXECUTION_STATES.TERMINATING}
               title="Stop agent execution"
               style={{
                 display: 'flex',
@@ -173,9 +172,9 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
                 border: 'none',
                 fontSize: 11,
                 fontWeight: 600,
-                cursor: terminateState === 'terminating' ? 'wait' : 'pointer',
-                background: terminateState === 'confirming' ? 'var(--theme-danger)' : 'rgba(255, 80, 80, 0.15)',
-                color: terminateState === 'confirming' ? '#fff' : 'var(--theme-danger)',
+                cursor: terminateState === EXECUTION_STATES.TERMINATING ? 'wait' : 'pointer',
+                background: terminateState === EXECUTION_STATES.CONFIRMING ? 'var(--theme-danger)' : 'rgba(255, 80, 80, 0.15)',
+                color: terminateState === EXECUTION_STATES.CONFIRMING ? '#fff' : 'var(--theme-danger)',
                 transition: 'all 0.15s',
                 flexShrink: 0,
               }}
@@ -183,13 +182,13 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
               <svg width="10" height="10" viewBox="0 0 10 10">
                 <rect x="1" y="1" width="8" height="8" rx="1" fill="currentColor" />
               </svg>
-              {terminateState === 'idle' && 'Terminate'}
-              {terminateState === 'confirming' && 'Confirm kill?'}
-              {terminateState === 'terminating' && 'Stopping\u2026'}
-              {terminateState === 'error' && 'Failed'}
+              {terminateState === EXECUTION_STATES.IDLE && 'Terminate'}
+              {terminateState === EXECUTION_STATES.CONFIRMING && 'Confirm kill?'}
+              {terminateState === EXECUTION_STATES.TERMINATING && 'Stopping\u2026'}
+              {terminateState === EXECUTION_STATES.ERROR && 'Failed'}
             </button>
           )}
-          {terminateState === 'done' && (
+          {terminateState === EXECUTION_STATES.DONE && (
             <span style={{ fontSize: 11, color: 'var(--theme-text-muted)', fontWeight: 600, flexShrink: 0 }}>
               Terminated
             </span>

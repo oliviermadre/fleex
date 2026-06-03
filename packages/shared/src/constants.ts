@@ -101,6 +101,42 @@ export const WS_AGENT_EVENTS_PATH = '/ws/agent-events';
 // Skills
 export const WS_SKILL_PATH = '/ws/skills';
 
+// Timing — UI interactions
+export const CONFIRM_KILL_TIMEOUT_MS = 3_000; // sidebar kill confirm dialog auto-reset
+export const KILL_GRACE_MS = 3_000;           // grace window for recently-killed sessions
+export const ADD_GRACE_MS = 3_000;            // grace window for recently-added sessions
+export const EXECUTION_LOG_REFRESH_MS = 1_500; // silent reload delay after a log action
+export const TOOLTIP_HIDE_DELAY_MS = 80;       // delay before hiding a hover tooltip
+
+// Execution / terminate-button state machine
+export const EXECUTION_STATES = {
+  IDLE: 'idle',
+  CONFIRMING: 'confirming',
+  TERMINATING: 'terminating',
+  DONE: 'done',
+  ERROR: 'error',
+} as const;
+export type ExecutionState = (typeof EXECUTION_STATES)[keyof typeof EXECUTION_STATES];
+
+// Named accessor for ticket statuses (TICKET_STATUSES tuple stays the source of column order)
+export const TICKET_STATUS = {
+  BACKLOG: 'backlog',
+  TODO: 'todo',
+  DOING: 'doing',
+  REVIEWING: 'reviewing',
+  DONE: 'done',
+  CANCELLED: 'cancelled',
+} as const;
+
+// Usage gauge color thresholds (remaining %)
+export const USAGE_WARN_THRESHOLD_PCT = 50;   // above → success/green
+export const USAGE_DANGER_THRESHOLD_PCT = 20; // below → danger/red
+
+// Time conversion units
+export const MS_IN_MINUTE = 60_000;
+export const MINUTES_IN_HOUR = 60;
+export const HOURS_IN_DAY = 24;
+
 // Auto-review workflow activity actions
 export const AUTO_REVIEW_ACTIVITY_ACTIONS = [
   'unclaimed_and_assigned_human_via_mention',

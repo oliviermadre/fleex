@@ -1,4 +1,5 @@
 import type { TicketStatus } from '@fleex/shared';
+import { TICKET_STATUS } from '@fleex/shared';
 
 interface EpicProgressBarProps {
   tickets: Array<{ status: TicketStatus }>;
@@ -7,7 +8,7 @@ interface EpicProgressBarProps {
 
 export function EpicProgressBar({ tickets, showLabel = true }: EpicProgressBarProps) {
   const total = tickets.length;
-  const doneCount = tickets.filter((t) => t.status === 'done' || t.status === 'cancelled').length;
+  const doneCount = tickets.filter((t) => t.status === TICKET_STATUS.DONE || t.status === TICKET_STATUS.CANCELLED).length;
 
   const percent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
