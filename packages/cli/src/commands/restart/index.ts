@@ -1,6 +1,6 @@
 import type { CommandDef } from '../../core/types.ts';
 import { info } from '../../core/colors.ts';
-import { activateWorkspace } from '../../core/workspaces.ts';
+import { activateWorkspace, assertValidWorkspacesConfig } from '../../core/workspaces.ts';
 import { stopCurrent } from '../stop/_impl.ts';
 import { sleep } from '../../core/process.ts';
 import startDef from '../start/index.ts';
@@ -14,6 +14,7 @@ const def: CommandDef = {
     cmd.option('--workspace <name>', 'Use the named workspace from ~/.fleex/workspaces.json (defaults to the is_default workspace)');
   },
   action: async (opts: { workspace?: string }) => {
+    assertValidWorkspacesConfig();
     // Activate the workspace first so stopCurrent() resolves the right
     // (workspace@branch) instance to stop before we restart it.
     activateWorkspace(opts.workspace);

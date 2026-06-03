@@ -8,6 +8,7 @@ import { SERVICES, loadPorts, type Service } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
 import { MIN_BUN_VERSION, versionGte } from '../../core/version.ts';
 import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
+import { validateWorkspacesConfig, parseWorkspacesFile, workspacesFilePath } from '../../core/workspaces.ts';
 
 interface ToolStatus {
   installed: boolean;
@@ -148,6 +149,24 @@ const def: CommandDef = {
       line(`${c.green('✓')} node_modules installed`);
     } else {
       line(`${c.yellow('○')} node_modules missing — run: ${c.bold(`cd ${ctx.repoDir} && bun install`)}`);
+    }
+
+    // workspaces config — global ~/.fleex/workspaces.json validity
+    const wsRes = validateWorkspacesConfig();
+    if (!wsRes.ok) {
+      line(`${c.red('✗')} workspaces config — ${wsRes.error} Fix: ${workspacesFilePath()}`);
+      allOk = false;
+    } else {
+      let list = null;
+      try { list = parseWorkspacesFile(); } catch { /* validated ok just above */ }
+      if (list === null) {
+        line(`${c.dim('○')} workspaces — legacy .env mode (no ${path.basename(workspacesFilePath())})`);
+      } else {
+        const defaultWs = list.find((w) => w.is_default);
+        const defLabel = defaultWs ? defaultWs.name : '(none — pass --workspace)';
+        const plural = list.length === 1 ? '' : 's';
+        line(`${c.green('✓')} workspaces config — valid (${list.length} workspace${plural}, default: ${defLabel})`);
+      }
     }
 
     // Services

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadDotEnv } from '../../core/env.ts';
-import { activateWorkspace } from '../../core/workspaces.ts';
+import { activateWorkspace, assertValidWorkspacesConfig } from '../../core/workspaces.ts';
 import { c, info, ok, warn, die } from '../../core/colors.ts';
 import { checkBun } from '../../core/version.ts';
 import {
@@ -25,6 +25,10 @@ export interface StartOptions {
 }
 
 export async function runStart(opts: StartOptions = {}): Promise<void> {
+  // Refuse to proceed on a broken global config (e.g. >1 default workspace),
+  // before any workspace activation or instance resolution.
+  assertValidWorkspacesConfig();
+
   // Resolve & inject the workspace BEFORE the first resolveInstance() (which
   // caches the slug). In legacy mode (no workspaces.json) this is a no-op.
   activateWorkspace(opts.workspace);

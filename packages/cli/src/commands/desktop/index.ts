@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { CommandDef } from '../../core/types.ts';
 import { info, die, warn } from '../../core/colors.ts';
 import { FLEEX_HOME, resolveInstance, ensureDirs, slugify } from '../../core/instance.ts';
-import { activateWorkspace } from '../../core/workspaces.ts';
+import { activateWorkspace, assertValidWorkspacesConfig } from '../../core/workspaces.ts';
 import { loadPorts } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
 import { launchDesktop } from './_impl.ts';
@@ -16,6 +16,7 @@ const def: CommandDef = {
     cmd.option('--workspace <name>', 'Use the named workspace from ~/.fleex/workspaces.json (defaults to the is_default workspace)');
   },
   action: async (opts: { workspace?: string } = {}) => {
+    assertValidWorkspacesConfig();
     // Activate the workspace first so the resolved instance is workspace@branch.
     const ws = activateWorkspace(opts.workspace);
     const ctx = resolveInstance();

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parseDotEnv, applyEnv } from './env.ts';
-import { warn, die } from './colors.ts';
+import { warn, die, err } from './colors.ts';
 
 /**
  * A workspace is a named, isolated configuration context. Its `env` block is
@@ -119,6 +119,60 @@ export function resolveWorkspace(workspaces: Workspace[], name?: string): Worksp
     );
   }
   return defaults[0]!;
+}
+
+/**
+ * Validate the global workspaces config WITHOUT activating anything.
+ *
+ * Checks only invariants that are global — true regardless of which workspace a
+ * command targets — so the result is meaningful even for `--workspace <name>`
+ * invocations (which {@link resolveWorkspace} would otherwise let through
+ * without ever inspecting `is_default`):
+ *
+ *  - structural validity (delegated to {@link parseWorkspacesFile}: JSON shape,
+ *    unique non-empty names, env objects);
+ *  - **at most one** `is_default: true`.
+ *
+ * Zero defaults is intentionally VALID: a fully-explicit setup driven entirely
+ * by `--workspace` is legitimate, and bare `fleex start` already reports a
+ * helpful message at resolution time. Returns `{ ok: true }` in legacy mode
+ * (no workspaces.json). Never throws, never exits — callers decide what to do.
+ */
+export function validateWorkspacesConfig(
+  filePath: string = workspacesFilePath(),
+): { ok: true } | { ok: false; error: string } {
+  let workspaces: Workspace[] | null;
+  try {
+    workspaces = parseWorkspacesFile(filePath);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (workspaces === null) return { ok: true }; // legacy mode — nothing to validate
+
+  const defaults = workspaces.filter((w) => w.is_default);
+  if (defaults.length > 1) {
+    return {
+      ok: false,
+      error: `only one default workspace is allowed (found: ${defaults.map((w) => w.name).join(', ')}).`,
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * CLI guard for state-changing commands (start/restart/stop/desktop/self-update).
+ *
+ * Call at the very top of a command — before any workspace activation or
+ * instance resolution — so a broken global config fails fast with an actionable
+ * message instead of a confusing partial failure deeper in (or, worse, silently
+ * skipping the broken path). Exits the process via a non-zero code on failure.
+ */
+export function assertValidWorkspacesConfig(): void {
+  const res = validateWorkspacesConfig();
+  if (res.ok) return;
+  err(`Invalid workspaces config: ${res.error}`);
+  err(`Run \`fleex doctor\` to diagnose, then fix ${workspacesFilePath()}.`);
+  process.exit(1);
 }
 
 /** Warn (once) if the secrets file is readable by group/other. */

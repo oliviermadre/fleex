@@ -10,6 +10,7 @@ import {
   parseWorkspacesFile,
   resolveWorkspace,
   bootstrapWorkspacesFromEnv,
+  assertValidWorkspacesConfig,
   workspacesFilePath,
 } from '../../core/workspaces.ts';
 
@@ -68,6 +69,11 @@ const def: CommandDef = {
     if (created) {
       info(`Created ${workspacesFilePath()} from existing .env (workspace 'default').`);
     }
+
+    // Refuse to update on a broken config — the migration pass below relies on
+    // it, and a confusing partial update is worse than a clear stop. The fix is
+    // editing the file, not pulling code, so this is not a chicken-and-egg trap.
+    assertValidWorkspacesConfig();
 
     info('Updating fleex...');
     // Try rebase, fallback to plain pull

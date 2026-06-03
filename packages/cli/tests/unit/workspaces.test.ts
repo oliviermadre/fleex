@@ -7,6 +7,7 @@ import {
   resolveWorkspace,
   activateWorkspace,
   bootstrapWorkspacesFromEnv,
+  validateWorkspacesConfig,
   workspacesFilePath,
   type Workspace,
 } from '../../src/core/workspaces.ts';
@@ -224,5 +225,63 @@ describe('bootstrapWorkspacesFromEnv', () => {
   it('returns null when no .env exists', () => {
     expect(bootstrapWorkspacesFromEnv(path.join(repoDir, '.env'))).toBeNull();
     expect(fs.existsSync(workspacesFilePath())).toBe(false);
+  });
+});
+
+describe('validateWorkspacesConfig', () => {
+  it('is ok in legacy mode (no workspaces.json)', () => {
+    expect(validateWorkspacesConfig(path.join(tmpDir, 'absent.json'))).toEqual({ ok: true });
+  });
+
+  it('is ok with exactly one default', () => {
+    const p = writeWs('v-one.json', JSON.stringify({
+      workspaces: [
+        { name: 'a', is_default: true, env: {} },
+        { name: 'b', env: {} },
+      ],
+    }));
+    expect(validateWorkspacesConfig(p)).toEqual({ ok: true });
+  });
+
+  it('is ok with zero defaults (explicit --workspace setup)', () => {
+    const p = writeWs('v-zero.json', JSON.stringify({
+      workspaces: [
+        { name: 'a', env: {} },
+        { name: 'b', env: {} },
+      ],
+    }));
+    expect(validateWorkspacesConfig(p)).toEqual({ ok: true });
+  });
+
+  it('is invalid when more than one default is flagged', () => {
+    const p = writeWs('v-two.json', JSON.stringify({
+      workspaces: [
+        { name: 'default', is_default: true, env: {} },
+        { name: 'sqlite', is_default: true, env: {} },
+      ],
+    }));
+    const res = validateWorkspacesConfig(p);
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.error).toMatch(/only one default/);
+    expect(res.ok === false && res.error).toMatch(/default, sqlite/);
+  });
+
+  it('is invalid on malformed JSON', () => {
+    const p = writeWs('v-bad.json', '{ not json');
+    const res = validateWorkspacesConfig(p);
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.error).toMatch(/not valid JSON/);
+  });
+
+  it('is invalid on a duplicate workspace name', () => {
+    const p = writeWs('v-dup.json', JSON.stringify({
+      workspaces: [
+        { name: 'dup', is_default: true, env: {} },
+        { name: 'dup', env: {} },
+      ],
+    }));
+    const res = validateWorkspacesConfig(p);
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.error).toMatch(/duplicate/);
   });
 });
