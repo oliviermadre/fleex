@@ -1,50 +1,86 @@
 import { describe, it, expect, vi } from 'vitest';
+import {
+  parseSlackMessageUrl,
+  SLACK_IMPORT_PENDING_TAG,
+  SLACK_IMPORT_FAILED_TAG,
+} from '@fleex/shared';
 import { ImportSlackMessageUseCase } from '../../src/application/use-cases/import-slack-message.js';
 import { SlackImportError } from '../../src/domain/errors.js';
+import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
 import type { SlackImportResult } from '../../src/application/ports/slack-import.port.js';
 
 const VALID_URL = 'https://acme.slack.com/archives/C01234ABCDE/p1700000000123456';
 const THREADED_URL =
   'https://acme.slack.com/archives/C01234ABCDE/p1700000000123456?thread_ts=1699999999.000100&cid=C01234ABCDE';
 
-const makeLogger = () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() });
-const makeTicketStore = () => ({ createTicket: vi.fn(), saveActivity: vi.fn() });
+/** A promise that never settles — used to prove `execute` does not block on synthesis. */
+const NEVER = (): Promise<SlackImportResult> => new Promise<SlackImportResult>(() => {});
 
-/** Build a use case whose Slack port returns exactly `result`. */
-const makeUseCase = (result: SlackImportResult) => {
-  const ticketStore = makeTicketStore();
-  const slackImport = { synthesizeThread: vi.fn().mockResolvedValue(result) };
-  const logger = makeLogger();
-  const uc = new ImportSlackMessageUseCase(ticketStore as never, slackImport as never, logger as never);
-  return { uc, ticketStore, slackImport, logger };
+const makeLogger = () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() });
+
+/** Minimal in-memory ticket store: createTicket assigns a displayId, saveTicket overwrites. */
+const makeTicketStore = () => {
+  const tickets = new Map<string, TicketEntity>();
+  let seq = 1;
+  return {
+    _tickets: tickets,
+    createTicket: vi.fn(async (t: TicketEntity) => {
+      t.displayId = seq++;
+      tickets.set(t.id, t);
+    }),
+    saveTicket: vi.fn(async (t: TicketEntity) => {
+      tickets.set(t.id, t);
+    }),
+    getTicketById: vi.fn(async (id: string) => tickets.get(id) ?? null),
+    saveActivity: vi.fn(async () => {}),
+  };
 };
 
-describe('ImportSlackMessageUseCase', () => {
-  it('creates a backlog ticket from a successful synthesis, with the synthesis as description', async () => {
-    // WHY: the whole point of the feature — a pasted Slack link becomes a ticket whose body is
-    // Claude's faithful synthesis, NOT raw Slack content (which Fleex never persists).
-    const { uc, ticketStore } = makeUseCase({
-      status: 'ok',
-      title: 'Decide on the new onboarding flow',
-      synthesis: '## Summary\n\nThe team debated two onboarding flows.',
-    });
+const makeUseCase = () => {
+  const ticketStore = makeTicketStore();
+  const slackImport = { synthesizeThread: vi.fn() };
+  const logger = makeLogger();
+  const eventBus = { emit: vi.fn() };
+  const uc = new ImportSlackMessageUseCase(ticketStore as never, slackImport as never, logger as never);
+  uc.eventBus = eventBus as never;
+  return { uc, ticketStore, slackImport, logger, eventBus };
+};
+
+describe('ImportSlackMessageUseCase.execute (synchronous placeholder)', () => {
+  it('creates and persists a pending placeholder ticket immediately, returning it', async () => {
+    // WHY: Slack synthesis takes >1min; blocking the request makes the optimistic card vanish on
+    // navigation and feel failed. So execute() must persist a real ticket up front (reload-safe)
+    // and let synthesis finish in the background.
+    const { uc, ticketStore, slackImport } = makeUseCase();
+    slackImport.synthesizeThread.mockReturnValue(NEVER());
 
     const ticket = await uc.execute(VALID_URL, 'board-1');
 
-    expect(ticket.title).toBe('Decide on the new onboarding flow');
     expect(ticket.status).toBe('backlog');
     expect(ticket.boardId).toBe('board-1');
-    expect(ticket.description).toContain('The team debated two onboarding flows.');
-    // The provenance URL is appended so the ticket links back to its Slack origin.
-    expect(ticket.description).toContain(VALID_URL);
+    expect(ticket.tags).toContain(SLACK_IMPORT_PENDING_TAG);
+    // The placeholder title signals work in progress until synthesis replaces it.
+    expect(ticket.title.toLowerCase()).toContain('import');
     expect(ticketStore.createTicket).toHaveBeenCalledWith(ticket);
+    // It is actually persisted (reload-safe), not just returned.
+    await expect(ticketStore.getTicketById(ticket.id)).resolves.toBe(ticket);
   });
 
-  it('attaches a slack_message provenance link keyed by channel id + message ts', async () => {
-    // WHY: the link's ref is the stable (channel, ts) identity — independent of query params —
-    // so two imports of the same message are recognizably the same source. The label is the
-    // word "message" because this permalink targets a root message, not a reply.
-    const { uc } = makeUseCase({ status: 'ok', title: 'T', synthesis: 'S' });
+  it('returns without waiting for the slow synthesis to complete, but does kick it off', async () => {
+    // WHY: the whole point of the fix — the HTTP request returns in well under a second even though
+    // synthesis is still running. A never-resolving synthesis must NOT hang execute().
+    const { uc, slackImport } = makeUseCase();
+    slackImport.synthesizeThread.mockReturnValue(NEVER());
+
+    const ticket = await uc.execute(VALID_URL, 'board-1'); // would hang if execute awaited synthesis
+
+    expect(ticket).toBeDefined();
+    expect(slackImport.synthesizeThread).toHaveBeenCalledTimes(1);
+  });
+
+  it('attaches a slack_message provenance link labelled for a single message', async () => {
+    const { uc, slackImport } = makeUseCase();
+    slackImport.synthesizeThread.mockReturnValue(NEVER());
 
     const ticket = await uc.execute(VALID_URL, 'board-1');
 
@@ -57,10 +93,9 @@ describe('ImportSlackMessageUseCase', () => {
     });
   });
 
-  it('labels the link "Slack thread" when the permalink points to a threaded reply', async () => {
-    // WHY: a reply carries ?thread_ts=<parent> — the label must reflect that the imported
-    // content is a thread, so the reviewer knows the description spans multiple messages.
-    const { uc } = makeUseCase({ status: 'ok', title: 'T', synthesis: 'S' });
+  it('labels the provenance link "Slack thread" for a threaded reply', async () => {
+    const { uc, slackImport } = makeUseCase();
+    slackImport.synthesizeThread.mockReturnValue(NEVER());
 
     const ticket = await uc.execute(THREADED_URL, 'board-1');
 
@@ -68,22 +103,19 @@ describe('ImportSlackMessageUseCase', () => {
   });
 
   it('records a creation activity attributing the ticket to its Slack source', async () => {
-    // WHY: the activity trail must show WHERE the ticket came from, mirroring the github:<...>
-    // provenance written by the GitHub import, so the timeline is auditable.
-    const { uc, ticketStore } = makeUseCase({ status: 'ok', title: 'T', synthesis: 'S' });
+    const { uc, slackImport, ticketStore } = makeUseCase();
+    slackImport.synthesizeThread.mockReturnValue(NEVER());
 
     await uc.execute(VALID_URL, 'board-1');
 
     expect(ticketStore.saveActivity).toHaveBeenCalledTimes(1);
-    const activity = ticketStore.saveActivity.mock.calls[0][0];
+    const activity = ticketStore.saveActivity.mock.calls[0]![0] as { action: string; changes: { source: { to: string } } };
     expect(activity.action).toBe('created');
     expect(activity.changes.source.to).toBe('slack:C01234ABCDE/1700000000.123456');
   });
 
-  it('rejects a non-Slack link before ever calling the integration (US7)', async () => {
-    // WHY: an invalid link is a client mistake — fail fast with SLACK_INVALID_URL and never
-    // burn an SDK slot on a URL we already know is unusable.
-    const { uc, slackImport, ticketStore } = makeUseCase({ status: 'ok', title: 'T', synthesis: 'S' });
+  it('rejects a non-Slack link before creating anything (SLACK_INVALID_URL)', async () => {
+    const { uc, slackImport, ticketStore } = makeUseCase();
 
     await expect(uc.execute('https://github.com/acme/repo/issues/42', 'board-1')).rejects.toMatchObject({
       slackCode: 'SLACK_INVALID_URL',
@@ -91,37 +123,137 @@ describe('ImportSlackMessageUseCase', () => {
     expect(slackImport.synthesizeThread).not.toHaveBeenCalled();
     expect(ticketStore.createTicket).not.toHaveBeenCalled();
   });
+});
 
-  it('surfaces an unavailable Slack integration as SLACK_INTEGRATION_UNAVAILABLE (US5)', async () => {
-    const { uc, ticketStore } = makeUseCase({ status: 'integration_unavailable' });
+describe('ImportSlackMessageUseCase.completeImport (background success)', () => {
+  it('patches the title + description with the synthesis and clears the pending tag', async () => {
+    // WHY: on success the placeholder becomes the real ticket — Claude's synthesis as the body,
+    // a derived title, and NO lifecycle tag (the import is over).
+    const { uc, slackImport, ticketStore } = makeUseCase();
+    slackImport.synthesizeThread.mockReturnValueOnce(NEVER()); // consumed by execute's background fire
+    const ticket = await uc.execute(VALID_URL, 'board-1');
 
-    const err = await uc.execute(VALID_URL, 'board-1').catch((e) => e);
-    expect(err).toBeInstanceOf(SlackImportError);
-    expect((err as SlackImportError).slackCode).toBe('SLACK_INTEGRATION_UNAVAILABLE');
-    expect(ticketStore.createTicket).not.toHaveBeenCalled();
+    slackImport.synthesizeThread.mockResolvedValue({
+      status: 'ok',
+      title: 'Decide on the new onboarding flow',
+      synthesis: '## Summary\n\nThe team debated two onboarding flows.',
+    });
+    await uc.completeImport(ticket.id, parseSlackMessageUrl(VALID_URL)!);
+
+    const reloaded = (await ticketStore.getTicketById(ticket.id))!;
+    expect(reloaded.title).toBe('Decide on the new onboarding flow');
+    expect(reloaded.description).toContain('The team debated two onboarding flows.');
+    expect(reloaded.description).toContain(VALID_URL); // provenance footer preserved
+    expect(reloaded.tags).not.toContain(SLACK_IMPORT_PENDING_TAG);
+    expect(reloaded.tags).not.toContain(SLACK_IMPORT_FAILED_TAG);
+    expect(ticketStore.saveTicket).toHaveBeenCalled();
   });
 
-  it('surfaces an unreadable conversation as SLACK_CONVERSATION_INACCESSIBLE, including the detail (US6)', async () => {
-    const { uc } = makeUseCase({ status: 'inaccessible', detail: 'private channel' });
+  it('emits ticket.updated so the optimistic card is replaced by the full ticket', async () => {
+    // WHY: the front already swaps a ticket on ticket:updated with the full DTO — that is what makes
+    // the late synthesis appear even after the user navigated away and back.
+    const { uc, slackImport, eventBus } = makeUseCase();
+    slackImport.synthesizeThread.mockReturnValueOnce(NEVER());
+    const ticket = await uc.execute(VALID_URL, 'board-1');
 
-    const err = (await uc.execute(VALID_URL, 'board-1').catch((e) => e)) as SlackImportError;
-    expect(err.slackCode).toBe('SLACK_CONVERSATION_INACCESSIBLE');
-    // The reviewer-facing message must carry the reason so they know why it failed.
-    expect(err.message).toContain('private channel');
+    slackImport.synthesizeThread.mockResolvedValue({ status: 'ok', title: 'T', synthesis: 'S' });
+    await uc.completeImport(ticket.id, parseSlackMessageUrl(VALID_URL)!);
+
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'ticket.updated', ticketId: ticket.id }),
+    );
+  });
+});
+
+describe('ImportSlackMessageUseCase.completeImport (background failure)', () => {
+  const arrangeFailedImport = async (result: SlackImportResult) => {
+    const ctx = makeUseCase();
+    ctx.slackImport.synthesizeThread.mockReturnValueOnce(NEVER());
+    const ticket = await ctx.uc.execute(VALID_URL, 'board-1');
+    ctx.slackImport.synthesizeThread.mockResolvedValue(result);
+    await ctx.uc.completeImport(ticket.id, parseSlackMessageUrl(VALID_URL)!);
+    const reloaded = (await ctx.ticketStore.getTicketById(ticket.id))!;
+    return { ...ctx, ticket, reloaded };
+  };
+
+  it('flags the ticket failed (failed tag, no pending tag) when the integration is unavailable', async () => {
+    // WHY: NaS wants the failure to be visible AND retryable. The failed tag is the reload-safe
+    // signal the UI keys off to show "import failed" + a retry button.
+    const { reloaded, eventBus } = await arrangeFailedImport({ status: 'integration_unavailable' });
+
+    expect(reloaded.tags).toContain(SLACK_IMPORT_FAILED_TAG);
+    expect(reloaded.tags).not.toContain(SLACK_IMPORT_PENDING_TAG);
+    expect(reloaded.description.toLowerCase()).toContain('integration');
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'ticket.updated' }),
+    );
   });
 
-  it('still classifies an inaccessible conversation without a detail', async () => {
-    const { uc } = makeUseCase({ status: 'inaccessible' });
+  it('surfaces the inaccessibility detail in the failure description', async () => {
+    const { reloaded } = await arrangeFailedImport({ status: 'inaccessible', detail: 'private channel' });
 
-    const err = (await uc.execute(VALID_URL, 'board-1').catch((e) => e)) as SlackImportError;
-    expect(err.slackCode).toBe('SLACK_CONVERSATION_INACCESSIBLE');
+    expect(reloaded.tags).toContain(SLACK_IMPORT_FAILED_TAG);
+    expect(reloaded.description).toContain('private channel');
   });
 
-  it('surfaces an empty conversation as SLACK_CONVERSATION_EMPTY', async () => {
-    const { uc, ticketStore } = makeUseCase({ status: 'empty' });
+  it('flags failed when the conversation is empty', async () => {
+    const { reloaded } = await arrangeFailedImport({ status: 'empty' });
 
-    const err = (await uc.execute(VALID_URL, 'board-1').catch((e) => e)) as SlackImportError;
-    expect(err.slackCode).toBe('SLACK_CONVERSATION_EMPTY');
-    expect(ticketStore.createTicket).not.toHaveBeenCalled();
+    expect(reloaded.tags).toContain(SLACK_IMPORT_FAILED_TAG);
+  });
+
+  it('flags failed (not left pending) when the synthesis throws, without crashing', async () => {
+    // WHY: a thrown SDK error must not leave the ticket stuck pending forever — fail loud, stay retryable.
+    const { uc, slackImport, ticketStore } = makeUseCase();
+    slackImport.synthesizeThread.mockReturnValueOnce(NEVER());
+    const ticket = await uc.execute(VALID_URL, 'board-1');
+
+    slackImport.synthesizeThread.mockRejectedValue(new Error('SDK boom'));
+    await expect(uc.completeImport(ticket.id, parseSlackMessageUrl(VALID_URL)!)).resolves.toBeUndefined();
+
+    const reloaded = (await ticketStore.getTicketById(ticket.id))!;
+    expect(reloaded.tags).toContain(SLACK_IMPORT_FAILED_TAG);
+    expect(reloaded.tags).not.toContain(SLACK_IMPORT_PENDING_TAG);
+  });
+});
+
+describe('ImportSlackMessageUseCase.retry', () => {
+  const arrangeFailed = async () => {
+    const ctx = makeUseCase();
+    ctx.slackImport.synthesizeThread.mockReturnValueOnce(NEVER());
+    const ticket = await ctx.uc.execute(VALID_URL, 'board-1');
+    ctx.slackImport.synthesizeThread.mockResolvedValueOnce({ status: 'integration_unavailable' });
+    await ctx.uc.completeImport(ticket.id, parseSlackMessageUrl(VALID_URL)!);
+    return { ...ctx, ticket };
+  };
+
+  it('re-arms a failed ticket to pending and kicks off a fresh synthesis', async () => {
+    // WHY: the retry affordance NaS asked for — flip failed → pending, broadcast the change so the
+    // card immediately shows "importing" again, and re-run the (now hopefully working) synthesis.
+    const { uc, slackImport, eventBus, ticket } = await arrangeFailed();
+    const callsBefore = slackImport.synthesizeThread.mock.calls.length;
+    slackImport.synthesizeThread.mockReturnValue(NEVER()); // keep the re-armed synthesis pending for the assertion
+
+    const reArmed = await uc.retry(ticket.id);
+
+    expect(reArmed.tags).toContain(SLACK_IMPORT_PENDING_TAG);
+    expect(reArmed.tags).not.toContain(SLACK_IMPORT_FAILED_TAG);
+    expect(slackImport.synthesizeThread.mock.calls.length).toBe(callsBefore + 1);
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'ticket.updated', ticketId: ticket.id }),
+    );
+  });
+
+  it('throws TICKET_NOT_FOUND for an unknown ticket id', async () => {
+    const { uc } = makeUseCase();
+    await expect(uc.retry('does-not-exist')).rejects.toMatchObject({ code: 'TICKET_NOT_FOUND' });
+  });
+
+  it('throws SLACK_INVALID_URL when the ticket has no Slack provenance link', async () => {
+    const { uc, ticketStore } = makeUseCase();
+    const plain = TicketEntity.create({ id: 'plain-1', boardId: 'b', displayId: 0, title: 'No slack' });
+    await ticketStore.createTicket(plain);
+
+    await expect(uc.retry('plain-1')).rejects.toMatchObject({ slackCode: 'SLACK_INVALID_URL' });
   });
 });

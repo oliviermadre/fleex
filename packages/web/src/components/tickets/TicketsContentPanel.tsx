@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
 import type { TicketPriority } from '@fleex/shared';
-import { TICKET_PRIORITIES, isSlackMessageUrl } from '@fleex/shared';
+import { TICKET_PRIORITIES, isSlackMessageUrl, isSlackImportTag } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -52,7 +52,8 @@ export function TicketsContentPanel() {
     }
     const tagSet = new Set<string>();
     for (const t of tickets) {
-      for (const tag of t.tags) tagSet.add(tag);
+      // Reserved Slack-import lifecycle tags are status, not user-filterable tags.
+      for (const tag of t.tags) if (!isSlackImportTag(tag)) tagSet.add(tag);
     }
     return { repos: [...repoSet].sort(), tags: [...tagSet].sort() };
   }, [tickets, resolvedRepositories]);

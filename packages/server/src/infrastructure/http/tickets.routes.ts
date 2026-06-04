@@ -691,6 +691,16 @@ export function ticketRoutes(container: Container) {
       },
     );
 
+    // Retry a failed background Slack import (re-arms the ticket to pending and re-runs synthesis).
+    // The use case emits ticket.updated itself, so the route just returns the re-armed ticket.
+    app.post<{ Params: { id: string } }>(
+      '/api/tickets/:id/retry-slack-import',
+      async (request, reply) => {
+        const ticket = await container.importSlackMessage.retry(request.params.id);
+        return reply.code(200).send(ticket.toDTO());
+      },
+    );
+
     // Import GitHub PR as ticket
     app.post<{ Body: { org: string; name: string; prNumber: number; prTitle: string; headRefName: string; boardId: string } }>(
       '/api/tickets/import-github-pr',

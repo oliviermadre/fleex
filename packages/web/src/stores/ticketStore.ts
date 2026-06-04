@@ -43,6 +43,7 @@ interface TicketState {
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
   importGitHubIssue: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
   importSlackMessage: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
+  retrySlackImport: (ticketId: string) => Promise<void>;
   syncGithubIssue: (ticketId: string) => Promise<void>;
   openSessionFromTicket: (id: string) => Promise<{ sessionId: string }>;
   selectBoard: (id: string | null) => void;
@@ -245,6 +246,16 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       return { tickets: [...s.tickets, ticket] };
     });
     return ticket;
+  },
+
+  retrySlackImport: async (ticketId) => {
+    // Re-arms the failed import on the server (flips it back to pending and re-runs the
+    // synthesis). The returned pending ticket is applied immediately; the eventual success
+    // or new failure arrives via the ticket:updated WebSocket broadcast.
+    const updated = await api.retrySlackImport(ticketId);
+    set((s) => ({
+      tickets: s.tickets.map((t) => (t.id === ticketId ? updated : t)),
+    }));
   },
 
   syncGithubIssue: async (ticketId) => {

@@ -86,3 +86,27 @@ export function parseSlackMessageUrl(url: string): ParsedSlackMessageUrl | null 
 export function isSlackMessageUrl(url: string): boolean {
   return SLACK_MESSAGE_URL_RE.test(url.trim());
 }
+
+/**
+ * Reserved ticket tags used to carry the asynchronous Slack-import lifecycle on
+ * the ticket itself. Because Slack synthesis is slow (Claude reads the whole
+ * thread), the import runs in the background: the ticket is created immediately
+ * with {@link SLACK_IMPORT_PENDING_TAG}, then on completion the tag is cleared
+ * (success) or swapped to {@link SLACK_IMPORT_FAILED_TAG} (failure). Tags are
+ * persisted in every store and shipped in the ticket DTO, so this state is
+ * reload-safe and lets the UI render a spinner / retry affordance without a new
+ * schema field.
+ */
+export const SLACK_IMPORT_PENDING_TAG = 'slack-import-pending';
+export const SLACK_IMPORT_FAILED_TAG = 'slack-import-failed';
+
+/** All reserved Slack-import lifecycle tags. */
+export const SLACK_IMPORT_TAGS: readonly string[] = [
+  SLACK_IMPORT_PENDING_TAG,
+  SLACK_IMPORT_FAILED_TAG,
+];
+
+/** True when `tag` is one of the reserved Slack-import lifecycle tags (not a user tag). */
+export function isSlackImportTag(tag: string): boolean {
+  return tag === SLACK_IMPORT_PENDING_TAG || tag === SLACK_IMPORT_FAILED_TAG;
+}

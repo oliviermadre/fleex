@@ -4,34 +4,35 @@ import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { SdkConcurrencyLimiter } from '../../application/services/sdk-concurrency-limiter.js';
 
 /**
- * Model used for the Slack synthesis. Needs tool use (to drive the native Slack
- * integration) plus solid summarization, hence a Sonnet-class model rather than
- * the Haiku used for offline ticket summaries.
+ * Model used for the Slack synthesis. Haiku is fast and more than capable of the
+ * read-thread-then-summarize task; speed matters here because the import is on
+ * the critical path of the user seeing their ticket fill in.
  */
-const MODEL = 'claude-sonnet-4-5-20250929';
+const MODEL = 'claude-haiku-4-5-20251001';
 
 /**
- * Upper bound on agentic turns. The agent typically needs a couple of tool
- * round-trips (read the message, read the thread) before producing the
- * synthesis; this guards against runaway loops.
+ * Upper bound on agentic turns. Reading a message + its thread needs only a
+ * couple of tool round-trips; 10 leaves headroom for a paginated thread while
+ * still guarding against runaway loops (and keeping latency low).
  */
-const MAX_TURNS = 20;
+const MAX_TURNS = 10;
 
-const SYSTEM_PROMPT = `You retrieve a Slack conversation through the user's connected Slack integration and write a faithful synthesis of it.
+const SYSTEM_PROMPT = `You read a Slack conversation through the user's connected Slack integration and write a faithful synthesis. Optimize for SPEED: use the fewest tool calls possible.
 
-You will be given a Slack message permalink (channel id + message timestamp, and possibly a parent thread timestamp). Your job:
+Input: a Slack permalink (channel id + message ts, optionally a parent thread_ts).
 
-1. Use the available Slack tools to read the target message. If it is the root of a thread, read ALL replies in that thread. If a parent thread timestamp is provided, read the full parent thread.
-2. Produce a faithful, well-structured Markdown synthesis of the conversation: what is being discussed, the key points, decisions, questions, and any concrete action items or requests. Preserve who said what when it matters. Do not pad.
-3. Derive a short, descriptive title (max ~80 chars, no trailing period) that captures the subject. Slack messages have no title, so infer it from the content.
+Steps:
+1. Read the conversation in as FEW tool calls as possible. If a thread_ts is given, fetch that thread's replies in one call. If not, fetch the message; only fetch replies if it is a thread root. Do NOT re-read content you already have. Do NOT explore unrelated channels or messages.
+2. Write a faithful, well-structured Markdown synthesis: what is discussed, key points, decisions, questions, action items. Preserve who said what when it matters. No padding.
+3. Derive a short descriptive title (max ~80 chars, no trailing period) from the content.
 
-ABSOLUTE RULES:
-- NEVER invent, assume, or hallucinate content. Only report what you actually read from Slack.
-- If NO Slack tool is available to you (the integration is not connected), return status "integration_unavailable" and nothing else.
-- If the conversation cannot be read (private/forbidden channel, deleted message, not found), return status "inaccessible" with a brief "detail".
-- If you reach the message/thread but there is no useful content to summarize, return status "empty".
-- Otherwise return status "ok" with both "title" and "synthesis" filled.
-- Output ONLY via the structured output schema. Do not write conversational prose outside it.`;
+RULES:
+- NEVER invent or hallucinate. Only report what you actually read.
+- If NO Slack tool is available (integration not connected), return status "integration_unavailable".
+- If the conversation can't be read (private/forbidden, deleted, not found), return status "inaccessible" with a brief "detail".
+- If reached but there is nothing useful to summarize, return status "empty".
+- Otherwise return status "ok" with both "title" and "synthesis".
+- Output ONLY via the structured output schema.`;
 
 const OUTPUT_FORMAT = {
   type: 'json_schema' as const,

@@ -18,6 +18,10 @@ export {
   SLACK_MESSAGE_URL_RE,
   parseSlackMessageUrl,
   isSlackMessageUrl,
+  SLACK_IMPORT_PENDING_TAG,
+  SLACK_IMPORT_FAILED_TAG,
+  SLACK_IMPORT_TAGS,
+  isSlackImportTag,
 } from './slack.js';
 export type { ParsedSlackMessageUrl } from './slack.js';
 

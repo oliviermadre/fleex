@@ -373,6 +373,8 @@ export async function createContainer() {
   runPanel.resolver = resolver;
   generateTicketSummary.eventBus = eventBus;
   autoReviewWorkflow.eventBus = eventBus;
+  // Slack import synthesizes in the background and patches the ticket via ticket.updated.
+  importSlackMessage.eventBus = eventBus;
 
   // ── Phase B: Workflow orchestration ──────────────────────────────────────
   // Stores are non-null for sqlite and supabase adapters, null for json/pgsql.
