@@ -90,7 +90,7 @@ export function WorkflowDagEdge(props: EdgeProps) {
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: 'all',
-              background: 'rgba(24, 24, 27, 0.85)',
+              background: 'var(--theme-bg-overlay, #27272a)',
               padding: '2px 6px',
               borderRadius: 4,
               fontSize: 11,

@@ -538,3 +538,30 @@ export function resolveTheme(themeId: string, customThemes: Theme[]): Theme {
 
   return THEME_VERDANT;
 }
+
+/** Relative luminance (0–1) of an #rrggbb / #rgb color. */
+function relativeLuminance(hex: string): number {
+  const clean = hex.replace('#', '');
+  const full =
+    clean.length === 3
+      ? clean
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : clean;
+  const r = parseInt(full.slice(0, 2), 16) / 255;
+  const g = parseInt(full.slice(2, 4), 16) / 255;
+  const b = parseInt(full.slice(4, 6), 16) / 255;
+  // sRGB perceptual weighting — precise enough to separate light vs dark bases.
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Whether a theme reads as "light" (bright base background). Drives the React
+ * Flow `colorMode` so the workflow DAG canvas follows the active theme instead
+ * of being permanently dark. Derived from the base background's luminance, so
+ * it works for built-in AND custom themes without an extra declared field.
+ */
+export function isLightTheme(theme: Theme): boolean {
+  return relativeLuminance(theme.colors.bgBase) > 0.5;
+}

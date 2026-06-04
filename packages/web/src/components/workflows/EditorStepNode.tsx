@@ -91,13 +91,6 @@ const BORDER_HEX = {
   human_gate: '#f59e0b',  // amber-500
 } as const;
 
-const TEXT_HEX = {
-  agent: '#c4b5fd',       // purple-300
-  panel: '#93c5fd',       // blue-300
-  skill: '#86efac',       // green-300
-  human_gate: '#fcd34d',  // amber-300
-} as const;
-
 export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   const [hovered, setHovered] = useState(false);
   // Reveal handles on hover and whenever a connection drag is in progress, so the
@@ -118,12 +111,11 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   const Icon = executorIcon[step.executorType];
   const showUnconfigured = !step.executorRef && step.executorType !== 'human_gate';
   const borderColor = BORDER_HEX[step.executorType];
-  const accentText = TEXT_HEX[step.executorType];
   const handleStyle = {
     width: 12,
     height: 12,
-    background: '#52525b',
-    border: '2px solid #18181b',
+    background: 'var(--theme-text-faint)',
+    border: '2px solid var(--theme-bg-base)',
     opacity: handlesVisible ? 1 : 0,
     transition: 'opacity 120ms ease',
     pointerEvents: 'all' as const,
@@ -163,11 +155,13 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
           height: '100%',
           padding: 12,
           borderRadius: 8,
-          background: '#27272a', // zinc-800 — hardcoded so it never resolves to transparent
+          // Theme surface (never transparent) so the node reads on any theme;
+          // the executor-type border color stays the identity cue.
+          background: 'var(--theme-bg-overlay)',
           border: `2px ${step.executorType === 'human_gate' ? 'dashed' : 'solid'} ${borderColor}`,
-          color: accentText,
+          color: borderColor,
           cursor: 'pointer',
-          boxShadow: isSelected ? '0 0 0 2px rgba(255,255,255,0.4)' : 'none',
+          boxShadow: isSelected ? '0 0 0 2px var(--theme-accent)' : 'none',
           transition: 'box-shadow 120ms ease',
           boxSizing: 'border-box',
           display: 'flex',
@@ -178,16 +172,16 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <Icon className="w-4 h-4" />
-          <span style={{ fontSize: 12, fontWeight: 500, flex: 1, color: '#fafafa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 500, flex: 1, color: 'var(--theme-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {step.name || 'Unnamed'}
           </span>
           {isEntry && (
-            <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', padding: '2px 4px', borderRadius: 3, background: 'rgba(255,255,255,0.1)', color: '#fafafa' }}>
+            <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', padding: '2px 4px', borderRadius: 3, background: 'var(--theme-bg-hover)', color: 'var(--theme-text-primary)' }}>
               entry
             </span>
           )}
         </div>
-        <div style={{ fontSize: 10, color: '#a1a1aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 10, color: 'var(--theme-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {showUnconfigured ? <span style={{ fontStyle: 'italic', opacity: 0.6 }}>Unconfigured</span> : (step.executorRef || '—')}
         </div>
       </div>

@@ -12,6 +12,7 @@ import { StepConfigPanel } from './StepConfigPanel';
 import { EdgeConfigPanel } from './EdgeConfigPanel';
 import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { useActiveTheme, useColorMode } from '../../hooks/useActiveTheme';
 import type { WorkflowExecutorType, WorkflowStep, WorkflowEdge as WfEdge, WorkflowTemplate } from '@fleex/shared';
 
 const nodeTypes = { editorStep: EditorStepNode };
@@ -33,6 +34,8 @@ export function WorkflowEditorView(props: Props) {
 function EditorInner({ template, onBack }: Props) {
   const update = useWorkflowTemplateStore((s) => s.update);
   const reactFlow = useReactFlow();
+  const colorMode = useColorMode();
+  const themeColors = useActiveTheme().colors;
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Local mutable state
@@ -162,27 +165,27 @@ function EditorInner({ template, onBack }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-full w-full">
+    <div className="flex flex-col h-full w-full" style={{ color: 'var(--theme-text-primary)' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--theme-border)' }}>
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-xs px-3 py-1 rounded border" style={{ borderColor: 'var(--theme-border)' }}>← Back</button>
+          <button onClick={onBack} className="text-xs px-3 py-1 rounded border" style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}>← Back</button>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name"
             className="h-8 w-[200px] text-sm px-2 rounded border"
-            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }} />
+            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }} />
           <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="slug"
             className="h-8 w-[180px] text-xs font-mono px-2 rounded border"
-            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }} />
+            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }} />
           <input value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="🏭"
             className="h-8 w-[60px] text-center rounded border"
-            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }} />
+            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }} />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs" style={{ color: 'var(--theme-text-muted)' }}>{steps.length} steps · {edges.length} edges</span>
           <button
             onClick={() => reactFlow.fitView({ padding: 0.3, minZoom: 0.3, maxZoom: 1.2, duration: 300 })}
             className="text-xs px-3 py-1 rounded border"
-            style={{ borderColor: 'var(--theme-border)' }}
+            style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
             title="Fit all steps in view"
           >Fit view</button>
           <button
@@ -192,12 +195,12 @@ function EditorInner({ template, onBack }: Props) {
               setTimeout(() => reactFlow.fitView({ padding: 0.3, duration: 300 }), 50);
             }}
             className="text-xs px-3 py-1 rounded border"
-            style={{ borderColor: 'var(--theme-border)' }}
+            style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
             title="Reset positions (line up horizontally)"
           >Tidy</button>
           <button onClick={save} disabled={saving}
             className="text-xs px-3 py-1 rounded border disabled:opacity-50"
-            style={{ borderColor: 'var(--theme-border)' }}>{saving ? 'Saving…' : 'Save Workflow'}</button>
+            style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}>{saving ? 'Saving…' : 'Save Workflow'}</button>
         </div>
       </div>
       {error && <div className="px-4 py-1 text-xs text-red-400">{error}</div>}
@@ -207,7 +210,7 @@ function EditorInner({ template, onBack }: Props) {
         <ExecutorPalette onDragStart={onPaletteDragStart} />
         <div ref={wrapperRef} className="flex-1" onDrop={onDrop} onDragOver={onDragOver}>
           <ReactFlow
-            colorMode="dark"
+            colorMode={colorMode}
             nodes={nodes} edges={rfEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
             onEdgeClick={(_, e) => { setSelectedEdgeId(e.id); setSelectedStepId(null); }}
@@ -215,16 +218,16 @@ function EditorInner({ template, onBack }: Props) {
             defaultViewport={{ x: 200, y: 100, zoom: 1 }}
             minZoom={0.2} maxZoom={2}
             fitView fitViewOptions={{ padding: 0.4, minZoom: 0.5, maxZoom: 1.2 }}
-            defaultMarkerColor="#a1a1aa"
+            defaultMarkerColor={themeColors.textMuted}
           >
-            <Background gap={16} size={1} color="rgba(255,255,255,0.08)" />
+            <Background gap={16} size={1} color={themeColors.borderSubtle} />
             <Controls className="!bg-[var(--theme-bg-surface)] !border-[var(--theme-border)]" showInteractive={false} />
             <MiniMap
               pannable zoomable
-              maskColor="rgba(0,0,0,0.6)"
+              maskColor={themeColors.bgHover}
               style={{ background: 'var(--theme-bg-surface)', border: '1px solid var(--theme-border)' }}
-              nodeColor="rgba(168,85,247,0.4)"
-              nodeStrokeColor="rgba(168,85,247,0.8)"
+              nodeColor={themeColors.accentMuted}
+              nodeStrokeColor={themeColors.accent}
             />
           </ReactFlow>
         </div>
@@ -248,7 +251,7 @@ function EditorInner({ template, onBack }: Props) {
                 <span style={{ color: 'var(--theme-text-muted)' }}>Description</span>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)}
                   className="w-full text-xs min-h-[80px] p-2 rounded border"
-                  style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }} />
+                  style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }} />
               </label>
               <div className="text-[10px]" style={{ color: 'var(--theme-text-muted)' }}>
                 Drag a step type from the palette into the canvas. Connect nodes by dragging from the right handle to the left handle of another node. Click a step or edge to configure it.

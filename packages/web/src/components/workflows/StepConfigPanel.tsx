@@ -68,7 +68,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
           value={step.name}
           onChange={(e) => onChange({ ...step, name: e.target.value })}
           className="w-full h-8 px-2 text-xs rounded border"
-          style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }}
+          style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
         />
       </label>
 
@@ -77,7 +77,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
         <span style={{ color: 'var(--theme-text-muted)' }}>Type</span>
         <div
           className="font-mono px-2 py-1 rounded"
-          style={{ background: 'var(--theme-bg-surface)' }}
+          style={{ background: 'var(--theme-bg-surface)', color: 'var(--theme-text-primary)' }}
         >
           {step.executorType}
         </div>
@@ -91,7 +91,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
             value={step.executorRef}
             onChange={(e) => onChange({ ...step, executorRef: e.target.value })}
             className="w-full h-8 px-2 text-xs rounded border"
-            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }}
+            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
           >
             <option value="">Select…</option>
             {refOptions.map((o) => (
@@ -117,7 +117,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
               });
             }}
             className="w-full h-8 px-2 text-xs rounded border"
-            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }}
+            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
           >
             <option value="__inherit__">Inherit from persona</option>
             <option value="talk">talk</option>
@@ -135,7 +135,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
             value={step.prompt ?? ''}
             onChange={(e) => onChange({ ...step, prompt: e.target.value || undefined })}
             className="w-full font-mono text-[11px] min-h-[80px] p-2 rounded border"
-            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }}
+            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
             placeholder="Custom instructions injected into the agent's workflow context…"
           />
         </label>
@@ -165,7 +165,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
           value={outputSchemaText}
           onChange={(e) => handleOutputSchema(e.target.value)}
           className="w-full font-mono text-[11px] min-h-[160px] p-2 rounded border"
-          style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }}
+          style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
           placeholder='{"type":"object","properties":{"path":{"type":"string","enum":["a","b"]}},"required":["path"]}'
         />
         {outputSchemaError && (
@@ -177,7 +177,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
         disabled={isEntry}
         onClick={onSetEntry}
         className="text-xs px-3 py-1 rounded border disabled:opacity-50"
-        style={{ borderColor: 'var(--theme-border)' }}
+        style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}
       >
         {isEntry ? 'Entry step' : 'Set as entry step'}
       </button>
