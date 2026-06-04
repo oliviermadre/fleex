@@ -29,3 +29,6 @@ jobs:
 
       - name: Run tests
         run: bun run test
+
+      - name: Run Bun-runtime tests (bun:sqlite)
+        run: bun run test:bun

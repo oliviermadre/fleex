@@ -62,11 +62,26 @@ export class SqliteTicketGroupStoreAdapter implements TicketGroupStorePort {
   }
 
   async saveTicketGroup(group: TicketGroupEntity): Promise<void> {
+    // Use INSERT … ON CONFLICT DO UPDATE to avoid triggering ON DELETE CASCADE on
+    // ticket_group_memberships and ticket_group_boards, which both reference ticket_groups(id).
+    // INSERT OR REPLACE would silently delete all memberships on every save.
     this.conn.db.prepare(`
-      INSERT OR REPLACE INTO ticket_groups
+      INSERT INTO ticket_groups
         (id, board_id, name, emoji, color, description, timeframe, group_status, blocked, favorite, created_at, updated_at)
       VALUES
         (@id, @board_id, @name, @emoji, @color, @description, @timeframe, @group_status, @blocked, @favorite, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        board_id = excluded.board_id,
+        name = excluded.name,
+        emoji = excluded.emoji,
+        color = excluded.color,
+        description = excluded.description,
+        timeframe = excluded.timeframe,
+        group_status = excluded.group_status,
+        blocked = excluded.blocked,
+        favorite = excluded.favorite,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at
     `).run({
       id: group.id,
       board_id: group.boardIds[0] ?? null,
