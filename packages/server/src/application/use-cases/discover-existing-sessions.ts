@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
 import { SessionEntity } from '../../domain/entities.js';
 import { SessionNamingService } from '../../domain/services/session-naming.js';
+import { sessionIdFromTmuxName } from '../../domain/services/session-id.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { TmuxPort, TmuxSessionInfo } from '../ports/tmux.port.js';
 import type { GitPort } from '../ports/git.port.js';
@@ -34,7 +34,7 @@ export class DiscoverExistingSessionsUseCase {
       const extractedDisplayName = this.namingService.extractDisplayName(tmuxSession.name);
 
       const session = new SessionEntity(
-        randomUUID(),
+        sessionIdFromTmuxName(tmuxSession.name),
         tmuxSession.name,
         type,
         'running',
