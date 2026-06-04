@@ -49,13 +49,29 @@ export class SqliteWorkflowRunStoreAdapter implements WorkflowRunStorePort {
   }
 
   async save(run: WorkflowRunEntity): Promise<void> {
+    // Use INSERT … ON CONFLICT DO UPDATE (upsert-in-place) instead of INSERT OR REPLACE.
+    // INSERT OR REPLACE performs DELETE + INSERT, which triggers ON DELETE CASCADE on
+    // step_runs — erasing all step history every time a run transitions state.
+    // ON CONFLICT DO UPDATE performs an in-place UPDATE: no row is deleted, no cascade fires.
     this.conn.db.prepare(`
-      INSERT OR REPLACE INTO workflow_runs
+      INSERT INTO workflow_runs
         (id, ticket_id, template_id, template_snapshot, status, current_step_id,
          triggered_by, triggered_from, started_at, completed_at, created_at, updated_at)
       VALUES
         (@id, @ticket_id, @template_id, @template_snapshot, @status, @current_step_id,
          @triggered_by, @triggered_from, @started_at, @completed_at, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        ticket_id = excluded.ticket_id,
+        template_id = excluded.template_id,
+        template_snapshot = excluded.template_snapshot,
+        status = excluded.status,
+        current_step_id = excluded.current_step_id,
+        triggered_by = excluded.triggered_by,
+        triggered_from = excluded.triggered_from,
+        started_at = excluded.started_at,
+        completed_at = excluded.completed_at,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at
     `).run({
       id: run.id,
       ticket_id: run.ticketId,

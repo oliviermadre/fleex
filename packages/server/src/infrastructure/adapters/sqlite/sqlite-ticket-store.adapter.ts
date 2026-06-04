@@ -68,11 +68,18 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
   }
 
   async saveBoard(board: BoardEntity): Promise<void> {
+    // Use INSERT … ON CONFLICT DO UPDATE to avoid triggering ON DELETE CASCADE on
+    // ticket_groups and ticket_group_boards, both of which reference boards(id).
     const stmt = this.conn.db.prepare(`
-      INSERT OR REPLACE INTO boards
+      INSERT INTO boards
         (id, name, emoji, created_at, updated_at)
       VALUES
         (@id, @name, @emoji, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        emoji = excluded.emoji,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at
     `);
 
     stmt.run({
@@ -169,8 +176,12 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
   }
 
   async saveTicket(ticket: TicketEntity): Promise<void> {
+    // Use INSERT … ON CONFLICT DO UPDATE (upsert-in-place) instead of INSERT OR REPLACE.
+    // INSERT OR REPLACE performs DELETE + INSERT, which triggers ON DELETE CASCADE on
+    // workflow_runs and step_runs — silently destroying active workflow runs.
+    // ON CONFLICT DO UPDATE performs an in-place UPDATE: no row is deleted, no cascade fires.
     const stmt = this.conn.db.prepare(`
-      INSERT OR REPLACE INTO tickets
+      INSERT INTO tickets
         (id, board_id, display_id, title, description, status, priority, type, position,
          tags, links, blocked, favorite, due_date, assignee, agent_claimed_at,
          github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at)
@@ -178,6 +189,28 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
         (@id, @board_id, @display_id, @title, @description, @status, @priority, @type, @position,
          @tags, @links, @blocked, @favorite, @due_date, @assignee, @agent_claimed_at,
          @github_metadata, @archived_at, @first_doing_at, @status_changed_at, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        board_id = excluded.board_id,
+        display_id = excluded.display_id,
+        title = excluded.title,
+        description = excluded.description,
+        status = excluded.status,
+        priority = excluded.priority,
+        type = excluded.type,
+        position = excluded.position,
+        tags = excluded.tags,
+        links = excluded.links,
+        blocked = excluded.blocked,
+        favorite = excluded.favorite,
+        due_date = excluded.due_date,
+        assignee = excluded.assignee,
+        agent_claimed_at = excluded.agent_claimed_at,
+        github_metadata = excluded.github_metadata,
+        archived_at = excluded.archived_at,
+        first_doing_at = excluded.first_doing_at,
+        status_changed_at = excluded.status_changed_at,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at
     `);
 
     stmt.run({
