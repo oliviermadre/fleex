@@ -14,6 +14,17 @@ export type {
 
 export { slugify } from './slugify.js';
 
+export {
+  SLACK_MESSAGE_URL_RE,
+  parseSlackMessageUrl,
+  isSlackMessageUrl,
+  SLACK_IMPORT_PENDING_TAG,
+  SLACK_IMPORT_FAILED_TAG,
+  SLACK_IMPORT_TAGS,
+  isSlackImportTag,
+} from './slack.js';
+export type { ParsedSlackMessageUrl } from './slack.js';
+
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
 
 export type { ModelFamily, ModelOption, ModelsResponse } from './types/model.js';

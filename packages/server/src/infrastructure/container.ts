@@ -37,6 +37,7 @@ import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
 import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
 import { ImportGitHubIssueUseCase } from '../application/use-cases/import-github-issue.js';
+import { ImportSlackMessageUseCase } from '../application/use-cases/import-slack-message.js';
 import { BackfillPRTicketUseCase } from '../application/use-cases/backfill-pr-ticket.js';
 import { PostCommentUseCase } from '../application/use-cases/post-comment.js';
 import { ResolveMentionUseCase } from '../application/use-cases/resolve-mention.js';
@@ -71,6 +72,7 @@ import { GetRelevantSummariesUseCase } from '../application/use-cases/get-releva
 import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
+import { ClaudeSlackImportAdapter } from './adapters/claude-slack-import.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { ApiClaudeUsageAdapter } from './adapters/api-claude-usage.adapter.js';
@@ -246,6 +248,11 @@ export async function createContainer() {
 
   const generateTicketSummary = new GenerateTicketSummaryUseCase(ticketStore_, commentStore, deliverableStore, git, config, logger, resolver, sdkLimiter);
 
+  // Slack message import: retrieval + synthesis delegated to Claude's native
+  // Slack integration via the Agent SDK (gated by the shared sdkLimiter).
+  const slackImportAdapter = new ClaudeSlackImportAdapter(sdkLimiter, logger);
+  const importSlackMessage = new ImportSlackMessageUseCase(ticketStore_, slackImportAdapter, logger);
+
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
   // Domain event bus
@@ -366,6 +373,8 @@ export async function createContainer() {
   runPanel.resolver = resolver;
   generateTicketSummary.eventBus = eventBus;
   autoReviewWorkflow.eventBus = eventBus;
+  // Slack import synthesizes in the background and patches the ticket via ticket.updated.
+  importSlackMessage.eventBus = eventBus;
 
   // ── Phase B: Workflow orchestration ──────────────────────────────────────
   // Stores are non-null for sqlite and supabase adapters, null for json/pgsql.
@@ -472,6 +481,7 @@ export async function createContainer() {
     detectMerge,
     createSessionFromTicket,
     importGitHubIssue,
+    importSlackMessage,
     backfillPRTicket,
     commentStore,
     mentionStore,

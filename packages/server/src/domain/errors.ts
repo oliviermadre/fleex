@@ -157,3 +157,21 @@ export class InvalidGateOutcomeError extends DomainError {
     super(`Invalid gate outcome "${outcome}". Allowed: ${allowed.join(', ')}`, 'INVALID_GATE_OUTCOME');
   }
 }
+
+export type SlackImportErrorCode =
+  | 'SLACK_INVALID_URL'
+  | 'SLACK_INTEGRATION_UNAVAILABLE'
+  | 'SLACK_CONVERSATION_INACCESSIBLE'
+  | 'SLACK_CONVERSATION_EMPTY';
+
+/**
+ * Raised when importing a ticket from a Slack message link fails. Carries a
+ * specific {@link SlackImportErrorCode} so the HTTP layer can return a 422 with
+ * an actionable code (invalid link, integration unavailable, inaccessible, or
+ * empty conversation).
+ */
+export class SlackImportError extends DomainError {
+  constructor(message: string, public readonly slackCode: SlackImportErrorCode) {
+    super(message, slackCode);
+  }
+}

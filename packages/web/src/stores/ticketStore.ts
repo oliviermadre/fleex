@@ -42,6 +42,8 @@ interface TicketState {
   addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
   importGitHubIssue: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
+  importSlackMessage: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
+  retrySlackImport: (ticketId: string) => Promise<void>;
   syncGithubIssue: (ticketId: string) => Promise<void>;
   openSessionFromTicket: (id: string) => Promise<{ sessionId: string }>;
   selectBoard: (id: string | null) => void;
@@ -226,6 +228,34 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       return { tickets: [...s.tickets, ticket] };
     });
     return ticket;
+  },
+
+  importSlackMessage: async (url, boardId, status) => {
+    const ticket = await api.importSlackMessage(url, boardId);
+    // If a specific status was requested (e.g. creating in a specific column), move the ticket
+    if (status && status !== 'backlog') {
+      const moved = await api.moveTicket(ticket.id, status);
+      set((s) => {
+        if (s.tickets.some((t) => t.id === moved.id)) return s;
+        return { tickets: [...s.tickets, moved] };
+      });
+      return moved;
+    }
+    set((s) => {
+      if (s.tickets.some((t) => t.id === ticket.id)) return s;
+      return { tickets: [...s.tickets, ticket] };
+    });
+    return ticket;
+  },
+
+  retrySlackImport: async (ticketId) => {
+    // Re-arms the failed import on the server (flips it back to pending and re-runs the
+    // synthesis). The returned pending ticket is applied immediately; the eventual success
+    // or new failure arrives via the ticket:updated WebSocket broadcast.
+    const updated = await api.retrySlackImport(ticketId);
+    set((s) => ({
+      tickets: s.tickets.map((t) => (t.id === ticketId ? updated : t)),
+    }));
   },
 
   syncGithubIssue: async (ticketId) => {

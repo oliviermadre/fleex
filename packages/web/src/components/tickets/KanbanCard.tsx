@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Ticket, TicketLink, BoardWithCounts } from '@fleex/shared';
-import { TICKET_STATUS } from '@fleex/shared';
+import { TICKET_STATUS, SLACK_IMPORT_PENDING_TAG, SLACK_IMPORT_FAILED_TAG, isSlackImportTag } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { TypePickerPopover } from './TypePickerPopover';
 import { DueDateBadge } from './DueDateBadge';
@@ -61,6 +61,8 @@ export function KanbanCard({
   const setTicketTab = useTicketStore((s) => s.setTicketTab);
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const archiveTicket = useTicketStore((s) => s.archiveTicket);
+  const retrySlackImport = useTicketStore((s) => s.retrySlackImport);
+  const [retrying, setRetrying] = useState(false);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const unread = useUnreadStore((s) => s.getUnread(ticket.id));
   const groups = useTicketGroupStore((s) => s.groups);
@@ -84,6 +86,22 @@ export function KanbanCard({
 
   const timeInColumn = formatTimeAgo(ticket.statusChangedAt);
   const isCompleted = ticket.status === TICKET_STATUS.DONE || ticket.status === TICKET_STATUS.CANCELLED;
+
+  // Async Slack-import lifecycle (carried as reserved tags so it survives reload).
+  const isSlackImportPending = ticket.tags.includes(SLACK_IMPORT_PENDING_TAG);
+  const isSlackImportFailed = ticket.tags.includes(SLACK_IMPORT_FAILED_TAG);
+  const slackThreaded = ticket.links.some((l: TicketLink) => l.type === 'slack_message' && l.label === 'Slack thread');
+  // Reserved lifecycle tags are status, not user tags — keep them out of the chip row.
+  const displayTags = ticket.tags.filter((t: string) => !isSlackImportTag(t));
+
+  const handleRetrySlackImport = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (retrying) return;
+    setRetrying(true);
+    retrySlackImport(ticket.id)
+      .catch((err) => console.error('Failed to retry Slack import:', err))
+      .finally(() => setRetrying(false));
+  };
 
   return (
     <div
@@ -187,8 +205,37 @@ export function KanbanCard({
         </span>
       </div>
 
+      {/* ── SLACK IMPORT STATUS ── background synthesis is slow; show progress / retry */}
+      {isSlackImportPending && (
+        <div className="flex items-center gap-1.5 px-3 pb-1.5 text-[11px] text-[var(--theme-accent)]">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin flex-shrink-0">
+            <circle cx="8" cy="8" r="6" strokeDasharray="30" strokeDashoffset="10" />
+          </svg>
+          <span>Summarizing Slack {slackThreaded ? 'thread' : 'message'}…</span>
+        </div>
+      )}
+      {isSlackImportFailed && (
+        <div className="flex items-center gap-2 px-3 pb-1.5 text-[11px]" onClick={(e) => e.stopPropagation()}>
+          <span className="inline-flex items-center gap-1 text-[var(--theme-danger)]">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" className="flex-shrink-0">
+              <circle cx="8" cy="8" r="6.5" />
+              <path d="M8 4.5v4M8 11h.01" />
+            </svg>
+            Slack import failed
+          </span>
+          <button
+            className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] disabled:opacity-50"
+            onClick={handleRetrySlackImport}
+            disabled={retrying}
+            title="Retry the Slack import"
+          >
+            {retrying ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      )}
+
       {/* ── CHIPS ZONE ── epics + PRs + tags in one flow */}
-      {(epicBadges.length > 0 || prLinks.length > 0 || ticket.tags.length > 0) && (
+      {(epicBadges.length > 0 || prLinks.length > 0 || displayTags.length > 0) && (
         <div className="flex flex-wrap gap-1 px-3 pb-2">
           {/* Epics */}
           {epicBadges.map((epic) => (
@@ -229,7 +276,7 @@ export function KanbanCard({
           })}
 
           {/* Tags */}
-          {ticket.tags.slice(0, 3).map((tag: string) => (
+          {displayTags.slice(0, 3).map((tag: string) => (
             <span
               key={tag}
               className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]"

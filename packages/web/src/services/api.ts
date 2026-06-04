@@ -386,6 +386,18 @@ export async function importGitHubIssue(org: string, name: string, issueNumber: 
   });
 }
 
+export async function importSlackMessage(url: string, boardId: string): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>('/tickets/import-slack-message', {
+    method: 'POST', body: JSON.stringify({ url, boardId }),
+  });
+}
+
+export async function retrySlackImport(ticketId: string): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(ticketId)}/retry-slack-import`, {
+    method: 'POST',
+  });
+}
+
 export async function importGitHubPR(
   org: string, name: string, prNumber: number, prTitle: string, headRefName: string, boardId: string,
 ): Promise<import('@fleex/shared').Ticket> {
