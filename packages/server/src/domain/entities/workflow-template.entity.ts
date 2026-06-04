@@ -72,8 +72,8 @@ export class WorkflowTemplateEntity {
     }
     for (const step of input.steps) {
       if (step.executorType === 'human_gate') {
-        if (!step.humanGateOutcomes || step.humanGateOutcomes.length === 0) {
-          throw new Error(`step ${step.id}: human_gate must have at least one outcome`);
+        if (!step.humanGateOutcomes || step.humanGateOutcomes.length < 2) {
+          throw new Error(`step ${step.id}: human_gate must have at least two outcomes`);
         }
       }
     }

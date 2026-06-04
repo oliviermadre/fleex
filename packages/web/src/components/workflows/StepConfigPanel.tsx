@@ -3,6 +3,7 @@ import type { WorkflowStep, JsonSchema } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { usePanelStore } from '../../stores/panelStore';
+import { TagInput } from '../ui/TagInput';
 
 interface Props {
   step: WorkflowStep;
@@ -142,24 +143,19 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
 
       {/* Human gate outcomes */}
       {step.executorType === 'human_gate' && (
-        <label className="block text-xs space-y-1">
-          <span style={{ color: 'var(--theme-text-muted)' }}>Outcomes (comma-separated)</span>
-          <input
-            value={(step.humanGateOutcomes ?? []).join(', ')}
-            onChange={(e) =>
-              onChange({
-                ...step,
-                humanGateOutcomes: e.target.value
-                  .split(',')
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-              })
-            }
+        <div className="text-xs space-y-1">
+          <TagInput
+            label="Outcomes"
+            tags={step.humanGateOutcomes ?? []}
+            onChange={(next) => onChange({ ...step, humanGateOutcomes: next })}
             placeholder="approve, reject, request_changes"
-            className="w-full h-8 px-2 text-xs rounded border"
-            style={{ background: 'var(--theme-bg-surface)', borderColor: 'var(--theme-border)' }}
+            helperText={
+              (step.humanGateOutcomes ?? []).length < 2
+                ? <span className="text-red-400">A human gate needs at least 2 outcomes.</span>
+                : 'Type an outcome, then press Enter, comma or Tab to add it.'
+            }
           />
-        </label>
+        </div>
       )}
 
       {/* Output schema textarea */}

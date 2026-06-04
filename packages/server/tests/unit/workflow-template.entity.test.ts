@@ -51,6 +51,33 @@ describe('WorkflowTemplateEntity', () => {
     })).toThrow(/edge .* target/);
   });
 
+  const humanGateStep = (humanGateOutcomes?: string[]) => ({
+    id: 'gate',
+    name: 'Check Spec',
+    executorType: 'human_gate' as const,
+    executorRef: '',
+    position: { x: 0, y: 0 },
+    humanGateOutcomes,
+  });
+
+  it('rejects a human_gate with fewer than two outcomes', () => {
+    // A gate with a single (or zero) outcome has no real branch to decide on,
+    // so it must offer at least two outcomes (e.g. approve / reject).
+    for (const outcomes of [undefined, [], ['approve']]) {
+      expect(() => WorkflowTemplateEntity.create({
+        id: 'wf-1', name: 'X', slug: 'x',
+        steps: [humanGateStep(outcomes)], edges: [], entryStepId: 'gate',
+      })).toThrow(/at least two outcomes/);
+    }
+  });
+
+  it('accepts a human_gate with two or more outcomes', () => {
+    expect(() => WorkflowTemplateEntity.create({
+      id: 'wf-1', name: 'X', slug: 'x',
+      steps: [humanGateStep(['approve', 'reject'])], edges: [], entryStepId: 'gate',
+    })).not.toThrow();
+  });
+
   it('toDTO returns serializable shape', () => {
     const t = WorkflowTemplateEntity.create({
       id: 'wf-1', name: 'X', slug: 'x',

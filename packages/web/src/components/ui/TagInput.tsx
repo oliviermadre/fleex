@@ -20,7 +20,9 @@ export function TagInput({ label, tags, onChange, placeholder, helperText }: Tag
   }, [tags, onChange]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ' ' || e.key === ',') {
+    const isCommit = e.key === 'Enter' || e.key === ' ' || e.key === ','
+      || (e.key === 'Tab' && input.trim() !== '');
+    if (isCommit) {
       e.preventDefault();
       if (input.trim()) {
         addTags(input);
