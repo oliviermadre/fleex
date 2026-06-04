@@ -42,6 +42,7 @@ interface TicketState {
   addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
   importGitHubIssue: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
+  importSlackMessage: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
   syncGithubIssue: (ticketId: string) => Promise<void>;
   openSessionFromTicket: (id: string) => Promise<{ sessionId: string }>;
   selectBoard: (id: string | null) => void;
@@ -212,6 +213,24 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     if (!match) throw new Error('Invalid GitHub issue URL');
     const [, org, name, num] = match as RegExpMatchArray & [string, string, string, string];
     const ticket = await api.importGitHubIssue(org!, name!, parseInt(num!, 10), boardId);
+    // If a specific status was requested (e.g. creating in a specific column), move the ticket
+    if (status && status !== 'backlog') {
+      const moved = await api.moveTicket(ticket.id, status);
+      set((s) => {
+        if (s.tickets.some((t) => t.id === moved.id)) return s;
+        return { tickets: [...s.tickets, moved] };
+      });
+      return moved;
+    }
+    set((s) => {
+      if (s.tickets.some((t) => t.id === ticket.id)) return s;
+      return { tickets: [...s.tickets, ticket] };
+    });
+    return ticket;
+  },
+
+  importSlackMessage: async (url, boardId, status) => {
+    const ticket = await api.importSlackMessage(url, boardId);
     // If a specific status was requested (e.g. creating in a specific column), move the ticket
     if (status && status !== 'backlog') {
       const moved = await api.moveTicket(ticket.id, status);

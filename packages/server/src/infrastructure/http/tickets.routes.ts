@@ -680,6 +680,17 @@ export function ticketRoutes(container: Container) {
       },
     );
 
+    // Import Slack message (single message or thread) as ticket
+    app.post<{ Body: { url: string; boardId: string } }>(
+      '/api/tickets/import-slack-message',
+      async (request, reply) => {
+        const { url, boardId } = request.body;
+        const ticket = await container.importSlackMessage.execute(url, boardId);
+        emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
+        return reply.code(201).send(ticket.toDTO());
+      },
+    );
+
     // Import GitHub PR as ticket
     app.post<{ Body: { org: string; name: string; prNumber: number; prTitle: string; headRefName: string; boardId: string } }>(
       '/api/tickets/import-github-pr',

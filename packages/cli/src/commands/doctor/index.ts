@@ -137,6 +137,10 @@ const def: CommandDef = {
       allOk = false;
     }
 
+    // slack — informational only. Slack message import relies on Claude's
+    // native Slack integration, which fleex cannot introspect or verify.
+    line(`${c.dim('○')} slack — fleex can't check Claude's Slack integration availability`);
+
     // repo
     if (fs.existsSync(path.join(ctx.repoDir, 'packages'))) {
       line(`${c.green('✓')} repo found at ${ctx.repoDir}`);

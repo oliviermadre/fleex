@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { TicketStatus } from '@fleex/shared';
+import { isSlackMessageUrl } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 
 const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;
@@ -13,6 +14,7 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
   const submittingRef = useRef(false);
   const createTicket = useTicketStore((s) => s.createTicket);
   const importGitHubIssue = useTicketStore((s) => s.importGitHubIssue);
+  const importSlackMessage = useTicketStore((s) => s.importSlackMessage);
 
   useEffect(() => {
     if (active && inputRef.current) {
@@ -33,10 +35,13 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
     setError(null);
 
     try {
-      // Detect GitHub issue URL
+      // Detect GitHub issue URL or Slack message link
       if (GITHUB_ISSUE_RE.test(trimmed)) {
         setImporting(true);
         await importGitHubIssue(trimmed, boardId, status);
+      } else if (isSlackMessageUrl(trimmed)) {
+        setImporting(true);
+        await importSlackMessage(trimmed, boardId, status);
       } else {
         await createTicket({ boardId, title: trimmed, status });
       }
@@ -44,8 +49,8 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
       setTitle('');
       setActive(false);
     } catch (err) {
-      console.error('Failed to import GitHub issue:', err);
-      setError(err instanceof Error ? err.message : 'Failed to import GitHub issue');
+      console.error('Failed to import from link:', err);
+      setError(err instanceof Error ? err.message : 'Failed to import from link');
     } finally {
       setImporting(false);
       submittingRef.current = false;
@@ -64,6 +69,7 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
   };
 
   const isGitHubUrl = GITHUB_ISSUE_RE.test(title.trim());
+  const isSlackUrl = isSlackMessageUrl(title.trim());
 
   if (!active) {
     return (
@@ -82,7 +88,7 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
         ref={inputRef}
         className="w-full resize-none bg-transparent text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
         rows={2}
-        placeholder="Card title or GitHub issue URL..."
+        placeholder="Card title, GitHub issue or Slack message URL..."
         value={title}
         onChange={(e) => { setTitle(e.target.value); setError(null); }}
         onKeyDown={handleKeyDown}
@@ -97,6 +103,14 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
           <span>Will import from GitHub</span>
         </div>
       )}
+      {isSlackUrl && !isGitHubUrl && !importing && !error && (
+        <div className="flex items-center gap-1.5 pt-1 text-[10px] text-[var(--theme-text-muted)]">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-secondary)]">
+            <path d="M3.5 9.5A1.5 1.5 0 1 1 2 8h1.5v1.5zm.75 0A1.5 1.5 0 0 1 5.75 8a1.5 1.5 0 0 1 1.5 1.5v3.75a1.5 1.5 0 1 1-3 0V9.5zM5.75 3.5A1.5 1.5 0 1 1 7.25 2v1.5H5.75zm0 .75a1.5 1.5 0 0 1 0 3H2a1.5 1.5 0 1 1 0-3h3.75zM11.5 5.75A1.5 1.5 0 1 1 13 7.25h-1.5V5.75zm-.75 0a1.5 1.5 0 0 1-1.5 1.5 1.5 1.5 0 0 1-1.5-1.5V2a1.5 1.5 0 1 1 3 0v3.75zM9.25 11.5A1.5 1.5 0 1 1 7.75 13v-1.5h1.5zm0-.75a1.5 1.5 0 0 1 0-3H13a1.5 1.5 0 1 1 0 3H9.25z" />
+          </svg>
+          <span>Will import &amp; summarize from Slack</span>
+        </div>
+      )}
       {error && (
         <span className="text-[10px] text-[var(--theme-danger)]">{error}</span>
       )}
@@ -105,7 +119,7 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
             <circle cx="8" cy="8" r="6" strokeDasharray="30" strokeDashoffset="10" />
           </svg>
-          <span>Importing from GitHub...</span>
+          <span>{isSlackUrl && !isGitHubUrl ? 'Summarizing Slack thread...' : 'Importing from GitHub...'}</span>
         </div>
       )}
     </div>

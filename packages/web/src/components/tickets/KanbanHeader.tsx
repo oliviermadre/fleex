@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import type { BoardWithCounts } from '@fleex/shared';
+import { isSlackMessageUrl } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { BoardSelectorDropdown } from './BoardSelectorDropdown';
@@ -22,6 +23,7 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived, hideActions }
   const createTicket = useTicketStore((s) => s.createTicket);
   const createBoard = useTicketStore((s) => s.createBoard);
   const importGitHubIssue = useTicketStore((s) => s.importGitHubIssue);
+  const importSlackMessage = useTicketStore((s) => s.importSlackMessage);
 
   const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
@@ -57,6 +59,9 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived, hideActions }
       if (GITHUB_ISSUE_RE.test(trimmed)) {
         setQuickImporting(true);
         await importGitHubIssue(trimmed, boardId);
+      } else if (isSlackMessageUrl(trimmed)) {
+        setQuickImporting(true);
+        await importSlackMessage(trimmed, boardId);
       } else {
         await createTicket({ boardId, title: trimmed });
       }
@@ -144,7 +149,7 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived, hideActions }
                 ref={inputRef}
                 type="text"
                 className="h-8 w-64 rounded-md border border-[var(--theme-accent)] bg-[var(--theme-bg-surface)] px-3 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
-                placeholder="Title or GitHub issue URL..."
+                placeholder="Title, GitHub issue or Slack message URL..."
                 value={quickTitle}
                 onChange={(e) => { setQuickTitle(e.target.value); setQuickError(null); }}
                 onKeyDown={(e) => {

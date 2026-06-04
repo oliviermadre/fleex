@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
 import type { TicketPriority } from '@fleex/shared';
-import { TICKET_PRIORITIES } from '@fleex/shared';
+import { TICKET_PRIORITIES, isSlackMessageUrl } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -24,6 +24,7 @@ export function TicketsContentPanel() {
   const setSearchQuery = useTicketStore((s) => s.setSearchQuery);
   const createTicket = useTicketStore((s) => s.createTicket);
   const importGitHubIssue = useTicketStore((s) => s.importGitHubIssue);
+  const importSlackMessage = useTicketStore((s) => s.importSlackMessage);
 
   const [quickTitle, setQuickTitle] = useState('');
   const [quickImporting, setQuickImporting] = useState(false);
@@ -89,13 +90,16 @@ export function TicketsContentPanel() {
       if (GITHUB_ISSUE_RE.test(trimmed)) {
         setQuickImporting(true);
         await importGitHubIssue(trimmed, boardId);
+      } else if (isSlackMessageUrl(trimmed)) {
+        setQuickImporting(true);
+        await importSlackMessage(trimmed, boardId);
       } else {
         await createTicket({ boardId, title: trimmed });
       }
       setQuickTitle('');
     } catch (err) {
-      console.error('Failed to import GitHub issue:', err);
-      setQuickError(err instanceof Error ? err.message : 'Failed to import GitHub issue');
+      console.error('Failed to import from link:', err);
+      setQuickError(err instanceof Error ? err.message : 'Failed to import from link');
     } finally {
       setQuickImporting(false);
       quickSubmittingRef.current = false;
@@ -226,7 +230,7 @@ export function TicketsContentPanel() {
           <input
             type="text"
             className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
-            placeholder="Ticket title or GitHub issue URL..."
+            placeholder="Ticket title, GitHub issue or Slack message URL..."
             value={quickTitle}
             onChange={(e) => { setQuickTitle(e.target.value); setQuickError(null); }}
             onKeyDown={(e) => {
