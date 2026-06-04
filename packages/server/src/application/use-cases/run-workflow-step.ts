@@ -164,6 +164,7 @@ export class RunWorkflowStepUseCase {
         ticketId: run.ticketId,
         agentName: author,
         status: (output.deliverable.status ?? 'final') as 'draft' | 'final',
+        title: deliverable.title,
         occurredAt: now,
       });
     }

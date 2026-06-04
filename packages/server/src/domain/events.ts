@@ -154,6 +154,9 @@ export interface DeliverableCreatedEvent extends DomainEvent {
   ticketId: string;
   agentName: string;
   status: 'draft' | 'final';
+  /** Deliverable title — carried in the payload so consumers (e.g. audit-trail
+   *  reconstruction) don't have to re-fetch the deliverable to label it. */
+  title: string;
 }
 
 export interface DeliverableUpdatedEvent extends DomainEvent {
@@ -163,6 +166,8 @@ export interface DeliverableUpdatedEvent extends DomainEvent {
   agentName: string;
   oldStatus: string;
   newStatus: string;
+  /** Deliverable title — see DeliverableCreatedEvent. */
+  title: string;
 }
 
 export interface DeliverableDeletedEvent extends DomainEvent {

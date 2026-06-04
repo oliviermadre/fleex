@@ -348,6 +348,7 @@ describe('DomainEventListener', () => {
         ticketId: 't1',
         agentName: 'agent-a',
         status: 'final',
+        title: 'Deliverable d1',
         occurredAt: new Date(),
       });
       await new Promise((r) => setTimeout(r, 10));
@@ -473,6 +474,7 @@ describe('DomainEventListener', () => {
         agentName: 'agent-a',
         oldStatus: 'draft',
         newStatus: 'final',
+        title: 'Deliverable d1',
         occurredAt: new Date(),
       });
       await new Promise((r) => setTimeout(r, 10));
@@ -494,6 +496,7 @@ describe('DomainEventListener', () => {
         agentName: 'agent-a',
         oldStatus: 'draft',
         newStatus: 'draft',
+        title: 'Deliverable d1',
         occurredAt: new Date(),
       });
       await new Promise((r) => setTimeout(r, 10));
