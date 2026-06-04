@@ -126,7 +126,7 @@ describe('ResolveHumanGateUseCase', () => {
     }));
   });
 
-  it('does not post any comment when notes are absent or blank', async () => {
+  it('posts a comment with a fallback reason when notes are absent or blank', async () => {
     const run = makeRun(); run.block();
     const stepRun = makeResolvableStepRun();
     const postComment = makePostComment();
@@ -139,11 +139,40 @@ describe('ResolveHumanGateUseCase', () => {
       makeLogger() as never,
     );
 
-    // WHY: an outcome with no note carries no rationale — posting an empty comment is noise.
+    // WHY: every gate decision must leave a trace in the thread, even with no rationale —
+    // otherwise a silent resolve (e.g. a reject loop-back) is impossible to reconstruct later.
+    // When the reviewer leaves the reason empty/blank we still post the decision, substituting
+    // a "no reason provided" placeholder so the comment renders identically to the with-notes case.
     await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'reject', notes: '   ' });
 
-    expect(postComment.execute).not.toHaveBeenCalled();
+    expect(postComment.execute).toHaveBeenCalledTimes(1);
+    expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
+      authorName: 'workflow:W → Gate',
+      body: '**User decision :** *reject*\n\n**Reason :**\n\nno reason provided',
+    }));
     expect(run.status).toBe('completed');
+  });
+
+  it('posts the fallback reason when notes are entirely omitted', async () => {
+    const run = makeRun(); run.block();
+    const stepRun = makeResolvableStepRun();
+    const postComment = makePostComment();
+    const uc = new ResolveHumanGateUseCase(
+      { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
+      { getById: vi.fn().mockResolvedValue(stepRun), save: vi.fn() } as never,
+      { runStep: vi.fn() } as never,
+      { emit: vi.fn() } as never,
+      postComment as never,
+      makeLogger() as never,
+    );
+
+    // WHY: the `notes` field is optional — an omitted reason must behave exactly like a blank one.
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1', outcome: 'approve' });
+
+    expect(postComment.execute).toHaveBeenCalledTimes(1);
+    expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({
+      body: '**User decision :** *approve*\n\n**Reason :**\n\nno reason provided',
+    }));
   });
 
   it('resolves the gate even when posting the comment fails, and logs the error', async () => {
