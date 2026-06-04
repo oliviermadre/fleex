@@ -158,20 +158,24 @@ export function StepRunNode({ data }: { data: StepRunNodeData }) {
       <Handle type="target" position={Position.Left} className="!w-3 !h-3 !border-2" />
       <div
         onClick={() => data.onSelect(data.step.id)}
+        // Solid theme surface (the old `bg-card` token is undefined → rendered
+        // transparent, leaving the node unreadable on light themes). The
+        // executor-type border/icon color stays the identity cue.
+        style={{ background: 'var(--theme-bg-overlay)' }}
         className={cn(
-          'w-full h-full rounded-lg border-2 p-3 bg-card cursor-pointer transition-all hover:shadow-lg flex flex-col justify-center overflow-hidden',
+          'w-full h-full rounded-lg border-2 p-3 cursor-pointer transition-all hover:shadow-lg flex flex-col justify-center overflow-hidden',
           executorColor[data.step.executorType],
-          data.isCurrent && 'ring-2 ring-green-400 ring-offset-2 ring-offset-background',
+          data.isCurrent && 'ring-2 ring-green-400 ring-offset-2 ring-offset-[var(--theme-bg-base)]',
         )}
       >
         <div className="flex items-center gap-2 mb-1">
           <Icon className="w-4 h-4 shrink-0" />
-          <span className="text-xs font-medium truncate flex-1">{data.step.name}</span>
+          <span className="text-xs font-medium truncate flex-1 text-[var(--theme-text-primary)]">{data.step.name}</span>
           <StatusIcon status={data.status} />
         </div>
-        <div className="text-[10px] opacity-60 truncate">{data.step.executorRef || '—'}</div>
+        <div className="text-[10px] truncate text-[var(--theme-text-muted)]">{data.step.executorRef || '—'}</div>
         {data.summary && (
-          <div className="mt-1 text-[10px] opacity-60 line-clamp-2">{data.summary}</div>
+          <div className="mt-1 text-[10px] line-clamp-2 text-[var(--theme-text-muted)]">{data.summary}</div>
         )}
       </div>
       <Handle type="source" position={Position.Right} className="!w-3 !h-3 !border-2" />

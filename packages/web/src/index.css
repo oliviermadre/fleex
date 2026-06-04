@@ -493,11 +493,18 @@ html, body {
   filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6)) drop-shadow(0 0 12px rgba(255, 255, 255, 0.3));
 }
 
-/* React Flow dark-mode edge colors — defaults (#3e3e3e) are invisible on our near-black canvas. */
-.react-flow.dark {
-  --xy-edge-stroke: #71717a;
-  --xy-edge-stroke-selected: #fafafa;
-  --xy-connectionline-stroke: #a1a1aa;
+/* React Flow canvas — bound to the active Fleex theme so the workflow DAG
+   (editor + ticket execution view) follows light AND dark themes instead of
+   being permanently dark. We override the non-`-default` xy variables, which
+   take precedence over React Flow's built-in light/dark `-default` values, so
+   the pane background and edges match the theme regardless of `colorMode`.
+   React Flow's stock edge stroke (#3e3e3e/#b1b1b7) is invisible on our bases;
+   text-muted keeps a consistent mid-contrast line on every theme. */
+.react-flow {
+  --xy-background-color: var(--theme-bg-base);
+  --xy-edge-stroke: var(--theme-text-muted);
+  --xy-edge-stroke-selected: var(--theme-text-primary);
+  --xy-connectionline-stroke: var(--theme-text-secondary);
   --xy-edge-stroke-width: 1.5;
 }
 

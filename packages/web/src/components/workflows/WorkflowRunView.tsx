@@ -11,6 +11,7 @@ import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { countCompletedSteps } from './workflowProgress';
 import { postTicketComment } from '../../services/api';
+import { useActiveTheme, useColorMode } from '../../hooks/useActiveTheme';
 
 const nodeTypes = { stepRun: StepRunNode };
 const edgeTypes = { workflow: WorkflowDagEdge };
@@ -22,6 +23,8 @@ interface Props {
 
 export function WorkflowRunView({ run, stepRuns }: Props) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const colorMode = useColorMode();
+  const themeColors = useActiveTheme().colors;
   const cancel = useWorkflowRunStore((s) => s.cancel);
   const resolveGate = useWorkflowRunStore((s) => s.resolveGate);
   const retry = useWorkflowRunStore((s) => s.retry);
@@ -132,7 +135,7 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
         {/* DAG canvas */}
         <div className="flex-1">
           <ReactFlow
-            colorMode="dark"
+            colorMode={colorMode}
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
@@ -144,17 +147,17 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
             maxZoom={2}
             fitView
             fitViewOptions={{ padding: 0.4, minZoom: 0.5, maxZoom: 1.2 }}
-            defaultMarkerColor="#a1a1aa"
+            defaultMarkerColor={themeColors.textMuted}
           >
-            <Background gap={16} size={1} color="rgba(255,255,255,0.08)" />
+            <Background gap={16} size={1} color={themeColors.borderSubtle} />
             <Controls showInteractive={false} />
             <MiniMap
               pannable
               zoomable
-              maskColor="rgba(0,0,0,0.6)"
+              maskColor={themeColors.bgHover}
               style={{ background: 'var(--theme-bg-surface)', border: '1px solid var(--theme-border)' }}
-              nodeColor="rgba(168,85,247,0.4)"
-              nodeStrokeColor="rgba(168,85,247,0.8)"
+              nodeColor={themeColors.accentMuted}
+              nodeStrokeColor={themeColors.accent}
             />
           </ReactFlow>
         </div>
