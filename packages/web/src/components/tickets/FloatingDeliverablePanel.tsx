@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { TicketDeliverable } from '@fleex/shared';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
+import { TITLE_BAR_HEIGHT, PILL_BORDER_RADIUS } from '../../lib/constants';
 
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 250;
@@ -120,7 +121,7 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
         {/* Title bar */}
         <div
           style={{
-            height: 36,
+            height: TITLE_BAR_HEIGHT,
             display: 'flex',
             alignItems: 'center',
             gap: 8,
@@ -172,7 +173,7 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
                 fontSize: 10,
                 fontWeight: 500,
                 padding: '0 6px',
-                borderRadius: 9999,
+                borderRadius: PILL_BORDER_RADIUS,
                 backgroundColor: 'var(--theme-warning)/15',
                 color: 'var(--theme-warning)',
                 flexShrink: 0,

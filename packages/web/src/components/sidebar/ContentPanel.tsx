@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { SessionGroup, Session, WorktreeSessionGroup, TicketLink, RepositorySummary } from '@fleex/shared';
+import { TOOLTIP_HIDE_DELAY_MS } from '@fleex/shared';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -103,7 +104,7 @@ function useCollapsedTooltip() {
   }, []);
 
   const hide = useCallback(() => {
-    hideTimeout.current = setTimeout(() => setTooltip(null), 80);
+    hideTimeout.current = setTimeout(() => setTooltip(null), TOOLTIP_HIDE_DELAY_MS);
   }, []);
 
   return { tooltip, show, hide } as const;

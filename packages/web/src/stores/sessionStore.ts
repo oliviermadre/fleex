@@ -1,14 +1,13 @@
 import { create } from 'zustand';
 import type { Session, SessionGroup, SessionStatus, WorktreeSessionGroup } from '@fleex/shared';
+import { KILL_GRACE_MS, ADD_GRACE_MS } from '@fleex/shared';
 import { useUIStore } from './uiStore';
 
 /** IDs of recently killed sessions — filtered out of broadcast updates to prevent flicker */
 const recentlyKilled = new Map<string, number>();
-const KILL_GRACE_MS = 3000;
 
 /** Recently added sessions — preserved across broadcast updates to prevent flash */
 const recentlyAdded = new Map<string, { ts: number; session: Session }>();
-const ADD_GRACE_MS = 3000;
 
 function pruneKilled(): void {
   const now = Date.now();

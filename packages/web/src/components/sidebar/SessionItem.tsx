@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Session } from '@fleex/shared';
+import { CONFIRM_KILL_TIMEOUT_MS } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -59,7 +60,7 @@ export function SessionItem({ session }: Props) {
     e.stopPropagation();
     if (!confirmKill) {
       setConfirmKill(true);
-      killTimerRef.current = setTimeout(() => setConfirmKill(false), 3000);
+      killTimerRef.current = setTimeout(() => setConfirmKill(false), CONFIRM_KILL_TIMEOUT_MS);
       return;
     }
     clearTimeout(killTimerRef.current);

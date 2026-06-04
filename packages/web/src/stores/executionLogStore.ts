@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import type { ExecutionLogEntry, AgentEvent } from '@fleex/shared';
+import { EXECUTION_LOG_REFRESH_MS } from '@fleex/shared';
 import * as api from '../services/api';
 import { appWs } from '../services/websocket';
+import { PAGE_SIZE_EXECUTIONS } from '../lib/constants';
 
 export type ExecutionTypeFilter = 'all' | 'agent' | 'panel' | 'skill' | 'workflow';
-
-const PAGE_SIZE = 100;
 
 interface ExecutionLogState {
   // Data
@@ -55,7 +55,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
       const res = await api.fetchAllExecutions({
         type: typeFilter === 'all' ? undefined : typeFilter,
         q: searchQuery || undefined,
-        limit: PAGE_SIZE,
+        limit: PAGE_SIZE_EXECUTIONS,
       });
 
       const live = res.entries.filter((e) => e.status === 'running');
@@ -87,7 +87,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
       const res = await api.fetchAllExecutions({
         type: typeFilter === 'all' ? undefined : typeFilter,
         q: searchQuery || undefined,
-        limit: PAGE_SIZE,
+        limit: PAGE_SIZE_EXECUTIONS,
         offset,
       });
       // The next page of past executions — filter defensively in case any
@@ -169,7 +169,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
       });
 
       // Background reload to get full server-side enriched data (tokens, cost, model, etc.)
-      setTimeout(() => { get().load({ silent: true }); }, 1500);
+      setTimeout(() => { get().load({ silent: true }); }, EXECUTION_LOG_REFRESH_MS);
     }
   },
 

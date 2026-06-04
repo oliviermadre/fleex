@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { ClaudeUsage, ClaudeUsageMetric } from '@fleex/shared';
+import {
+  MS_IN_MINUTE,
+  MINUTES_IN_HOUR,
+  HOURS_IN_DAY,
+  USAGE_WARN_THRESHOLD_PCT,
+  USAGE_DANGER_THRESHOLD_PCT,
+} from '@fleex/shared';
 
 function parseTimeLeft(resetsAt: string): string {
   // resetsAt is an ISO 8601 timestamp from the OAuth usage endpoint.
@@ -15,23 +22,23 @@ function parseTimeLeft(resetsAt: string): string {
 }
 
 function formatDuration(ms: number): string {
-  const totalMinutes = Math.floor(ms / 60000);
-  const totalHours = Math.floor(totalMinutes / 60);
-  const totalDays = Math.floor(totalHours / 24);
+  const totalMinutes = Math.floor(ms / MS_IN_MINUTE);
+  const totalHours = Math.floor(totalMinutes / MINUTES_IN_HOUR);
+  const totalDays = Math.floor(totalHours / HOURS_IN_DAY);
 
   if (totalMinutes < 1) return '<1m';
-  if (totalMinutes < 60) return `${totalMinutes}m`;
-  if (totalHours < 24) {
-    const remainingMin = totalMinutes % 60;
+  if (totalMinutes < MINUTES_IN_HOUR) return `${totalMinutes}m`;
+  if (totalHours < HOURS_IN_DAY) {
+    const remainingMin = totalMinutes % MINUTES_IN_HOUR;
     return remainingMin > 0 ? `${totalHours}h ${remainingMin}m` : `${totalHours}h`;
   }
-  const remainingHours = totalHours % 24;
+  const remainingHours = totalHours % HOURS_IN_DAY;
   return remainingHours > 0 ? `${totalDays}d ${remainingHours}h` : `${totalDays}d`;
 }
 
 function getFillColor(remaining: number): string {
-  if (remaining > 50) return 'var(--theme-success, #22c55e)';
-  if (remaining >= 20) return 'var(--theme-warning, #eab308)';
+  if (remaining > USAGE_WARN_THRESHOLD_PCT) return 'var(--theme-success, #22c55e)';
+  if (remaining >= USAGE_DANGER_THRESHOLD_PCT) return 'var(--theme-warning, #eab308)';
   return 'var(--theme-danger, #ef4444)';
 }
 

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { Ticket, TicketLink, BoardWithCounts } from '@fleex/shared';
+import { TICKET_STATUS } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { TypePickerPopover } from './TypePickerPopover';
 import { DueDateBadge } from './DueDateBadge';
@@ -82,7 +83,7 @@ export function KanbanCard({
   );
 
   const timeInColumn = formatTimeAgo(ticket.statusChangedAt);
-  const isCompleted = ticket.status === 'done' || ticket.status === 'cancelled';
+  const isCompleted = ticket.status === TICKET_STATUS.DONE || ticket.status === TICKET_STATUS.CANCELLED;
 
   return (
     <div
