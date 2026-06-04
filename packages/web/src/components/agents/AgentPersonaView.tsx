@@ -31,10 +31,7 @@ export function AgentPersonaView() {
 
   const handlePlay = async () => {
     try {
-      const result = await executeAgent(persona.id);
-      if (result.status === 'no_work') {
-        console.log('No pending work for this agent');
-      }
+      await executeAgent(persona.id);
     } catch (err) {
       console.error('Agent execution failed:', err);
     }

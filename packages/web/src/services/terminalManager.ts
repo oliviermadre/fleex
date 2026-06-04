@@ -52,12 +52,6 @@ class TerminalManager {
     terminal.loadAddon(new ClipboardAddon(undefined, clipboardProvider));
     terminal.loadAddon(new WebLinksAddon());
 
-    // Diagnostic: log OSC 52 sequences from tmux
-    terminal.parser.registerOscHandler(52, (data) => {
-      console.debug('[FLEEX:OSC52] received', { len: data.length });
-      return false; // let ClipboardAddon handle it too
-    });
-
     // Cmd+C (macOS) / Ctrl+Shift+C (Linux): copy from xterm selection or pending OSC 52 text
     terminal.attachCustomKeyEventHandler((ev) => {
       if (ev.type !== 'keydown' || ev.key !== 'c') return true;
@@ -68,8 +62,7 @@ class TerminalManager {
 
       // Priority 1: xterm.js native selection (user gesture → clipboard works)
       if (terminal.hasSelection()) {
-        navigator.clipboard.writeText(terminal.getSelection()).then(
-          () => console.debug('[FLEEX:Clipboard] copied xterm selection'),
+        navigator.clipboard.writeText(terminal.getSelection()).catch(
           (err) => console.warn('[FLEEX:Clipboard] failed to copy xterm selection', err),
         );
         return false;
@@ -78,8 +71,7 @@ class TerminalManager {
       // Priority 2: pending OSC 52 text that failed auto-write
       const pending = clipboardProvider.consumePendingText();
       if (pending) {
-        navigator.clipboard.writeText(pending).then(
-          () => console.debug('[FLEEX:Clipboard] copied pending OSC52 text'),
+        navigator.clipboard.writeText(pending).catch(
           (err) => console.warn('[FLEEX:Clipboard] failed to copy pending OSC52 text', err),
         );
         return false;

@@ -8,10 +8,6 @@ export class AsmClipboardProvider implements IClipboardProvider {
   async writeText(selection: ClipboardSelectionType, text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
-      console.debug(LOG_PREFIX, 'writeText OK', {
-        selection,
-        len: text.length,
-      });
       this.pendingText = null;
     } catch (err) {
       console.warn(LOG_PREFIX, 'writeText FAILED, buffering for Cmd+C fallback', {
@@ -28,7 +24,6 @@ export class AsmClipboardProvider implements IClipboardProvider {
   async readText(selection: ClipboardSelectionType): Promise<string> {
     try {
       const text = await navigator.clipboard.readText();
-      console.debug(LOG_PREFIX, 'readText OK', { selection, len: text.length });
       return text;
     } catch (err) {
       console.warn(LOG_PREFIX, 'readText FAILED', {
