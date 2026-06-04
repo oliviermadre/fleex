@@ -9,6 +9,7 @@ import {
   bootstrapWorkspacesFromEnv,
   validateWorkspacesConfig,
   defaultWorkspaceName,
+  reportWorkspacesConfig,
   workspacesFilePath,
   type Workspace,
 } from '../../src/core/workspaces.ts';
@@ -389,5 +390,42 @@ describe('defaultWorkspaceName', () => {
   it('returns null on a corrupt config instead of throwing', () => {
     const p = writeWs('d-bad.json', '{ not json');
     expect(defaultWorkspaceName(p)).toBeNull();
+  });
+});
+
+describe('reportWorkspacesConfig', () => {
+  it('reports legacy mode when the file is absent', () => {
+    const lines = reportWorkspacesConfig(path.join(tmpDir, 'absent.json'));
+    expect(lines).toEqual([{ level: 'legacy', message: expect.stringMatching(/legacy \.env mode/) }]);
+  });
+
+  it('reports ONE error line for a corrupt file (duplicate name) — never a legacy line', () => {
+    const p = writeWs('r-dup-name.json', JSON.stringify({
+      workspaces: [{ name: 'dup', is_default: true }, { name: 'dup' }],
+    }));
+    const lines = reportWorkspacesConfig(p);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.level).toBe('error');
+    expect(lines[0]!.message).toMatch(/duplicate workspace name/);
+    expect(lines[0]!.message).toContain('Fix:');
+    expect(lines.some((l) => l.level === 'legacy')).toBe(false);
+  });
+
+  it('reports an ok line for a valid config', () => {
+    const p = writeWs('r-valid.json', JSON.stringify({
+      workspaces: [{ name: 'default', is_default: true, basePath: '~/a' }, { name: 'b', basePath: '~/b' }],
+    }));
+    const lines = reportWorkspacesConfig(p);
+    const ok = lines.find((l) => l.level === 'ok');
+    expect(ok?.message).toMatch(/valid \(2 workspaces, default: default\)/);
+  });
+
+  it('reports an error and no ok line when a rule fails (duplicate basePath)', () => {
+    const p = writeWs('r-dup-base.json', JSON.stringify({
+      workspaces: [{ name: 'a', is_default: true, basePath: '~/x' }, { name: 'b', basePath: '~/x' }],
+    }));
+    const lines = reportWorkspacesConfig(p);
+    expect(lines.some((l) => l.level === 'error')).toBe(true);
+    expect(lines.some((l) => l.level === 'ok')).toBe(false);
   });
 });

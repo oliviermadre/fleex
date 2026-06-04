@@ -189,6 +189,38 @@ export function defaultWorkspaceName(filePath: string = workspacesFilePath()): s
   return defaults.length === 1 ? defaults[0]!.name : null;
 }
 
+export type ConfigReportLevel = 'ok' | 'error' | 'warning' | 'legacy';
+export interface ConfigReportLine {
+  level: ConfigReportLevel;
+  message: string;
+}
+
+/**
+ * Describe the workspaces config for `fleex doctor` — a pure list of lines the
+ * command just renders. Centralizes the parse/legacy/rules branching (and keeps
+ * `doctor` from re-reporting "legacy mode" when the file exists but is corrupt).
+ */
+export function reportWorkspacesConfig(filePath: string = workspacesFilePath()): ConfigReportLine[] {
+  let workspaces: Workspace[] | null;
+  try {
+    workspaces = parseWorkspacesFile(filePath);
+  } catch (e) {
+    return [{ level: 'error', message: `${e instanceof Error ? e.message : String(e)} Fix: ${filePath}` }];
+  }
+  if (workspaces === null) {
+    return [{ level: 'legacy', message: `legacy .env mode (no ${path.basename(filePath)})` }];
+  }
+  const issues = runRules(makeRuleContext(workspaces));
+  const lines: ConfigReportLine[] = issues.map((i) => ({ level: i.level, message: i.message }));
+  if (!issues.some((i) => i.level === 'error')) {
+    const def = workspaces.find((w) => w.is_default);
+    const defLabel = def ? def.name : '(none — pass --workspace)';
+    const plural = workspaces.length === 1 ? '' : 's';
+    lines.push({ level: 'ok', message: `valid (${workspaces.length} workspace${plural}, default: ${defLabel})` });
+  }
+  return lines;
+}
+
 /**
  * CLI guard for state-changing commands (start/restart/stop/desktop/self-update).
  *

@@ -8,8 +8,7 @@ import { SERVICES, loadPorts, type Service } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
 import { MIN_BUN_VERSION, versionGte } from '../../core/version.ts';
 import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
-import { parseWorkspacesFile, workspacesFilePath } from '../../core/workspaces.ts';
-import { runRules, makeRuleContext } from '../../core/workspaces-validation.ts';
+import { reportWorkspacesConfig } from '../../core/workspaces.ts';
 
 interface ToolStatus {
   installed: boolean;
@@ -154,31 +153,18 @@ const def: CommandDef = {
     }
 
     // workspaces config — global ~/.fleex/workspaces.json validity, via the
-    // shared rule engine (config + state rules; same rules the command guard uses).
-    let wsList = null;
-    try {
-      wsList = parseWorkspacesFile();
-    } catch (e) {
-      line(`${c.red('✗')} workspaces config — ${e instanceof Error ? e.message : String(e)} Fix: ${workspacesFilePath()}`);
-      allOk = false;
-    }
-    if (wsList === null) {
-      line(`${c.dim('○')} workspaces — legacy .env mode (no ${path.basename(workspacesFilePath())})`);
-    } else {
-      const issues = runRules(makeRuleContext(wsList));
-      for (const issue of issues) {
-        if (issue.level === 'error') {
-          line(`${c.red('✗')} workspaces config — ${issue.message}`);
-          allOk = false;
-        } else {
-          line(`${c.yellow('⚠')} workspaces config — ${issue.message}`);
-        }
-      }
-      if (!issues.some((i) => i.level === 'error')) {
-        const defaultWs = wsList.find((w) => w.is_default);
-        const defLabel = defaultWs ? defaultWs.name : '(none — pass --workspace)';
-        const plural = wsList.length === 1 ? '' : 's';
-        line(`${c.green('✓')} workspaces config — valid (${wsList.length} workspace${plural}, default: ${defLabel})`);
+    // shared rule engine (same rules the command guard uses). reportWorkspacesConfig
+    // centralizes parse/legacy/rules branching; doctor just renders.
+    for (const r of reportWorkspacesConfig()) {
+      if (r.level === 'error') {
+        line(`${c.red('✗')} workspaces config — ${r.message}`);
+        allOk = false;
+      } else if (r.level === 'warning') {
+        line(`${c.yellow('⚠')} workspaces config — ${r.message}`);
+      } else if (r.level === 'legacy') {
+        line(`${c.dim('○')} workspaces — ${r.message}`);
+      } else {
+        line(`${c.green('✓')} workspaces config — ${r.message}`);
       }
     }
 
