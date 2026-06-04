@@ -4,10 +4,9 @@ import { Button } from '../ui/Button';
 interface Props {
   outcomes: string[];
   onResolve: (outcome: string, notes?: string) => Promise<void>;
-  onRetry: () => Promise<void>;
 }
 
-export function HumanGateResolvePanel({ outcomes, onResolve, onRetry }: Props) {
+export function HumanGateResolvePanel({ outcomes, onResolve }: Props) {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -15,15 +14,6 @@ export function HumanGateResolvePanel({ outcomes, onResolve, onRetry }: Props) {
     setBusy(true);
     try {
       await onResolve(outcome, notes.trim() || undefined);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleRetry = async () => {
-    setBusy(true);
-    try {
-      await onRetry();
     } finally {
       setBusy(false);
     }
@@ -45,9 +35,6 @@ export function HumanGateResolvePanel({ outcomes, onResolve, onRetry }: Props) {
             {o}
           </Button>
         ))}
-        <Button variant="secondary" size="sm" disabled={busy} onClick={handleRetry}>
-          Retry step
-        </Button>
       </div>
     </div>
   );

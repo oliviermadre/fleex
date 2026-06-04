@@ -202,7 +202,6 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
                   onResolve={(outcome, notes) =>
                     resolveGate(run.id, selectedStepRun.id, outcome, notes)
                   }
-                  onRetry={() => retry(run.id, selectedStepRun.id)}
                 />
               )}
             {selectedStepRun?.status === 'needs_review' &&
