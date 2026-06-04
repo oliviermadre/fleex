@@ -97,14 +97,14 @@ export class ImportSlackMessageUseCase {
    * success the synthesis becomes the description and the pending tag is
    * cleared; on any failure the ticket is flagged failed (and stays retryable).
    * Awaitable so tests can drive it deterministically.
+   *
+   * The synthesis takes seconds, during which the client may concurrently move
+   * the ticket (e.g. the "create directly into a column" path PATCHes its
+   * status right after the 201). We therefore run the synthesis FIRST and only
+   * re-read + patch the ticket once it is done, so we never save a snapshot
+   * captured before that move — which would silently revert the column.
    */
   async completeImport(ticketId: string, parsed: ParsedSlackMessageUrl): Promise<void> {
-    const ticket = await this.ticketStore.getTicketById(ticketId);
-    if (!ticket) {
-      this.logger.warn('Slack import target ticket vanished before completion', { ticketId });
-      return;
-    }
-
     let result: SlackImportResult;
     try {
       result = await this.slackImport.synthesizeThread(parsed);
@@ -113,12 +113,19 @@ export class ImportSlackMessageUseCase {
         ticketId,
         error: err instanceof Error ? err.message : String(err),
       });
-      await this.markFailed(ticket, 'Slack synthesis failed unexpectedly.', parsed);
+      await this.markFailed(ticketId, 'Slack synthesis failed unexpectedly.', parsed);
       return;
     }
 
     if (result.status !== 'ok') {
-      await this.markFailed(ticket, this.failureReason(result), parsed);
+      await this.markFailed(ticketId, this.failureReason(result), parsed);
+      return;
+    }
+
+    // Re-read AFTER synthesis so a concurrent move/edit is preserved, not clobbered.
+    const ticket = await this.ticketStore.getTicketById(ticketId);
+    if (!ticket) {
+      this.logger.warn('Slack import target ticket vanished before completion', { ticketId });
       return;
     }
 
@@ -171,15 +178,23 @@ export class ImportSlackMessageUseCase {
 
   // ── helpers ──
 
-  private async markFailed(ticket: TicketEntity, reason: string, parsed: ParsedSlackMessageUrl): Promise<void> {
+  private async markFailed(ticketId: string, reason: string, parsed: ParsedSlackMessageUrl): Promise<void> {
+    // Re-read here too: the failure path runs after the same slow synthesis, so a concurrent
+    // move must be preserved while we flag the ticket failed.
+    const ticket = await this.ticketStore.getTicketById(ticketId);
+    if (!ticket) {
+      this.logger.warn('Slack import target ticket vanished before failure could be recorded', { ticketId });
+      return;
+    }
+
     const diff = ticket.update({
       title: 'Slack import failed',
       description: this.failedDescription(reason, parsed.url),
       tags: [...this.stripImportTags(ticket.tags), SLACK_IMPORT_FAILED_TAG],
     });
     await this.ticketStore.saveTicket(ticket);
-    this.logger.warn('Slack import failed', { ticketId: ticket.id, reason });
-    this.emitUpdated(ticket.id, diff);
+    this.logger.warn('Slack import failed', { ticketId, reason });
+    this.emitUpdated(ticketId, diff);
   }
 
   private emitUpdated(ticketId: string, changes: Record<string, { from: unknown; to: unknown }>): void {

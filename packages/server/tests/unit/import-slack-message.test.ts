@@ -217,6 +217,69 @@ describe('ImportSlackMessageUseCase.completeImport (background failure)', () => 
   });
 });
 
+describe('ImportSlackMessageUseCase.completeImport (concurrency)', () => {
+  // A concurrent move that lands DURING synthesis, persisting a brand-new entity instance —
+  // exactly how a real DB hands back a fresh row on the next load.
+  const moveToDoingFresh = (
+    ticketStore: ReturnType<typeof makeTicketStore>,
+    placeholder: TicketEntity,
+  ): TicketEntity => {
+    const movedFresh = TicketEntity.create({
+      id: placeholder.id,
+      boardId: placeholder.boardId,
+      displayId: placeholder.displayId,
+      title: placeholder.title,
+      description: placeholder.description,
+      status: 'doing',
+      tags: [...placeholder.tags],
+      links: [...placeholder.links],
+    });
+    ticketStore._tickets.set(placeholder.id, movedFresh);
+    return movedFresh;
+  };
+
+  it('preserves a concurrent column move on success (re-reads the ticket after synthesis)', async () => {
+    // WHY: when a ticket is created straight into a column, the client fires moveTicket (PATCH status)
+    // right after the 201 — while the multi-second synthesis is still running. completeImport must
+    // patch a FRESH snapshot taken AFTER synthesis, not one captured before it, or it silently reverts
+    // the user's column move back to backlog.
+    const { uc, ticketStore, slackImport } = makeUseCase();
+    slackImport.synthesizeThread.mockReturnValueOnce(NEVER()); // execute's background fire (parked)
+    const ticket = await uc.execute(VALID_URL, 'board-1');
+
+    slackImport.synthesizeThread.mockImplementationOnce(async () => {
+      moveToDoingFresh(ticketStore, ticket);
+      return { status: 'ok', title: 'Synth title', synthesis: 'Body' };
+    });
+
+    await uc.completeImport(ticket.id, parseSlackMessageUrl(VALID_URL)!);
+
+    const reloaded = (await ticketStore.getTicketById(ticket.id))!;
+    expect(reloaded.status).toBe('doing'); // the move survived
+    expect(reloaded.title).toBe('Synth title'); // synthesis still applied on top
+    expect(reloaded.tags).not.toContain(SLACK_IMPORT_PENDING_TAG);
+  });
+
+  it('preserves a concurrent column move on failure (re-reads the ticket after synthesis)', async () => {
+    // WHY: the move lands regardless of how synthesis ends, so the failure path must re-read too —
+    // flagging the ticket failed without reverting the user's column.
+    const { uc, ticketStore, slackImport } = makeUseCase();
+    slackImport.synthesizeThread.mockReturnValueOnce(NEVER());
+    const ticket = await uc.execute(VALID_URL, 'board-1');
+
+    slackImport.synthesizeThread.mockImplementationOnce(async () => {
+      moveToDoingFresh(ticketStore, ticket);
+      return { status: 'integration_unavailable' };
+    });
+
+    await uc.completeImport(ticket.id, parseSlackMessageUrl(VALID_URL)!);
+
+    const reloaded = (await ticketStore.getTicketById(ticket.id))!;
+    expect(reloaded.status).toBe('doing'); // the move survived
+    expect(reloaded.tags).toContain(SLACK_IMPORT_FAILED_TAG); // failure still flagged
+  });
+});
+
 describe('ImportSlackMessageUseCase.retry', () => {
   const arrangeFailed = async () => {
     const ctx = makeUseCase();
