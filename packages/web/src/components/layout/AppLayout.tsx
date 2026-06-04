@@ -6,6 +6,7 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useHotkeyReveal } from '../../hooks/useHotkeyReveal';
 import { usePullRequestPolling } from '../../hooks/usePullRequestPolling';
 import { useTickets } from '../../hooks/useTickets';
+import { useNotifications } from '../../hooks/useNotifications';
 import { useAgentPersonas } from '../../hooks/useAgentPersonas';
 import { useSkills } from '../../hooks/useSkills';
 import { useUIStore } from '../../stores/uiStore';
@@ -33,6 +34,7 @@ export function AppLayout() {
   useHotkeyReveal();
   usePullRequestPolling();
   useTickets();
+  useNotifications();
   useAgentPersonas();
   useSkills();
 
