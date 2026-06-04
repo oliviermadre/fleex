@@ -36,6 +36,7 @@ export function toNotification(
     body: draft.body,
     level: draft.level,
     link: draft.link,
+    ticketId: draft.ticketId ?? null,
     createdAt: now(),
     seen: false,
   };

@@ -4,7 +4,6 @@ import { NotificationRendererRegistry } from './registry';
 import type { RendererContext } from './types';
 
 const ctx: RendererContext = {
-  ticketTitle: () => null,
   ticketLink: (id, tab) => `/t/${id}${tab ? `/${tab}` : ''}`,
 };
 
@@ -26,6 +25,7 @@ describe('toNotification', () => {
       body: 'Body',
       level: 'info',
       link: '/somewhere',
+      ticketId: 't9',
     }));
 
     const out = toNotification({ type: 'x', data: {} }, reg, ctx, fixedNow);
@@ -36,6 +36,7 @@ describe('toNotification', () => {
       body: 'Body',
       level: 'info',
       link: '/somewhere',
+      ticketId: 't9',
       createdAt: '2026-06-04T00:00:00.000Z',
       seen: false,
     });

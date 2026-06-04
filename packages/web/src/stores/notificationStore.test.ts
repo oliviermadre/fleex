@@ -10,6 +10,7 @@ function makeNotification(id: string, overrides: Partial<PulseNotification> = {}
     body: `Body ${id}`,
     level: 'info',
     link: `/t/${id}`,
+    ticketId: null,
     createdAt: '2026-06-04T00:00:00.000Z',
     seen: false,
     ...overrides,

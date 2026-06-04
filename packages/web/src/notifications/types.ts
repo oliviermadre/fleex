@@ -33,6 +33,13 @@ export interface PulseNotification {
   readonly level: PulseLevel;
   /** In-app deep link to the relevant ticket/element. */
   readonly link: string;
+  /**
+   * Id of the ticket this notification is about, or null when not ticket-bound.
+   * The UI resolves the human reference (`#<displayId> <title>`) from the live
+   * ticket store at render time — so it stays correct even for entries rebuilt
+   * from the audit trail before the ticket list has loaded (no baked-in title).
+   */
+  readonly ticketId: string | null;
   /** ISO timestamp of when the client received it. */
   readonly createdAt: string;
   /** Whether the user has already seen this (drives the unseen badge). */
@@ -51,15 +58,19 @@ export interface NotificationDraft {
   readonly body: string;
   readonly level: PulseLevel;
   readonly link: string;
+  /** Ticket this notification is about (null when not ticket-bound). */
+  readonly ticketId: string | null;
 }
 
 /**
  * Side dependencies a renderer may use to enrich a notification. Injected (not
  * imported) so renderers stay pure and unit-testable.
+ *
+ * Note: the ticket's human reference (title + display id) is intentionally NOT
+ * resolved here — it is resolved reactively in the UI from the live ticket
+ * store, so it survives an audit-trail rebuild that runs before tickets load.
  */
 export interface RendererContext {
-  /** Human label for a ticket, or null when it cannot be resolved client-side. */
-  readonly ticketTitle: (ticketId: string) => string | null;
   /** Build a deep link to a ticket (optionally a specific tab). */
   readonly ticketLink: (ticketId: string, tab?: TicketTab) => string;
 }

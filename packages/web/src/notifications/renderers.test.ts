@@ -4,7 +4,6 @@ import { NotificationRendererRegistry } from './registry';
 import type { RendererContext } from './types';
 
 const ctx: RendererContext = {
-  ticketTitle: (id) => (id === 't1' ? 'Fix the login bug' : null),
   ticketLink: (id, tab) => `/tickets/board/all/ticket/${id}${tab && tab !== 'description' ? `/${tab}` : ''}`,
 };
 
@@ -36,8 +35,11 @@ describe('deliverable:created', () => {
     expect(draft!.emoji).toBe('📝');
     expect(draft!.dedupKey).toBe('deliverable-draft:d1');
     expect(draft!.link).toBe('/tickets/board/all/ticket/t1/deliverables');
-    // ticket title is woven into the body when resolvable
-    expect(draft!.body).toContain('Fix the login bug');
+    // The deliverable title stays in the body…
+    expect(draft!.body).toContain('Auth spec');
+    // …and the ticket reference is carried as an id, resolved (title + display
+    // id) reactively by the UI rather than baked into the body string.
+    expect(draft!.ticketId).toBe('t1');
   });
 
   it('uses the shared "final" dedup key when created directly as final', () => {

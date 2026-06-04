@@ -9,6 +9,7 @@ const stub = (): NotificationDraft => ({
   body: 'b',
   level: 'info',
   link: '/x',
+  ticketId: null,
 });
 
 describe('NotificationRendererRegistry', () => {

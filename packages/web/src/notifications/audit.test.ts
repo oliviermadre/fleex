@@ -10,7 +10,6 @@ import { registerDefaultRenderers } from './renderers';
 import type { RendererContext } from './types';
 
 const ctx: RendererContext = {
-  ticketTitle: (id) => (id === 't1' ? 'Fix the login bug' : null),
   ticketLink: (id, tab) =>
     `/tickets/board/all/ticket/${id}${tab && tab !== 'description' ? `/${tab}` : ''}`,
 };

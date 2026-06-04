@@ -27,12 +27,6 @@ import type { NotificationRendererRegistry } from './registry';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-/** Append ` · <ticket title>` when the ticket can be resolved client-side. */
-function withTicket(body: string, ticketId: string, ctx: RendererContext): string {
-  const title = ctx.ticketTitle(ticketId);
-  return title ? `${body} · ${title}` : body;
-}
-
 /** Trim a string field to a single short line for a notification body. */
 function oneLine(value: string, max = 120): string {
   const flat = value.replace(/\s+/g, ' ').trim();
@@ -73,9 +67,10 @@ const renderDeliverableCreated: NotificationRenderer = (data, ctx) => {
       dedupKey: `deliverable-final:${id}`,
       emoji: '✅',
       title: 'Deliverable ready',
-      body: withTicket(`${agent} shared “${oneLine(title, 60)}”`, ticketId, ctx),
+      body: `${agent} shared “${oneLine(title, 60)}”`,
       level: 'success',
       link,
+      ticketId,
     };
   }
 
@@ -83,9 +78,10 @@ const renderDeliverableCreated: NotificationRenderer = (data, ctx) => {
     dedupKey: `deliverable-draft:${id}`,
     emoji: '📝',
     title: 'Draft deliverable posted',
-    body: withTicket(`${agent} shared a draft: “${oneLine(title, 60)}”`, ticketId, ctx),
+    body: `${agent} shared a draft: “${oneLine(title, 60)}”`,
     level: 'action',
     link,
+    ticketId,
   };
 };
 
@@ -108,9 +104,10 @@ const renderDeliverableUpdated: NotificationRenderer = (data, ctx) => {
     dedupKey: `deliverable-final:${id}`,
     emoji: '✅',
     title: 'Deliverable finalised',
-    body: withTicket(`“${oneLine(title, 60)}” is ready`, ticketId, ctx),
+    body: `“${oneLine(title, 60)}” is ready`,
     level: 'success',
     link: ctx.ticketLink(ticketId, 'deliverables'),
+    ticketId,
   };
 };
 
@@ -128,9 +125,10 @@ const renderWorkflowNeedsReview: NotificationRenderer = (data, ctx) => {
     dedupKey: `workflow-needs-review:${stepRunId}`,
     emoji: '⏳',
     title: 'Workflow needs your review',
-    body: withTicket('A step is waiting for your input', ticketId, ctx),
+    body: 'A step is waiting for your input',
     level: 'action',
     link: ctx.ticketLink(ticketId, 'workflow'),
+    ticketId,
   };
 };
 
@@ -145,9 +143,10 @@ const renderWorkflowCompleted: NotificationRenderer = (data, ctx) => {
     dedupKey: `workflow-completed:${runId}`,
     emoji: '🏁',
     title: 'Workflow completed',
-    body: withTicket('The workflow finished', ticketId, ctx),
+    body: 'The workflow finished',
     level: 'success',
     link: ctx.ticketLink(ticketId, 'workflow'),
+    ticketId,
   };
 };
 
@@ -163,9 +162,10 @@ const renderWorkflowFailed: NotificationRenderer = (data, ctx) => {
     dedupKey: `workflow-failed:${runId}`,
     emoji: '❌',
     title: 'Workflow failed',
-    body: error ? oneLine(error) : withTicket('The workflow errored', ticketId, ctx),
+    body: error ? oneLine(error) : 'The workflow errored',
     level: 'error',
     link: ctx.ticketLink(ticketId, 'workflow'),
+    ticketId,
   };
 };
 
@@ -185,9 +185,10 @@ const renderMentionWaiting: NotificationRenderer = (data, ctx) => {
     dedupKey: `mention-waiting:${id}`,
     emoji: '❓',
     title: 'An agent is waiting for you',
-    body: withTicket(`${agent} needs your input`, ticketId, ctx),
+    body: `${agent} needs your input`,
     level: 'action',
     link: ctx.ticketLink(ticketId, 'comments'),
+    ticketId,
   };
 };
 

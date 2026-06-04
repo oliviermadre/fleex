@@ -1,4 +1,5 @@
 import type { PulseNotification, PulseLevel } from '../../notifications/types';
+import { useTicketStore } from '../../stores/ticketStore';
 import { formatAge } from '../../lib/formatAge';
 import { cn } from '../../lib/cn';
 
@@ -12,8 +13,15 @@ const levelAccent: Record<PulseLevel, string> = {
 };
 
 /**
- * Presentational card shared by the toast surface and the notification center.
- * Stateless: callers wire navigation (`onClick`) and dismissal (`onClose`).
+ * Card shared by the toast surface and the notification center.
+ *
+ * It resolves the ticket reference (`#<displayId> <title>`) reactively from the
+ * live ticket store rather than baking it into `body`. That matters because the
+ * bell is rebuilt from the audit trail on app load — often before the ticket
+ * list has finished loading — so a baked-in title would be permanently empty.
+ * Resolving here means the reference fills in (and stays correct) as soon as the
+ * tickets are available. Callers wire navigation (`onClick`) and dismissal
+ * (`onClose`).
  */
 export function NotificationCard({
   notification,
@@ -24,7 +32,13 @@ export function NotificationCard({
   onClick?: () => void;
   onClose?: () => void;
 }) {
-  const { emoji, title, body, level, createdAt, seen } = notification;
+  const { emoji, title, body, level, createdAt, seen, ticketId } = notification;
+
+  // Select the ticket object itself (stable reference) and derive the label
+  // outside the selector, so we never return a fresh object and loop renders.
+  const ticket = useTicketStore((s) =>
+    ticketId ? s.tickets.find((t) => t.id === ticketId) ?? null : null,
+  );
 
   return (
     <div
@@ -69,6 +83,12 @@ export function NotificationCard({
         <p className="mt-0.5 break-words text-[11px] leading-snug text-[var(--theme-text-secondary)]">
           {body}
         </p>
+        {ticket && (
+          <p className="mt-1 flex items-center gap-1 text-[10px] text-[var(--theme-text-faint)]">
+            <span className="shrink-0 font-mono">#{ticket.displayId}</span>
+            <span className="truncate">{ticket.title}</span>
+          </p>
+        )}
       </div>
       {onClose && (
         <button
