@@ -14,6 +14,11 @@ function ws(name: string, is_default: boolean, basePath?: string): Workspace {
   return { name, is_default, env: {}, ...(basePath ? { basePath } : {}) };
 }
 
+/** Workspace with a custom env block (for driver/sqlite-path rules). */
+function wsEnv(name: string, env: Record<string, string>): Workspace {
+  return { name, is_default: false, env };
+}
+
 /** Build a context with an explicit homedir and a stubbed fs (set of existing dirs). */
 function ctx(workspaces: Workspace[], existingDirs: string[] = []): RuleContext {
   const set = new Set(existingDirs.map((d) => path.resolve(d)));
@@ -57,6 +62,35 @@ describe('unique-base-path rule', () => {
   it('ignores workspaces without a basePath for duplicate detection', () => {
     const issues = runRules(ctx([ws('a', true), ws('b', false)]), ['config']);
     expect(issues.some((i) => i.rule === 'unique-base-path')).toBe(false);
+  });
+});
+
+describe('unique-sqlite-path rule', () => {
+  const sqlite = (name: string, p?: string) =>
+    wsEnv(name, { FLEEX_STORAGE_DRIVER: 'sqlite', ...(p ? { FLEEX_SQLITE_PATH: p } : {}) });
+
+  it('errors when two sqlite workspaces share a db file (after ~ normalization)', () => {
+    const issues = runRules(ctx([sqlite('a', '~/.fleex/fleex.db'), sqlite('b', '/home/tester/.fleex/fleex.db')]), ['config']);
+    const e = issues.find((i) => i.rule === 'unique-sqlite-path');
+    expect(e?.level).toBe('error');
+    expect(e?.message).toMatch(/share the same database file/);
+    expect(e?.message).toContain('a, b');
+  });
+
+  it('passes when sqlite paths are distinct', () => {
+    const issues = runRules(ctx([sqlite('a', '~/.fleex/a.db'), sqlite('b', '~/.fleex/b.db')]), ['config']);
+    expect(issues.some((i) => i.rule === 'unique-sqlite-path')).toBe(false);
+  });
+
+  it('ignores non-sqlite workspaces even if FLEEX_SQLITE_PATH coincides', () => {
+    const supa = wsEnv('s', { FLEEX_STORAGE_DRIVER: 'supabase', FLEEX_SQLITE_PATH: '~/.fleex/fleex.db' });
+    const issues = runRules(ctx([sqlite('a', '~/.fleex/fleex.db'), supa]), ['config']);
+    expect(issues.some((i) => i.rule === 'unique-sqlite-path')).toBe(false);
+  });
+
+  it('skips sqlite workspaces without an explicit path', () => {
+    const issues = runRules(ctx([sqlite('a'), sqlite('b')]), ['config']);
+    expect(issues.some((i) => i.rule === 'unique-sqlite-path')).toBe(false);
   });
 });
 

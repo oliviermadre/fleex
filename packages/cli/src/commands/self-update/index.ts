@@ -101,6 +101,39 @@ function migrateBasePathToWorkspaces(updateDir: string): void {
   }
 }
 
+/**
+ * One-time backfill for existing users: every `driver=sqlite` workspace gets an
+ * explicit `FLEEX_SQLITE_PATH` (default ~/.fleex/fleex.db — where their data
+ * already lives) so the DB file becomes configurable per workspace. Idempotent:
+ * skips workspaces that already set it. Preserves 0600.
+ */
+function backfillSqlitePathInWorkspaces(): void {
+  const file = workspacesFilePath();
+  let raw: { workspaces?: unknown };
+  try {
+    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return;
+  }
+  const list = Array.isArray(raw.workspaces) ? raw.workspaces : [];
+  const defaultPath = path.join(FLEEX_HOME, 'fleex.db');
+  let changed = false;
+  for (const ws of list as Array<Record<string, unknown>>) {
+    if (!ws || typeof ws !== 'object') continue;
+    const env = (ws['env'] ?? {}) as Record<string, string>;
+    if (env['FLEEX_STORAGE_DRIVER'] !== 'sqlite' || env['FLEEX_SQLITE_PATH']) continue;
+    env['FLEEX_SQLITE_PATH'] = defaultPath;
+    ws['env'] = env;
+    changed = true;
+    info(`Workspace '${String(ws['name'])}': FLEEX_SQLITE_PATH set → ${defaultPath}`);
+  }
+  if (changed) {
+    fs.writeFileSync(file, JSON.stringify(raw, null, 2) + '\n', { mode: 0o600 });
+    try { fs.chmodSync(file, 0o600); } catch { /* best effort */ }
+    ok('workspaces.json updated with per-workspace sqlite path.');
+  }
+}
+
 const def: CommandDef = {
   name: 'self-update',
   description: 'Pull latest code and update the fleex CLI',
@@ -150,6 +183,8 @@ const def: CommandDef = {
     // One-time: lift basePath from each workspace's DB config into workspaces.json
     // (new source of truth). Idempotent — skips workspaces that already have one.
     migrateBasePathToWorkspaces(updateDir);
+    // One-time: give every sqlite workspace an explicit FLEEX_SQLITE_PATH default.
+    backfillSqlitePathInWorkspaces();
 
     // Migrations — workspace-aware. Each workspace's env selects its DB.
     let workspaces = null;

@@ -309,6 +309,18 @@ describe('validateWorkspacesConfig', () => {
     expect(validateWorkspacesConfig(p)).toEqual({ ok: true });
   });
 
+  it('is invalid when two sqlite workspaces share the same db file', () => {
+    const p = writeWs('v-dup-sqlite.json', JSON.stringify({
+      workspaces: [
+        { name: 'a', is_default: true, basePath: '~/p-a', env: { FLEEX_STORAGE_DRIVER: 'sqlite', FLEEX_SQLITE_PATH: '~/.fleex/fleex.db' } },
+        { name: 'b', basePath: '~/p-b', env: { FLEEX_STORAGE_DRIVER: 'sqlite', FLEEX_SQLITE_PATH: '~/.fleex/fleex.db' } },
+      ],
+    }));
+    const res = validateWorkspacesConfig(p);
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.error).toMatch(/share the same database file/);
+  });
+
   it('is invalid when more than one default is flagged', () => {
     const p = writeWs('v-two.json', JSON.stringify({
       workspaces: [

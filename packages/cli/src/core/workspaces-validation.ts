@@ -98,6 +98,40 @@ const uniqueBasePathRule: WorkspacesRule = {
   },
 };
 
+/**
+ * No two `driver=sqlite` workspaces may point at the same DB file (compared
+ * after `~`/resolve normalization). Sharing one SQLite file across instances
+ * corrupts it (WAL). Workspaces without an explicit FLEEX_SQLITE_PATH are
+ * skipped (consistent with unique-base-path); self-update backfills them.
+ */
+const uniqueSqlitePathRule: WorkspacesRule = {
+  name: 'unique-sqlite-path',
+  kind: 'config',
+  check(ctx) {
+    const byNormalized = new Map<string, string[]>();
+    for (const w of ctx.workspaces) {
+      if (w.env?.['FLEEX_STORAGE_DRIVER'] !== 'sqlite') continue;
+      const dbPath = w.env['FLEEX_SQLITE_PATH'];
+      if (!dbPath) continue;
+      const key = normalizeBasePath(dbPath, ctx.homedir);
+      const names = byNormalized.get(key) ?? [];
+      names.push(w.name);
+      byNormalized.set(key, names);
+    }
+    const issues: ValidationIssue[] = [];
+    for (const [key, names] of byNormalized) {
+      if (names.length > 1) {
+        issues.push({
+          rule: 'unique-sqlite-path',
+          level: 'error',
+          message: `sqlite workspaces ${names.join(', ')} share the same database file (${key}) — each needs a distinct FLEEX_SQLITE_PATH.`,
+        });
+      }
+    }
+    return issues;
+  },
+};
+
 /** Warn when a workspace has no basePath — it falls back to the server default and risks collisions. */
 const basePathPresentRule: WorkspacesRule = {
   name: 'base-path-present',
@@ -134,6 +168,7 @@ const basePathExistsRule: WorkspacesRule = {
 export const WORKSPACES_RULES: WorkspacesRule[] = [
   singleDefaultRule,
   uniqueBasePathRule,
+  uniqueSqlitePathRule,
   basePathPresentRule,
   basePathExistsRule,
 ];

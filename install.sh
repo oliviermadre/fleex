@@ -671,12 +671,21 @@ phase_wizard() {
     *) storage_driver="sqlite" ;;
   esac
 
+  # 4b. SQLite database file path (only relevant for the sqlite driver).
+  local sqlite_path=""
+  if [ "$storage_driver" = "sqlite" ]; then
+    sqlite_path="$(ui_prompt_text "Where should the SQLite database file be stored?" "$DB_FILE" "one file per workspace; must be unique across workspaces")"
+  fi
+
   echo ""
   ok "Configuration:"
   printf "    Display name:   ${BOLD}%s${NC}\n" "$display_name"
   printf "    Mention name:   ${BOLD}@%s${NC}\n" "$mention_name"
   printf "    Base path:      ${BOLD}%s${NC}\n" "$base_path"
   printf "    Storage driver: ${BOLD}%s${NC}\n" "$storage_driver"
+  if [ "$storage_driver" = "sqlite" ]; then
+    printf "    SQLite path:    ${BOLD}%s${NC}\n" "$sqlite_path"
+  fi
   echo ""
 
   # Detect shell
@@ -743,17 +752,20 @@ db.close();
   mkdir -p "$(dirname "$WORKSPACES_FILE")"
   FLEEX_WS_DRIVER="$storage_driver" \
   FLEEX_WS_BASE_PATH="$base_path" \
+  FLEEX_WS_SQLITE_PATH="$sqlite_path" \
   FLEEX_WS_OUT="$WORKSPACES_FILE" \
   bun -e '
+    const env = { FLEEX_STORAGE_DRIVER: process.env.FLEEX_WS_DRIVER };
+    if (process.env.FLEEX_WS_DRIVER === "sqlite" && process.env.FLEEX_WS_SQLITE_PATH) {
+      env.FLEEX_SQLITE_PATH = process.env.FLEEX_WS_SQLITE_PATH;
+    }
     const workspaces = {
       workspaces: [
         {
           name: "default",
           is_default: true,
           basePath: process.env.FLEEX_WS_BASE_PATH,
-          env: {
-            FLEEX_STORAGE_DRIVER: process.env.FLEEX_WS_DRIVER,
-          },
+          env,
         },
       ],
     };
