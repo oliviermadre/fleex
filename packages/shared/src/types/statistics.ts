@@ -16,6 +16,7 @@ export interface StatisticsTimeBucket {
   readonly panelsExecuted: number;
   readonly totalCostUsd: number;
   readonly costByAgent: Record<string, number>; // personaName → costUsd
+  readonly ticketsDoneByBoard: Record<string, number>; // boardName → count of tickets moved to done in this bucket
 }
 
 export interface AgentLeaderboardEntry {

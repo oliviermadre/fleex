@@ -364,7 +364,7 @@ function formatDuration(ms: number): string {
 
 // ── Cost Bar Chart (stacked per agent) ──
 
-const AGENT_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899', '#ef4444', '#06b6d4', '#84cc16'];
+const STACK_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899', '#ef4444', '#06b6d4', '#84cc16'];
 
 function CostBarChart({ data }: { data: StatisticsTimeBucket[] }) {
   if (data.length === 0) return null;
@@ -400,7 +400,7 @@ function CostBarChart({ data }: { data: StatisticsTimeBucket[] }) {
                 const y = height - legendH - 20 - offsetY - segH;
                 offsetY += segH;
                 return (
-                  <rect key={agent} x={x} y={y} width={barWidth} height={segH} fill={AGENT_COLORS[ai % AGENT_COLORS.length]} opacity={0.85}>
+                  <rect key={agent} x={x} y={y} width={barWidth} height={segH} fill={STACK_COLORS[ai % STACK_COLORS.length]} opacity={0.85}>
                     <title>{`${agent}: $${val.toFixed(4)}`}</title>
                   </rect>
                 );
@@ -420,8 +420,77 @@ function CostBarChart({ data }: { data: StatisticsTimeBucket[] }) {
       <div className="flex flex-wrap gap-3 mt-2">
         {agents.map((agent, i) => (
           <div key={agent} className="flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: AGENT_COLORS[i % AGENT_COLORS.length] }} />
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: STACK_COLORS[i % STACK_COLORS.length] }} />
             <span className="text-[10px] text-[var(--theme-text-secondary)]">{agent}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Tickets Done Bar Chart (stacked per board) ──
+
+function TicketsByBoardChart({ data }: { data: StatisticsTimeBucket[] }) {
+  if (data.length === 0) return null;
+
+  // Collect all board names across all buckets
+  const boardSet = new Set<string>();
+  for (const d of data) {
+    for (const name of Object.keys(d.ticketsDoneByBoard ?? {})) boardSet.add(name);
+  }
+  const boards = [...boardSet];
+  if (boards.length === 0) return null;
+
+  const height = 220;
+  const legendH = 24;
+  const chartH = height - 30 - legendH;
+  // Max total done-per-bucket drives the Y scale (stacked bars)
+  const totals = data.map((d) =>
+    Object.values(d.ticketsDoneByBoard ?? {}).reduce((sum, v) => sum + v, 0),
+  );
+  const maxVal = Math.max(...totals, 1);
+  const barWidth = Math.max(4, Math.min(40, (600 - data.length * 2) / data.length));
+  const width = data.length * (barWidth + 2) + 40;
+
+  return (
+    <div>
+      <svg width="100%" height={height - legendH} viewBox={`0 0 ${width} ${height - legendH}`} preserveAspectRatio="xMinYMid meet">
+        {data.map((d, i) => {
+          const x = 30 + i * (barWidth + 2);
+          let offsetY = 0;
+          const counts = d.ticketsDoneByBoard ?? {};
+          return (
+            <g key={i}>
+              {boards.map((board, bi) => {
+                const val = counts[board] ?? 0;
+                if (val === 0) return null;
+                const segH = (val / maxVal) * chartH;
+                const y = height - legendH - 20 - offsetY - segH;
+                offsetY += segH;
+                return (
+                  <rect key={board} x={x} y={y} width={barWidth} height={segH} fill={STACK_COLORS[bi % STACK_COLORS.length]} opacity={0.85}>
+                    <title>{`${board}: ${val} done`}</title>
+                  </rect>
+                );
+              })}
+              {(i === 0 || i === data.length - 1 || i % Math.max(1, Math.floor(data.length / 6)) === 0) && (
+                <text x={x + barWidth / 2} y={height - legendH - 4} textAnchor="middle" fontSize="9" fill="var(--theme-text-faint)">
+                  {d.date.slice(5)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        <text x="0" y="12" fontSize="9" fill="var(--theme-text-faint)">{maxVal}</text>
+        <text x="0" y={height - legendH - 22} fontSize="9" fill="var(--theme-text-faint)">0</text>
+      </svg>
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 mt-2">
+        {boards.map((board, i) => (
+          <div key={board} className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: STACK_COLORS[i % STACK_COLORS.length] }} />
+            <span className="text-[10px] text-[var(--theme-text-secondary)]">{board}</span>
           </div>
         ))}
       </div>
@@ -533,6 +602,18 @@ export function StatisticsView() {
 
             {/* Time Series */}
             <TimeSeriesChart data={data.timeSeries} />
+
+            {/* Tickets Done by Board */}
+            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Tickets Done by Board</h3>
+                <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: '#10b98130', color: '#10b981', border: '1px solid #10b98140' }}>Done</span>
+              </div>
+              {data.timeSeries.some((b) => Object.keys(b.ticketsDoneByBoard ?? {}).length > 0)
+                ? <TicketsByBoardChart data={data.timeSeries} />
+                : <p className="py-8 text-center text-xs text-[var(--theme-text-faint)]">No tickets moved to done in this period</p>
+              }
+            </div>
 
             {/* Cost Over Time */}
             <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">

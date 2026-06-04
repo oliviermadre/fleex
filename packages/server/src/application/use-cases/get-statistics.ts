@@ -56,9 +56,10 @@ export class GetStatisticsUseCase {
       return d >= from && d <= to;
     };
 
-    const [tickets, comments, mentions, deliverables, executions, personas, sessions] =
+    const [tickets, boards, comments, mentions, deliverables, executions, personas, sessions] =
       await Promise.all([
         this.ticketStore.getAllTickets(),
+        this.ticketStore.getAllBoards(),
         this.commentStore.getAll(),
         this.mentionStore.getAll(),
         this.deliverableStore.getAll(),
@@ -66,6 +67,9 @@ export class GetStatisticsUseCase {
         this.personaStore.getAll(),
         this.sessionStore.getAll(),
       ]);
+
+    // Board lookup (boardId → display name), used by the "tickets done by board" chart
+    const boardNameById = new Map(boards.map((b) => [b.id, b.name]));
 
     // Filter to date range
     const filteredTickets = tickets.filter((t) => inRange(t.toDTO().createdAt));
@@ -129,6 +133,18 @@ export class GetStatisticsUseCase {
     // Persona lookup (used by time series + leaderboard)
     const personaMap = new Map(personas.map((p) => [p.id, p]));
 
+    // Tickets currently done, paired with their board name. The "tickets done
+    // by board" chart buckets these by statusChangedAt (i.e. when they moved to
+    // done), regardless of when they were created. Precomputed once here so the
+    // bucket loop below doesn't re-resolve toDTO()/board name per bucket.
+    const doneTickets = tickets
+      .map((t) => t.toDTO())
+      .filter((t) => t.status === 'done')
+      .map((t) => ({
+        statusChangedAt: t.statusChangedAt,
+        boardName: boardNameById.get(t.boardId) ?? 'Unknown',
+      }));
+
     // Compute time series
     const buckets = this.buildBuckets(from, to, params.granularity);
     const timeSeries: StatisticsTimeBucket[] = buckets.map((bucket) => {
@@ -177,6 +193,14 @@ export class GetStatisticsUseCase {
             byAgent[name] = (byAgent[name] ?? 0) + e.costUsd;
           }
           return byAgent;
+        })(),
+        ticketsDoneByBoard: (() => {
+          const byBoard: Record<string, number> = {};
+          for (const t of doneTickets) {
+            if (!inBucket(t.statusChangedAt)) continue;
+            byBoard[t.boardName] = (byBoard[t.boardName] ?? 0) + 1;
+          }
+          return byBoard;
         })(),
       };
     });
