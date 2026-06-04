@@ -4,6 +4,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { cn } from '../../lib/cn';
 import { RepositoriesIcon } from './icons';
+import { NotificationNavItem } from '../notifications/NotificationNavItem';
 
 function FleexLogo({ collapsed }: { collapsed: boolean }) {
   return (
@@ -37,6 +38,10 @@ export function NavSidebar() {
     <div className="flex h-full flex-col border-r border-[var(--theme-border)] bg-[var(--theme-bg-base)]">
       <FleexLogo collapsed={navCollapsed} />
       <div className="flex flex-1 flex-col gap-1 pt-2">
+        {/* === Pulse notifications (first position) === */}
+        <NotificationNavItem collapsed={navCollapsed} />
+        <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
+
         {/* === Operational === */}
         {/* Dashboard */}
         <NavItem
