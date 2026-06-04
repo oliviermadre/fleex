@@ -4,6 +4,7 @@ import type { AppConfig, ConfigPort } from '../../../application/ports/config.po
 import type { PgConnection } from './connection.js';
 import type { ExecFn, HostFs } from '../../host/types.js';
 import { resolveClaudeCommand } from '../resolve-claude-command.js';
+import { applyBasePathEnvOverride } from '../config-env.js';
 
 export class PgConfigAdapter implements ConfigPort {
   private config: AppConfig;
@@ -27,6 +28,9 @@ export class PgConfigAdapter implements ConfigPort {
     if (this.initialized) return;
     this.claudeCommand = await resolveClaudeCommand(this.execFn, this.hostFs, this.homedir);
     await this.loadFromDb();
+    // A workspace's basePath (via env) overrides the persisted config.
+    applyBasePathEnvOverride(this.config);
+    this.resolveTilde();
     this.initialized = true;
   }
 

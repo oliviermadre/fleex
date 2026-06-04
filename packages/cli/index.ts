@@ -15,6 +15,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import type { CommandDef } from './src/core/types.ts';
 import { applyPrettyHelp, setRootProgram } from './src/core/help.ts';
+import { activateWorkspace } from './src/core/workspaces.ts';
 
 const program = new Command();
 program
@@ -61,6 +62,16 @@ function attachCommand(parent: Command, def: CommandDef): void {
   cmd.description(def.description);
   if (def.aliases?.length) cmd.aliases(def.aliases);
   if (def.setup) def.setup(cmd);
+  if (def.workspaceAware) {
+    cmd.option('--workspace <name>', 'Target the named workspace instance (defaults to the is_default workspace)');
+    // Activate before the action runs — hence before the first resolveInstance()
+    // — so the resolved slug is `workspace@branch`. No flag → resolveInstance()
+    // falls back to the default workspace on its own.
+    cmd.hook('preAction', (thisCommand) => {
+      const ws = thisCommand.opts().workspace as string | undefined;
+      if (ws) activateWorkspace(ws);
+    });
+  }
   if (def.extraHelp !== undefined) {
     const text = typeof def.extraHelp === 'function' ? def.extraHelp() : def.extraHelp;
     if (text && text.trim().length > 0) cmd.addHelpText('after', text);

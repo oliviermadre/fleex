@@ -6,6 +6,7 @@ import { resolveTicketId } from '../_shared.ts';
 interface CommentOptions { board?: string }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'comment',
   description: 'Add a comment to a ticket (comment <id> "body")',
   setup(cmd) {

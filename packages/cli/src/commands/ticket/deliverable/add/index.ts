@@ -15,6 +15,7 @@ interface AddOptions {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'add',
   aliases: ['create', 'new'],
   description: 'Add a new deliverable to a ticket',

@@ -7,6 +7,7 @@ import type { DeliverableDTO } from '../_shared.ts';
 interface ShowOptions { board?: string; contentOnly?: boolean }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'show',
   aliases: ['view', 'get'],
   description: 'Show a single deliverable on a ticket',

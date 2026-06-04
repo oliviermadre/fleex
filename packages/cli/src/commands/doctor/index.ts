@@ -8,6 +8,7 @@ import { SERVICES, loadPorts, type Service } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
 import { MIN_BUN_VERSION, versionGte } from '../../core/version.ts';
 import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
+import { reportWorkspacesConfig } from '../../core/workspaces.ts';
 
 interface ToolStatus {
   installed: boolean;
@@ -56,6 +57,7 @@ function probeSimple(cmd: string, versionArgs: string[] = ['--version']): ToolSt
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'doctor',
   description: 'Check system health and prerequisites (bun, tmux, gh, claude, services)',
   setup(cmd) {
@@ -148,6 +150,22 @@ const def: CommandDef = {
       line(`${c.green('✓')} node_modules installed`);
     } else {
       line(`${c.yellow('○')} node_modules missing — run: ${c.bold(`cd ${ctx.repoDir} && bun install`)}`);
+    }
+
+    // workspaces config — global ~/.fleex/workspaces.json validity, via the
+    // shared rule engine (same rules the command guard uses). reportWorkspacesConfig
+    // centralizes parse/legacy/rules branching; doctor just renders.
+    for (const r of reportWorkspacesConfig()) {
+      if (r.level === 'error') {
+        line(`${c.red('✗')} workspaces config — ${r.message}`);
+        allOk = false;
+      } else if (r.level === 'warning') {
+        line(`${c.yellow('⚠')} workspaces config — ${r.message}`);
+      } else if (r.level === 'legacy') {
+        line(`${c.dim('○')} workspaces — ${r.message}`);
+      } else {
+        line(`${c.green('✓')} workspaces config — ${r.message}`);
+      }
     }
 
     // Services

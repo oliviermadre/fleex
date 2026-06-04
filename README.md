@@ -79,19 +79,102 @@ export ANTHROPIC_API_KEY=sk-ant-...
 fleex start
 ```
 
+Or set it once per workspace in the `env` block of `~/.fleex/workspaces.json` (see
+[Workspaces](#workspaces) below), which keeps secrets in a single `0600` file.
+
 ## CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `fleex start [--port <port>]` | Start all services (gateway, server, web) |
+| `fleex start [--port <port>] [--workspace <name>]` | Start all services (gateway, server, web) for a workspace |
 | `fleex stop [name]` | Stop current or named instance |
 | `fleex stop --all` | Stop all running instances |
-| `fleex restart` | Restart current instance |
-| `fleex status` | Show status of all instances |
+| `fleex restart [--workspace <name>]` | Restart current instance |
+| `fleex status` | Show status of all instances (with workspace + driver) |
+| `fleex desktop [--workspace <name>]` | Open the Electron desktop window for a workspace |
 | `fleex logs [svc]` | Tail logs (all, gateway, server, web) |
 | `fleex remove [name]` | Remove a stopped instance |
 | `fleex remove --all-stopped` | Remove all stopped instances |
-| `fleex self-update` | Pull latest and update CLI |
+| `fleex self-update [--workspace <name>] [--all-workspaces]` | Pull latest, update CLI, migrate workspace DB(s) |
+
+## Workspaces
+
+A **workspace** is a named, self-contained configuration (storage driver, database,
+event-hub, API keys) for a complete Fleex stack. Workspaces let you run several
+independent stacks from a single repo — e.g. a shared team Supabase alongside a
+local SQLite sandbox — each as its own gateway/server/web/desktop set.
+
+Workspaces are defined globally in `~/.fleex/workspaces.json`:
+
+```json
+{
+  "workspaces": [
+    {
+      "name": "tada",
+      "is_default": true,
+      "env": {
+        "FLEEX_STORAGE_DRIVER": "supabase",
+        "SUPABASE_URL": "https://xxxx.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "ey...",
+        "ANTHROPIC_API_KEY": "sk-ant-..."
+      }
+    },
+    {
+      "name": "perso",
+      "env": { "FLEEX_STORAGE_DRIVER": "sqlite" }
+    }
+  ]
+}
+```
+
+- **`name`** — the workspace identifier used with `--workspace`.
+- **`is_default`** — exactly one workspace should set this to `true`; it is used when
+  no `--workspace` flag is given. (Multiple defaults, or none, is treated as a
+  corrupt file.)
+- **`env`** — a nested block of environment variables injected when the workspace is
+  activated. **Workspace env wins over everything** — it overrides both shell exports
+  and the repo `.env`.
+
+### Secrets
+
+`workspaces.json` holds secrets (Supabase keys, hub tokens, `ANTHROPIC_API_KEY`), so
+it is created with `0600` permissions. Fleex warns if the file is more permissive and
+never logs its values. Keep it out of version control.
+
+### Running parallel stacks
+
+Each running stack is identified by `<workspace>@<branch>`, so the same branch can run
+under several workspaces at once:
+
+```bash
+fleex desktop --workspace tada    # tada@main  → Supabase stack + Electron window
+fleex desktop --workspace perso   # perso@main → SQLite stack + Electron window
+```
+
+`fleex status` shows the **Workspace** and **Driver** of every running instance.
+
+### Updating
+
+`fleex self-update` is workspace-aware:
+
+| Invocation | Migrations run for |
+|---|---|
+| `fleex self-update` | the `is_default` workspace |
+| `fleex self-update --workspace <name>` | the named workspace |
+| `fleex self-update --all-workspaces` | every workspace's database |
+
+The code is pulled and rebuilt once; only the database migration step loops per workspace.
+
+### Migration from `.env` (backward compatibility)
+
+Earlier versions stored config in a per-repo `.env` file. No manual migration is needed:
+
+- **Fresh installs** write `~/.fleex/workspaces.json` directly (a single `default`
+  workspace) during the setup wizard.
+- **Existing installs**: the first `fleex self-update` automatically creates
+  `~/.fleex/workspaces.json` from your existing `~/.fleex/repo/.env` (as the `default`
+  workspace) when no workspaces file is present. The legacy `.env` continues to work
+  as a fallback until then.
 
 ## Tech Stack
 

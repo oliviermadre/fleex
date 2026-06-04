@@ -9,7 +9,10 @@ export function configRoutes(container: Container) {
     });
 
     app.put<{ Body: Partial<AppConfig> }>('/api/config', async (request) => {
-      await container.config.update(request.body);
+      // basePath is managed by ~/.fleex/workspaces.json (injected via env at
+      // startup), not the DB — ignore any attempt to change it through the API.
+      const { basePath: _ignoredBasePath, ...updatable } = request.body;
+      await container.config.update(updatable);
 
       // Auto-resolve repository patterns when repositories change
       if (Array.isArray(request.body.repositories)) {

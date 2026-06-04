@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadDotEnv } from '../../core/env.ts';
+import { activateWorkspace, assertValidWorkspacesConfig } from '../../core/workspaces.ts';
 import { c, info, ok, warn, die } from '../../core/colors.ts';
 import { checkBun } from '../../core/version.ts';
 import {
@@ -9,6 +10,7 @@ import {
   ensureDirs,
   checkRepo,
   logFile,
+  writeInstanceMeta,
 } from '../../core/instance.ts';
 import { SERVICES, allocatePorts, writePorts } from '../../core/ports.ts';
 import { isRunning, savePid, waitForService } from '../../core/process.ts';
@@ -19,9 +21,18 @@ import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts
 export interface StartOptions {
   port?: string;
   desktop?: boolean;
+  workspace?: string;
 }
 
 export async function runStart(opts: StartOptions = {}): Promise<void> {
+  // Refuse to proceed on a broken global config (e.g. >1 default workspace),
+  // before any workspace activation or instance resolution.
+  assertValidWorkspacesConfig();
+
+  // Resolve & inject the workspace BEFORE the first resolveInstance() (which
+  // caches the slug). In legacy mode (no workspaces.json) this is a no-op.
+  activateWorkspace(opts.workspace);
+
   let forcedWebPort: number | undefined;
   if (opts.port !== undefined) {
     const n = parseInt(opts.port, 10);
@@ -73,8 +84,20 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
 
   info(`Starting stack for ${c.bold(ctx.instanceSlug)}...`);
 
-  // Load repo .env so installer-written vars (e.g. FLEEX_STORAGE_DRIVER) are honoured.
+  // Load repo .env so installer-written vars (e.g. FLEEX_STORAGE_DRIVER) are
+  // honoured. Non-override: the workspace env (already injected) wins.
   loadDotEnv(path.join(ctx.repoDir, '.env'));
+
+  // Persist instance metadata for `fleex status` (workspace, driver, branch).
+  writeInstanceMeta(
+    {
+      workspace: ctx.workspace,
+      branch: ctx.branch,
+      driver: process.env.FLEEX_STORAGE_DRIVER ?? 'json',
+      startedAt: new Date().toISOString(),
+    },
+    ctx,
+  );
 
   // Spawn each service detached, captured in its own log file.
   const env = { ...process.env };

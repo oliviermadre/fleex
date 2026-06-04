@@ -29,6 +29,7 @@ interface Ticket {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'show',
   aliases: ['view'],
   description: 'Show epic details and the list of its tickets',

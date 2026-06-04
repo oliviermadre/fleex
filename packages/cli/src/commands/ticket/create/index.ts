@@ -15,6 +15,7 @@ interface CreateOptions {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'create',
   aliases: ['new'],
   description: 'Create a new ticket (--title required)',

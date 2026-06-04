@@ -33,6 +33,7 @@ interface Comment { authorType: string; authorName: string; createdAt: string; b
 interface Deliverable { title: string; type: string; agentName: string; status: string; version: number | string; content: string }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'show',
   aliases: ['view'],
   description: 'Show ticket details (use --full for comments + deliverables)',

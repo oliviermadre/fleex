@@ -8,6 +8,7 @@ import type { DeliverableDTO } from '../_shared.ts';
 interface DeleteOptions { board?: string; force?: boolean }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'delete',
   aliases: ['rm'],
   description: 'Delete a deliverable (prompts unless -f is given)',

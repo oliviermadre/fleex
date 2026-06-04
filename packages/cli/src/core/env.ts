@@ -21,12 +21,29 @@ export function parseDotEnv(filePath: string): Record<string, string> {
   return vars;
 }
 
+export interface ApplyEnvOptions {
+  /** When true, overwrite variables already present in process.env. Default false. */
+  override?: boolean;
+}
+
+/**
+ * Merge a set of variables into process.env.
+ *
+ * By default existing variables are preserved (non-override), matching .env
+ * semantics. Pass `{ override: true }` to force the supplied values to win —
+ * used when activating a workspace, whose config must beat both the shell and
+ * the repo .env.
+ */
+export function applyEnv(vars: Record<string, string>, opts: ApplyEnvOptions = {}): void {
+  const override = opts.override ?? false;
+  for (const [k, v] of Object.entries(vars)) {
+    if (override || process.env[k] === undefined) process.env[k] = v;
+  }
+}
+
 /**
  * Load a .env file into process.env. Existing env vars are NOT overridden.
  */
 export function loadDotEnv(filePath: string): void {
-  const vars = parseDotEnv(filePath);
-  for (const [k, v] of Object.entries(vars)) {
-    if (process.env[k] === undefined) process.env[k] = v;
-  }
+  applyEnv(parseDotEnv(filePath), { override: false });
 }

@@ -3,6 +3,7 @@ import { FLEEX_DIR, CONFIG_FILE } from '@fleex/shared';
 import type { AppConfig, ConfigPort } from '../../application/ports/config.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 import { resolveClaudeCommand } from './resolve-claude-command.js';
+import { applyBasePathEnvOverride } from './config-env.js';
 
 export class JsonConfigAdapter implements ConfigPort {
   private config: AppConfig;
@@ -33,6 +34,9 @@ export class JsonConfigAdapter implements ConfigPort {
     }
     this.claudeCommand = await resolveClaudeCommand(this.execFn, this.hostFs, this.homedir);
     await this.loadFromDisk();
+    // A workspace's basePath (via env) overrides the persisted config.
+    applyBasePathEnvOverride(this.config);
+    this.resolveTilde();
     this.initialized = true;
   }
 

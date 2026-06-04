@@ -16,6 +16,7 @@ interface Repository {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'link',
   description: 'Link repositories / PRs / issues to a ticket (link <id> --repo org/name | --pr org/name#n | --issue org/name#n)',
   setup(cmd) {

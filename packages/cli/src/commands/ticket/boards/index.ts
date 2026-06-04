@@ -10,6 +10,7 @@ interface Board {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'boards',
   description: 'List boards with ticket counts per status',
   action: async () => {

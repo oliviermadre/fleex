@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { CommandDef } from '../../core/types.ts';
 import { die } from '../../core/colors.ts';
 import { FLEEX_HOME } from '../../core/instance.ts';
+import { assertValidWorkspacesConfig } from '../../core/workspaces.ts';
 import { stopAllInstances, stopCurrent, stopInstance } from './_impl.ts';
 
 interface StopOptions {
@@ -10,6 +11,7 @@ interface StopOptions {
 }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'stop',
   description: 'Stop the current instance (or a named one with [name])',
   setup(cmd) {
@@ -29,6 +31,10 @@ const def: CommandDef = {
       await stopInstance(instance);
       return;
     }
+    // Bare `fleex stop` resolves the current instance from the workspace config;
+    // guard it. `--all` and explicit-slug stops above work on slugs directly and
+    // stay available as an escape hatch when the config is broken.
+    assertValidWorkspacesConfig();
     await stopCurrent();
   },
 };

@@ -25,6 +25,7 @@ interface Epic { id: string; name?: string; emoji?: string }
 interface Membership { ticketId: string; groupId: string }
 
 const def: CommandDef = {
+  workspaceAware: true,
   name: 'list',
   aliases: ['ls'],
   description: 'List tickets (optionally filtered by --board, --status, --tag, --epic)',
