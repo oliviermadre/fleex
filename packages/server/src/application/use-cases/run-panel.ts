@@ -277,6 +277,7 @@ export class RunPanelUseCase {
         ticketId: params.ticketId,
         agentName: panelAuthor,
         status: 'final',
+        title: deliverable.title,
         occurredAt: new Date(),
       });
     }

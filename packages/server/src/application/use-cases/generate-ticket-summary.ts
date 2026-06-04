@@ -150,6 +150,7 @@ export class GenerateTicketSummaryUseCase {
         agentName: 'system',
         oldStatus,
         newStatus: 'final',
+        title: existing.title,
         occurredAt: new Date(),
       });
     } else {
@@ -170,6 +171,7 @@ export class GenerateTicketSummaryUseCase {
         ticketId,
         agentName: 'system',
         status: 'final',
+        title: deliverable.title,
         occurredAt: new Date(),
       });
     }

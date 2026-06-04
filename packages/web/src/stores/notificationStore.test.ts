@@ -122,6 +122,55 @@ describe('notificationStore', () => {
     expect(useNotificationStore.getState().panelOpen).toBe(false);
   });
 
+  describe('hydrate', () => {
+    it('seeds history as already-seen (no badge spike) and without toasts', () => {
+      useNotificationStore.getState().hydrate([
+        makeNotification('h1', { createdAt: '2026-06-01T00:00:00.000Z' }),
+        makeNotification('h2', { createdAt: '2026-06-02T00:00:00.000Z' }),
+      ]);
+      const s = useNotificationStore.getState();
+      expect(s.notifications).toHaveLength(2);
+      expect(s.notifications.every((n) => n.seen)).toBe(true);
+      expect(s.unseenCount).toBe(0);
+      expect(s.toasts).toHaveLength(0);
+    });
+
+    it('orders the merged list newest-first by createdAt', () => {
+      useNotificationStore.getState().hydrate([
+        makeNotification('older', { createdAt: '2026-06-01T00:00:00.000Z' }),
+        makeNotification('newer', { createdAt: '2026-06-03T00:00:00.000Z' }),
+      ]);
+      expect(useNotificationStore.getState().notifications[0]!.id).toBe('newer');
+    });
+
+    it('does not duplicate a hydrated entry that already arrived live', () => {
+      // live push first (unseen), then hydrate the same id from the audit trail
+      useNotificationStore.getState().push(makeNotification('shared'));
+      useNotificationStore.getState().hydrate([makeNotification('shared')]);
+      const s = useNotificationStore.getState();
+      expect(s.notifications).toHaveLength(1);
+      // the live entry keeps its unseen state — hydrate must not overwrite it
+      expect(s.unseenCount).toBe(1);
+      expect(s.notifications[0]!.seen).toBe(false);
+    });
+
+    it('registers hydrated ids for dedup so a later live broadcast is collapsed', () => {
+      useNotificationStore.getState().hydrate([makeNotification('past')]);
+      useNotificationStore.getState().push(makeNotification('past'));
+      const s = useNotificationStore.getState();
+      expect(s.notifications).toHaveLength(1);
+      expect(s.unseenCount).toBe(0); // stayed seen; the live twin was deduped away
+    });
+
+    it('caps the merged history at MAX_NOTIFICATIONS', () => {
+      const many = Array.from({ length: 60 }, (_, i) =>
+        makeNotification(`h${i}`, { createdAt: `2026-06-04T00:00:${String(i).padStart(2, '0')}.000Z` }),
+      );
+      useNotificationStore.getState().hydrate(many);
+      expect(useNotificationStore.getState().notifications).toHaveLength(50);
+    });
+  });
+
   describe('auto-dismiss', () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());

@@ -952,6 +952,7 @@ export function ticketRoutes(container: Container) {
         ticketId: request.params.id,
         agentName,
         status: deliverable.status,
+        title: deliverable.title,
         occurredAt: new Date(),
       });
 
@@ -988,6 +989,7 @@ export function ticketRoutes(container: Container) {
         agentName: deliverable.agentName,
         oldStatus,
         newStatus: deliverable.status,
+        title: deliverable.title,
         occurredAt: new Date(),
       });
 

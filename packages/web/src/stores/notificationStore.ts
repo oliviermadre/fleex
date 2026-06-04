@@ -5,10 +5,12 @@ import type { PulseNotification } from '../notifications/types';
  * Fleex Pulse store — the single in-memory source of truth for both surfaces:
  * the persistent notification center (the bell) and the ephemeral toasts.
  *
- * Persistence is intentionally per-tab and in-memory only: a page reload starts
- * from a clean slate (V1 requirement). Deduplication is handled here via
- * `processedKeys` so hub re-broadcasts and "announce once" events never produce
- * duplicate entries.
+ * The live list is in-memory, but it is not lost on reload: `hydrate` rebuilds
+ * the recent history from the server-side audit trail on app load (see
+ * notifications/audit.ts), which is essential because Electron reallocates a
+ * dynamic web port on restart — a new origin means a blank localStorage anyway.
+ * Deduplication is handled here via `processedKeys` so hub re-broadcasts,
+ * "announce once" events, and reconstructed-vs-live twins never duplicate.
  */
 
 const MAX_NOTIFICATIONS = 50; // persistent list cap (newest kept)
@@ -30,6 +32,13 @@ interface NotificationState {
 
   /** Ingest a freshly built notification (deduped by id). */
   push: (n: PulseNotification) => void;
+  /**
+   * Seed the persistent list from reconstructed history (e.g. the audit trail
+   * on app load). Entries are merged in as already-seen — they are old news, so
+   * they must not light up the unseen badge — and never spawn a toast. Ids are
+   * registered for dedup so the matching live broadcast is collapsed.
+   */
+  hydrate: (incoming: PulseNotification[]) => void;
   /** Remove a toast (auto or manual). */
   dismissToast: (id: string) => void;
   /** Open the bell: reveals the list and marks everything as seen. */
@@ -87,6 +96,27 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
     // Auto-dismiss the toast surface (the entry stays in the persistent list).
     setTimeout(() => get().dismissToast(n.id), TOAST_DISMISS_MS);
+  },
+
+  hydrate: (incoming) => {
+    set((state) => {
+      const keys = new Set(state.processedKeys);
+      const merged = [...state.notifications];
+      for (const n of incoming) {
+        if (keys.has(n.id)) continue; // already known (live twin or re-hydrate)
+        keys.add(n.id);
+        merged.push({ ...n, seen: true }); // history is old news → never unseen
+      }
+      // Newest first; mixes reconstructed (occurredAt) and live (now) timestamps,
+      // both ISO-8601 so a lexical compare is a chronological compare.
+      merged.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+      const notifications = merged.slice(0, MAX_NOTIFICATIONS);
+      return {
+        processedKeys: trimKeys(keys),
+        notifications,
+        unseenCount: countUnseen(notifications),
+      };
+    });
   },
 
   dismissToast: (id) => {

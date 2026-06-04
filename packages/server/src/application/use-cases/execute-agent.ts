@@ -826,6 +826,7 @@ export class ExecuteAgentUseCase {
               ticketId: mention.ticketId,
               agentName: persona.name,
               status: structured.deliverable!.status as 'draft' | 'final',
+              title: deliverable.title,
               occurredAt: new Date(),
             });
           } catch (delivErr) {
@@ -1323,6 +1324,7 @@ export class ExecuteAgentUseCase {
               ticketId,
               agentName: persona.name,
               status: structured.deliverable.status as 'draft' | 'final',
+              title: deliverable.title,
               occurredAt: new Date(),
             });
           } catch (delivErr) {

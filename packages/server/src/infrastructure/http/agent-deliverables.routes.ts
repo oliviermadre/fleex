@@ -65,6 +65,7 @@ export function agentDeliverablesRoutes(container: Container) {
         ticketId: request.params.id,
         agentName,
         status: deliverable.status,
+        title: deliverable.title,
         occurredAt: new Date(),
       });
 
@@ -95,6 +96,7 @@ export function agentDeliverablesRoutes(container: Container) {
         agentName,
         oldStatus,
         newStatus: deliverable.status,
+        title: deliverable.title,
         occurredAt: new Date(),
       });
 
