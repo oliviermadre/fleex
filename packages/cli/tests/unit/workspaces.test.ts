@@ -411,6 +411,12 @@ describe('reportWorkspacesConfig', () => {
     expect(lines.some((l) => l.level === 'legacy')).toBe(false);
   });
 
+  it('shows the file path exactly once on a JSON parse error (no double path)', () => {
+    const p = writeWs('r-badjson.json', '{ not json');
+    const lines = reportWorkspacesConfig(p);
+    expect(lines).toEqual([{ level: 'error', message: `workspaces.json is not valid JSON. Fix: ${p}` }]);
+  });
+
   it('reports an ok line for a valid config', () => {
     const p = writeWs('r-valid.json', JSON.stringify({
       workspaces: [{ name: 'default', is_default: true, basePath: '~/a' }, { name: 'b', basePath: '~/b' }],

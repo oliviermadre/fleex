@@ -56,19 +56,19 @@ export function parseWorkspacesFile(filePath: string = workspacesFilePath()): Wo
   try {
     raw = fs.readFileSync(filePath, 'utf8');
   } catch (e) {
-    throw new Error(`Cannot read ${filePath}: ${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`Cannot read workspaces.json: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   let data: WorkspacesFile;
   try {
     data = JSON.parse(raw) as WorkspacesFile;
   } catch {
-    throw new Error(`${filePath} is not valid JSON.`);
+    throw new Error(`workspaces.json is not valid JSON.`);
   }
 
   const list = (data as WorkspacesFile)?.workspaces;
   if (!Array.isArray(list)) {
-    throw new Error(`${filePath} must contain a "workspaces" array.`);
+    throw new Error(`workspaces.json must contain a "workspaces" array.`);
   }
 
   const seen = new Set<string>();
