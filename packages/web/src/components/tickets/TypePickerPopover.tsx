@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Ticket, TicketType } from '@fleex/shared';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { cn } from '../../lib/cn';
 import { TYPE_COLORS } from './TicketTypeBadge';
 
@@ -23,29 +24,7 @@ export function TypePickerPopover({ ticket }: { ticket: Ticket }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-
-    function handleMouseDown(e: MouseEvent) {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        triggerRef.current && !triggerRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open]);
+  useClickOutside([triggerRef, menuRef], () => setOpen(false), open);
 
   const rect = triggerRef.current?.getBoundingClientRect();
 

@@ -49,6 +49,28 @@ export interface Theme {
   terminal: TerminalThemeOverrides;
 }
 
+/**
+ * Neutral (non-accent) color tokens shared verbatim by the zinc-based dark
+ * themes (Ember, Ocean, Verdant). Only their accent palette differs, so the
+ * neutrals are factored out here to keep them in sync.
+ */
+const ZINC_DARK_NEUTRALS = {
+  bgBase: '#09090b',
+  bgSurface: '#18181b',
+  bgOverlay: '#27272a',
+  bgHover: 'rgba(39, 39, 42, 0.5)',
+  border: '#27272a',
+  borderSubtle: 'rgba(39, 39, 42, 0.5)',
+  borderInput: '#3f3f46',
+  textPrimary: '#fafafa',
+  textSecondary: '#a1a1aa',
+  textMuted: '#71717a',
+  textFaint: '#52525b',
+  success: '#22c55e',
+  warning: '#eab308',
+  danger: '#ef4444',
+} satisfies Omit<ThemeColors, 'accent' | 'accentHover' | 'accentActive' | 'accentMuted'>;
+
 export const THEME_EMBER: Theme = {
   id: 'ember',
   name: 'Ember',
@@ -58,20 +80,7 @@ export const THEME_EMBER: Theme = {
     accentHover: '#e08868',
     accentActive: '#b85a3a',
     accentMuted: 'rgba(215, 118, 85, 0.15)',
-    bgBase: '#09090b',
-    bgSurface: '#18181b',
-    bgOverlay: '#27272a',
-    bgHover: 'rgba(39, 39, 42, 0.5)',
-    border: '#27272a',
-    borderSubtle: 'rgba(39, 39, 42, 0.5)',
-    borderInput: '#3f3f46',
-    textPrimary: '#fafafa',
-    textSecondary: '#a1a1aa',
-    textMuted: '#71717a',
-    textFaint: '#52525b',
-    success: '#22c55e',
-    warning: '#eab308',
-    danger: '#ef4444',
+    ...ZINC_DARK_NEUTRALS,
   },
   syntax: {
     keyword: '#f97316',     // orange-500 - warm like ember
@@ -103,20 +112,7 @@ export const THEME_OCEAN: Theme = {
     accentHover: '#60a5fa',
     accentActive: '#2563eb',
     accentMuted: 'rgba(59, 130, 246, 0.15)',
-    bgBase: '#09090b',
-    bgSurface: '#18181b',
-    bgOverlay: '#27272a',
-    bgHover: 'rgba(39, 39, 42, 0.5)',
-    border: '#27272a',
-    borderSubtle: 'rgba(39, 39, 42, 0.5)',
-    borderInput: '#3f3f46',
-    textPrimary: '#fafafa',
-    textSecondary: '#a1a1aa',
-    textMuted: '#71717a',
-    textFaint: '#52525b',
-    success: '#22c55e',
-    warning: '#eab308',
-    danger: '#ef4444',
+    ...ZINC_DARK_NEUTRALS,
   },
   syntax: {
     keyword: '#60a5fa',     // blue-400 - ocean blue
@@ -148,20 +144,7 @@ export const THEME_VERDANT: Theme = {
     accentHover: '#4ade80',
     accentActive: '#16a34a',
     accentMuted: 'rgba(34, 197, 94, 0.15)',
-    bgBase: '#09090b',
-    bgSurface: '#18181b',
-    bgOverlay: '#27272a',
-    bgHover: 'rgba(39, 39, 42, 0.5)',
-    border: '#27272a',
-    borderSubtle: 'rgba(39, 39, 42, 0.5)',
-    borderInput: '#3f3f46',
-    textPrimary: '#fafafa',
-    textSecondary: '#a1a1aa',
-    textMuted: '#71717a',
-    textFaint: '#52525b',
-    success: '#22c55e',
-    warning: '#eab308',
-    danger: '#ef4444',
+    ...ZINC_DARK_NEUTRALS,
   },
   syntax: {
     keyword: '#4ade80',     // green-400 - verdant green

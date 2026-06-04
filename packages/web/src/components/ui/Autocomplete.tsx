@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { cn } from '../../lib/cn';
 
 interface AutocompleteOption {
@@ -51,16 +52,9 @@ export function Autocomplete({
     return () => clearTimeout(timer);
   }, [autoFocus]);
 
-  // Close on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+  // Close on outside click. The input's own onKeyDown keeps handling Escape
+  // (with preventDefault/stopPropagation) so it is intentionally left in place.
+  useClickOutside(containerRef, () => setIsOpen(false), isOpen);
 
   // Scroll highlighted item into view
   useEffect(() => {

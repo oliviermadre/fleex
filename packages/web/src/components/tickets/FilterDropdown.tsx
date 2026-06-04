@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { TicketPriority, TicketType } from '@fleex/shared';
 import { TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS } from '@fleex/shared';
@@ -6,6 +6,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { PriorityIndicator } from './PriorityIndicator';
 import { TYPE_ICONS } from './TicketTypeBadge';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { cn } from '../../lib/cn';
 
 export function FilterDropdown() {
@@ -46,24 +47,7 @@ export function FilterDropdown() {
     return { repos: [...repoSet].sort(), tags: [...tagSet].sort() };
   }, [tickets, resolvedRepositories]);
 
-  useEffect(() => {
-    if (!open) return;
-    function handleMouseDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
-          buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open]);
+  useClickOutside([buttonRef, menuRef], () => setOpen(false), open);
 
   const rect = buttonRef.current?.getBoundingClientRect();
 

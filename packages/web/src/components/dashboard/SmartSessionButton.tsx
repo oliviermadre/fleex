@@ -10,6 +10,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { cn } from '../../lib/cn';
 
 interface SmartSessionButtonProps {
@@ -282,27 +283,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
 
   useEffect(() => { void refreshTemplates(); }, [refreshTemplates]);
 
-  useEffect(() => {
-    if (!dropdownOpen) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        dropdownRef.current && !dropdownRef.current.contains(target) &&
-        (!portalRef.current || !portalRef.current.contains(target))
-      ) {
-        setDropdownOpen(false);
-      }
-    };
-    const keyHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDropdownOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('keydown', keyHandler);
-    return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('keydown', keyHandler);
-    };
-  }, [dropdownOpen]);
+  useClickOutside([dropdownRef, portalRef], () => setDropdownOpen(false), dropdownOpen);
 
   const handleOpenFloating = (sessionId: string) => {
     addFloatingSession(sessionId);

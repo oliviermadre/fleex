@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Ticket, DashboardPullRequest, BoardWithCounts } from '@fleex/shared';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -237,9 +238,9 @@ export function CreateTaskModal() {
         {/* ── From Ticket ── */}
         {mode === 'ticket' && (
           <div>
-            <input
+            <Input
               autoFocus
-              className="mb-3 w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
+              className="mb-3 w-full py-2"
               placeholder="Search tickets..."
               value={ticketSearch}
               onChange={(e) => setTicketSearch(e.target.value)}
@@ -360,9 +361,9 @@ export function CreateTaskModal() {
             {/* Task title */}
             <div>
               <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">Task name</label>
-              <input
+              <Input
                 autoFocus
-                className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
+                className="w-full py-2"
                 placeholder="What needs to be done?"
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}

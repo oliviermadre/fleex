@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { BoardWithCounts } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { cn } from '../../lib/cn';
 
 export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
@@ -16,28 +17,7 @@ export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    function handleMouseDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
-          buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setRenaming(false);
-      }
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        setRenaming(false);
-      }
-    }
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open]);
+  useClickOutside([buttonRef, menuRef], () => { setOpen(false); setRenaming(false); }, open);
 
   useEffect(() => {
     if (renaming && inputRef.current) {

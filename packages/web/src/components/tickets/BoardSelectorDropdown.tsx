@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
 import { createPortal } from 'react-dom';
 import { useTicketStore } from '../../stores/ticketStore';
 import { BoardActionsDropdown } from './BoardActionsDropdown';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { cn } from '../../lib/cn';
 
 export function BoardSelectorDropdown() {
@@ -28,24 +29,7 @@ export function BoardSelectorDropdown() {
   const columns = ticketsByColumn(selectedBoardId);
   const totalCount = (Object.values(columns) as import('@fleex/shared').Ticket[][]).reduce((sum, col) => sum + col.length, 0);
 
-  useEffect(() => {
-    if (!open) return;
-    function handleMouseDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
-          buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open]);
+  useClickOutside([buttonRef, menuRef], () => setOpen(false), open);
 
   const handleCreateBoard = () => {
     setOpen(false);
