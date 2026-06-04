@@ -79,8 +79,11 @@ export class ResolveHumanGateUseCase {
     notes: string | undefined,
     stepRunId: string,
   ): Promise<void> {
+    // Always leave a decision trail, even with no rationale: a silent resolve (e.g. a reject
+    // loop-back) would otherwise be impossible to reconstruct from the thread. When the reviewer
+    // leaves the reason empty/blank we fall back to a placeholder rather than skipping the comment.
     const trimmedNotes = notes?.trim();
-    if (!trimmedNotes) return; // no rationale → no comment (avoids empty-comment noise)
+    const reason = trimmedNotes || 'no reason provided';
 
     // The comment renderer uses GFM *without* `breaks`, so a single newline collapses to a
     // space — blocks must be separated by blank lines. The reason is dropped in as-is (not
@@ -90,7 +93,7 @@ export class ResolveHumanGateUseCase {
       '',
       '**Reason :**',
       '',
-      trimmedNotes,
+      reason,
     ].join('\n');
 
     try {
