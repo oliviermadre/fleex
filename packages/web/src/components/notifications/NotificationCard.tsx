@@ -84,8 +84,10 @@ export function NotificationCard({
           {body}
         </p>
         {ticket && (
-          <p className="mt-1 flex items-center gap-1 text-[10px] text-[var(--theme-text-faint)]">
-            <span className="shrink-0 font-mono">#{ticket.displayId}</span>
+          <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[var(--theme-text-secondary)]">
+            <span className="shrink-0 rounded bg-[var(--theme-bg-hover)] px-1 py-px font-mono text-[10px] font-medium text-[var(--theme-text-secondary)]">
+              #{ticket.displayId}
+            </span>
             <span className="truncate">{ticket.title}</span>
           </p>
         )}

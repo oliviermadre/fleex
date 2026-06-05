@@ -43,6 +43,18 @@ function str(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+/**
+ * The quoted, one-line title of a deliverable, or `null` when it carries none.
+ *
+ * Deliverables created before the notification system shipped (and a few edge
+ * cases) have no title; surfacing a literal `“Untitled”` reads worse than
+ * staying generic, so callers fall back to a plain noun ("a document") instead.
+ */
+function quotedTitle(value: unknown): string | null {
+  const title = str(value);
+  return title ? `“${oneLine(title, 60)}”` : null;
+}
+
 // ── renderers ──────────────────────────────────────────────────────────────
 
 /**
@@ -56,7 +68,7 @@ const renderDeliverableCreated: NotificationRenderer = (data, ctx) => {
   const id = str(d.id);
   if (!ticketId || !id) return null;
 
-  const title = str(d.title) ?? 'Untitled';
+  const what = quotedTitle(d.title);
   const agent = str(d.agentName) ?? 'An agent';
   const link = ctx.ticketLink(ticketId, 'deliverables');
 
@@ -67,7 +79,7 @@ const renderDeliverableCreated: NotificationRenderer = (data, ctx) => {
       dedupKey: `deliverable-final:${id}`,
       emoji: '✅',
       title: 'Deliverable ready',
-      body: `${agent} shared “${oneLine(title, 60)}”`,
+      body: what ? `${agent} shared ${what}` : `${agent} shared a document`,
       level: 'success',
       link,
       ticketId,
@@ -78,7 +90,7 @@ const renderDeliverableCreated: NotificationRenderer = (data, ctx) => {
     dedupKey: `deliverable-draft:${id}`,
     emoji: '📝',
     title: 'Draft deliverable posted',
-    body: `${agent} shared a draft: “${oneLine(title, 60)}”`,
+    body: what ? `${agent} shared a draft: ${what}` : `${agent} shared a draft`,
     level: 'action',
     link,
     ticketId,
@@ -99,12 +111,12 @@ const renderDeliverableUpdated: NotificationRenderer = (data, ctx) => {
   const id = str(d.id);
   if (!ticketId || !id) return null;
 
-  const title = str(d.title) ?? 'Untitled';
+  const what = quotedTitle(d.title);
   return {
     dedupKey: `deliverable-final:${id}`,
     emoji: '✅',
     title: 'Deliverable finalised',
-    body: `“${oneLine(title, 60)}” is ready`,
+    body: what ? `${what} is ready` : 'The deliverable is ready',
     level: 'success',
     link: ctx.ticketLink(ticketId, 'deliverables'),
     ticketId,

@@ -51,6 +51,24 @@ describe('deliverable:created', () => {
     expect(draft!.level).toBe('success');
   });
 
+  it('falls back to a generic noun when the deliverable has no title', () => {
+    // Deliverables created before the title field existed (historical audit
+    // entries) carry no title — we must not surface a literal "Untitled".
+    const final = __renderers.renderDeliverableCreated(
+      { id: 'd5', ticketId: 't1', agentName: 'system', status: 'final' },
+      ctx,
+    );
+    expect(final!.body).toBe('system shared a document');
+    expect(final!.body).not.toContain('Untitled');
+
+    const draft = __renderers.renderDeliverableCreated(
+      { id: 'd6', ticketId: 't1', agentName: 'system', status: 'draft' },
+      ctx,
+    );
+    expect(draft!.body).toBe('system shared a draft');
+    expect(draft!.body).not.toContain('Untitled');
+  });
+
   it('returns null on a malformed payload (missing ids)', () => {
     expect(__renderers.renderDeliverableCreated({ status: 'draft' }, ctx)).toBeNull();
     expect(__renderers.renderDeliverableCreated(null, ctx)).toBeNull();
