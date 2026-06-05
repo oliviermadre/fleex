@@ -271,14 +271,19 @@ export class GetSessionGroupsUseCase {
 
         const repoLinks = ticket.links.filter((l) => l.type === 'repository');
 
+        // Normalize to lowercase: `resolvedRepositories` is canonically lowercased by the
+        // RepositoryResolver, and repo groups are keyed lowercase. GitHub-imported tickets
+        // keep the org's original casing in their repository link ref (e.g. "ODYS-TRAVEL/…"),
+        // so without normalization the resolved-check below silently drops them AND they'd
+        // spawn a duplicate, differently-cased repo group instead of joining the canonical one.
         if (repoLinks.length === 1) {
-          [org, name] = repoLinks[0]!.ref.split('/');
+          [org, name] = repoLinks[0]!.ref.toLowerCase().split('/');
         } else if (repoLinks.length === 0) {
           // Fallback: parse repo from worktree link ref (format: "org/repo:branch")
           if (wtLink) {
             const colonIdx = wtLink.ref.indexOf(':');
             if (colonIdx > 0) {
-              [org, name] = wtLink.ref.substring(0, colonIdx).split('/');
+              [org, name] = wtLink.ref.substring(0, colonIdx).toLowerCase().split('/');
             }
           }
         }
