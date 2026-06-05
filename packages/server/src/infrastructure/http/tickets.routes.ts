@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { TicketStatus, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, DeliverableType, DeliverableStatus } from '@fleex/shared';
+import type { TicketStatus, TicketType, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, DeliverableType, DeliverableStatus } from '@fleex/shared';
 import { TICKET_STATUSES } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
@@ -670,11 +670,11 @@ export function ticketRoutes(container: Container) {
     });
 
     // Import GitHub issue
-    app.post<{ Body: { org: string; name: string; number: number; boardId: string } }>(
+    app.post<{ Body: { org: string; name: string; number: number; boardId: string; status?: TicketStatus; type?: TicketType } }>(
       '/api/tickets/import-github-issue',
       async (request, reply) => {
-        const { org, name, number: issueNumber, boardId } = request.body;
-        const ticket = await container.importGitHubIssue.execute(org, name, issueNumber, boardId);
+        const { org, name, number: issueNumber, boardId, status, type } = request.body;
+        const ticket = await container.importGitHubIssue.execute(org, name, issueNumber, boardId, { status, type });
         emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
         return reply.code(201).send(ticket.toDTO());
       },
