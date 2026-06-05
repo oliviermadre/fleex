@@ -3,8 +3,11 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Button } from '../ui/Button';
+import { useDraft } from '../../hooks/useDraft';
 
 interface Props {
+  runId: string;
+  stepRunId: string;
   // The agent's question / status comment (output.comment from the step run).
   // Treated as markdown — the comment field is contractually `string | null`
   // but agents conventionally emit markdown (bold, lists, inline `code`,
@@ -16,8 +19,10 @@ interface Props {
   onSubmit: (response: string) => Promise<void>;
 }
 
-export function NeedsReviewRespondPanel({ question, onSubmit }: Props) {
-  const [response, setResponse] = useState('');
+export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }: Props) {
+  const { draft: response, setDraft: setResponse, clearDraft } = useDraft(
+    `needs_review_response_${runId}_${stepRunId}`,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +33,9 @@ export function NeedsReviewRespondPanel({ question, onSubmit }: Props) {
     setError(null);
     try {
       await onSubmit(trimmed);
-      setResponse('');
+      // Only clear the in-progress response once it is successfully posted —
+      // on failure we keep it so the user doesn't lose their text.
+      clearDraft();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
