@@ -197,6 +197,8 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
             {selectedStepRun?.status === 'needs_review' &&
               selectedStep.executorType === 'human_gate' && (
                 <HumanGateResolvePanel
+                  runId={run.id}
+                  stepRunId={selectedStepRun.id}
                   outcomes={
                     (selectedStepRun.output?.schemaFields?.outcomes as string[]) ??
                     selectedStep.humanGateOutcomes ??
