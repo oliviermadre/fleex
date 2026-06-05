@@ -212,6 +212,8 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
             {selectedStepRun?.status === 'needs_review' &&
               selectedStep.executorType !== 'human_gate' && (
                 <NeedsReviewRespondPanel
+                  runId={run.id}
+                  stepRunId={selectedStepRun.id}
                   question={selectedStepRun.output?.comment}
                   onSubmit={async (response) => {
                     // Post the user's response as a regular ticket comment so the
