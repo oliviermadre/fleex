@@ -52,6 +52,33 @@ export function parseGithubRef(
 }
 
 /**
+ * Parse a full GitHub issue URL (`https://github.com/{org}/{name}/issues/{n}`)
+ * into its parts. Tolerates `http`, a trailing slash, and a query/fragment.
+ * Exits with a helpful message on anything that isn't a GitHub *issue* URL
+ * (e.g. a `/pull/` URL or a non-github host). Returns the canonical
+ * `org/name#number` ref and a normalized issue URL, mirroring `parseGithubRef`.
+ */
+export function parseGithubIssueUrl(
+  input: string,
+): { ref: string; org: string; name: string; number: number; url: string } {
+  const m = input.match(
+    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)(?:[/?#].*)?$/,
+  );
+  if (!m) {
+    die(`Invalid GitHub issue URL "${input}" (expected https://github.com/org/name/issues/N)`);
+  }
+  const [, org, name, num] = m as RegExpMatchArray;
+  const number = parseInt(num!, 10);
+  return {
+    ref: `${org}/${name}#${number}`,
+    org: org!,
+    name: name!,
+    number,
+    url: `https://github.com/${org}/${name}/issues/${number}`,
+  };
+}
+
+/**
  * Normalize a due date input (`YYYY-MM-DD` or a full ISO string) to an ISO
  * 8601 string. Exits if the value can't be parsed into a real date.
  */

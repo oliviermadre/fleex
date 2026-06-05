@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { TicketStatus, TicketType } from '@fleex/shared';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
@@ -12,7 +13,13 @@ export class ImportGitHubIssueUseCase {
     private readonly logger: LoggerPort,
   ) {}
 
-  async execute(org: string, name: string, issueNumber: number, boardId: string): Promise<TicketEntity> {
+  async execute(
+    org: string,
+    name: string,
+    issueNumber: number,
+    boardId: string,
+    options?: { status?: TicketStatus; type?: TicketType },
+  ): Promise<TicketEntity> {
     const detail = await this.githubGraphql.fetchIssueDetail(org, name, issueNumber);
 
     // Build description: original body + metadata footer
@@ -48,7 +55,8 @@ export class ImportGitHubIssueUseCase {
       displayId: 0, // assigned by createTicket() below
       title: detail.title,
       description,
-      status: 'backlog',
+      status: options?.status ?? 'backlog',
+      type: options?.type ?? null,
       tags: detail.labels ?? [],
     });
 
