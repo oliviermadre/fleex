@@ -341,6 +341,7 @@ export class DomainEventListener {
   // ── Ticket moved to done → auto-resolve all mentions ──
 
   private async handleTicketMovedToDone(event: TicketMovedEvent): Promise<void> {
+    if (event.fromStatus === event.toStatus) return; // no-op move (reorder) → pas de transition réelle
     if (event.toStatus === 'done') {
       await this.deps.autoReviewWorkflow.handleTicketDone({ ticketId: event.ticketId });
     }
@@ -366,6 +367,7 @@ export class DomainEventListener {
   // ── Auto-generate ticket summary on close ──
 
   private handleTicketClosedForSummary(event: TicketMovedEvent): void {
+    if (event.fromStatus === event.toStatus) return; // no-op move (reorder) → pas de régénération du summary
     if (event.toStatus === 'done' || event.toStatus === 'cancelled') {
       this.deps.generateTicketSummary.execute({
         ticketId: event.ticketId,
