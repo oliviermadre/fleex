@@ -7,18 +7,19 @@ export class SupabaseKvStoreAdapter implements KvStorePort {
   constructor(private readonly connection: SupabaseConnection) {}
 
   async get(key: string): Promise<string | null> {
-    const { data } = await this.connection.client
+    const { data, error } = await this.connection.client
       .from('user_kv')
       .select('value')
       .eq('user_id', DEFAULT_USER_ID)
       .eq('key', key)
       .maybeSingle();
+    if (error) throw new Error(`SupabaseKvStore.get failed: ${error.message}`);
     if (!data) return null;
     return JSON.parse(data.value) as string;
   }
 
   async set(key: string, value: string): Promise<void> {
-    await this.connection.client.from('user_kv').upsert(
+    const { error } = await this.connection.client.from('user_kv').upsert(
       {
         user_id: DEFAULT_USER_ID,
         key,
@@ -27,22 +28,25 @@ export class SupabaseKvStoreAdapter implements KvStorePort {
       },
       { onConflict: 'user_id,key' },
     );
+    if (error) throw new Error(`SupabaseKvStore.set failed: ${error.message}`);
   }
 
   async delete(key: string): Promise<void> {
-    await this.connection.client
+    const { error } = await this.connection.client
       .from('user_kv')
       .delete()
       .eq('user_id', DEFAULT_USER_ID)
       .eq('key', key);
+    if (error) throw new Error(`SupabaseKvStore.delete failed: ${error.message}`);
   }
 
   async listByPrefix(prefix: string): Promise<{ key: string; value: string }[]> {
-    const { data } = await this.connection.client
+    const { data, error } = await this.connection.client
       .from('user_kv')
       .select('key, value')
       .eq('user_id', DEFAULT_USER_ID)
       .like('key', `${prefix}%`);
+    if (error) throw new Error(`SupabaseKvStore.listByPrefix failed: ${error.message}`);
     if (!data) return [];
     return data.map((row) => ({
       key: row.key as string,

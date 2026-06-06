@@ -1234,10 +1234,13 @@ export function ticketRoutes(container: Container) {
         }
       }
 
-      // Scope: intersection of requested IDs and tracked IDs (fallback to all tracked)
+      // Scope: when the frontend requests specific tickets, compute totals for ALL
+      // of them (a ticket with no read cursor / seen entry yet is still untracked but
+      // must report its real comment/deliverable totals). Only fall back to the set of
+      // tracked tickets when no explicit IDs were requested.
       const trackedIds = new Set([...commentMap.keys(), ...seenDeliverableMap.keys()]);
       const ticketIds = requestedIds.length > 0
-        ? requestedIds.filter((id) => trackedIds.has(id))
+        ? requestedIds
         : [...trackedIds];
 
       if (ticketIds.length === 0) return [];
