@@ -10,7 +10,7 @@ import { deriveDisplayStatus } from '../../../lib/deriveStatus';
 import { StatusDot } from '../../ui/StatusDot';
 import { NanoKanban } from '../../tickets/NanoKanban';
 import { renderIcon } from '../../sidebar/PinnedIcons';
-import { buildWorktreeContext } from '../../../lib/templateUtils';
+import { buildWorkspaceContext } from '../../../lib/templateUtils';
 
 interface Props {
   worktree: WorktreeSessionGroup | null;
@@ -67,17 +67,18 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
   const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
   const isFloating = activeSession ? floatingSessionIds.includes(activeSession.id) : false;
   const updateTicket = useTicketStore((s) => s.updateTicket);
+  const basePath = useSettingsStore((s) => s.settings.basePath);
   const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
-  const worktreeActions = useSettingsStore((s) => s.settings.worktreeActions);
+  const workspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
   const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
-  const executeWorktreeAction = useSettingsStore((s) => s.executeWorktreeAction);
+  const executeWorkspaceAction = useSettingsStore((s) => s.executeWorkspaceAction);
 
-  const worktreeContext = useMemo(() => {
-    if (worktree && repoOrg && repoName) return buildWorktreeContext(repoOrg, repoName, worktree.branch, worktree.path);
-    if (activeSession?.repositoryOrg && activeSession?.repositoryName && activeSession?.worktreeBranch)
-      return buildWorktreeContext(activeSession.repositoryOrg, activeSession.repositoryName, activeSession.worktreeBranch, activeSession.cwd);
-    return null;
-  }, [worktree, repoOrg, repoName, activeSession?.repositoryOrg, activeSession?.repositoryName, activeSession?.worktreeBranch, activeSession?.cwd]);
+  // Workspace actions are bound to the ticket's workspace; without a ticket
+  // there is no workspace, so only the global pinned actions show.
+  const workspaceContext = useMemo(
+    () => (ticket ? buildWorkspaceContext(ticket, basePath) : null),
+    [ticket, basePath],
+  );
 
   const handleStatusChange = useCallback((status: TicketStatus) => {
     if (ticket) updateTicket(ticket.id, { status });
@@ -162,8 +163,8 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
       )}
 
       <div className="ml-auto flex items-center gap-2">
-        {/* Pinned actions + worktree actions */}
-        {(pinnedIcons.length > 0 || (worktreeContext && worktreeActions && worktreeActions.length > 0)) && (
+        {/* Pinned actions + workspace actions */}
+        {(pinnedIcons.length > 0 || (workspaceContext && workspaceActions && workspaceActions.length > 0)) && (
           <div className="flex items-center gap-1">
             {pinnedIcons.map((icon) => (
               <button
@@ -177,14 +178,14 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
                 </span>
               </button>
             ))}
-            {pinnedIcons.length > 0 && worktreeContext && worktreeActions && worktreeActions.length > 0 && (
+            {pinnedIcons.length > 0 && workspaceContext && workspaceActions && workspaceActions.length > 0 && (
               <div className="mx-0.5 h-4 w-px bg-[var(--theme-border)]" />
             )}
-            {worktreeContext && worktreeActions?.map((action) => (
+            {workspaceContext && workspaceActions?.map((action) => (
               <button
                 key={action.id}
                 className={ICON_BTN}
-                onClick={() => executeWorktreeAction(action, worktreeContext)}
+                onClick={() => executeWorkspaceAction(action, workspaceContext)}
                 title={action.label}
               >
                 {action.icon ? (

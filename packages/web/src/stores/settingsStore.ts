@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { API_URL, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, STORAGE_KEY_SETTINGS } from '../lib/constants';
-import { resolveTemplate, type WorktreeContext } from '../lib/templateUtils';
+import { resolveTemplate, type WorkspaceContext } from '../lib/templateUtils';
 import type { Theme } from '../lib/themes';
 import * as api from '../services/api';
 
@@ -13,7 +13,7 @@ export interface PinnedIcon {
   actionValue: string;
 }
 
-export interface WorktreeAction {
+export interface WorkspaceAction {
   id: string;
   icon: string;
   iconType: 'svg' | 'base64' | 'path' | 'url';
@@ -41,7 +41,7 @@ export interface AppSettings {
   resolvedRepositories: string[];
   resolvedAt: string | null;
   pinnedIcons: PinnedIcon[];
-  worktreeActions: WorktreeAction[];
+  workspaceActions: WorkspaceAction[];
   sessionDisplayNames: Record<string, string>;
   repoOrder: string[];
   worktreeOrder: Record<string, string[]>;
@@ -70,7 +70,7 @@ interface SettingsState {
   setSessionOrder: (worktreeGroupId: string, order: string[]) => void;
   resolveRepositories: () => Promise<void>;
   executePinnedAction: (icon: PinnedIcon) => void;
-  executeWorktreeAction: (action: WorktreeAction, context: WorktreeContext) => void;
+  executeWorkspaceAction: (action: WorkspaceAction, context: WorkspaceContext) => void;
   addLayoutGroup: (type: SessionLayoutType) => string;
   removeLayoutGroup: (id: string) => void;
   bindLayoutGroupCell: (groupId: string, cellIndex: number, sessionId: string | null) => void;
@@ -84,7 +84,7 @@ const defaultSettings: AppSettings = {
   resolvedRepositories: [],
   resolvedAt: null,
   pinnedIcons: [],
-  worktreeActions: [],
+  workspaceActions: [],
   sessionDisplayNames: {},
   repoOrder: [],
   worktreeOrder: {},
@@ -124,7 +124,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const res = await fetch(`${API_URL}/config`);
       if (res.ok) {
         const data = await res.json();
-        if (data && typeof data === 'object' && (data.basePath || data.repositories || data.pinnedIcons || data.worktreeActions)) {
+        if (data && typeof data === 'object' && (data.basePath || data.repositories || data.pinnedIcons || data.workspaceActions)) {
           const merged = { ...defaultSettings, ...data };
           set({ settings: merged, loaded: true });
           saveToStorage(merged);
@@ -271,11 +271,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   },
 
-  executeWorktreeAction: (action: WorktreeAction, context: WorktreeContext) => {
+  executeWorkspaceAction: async (action: WorkspaceAction, context: WorkspaceContext) => {
     const resolved = resolveTemplate(action.actionValue, context);
     if (action.actionType === 'url') {
       window.open(resolved, '_blank');
     } else if (action.actionType === 'shell') {
+      // The workspace folder is created lazily (on session/agent start), so it
+      // may not exist yet for tickets that never ran one (e.g. lead/meeting).
+      // Materialize it first so {{workspace_path}} points at a real directory.
+      try {
+        await fetch(`${API_URL}/tickets/${context.ticket_id}/ensure-workspace`, { method: 'POST' });
+      } catch { /* best-effort; still attempt the command below */ }
       fetch(`${API_URL}/exec`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

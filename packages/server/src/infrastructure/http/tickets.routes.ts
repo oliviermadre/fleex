@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus, TicketType, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, DeliverableType, DeliverableStatus } from '@fleex/shared';
@@ -667,6 +667,23 @@ export function ticketRoutes(container: Container) {
       const result = await container.createSessionFromTicket.execute(request.params.id);
       emit({ type: 'ticket.updated', ticketId: request.params.id, changes: {}, occurredAt: new Date() });
       return result;
+    });
+
+    // Ensure the ticket's workspace folder exists on disk (idempotent, repo-free).
+    // Used by workspace actions so {{workspace_path}} always resolves to a real
+    // directory — even for tickets that never had a session (e.g. lead/meeting).
+    app.post<{ Params: { id: string } }>('/api/tickets/:id/ensure-workspace', async (request, reply) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+      const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+      const workspacePath = container.resolver.workspacePath(workspaceId);
+      mkdirSync(workspacePath, { recursive: true });
+      const manifestPath = join(workspacePath, '.fleex.json');
+      if (!existsSync(manifestPath)) {
+        writeFileSync(manifestPath, JSON.stringify({ ticketId: ticket.id }, null, 2));
+      }
+      return reply.send({ workspacePath });
     });
 
     // Import GitHub issue
