@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import type { TicketComment, TicketMention, TicketWsMessage } from '@fleex/shared';
+import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -13,6 +13,7 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
+import { useUIStore } from '../../stores/uiStore';
 import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
@@ -101,6 +102,56 @@ function MentionSpan({ text, mentionId, onRemove, className }: {
         </button>
       )}
     </span>
+  );
+}
+
+// ── Deliverable attachment chip ──
+
+function isUrl(text: string): boolean {
+  return /^https?:\/\/\S+$/.test(text.trim());
+}
+
+function deliverableTypeLabel(type: string): string {
+  switch (type) {
+    case 'prd': return 'PRD';
+    case 'spec': return 'SPEC';
+    case 'url': return 'URL';
+    case 'pr': return 'PR';
+    case 'plan': return 'PLAN';
+    default: return type.toUpperCase().slice(0, 4);
+  }
+}
+
+/**
+ * Gmail-style attachment chip materialising a deliverable linked to a comment
+ * (via its mention's resolvedDeliverableId). Clicking opens the same overlay as
+ * the Deliverables tab.
+ */
+function DeliverableChip({ deliverable, onOpen }: {
+  deliverable: TicketDeliverable;
+  onOpen: (d: TicketDeliverable) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onOpen(deliverable); }}
+      title={deliverable.title}
+      className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-secondary)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
+    >
+      <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-1 py-0.5 text-[10px] font-bold tracking-wider text-[var(--theme-accent)]">
+        {deliverableTypeLabel(deliverable.type)}
+      </span>
+      <span className="truncate font-medium text-[var(--theme-text-primary)]">{deliverable.title}</span>
+      {isUrl(deliverable.content) ? (
+        <svg className="h-3 w-3 flex-shrink-0 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      ) : (
+        <svg className="h-3 w-3 flex-shrink-0 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      )}
+    </button>
   );
 }
 
@@ -409,6 +460,7 @@ function MentionAutocomplete({
 export function TicketComments({ ticketId }: { ticketId: string }) {
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [mentions, setMentions] = useState<TicketMention[]>([]);
+  const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
   const { draft: body, setDraft: setBody, clearDraft } = useCommentDraft(ticketId);
   const [modalExecutionId, setModalExecutionId] = useState<string | null>(null);
   const [modalTitle, setModalTitle] = useState('');
@@ -539,6 +591,42 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     );
   }, [acOpen, acQuery, allMentionOptions]);
 
+  // Deliverable overlay opening (chips linked to comments via mentions)
+  const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
+  const floatingDeliverableIds = useUIStore((s) => s.floatingDeliverableIds);
+  const bringDeliverableToFront = useUIStore((s) => s.bringDeliverableToFront);
+  const seenDeliverables = useUnreadStore((s) => s.seenDeliverablesByTicket[ticketId]);
+  const toggleDeliverableSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
+
+  const handleOpenDeliverable = useCallback((d: TicketDeliverable) => {
+    if (!seenDeliverables?.has(d.id)) {
+      toggleDeliverableSeen(ticketId, d.id, true).catch(() => {});
+    }
+    if (isUrl(d.content)) {
+      window.open(d.content.trim(), '_blank', 'noopener');
+    } else if (floatingDeliverableIds.includes(d.id)) {
+      bringDeliverableToFront(d.id);
+    } else {
+      openDeliverableOverlay(d);
+    }
+  }, [ticketId, seenDeliverables, toggleDeliverableSeen, floatingDeliverableIds, bringDeliverableToFront, openDeliverableOverlay]);
+
+  // Map each comment (the agent's resolved/result comment) to its linked deliverables.
+  // Link path: deliverable ← mention.resolvedDeliverableId, surfaced on mention.resolvedCommentId.
+  const deliverablesByComment = useMemo(() => {
+    const deliverableById = new Map(deliverables.map((d) => [d.id, d]));
+    const map = new Map<string, TicketDeliverable[]>();
+    for (const m of mentions) {
+      if (!m.resolvedCommentId || !m.resolvedDeliverableId) continue;
+      const d = deliverableById.get(m.resolvedDeliverableId);
+      if (!d) continue;
+      const arr = map.get(m.resolvedCommentId);
+      if (arr) arr.push(d);
+      else map.set(m.resolvedCommentId, [d]);
+    }
+    return map;
+  }, [deliverables, mentions]);
+
   // Read cursor for "new messages" line
   const loadCursors = useUnreadStore((s) => s.loadCursors);
   const markCommentsRead = useUnreadStore((s) => s.markCommentsRead);
@@ -560,6 +648,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         modeInitialised.current = true;
       }
     }).catch(() => {});
+    api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
     loadCursors(ticketId).catch(() => {});
   }, [ticketId, loadCursors]);
 
@@ -599,6 +688,21 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           const d = msg.data as { id: string; ticketId: string };
           if (d.ticketId === ticketId) {
             setMentions((prev) => prev.filter((x) => x.id !== d.id));
+          }
+        } else if (msg.type === 'deliverable:created') {
+          const d = msg.data as TicketDeliverable;
+          if (d.ticketId === ticketId) {
+            setDeliverables((prev) => (prev.some((x) => x.id === d.id) ? prev : [...prev, d]));
+          }
+        } else if (msg.type === 'deliverable:updated') {
+          const d = msg.data as TicketDeliverable;
+          if (d.ticketId === ticketId) {
+            setDeliverables((prev) => prev.map((x) => (x.id === d.id ? d : x)));
+          }
+        } else if (msg.type === 'deliverable:deleted') {
+          const { deliverableId, ticketId: tid } = msg.data as { deliverableId: string; ticketId: string };
+          if (tid === ticketId) {
+            setDeliverables((prev) => prev.filter((x) => x.id !== deliverableId));
           }
         } else if (msg.type === 'mention:updated' || msg.type === 'mention:acknowledged' || msg.type === 'mention:resolved' || msg.type === 'mention:waiting_for_info') {
           const m = msg.data as TicketMention;
@@ -852,6 +956,18 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                   mentionLookup={mentionLookup}
                   onRemoveMention={handleRemoveMention}
                 />
+                {/* Linked deliverables — Gmail-style attachment chips */}
+                {(() => {
+                  const linked = deliverablesByComment.get(c.id);
+                  if (!linked || linked.length === 0) return null;
+                  return (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {linked.map((d) => (
+                        <DeliverableChip key={d.id} deliverable={d} onOpen={handleOpenDeliverable} />
+                      ))}
+                    </div>
+                  );
+                })()}
                 {/* Delete button — all comments */}
                 <button
                     className="absolute right-2 top-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/20 text-[var(--theme-text-faint)] hover:text-red-400"
