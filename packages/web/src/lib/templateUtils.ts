@@ -1,36 +1,30 @@
+import { buildTicketWorkspaceId } from '@fleex/shared';
+import type { Ticket } from '@fleex/shared';
 import { getPipe } from './pipes';
 
-export interface WorktreeContext {
-  org: string;
-  repo: string;
-  branch: string;
-  worktree_path: string;
-  worktree_name: string;
-  branch_slug: string;
-  branch_prefix: string;
-  branch_suffix: string;
-  issue_number: string;
+/**
+ * Template context for workspace actions. A workspace is the ticket's folder
+ * (`<basePath>/workspaces/<workspaceId>`) and exists for any ticket, so this
+ * context is always computable. Git-level variables (org/repo/branch) are
+ * intentionally omitted: a workspace can hold multiple repos, so those values
+ * would be plural and unusable in a flat template without loops/conditionals.
+ */
+export interface WorkspaceContext {
+  workspace_path: string;
+  workspace_name: string;
+  ticket_id: string;
+  ticket_slug: string;
+  ticket_display_id: string;
 }
 
-export function buildWorktreeContext(
-  org: string,
-  repo: string,
-  branch: string,
-  worktreePath: string,
-): WorktreeContext {
-  const slashIndex = branch.indexOf('/');
-  const issueMatch = branch.match(/(\d+)/);
-
+export function buildWorkspaceContext(ticket: Ticket, basePath: string): WorkspaceContext {
+  const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
   return {
-    org,
-    repo,
-    branch,
-    worktree_path: worktreePath,
-    worktree_name: worktreePath.split('/').pop() || '',
-    branch_slug: branch.replace(/\//g, '-'),
-    branch_prefix: slashIndex !== -1 ? branch.substring(0, slashIndex) : branch,
-    branch_suffix: slashIndex !== -1 ? branch.substring(slashIndex + 1) : '',
-    issue_number: issueMatch ? issueMatch[1]! : '',
+    workspace_path: `${basePath}/workspaces/${workspaceId}`,
+    workspace_name: workspaceId,
+    ticket_id: ticket.id,
+    ticket_slug: workspaceId.slice(7), // workspaceId is `<6-char-id>-<slug>`
+    ticket_display_id: String(ticket.displayId),
   };
 }
 
@@ -50,7 +44,7 @@ export function parsePipeExpression(expr: string): {
   return { variable, pipes };
 }
 
-export function resolveTemplate(template: string, context: WorktreeContext): string {
+export function resolveTemplate(template: string, context: WorkspaceContext): string {
   return template.replace(/\{\{(.+?)\}\}/g, (match, expr: string) => {
     const { variable, pipes } = parsePipeExpression(expr);
 
@@ -58,7 +52,7 @@ export function resolveTemplate(template: string, context: WorktreeContext): str
       return match;
     }
 
-    let value = context[variable as keyof WorktreeContext];
+    let value = context[variable as keyof WorkspaceContext];
 
     for (const pipe of pipes) {
       const pipeFn = getPipe(pipe.name);

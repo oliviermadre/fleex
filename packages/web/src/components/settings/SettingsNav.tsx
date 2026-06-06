@@ -39,7 +39,7 @@ const tabIcons: Record<SettingsTab, React.ReactNode> = {
       <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
     </svg>
   ),
-  'worktree-actions': (
+  'workspace-actions': (
     // Wrench icon
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
@@ -58,7 +58,7 @@ const tabs: { key: SettingsTab; label: string }[] = [
   { key: 'appearance', label: 'Appearance' },
   { key: 'repositories', label: 'Repositories' },
   { key: 'pinned-icons', label: 'Pinned Icons' },
-  { key: 'worktree-actions', label: 'Worktree Actions' },
+  { key: 'workspace-actions', label: 'Workspace Actions' },
   { key: 'agent-tokens', label: 'Agent Tokens' },
 ];
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSettingsStore, type AppSettings, type PinnedIcon, type WorktreeAction } from '../../stores/settingsStore';
+import { useSettingsStore, type AppSettings, type PinnedIcon, type WorkspaceAction } from '../../stores/settingsStore';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -14,7 +14,7 @@ const tabLabels: Record<SettingsTab, string> = {
   appearance: 'Appearance',
   repositories: 'Repositories',
   'pinned-icons': 'Pinned Icons',
-  'worktree-actions': 'Worktree Actions',
+  'workspace-actions': 'Workspace Actions',
   'agent-tokens': 'Agent Tokens',
 };
 
@@ -32,7 +32,7 @@ export function SettingsPanel() {
   const [repoPatterns, setRepoPatterns] = useState<string[]>([]);
   const resolveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [pinnedIcons, setPinnedIcons] = useState<PinnedIcon[]>([]);
-  const [worktreeActions, setWorktreeActions] = useState<WorktreeAction[]>([]);
+  const [workspaceActions, setWorkspaceActions] = useState<WorkspaceAction[]>([]);
 
   useEffect(() => {
     setBasePath(settings.basePath);
@@ -41,7 +41,7 @@ export function SettingsPanel() {
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
     setRepoPatterns(settings.repositories);
     setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
-    setWorktreeActions((settings.worktreeActions ?? []).map((a) => ({ ...a })));
+    setWorkspaceActions((settings.workspaceActions ?? []).map((a) => ({ ...a })));
   }, [settings]);
 
   const handleSave = async () => {
@@ -49,7 +49,7 @@ export function SettingsPanel() {
       basePath,
       repositories: repoPatterns,
       pinnedIcons,
-      worktreeActions,
+      workspaceActions,
       ...(humanDisplayName.trim() ? { humanDisplayName: humanDisplayName.trim() } : { humanDisplayName: undefined }),
       ...(humanMentionName.trim() ? { humanMentionName: humanMentionName.trim() } : { humanMentionName: undefined }),
       agentMaxConcurrency,
@@ -88,9 +88,9 @@ export function SettingsPanel() {
     setPinnedIcons((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const addWorktreeAction = () => {
-    setWorktreeActions([
-      ...worktreeActions,
+  const addWorkspaceAction = () => {
+    setWorkspaceActions([
+      ...workspaceActions,
       {
         id: crypto.randomUUID(),
         icon: '',
@@ -102,14 +102,14 @@ export function SettingsPanel() {
     ]);
   };
 
-  const updateWorktreeAction = (index: number, patch: Partial<WorktreeAction>) => {
-    setWorktreeActions((prev) =>
+  const updateWorkspaceAction = (index: number, patch: Partial<WorkspaceAction>) => {
+    setWorkspaceActions((prev) =>
       prev.map((action, i) => (i === index ? { ...action, ...patch } : action))
     );
   };
 
-  const removeWorktreeAction = (index: number) => {
-    setWorktreeActions((prev) => prev.filter((_, i) => i !== index));
+  const removeWorkspaceAction = (index: number) => {
+    setWorkspaceActions((prev) => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -153,13 +153,13 @@ export function SettingsPanel() {
               onReorder={setPinnedIcons}
             />
           )}
-          {settingsTab === 'worktree-actions' && (
-            <WorktreeActionsTab
-              worktreeActions={worktreeActions}
-              onAdd={addWorktreeAction}
-              onUpdate={updateWorktreeAction}
-              onRemove={removeWorktreeAction}
-              onReorder={setWorktreeActions}
+          {settingsTab === 'workspace-actions' && (
+            <WorkspaceActionsTab
+              workspaceActions={workspaceActions}
+              onAdd={addWorkspaceAction}
+              onUpdate={updateWorkspaceAction}
+              onRemove={removeWorkspaceAction}
+              onReorder={setWorkspaceActions}
             />
           )}
           {settingsTab === 'agent-tokens' && <AgentTokensTab />}
@@ -403,18 +403,18 @@ function PinnedIconsTab({
   );
 }
 
-function WorktreeActionsTab({
-  worktreeActions,
+function WorkspaceActionsTab({
+  workspaceActions,
   onAdd,
   onUpdate,
   onRemove,
   onReorder,
 }: {
-  worktreeActions: WorktreeAction[];
+  workspaceActions: WorkspaceAction[];
   onAdd: () => void;
-  onUpdate: (index: number, patch: Partial<WorktreeAction>) => void;
+  onUpdate: (index: number, patch: Partial<WorkspaceAction>) => void;
   onRemove: (index: number) => void;
-  onReorder: (actions: WorktreeAction[]) => void;
+  onReorder: (actions: WorkspaceAction[]) => void;
 }) {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dropEdge, setDropEdge] = useState<'top' | 'bottom'>('bottom');
@@ -423,7 +423,7 @@ function WorktreeActionsTab({
   const handleDragStart = useCallback((id: string) => (e: React.DragEvent) => {
     draggedIdRef.current = id;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-worktree-action', id);
+    e.dataTransfer.setData('application/x-workspace-action', id);
     (e.currentTarget as HTMLElement).style.opacity = '0.4';
   }, []);
 
@@ -434,7 +434,7 @@ function WorktreeActionsTab({
   }, []);
 
   const handleDragOver = useCallback((id: string) => (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('application/x-worktree-action')) return;
+    if (!e.dataTransfer.types.includes('application/x-workspace-action')) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -450,11 +450,11 @@ function WorktreeActionsTab({
 
   const handleDrop = useCallback((targetId: string) => (e: React.DragEvent) => {
     e.preventDefault();
-    const draggedId = e.dataTransfer.getData('application/x-worktree-action');
+    const draggedId = e.dataTransfer.getData('application/x-workspace-action');
     setDragOverId(null);
     if (!draggedId || draggedId === targetId) return;
 
-    const items = [...worktreeActions];
+    const items = [...workspaceActions];
     const fromIdx = items.findIndex((a) => a.id === draggedId);
     if (fromIdx === -1) return;
     const moved = items.splice(fromIdx, 1)[0];
@@ -464,13 +464,13 @@ function WorktreeActionsTab({
     if (dropEdge === 'bottom') toIdx += 1;
     items.splice(toIdx, 0, moved);
     onReorder(items);
-  }, [worktreeActions, dropEdge, onReorder]);
+  }, [workspaceActions, dropEdge, onReorder]);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
-          Worktree Actions ({worktreeActions.length})
+          Workspace Actions ({workspaceActions.length})
         </label>
         <Button variant="secondary" size="sm" onClick={onAdd}>
           + Add Action
@@ -478,18 +478,18 @@ function WorktreeActionsTab({
       </div>
 
       <p className="text-xs text-[var(--theme-text-muted)]">
-        Actions appear as icon buttons under each worktree header. Template variables are resolved per worktree.
-        {worktreeActions.length > 1 && ' Drag to reorder.'}
+        Actions appear as icon buttons in ticket and session headers. Template variables resolve to the ticket's workspace.
+        {workspaceActions.length > 1 && ' Drag to reorder.'}
       </p>
 
-      {worktreeActions.length === 0 && (
+      {workspaceActions.length === 0 && (
         <p className="py-6 text-center text-sm text-[var(--theme-text-muted)]">
-          No worktree actions configured. Add one to show action buttons per worktree.
+          No workspace actions configured. Add one to show action buttons on every ticket.
         </p>
       )}
 
       <div className="flex flex-col gap-3">
-        {worktreeActions.map((action, i) => (
+        {workspaceActions.map((action, i) => (
           <div
             key={action.id}
             draggable
@@ -503,7 +503,7 @@ function WorktreeActionsTab({
             {dragOverId === action.id && dropEdge === 'top' && (
               <div className="absolute -top-1.5 left-0 right-0 h-0.5 rounded bg-[var(--theme-accent)]" />
             )}
-            <WorktreeActionEditor
+            <WorkspaceActionEditor
               action={action}
               onUpdate={(patch) => onUpdate(i, patch)}
               onRemove={() => onRemove(i)}
@@ -520,15 +520,11 @@ function WorktreeActionsTab({
         <p className="mb-2 text-xs font-medium text-[var(--theme-text-secondary)]">Template Variables</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
           {[
-            ['{{org}}', 'Repository organization'],
-            ['{{repo}}', 'Repository name'],
-            ['{{branch}}', 'Branch name'],
-            ['{{worktree_path}}', 'Worktree absolute path'],
-            ['{{worktree_name}}', 'Worktree directory name'],
-            ['{{branch_slug}}', 'Branch with / replaced by -'],
-            ['{{branch_prefix}}', 'Before first /'],
-            ['{{branch_suffix}}', 'After first /'],
-            ['{{issue_number}}', 'First number in branch'],
+            ['{{workspace_path}}', "Workspace folder absolute path"],
+            ['{{workspace_name}}', 'Workspace folder name (id-slug)'],
+            ['{{ticket_id}}', 'Full ticket id'],
+            ['{{ticket_slug}}', 'Slugified ticket title'],
+            ['{{ticket_display_id}}', 'Ticket display number'],
           ].map(([variable, description]) => (
             <div key={variable} className="flex items-baseline gap-2">
               <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">{variable}</code>
@@ -568,13 +564,13 @@ function WorktreeActionsTab({
   );
 }
 
-function WorktreeActionEditor({
+function WorkspaceActionEditor({
   action,
   onUpdate,
   onRemove,
 }: {
-  action: WorktreeAction;
-  onUpdate: (patch: Partial<WorktreeAction>) => void;
+  action: WorkspaceAction;
+  onUpdate: (patch: Partial<WorkspaceAction>) => void;
   onRemove: () => void;
 }) {
   const [expanded, setExpanded] = useState(!action.label);
@@ -704,14 +700,14 @@ function WorktreeActionEditor({
               rows={action.actionType === 'shell' ? 4 : 2}
               placeholder={
                 action.actionType === 'url'
-                  ? 'https://github.com/{{org}}/{{repo}}/tree/{{branch}}'
-                  : 'open -a "PhpStorm" "{{worktree_path}}"'
+                  ? 'https://example.com/?ws={{workspace_name}}'
+                  : 'open -a "PhpStorm" "{{workspace_path}}"'
               }
               value={action.actionValue}
               onChange={(e) => onUpdate({ actionValue: e.target.value })}
             />
             <p className="text-xs text-[var(--theme-text-muted)]">
-              Use {'{{template}}'} variables above. They resolve per worktree at click time.
+              Use {'{{template}}'} variables above. They resolve to the ticket's workspace at click time.
             </p>
           </div>
         </div>

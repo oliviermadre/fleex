@@ -28,7 +28,7 @@ const VALID_SETTINGS_TABS: SettingsTab[] = [
   'appearance',
   'repositories',
   'pinned-icons',
-  'worktree-actions',
+  'workspace-actions',
   'agent-tokens',
 ];
 

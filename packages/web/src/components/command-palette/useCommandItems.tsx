@@ -3,7 +3,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { buildWorktreeContext } from '../../lib/templateUtils';
+import { buildWorkspaceContext } from '../../lib/templateUtils';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { ClaudeIcon, TerminalIcon, PlusIcon } from '../sidebar/icons';
 import * as api from '../../services/api';
@@ -24,11 +24,11 @@ export function useCommandItems(query: string): CommandItem[] {
   const toggleScratchpad = useUIStore((s) => s.toggleScratchpad);
 
   const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
-  const worktreeActions = useSettingsStore((s) => s.settings.worktreeActions);
+  const workspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
   const basePath = useSettingsStore((s) => s.settings.basePath);
   const addLayoutGroup = useSettingsStore((s) => s.addLayoutGroup);
   const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
-  const executeWorktreeAction = useSettingsStore((s) => s.executeWorktreeAction);
+  const executeWorkspaceAction = useSettingsStore((s) => s.executeWorkspaceAction);
   const sessionDisplayNames = useSettingsStore((s) => s.settings.sessionDisplayNames);
 
   const ticketItems = useTicketStore((s) => s.tickets);
@@ -143,39 +143,32 @@ export function useCommandItems(query: string): CommandItem[] {
       });
     }
 
-    // ── Worktree actions (conditional) ──
-    if (worktreeActions.length > 0 && selectedSessionId) {
-      const selectedSession = sessions.find((s) => s.id === selectedSessionId);
-      if (selectedSession?.repositoryOrg && selectedSession.repositoryName && selectedSession.worktreeBranch) {
-        // Find the worktree path from sessionGroups
-        let worktreePath = '';
-        for (const group of sessionGroups) {
-          if (group.repositoryOrg === selectedSession.repositoryOrg && group.repositoryName === selectedSession.repositoryName) {
-            for (const wt of group.worktrees) {
-              if (wt.branch === selectedSession.worktreeBranch) {
-                worktreePath = wt.path;
-                break;
-              }
-            }
+    // ── Workspace actions (conditional on the selected session's ticket) ──
+    if (workspaceActions.length > 0 && selectedSessionId) {
+      // Resolve the ticket linked to the selected session via its worktree group.
+      let ticketId: string | undefined;
+      for (const group of sessionGroups) {
+        for (const wt of group.worktrees) {
+          if (wt.sessions.some((s) => s.id === selectedSessionId)) {
+            ticketId = wt.ticketId ?? wt.agentWorktree?.ticketId;
+            break;
           }
         }
+        if (ticketId) break;
+      }
+      const ticket = ticketId ? ticketItems.find((t) => t.id === ticketId) : undefined;
 
-        const context = buildWorktreeContext(
-          selectedSession.repositoryOrg,
-          selectedSession.repositoryName,
-          selectedSession.worktreeBranch,
-          worktreePath,
-        );
-
-        for (const action of worktreeActions) {
+      if (ticket) {
+        const context = buildWorkspaceContext(ticket, basePath);
+        for (const action of workspaceActions) {
           items.push({
-            id: `worktree:${action.id}`,
+            id: `workspace:${action.id}`,
             label: action.label,
             category: 'worktree',
-            categoryLabel: 'Worktree Actions',
+            categoryLabel: 'Workspace Actions',
             icon: action.icon ? renderIcon(action, 16) : null,
-            keywords: `worktree ${selectedSession.worktreeBranch}`,
-            onExecute: () => { executeWorktreeAction(action, context); closeCommandPalette(); },
+            keywords: `workspace ${ticket.title}`,
+            onExecute: () => { executeWorkspaceAction(action, context); closeCommandPalette(); },
           });
         }
       }
@@ -230,9 +223,9 @@ export function useCommandItems(query: string): CommandItem[] {
   }, [
     sessions, sessionGroups, selectedSessionId, sessionDisplayNames,
     selectSession, selectGroup, setActivePanel, openCreateModal, closeCommandPalette,
-    toggleScratchpad, pinnedIcons, worktreeActions, basePath,
+    toggleScratchpad, pinnedIcons, workspaceActions, basePath,
     addLayoutGroup, addSessionToGroup, setSessionGroups,
-    executePinnedAction, executeWorktreeAction,
+    executePinnedAction, executeWorkspaceAction,
     ticketItems, selectTicket,
   ]);
 
