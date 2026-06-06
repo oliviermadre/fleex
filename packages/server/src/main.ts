@@ -12,6 +12,7 @@ import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
 import { healthRoutes } from './infrastructure/http/health.routes.js';
 import { versionRoutes } from './infrastructure/http/version.routes.js';
 import { configRoutes } from './infrastructure/http/config.routes.js';
+import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
 import { execRoutes } from './infrastructure/http/exec.routes.js';
 import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
@@ -89,6 +90,7 @@ async function main() {
   await app.register(healthRoutes(container));
   await app.register(versionRoutes());
   await app.register(configRoutes(container));
+  await app.register(deliverableTypesRoutes(container));
   await app.register(execRoutes(container));
   await app.register(claudeConfigRoutes(container));
   await app.register(scratchpadRoutes(container));

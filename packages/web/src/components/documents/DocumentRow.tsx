@@ -2,6 +2,7 @@ import type { TicketDeliverable } from '@fleex/shared';
 import { useNavigate } from 'react-router-dom';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { cn } from '../../lib/cn';
 
 const TYPE_COLORS: Record<string, string> = {
@@ -44,6 +45,7 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
   const selectBoard = useTicketStore((s) => s.selectBoard);
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
+  const typeLabel = useDeliverableTypesStore((s) => s.labelFor)(deliverable.type);
 
   const ticket = tickets.find((t) => t.id === deliverable.ticketId);
   const typeColor = TYPE_COLORS[deliverable.type] ?? 'bg-gray-500/10 text-gray-400';
@@ -103,7 +105,7 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
       {/* Type badge */}
       <div className="flex-[0.8]">
         <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', typeColor)}>
-          {deliverable.type}
+          {typeLabel}
         </span>
       </div>
 

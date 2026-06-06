@@ -1,5 +1,15 @@
 import type { AgentStructuredOutput, DeliverableType, DeliverableStatus } from '@fleex/shared';
-import { isDeliverableType } from '@fleex/shared';
+
+/**
+ * Options controlling how the deliverable `type` field is coerced.
+ * - `validTypes`: when provided, a type outside this list is replaced with
+ *   `fallbackType`. When omitted, any non-empty string is accepted as-is.
+ * - `fallbackType`: substituted for missing/invalid types (default 'report').
+ */
+export interface ParseAgentOutputOptions {
+  validTypes?: string[];
+  fallbackType?: string;
+}
 
 /**
  * Attempts to extract a valid AgentStructuredOutput from raw agent result text.
@@ -11,42 +21,52 @@ import { isDeliverableType } from '@fleex/shared';
  *
  * Returns null if parsing fails or the shape doesn't match.
  */
-export function parseAgentOutput(raw: string): AgentStructuredOutput | null {
+export function parseAgentOutput(
+  raw: string,
+  options: ParseAgentOutputOptions = {},
+): AgentStructuredOutput | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
 
   // Strategy 1: entire string is JSON
-  const result = tryParseAndValidate(trimmed);
+  const result = tryParseAndValidate(trimmed, options);
   if (result) return result;
 
   // Strategy 2: extract from markdown code fence
   const fenceMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
   if (fenceMatch?.[1]) {
-    const fenced = tryParseAndValidate(fenceMatch[1].trim());
+    const fenced = tryParseAndValidate(fenceMatch[1].trim(), options);
     if (fenced) return fenced;
   }
 
   // Strategy 3: find the last top-level { ... } pair
   const lastBrace = findLastJsonObject(trimmed);
   if (lastBrace) {
-    const braced = tryParseAndValidate(lastBrace);
+    const braced = tryParseAndValidate(lastBrace, options);
     if (braced) return braced;
   }
 
   return null;
 }
 
-function tryParseAndValidate(text: string): AgentStructuredOutput | null {
+function tryParseAndValidate(text: string, options: ParseAgentOutputOptions): AgentStructuredOutput | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
     return null;
   }
-  return validateShape(parsed);
+  return validateShape(parsed, options);
 }
 
-function validateShape(obj: unknown): AgentStructuredOutput | null {
+function coerceType(raw: unknown, options: ParseAgentOutputOptions): DeliverableType {
+  const fallback = options.fallbackType ?? 'report';
+  if (typeof raw !== 'string' || raw.length === 0) return fallback;
+  if (options.validTypes && !options.validTypes.includes(raw)) return fallback;
+  return raw;
+}
+
+function validateShape(obj: unknown, options: ParseAgentOutputOptions): AgentStructuredOutput | null {
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
 
   const record = obj as Record<string, unknown>;
@@ -82,9 +102,7 @@ function validateShape(obj: unknown): AgentStructuredOutput | null {
         ? {
             title: (deliverable as Record<string, unknown>)['title'] as string,
             markdown: (deliverable as Record<string, unknown>)['markdown'] as string,
-            type: (isDeliverableType((deliverable as Record<string, unknown>)['type'])
-              ? (deliverable as Record<string, unknown>)['type'] as DeliverableType
-              : 'report'),
+            type: coerceType((deliverable as Record<string, unknown>)['type'], options),
             status: ((deliverable as Record<string, unknown>)['status'] as DeliverableStatus) ?? 'draft',
           }
         : null,

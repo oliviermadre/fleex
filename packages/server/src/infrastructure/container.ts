@@ -42,6 +42,7 @@ import { BackfillPRTicketUseCase } from '../application/use-cases/backfill-pr-ti
 import { PostCommentUseCase } from '../application/use-cases/post-comment.js';
 import { ResolveMentionUseCase } from '../application/use-cases/resolve-mention.js';
 import { SubmitDeliverableUseCase } from '../application/use-cases/submit-deliverable.js';
+import { ManageDeliverableTypesUseCase } from '../application/use-cases/manage-deliverable-types.js';
 import { GetTicketContextUseCase } from '../application/use-cases/get-ticket-context.js';
 import { CreatePersonaUseCase } from '../application/use-cases/create-persona.js';
 import { UpdatePersonaUseCase } from '../application/use-cases/update-persona.js';
@@ -219,7 +220,7 @@ export async function createContainer() {
   // Agent collaboration use cases
   const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore_, logger);
   const resolveMention = new ResolveMentionUseCase(mentionStore, ticketStore_, logger);
-  const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore_, logger);
+  const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore_, config, logger);
   const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore_);
   const getTicketContext = new GetTicketContextUseCase(ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore);
 
@@ -264,6 +265,9 @@ export async function createContainer() {
   //     broadcasts only — never side-effects, never re-audited, never re-published.
   const eventBus = new EventBus();
   const remoteEventBus = new EventBus();
+
+  // Per-workspace deliverable-type backoffice (CRUD + usage + reassignment).
+  const manageDeliverableTypes = new ManageDeliverableTypesUseCase(config, deliverableStore, logger, eventBus);
 
   // Unique per-process server identifier — used to filter our own events on the hub fan-out.
   const serverId = process.env['FLEEX_INSTANCE_ID'] ?? randomUUID();
@@ -489,6 +493,7 @@ export async function createContainer() {
     postComment,
     resolveMention,
     submitDeliverable,
+    manageDeliverableTypes,
     getTicketContext,
     personaStore: personaStore_,
     createPersona,

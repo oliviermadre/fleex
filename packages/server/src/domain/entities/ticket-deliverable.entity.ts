@@ -5,7 +5,7 @@ export class TicketDeliverableEntity {
     public readonly id: string,
     public readonly ticketId: string,
     public readonly agentName: string,
-    public readonly type: DeliverableType,
+    public type: DeliverableType,
     public title: string,
     public content: string,
     public version: number,
@@ -52,6 +52,17 @@ export class TicketDeliverableEntity {
     if (changes.status !== undefined) {
       this.status = changes.status;
     }
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * Reassign this deliverable to a different type (backoffice operation —
+   * single edit, bulk reassign, or type rename migration). Does not bump the
+   * content version since the content is unchanged.
+   */
+  setType(type: DeliverableType): void {
+    if (type === this.type) return;
+    this.type = type;
     this.updatedAt = new Date();
   }
 

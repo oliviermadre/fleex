@@ -1,5 +1,6 @@
 import type { TicketDeliverable } from '@fleex/shared';
 import { useDocumentsStore } from '../../stores/documentsStore';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { cn } from '../../lib/cn';
 
 interface FacetItem {
@@ -103,6 +104,7 @@ export function DocumentsFilterSidebar() {
   const filterStatuses = useDocumentsStore((s) => s.filterStatuses);
   const toggleFilter = useDocumentsStore((s) => s.toggleFilter);
   const clearFilters = useDocumentsStore((s) => s.clearFilters);
+  const labelForType = useDeliverableTypesStore((s) => s.labelFor);
 
   const typeFacets = buildFacets(deliverables, 'type');
   const agentFacets = buildFacets(deliverables, 'agentName');
@@ -132,7 +134,7 @@ export function DocumentsFilterSidebar() {
           const color = TYPE_COLORS[f.value] ?? 'bg-gray-500/10 text-gray-400 ring-gray-500/20';
           return (
             <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium ring-1', color)}>
-              {f.label}
+              {labelForType(f.value)}
             </span>
           );
         }}
