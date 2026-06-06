@@ -3,7 +3,6 @@ import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
 import { appWs } from '../../services/websocket';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
-import { DeliverableReadingOverlay } from './DeliverableReadingOverlay';
 import { DeliverableFormModal } from './DeliverableFormModal';
 import { TicketPickerModal } from './TicketPickerModal';
 import * as api from '../../services/api';
@@ -258,7 +257,6 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
         })}
       </div>
 
-      <DeliverableReadingOverlay ticketId={ticketId} />
       <DeliverableFormModal open={showCreateModal} onClose={() => setShowCreateModal(false)} ticketId={ticketId} />
       {copyTarget && (
         <TicketPickerModal
