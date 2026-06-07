@@ -282,6 +282,25 @@ export interface TicketContext {
   readonly activity: TicketActivity[];
   readonly relevantSummaries: TicketSummaryRef[];
   readonly epics: TicketContextEpic[];
+  /**
+   * What changed since a given watermark (an agent's previous run on this
+   * ticket). Only populated when the context is requested with `sinceWatermark`.
+   * Used to keep a resumed LLM session coherent with edited/removed content.
+   */
+  readonly contextDelta?: TicketContextDelta;
+}
+
+export interface TicketContextDelta {
+  /** Comments seen before the watermark whose body was edited since. */
+  readonly editedComments: TicketComment[];
+  /** Deliverables seen before the watermark whose content was edited since. */
+  readonly editedDeliverables: TicketDeliverable[];
+  /** Ids of comments deleted since the watermark. */
+  readonly deletedCommentIds: string[];
+  /** Ids of deliverables deleted since the watermark. */
+  readonly deletedDeliverableIds: string[];
+  /** True when a deliverable authored by the running agent was edited since. */
+  readonly selfAuthoredDeliverableEdited: boolean;
 }
 
 // ── WebSocket ──

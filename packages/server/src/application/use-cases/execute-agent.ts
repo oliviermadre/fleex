@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode } from '@fleex/shared';
+import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, TicketContextDelta } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
@@ -457,16 +457,45 @@ export class ExecuteAgentUseCase {
       const repoCount = ticket ? ticket.links.filter((l) => l.type === 'repository').length : 0;
       const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath, repoCount);
 
-      // 5. Load ticket context
+      // 5. Load ticket context (with a delta vs. this agent's previous run so
+      //    a resumed session stays coherent with edited/removed content).
+      const sessionKey = `${persona.name}:${mention.ticketId}`;
+      const hasPriorSession = this.sessionHistory.has(sessionKey);
+      const watermark = hasPriorSession
+        ? await this.computePreviousRunWatermark(persona.id, mention.ticketId, executionId)
+        : undefined;
+
       const context = await this.getTicketContext.execute({
         ticketId: mention.ticketId,
         agentName: persona.name,
+        sinceWatermark: watermark,
       });
 
+      // Hybrid LLM-coherence strategy (see editable-comments-deliverables spec §6):
+      // invalidate the resumed session when the stale transcript would be
+      // misleading (a deletion, or the agent's own deliverable was edited);
+      // otherwise keep it and inject a correction notice for plain edits.
+      const delta = context.contextDelta ?? null;
+      const hasDeletions = !!delta && (delta.deletedCommentIds.length > 0 || delta.deletedDeliverableIds.length > 0);
+      const hasEdits = !!delta && (delta.editedComments.length > 0 || delta.editedDeliverables.length > 0);
+      const shouldInvalidateSession = hasPriorSession && !!delta && (hasDeletions || delta.selfAuthoredDeliverableEdited);
+      const willResume = hasPriorSession && !shouldInvalidateSession;
+
+      if (shouldInvalidateSession) {
+        this.sessionHistory.delete(sessionKey);
+        this.logger.info('Invalidating resumed session due to context edits', {
+          persona: persona.name,
+          ticketId: mention.ticketId,
+          deletedComments: delta!.deletedCommentIds.length,
+          deletedDeliverables: delta!.deletedDeliverableIds.length,
+          selfAuthoredDeliverableEdited: delta!.selfAuthoredDeliverableEdited,
+        });
+      }
+
       // 6. Build user prompt with ticket context (content blocks for multimodal support)
-      const sessionKey = `${persona.name}:${mention.ticketId}`;
-      const isWakeUp = mention.status === 'pending' && this.sessionHistory.has(sessionKey);
-      const userPromptBlocks = await this.composeUserPrompt(context, mention, isWakeUp);
+      const isWakeUp = mention.status === 'pending' && hasPriorSession;
+      const editsNotice = willResume && (hasEdits || hasDeletions) ? delta : null;
+      const userPromptBlocks = await this.composeUserPrompt(context, mention, isWakeUp, editsNotice);
       const userPromptTextLength = userPromptBlocks.reduce((n, b) => n + (b.type === 'text' ? b.text.length : 0), 0);
 
       this.logger.info('Agent execution started', {
@@ -1802,10 +1831,34 @@ export class ExecuteAgentUseCase {
     return parts.join('\n\n');
   }
 
+  /**
+   * Returns the start time of this persona's most recent *previous* run on the
+   * ticket (excluding the run currently starting). Used as the watermark to
+   * detect comments/deliverables edited or deleted since the agent last saw
+   * them. Returns undefined when there is no prior run.
+   */
+  private async computePreviousRunWatermark(
+    personaId: string,
+    ticketId: string,
+    currentExecutionId: string,
+  ): Promise<Date | undefined> {
+    try {
+      const execs = await this.agentEventStore.getExecutionsByTicket(ticketId);
+      const priorStarts = execs
+        .filter((e) => e.personaId === personaId && e.id !== currentExecutionId && !!e.startedAt)
+        .map((e) => new Date(e.startedAt).getTime())
+        .filter((t) => Number.isFinite(t));
+      return priorStarts.length > 0 ? new Date(Math.max(...priorStarts)) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async composeUserPrompt(
     context: Awaited<ReturnType<GetTicketContextUseCase['execute']>>,
     mention: TicketMentionEntity,
     isWakeUp = false,
+    editsNotice: TicketContextDelta | null = null,
   ): Promise<PromptContentBlock[]> {
     const blocks: PromptContentBlock[] = [];
 
@@ -1851,6 +1904,26 @@ export class ExecuteAgentUseCase {
       pushText('Context from previously completed tickets — use to avoid reinventing solutions.\n');
       for (const s of context.relevantSummaries) {
         pushText(`---\n${s.content}\n`);
+      }
+    }
+
+    // Correction notice for resumed sessions: the replayed transcript may still
+    // contain a pre-edit version of items that have since changed. Tell the
+    // model the current sections above are authoritative.
+    if (editsNotice) {
+      const lines: string[] = [];
+      for (const c of editsNotice.editedComments) {
+        lines.push(`- Comment by ${c.authorName} was edited${c.lastEditedBy ? ` by ${c.lastEditedBy}` : ''}.`);
+      }
+      for (const d of editsNotice.editedDeliverables) {
+        lines.push(`- Deliverable "${d.title}" → v${d.version} (edited${d.lastEditedBy ? ` by ${d.lastEditedBy}` : ''}).`);
+      }
+      const deletedCount = editsNotice.deletedCommentIds.length + editsNotice.deletedDeliverableIds.length;
+      if (deletedCount > 0) {
+        lines.push(`- ${deletedCount} item(s) were deleted — disregard them entirely.`);
+      }
+      if (lines.length > 0) {
+        pushText(`\n## Updates since your last run\nSome items you already saw have changed. The versions shown above in "Comments" / "Deliverables" are authoritative — ignore any earlier version still present in the conversation history:\n${lines.join('\n')}\n`);
       }
     }
 

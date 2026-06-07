@@ -1,6 +1,6 @@
 # Commentaires & Deliverables éditables — Spécification
 
-> Statut : **Phase 1 implémentée**. Auteur : agent. Date : 2026-06-07.
+> Statut : **Phases 1 & 2 implémentées**. Auteur : agent. Date : 2026-06-07.
 
 ## Statut d'implémentation
 
@@ -22,7 +22,19 @@ Décisions validées : **D1** = humain peut éditer le contenu d'un agent, *trac
 - UI : édition inline des commentaires (+ badge « (edited) »), `DeliverableFormModal` en mode create/edit,
   bouton Edit + « edited … » dans `TicketDeliverables`.
 
-**Phase 2 — non livrée** : cohérence du contexte LLM (watermark + `contextDelta` + bloc-correction / invalidation de session). Voir §6.
+**Phase 2 — livrée** (cette branche) : cohérence du contexte LLM au re-run.
+- `TicketContextDelta` (shared) + `GetTicketContextUseCase.execute({ sinceWatermark })` qui calcule
+  édités (`last_edited_at > watermark && created_at <= watermark`), suppressions (reconstruites depuis
+  `domain_event_log` via `list({ eventType, since })`) et `selfAuthoredDeliverableEdited`.
+  Injection de `domainEventLogStore` dans le use-case.
+- `execute-agent.ts` : watermark = `startedAt` du run précédent de la persona sur le ticket
+  (`computePreviousRunWatermark`, via `getExecutionsByTicket`, en excluant le run courant).
+  Stratégie **hybride** : invalidation du `resume` si suppression OU auto-édition d'un deliverable de
+  l'agent (drop de `sessionHistory[sessionKey]` ⇒ run frais) ; sinon bloc « Updates since your last run »
+  injecté dans le prompt (les sections Comments/Deliverables courantes font foi).
+- Garde anti-storm inchangée (édition ≠ wake/auto-review).
+
+Tests : `ticket-comment.entity` (edit tracking) + `get-ticket-context-delta` (4 cas).
 
 ---
 

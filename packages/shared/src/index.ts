@@ -116,6 +116,7 @@ export type {
   TicketSummaryRef,
   TicketContext,
   TicketContextEpic,
+  TicketContextDelta,
   TicketReadCursors,
   TicketUnreadCounts,
   TicketWsMessageType,

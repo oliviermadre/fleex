@@ -1,10 +1,11 @@
-import type { TicketContext, TicketContextEpic } from '@fleex/shared';
+import type { TicketContext, TicketContextEpic, TicketContextDelta } from '@fleex/shared';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { TicketGroupStorePort } from '../ports/ticket-group-store.port.js';
+import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
 import type { GetRelevantSummariesUseCase } from './get-relevant-summaries.js';
 
 export class GetTicketContextUseCase {
@@ -15,6 +16,7 @@ export class GetTicketContextUseCase {
     private readonly deliverableStore: DeliverableStorePort,
     private readonly getRelevantSummaries?: GetRelevantSummariesUseCase,
     private readonly ticketGroupStore?: TicketGroupStorePort,
+    private readonly domainEventLogStore?: DomainEventLogStorePort,
   ) {}
 
   async execute(params: {
@@ -22,6 +24,13 @@ export class GetTicketContextUseCase {
     agentName: string;
     commentsLimit?: number;
     activityLimit?: number;
+    /**
+     * When set, compute {@link TicketContextDelta}: what changed (edits,
+     * deletions) since this timestamp — typically the agent's previous run on
+     * this ticket — so a resumed LLM session can be told its stale transcript
+     * is superseded.
+     */
+    sinceWatermark?: Date;
   }): Promise<TicketContext> {
     const ticket = await this.ticketStore.getTicketById(params.ticketId);
     if (!ticket) throw new TicketNotFoundError(params.ticketId);
@@ -79,6 +88,18 @@ export class GetTicketContextUseCase {
       }
     }
 
+    // Compute the delta since the agent's previous run, if requested.
+    let contextDelta: TicketContextDelta | undefined;
+    if (params.sinceWatermark) {
+      contextDelta = await this.computeDelta({
+        ticketId: params.ticketId,
+        agentName: params.agentName,
+        watermark: params.sinceWatermark,
+        comments: visibleComments,
+        deliverables,
+      });
+    }
+
     return {
       ticket: ticket.toDTO(),
       comments: visibleComments.map((c) => c.toDTO()),
@@ -90,6 +111,58 @@ export class GetTicketContextUseCase {
       activity: activity.map((a) => a.toDTO()),
       relevantSummaries,
       epics,
+      ...(contextDelta ? { contextDelta } : {}),
     };
+  }
+
+  private async computeDelta(params: {
+    ticketId: string;
+    agentName: string;
+    watermark: Date;
+    comments: Awaited<ReturnType<CommentStorePort['getByTicket']>>;
+    deliverables: Awaited<ReturnType<DeliverableStorePort['getByTicket']>>;
+  }): Promise<TicketContextDelta> {
+    const { watermark } = params;
+
+    // Edited = seen before the watermark (created earlier) but edited since.
+    const editedComments = params.comments.filter(
+      (c) => c.lastEditedAt != null && c.lastEditedAt > watermark && c.createdAt <= watermark,
+    );
+    const editedDeliverables = params.deliverables.filter(
+      (d) => d.lastEditedAt != null && d.lastEditedAt > watermark && d.createdAt <= watermark,
+    );
+    const selfAuthoredDeliverableEdited = editedDeliverables.some(
+      (d) => d.agentName === params.agentName,
+    );
+
+    // Deletions are reconstructed from the audit log (the rows are gone).
+    const deletedCommentIds = await this.deletedIdsSince('comment.deleted', 'commentId', params.ticketId, watermark);
+    const deletedDeliverableIds = await this.deletedIdsSince('deliverable.deleted', 'deliverableId', params.ticketId, watermark);
+
+    return {
+      editedComments: editedComments.map((c) => c.toDTO()),
+      editedDeliverables: editedDeliverables.map((d) => d.toDTO()),
+      deletedCommentIds,
+      deletedDeliverableIds,
+      selfAuthoredDeliverableEdited,
+    };
+  }
+
+  private async deletedIdsSince(
+    eventType: string,
+    idField: string,
+    ticketId: string,
+    since: Date,
+  ): Promise<string[]> {
+    if (!this.domainEventLogStore) return [];
+    try {
+      const entries = await this.domainEventLogStore.list({ limit: 200, eventType, since });
+      return entries
+        .filter((e) => e.payload['ticketId'] === ticketId)
+        .map((e) => e.payload[idField])
+        .filter((id): id is string => typeof id === 'string');
+    } catch {
+      return [];
+    }
   }
 }
