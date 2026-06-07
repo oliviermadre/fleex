@@ -11,6 +11,7 @@ import { Command } from 'commander';
 import type { CommandDef } from './types.ts';
 import { applyPrettyHelp, setRootProgram } from './help.ts';
 import { activateWorkspace } from './workspaces.ts';
+import { isJsonMode, setJsonMode } from './colors.ts';
 
 const commandsDir = path.join(import.meta.dir, '..', 'commands');
 
@@ -47,6 +48,13 @@ function attachCommand(parent: Command, def: CommandDef): void {
   cmd.description(def.description);
   if (def.aliases?.length) cmd.aliases(def.aliases);
   if (def.setup) def.setup(cmd);
+  // Global `--json` flag on every command: machine-readable output for
+  // programmatic consumers (the MCP tool layer). Hidden from the MCP tool
+  // schemas (see @fleex/mcp generator) and injected automatically when needed.
+  cmd.option('--json', 'Output machine-readable JSON instead of formatted text');
+  cmd.hook('preAction', (thisCommand) => {
+    if (thisCommand.opts().json) setJsonMode(true);
+  });
   if (def.workspaceAware) {
     cmd.option('--workspace <name>', 'Target the named workspace instance (defaults to the is_default workspace)');
     cmd.hook('preAction', (thisCommand) => {
@@ -63,7 +71,11 @@ function attachCommand(parent: Command, def: CommandDef): void {
       await def.action(...args);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      process.stderr.write(`fleex: ${msg}\n`);
+      if (isJsonMode()) {
+        process.stdout.write(JSON.stringify({ ok: false, error: msg }) + '\n');
+      } else {
+        process.stderr.write(`fleex: ${msg}\n`);
+      }
       process.exit(1);
     }
   });

@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { c, statusColor } from '../../../core/colors.ts';
+import { c, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
 import { resolveTicketId } from '../_shared.ts';
 
@@ -58,6 +58,24 @@ const def: CommandDef = {
           .map((e) => `${e.emoji ? e.emoji + ' ' : ''}${e.name ?? ''}`.trim())
           .filter((s) => s !== '')
           .join(', ') || '-';
+
+    if (isJsonMode()) {
+      const includeComments = opts.withComments || opts.full;
+      const includeDeliverables = opts.withDeliverables || opts.full;
+      const [comments, deliverables] = await Promise.all([
+        includeComments ? apiGet<Comment[]>(`${base}/api/tickets/${uuid}/comments`) : Promise.resolve(undefined),
+        includeDeliverables ? apiGet<Deliverable[]>(`${base}/api/tickets/${uuid}/deliverables`) : Promise.resolve(undefined),
+      ]);
+      const payload = {
+        ...ticket,
+        uuid,
+        epics: ticketEpics,
+        ...(comments ? { comments } : {}),
+        ...(deliverables ? { deliverables } : {}),
+      };
+      process.stdout.write(JSON.stringify(payload) + '\n');
+      return;
+    }
 
     const colored = statusColor(ticket.status)(ticket.status);
     process.stdout.write('\n');

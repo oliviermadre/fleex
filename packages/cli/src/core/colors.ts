@@ -12,6 +12,34 @@ export const c = {
 
 const tag = chalk.blue('[fleex]');
 
+// ── Machine-readable output mode ──
+// Toggled by the global `--json` flag (see src/core/program.ts). When on,
+// data-returning commands emit a single JSON line instead of formatted text,
+// and errors are emitted as `{ "ok": false, "error": "..." }` on stdout — so
+// programmatic consumers (the MCP tool layer) get structured results.
+let jsonMode = false;
+
+export function setJsonMode(on: boolean): void {
+  jsonMode = on;
+}
+
+export function isJsonMode(): boolean {
+  return jsonMode;
+}
+
+/**
+ * In JSON mode, print `data` as a single JSON line. Otherwise run `renderHuman`
+ * (the existing formatted output). Lets a command serve both audiences without
+ * duplicating its fetch logic.
+ */
+export function present(data: unknown, renderHuman: () => void): void {
+  if (jsonMode) {
+    process.stdout.write(JSON.stringify(data) + '\n');
+    return;
+  }
+  renderHuman();
+}
+
 export function info(msg: string): void {
   process.stdout.write(`${tag} ${msg}\n`);
 }
@@ -29,6 +57,10 @@ export function err(msg: string): void {
 }
 
 export function die(msg: string): never {
+  if (jsonMode) {
+    process.stdout.write(JSON.stringify({ ok: false, error: msg }) + '\n');
+    process.exit(1);
+  }
   err(msg);
   process.exit(1);
 }
