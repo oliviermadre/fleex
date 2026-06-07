@@ -20,6 +20,7 @@ import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { EventBus } from '../event-bus.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { MentionExecutionMode } from '@fleex/shared';
+import { normalizeDeliverableTypes } from '@fleex/shared';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
@@ -744,7 +745,10 @@ Be concise and decision-oriented. Write in the same language as the panel member
       await this.agentEventStore.appendEvent(endEvent);
       this.onEvent?.(endEvent);
 
-      const structuredOutput = (rawStructured ?? parseAgentOutput(text)) as Record<string, unknown> | null;
+      const validTypes = normalizeDeliverableTypes(this.config.get().deliverableTypes)
+        .filter((t) => !t.system)
+        .map((t) => t.id);
+      const structuredOutput = (rawStructured ?? parseAgentOutput(text, { validTypes })) as Record<string, unknown> | null;
       return { text: `**🏛️ ${panel.displayName} — Synthesis**\n\n${text}`, structuredOutput, executionId };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

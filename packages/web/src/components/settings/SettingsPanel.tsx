@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { TagInput } from '../ui/TagInput';
 import { AppearanceTab } from './AppearanceTab';
+import { DeliverableTypesTab } from './DeliverableTypesTab';
 import { cn } from '../../lib/cn';
 import type { AgentToken } from '@fleex/shared';
 import * as api from '../../services/api';
@@ -16,6 +17,7 @@ const tabLabels: Record<SettingsTab, string> = {
   'pinned-icons': 'Pinned Icons',
   'workspace-actions': 'Workspace Actions',
   'agent-tokens': 'Agent Tokens',
+  'deliverable-types': 'Deliverable Types',
 };
 
 export function SettingsPanel() {
@@ -163,13 +165,16 @@ export function SettingsPanel() {
             />
           )}
           {settingsTab === 'agent-tokens' && <AgentTokensTab />}
+          {settingsTab === 'deliverable-types' && <DeliverableTypesTab />}
 
-          {/* Save button */}
-          <div className="mt-8 flex justify-end">
-            <Button variant="primary" onClick={handleSave}>
-              Save Settings
-            </Button>
-          </div>
+          {/* Save button — hidden for tabs that persist changes immediately. */}
+          {settingsTab !== 'deliverable-types' && (
+            <div className="mt-8 flex justify-end">
+              <Button variant="primary" onClick={handleSave}>
+                Save Settings
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -466,6 +466,52 @@ export async function deleteDeliverable(ticketId: string, deliverableId: string)
   await request<void>(`/tickets/${encodeURIComponent(ticketId)}/deliverables/${encodeURIComponent(deliverableId)}`, { method: 'DELETE' });
 }
 
+// ── Deliverable Types (per-workspace config / backoffice) ──
+
+export interface DeliverableTypesView {
+  types: import('@fleex/shared').DeliverableTypeDef[];
+  usage: Record<string, number>;
+}
+
+export async function fetchDeliverableTypes(): Promise<DeliverableTypesView> {
+  return request<DeliverableTypesView>('/deliverable-types');
+}
+
+export async function createDeliverableType(
+  input: { id: string; label: string; description?: string; renderer: import('@fleex/shared').DeliverableRenderer; color?: import('@fleex/shared').DeliverableTypeColor | null },
+): Promise<DeliverableTypesView> {
+  return request<DeliverableTypesView>('/deliverable-types', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function updateDeliverableType(
+  id: string,
+  patch: { label?: string; description?: string; renderer?: import('@fleex/shared').DeliverableRenderer; color?: import('@fleex/shared').DeliverableTypeColor | null },
+): Promise<DeliverableTypesView> {
+  return request<DeliverableTypesView>(`/deliverable-types/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+export async function renameDeliverableType(id: string, newId: string): Promise<DeliverableTypesView & { migrated: number }> {
+  return request<DeliverableTypesView & { migrated: number }>(`/deliverable-types/${encodeURIComponent(id)}/rename`, {
+    method: 'POST',
+    body: JSON.stringify({ newId }),
+  });
+}
+
+export async function deleteDeliverableType(id: string): Promise<DeliverableTypesView> {
+  return request<DeliverableTypesView>(`/deliverable-types/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function reassignDeliverableType(from: string, to: string): Promise<{ migrated: number }> {
+  return request<{ migrated: number }>('/deliverable-types/reassign', { method: 'POST', body: JSON.stringify({ from, to }) });
+}
+
+export async function changeDeliverableType(deliverableId: string, type: string): Promise<import('@fleex/shared').TicketDeliverable> {
+  return request<import('@fleex/shared').TicketDeliverable>(`/deliverables/${encodeURIComponent(deliverableId)}/type`, {
+    method: 'PATCH',
+    body: JSON.stringify({ type }),
+  });
+}
+
 // ── Ticket Comments API ──
 
 export async function fetchTicketComments(ticketId: string): Promise<import('@fleex/shared').TicketComment[]> {

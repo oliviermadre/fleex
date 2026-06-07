@@ -2,15 +2,34 @@ import { readFileSync } from 'node:fs';
 import {
   DELIVERABLE_TYPES,
   DELIVERABLE_STATUSES,
-  isDeliverableType,
   isDeliverableStatus,
 } from '@fleex/shared';
-import type { DeliverableType, DeliverableStatus, TicketDeliverable } from '@fleex/shared';
+import type { DeliverableTypeDef, DeliverableStatus, TicketDeliverable } from '@fleex/shared';
 import { die } from '../../../core/colors.ts';
+import { apiBase, apiCall } from '../../../core/api.ts';
 
-export function assertValidType(t: string): asserts t is DeliverableType {
-  if (!isDeliverableType(t)) {
-    die(`Invalid type: ${t} (valid: ${DELIVERABLE_TYPES.join(', ')})`);
+/**
+ * Fetch the workspace's configured deliverable type ids from the server. Falls
+ * back to the default preset if the endpoint is unreachable (e.g. older server).
+ */
+async function fetchDeliverableTypeIds(): Promise<string[]> {
+  try {
+    const view = await apiCall<{ types: DeliverableTypeDef[] }>('GET', `${apiBase()}/api/deliverable-types`);
+    const ids = view?.types?.map((t) => t.id) ?? [];
+    return ids.length > 0 ? ids : DELIVERABLE_TYPES;
+  } catch {
+    return DELIVERABLE_TYPES;
+  }
+}
+
+/**
+ * Validate a deliverable type against the workspace's configured types.
+ * Exits the process via `die` when invalid.
+ */
+export async function assertValidType(t: string): Promise<void> {
+  const valid = await fetchDeliverableTypeIds();
+  if (!valid.includes(t)) {
+    die(`Invalid type: ${t} (valid: ${valid.join(', ')})`);
   }
 }
 

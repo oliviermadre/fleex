@@ -3,6 +3,8 @@ import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
 import { appWs } from '../../services/websocket';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { DeliverableFormModal } from './DeliverableFormModal';
 import { TicketPickerModal } from './TicketPickerModal';
 import * as api from '../../services/api';
@@ -24,16 +26,6 @@ function isUrl(text: string): boolean {
   return /^https?:\/\/\S+$/.test(text.trim());
 }
 
-function typeIcon(type: string): string {
-  switch (type) {
-    case 'prd': return 'PRD';
-    case 'spec': return 'SPEC';
-    case 'url': return 'URL';
-    case 'pr': return 'PR';
-    case 'plan': return 'PLAN';
-    default: return type.toUpperCase().slice(0, 4);
-  }
-}
 
 export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
@@ -47,6 +39,8 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const seenSet = useUnreadStore((s) => s.seenDeliverablesByTicket[ticketId]);
   const toggleDeliverableSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
   const loadSeenDeliverables = useUnreadStore((s) => s.loadSeenDeliverables);
+  const labelForType = useDeliverableTypesStore((s) => s.labelFor);
+  const colorForType = useDeliverableTypesStore((s) => s.colorFor);
 
   const handleOpenDeliverable = useCallback((d: TicketDeliverable) => {
     // Mark as seen when opening
@@ -169,15 +163,31 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                   <span className="text-[9px] font-bold tracking-wider">NEW</span>
                 </button>
 
+                {/* Type badge — click to change type. Kept outside the row-open
+                    button (no nested buttons); full label, configured colour. */}
+                {(() => {
+                  const c = colorForType(d.type);
+                  return (
+                    <div className="flex-shrink-0 py-2.5 pl-2">
+                      <DeliverableTypePicker
+                        deliverable={d}
+                        onChanged={(u) => setDeliverables((prev) => prev.map((x) => (x.id === u.id ? u : x)))}
+                      >
+                        <span
+                          className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${c ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
+                          style={c ? { backgroundColor: c.bg, color: c.text } : undefined}
+                        >
+                          {labelForType(d.type)}
+                        </span>
+                      </DeliverableTypePicker>
+                    </div>
+                  );
+                })()}
+
                 <button
                   className="flex flex-1 items-center gap-3 px-2 py-2.5 text-left transition-colors hover:bg-[var(--theme-bg-surface-hover)]"
                   onClick={() => handleOpenDeliverable(d)}
                 >
-
-                  {/* Type badge */}
-                  <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-[var(--theme-accent)]">
-                    {typeIcon(d.type)}
-                  </span>
 
                   {/* Title + meta */}
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">

@@ -1,5 +1,6 @@
 import type { TicketDeliverable } from '@fleex/shared';
 import { useDocumentsStore } from '../../stores/documentsStore';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { cn } from '../../lib/cn';
 
 interface FacetItem {
@@ -19,16 +20,8 @@ function buildFacets(deliverables: TicketDeliverable[], key: keyof TicketDeliver
     .sort((a, b) => b.count - a.count);
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  spec: 'bg-blue-500/10 text-blue-400 ring-blue-500/20',
-  prd: 'bg-indigo-500/10 text-indigo-400 ring-indigo-500/20',
-  code: 'bg-teal-500/10 text-teal-400 ring-teal-500/20',
-  report: 'bg-gray-500/10 text-gray-400 ring-gray-500/20',
-  plan: 'bg-orange-500/10 text-orange-400 ring-orange-500/20',
-  html: 'bg-amber-500/10 text-amber-400 ring-amber-500/20',
-  url: 'bg-cyan-500/10 text-cyan-400 ring-cyan-500/20',
-  'ticket-summary': 'bg-rose-500/10 text-rose-400 ring-rose-500/20',
-};
+// Theme-accent fallback used when a type has no configured colour.
+const ACCENT_BADGE = 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)] ring-[var(--theme-accent)]/20';
 
 const STATUS_COLORS: Record<string, string> = {
   final: 'bg-green-500/10 text-green-400 ring-green-500/20',
@@ -103,6 +96,8 @@ export function DocumentsFilterSidebar() {
   const filterStatuses = useDocumentsStore((s) => s.filterStatuses);
   const toggleFilter = useDocumentsStore((s) => s.toggleFilter);
   const clearFilters = useDocumentsStore((s) => s.clearFilters);
+  const labelForType = useDeliverableTypesStore((s) => s.labelFor);
+  const colorForType = useDeliverableTypesStore((s) => s.colorFor);
 
   const typeFacets = buildFacets(deliverables, 'type');
   const agentFacets = buildFacets(deliverables, 'agentName');
@@ -129,10 +124,13 @@ export function DocumentsFilterSidebar() {
         activeValues={filterTypes}
         onToggle={(v) => toggleFilter('filterTypes', v)}
         renderLabel={(f) => {
-          const color = TYPE_COLORS[f.value] ?? 'bg-gray-500/10 text-gray-400 ring-gray-500/20';
+          const c = colorForType(f.value);
           return (
-            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium ring-1', color)}>
-              {f.label}
+            <span
+              className={cn('whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ring-1', !c && ACCENT_BADGE)}
+              style={c ? { backgroundColor: c.bg, color: c.text, boxShadow: `0 0 0 1px ${c.text}33` } : undefined}
+            >
+              {labelForType(f.value)}
             </span>
           );
         }}

@@ -1,9 +1,13 @@
 import { memo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { TicketDeliverable } from '@fleex/shared';
+import { stripHtmlCodeFence } from '@fleex/shared';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 import { TITLE_BAR_HEIGHT, PILL_BORDER_RADIUS } from '../../lib/constants';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { useUIStore } from '../../stores/uiStore';
 
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 250;
@@ -25,17 +29,6 @@ function relativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
-function typeIcon(type: string): string {
-  switch (type) {
-    case 'prd': return 'PRD';
-    case 'spec': return 'SPEC';
-    case 'url': return 'URL';
-    case 'pr': return 'PR';
-    case 'plan': return 'PLAN';
-    default: return type.toUpperCase().slice(0, 4);
-  }
-}
-
 const noopToggle = () => {};
 
 export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
@@ -53,7 +46,12 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
   onFocus?: () => void;
   isFocused?: boolean;
 }) {
-  const isHtml = deliverable.type === 'html';
+  const renderer = useDeliverableTypesStore((s) => s.rendererFor)(deliverable.type);
+  const typeLabel = useDeliverableTypesStore((s) => s.labelFor)(deliverable.type);
+  const typeColor = useDeliverableTypesStore((s) => s.colorFor)(deliverable.type);
+  const updateFloatingDeliverable = useUIStore((s) => s.updateFloatingDeliverable);
+  const isHtml = renderer === 'html';
+
   const { size, effectivePos, setPosition, handleResizeMouseDown } = useFloatingResize({
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
@@ -134,20 +132,25 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
           }}
           onMouseDown={handleTitleMouseDown}
         >
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: '0.05em',
-              padding: '1px 6px',
-              borderRadius: 3,
-              backgroundColor: 'var(--theme-accent-muted)',
-              color: 'var(--theme-accent)',
-              flexShrink: 0,
-            }}
-          >
-            {typeIcon(deliverable.type)}
-          </span>
+          <DeliverableTypePicker deliverable={deliverable} onChanged={updateFloatingDeliverable}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.05em',
+                padding: '1px 6px',
+                borderRadius: 3,
+                backgroundColor: typeColor?.bg ?? 'var(--theme-accent-muted)',
+                color: typeColor?.text ?? 'var(--theme-accent)',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                textTransform: 'uppercase',
+                display: 'inline-block',
+              }}
+            >
+              {typeLabel}
+            </span>
+          </DeliverableTypePicker>
 
           <span
             style={{
@@ -217,9 +220,9 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
         </div>
 
         {/* Content */}
-        {deliverable.type === 'html' ? (
+        {isHtml ? (
           <iframe
-            srcDoc={deliverable.content.replace(/<\\\/script\s*>/gi, '</script>')}
+            srcDoc={stripHtmlCodeFence(deliverable.content).replace(/<\\\/script\s*>/gi, '</script>')}
             style={{
               flex: 1,
               minHeight: 0,

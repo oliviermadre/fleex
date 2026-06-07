@@ -12,6 +12,7 @@ const def: CommandDef = {
   description: 'Manage deliverables on a ticket (list, show, add, update, delete)',
   isParent: true,
   extraHelp: `\n${SECTION('Deliverable types:')}
+  Configured per workspace (Settings → Deliverable Types). Default preset:
   prd, spec, plan, code, report, url, html, ticket-summary
 
 ${SECTION('Status values:')}  draft, final

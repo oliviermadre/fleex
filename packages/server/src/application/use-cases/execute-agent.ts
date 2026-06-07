@@ -29,7 +29,9 @@ import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
-import { STANDARD_OUTPUT_SCHEMA as OUTPUT_FORMAT_SCHEMA } from '../utils/merge-output-schemas.js';
+import { STANDARD_OUTPUT_SCHEMA as OUTPUT_FORMAT_SCHEMA, buildStandardOutputSchema } from '../utils/merge-output-schemas.js';
+import { normalizeDeliverableTypes } from '@fleex/shared';
+import type { DeliverableTypeDef } from '@fleex/shared';
 
 interface ActiveExecution {
   mentionId: string;
@@ -45,24 +47,34 @@ interface QueueItem {
   mention: TicketMentionEntity;
 }
 
-const STRUCTURED_OUTPUT_INSTRUCTIONS = `
+/**
+ * Build the structured-output instructions, enumerating the workspace's
+ * configured (agent-selectable) deliverable types with their descriptions.
+ */
+function buildStructuredOutputInstructions(types: DeliverableTypeDef[]): string {
+  const selectable = types.filter((t) => !t.system);
+  const fallback = selectable.some((t) => t.id === 'report') ? 'report' : (selectable[0]?.id ?? 'report');
+  const typeLines = selectable
+    .map((t) => {
+      const htmlNote = t.renderer === 'html' ? ' (rendered as a standalone HTML page)' : '';
+      return `  - \`"${t.id}"\` — ${t.description}${htmlNote}`;
+    })
+    .join('\n');
+  const htmlTypeIds = selectable.filter((t) => t.renderer === 'html').map((t) => `\`"${t.id}"\``);
+  const htmlRule = htmlTypeIds.length > 0
+    ? `\n- **HTML-rendered types** (${htmlTypeIds.join(', ')}): the \`markdown\` field MUST contain a single, complete, self-contained raw HTML document starting with \`<!DOCTYPE html>\`. Do **NOT** wrap it in a markdown code fence (no \`\`\`html … \`\`\`) — the content is embedded directly into an iframe, so any fence markers would render literally.`
+    : '';
+  return `
 # Output Format
 
 Your final response will be structured as JSON with two fields:
 
 - **deliverable**: Use when you have a tangible work product (code, analysis, document, PRD, etc.).
-  Provide a short descriptive title, the full content as markdown, a type, and a status.
-  Set to null if there is nothing to deliver.
+  Provide a short descriptive title, the full content (markdown — or, for HTML-rendered types, a
+  raw HTML document), a type, and a status. Set to null if there is nothing to deliver.
 - **deliverable.type**: Classify the deliverable. Must be one of:
-  - \`"prd"\` — Product Requirements Document
-  - \`"spec"\` — Technical specification or design document
-  - \`"plan"\` — Implementation plan, roadmap, or action items
-  - \`"code"\` — Code snippet, patch, or implementation
-  - \`"report"\` — Analysis, audit, review, or research findings
-  - \`"url"\` — External link (content should be the URL)
-  - \`"ticket-summary"\` — Auto-generated ticket summary (system use only)
-  - \`"html"\` — Self-contained HTML document (rendered as iframe embed). The \`markdown\` field must contain a complete \`<!DOCTYPE html>...\` string.
-  Choose the type that best matches your output. When in doubt, use \`"report"\`.
+${typeLines}
+  Choose the type that best matches your output. When in doubt, use \`"${fallback}"\`.${htmlRule}
 - **deliverable.status**: Set to "draft" if your work has open questions, uncertainties, or
   needs human review before being acted upon. Set to "final" when the work is complete and
   ready for downstream consumption.
@@ -92,6 +104,7 @@ Your final response will be structured as JSON with two fields:
 3. When you need human input, decisions, or answers: mention the human operator using
    the exact tag provided below (NOT a display name or guess).
 `.trim();
+}
 
 export class ExecuteAgentUseCase {
   private activeExecutions = new Map<string, ActiveExecution>();
@@ -131,6 +144,21 @@ export class ExecuteAgentUseCase {
     private readonly sdkLimiter: SdkConcurrencyLimiter,
     private readonly skillStore?: SkillStorePort,
   ) {}
+
+  /** Workspace-configured deliverable types (normalized; system types included). */
+  private deliverableTypeDefs(): DeliverableTypeDef[] {
+    return normalizeDeliverableTypes(this.config.get().deliverableTypes);
+  }
+
+  /** Type ids agents may select (system types excluded). */
+  private agentSelectableTypeIds(): string[] {
+    return this.deliverableTypeDefs().filter((t) => !t.system).map((t) => t.id);
+  }
+
+  /** Structured-output JSON schema constrained to the configured selectable types. */
+  private outputFormatSchema(): typeof OUTPUT_FORMAT_SCHEMA {
+    return buildStandardOutputSchema(this.agentSelectableTypeIds());
+  }
 
   /**
    * Startup recovery: mark orphaned executions as interrupted,
@@ -549,7 +577,7 @@ export class ExecuteAgentUseCase {
           model: persona.model,
           systemPrompt,
           cwd: worktreePath,
-          outputFormat: OUTPUT_FORMAT_SCHEMA,
+          outputFormat: this.outputFormatSchema(),
           resume: previousSessionId ?? undefined,
         });
 
@@ -703,7 +731,7 @@ export class ExecuteAgentUseCase {
       }
 
       // 11b. Parse structured output — prefer SDK-validated output, fall back to text parser
-      const structured = structuredOutput ?? parseAgentOutput(resultText);
+      const structured = structuredOutput ?? parseAgentOutput(resultText, { validTypes: this.agentSelectableTypeIds() });
 
       await emitEvent('execution_end', {
         status: 'completed',
@@ -1160,7 +1188,7 @@ export class ExecuteAgentUseCase {
         model: persona.model,
         systemPrompt,
         cwd: worktreePath,
-        outputFormat: opts?.outputFormatOverride ?? OUTPUT_FORMAT_SCHEMA,
+        outputFormat: opts?.outputFormatOverride ?? this.outputFormatSchema(),
         resume: previousSessionId ?? undefined,
       });
 
@@ -1234,7 +1262,7 @@ export class ExecuteAgentUseCase {
       }
 
       // 9. Process results — same as executeForMention
-      const structured = structuredOutput ?? parseAgentOutput(resultText);
+      const structured = structuredOutput ?? parseAgentOutput(resultText, { validTypes: this.agentSelectableTypeIds() });
       const ticket = await this.ticketStore.getTicketById(ticketId);
 
       await emitEvent('execution_end', {
@@ -1775,7 +1803,7 @@ export class ExecuteAgentUseCase {
       parts.push(`---\n## ${persona.name} - MEMORY.md\n\n${persona.memoryMd}\n---`);
     }
 
-    parts.push(STRUCTURED_OUTPUT_INSTRUCTIONS);
+    parts.push(buildStructuredOutputInstructions(this.deliverableTypeDefs()));
 
     if (humanName) {
       parts.push(

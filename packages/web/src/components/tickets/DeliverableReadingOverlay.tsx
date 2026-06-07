@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { stripHtmlCodeFence } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { TicketPickerModal } from './TicketPickerModal';
 
 function relativeTime(dateStr: string): string {
@@ -17,23 +20,15 @@ function relativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
-function typeIcon(type: string): string {
-  switch (type) {
-    case 'prd': return 'PRD';
-    case 'spec': return 'SPEC';
-    case 'url': return 'URL';
-    case 'pr': return 'PR';
-    case 'plan': return 'PLAN';
-    default: return type.toUpperCase().slice(0, 4);
-  }
-}
-
 const noopToggle = () => {};
 
 export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
   const deliverable = useUIStore((s) => s.deliverableOverlay);
   const close = useUIStore((s) => s.closeDeliverableOverlay);
   const addFloatingDeliverable = useUIStore((s) => s.addFloatingDeliverable);
+  const labelForType = useDeliverableTypesStore((s) => s.labelFor);
+  const typeColor = useDeliverableTypesStore((s) => s.colorFor)(deliverable?.type ?? '');
+  const isHtml = useDeliverableTypesStore((s) => s.rendererFor)(deliverable?.type ?? '') === 'html';
   const [showCopyPicker, setShowCopyPicker] = useState(false);
   const [copied, setCopied] = useState(false);
   const resolvedTicketId = ticketId ?? deliverable?.ticketId ?? '';
@@ -81,12 +76,17 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="deliverable-overlay-panel" style={deliverable.type === 'html' ? { height: '85vh' } : undefined} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="deliverable-overlay-panel" style={isHtml ? { height: '85vh' } : undefined} onMouseDown={(e) => e.stopPropagation()}>
         {/* Title bar */}
         <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3" style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}>
-          <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-2 py-0.5 text-[11px] font-bold tracking-wider text-[var(--theme-accent)]">
-            {typeIcon(deliverable.type)}
-          </span>
+          <DeliverableTypePicker deliverable={deliverable} onChanged={(u) => useUIStore.getState().openDeliverableOverlay(u)}>
+            <span
+              className={`flex-shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${typeColor ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
+              style={typeColor ? { backgroundColor: typeColor.bg, color: typeColor.text } : undefined}
+            >
+              {labelForType(deliverable.type)}
+            </span>
+          </DeliverableTypePicker>
 
           <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
             {deliverable.title}
@@ -158,9 +158,9 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
         </div>
 
         {/* Content */}
-        {deliverable.type === 'html' ? (
+        {isHtml ? (
           <iframe
-            srcDoc={deliverable.content.replace(/<\\\/script\s*>/gi, '</script>')}
+            srcDoc={stripHtmlCodeFence(deliverable.content).replace(/<\\\/script\s*>/gi, '</script>')}
             className="flex-1"
             style={{
               width: '100%',

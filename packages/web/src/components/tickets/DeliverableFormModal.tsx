@@ -3,16 +3,7 @@ import { Modal } from '../ui/Modal';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import * as api from '../../services/api';
 import { useToastStore } from '../../stores/toastStore';
-
-const DELIVERABLE_TYPES = [
-  { value: 'prd', label: 'PRD' },
-  { value: 'spec', label: 'SPEC' },
-  { value: 'plan', label: 'PLAN' },
-  { value: 'code', label: 'CODE' },
-  { value: 'report', label: 'REPORT' },
-  { value: 'url', label: 'URL' },
-  { value: 'html', label: 'HTML' },
-] as const;
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 
 interface DeliverableFormModalProps {
   open: boolean;
@@ -21,8 +12,10 @@ interface DeliverableFormModalProps {
 }
 
 export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFormModalProps) {
+  const selectableTypes = useDeliverableTypesStore((s) => s.types).filter((t) => !t.system);
+  const defaultType = selectableTypes.some((t) => t.id === 'report') ? 'report' : (selectableTypes[0]?.id ?? 'report');
   const [title, setTitle] = useState('');
-  const [type, setType] = useState<string>('report');
+  const [type, setType] = useState<string>(defaultType);
   const [status, setStatus] = useState<'draft' | 'final'>('final');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
@@ -38,11 +31,11 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
 
   const resetForm = useCallback(() => {
     setTitle('');
-    setType('report');
+    setType(defaultType);
     setStatus('final');
     setContent('');
     setTitleError('');
-  }, []);
+  }, [defaultType]);
 
   const handleClose = useCallback(() => {
     resetForm();
@@ -118,8 +111,8 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
               onChange={(e) => setType(e.target.value)}
               className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-input)] px-3 py-2 text-sm text-[var(--theme-text-primary)] outline-none transition-colors focus:border-[var(--theme-accent)]"
             >
-              {DELIVERABLE_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+              {selectableTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
               ))}
             </select>
           </div>

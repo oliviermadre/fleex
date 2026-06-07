@@ -189,27 +189,176 @@ export interface MentionExecutionFailedPayload {
 
 // ── Deliverables ──
 
-export const DELIVERABLE_TYPES = [
-  'prd',
-  'spec',
-  'plan',
-  'code',
-  'report',
-  'url',
-  'html',
-  'ticket-summary',
-] as const;
-export type DeliverableType = typeof DELIVERABLE_TYPES[number];
+/**
+ * Renderers available for deliverable content. Extensible: add a key here and
+ * handle it in the web renderer switch (see FloatingDeliverablePanel).
+ */
+export const DELIVERABLE_RENDERERS = ['markdown', 'html'] as const;
+export type DeliverableRenderer = typeof DELIVERABLE_RENDERERS[number];
+
+/**
+ * Badge colour for a deliverable type. Concrete CSS colour strings so they can
+ * be applied as inline styles consistently across every surface (regardless of
+ * Tailwind). `bg` is typically a translucent fill, `text` a solid foreground.
+ */
+export interface DeliverableTypeColor {
+  bg: string;
+  text: string;
+}
+
+/**
+ * A configurable deliverable type. `id` is the stable value persisted on each
+ * deliverable row; label/description/renderer drive presentation and behaviour.
+ * Types are configurable per workspace — {@link DEFAULT_DELIVERABLE_TYPES} is
+ * the preset used when a workspace has not customised them.
+ */
+export interface DeliverableTypeDef {
+  /** Stable slug stored on deliverables (e.g. "spec", "visual-explainer"). */
+  id: string;
+  /** Human-friendly label shown in the UI. */
+  label: string;
+  /** Shown to the agent in the structured-output instructions to guide choice. */
+  description: string;
+  /** How the web renders this deliverable's content. */
+  renderer: DeliverableRenderer;
+  /**
+   * Badge colour. When unset, the badge falls back to the theme accent colour
+   * everywhere (no regression for legacy/uncoloured types).
+   */
+  color?: DeliverableTypeColor;
+  /**
+   * System-managed type (e.g. ticket-summary): not offered to agents, and
+   * cannot be deleted or renamed through the backoffice.
+   */
+  system?: boolean;
+}
+
+/**
+ * Predefined badge colour palette offered in the config UI. Each entry pairs a
+ * translucent background with a solid text colour of the same hue, matching the
+ * app's existing badge aesthetic.
+ */
+export const DELIVERABLE_COLOR_PRESETS: { key: string; label: string; bg: string; text: string }[] = [
+  { key: 'gray', label: 'Gray', bg: 'rgba(107,114,128,0.14)', text: '#9ca3af' },
+  { key: 'red', label: 'Red', bg: 'rgba(239,68,68,0.14)', text: '#f87171' },
+  { key: 'rose', label: 'Rose', bg: 'rgba(244,63,94,0.14)', text: '#fb7185' },
+  { key: 'orange', label: 'Orange', bg: 'rgba(249,115,22,0.14)', text: '#fb923c' },
+  { key: 'amber', label: 'Amber', bg: 'rgba(245,158,11,0.14)', text: '#fbbf24' },
+  { key: 'yellow', label: 'Yellow', bg: 'rgba(234,179,8,0.14)', text: '#facc15' },
+  { key: 'lime', label: 'Lime', bg: 'rgba(132,204,22,0.14)', text: '#a3e635' },
+  { key: 'green', label: 'Green', bg: 'rgba(34,197,94,0.14)', text: '#4ade80' },
+  { key: 'emerald', label: 'Emerald', bg: 'rgba(16,185,129,0.14)', text: '#34d399' },
+  { key: 'teal', label: 'Teal', bg: 'rgba(20,184,166,0.14)', text: '#2dd4bf' },
+  { key: 'cyan', label: 'Cyan', bg: 'rgba(6,182,212,0.14)', text: '#22d3ee' },
+  { key: 'blue', label: 'Blue', bg: 'rgba(59,130,246,0.14)', text: '#60a5fa' },
+  { key: 'indigo', label: 'Indigo', bg: 'rgba(99,102,241,0.14)', text: '#818cf8' },
+  { key: 'violet', label: 'Violet', bg: 'rgba(139,92,246,0.14)', text: '#a78bfa' },
+  { key: 'purple', label: 'Purple', bg: 'rgba(168,85,247,0.14)', text: '#c084fc' },
+  { key: 'pink', label: 'Pink', bg: 'rgba(236,72,153,0.14)', text: '#f472b6' },
+];
+
+/** Resolve a preset by hue key. */
+function preset(key: string): DeliverableTypeColor {
+  const p = DELIVERABLE_COLOR_PRESETS.find((c) => c.key === key)!;
+  return { bg: p.bg, text: p.text };
+}
+
+/** The stable id of the auto-generated ticket-summary deliverable. */
+export const TICKET_SUMMARY_TYPE = 'ticket-summary';
+
+/**
+ * Default preset — mirrors the historically hardcoded behaviour. Used when a
+ * workspace has not customised its deliverable types. `html` is kept for
+ * backward compatibility with existing deliverables; new workspaces can add
+ * named html-rendered types (e.g. visual-explainer, playground) instead.
+ */
+export const DEFAULT_DELIVERABLE_TYPES: DeliverableTypeDef[] = [
+  { id: 'prd', label: 'PRD', description: 'Product Requirements Document', renderer: 'markdown', color: preset('indigo') },
+  { id: 'spec', label: 'Spec', description: 'Technical specification or design document', renderer: 'markdown', color: preset('blue') },
+  { id: 'plan', label: 'Plan', description: 'Implementation plan, roadmap, or action items', renderer: 'markdown', color: preset('orange') },
+  { id: 'code', label: 'Code', description: 'Code snippet, patch, or implementation', renderer: 'markdown', color: preset('teal') },
+  { id: 'report', label: 'Report', description: 'Analysis, audit, review, or research findings', renderer: 'markdown', color: preset('gray') },
+  { id: 'url', label: 'URL', description: 'External link (content should be the URL)', renderer: 'markdown', color: preset('cyan') },
+  { id: 'html', label: 'HTML', description: 'Self-contained HTML document (rendered as an iframe embed). The content must be a complete `<!DOCTYPE html>...` string.', renderer: 'html', color: preset('amber') },
+  { id: TICKET_SUMMARY_TYPE, label: 'Ticket Summary', description: 'Auto-generated ticket summary (system use only)', renderer: 'markdown', color: preset('rose'), system: true },
+];
+
+/**
+ * Legacy default type ids. Kept for backward compatibility; new code should
+ * read the workspace's configured types instead.
+ */
+export const DELIVERABLE_TYPES: string[] = DEFAULT_DELIVERABLE_TYPES.map((t) => t.id);
+
+/** Deliverable type is a free-form string driven by per-workspace config. */
+export type DeliverableType = string;
 
 export const DELIVERABLE_STATUSES = ['draft', 'final'] as const;
 export type DeliverableStatus = typeof DELIVERABLE_STATUSES[number];
 
+/**
+ * Legacy guard against the default preset. Prefer validating against the
+ * workspace's configured types (see {@link normalizeDeliverableTypes}).
+ */
 export function isDeliverableType(t: unknown): t is DeliverableType {
-  return typeof t === 'string' && (DELIVERABLE_TYPES as readonly string[]).includes(t);
+  return typeof t === 'string' && DELIVERABLE_TYPES.includes(t);
 }
 
 export function isDeliverableStatus(s: unknown): s is DeliverableStatus {
   return typeof s === 'string' && (DELIVERABLE_STATUSES as readonly string[]).includes(s);
+}
+
+/**
+ * Ensure a usable list of types: fall back to the default preset when none are
+ * configured, and guarantee system types (e.g. ticket-summary) are always
+ * present even if a customised config omitted them.
+ */
+export function normalizeDeliverableTypes(
+  types: DeliverableTypeDef[] | undefined | null,
+): DeliverableTypeDef[] {
+  const base = types && types.length > 0
+    ? types.map((t) => ({ ...t }))
+    : DEFAULT_DELIVERABLE_TYPES.map((t) => ({ ...t }));
+  for (const sys of DEFAULT_DELIVERABLE_TYPES.filter((t) => t.system)) {
+    if (!base.some((t) => t.id === sys.id)) base.push({ ...sys });
+  }
+  return base;
+}
+
+/**
+ * Resolve the renderer for a stored deliverable type, tolerating unknown
+ * (e.g. legacy or removed) types by falling back to markdown.
+ */
+export function rendererForType(type: string, types: DeliverableTypeDef[]): DeliverableRenderer {
+  return types.find((t) => t.id === type)?.renderer ?? 'markdown';
+}
+
+/** Resolve the display label for a stored type, falling back to the raw id. */
+export function labelForType(type: string, types: DeliverableTypeDef[]): string {
+  return types.find((t) => t.id === type)?.label ?? type;
+}
+
+/**
+ * Resolve the configured badge colour for a stored type, or null when none is
+ * set (callers then fall back to the theme accent — no regression).
+ */
+export function colorForType(type: string, types: DeliverableTypeDef[]): DeliverableTypeColor | null {
+  return types.find((t) => t.id === type)?.color ?? null;
+}
+
+/** Validate a slug used as a deliverable type id. */
+export function isValidDeliverableTypeId(id: string): boolean {
+  return /^[a-z0-9][a-z0-9-]{0,48}$/.test(id);
+}
+
+/**
+ * Strip a single wrapping ```` ```html … ``` ```` (or bare ```` ``` … ``` ````) fence from
+ * HTML content. No-op when the content isn't a whole-content fenced block. Used for
+ * html-rendered deliverables, where the raw HTML is dropped into an iframe and an LLM may
+ * have mistakenly wrapped it in a markdown code fence.
+ */
+export function stripHtmlCodeFence(content: string): string {
+  const m = content.trim().match(/^```(?:html)?\s*\n?([\s\S]*?)\n?```$/i);
+  return m ? m[1]!.trim() : content;
 }
 
 export interface TicketDeliverable {

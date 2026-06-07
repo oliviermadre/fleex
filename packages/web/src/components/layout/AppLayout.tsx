@@ -12,6 +12,7 @@ import { useSkills } from '../../hooks/useSkills';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { NavSidebar } from '../sidebar/NavSidebar';
 import { ContentPanel } from '../sidebar/ContentPanel';
@@ -45,11 +46,13 @@ export function AppLayout() {
   const contentPanelCollapsed = useUIStore((s) => s.contentPanelCollapsed);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   const fetchRepositories = useRepositoryStore((s) => s.fetchRepositories);
+  const loadDeliverableTypes = useDeliverableTypesStore((s) => s.load);
 
   useEffect(() => {
     loadSettings();
     fetchRepositories();
-  }, [loadSettings, fetchRepositories]);
+    loadDeliverableTypes();
+  }, [loadSettings, fetchRepositories, loadDeliverableTypes]);
 
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
 

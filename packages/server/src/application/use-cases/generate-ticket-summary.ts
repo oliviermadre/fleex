@@ -150,6 +150,8 @@ export class GenerateTicketSummaryUseCase {
         agentName: 'system',
         oldStatus,
         newStatus: 'final',
+        oldType: existing.type,
+        newType: existing.type,
         title: existing.title,
         occurredAt: new Date(),
       });

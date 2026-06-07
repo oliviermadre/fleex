@@ -92,6 +92,30 @@ export class ForbiddenError extends DomainError {
   }
 }
 
+export class InvalidDeliverableTypeError extends DomainError {
+  constructor(type: string) {
+    super(`Invalid deliverable type: ${type}`, 'INVALID_DELIVERABLE_TYPE');
+  }
+}
+
+export class DeliverableTypeNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Deliverable type not found: ${id}`, 'DELIVERABLE_TYPE_NOT_FOUND');
+  }
+}
+
+export class DeliverableTypeConflictError extends DomainError {
+  constructor(message: string) {
+    super(message, 'DELIVERABLE_TYPE_CONFLICT');
+  }
+}
+
+export class DeliverableTypeInUseError extends DomainError {
+  constructor(id: string, count: number) {
+    super(`Deliverable type "${id}" is used by ${count} deliverable(s)`, 'DELIVERABLE_TYPE_IN_USE');
+  }
+}
+
 export class AgentPersonaNotFoundError extends DomainError {
   constructor(id: string) {
     super(`Agent persona not found: ${id}`, 'AGENT_PERSONA_NOT_FOUND');

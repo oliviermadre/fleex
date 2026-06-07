@@ -112,6 +112,9 @@ export type {
   MentionExecutionFailedPayload,
   TicketDeliverable,
   DeliverableType,
+  DeliverableTypeDef,
+  DeliverableTypeColor,
+  DeliverableRenderer,
   DeliverableStatus,
   TicketSummaryRef,
   TicketContext,
@@ -124,9 +127,19 @@ export type {
 
 export {
   DELIVERABLE_TYPES,
+  DELIVERABLE_RENDERERS,
+  DELIVERABLE_COLOR_PRESETS,
+  DEFAULT_DELIVERABLE_TYPES,
+  TICKET_SUMMARY_TYPE,
   DELIVERABLE_STATUSES,
   isDeliverableType,
   isDeliverableStatus,
+  normalizeDeliverableTypes,
+  rendererForType,
+  labelForType,
+  colorForType,
+  isValidDeliverableTypeId,
+  stripHtmlCodeFence,
 } from './types/ticket.js';
 
 export type {
