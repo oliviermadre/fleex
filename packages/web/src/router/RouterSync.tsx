@@ -26,6 +26,7 @@ const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 const VALID_SETTINGS_TABS: SettingsTab[] = [
   'general',
   'appearance',
+  'statuses',
   'repositories',
   'pinned-icons',
   'workspace-actions',
