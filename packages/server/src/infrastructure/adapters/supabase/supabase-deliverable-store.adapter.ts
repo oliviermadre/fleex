@@ -15,6 +15,8 @@ interface DeliverableRow {
   mention_id: string | null;
   created_at: string;
   updated_at: string;
+  last_edited_at: string | null;
+  last_edited_by: string | null;
 }
 
 function rowToEntity(r: DeliverableRow): TicketDeliverableEntity {
@@ -30,6 +32,8 @@ function rowToEntity(r: DeliverableRow): TicketDeliverableEntity {
     r.mention_id,
     new Date(r.created_at),
     new Date(r.updated_at),
+    r.last_edited_at ? new Date(r.last_edited_at) : null,
+    r.last_edited_by ?? null,
   );
 }
 
@@ -108,6 +112,8 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
       mention_id: deliverable.mentionId,
       created_at: deliverable.createdAt.toISOString(),
       updated_at: deliverable.updatedAt.toISOString(),
+      last_edited_at: deliverable.lastEditedAt?.toISOString() ?? null,
+      last_edited_by: deliverable.lastEditedBy,
     });
     if (error) throw new Error(`SupabaseDeliverableStore.save failed: ${error.message}`);
   }

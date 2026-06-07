@@ -15,6 +15,9 @@ interface CommentRow {
   parent_id: string | null;
   created_at: string;
   updated_at: string;
+  last_edited_at: string | null;
+  last_edited_by: string | null;
+  edit_count: number | null;
 }
 
 export class SqliteCommentStoreAdapter implements CommentStorePort {
@@ -54,10 +57,12 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO comments
         (id, ticket_id, author_type, author_name, body, visibility,
-         private_recipients, mentions, parent_id, created_at, updated_at)
+         private_recipients, mentions, parent_id, created_at, updated_at,
+         last_edited_at, last_edited_by, edit_count)
       VALUES
         (@id, @ticket_id, @author_type, @author_name, @body, @visibility,
-         @private_recipients, @mentions, @parent_id, @created_at, @updated_at)
+         @private_recipients, @mentions, @parent_id, @created_at, @updated_at,
+         @last_edited_at, @last_edited_by, @edit_count)
     `);
 
     stmt.run({
@@ -72,6 +77,9 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
       parent_id: comment.parentId,
       created_at: comment.createdAt.toISOString(),
       updated_at: comment.updatedAt.toISOString(),
+      last_edited_at: comment.lastEditedAt?.toISOString() ?? null,
+      last_edited_by: comment.lastEditedBy,
+      edit_count: comment.editCount,
     });
   }
 
@@ -92,6 +100,9 @@ export class SqliteCommentStoreAdapter implements CommentStorePort {
       row.parent_id,
       new Date(row.created_at),
       new Date(row.updated_at),
+      row.last_edited_at ? new Date(row.last_edited_at) : null,
+      row.last_edited_by ?? null,
+      row.edit_count ?? 0,
     );
   }
 }

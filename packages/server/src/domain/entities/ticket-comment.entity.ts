@@ -19,6 +19,9 @@ export class TicketCommentEntity {
     public readonly parentId: string | null,
     public readonly createdAt: Date,
     public updatedAt: Date,
+    public lastEditedAt: Date | null = null,
+    public lastEditedBy: string | null = null,
+    public editCount: number = 0,
   ) {}
 
   static create(params: {
@@ -111,10 +114,21 @@ export class TicketCommentEntity {
     return Array.from(matches);
   }
 
-  updateBody(body: string): void {
+  /**
+   * Edit the body. No-op (returns false) when the text is unchanged so callers
+   * don't bump `lastEditedAt` / `editCount` on idempotent saves.
+   * `editedBy` is the display name of the editor (may differ from the author).
+   */
+  updateBody(body: string, editedBy?: string): boolean {
+    if (body === this.body) return false;
     this.body = body;
     this.mentions = TicketCommentEntity.extractMentions(body);
-    this.updatedAt = new Date();
+    const now = new Date();
+    this.updatedAt = now;
+    this.lastEditedAt = now;
+    if (editedBy !== undefined) this.lastEditedBy = editedBy;
+    this.editCount += 1;
+    return true;
   }
 
   isVisibleTo(agentName: string): boolean {
@@ -136,6 +150,9 @@ export class TicketCommentEntity {
       parentId: this.parentId,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
+      lastEditedAt: this.lastEditedAt?.toISOString() ?? null,
+      lastEditedBy: this.lastEditedBy,
+      editCount: this.editCount,
     };
   }
 }

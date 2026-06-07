@@ -38,6 +38,7 @@ function typeIcon(type: string): string {
 export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editTarget, setEditTarget] = useState<TicketDeliverable | null>(null);
   const [copyTarget, setCopyTarget] = useState<TicketDeliverable | null>(null);
   const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
   const floatingDeliverableIds = useUIStore((s) => s.floatingDeliverableIds);
@@ -200,6 +201,17 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                       <span className="text-purple-400">{d.agentName}</span>
                       <span>&middot;</span>
                       <span>{relativeTime(d.createdAt)}</span>
+                      {d.lastEditedAt && (
+                        <>
+                          <span>&middot;</span>
+                          <span
+                            className="italic"
+                            title={`Edited ${new Date(d.lastEditedAt).toLocaleString()}${d.lastEditedBy ? ` by ${d.lastEditedBy}` : ''}`}
+                          >
+                            edited {relativeTime(d.lastEditedAt)}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -217,6 +229,21 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                   )}
+                </button>
+
+                {/* Edit button — visible on hover */}
+                <button
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded opacity-0 transition-all hover:bg-[var(--theme-accent)]/15 hover:text-[var(--theme-accent)] group-hover/deliv:opacity-100 text-[var(--theme-text-faint)]"
+                  title="Edit deliverable"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditTarget(d);
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
                 </button>
 
                 {/* Copy to button — visible on hover */}
@@ -258,6 +285,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
       </div>
 
       <DeliverableFormModal open={showCreateModal} onClose={() => setShowCreateModal(false)} ticketId={ticketId} />
+      <DeliverableFormModal open={!!editTarget} onClose={() => setEditTarget(null)} ticketId={ticketId} deliverable={editTarget} />
       {copyTarget && (
         <TicketPickerModal
           open={!!copyTarget}

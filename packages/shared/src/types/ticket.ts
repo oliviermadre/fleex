@@ -147,6 +147,12 @@ export interface TicketComment {
   readonly parentId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /** Set the first time the body is edited; null while never edited. */
+  readonly lastEditedAt: string | null;
+  /** Display name of whoever last edited the body (may differ from author). */
+  readonly lastEditedBy: string | null;
+  /** Number of times the body has been edited since creation. */
+  readonly editCount: number;
 }
 
 // ── Mentions ──
@@ -224,6 +230,10 @@ export interface TicketDeliverable {
   readonly mentionId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /** Set the first time the title/content is edited; null while never edited. */
+  readonly lastEditedAt: string | null;
+  /** Display name of whoever last edited the content (may differ from author). */
+  readonly lastEditedBy: string | null;
 }
 
 // ── Read Cursors ──

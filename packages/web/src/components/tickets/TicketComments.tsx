@@ -468,6 +468,11 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const listEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Inline comment editing
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
   // Autocomplete state
   const [acOpen, setAcOpen] = useState(false);
   const [acQuery, setAcQuery] = useState('');
@@ -782,6 +787,33 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     }
   }, []);
 
+  const handleStartEdit = useCallback((c: TicketComment) => {
+    setEditingId(c.id);
+    setEditBody(c.body);
+  }, []);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingId(null);
+    setEditBody('');
+  }, []);
+
+  const handleSaveEdit = useCallback(async (commentId: string) => {
+    const trimmed = editBody.trim();
+    if (!trimmed) return;
+    setEditSubmitting(true);
+    try {
+      const updated = await api.updateTicketComment(ticketId, commentId, trimmed);
+      // WS comment:updated will also reconcile; optimistically replace too
+      setComments((prev) => prev.map((c) => (c.id === commentId ? updated : c)));
+      setEditingId(null);
+      setEditBody('');
+    } catch {
+      // toast handled in api; keep editor open so the draft isn't lost
+    } finally {
+      setEditSubmitting(false);
+    }
+  }, [editBody, ticketId]);
+
   const handleSubmit = useCallback(async () => {
     const trimmed = body.trim();
     if (!trimmed || submitting) return;
@@ -948,14 +980,55 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                   <span className="text-[10px] text-[var(--theme-text-faint)]">
                     {relativeTime(c.createdAt)}
                   </span>
+                  {c.lastEditedAt && (
+                    <span
+                      className="text-[10px] italic text-[var(--theme-text-faint)]"
+                      title={`Edited ${new Date(c.lastEditedAt).toLocaleString()}${c.lastEditedBy ? ` by ${c.lastEditedBy}` : ''}`}
+                    >
+                      (edited)
+                    </span>
+                  )}
                 </div>
-                {/* Body — rendered as markdown */}
-                <CommentMarkdown
-                  body={c.body}
-                  commentId={c.id}
-                  mentionLookup={mentionLookup}
-                  onRemoveMention={handleRemoveMention}
-                />
+                {/* Body — rendered as markdown, or inline editor when editing */}
+                {editingId === c.id ? (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <textarea
+                      autoFocus
+                      className="max-h-60 min-h-[60px] w-full resize-y rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm leading-snug text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:outline-none"
+                      value={editBody}
+                      onChange={(e) => setEditBody(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') { e.preventDefault(); handleCancelEdit(); }
+                        else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void handleSaveEdit(c.id); }
+                      }}
+                      disabled={editSubmitting}
+                    />
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <button
+                        className="rounded bg-[var(--theme-accent)] px-2.5 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                        onClick={() => void handleSaveEdit(c.id)}
+                        disabled={editSubmitting || !editBody.trim()}
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="rounded px-2.5 py-1 text-xs text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)]"
+                        onClick={handleCancelEdit}
+                        disabled={editSubmitting}
+                      >
+                        Cancel
+                      </button>
+                      <span className="text-[10px] text-[var(--theme-text-faint)]">⌘/Ctrl+Enter to save · Esc to cancel</span>
+                    </div>
+                  </div>
+                ) : (
+                  <CommentMarkdown
+                    body={c.body}
+                    commentId={c.id}
+                    mentionLookup={mentionLookup}
+                    onRemoveMention={handleRemoveMention}
+                  />
+                )}
                 {/* Linked deliverables — Gmail-style attachment chips */}
                 {(() => {
                   const linked = deliverablesByComment.get(c.id);
@@ -968,16 +1041,29 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                     </div>
                   );
                 })()}
-                {/* Delete button — all comments */}
-                <button
-                    className="absolute right-2 top-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/20 text-[var(--theme-text-faint)] hover:text-red-400"
-                    onClick={() => handleDeleteComment(c.id)}
-                    title="Delete comment"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                {/* Edit + Delete buttons — hidden while editing */}
+                {editingId !== c.id && (
+                  <div className="absolute right-2 top-2 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      className="rounded p-1 text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-accent)]"
+                      onClick={(e) => { e.stopPropagation(); handleStartEdit(c); }}
+                      title="Edit comment"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      className="rounded p-1 text-[var(--theme-text-faint)] transition-colors hover:bg-red-500/20 hover:text-red-400"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteComment(c.id); }}
+                      title="Delete comment"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
                 </div>
               );

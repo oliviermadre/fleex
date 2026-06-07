@@ -462,6 +462,17 @@ export async function createDeliverable(
   });
 }
 
+export async function updateDeliverable(
+  ticketId: string,
+  deliverableId: string,
+  changes: { title?: string; content?: string; status?: 'draft' | 'final' },
+): Promise<import('@fleex/shared').TicketDeliverable> {
+  return request<import('@fleex/shared').TicketDeliverable>(
+    `/tickets/${encodeURIComponent(ticketId)}/deliverables/${encodeURIComponent(deliverableId)}`,
+    { method: 'PATCH', body: JSON.stringify(changes) },
+  );
+}
+
 export async function deleteDeliverable(ticketId: string, deliverableId: string): Promise<void> {
   await request<void>(`/tickets/${encodeURIComponent(ticketId)}/deliverables/${encodeURIComponent(deliverableId)}`, { method: 'DELETE' });
 }
@@ -476,6 +487,13 @@ export async function postTicketComment(ticketId: string, body: string, executio
   return request<import('@fleex/shared').TicketComment>(`/tickets/${encodeURIComponent(ticketId)}/comments`, {
     method: 'POST', body: JSON.stringify({ body, executionMode }),
   });
+}
+
+export async function updateTicketComment(ticketId: string, commentId: string, body: string): Promise<import('@fleex/shared').TicketComment> {
+  return request<import('@fleex/shared').TicketComment>(
+    `/tickets/${encodeURIComponent(ticketId)}/comments/${encodeURIComponent(commentId)}`,
+    { method: 'PATCH', body: JSON.stringify({ body }) },
+  );
 }
 
 export async function updateMentionExecutionMode(mentionId: string, executionMode: import('@fleex/shared').MentionExecutionMode): Promise<import('@fleex/shared').TicketMention> {

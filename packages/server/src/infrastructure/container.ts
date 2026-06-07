@@ -40,6 +40,7 @@ import { ImportGitHubIssueUseCase } from '../application/use-cases/import-github
 import { ImportSlackMessageUseCase } from '../application/use-cases/import-slack-message.js';
 import { BackfillPRTicketUseCase } from '../application/use-cases/backfill-pr-ticket.js';
 import { PostCommentUseCase } from '../application/use-cases/post-comment.js';
+import { EditCommentUseCase } from '../application/use-cases/edit-comment.js';
 import { ResolveMentionUseCase } from '../application/use-cases/resolve-mention.js';
 import { SubmitDeliverableUseCase } from '../application/use-cases/submit-deliverable.js';
 import { GetTicketContextUseCase } from '../application/use-cases/get-ticket-context.js';
@@ -218,6 +219,7 @@ export async function createContainer() {
 
   // Agent collaboration use cases
   const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore_, logger);
+  const editComment = new EditCommentUseCase(commentStore, mentionStore, logger);
   const resolveMention = new ResolveMentionUseCase(mentionStore, ticketStore_, logger);
   const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore_, logger);
   const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore_);
@@ -487,6 +489,7 @@ export async function createContainer() {
     mentionStore,
     deliverableStore,
     postComment,
+    editComment,
     resolveMention,
     submitDeliverable,
     getTicketContext,

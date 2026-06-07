@@ -15,6 +15,8 @@ interface DeliverableRow {
   mention_id: string | null;
   created_at: string;
   updated_at: string;
+  last_edited_at: string | null;
+  last_edited_by: string | null;
 }
 
 export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
@@ -68,10 +70,10 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO deliverables
         (id, ticket_id, agent_name, type, title, content, version, status,
-         mention_id, created_at, updated_at)
+         mention_id, created_at, updated_at, last_edited_at, last_edited_by)
       VALUES
         (@id, @ticket_id, @agent_name, @type, @title, @content, @version, @status,
-         @mention_id, @created_at, @updated_at)
+         @mention_id, @created_at, @updated_at, @last_edited_at, @last_edited_by)
     `);
 
     stmt.run({
@@ -86,6 +88,8 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
       mention_id: deliverable.mentionId,
       created_at: deliverable.createdAt.toISOString(),
       updated_at: deliverable.updatedAt.toISOString(),
+      last_edited_at: deliverable.lastEditedAt?.toISOString() ?? null,
+      last_edited_by: deliverable.lastEditedBy,
     });
   }
 
@@ -106,6 +110,8 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
       row.mention_id,
       new Date(row.created_at),
       new Date(row.updated_at),
+      row.last_edited_at ? new Date(row.last_edited_at) : null,
+      row.last_edited_by ?? null,
     );
   }
 }

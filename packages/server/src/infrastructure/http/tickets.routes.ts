@@ -8,7 +8,7 @@ import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
-import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
+import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError, ValidationError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus } from '@fleex/shared';
 import type { Container } from '../container.js';
 
@@ -1016,8 +1016,10 @@ export function ticketRoutes(container: Container) {
       const deliverable = await container.deliverableStore.getById(request.params.delivId);
       if (!deliverable) throw new DeliverableNotFoundError(request.params.delivId);
 
+      const { humanDisplayName, humanMentionName } = container.config.get();
+      const editorName = humanDisplayName || humanMentionName || 'user';
       const oldStatus = deliverable.status;
-      deliverable.update(request.body);
+      const contentChanged = deliverable.update(request.body, editorName);
       await container.deliverableStore.save(deliverable);
 
       container.eventBus.emit({
@@ -1028,6 +1030,11 @@ export function ticketRoutes(container: Container) {
         oldStatus,
         newStatus: deliverable.status,
         title: deliverable.title,
+        editorType: 'user',
+        editorName,
+        contentChanged,
+        version: deliverable.version,
+        editedAt: deliverable.lastEditedAt?.toISOString(),
         occurredAt: new Date(),
       });
 
@@ -1111,6 +1118,57 @@ export function ticketRoutes(container: Container) {
         }
 
         return reply.code(201).send(comment.toDTO());
+      },
+    );
+
+    // Edit a comment from the web UI (no ownership check — the human is
+    // trusted on the web port and may correct/redact agent comments; the edit
+    // is attributed via last_edited_by while the original author is preserved).
+    app.patch<{ Params: { id: string; commentId: string }; Body: { body: string } }>(
+      '/api/tickets/:id/comments/:commentId',
+      async (request) => {
+        if (!request.body.body || !request.body.body.trim()) {
+          throw new ValidationError('Comment body cannot be empty');
+        }
+
+        const { humanDisplayName, humanMentionName } = container.config.get();
+        const editorName = humanDisplayName || humanMentionName || 'user';
+        const { comment, createdMentions, bodyChanged } = await container.editComment.execute({
+          commentId: request.params.commentId,
+          body: request.body.body,
+          editorName,
+          humanMentionNames: humanMentionName ? [humanMentionName] : [],
+        });
+
+        for (const m of createdMentions) {
+          emit({
+            type: 'mention.created',
+            mentionId: m.id,
+            ticketId: comment.ticketId,
+            targetAgent: m.targetAgent,
+            targetType: m.targetType,
+            sourceAgent: editorName,
+            occurredAt: new Date(),
+          });
+        }
+
+        emit({
+          type: 'comment.updated',
+          commentId: comment.id,
+          ticketId: comment.ticketId,
+          createdMentions: createdMentions.map((m) => ({
+            mentionId: m.id,
+            targetAgent: m.targetAgent,
+            targetType: m.targetType,
+          })),
+          editorType: 'user',
+          editorName,
+          bodyChanged,
+          editedAt: comment.lastEditedAt?.toISOString(),
+          occurredAt: new Date(),
+        });
+
+        return comment.toDTO();
       },
     );
 

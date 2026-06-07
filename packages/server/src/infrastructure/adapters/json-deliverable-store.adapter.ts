@@ -18,6 +18,8 @@ interface SerializedDeliverable {
   mentionId: string | null;
   createdAt: string;
   updatedAt: string;
+  lastEditedAt?: string | null;
+  lastEditedBy?: string | null;
 }
 
 export class JsonDeliverableStore implements DeliverableStorePort {
@@ -93,6 +95,8 @@ export class JsonDeliverableStore implements DeliverableStorePort {
           d.id, d.ticketId, d.agentName, d.type, d.title,
           d.content, d.version, d.status, d.mentionId,
           new Date(d.createdAt), new Date(d.updatedAt),
+          d.lastEditedAt ? new Date(d.lastEditedAt) : null,
+          d.lastEditedBy ?? null,
         ));
       }
       this.logger.info('Deliverable store loaded', { count: this.deliverables.size });
@@ -110,6 +114,8 @@ export class JsonDeliverableStore implements DeliverableStorePort {
         type: d.type, title: d.title, content: d.content,
         version: d.version, status: d.status, mentionId: d.mentionId,
         createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),
+        lastEditedAt: d.lastEditedAt?.toISOString() ?? null,
+        lastEditedBy: d.lastEditedBy,
       }));
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));
     } catch (err) {

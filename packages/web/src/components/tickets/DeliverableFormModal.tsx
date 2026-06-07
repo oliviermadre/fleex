@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import type { TicketDeliverable } from '@fleex/shared';
 import { Modal } from '../ui/Modal';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import * as api from '../../services/api';
@@ -18,15 +19,28 @@ interface DeliverableFormModalProps {
   open: boolean;
   onClose: () => void;
   ticketId: string;
+  /** When provided, the modal edits this deliverable instead of creating one. */
+  deliverable?: TicketDeliverable | null;
 }
 
-export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFormModalProps) {
+export function DeliverableFormModal({ open, onClose, ticketId, deliverable }: DeliverableFormModalProps) {
+  const isEditing = !!deliverable;
   const [title, setTitle] = useState('');
   const [type, setType] = useState<string>('report');
   const [status, setStatus] = useState<'draft' | 'final'>('final');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [titleError, setTitleError] = useState('');
+
+  // Sync form state with the target deliverable whenever the modal opens.
+  useEffect(() => {
+    if (!open) return;
+    setTitle(deliverable?.title ?? '');
+    setType(deliverable?.type ?? 'report');
+    setStatus(deliverable?.status ?? 'final');
+    setContent(deliverable?.content ?? '');
+    setTitleError('');
+  }, [open, deliverable]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -56,21 +70,30 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
     }
     setSaving(true);
     try {
-      await api.createDeliverable(ticketId, {
-        title: title.trim(),
-        type,
-        content,
-        status,
-        agentName: 'user',
-      });
-      useToastStore.getState().addToast('success', 'Deliverable created');
+      if (isEditing && deliverable) {
+        await api.updateDeliverable(ticketId, deliverable.id, {
+          title: title.trim(),
+          content,
+          status,
+        });
+        useToastStore.getState().addToast('success', 'Deliverable updated');
+      } else {
+        await api.createDeliverable(ticketId, {
+          title: title.trim(),
+          type,
+          content,
+          status,
+          agentName: 'user',
+        });
+        useToastStore.getState().addToast('success', 'Deliverable created');
+      }
       handleClose();
     } catch {
       // error toast handled by api.ts
     } finally {
       setSaving(false);
     }
-  }, [ticketId, title, type, content, status, handleClose]);
+  }, [ticketId, title, type, content, status, handleClose, isEditing, deliverable]);
 
   return (
     <Modal open={open} onClose={handleClose} maxWidth="max-w-2xl">
@@ -78,7 +101,7 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold text-[var(--theme-text-primary)]">
-            Add deliverable
+            {isEditing ? 'Edit deliverable' : 'Add deliverable'}
           </h2>
           <button
             onClick={handleClose}
@@ -116,11 +139,16 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-input)] px-3 py-2 text-sm text-[var(--theme-text-primary)] outline-none transition-colors focus:border-[var(--theme-accent)]"
+              disabled={isEditing}
+              title={isEditing ? 'Type cannot be changed after creation' : undefined}
+              className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-input)] px-3 py-2 text-sm text-[var(--theme-text-primary)] outline-none transition-colors focus:border-[var(--theme-accent)] disabled:opacity-60"
             >
               {DELIVERABLE_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
+              {isEditing && !DELIVERABLE_TYPES.some((t) => t.value === type) && (
+                <option value={type}>{type.toUpperCase()}</option>
+              )}
             </select>
           </div>
 
@@ -191,7 +219,7 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
             disabled={saving || isUploading}
             className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {saving ? 'Saving...' : 'Save deliverable'}
+            {saving ? 'Saving...' : isEditing ? 'Save changes' : 'Save deliverable'}
           </button>
         </div>
       </div>

@@ -15,6 +15,9 @@ interface CommentRow {
   parent_id: string | null;
   created_at: string;
   updated_at: string;
+  last_edited_at: string | null;
+  last_edited_by: string | null;
+  edit_count: number | null;
 }
 
 function rowToEntity(r: CommentRow): TicketCommentEntity {
@@ -30,6 +33,9 @@ function rowToEntity(r: CommentRow): TicketCommentEntity {
     r.parent_id,
     new Date(r.created_at),
     new Date(r.updated_at),
+    r.last_edited_at ? new Date(r.last_edited_at) : null,
+    r.last_edited_by ?? null,
+    r.edit_count ?? 0,
   );
 }
 
@@ -89,6 +95,9 @@ export class SupabaseCommentStore implements CommentStorePort {
       parent_id: comment.parentId,
       created_at: comment.createdAt.toISOString(),
       updated_at: comment.updatedAt.toISOString(),
+      last_edited_at: comment.lastEditedAt?.toISOString() ?? null,
+      last_edited_by: comment.lastEditedBy,
+      edit_count: comment.editCount,
     });
     if (error) throw new Error(`SupabaseCommentStore.save failed: ${error.message}`);
   }

@@ -1,6 +1,32 @@
 # Commentaires & Deliverables éditables — Spécification
 
-> Statut : proposition (à valider). Auteur : agent. Date : 2026-06-07.
+> Statut : **Phase 1 implémentée**. Auteur : agent. Date : 2026-06-07.
+
+## Statut d'implémentation
+
+Décisions validées : **D1** = humain peut éditer le contenu d'un agent, *tracé* ;
+**D2** = stratégie LLM *hybride* ; **D4** = badge + version (pas d'historique complet en P1).
+
+**Phase 1 — livrée** (cette branche) :
+- Migration `021_add_edit_tracking` : `comments.last_edited_at/last_edited_by/edit_count`,
+  `deliverables.last_edited_at/last_edited_by`.
+- Entités : `TicketCommentEntity.updateBody(body, editedBy)` (no-op si inchangé, renvoie `bodyChanged`) ;
+  `TicketDeliverableEntity.update(changes, editedBy)` (renvoie `contentChanged`, stamp uniquement sur titre/contenu).
+- DTO `TicketComment` / `TicketDeliverable` enrichis ; 8 adaptateurs (sqlite/pg/supabase/json × 2) mis à jour.
+- Use-case partagé `EditCommentUseCase` (réconciliation des mentions) utilisé par les deux ports.
+- Route web `PATCH /api/tickets/:id/comments/:commentId` (gap principal) + `ValidationError` (400) ;
+  PATCH deliverable web/agent enrichis (editor, contentChanged, version).
+- Événements `comment.updated` / `deliverable.updated` enrichis (`editorType/Name`, `bodyChanged`/`contentChanged`,
+  `editedAt`, `version`). Garde anti-storm déjà en place (auto-review uniquement sur `→final`, wake uniquement sur `created`) — vérifiée, inchangée.
+- Client `api.ts` : `updateTicketComment`, `updateDeliverable`.
+- UI : édition inline des commentaires (+ badge « (edited) »), `DeliverableFormModal` en mode create/edit,
+  bouton Edit + « edited … » dans `TicketDeliverables`.
+
+**Phase 2 — non livrée** : cohérence du contexte LLM (watermark + `contextDelta` + bloc-correction / invalidation de session). Voir §6.
+
+---
+
+> Spécification de référence ci-dessous.
 
 ## 1. Objectif
 
@@ -229,8 +255,8 @@ Une édition par un **autre** acteur peut remarquer le contenu comme « non lu �
 **Phase 3 — Audit/diff (optionnel)**
 8. Tables de révisions + RLS + UI historique/diff ; concurrence optimiste.
 
-## 11. Décisions ouvertes à trancher
-- **D1** : l'humain peut-il éditer les commentaires d'un agent ? (reco : oui + tracé)
-- **D2** : seuils d'invalidation de session (reco : invalider si suppression ou auto-édition de deliverable, sinon bloc-correction)
-- **D3** : soft-delete des commentaires ? (reco : phase 2)
-- **D4** : historique de révisions complet dès le départ ? (reco : non, phase 3)
+## 11. Décisions
+- **D1** ✅ tranché : l'humain peut éditer les commentaires/deliverables d'un agent ; l'édition est **tracée** (`last_edited_by`) et l'auteur d'origine est préservé.
+- **D2** ✅ tranché : stratégie LLM **hybride** (bloc-correction + invalidation de session sur suppression / auto-édition de deliverable). À implémenter en Phase 2.
+- **D3** ⏳ ouvert : soft-delete des commentaires ? (reco : phase 2)
+- **D4** ✅ tranché : pas d'historique de révisions complet en P1 — badge « edited » + `version` suffisent.

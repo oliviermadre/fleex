@@ -53,8 +53,9 @@ export class PgDeliverableStore implements DeliverableStorePort {
     await this.db.query(
       `INSERT INTO deliverables (
         id, ticket_id, agent_name, type, title, content,
-        version, status, mention_id, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        version, status, mention_id, created_at, updated_at,
+        last_edited_at, last_edited_by
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       ON CONFLICT (id) DO UPDATE SET
         ticket_id = $2,
         agent_name = $3,
@@ -65,7 +66,9 @@ export class PgDeliverableStore implements DeliverableStorePort {
         status = $8,
         mention_id = $9,
         created_at = $10,
-        updated_at = $11`,
+        updated_at = $11,
+        last_edited_at = $12,
+        last_edited_by = $13`,
       [
         deliverable.id,
         deliverable.ticketId,
@@ -78,6 +81,8 @@ export class PgDeliverableStore implements DeliverableStorePort {
         deliverable.mentionId,
         deliverable.createdAt.toISOString(),
         deliverable.updatedAt.toISOString(),
+        deliverable.lastEditedAt?.toISOString() ?? null,
+        deliverable.lastEditedBy,
       ],
     );
   }
@@ -100,5 +105,7 @@ function rowToDeliverable(row: Record<string, unknown>): TicketDeliverableEntity
     (row.mention_id as string) ?? null,
     new Date(row.created_at as string),
     new Date(row.updated_at as string),
+    row.last_edited_at ? new Date(row.last_edited_at as string) : null,
+    (row.last_edited_by as string) ?? null,
   );
 }

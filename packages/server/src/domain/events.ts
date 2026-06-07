@@ -73,6 +73,12 @@ export interface CommentUpdatedEvent extends DomainEvent {
     targetAgent: string;
     targetType: MentionTargetType;
   }>;
+  /** Who performed the edit (may differ from the comment author). */
+  editorType?: 'user' | 'agent';
+  editorName?: string;
+  /** Whether the body actually changed (false ⇒ only mentions reconciled). */
+  bodyChanged?: boolean;
+  editedAt?: string;
 }
 
 export interface CommentDeletedEvent extends DomainEvent {
@@ -168,6 +174,14 @@ export interface DeliverableUpdatedEvent extends DomainEvent {
   newStatus: string;
   /** Deliverable title — see DeliverableCreatedEvent. */
   title: string;
+  /** Who performed the edit (may differ from the authoring agent). */
+  editorType?: 'user' | 'agent';
+  editorName?: string;
+  /** Whether the title/content changed (false ⇒ status-only flip). */
+  contentChanged?: boolean;
+  /** Current version after the update. */
+  version?: number;
+  editedAt?: string;
 }
 
 export interface DeliverableDeletedEvent extends DomainEvent {

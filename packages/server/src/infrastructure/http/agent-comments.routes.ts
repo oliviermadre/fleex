@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import type { MentionTargetType } from '@fleex/shared';
 import { TicketNotFoundError, CommentNotFoundError, ForbiddenError } from '../../domain/errors.js';
 import type { Container } from '../container.js';
 
@@ -94,74 +93,48 @@ export function agentCommentsRoutes(container: Container) {
       Params: { id: string; commentId: string };
       Body: { body: string };
     }>('/tickets/:id/comments/:commentId', async (request) => {
-      const comment = await container.commentStore.getById(request.params.commentId);
-      if (!comment) throw new CommentNotFoundError(request.params.commentId);
+      const existing = await container.commentStore.getById(request.params.commentId);
+      if (!existing) throw new CommentNotFoundError(request.params.commentId);
 
       const agentName = request.agent?.name ?? '';
-      if (comment.authorName !== agentName) {
+      if (existing.authorName !== agentName) {
         throw new ForbiddenError('Only the author can edit this comment');
       }
 
-      const oldMentions = new Set(comment.mentions);
-      comment.updateBody(request.body.body);
-      await container.commentStore.save(comment);
-
-      // Reconcile mentions: remove old, create new
-      const newMentionNames = new Set(comment.mentions);
-
-      // Remove mentions for agents no longer mentioned
-      const existingMentions = await container.mentionStore.getByComment(comment.id);
-      for (const m of existingMentions) {
-        if (!newMentionNames.has(m.targetAgent) && m.status !== 'resolved') {
-          m.resolve();
-          await container.mentionStore.save(m);
-        }
-      }
-
-      // Create mentions for newly added targets
-      const { randomUUID } = await import('node:crypto');
-      const { TicketMentionEntity } = await import('../../domain/entities/ticket-mention.entity.js');
       const { humanMentionName } = container.config.get();
-      const newlyCreatedMentions: Array<{ mentionId: string; targetAgent: string; targetType: MentionTargetType }> = [];
+      const { comment, createdMentions, bodyChanged } = await container.editComment.execute({
+        commentId: request.params.commentId,
+        body: request.body.body,
+        editorName: agentName,
+        humanMentionNames: humanMentionName ? [humanMentionName] : [],
+      });
 
-      for (const target of newMentionNames) {
-        if (!oldMentions.has(target) && target !== agentName) {
-          const isHuman = humanMentionName && target === humanMentionName;
-
-          const mention = TicketMentionEntity.create({
-            id: randomUUID(),
-            ticketId: comment.ticketId,
-            commentId: comment.id,
-            targetAgent: target,
-            sourceAgent: agentName,
-            targetType: isHuman ? 'human' : 'agent',
-          });
-          await container.mentionStore.save(mention);
-          newlyCreatedMentions.push({
-            mentionId: mention.id,
-            targetAgent: mention.targetAgent,
-            targetType: mention.targetType,
-          });
-
-          // Emit mention.created for auto-trigger and workflow
-          emit({
-            type: 'mention.created',
-            mentionId: mention.id,
-            ticketId: comment.ticketId,
-            targetAgent: mention.targetAgent,
-            targetType: mention.targetType,
-            sourceAgent: agentName,
-            occurredAt: new Date(),
-          });
-        }
+      // Emit mention.created for newly added targets (auto-trigger + workflow)
+      for (const m of createdMentions) {
+        emit({
+          type: 'mention.created',
+          mentionId: m.id,
+          ticketId: comment.ticketId,
+          targetAgent: m.targetAgent,
+          targetType: m.targetType,
+          sourceAgent: agentName,
+          occurredAt: new Date(),
+        });
       }
 
-      // Emit comment.updated with newly created mentions for workflow
       emit({
         type: 'comment.updated',
         commentId: comment.id,
         ticketId: comment.ticketId,
-        createdMentions: newlyCreatedMentions,
+        createdMentions: createdMentions.map((m) => ({
+          mentionId: m.id,
+          targetAgent: m.targetAgent,
+          targetType: m.targetType,
+        })),
+        editorType: 'agent',
+        editorName: agentName,
+        bodyChanged,
+        editedAt: comment.lastEditedAt?.toISOString(),
         occurredAt: new Date(),
       });
 

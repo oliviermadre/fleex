@@ -37,8 +37,9 @@ export class PgCommentStore implements CommentStorePort {
     await this.db.query(
       `INSERT INTO comments (
         id, ticket_id, author_type, author_name, body, visibility,
-        private_recipients, mentions, parent_id, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        private_recipients, mentions, parent_id, created_at, updated_at,
+        last_edited_at, last_edited_by, edit_count
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
       ON CONFLICT (id) DO UPDATE SET
         ticket_id = $2,
         author_type = $3,
@@ -49,7 +50,10 @@ export class PgCommentStore implements CommentStorePort {
         mentions = $8,
         parent_id = $9,
         created_at = $10,
-        updated_at = $11`,
+        updated_at = $11,
+        last_edited_at = $12,
+        last_edited_by = $13,
+        edit_count = $14`,
       [
         comment.id,
         comment.ticketId,
@@ -62,6 +66,9 @@ export class PgCommentStore implements CommentStorePort {
         comment.parentId,
         comment.createdAt.toISOString(),
         comment.updatedAt.toISOString(),
+        comment.lastEditedAt?.toISOString() ?? null,
+        comment.lastEditedBy,
+        comment.editCount,
       ],
     );
   }
@@ -84,5 +91,8 @@ function rowToComment(row: Record<string, unknown>): TicketCommentEntity {
     (row.parent_id as string) ?? null,
     new Date(row.created_at as string),
     new Date(row.updated_at as string),
+    row.last_edited_at ? new Date(row.last_edited_at as string) : null,
+    (row.last_edited_by as string) ?? null,
+    (row.edit_count as number) ?? 0,
   );
 }

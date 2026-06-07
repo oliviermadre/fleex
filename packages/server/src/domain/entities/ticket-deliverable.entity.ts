@@ -13,6 +13,8 @@ export class TicketDeliverableEntity {
     public readonly mentionId: string | null,
     public readonly createdAt: Date,
     public updatedAt: Date,
+    public lastEditedAt: Date | null = null,
+    public lastEditedBy: string | null = null,
   ) {}
 
   static create(params: {
@@ -41,18 +43,32 @@ export class TicketDeliverableEntity {
     );
   }
 
-  update(changes: { title?: string; content?: string; status?: DeliverableStatus }): void {
+  /**
+   * Apply changes. Returns whether the title or content (i.e. the actual
+   * deliverable payload) changed — a pure status flip does not count as a
+   * content edit and does not stamp `lastEditedAt`. `editedBy` is the display
+   * name of the editor (may differ from the authoring agent).
+   */
+  update(changes: { title?: string; content?: string; status?: DeliverableStatus }, editedBy?: string): boolean {
+    let contentChanged = false;
     if (changes.content !== undefined && changes.content !== this.content) {
       this.content = changes.content;
       this.version += 1;
+      contentChanged = true;
     }
-    if (changes.title !== undefined) {
+    if (changes.title !== undefined && changes.title !== this.title) {
       this.title = changes.title;
+      contentChanged = true;
     }
     if (changes.status !== undefined) {
       this.status = changes.status;
     }
     this.updatedAt = new Date();
+    if (contentChanged) {
+      this.lastEditedAt = this.updatedAt;
+      if (editedBy !== undefined) this.lastEditedBy = editedBy;
+    }
+    return contentChanged;
   }
 
   isOwnedBy(agentName: string): boolean {
@@ -72,6 +88,8 @@ export class TicketDeliverableEntity {
       mentionId: this.mentionId,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
+      lastEditedAt: this.lastEditedAt?.toISOString() ?? null,
+      lastEditedBy: this.lastEditedBy,
     };
   }
 }

@@ -92,6 +92,12 @@ export class ForbiddenError extends DomainError {
   }
 }
 
+export class ValidationError extends DomainError {
+  constructor(message: string) {
+    super(message, 'VALIDATION_ERROR');
+  }
+}
+
 export class AgentPersonaNotFoundError extends DomainError {
   constructor(id: string) {
     super(`Agent persona not found: ${id}`, 'AGENT_PERSONA_NOT_FOUND');

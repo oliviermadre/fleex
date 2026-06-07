@@ -18,6 +18,9 @@ interface SerializedComment {
   parentId: string | null;
   createdAt: string;
   updatedAt: string;
+  lastEditedAt?: string | null;
+  lastEditedBy?: string | null;
+  editCount?: number;
 }
 
 export class JsonCommentStore implements CommentStorePort {
@@ -80,6 +83,8 @@ export class JsonCommentStore implements CommentStorePort {
           c.id, c.ticketId, c.authorType, c.authorName,
           c.body, c.visibility, c.privateRecipients, c.mentions,
           c.parentId, new Date(c.createdAt), new Date(c.updatedAt),
+          c.lastEditedAt ? new Date(c.lastEditedAt) : null,
+          c.lastEditedBy ?? null, c.editCount ?? 0,
         ));
       }
       this.logger.info('Comment store loaded', { count: this.comments.size });
@@ -98,6 +103,8 @@ export class JsonCommentStore implements CommentStorePort {
         privateRecipients: c.privateRecipients, mentions: c.mentions,
         parentId: c.parentId,
         createdAt: c.createdAt.toISOString(), updatedAt: c.updatedAt.toISOString(),
+        lastEditedAt: c.lastEditedAt?.toISOString() ?? null,
+        lastEditedBy: c.lastEditedBy, editCount: c.editCount,
       }));
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));
     } catch (err) {

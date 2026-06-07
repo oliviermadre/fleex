@@ -86,7 +86,7 @@ export function agentDeliverablesRoutes(container: Container) {
       }
 
       const oldStatus = deliverable.status;
-      deliverable.update(request.body);
+      const contentChanged = deliverable.update(request.body, agentName);
       await container.deliverableStore.save(deliverable);
 
       emit({
@@ -97,6 +97,11 @@ export function agentDeliverablesRoutes(container: Container) {
         oldStatus,
         newStatus: deliverable.status,
         title: deliverable.title,
+        editorType: 'agent',
+        editorName: agentName,
+        contentChanged,
+        version: deliverable.version,
+        editedAt: deliverable.lastEditedAt?.toISOString(),
         occurredAt: new Date(),
       });
 
