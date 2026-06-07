@@ -166,6 +166,9 @@ export interface DeliverableUpdatedEvent extends DomainEvent {
   agentName: string;
   oldStatus: string;
   newStatus: string;
+  /** Deliverable type before/after the update (equal when the type was not changed). */
+  oldType: string;
+  newType: string;
   /** Deliverable title — see DeliverableCreatedEvent. */
   title: string;
 }

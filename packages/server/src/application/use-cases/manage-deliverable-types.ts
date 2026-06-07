@@ -166,6 +166,7 @@ export class ManageDeliverableTypesUseCase {
     if (!deliverable) throw new DeliverableNotFoundError(deliverableId);
 
     const oldStatus = deliverable.status;
+    const oldType = deliverable.type;
     deliverable.setType(type);
     await this.deliverableStore.save(deliverable);
 
@@ -176,6 +177,8 @@ export class ManageDeliverableTypesUseCase {
       agentName: deliverable.agentName,
       oldStatus,
       newStatus: deliverable.status,
+      oldType,
+      newType: deliverable.type,
       title: deliverable.title,
       occurredAt: new Date(),
     });

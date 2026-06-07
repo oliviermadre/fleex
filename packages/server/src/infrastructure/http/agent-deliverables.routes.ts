@@ -86,6 +86,7 @@ export function agentDeliverablesRoutes(container: Container) {
       }
 
       const oldStatus = deliverable.status;
+      const deliverableType = deliverable.type;
       deliverable.update(request.body);
       await container.deliverableStore.save(deliverable);
 
@@ -96,6 +97,8 @@ export function agentDeliverablesRoutes(container: Container) {
         agentName,
         oldStatus,
         newStatus: deliverable.status,
+        oldType: deliverableType,
+        newType: deliverable.type,
         title: deliverable.title,
         occurredAt: new Date(),
       });

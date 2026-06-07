@@ -1017,6 +1017,7 @@ export function ticketRoutes(container: Container) {
       if (!deliverable) throw new DeliverableNotFoundError(request.params.delivId);
 
       const oldStatus = deliverable.status;
+      const deliverableType = deliverable.type;
       deliverable.update(request.body);
       await container.deliverableStore.save(deliverable);
 
@@ -1027,6 +1028,8 @@ export function ticketRoutes(container: Container) {
         agentName: deliverable.agentName,
         oldStatus,
         newStatus: deliverable.status,
+        oldType: deliverableType,
+        newType: deliverable.type,
         title: deliverable.title,
         occurredAt: new Date(),
       });
