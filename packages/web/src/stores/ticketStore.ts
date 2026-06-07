@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Board, BoardWithCounts, Ticket, TicketLink, TicketStatus, TicketPriority, TicketType, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@fleex/shared';
-import { TICKET_STATUSES, Status, statusAnchors } from '@fleex/shared';
+import { Status, statusAnchors, getActiveStatusModel } from '@fleex/shared';
 import * as api from '../services/api';
 import { useSessionStore } from './sessionStore';
 
@@ -55,7 +55,7 @@ interface TicketState {
   clearFilters: () => void;
 
   // Derived
-  ticketsByColumn: (boardId: string | null) => Record<TicketStatus, Ticket[]>;
+  ticketsByColumn: (boardId: string | null) => Record<string, Ticket[]>;
 
   // WebSocket
   handleWsMessage: (msg: TicketWsMessage) => void;
@@ -359,11 +359,13 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       });
     }
 
-    const columns = {} as Record<TicketStatus, Ticket[]>;
-    for (const s of TICKET_STATUSES as readonly TicketStatus[]) {
-      const col = filtered.filter((t) => t.status === s);
+    const columns = {} as Record<string, Ticket[]>;
+    // Iterate the active status model's columns (dynamic) in display order.
+    const modelColumns = [...getActiveStatusModel().columns].sort((a, b) => a.order - b.order);
+    for (const c of modelColumns) {
+      const col = filtered.filter((t) => t.status === c.key);
       // Terminal columns sort by recency of closure; others by manual position.
-      columns[s] = Status.of(s).isTerminal()
+      columns[c.key] = c.terminal
         ? col.sort((a, b) => new Date(b.statusChangedAt).getTime() - new Date(a.statusChangedAt).getTime())
         : col.sort((a, b) => a.position - b.position);
     }

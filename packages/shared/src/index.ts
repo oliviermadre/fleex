@@ -132,6 +132,7 @@ export {
 export type {
   StatusOutcome,
   StatusAnchor,
+  StatusColor,
   StatusColumn,
   StatusModel,
   StatusModelValidation,

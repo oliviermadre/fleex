@@ -13,6 +13,7 @@ import {
 function col(over: Partial<StatusColumn> & Pick<StatusColumn, 'key'>): StatusColumn {
   return {
     label: over.key,
+    color: 'gray',
     order: 0,
     startable: false,
     active: false,
@@ -122,8 +123,8 @@ describe('role resolution against an explicit model', () => {
   it('honours a custom model passed to Status.of', () => {
     const model: StatusModel = {
       columns: [
-        { key: 'icebox', label: 'Icebox', order: 0, startable: true, active: false, terminal: false, outcome: null, anchors: ['defaultNew'], collapsedByDefault: false },
-        { key: 'shipped', label: 'Shipped', order: 1, startable: false, active: false, terminal: true, outcome: 'completed', anchors: ['mergeLanding'], collapsedByDefault: false },
+        { key: 'icebox', label: 'Icebox', color: 'gray', order: 0, startable: true, active: false, terminal: false, outcome: null, anchors: ['defaultNew'], collapsedByDefault: false },
+        { key: 'shipped', label: 'Shipped', color: 'green', order: 1, startable: false, active: false, terminal: true, outcome: 'completed', anchors: ['mergeLanding'], collapsedByDefault: false },
       ],
     };
     expect(Status.of('icebox', model).isStartable()).toBe(true);

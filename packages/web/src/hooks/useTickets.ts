@@ -3,6 +3,7 @@ import type { TicketWsMessage, TicketGroupWsMessage } from '@fleex/shared';
 import { appWs } from '../services/websocket';
 import { useTicketStore } from '../stores/ticketStore';
 import { useTicketGroupStore } from '../stores/ticketGroupStore';
+import { useStatusModelStore } from '../stores/statusModelStore';
 
 export function useTickets() {
   const fetchBoards = useTicketStore((s) => s.fetchBoards);
@@ -10,13 +11,15 @@ export function useTickets() {
   const handleWsMessage = useTicketStore((s) => s.handleWsMessage);
   const handleGroupWsMessage = useTicketGroupStore((s) => s.handleWsMessage);
   const fetchGroups = useTicketGroupStore((s) => s.fetchGroups);
+  const fetchStatusModel = useStatusModelStore((s) => s.fetchModel);
 
-  // Fetch boards, tickets, and groups on mount
+  // Fetch the status model, boards, tickets, and groups on mount
   useEffect(() => {
+    fetchStatusModel();
     fetchBoards();
     fetchTickets();
     fetchGroups();
-  }, [fetchBoards, fetchTickets, fetchGroups]);
+  }, [fetchStatusModel, fetchBoards, fetchTickets, fetchGroups]);
 
   // Handle WebSocket messages
   useEffect(() => {
@@ -25,6 +28,8 @@ export function useTickets() {
       // Route ticket group messages to the group store
       if (wsMsg.type.startsWith('ticketGroup:') || wsMsg.type.startsWith('ticketRelationship:')) {
         handleGroupWsMessage(wsMsg as TicketGroupWsMessage);
+      } else if (wsMsg.type === 'status-model:updated') {
+        useStatusModelStore.getState().fetchModel();
       } else {
         handleWsMessage(wsMsg as TicketWsMessage);
       }

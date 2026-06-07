@@ -46,9 +46,9 @@ describe('JsonStatusModelStore', () => {
     const store = new JsonStatusModelStore(fakeHostFs(), '/home/test', noopLogger);
     const model: StatusModel = {
       columns: [
-        { key: 'icebox', label: 'Icebox', order: 0, startable: true, active: false, terminal: false, outcome: null, anchors: ['defaultNew', 'agentQueue'], collapsedByDefault: false },
-        { key: 'wip', label: 'WIP', order: 1, startable: false, active: true, terminal: false, outcome: null, anchors: ['workStart'], collapsedByDefault: false },
-        { key: 'shipped', label: 'Shipped', order: 2, startable: false, active: false, terminal: true, outcome: 'completed', anchors: ['mergeLanding'], collapsedByDefault: false },
+        { key: 'icebox', label: 'Icebox', color: 'gray', order: 0, startable: true, active: false, terminal: false, outcome: null, anchors: ['defaultNew', 'agentQueue'], collapsedByDefault: false },
+        { key: 'wip', label: 'WIP', color: 'blue', order: 1, startable: false, active: true, terminal: false, outcome: null, anchors: ['workStart'], collapsedByDefault: false },
+        { key: 'shipped', label: 'Shipped', color: 'green', order: 2, startable: false, active: false, terminal: true, outcome: 'completed', anchors: ['mergeLanding'], collapsedByDefault: false },
       ],
     };
     await store.saveModel(model);

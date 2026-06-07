@@ -28,6 +28,7 @@ import type {
   WorkflowRun,
   StepRun,
   ModelsResponse,
+  StatusModel,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -60,6 +61,20 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export async function fetchModels(): Promise<ModelsResponse> {
   return request<ModelsResponse>('/models');
+}
+
+export async function fetchStatusModel(): Promise<StatusModel> {
+  return request<StatusModel>('/status-model');
+}
+
+export async function updateStatusModel(
+  model: StatusModel,
+  reassign?: Record<string, string>,
+): Promise<StatusModel> {
+  return request<StatusModel>('/status-model', {
+    method: 'PUT',
+    body: JSON.stringify({ columns: model.columns, reassign }),
+  });
 }
 
 export async function fetchSessions(): Promise<Session[]> {

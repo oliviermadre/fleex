@@ -1,10 +1,11 @@
-import type { StatusModel, StatusColumn, StatusAnchor, StatusOutcome, TicketStatus } from '@fleex/shared';
+import type { StatusModel, StatusColumn, StatusAnchor, StatusOutcome, StatusColor, TicketStatus } from '@fleex/shared';
 import type { StatusModelStorePort } from '../../../application/ports/status-model-store.port.js';
 import type { PgConnection } from './connection.js';
 
 interface Row {
   key: string;
   label: string;
+  color: string;
   position: number;
   startable: boolean;
   active: boolean;
@@ -18,6 +19,7 @@ function rowToColumn(r: Row): StatusColumn {
   return {
     key: r.key as TicketStatus,
     label: r.label,
+    color: r.color as StatusColor,
     order: Number(r.position),
     startable: r.startable,
     active: r.active,
@@ -48,11 +50,12 @@ export class PgStatusModelStore implements StatusModelStorePort {
     for (const c of model.columns) {
       await this.connection.query(
         `INSERT INTO status_columns
-           (key, label, position, startable, active, terminal, outcome, anchors, collapsed_by_default)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+           (key, label, color, position, startable, active, terminal, outcome, anchors, collapsed_by_default)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           c.key,
           c.label,
+          c.color,
           c.order,
           c.startable,
           c.active,

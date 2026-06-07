@@ -1,23 +1,20 @@
 import type { TicketStatus } from '@fleex/shared';
+import { getActiveStatusModel } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { statusColorToken } from '../../lib/statusColors';
 
 interface StatusCubesProps {
   tickets: Array<{ id: string; title: string; status: TicketStatus }>;
 }
 
-// Match kanban column colors exactly
-const statusColorClass: Record<TicketStatus, string> = {
-  backlog: 'bg-[var(--theme-text-muted)]',
-  todo: 'bg-orange-400',
-  doing: 'bg-blue-400',
-  reviewing: 'bg-purple-400',
-  done: 'bg-green-400',
-  cancelled: 'bg-red-400/70',
-};
+// Cube color follows the active status model (matches kanban column colors).
+const cubeColor = (status: string) => statusColorToken(status).bar;
 
 const CUBE_CLASS = 'w-2.5 h-2.5 rounded-[2px]';
 
-const STATUS_ORDER: TicketStatus[] = ['doing', 'reviewing', 'todo', 'backlog', 'done', 'cancelled'];
+// Display order follows the status model.
+const statusOrder = (): string[] =>
+  [...getActiveStatusModel().columns].sort((a, b) => a.order - b.order).map((c) => c.key);
 
 export function StatusCubes({ tickets }: StatusCubesProps) {
   if (tickets.length === 0) return null;
@@ -29,7 +26,7 @@ export function StatusCubes({ tickets }: StatusCubesProps) {
         {tickets.map((ticket) => (
           <div
             key={ticket.id}
-            className={cn(CUBE_CLASS, statusColorClass[ticket.status])}
+            className={cn(CUBE_CLASS, cubeColor(ticket.status))}
             title={ticket.title}
           />
         ))}
@@ -38,16 +35,16 @@ export function StatusCubes({ tickets }: StatusCubesProps) {
   }
 
   // Condensed mode: group by status with counts
-  const grouped = tickets.reduce<Partial<Record<TicketStatus, number>>>((acc, ticket) => {
+  const grouped = tickets.reduce<Record<string, number>>((acc, ticket) => {
     acc[ticket.status] = (acc[ticket.status] || 0) + 1;
     return acc;
   }, {});
 
   return (
     <div className="flex items-center gap-1.5">
-      {STATUS_ORDER.filter((status) => grouped[status]).map((status) => (
+      {statusOrder().filter((status) => grouped[status]).map((status) => (
         <div key={status} className="flex items-center gap-0.5">
-          <div className={cn(CUBE_CLASS, statusColorClass[status])} />
+          <div className={cn(CUBE_CLASS, cubeColor(status))} />
           <span className="text-[9px] font-mono text-[var(--theme-text-secondary)]">
             {grouped[status]}
           </span>

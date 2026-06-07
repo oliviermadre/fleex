@@ -1,8 +1,8 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
-import { TICKET_STATUSES } from '@fleex/shared';
-import type { TicketStatus, Ticket } from '@fleex/shared';
+import type { Ticket } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useStatusModelStore } from '../../stores/statusModelStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { fetchBulkPRStates } from '../../services/api';
 import { KanbanColumn } from './KanbanColumn';
@@ -18,6 +18,8 @@ export function KanbanBoard() {
   const boards = useMemo(() => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)), [rawBoards]);
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const ticketsByColumn = useTicketStore((s) => s.ticketsByColumn);
+  const modelColumns = useStatusModelStore((s) => s.model.columns);
+  const orderedColumns = useMemo(() => [...modelColumns].sort((a, b) => a.order - b.order), [modelColumns]);
   const tickets = useTicketStore((s) => s.tickets);
   const filters = useTicketStore((s) => s.filters);
   const searchQuery = useTicketStore((s) => s.searchQuery);
@@ -47,21 +49,22 @@ export function KanbanBoard() {
     fetchBulkPRStates([...prRefs]).then(setPrStates).catch(() => {});
   }, [tickets]);
 
-  // Collapsed columns state with localStorage persistence
+  // Collapsed columns state with localStorage persistence. Defaults to the
+  // columns flagged collapsedByDefault in the (initially built-in) status model.
   const COLLAPSED_STORAGE_KEY = 'fleex:collapsedColumns';
-  const [collapsedColumns, setCollapsedColumns] = useState<Set<TicketStatus>>(() => {
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(COLLAPSED_STORAGE_KEY);
-      if (stored) return new Set(JSON.parse(stored) as TicketStatus[]);
+      if (stored) return new Set(JSON.parse(stored) as string[]);
     } catch { /* ignore */ }
-    return new Set<TicketStatus>(['cancelled']);
+    return new Set<string>(modelColumns.filter((c) => c.collapsedByDefault).map((c) => c.key));
   });
 
   useEffect(() => {
     localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify([...collapsedColumns]));
   }, [collapsedColumns]);
 
-  const toggleCollapse = useCallback((status: TicketStatus) => {
+  const toggleCollapse = useCallback((status: string) => {
     setCollapsedColumns((prev) => {
       const next = new Set(prev);
       if (next.has(status)) next.delete(status);
@@ -146,16 +149,16 @@ export function KanbanBoard() {
       )}
       <EpicBanner />
       <div className="flex min-h-0 flex-1 items-stretch overflow-hidden">
-        {(TICKET_STATUSES as readonly TicketStatus[]).map((status) => (
+        {orderedColumns.map((column) => (
           <KanbanColumn
-            key={status}
-            status={status}
-            tickets={filteredColumns[status] ?? []}
+            key={column.key}
+            status={column.key}
+            tickets={filteredColumns[column.key] ?? []}
             boardId={selectedBoardId ?? boards[0]?.id ?? ''}
             isAllBoards={isAllBoards}
             boards={isAllBoards ? boards : undefined}
-            collapsed={collapsedColumns.has(status)}
-            onToggleCollapse={() => toggleCollapse(status)}
+            collapsed={collapsedColumns.has(column.key)}
+            onToggleCollapse={() => toggleCollapse(column.key)}
             prStates={prStates}
           />
         ))}

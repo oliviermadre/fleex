@@ -26,10 +26,17 @@ export type StatusOutcome = 'completed' | 'abandoned';
 /** Anchor roles. Exactly one column fills each across a valid model. */
 export type StatusAnchor = 'defaultNew' | 'workStart' | 'agentQueue' | 'mergeLanding';
 
+/** Palette color name for a column (mapped to theme tokens in the web layer). */
+export type StatusColor =
+  | 'gray' | 'orange' | 'blue' | 'purple' | 'green' | 'red'
+  | 'teal' | 'pink' | 'yellow';
+
 export interface StatusColumn {
   /** Stable identity. Written to ticket.status; never re-derived from the label. */
   readonly key: TicketStatus;
   readonly label: string;
+  /** Palette color name (presentation; resolved to theme tokens by the UI). */
+  readonly color: StatusColor;
   /** Column order on the board (ascending). */
   readonly order: number;
   // ── Predicate roles ──
@@ -61,12 +68,12 @@ export interface StatusModel {
  */
 export const DEFAULT_STATUS_MODEL: StatusModel = {
   columns: [
-    { key: 'backlog',   label: 'Backlog',   order: 0, startable: true,  active: false, terminal: false, outcome: null,         anchors: ['defaultNew'],   collapsedByDefault: false },
-    { key: 'todo',      label: 'Todo',      order: 1, startable: true,  active: false, terminal: false, outcome: null,         anchors: ['agentQueue'],   collapsedByDefault: false },
-    { key: 'doing',     label: 'Doing',     order: 2, startable: false, active: true,  terminal: false, outcome: null,         anchors: ['workStart'],    collapsedByDefault: false },
-    { key: 'reviewing', label: 'Reviewing', order: 3, startable: false, active: true,  terminal: false, outcome: null,         anchors: [],               collapsedByDefault: false },
-    { key: 'done',      label: 'Done',      order: 4, startable: false, active: false, terminal: true,  outcome: 'completed',  anchors: ['mergeLanding'], collapsedByDefault: false },
-    { key: 'cancelled', label: 'Cancelled', order: 5, startable: false, active: false, terminal: true,  outcome: 'abandoned',  anchors: [],               collapsedByDefault: true  },
+    { key: 'backlog',   label: 'Backlog',   color: 'gray',   order: 0, startable: true,  active: false, terminal: false, outcome: null,         anchors: ['defaultNew'],   collapsedByDefault: false },
+    { key: 'todo',      label: 'Todo',      color: 'orange', order: 1, startable: true,  active: false, terminal: false, outcome: null,         anchors: ['agentQueue'],   collapsedByDefault: false },
+    { key: 'doing',     label: 'Doing',     color: 'blue',   order: 2, startable: false, active: true,  terminal: false, outcome: null,         anchors: ['workStart'],    collapsedByDefault: false },
+    { key: 'reviewing', label: 'Reviewing', color: 'purple', order: 3, startable: false, active: true,  terminal: false, outcome: null,         anchors: [],               collapsedByDefault: false },
+    { key: 'done',      label: 'Done',      color: 'green',  order: 4, startable: false, active: false, terminal: true,  outcome: 'completed',  anchors: ['mergeLanding'], collapsedByDefault: false },
+    { key: 'cancelled', label: 'Cancelled', color: 'red',    order: 5, startable: false, active: false, terminal: true,  outcome: 'abandoned',  anchors: [],               collapsedByDefault: true  },
   ],
 };
 

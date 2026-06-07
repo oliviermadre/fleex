@@ -1,10 +1,11 @@
-import type { StatusModel, StatusColumn, StatusAnchor, StatusOutcome, TicketStatus } from '@fleex/shared';
+import type { StatusModel, StatusColumn, StatusAnchor, StatusOutcome, StatusColor, TicketStatus } from '@fleex/shared';
 import type { StatusModelStorePort } from '../../../application/ports/status-model-store.port.js';
 import type { SqliteConnection } from './connection.js';
 
 interface Row {
   key: string;
   label: string;
+  color: string;
   position: number;
   startable: number;
   active: number;
@@ -18,6 +19,7 @@ function rowToColumn(r: Row): StatusColumn {
   return {
     key: r.key as TicketStatus,
     label: r.label,
+    color: r.color as StatusColor,
     order: r.position,
     startable: r.startable === 1,
     active: r.active === 1,
@@ -47,14 +49,15 @@ export class SqliteStatusModelStoreAdapter implements StatusModelStorePort {
       this.conn.db.prepare('DELETE FROM status_columns').run();
       const stmt = this.conn.db.prepare(`
         INSERT INTO status_columns
-          (key, label, position, startable, active, terminal, outcome, anchors, collapsed_by_default)
+          (key, label, color, position, startable, active, terminal, outcome, anchors, collapsed_by_default)
         VALUES
-          (@key, @label, @position, @startable, @active, @terminal, @outcome, @anchors, @collapsed_by_default)
+          (@key, @label, @color, @position, @startable, @active, @terminal, @outcome, @anchors, @collapsed_by_default)
       `);
       for (const c of model.columns) {
         stmt.run({
           key: c.key,
           label: c.label,
+          color: c.color,
           position: c.order,
           startable: c.startable ? 1 : 0,
           active: c.active ? 1 : 0,

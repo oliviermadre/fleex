@@ -1,10 +1,11 @@
-import type { StatusModel, StatusColumn, StatusAnchor, StatusOutcome, TicketStatus } from '@fleex/shared';
+import type { StatusModel, StatusColumn, StatusAnchor, StatusOutcome, StatusColor, TicketStatus } from '@fleex/shared';
 import type { StatusModelStorePort } from '../../../application/ports/status-model-store.port.js';
 import type { SupabaseConnection } from './connection.js';
 
 interface Row {
   key: string;
   label: string;
+  color: string;
   position: number;
   startable: boolean;
   active: boolean;
@@ -18,6 +19,7 @@ function rowToColumn(r: Row): StatusColumn {
   return {
     key: r.key as TicketStatus,
     label: r.label,
+    color: r.color as StatusColor,
     order: r.position,
     startable: r.startable,
     active: r.active,
@@ -51,6 +53,7 @@ export class SupabaseStatusModelStore implements StatusModelStorePort {
     const rows = model.columns.map((c) => ({
       key: c.key,
       label: c.label,
+      color: c.color,
       position: c.order,
       startable: c.startable,
       active: c.active,
