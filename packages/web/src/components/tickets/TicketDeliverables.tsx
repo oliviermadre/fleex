@@ -39,6 +39,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const toggleDeliverableSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
   const loadSeenDeliverables = useUnreadStore((s) => s.loadSeenDeliverables);
   const labelForType = useDeliverableTypesStore((s) => s.labelFor);
+  const colorForType = useDeliverableTypesStore((s) => s.colorFor);
 
   const handleOpenDeliverable = useCallback((d: TicketDeliverable) => {
     // Mark as seen when opening
@@ -166,10 +167,18 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                   onClick={() => handleOpenDeliverable(d)}
                 >
 
-                  {/* Type badge — always show the full label, never truncated */}
-                  <span className="flex-shrink-0 whitespace-nowrap rounded bg-[var(--theme-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--theme-accent)]">
-                    {labelForType(d.type)}
-                  </span>
+                  {/* Type badge — full label, never truncated; configured colour or theme accent */}
+                  {(() => {
+                    const c = colorForType(d.type);
+                    return (
+                      <span
+                        className={`flex-shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${c ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
+                        style={c ? { backgroundColor: c.bg, color: c.text } : undefined}
+                      >
+                        {labelForType(d.type)}
+                      </span>
+                    );
+                  })()}
 
                   {/* Title + meta */}
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">

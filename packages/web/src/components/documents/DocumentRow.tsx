@@ -5,16 +5,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { cn } from '../../lib/cn';
 
-const TYPE_COLORS: Record<string, string> = {
-  spec: 'bg-blue-500/10 text-blue-400',
-  prd: 'bg-indigo-500/10 text-indigo-400',
-  code: 'bg-teal-500/10 text-teal-400',
-  report: 'bg-gray-500/10 text-gray-400',
-  plan: 'bg-orange-500/10 text-orange-400',
-  html: 'bg-amber-500/10 text-amber-400',
-  url: 'bg-cyan-500/10 text-cyan-400',
-  'ticket-summary': 'bg-rose-500/10 text-rose-400',
-};
+// Theme-accent fallback used when a type has no configured colour.
+const ACCENT_BADGE = 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]';
 
 function formatRelativeTime(dateStr: string): string {
   const now = Date.now();
@@ -46,9 +38,9 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const openDeliverableOverlay = useUIStore((s) => s.openDeliverableOverlay);
   const typeLabel = useDeliverableTypesStore((s) => s.labelFor)(deliverable.type);
+  const typeColorCfg = useDeliverableTypesStore((s) => s.colorFor)(deliverable.type);
 
   const ticket = tickets.find((t) => t.id === deliverable.ticketId);
-  const typeColor = TYPE_COLORS[deliverable.type] ?? 'bg-gray-500/10 text-gray-400';
   const statusColor =
     deliverable.status === 'final'
       ? 'bg-green-500/10 text-green-400'
@@ -104,7 +96,10 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
 
       {/* Type badge */}
       <div className="flex-[0.8]">
-        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', typeColor)}>
+        <span
+          className={cn('whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium', !typeColorCfg && ACCENT_BADGE)}
+          style={typeColorCfg ? { backgroundColor: typeColorCfg.bg, color: typeColorCfg.text } : undefined}
+        >
           {typeLabel}
         </span>
       </div>

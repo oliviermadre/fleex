@@ -50,6 +50,7 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
   const types = useDeliverableTypesStore((s) => s.types);
   const renderer = useDeliverableTypesStore((s) => s.rendererFor)(deliverable.type);
   const typeLabel = useDeliverableTypesStore((s) => s.labelFor)(deliverable.type);
+  const typeColor = useDeliverableTypesStore((s) => s.colorFor)(deliverable.type);
   const isHtml = renderer === 'html';
 
   // Build the type options for the unitary type-change control. Include the
@@ -162,8 +163,8 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
               letterSpacing: '0.05em',
               padding: '1px 6px',
               borderRadius: 3,
-              backgroundColor: 'var(--theme-accent-muted)',
-              color: 'var(--theme-accent)',
+              backgroundColor: typeColor?.bg ?? 'var(--theme-accent-muted)',
+              color: typeColor?.text ?? 'var(--theme-accent)',
               flexShrink: 0,
               whiteSpace: 'nowrap',
               textTransform: 'uppercase',

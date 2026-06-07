@@ -197,6 +197,16 @@ export const DELIVERABLE_RENDERERS = ['markdown', 'html'] as const;
 export type DeliverableRenderer = typeof DELIVERABLE_RENDERERS[number];
 
 /**
+ * Badge colour for a deliverable type. Concrete CSS colour strings so they can
+ * be applied as inline styles consistently across every surface (regardless of
+ * Tailwind). `bg` is typically a translucent fill, `text` a solid foreground.
+ */
+export interface DeliverableTypeColor {
+  bg: string;
+  text: string;
+}
+
+/**
  * A configurable deliverable type. `id` is the stable value persisted on each
  * deliverable row; label/description/renderer drive presentation and behaviour.
  * Types are configurable per workspace — {@link DEFAULT_DELIVERABLE_TYPES} is
@@ -212,10 +222,45 @@ export interface DeliverableTypeDef {
   /** How the web renders this deliverable's content. */
   renderer: DeliverableRenderer;
   /**
+   * Badge colour. When unset, the badge falls back to the theme accent colour
+   * everywhere (no regression for legacy/uncoloured types).
+   */
+  color?: DeliverableTypeColor;
+  /**
    * System-managed type (e.g. ticket-summary): not offered to agents, and
    * cannot be deleted or renamed through the backoffice.
    */
   system?: boolean;
+}
+
+/**
+ * Predefined badge colour palette offered in the config UI. Each entry pairs a
+ * translucent background with a solid text colour of the same hue, matching the
+ * app's existing badge aesthetic.
+ */
+export const DELIVERABLE_COLOR_PRESETS: { key: string; label: string; bg: string; text: string }[] = [
+  { key: 'gray', label: 'Gray', bg: 'rgba(107,114,128,0.14)', text: '#9ca3af' },
+  { key: 'red', label: 'Red', bg: 'rgba(239,68,68,0.14)', text: '#f87171' },
+  { key: 'rose', label: 'Rose', bg: 'rgba(244,63,94,0.14)', text: '#fb7185' },
+  { key: 'orange', label: 'Orange', bg: 'rgba(249,115,22,0.14)', text: '#fb923c' },
+  { key: 'amber', label: 'Amber', bg: 'rgba(245,158,11,0.14)', text: '#fbbf24' },
+  { key: 'yellow', label: 'Yellow', bg: 'rgba(234,179,8,0.14)', text: '#facc15' },
+  { key: 'lime', label: 'Lime', bg: 'rgba(132,204,22,0.14)', text: '#a3e635' },
+  { key: 'green', label: 'Green', bg: 'rgba(34,197,94,0.14)', text: '#4ade80' },
+  { key: 'emerald', label: 'Emerald', bg: 'rgba(16,185,129,0.14)', text: '#34d399' },
+  { key: 'teal', label: 'Teal', bg: 'rgba(20,184,166,0.14)', text: '#2dd4bf' },
+  { key: 'cyan', label: 'Cyan', bg: 'rgba(6,182,212,0.14)', text: '#22d3ee' },
+  { key: 'blue', label: 'Blue', bg: 'rgba(59,130,246,0.14)', text: '#60a5fa' },
+  { key: 'indigo', label: 'Indigo', bg: 'rgba(99,102,241,0.14)', text: '#818cf8' },
+  { key: 'violet', label: 'Violet', bg: 'rgba(139,92,246,0.14)', text: '#a78bfa' },
+  { key: 'purple', label: 'Purple', bg: 'rgba(168,85,247,0.14)', text: '#c084fc' },
+  { key: 'pink', label: 'Pink', bg: 'rgba(236,72,153,0.14)', text: '#f472b6' },
+];
+
+/** Resolve a preset by hue key. */
+function preset(key: string): DeliverableTypeColor {
+  const p = DELIVERABLE_COLOR_PRESETS.find((c) => c.key === key)!;
+  return { bg: p.bg, text: p.text };
 }
 
 /** The stable id of the auto-generated ticket-summary deliverable. */
@@ -228,14 +273,14 @@ export const TICKET_SUMMARY_TYPE = 'ticket-summary';
  * named html-rendered types (e.g. visual-explainer, playground) instead.
  */
 export const DEFAULT_DELIVERABLE_TYPES: DeliverableTypeDef[] = [
-  { id: 'prd', label: 'PRD', description: 'Product Requirements Document', renderer: 'markdown' },
-  { id: 'spec', label: 'Spec', description: 'Technical specification or design document', renderer: 'markdown' },
-  { id: 'plan', label: 'Plan', description: 'Implementation plan, roadmap, or action items', renderer: 'markdown' },
-  { id: 'code', label: 'Code', description: 'Code snippet, patch, or implementation', renderer: 'markdown' },
-  { id: 'report', label: 'Report', description: 'Analysis, audit, review, or research findings', renderer: 'markdown' },
-  { id: 'url', label: 'URL', description: 'External link (content should be the URL)', renderer: 'markdown' },
-  { id: 'html', label: 'HTML', description: 'Self-contained HTML document (rendered as an iframe embed). The content must be a complete `<!DOCTYPE html>...` string.', renderer: 'html' },
-  { id: TICKET_SUMMARY_TYPE, label: 'Ticket Summary', description: 'Auto-generated ticket summary (system use only)', renderer: 'markdown', system: true },
+  { id: 'prd', label: 'PRD', description: 'Product Requirements Document', renderer: 'markdown', color: preset('indigo') },
+  { id: 'spec', label: 'Spec', description: 'Technical specification or design document', renderer: 'markdown', color: preset('blue') },
+  { id: 'plan', label: 'Plan', description: 'Implementation plan, roadmap, or action items', renderer: 'markdown', color: preset('orange') },
+  { id: 'code', label: 'Code', description: 'Code snippet, patch, or implementation', renderer: 'markdown', color: preset('teal') },
+  { id: 'report', label: 'Report', description: 'Analysis, audit, review, or research findings', renderer: 'markdown', color: preset('gray') },
+  { id: 'url', label: 'URL', description: 'External link (content should be the URL)', renderer: 'markdown', color: preset('cyan') },
+  { id: 'html', label: 'HTML', description: 'Self-contained HTML document (rendered as an iframe embed). The content must be a complete `<!DOCTYPE html>...` string.', renderer: 'html', color: preset('amber') },
+  { id: TICKET_SUMMARY_TYPE, label: 'Ticket Summary', description: 'Auto-generated ticket summary (system use only)', renderer: 'markdown', color: preset('rose'), system: true },
 ];
 
 /**
@@ -290,6 +335,14 @@ export function rendererForType(type: string, types: DeliverableTypeDef[]): Deli
 /** Resolve the display label for a stored type, falling back to the raw id. */
 export function labelForType(type: string, types: DeliverableTypeDef[]): string {
   return types.find((t) => t.id === type)?.label ?? type;
+}
+
+/**
+ * Resolve the configured badge colour for a stored type, or null when none is
+ * set (callers then fall back to the theme accent — no regression).
+ */
+export function colorForType(type: string, types: DeliverableTypeDef[]): DeliverableTypeColor | null {
+  return types.find((t) => t.id === type)?.color ?? null;
 }
 
 /** Validate a slug used as a deliverable type id. */

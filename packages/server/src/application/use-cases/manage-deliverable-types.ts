@@ -3,7 +3,7 @@ import {
   normalizeDeliverableTypes,
   isValidDeliverableTypeId,
 } from '@fleex/shared';
-import type { DeliverableTypeDef, DeliverableRenderer, TicketDeliverable } from '@fleex/shared';
+import type { DeliverableTypeDef, DeliverableRenderer, DeliverableTypeColor, TicketDeliverable } from '@fleex/shared';
 import {
   InvalidDeliverableTypeError,
   DeliverableTypeNotFoundError,
@@ -58,7 +58,7 @@ export class ManageDeliverableTypesUseCase {
     return { types: this.current(), usage: await this.usage() };
   }
 
-  async create(input: { id: string; label: string; description?: string; renderer: DeliverableRenderer }): Promise<DeliverableTypesView> {
+  async create(input: { id: string; label: string; description?: string; renderer: DeliverableRenderer; color?: DeliverableTypeColor | null }): Promise<DeliverableTypesView> {
     const id = input.id.trim();
     if (!isValidDeliverableTypeId(id)) {
       throw new InvalidDeliverableTypeError(id);
@@ -77,13 +77,14 @@ export class ManageDeliverableTypesUseCase {
       label: input.label.trim(),
       description: input.description?.trim() ?? '',
       renderer: input.renderer,
+      ...(this.normalizeColor(input.color) ? { color: this.normalizeColor(input.color)! } : {}),
     });
     await this.persist(types);
     this.logger.info('Deliverable type created', { id });
     return { types, usage: await this.usage() };
   }
 
-  async update(id: string, patch: { label?: string; description?: string; renderer?: DeliverableRenderer }): Promise<DeliverableTypesView> {
+  async update(id: string, patch: { label?: string; description?: string; renderer?: DeliverableRenderer; color?: DeliverableTypeColor | null }): Promise<DeliverableTypesView> {
     const types = this.current();
     const target = types.find((t) => t.id === id);
     if (!target) throw new DeliverableTypeNotFoundError(id);
@@ -99,6 +100,11 @@ export class ManageDeliverableTypesUseCase {
     if (patch.renderer !== undefined) {
       this.assertRenderer(patch.renderer);
       target.renderer = patch.renderer;
+    }
+    if (patch.color !== undefined) {
+      const color = this.normalizeColor(patch.color);
+      if (color) target.color = color;
+      else delete target.color;
     }
     await this.persist(types);
     this.logger.info('Deliverable type updated', { id });
@@ -192,5 +198,14 @@ export class ManageDeliverableTypesUseCase {
     if (!(DELIVERABLE_RENDERERS as readonly string[]).includes(renderer)) {
       throw new DeliverableTypeConflictError(`Unknown renderer: ${renderer}`);
     }
+  }
+
+  /** Coerce arbitrary input into a valid color pair, or null to clear it. */
+  private normalizeColor(color: DeliverableTypeColor | null | undefined): DeliverableTypeColor | null {
+    if (!color) return null;
+    const bg = typeof color.bg === 'string' ? color.bg.trim() : '';
+    const text = typeof color.text === 'string' ? color.text.trim() : '';
+    if (!bg || !text) return null;
+    return { bg, text };
   }
 }

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { DELIVERABLE_RENDERERS, type DeliverableRenderer } from '@fleex/shared';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { DELIVERABLE_RENDERERS, DELIVERABLE_COLOR_PRESETS, type DeliverableRenderer, type DeliverableTypeColor } from '@fleex/shared';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useToastStore } from '../../stores/toastStore';
 import { Button } from '../ui/Button';
@@ -7,6 +8,23 @@ import { Input } from '../ui/Input';
 
 const inputCls =
   'rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-input)] px-2 py-1 text-sm text-[var(--theme-text-primary)] outline-none transition-colors focus:border-[var(--theme-accent)]';
+
+const ACCENT_BADGE_STYLE = {
+  backgroundColor: 'var(--theme-accent-muted, rgba(255,255,255,0.08))',
+  color: 'var(--theme-accent)',
+};
+
+/** Small badge preview, in a configured colour or the theme accent fallback. */
+function BadgePreview({ label, color }: { label: string; color: DeliverableTypeColor | null }) {
+  return (
+    <span
+      className="whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+      style={color ? { backgroundColor: color.bg, color: color.text } : ACCENT_BADGE_STYLE}
+    >
+      {label || 'Label'}
+    </span>
+  );
+}
 
 function RendererSelect({
   value,
@@ -31,6 +49,120 @@ function RendererSelect({
   );
 }
 
+/**
+ * Color picker bubble: shows the current badge colour; clicking opens a popover
+ * with the predefined palette, a live preview, and Apply/Default actions.
+ */
+function ColorPicker({
+  label,
+  color,
+  disabled,
+  onApply,
+}: {
+  label: string;
+  color: DeliverableTypeColor | null;
+  disabled?: boolean;
+  onApply: (color: DeliverableTypeColor | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState<DeliverableTypeColor | null>(color);
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setPending(color);
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) setPos({ top: rect.bottom + 6, left: rect.left });
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (popRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open, color]);
+
+  if (disabled) {
+    return <BadgePreview label={label} color={color} />;
+  }
+
+  const selectedKey = pending && DELIVERABLE_COLOR_PRESETS.find((p) => p.bg === pending.bg && p.text === pending.text)?.key;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="Change colour"
+        className="cursor-pointer rounded transition-opacity hover:opacity-80"
+      >
+        <BadgePreview label={label} color={color} />
+      </button>
+
+      {open && createPortal(
+        <div
+          ref={popRef}
+          className="fixed z-[1000] w-64 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] p-3 shadow-xl"
+          style={{ top: pos.top, left: pos.left }}
+        >
+          {/* Preview */}
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-[var(--theme-text-faint)]">Preview</span>
+            <BadgePreview label={label} color={pending} />
+          </div>
+
+          {/* Swatch grid */}
+          <div className="grid grid-cols-8 gap-1.5">
+            {DELIVERABLE_COLOR_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                title={p.label}
+                onClick={() => setPending({ bg: p.bg, text: p.text })}
+                className={`flex h-6 w-6 items-center justify-center rounded ${selectedKey === p.key ? 'ring-2 ring-[var(--theme-accent)]' : 'ring-1 ring-white/10'}`}
+                style={{ backgroundColor: p.bg }}
+              >
+                <span className="text-[10px] font-bold" style={{ color: p.text }}>A</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Actions */}
+          <div className="mt-3 flex items-center justify-between">
+            <button
+              type="button"
+              className="text-[11px] text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
+              onClick={() => { onApply(null); setOpen(false); }}
+            >
+              Default (theme)
+            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-[11px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded bg-[var(--theme-accent)] px-2 py-1 text-[11px] font-medium text-white hover:opacity-90"
+                onClick={() => { onApply(pending); setOpen(false); }}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 export function DeliverableTypesTab() {
   const types = useDeliverableTypesStore((s) => s.types);
   const usage = useDeliverableTypesStore((s) => s.usage);
@@ -47,6 +179,7 @@ export function DeliverableTypesTab() {
   const [newLabel, setNewLabel] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newRenderer, setNewRenderer] = useState<DeliverableRenderer>('markdown');
+  const [newColor, setNewColor] = useState<DeliverableTypeColor | null>(null);
 
   // Bulk reassign form
   const [reassignFrom, setReassignFrom] = useState('');
@@ -65,8 +198,8 @@ export function DeliverableTypesTab() {
       return;
     }
     try {
-      await create({ id: newId.trim(), label: newLabel.trim(), description: newDescription.trim(), renderer: newRenderer });
-      setNewId(''); setNewLabel(''); setNewDescription(''); setNewRenderer('markdown');
+      await create({ id: newId.trim(), label: newLabel.trim(), description: newDescription.trim(), renderer: newRenderer, color: newColor });
+      setNewId(''); setNewLabel(''); setNewDescription(''); setNewRenderer('markdown'); setNewColor(null);
       addToast('success', 'Type created');
     } catch { /* toast handled by api.ts */ }
   };
@@ -124,6 +257,7 @@ export function DeliverableTypesTab() {
               <th className="px-3 py-2 font-semibold">Label</th>
               <th className="px-3 py-2 font-semibold">Description</th>
               <th className="px-3 py-2 font-semibold">Renderer</th>
+              <th className="px-3 py-2 font-semibold">Color</th>
               <th className="px-3 py-2 text-right font-semibold">Usage</th>
               <th className="px-3 py-2 text-right font-semibold">Actions</th>
             </tr>
@@ -176,6 +310,14 @@ export function DeliverableTypesTab() {
                       onChange={(r) => update(t.id, { renderer: r })}
                     />
                   </td>
+                  <td className="px-3 py-2 align-middle">
+                    <ColorPicker
+                      label={t.label}
+                      color={t.color ?? null}
+                      disabled={t.system}
+                      onApply={(color) => update(t.id, { color })}
+                    />
+                  </td>
                   <td className="px-3 py-2 text-right align-middle text-[var(--theme-text-secondary)]">{count}</td>
                   <td className="px-3 py-2 text-right align-middle">
                     {!t.system && (
@@ -224,6 +366,10 @@ export function DeliverableTypesTab() {
           <div className="flex flex-col gap-1">
             <label className="text-[11px] text-[var(--theme-text-secondary)]">Renderer</label>
             <RendererSelect value={newRenderer} onChange={setNewRenderer} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] text-[var(--theme-text-secondary)]">Color</label>
+            <ColorPicker label={newLabel || newId || 'Label'} color={newColor} onApply={setNewColor} />
           </div>
           <Button variant="primary" onClick={handleAdd}>Add type</Button>
         </div>

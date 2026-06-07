@@ -478,14 +478,14 @@ export async function fetchDeliverableTypes(): Promise<DeliverableTypesView> {
 }
 
 export async function createDeliverableType(
-  input: { id: string; label: string; description?: string; renderer: import('@fleex/shared').DeliverableRenderer },
+  input: { id: string; label: string; description?: string; renderer: import('@fleex/shared').DeliverableRenderer; color?: import('@fleex/shared').DeliverableTypeColor | null },
 ): Promise<DeliverableTypesView> {
   return request<DeliverableTypesView>('/deliverable-types', { method: 'POST', body: JSON.stringify(input) });
 }
 
 export async function updateDeliverableType(
   id: string,
-  patch: { label?: string; description?: string; renderer?: import('@fleex/shared').DeliverableRenderer },
+  patch: { label?: string; description?: string; renderer?: import('@fleex/shared').DeliverableRenderer; color?: import('@fleex/shared').DeliverableTypeColor | null },
 ): Promise<DeliverableTypesView> {
   return request<DeliverableTypesView>(`/deliverable-types/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
 }

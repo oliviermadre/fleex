@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { DeliverableTypeDef, DeliverableRenderer } from '@fleex/shared';
-import { DEFAULT_DELIVERABLE_TYPES, rendererForType, labelForType } from '@fleex/shared';
+import type { DeliverableTypeDef, DeliverableRenderer, DeliverableTypeColor } from '@fleex/shared';
+import { DEFAULT_DELIVERABLE_TYPES, rendererForType, labelForType, colorForType } from '@fleex/shared';
 import * as api from '../services/api';
 
 interface DeliverableTypesState {
@@ -9,8 +9,8 @@ interface DeliverableTypesState {
   loaded: boolean;
 
   load: () => Promise<void>;
-  create: (input: { id: string; label: string; description?: string; renderer: DeliverableRenderer }) => Promise<void>;
-  update: (id: string, patch: { label?: string; description?: string; renderer?: DeliverableRenderer }) => Promise<void>;
+  create: (input: { id: string; label: string; description?: string; renderer: DeliverableRenderer; color?: DeliverableTypeColor | null }) => Promise<void>;
+  update: (id: string, patch: { label?: string; description?: string; renderer?: DeliverableRenderer; color?: DeliverableTypeColor | null }) => Promise<void>;
   rename: (id: string, newId: string) => Promise<number>;
   remove: (id: string) => Promise<void>;
   reassign: (from: string, to: string) => Promise<number>;
@@ -19,6 +19,8 @@ interface DeliverableTypesState {
   selectableTypes: () => DeliverableTypeDef[];
   rendererFor: (type: string) => DeliverableRenderer;
   labelFor: (type: string) => string;
+  /** Configured badge colour for a type, or null (caller falls back to theme accent). */
+  colorFor: (type: string) => DeliverableTypeColor | null;
 }
 
 export const useDeliverableTypesStore = create<DeliverableTypesState>((set, get) => ({
@@ -68,4 +70,5 @@ export const useDeliverableTypesStore = create<DeliverableTypesState>((set, get)
   selectableTypes: () => get().types.filter((t) => !t.system),
   rendererFor: (type) => rendererForType(type, get().types),
   labelFor: (type) => labelForType(type, get().types),
+  colorFor: (type) => colorForType(type, get().types),
 }));

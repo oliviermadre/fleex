@@ -113,6 +113,7 @@ export type {
   TicketDeliverable,
   DeliverableType,
   DeliverableTypeDef,
+  DeliverableTypeColor,
   DeliverableRenderer,
   DeliverableStatus,
   TicketSummaryRef,
@@ -127,6 +128,7 @@ export type {
 export {
   DELIVERABLE_TYPES,
   DELIVERABLE_RENDERERS,
+  DELIVERABLE_COLOR_PRESETS,
   DEFAULT_DELIVERABLE_TYPES,
   TICKET_SUMMARY_TYPE,
   DELIVERABLE_STATUSES,
@@ -135,6 +137,7 @@ export {
   normalizeDeliverableTypes,
   rendererForType,
   labelForType,
+  colorForType,
   isValidDeliverableTypeId,
 } from './types/ticket.js';
 

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { DeliverableRenderer } from '@fleex/shared';
+import type { DeliverableRenderer, DeliverableTypeColor } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 /**
@@ -17,16 +17,16 @@ export function deliverableTypesRoutes(container: Container) {
 
     // Create a new type
     app.post<{
-      Body: { id: string; label: string; description?: string; renderer: DeliverableRenderer };
+      Body: { id: string; label: string; description?: string; renderer: DeliverableRenderer; color?: DeliverableTypeColor | null };
     }>('/api/deliverable-types', async (request, reply) => {
       const view = await svc.create(request.body);
       return reply.code(201).send(view);
     });
 
-    // Update an existing type (label/description/renderer)
+    // Update an existing type (label/description/renderer/color)
     app.patch<{
       Params: { id: string };
-      Body: { label?: string; description?: string; renderer?: DeliverableRenderer };
+      Body: { label?: string; description?: string; renderer?: DeliverableRenderer; color?: DeliverableTypeColor | null };
     }>('/api/deliverable-types/:id', async (request) => {
       return svc.update(request.params.id, request.body);
     });

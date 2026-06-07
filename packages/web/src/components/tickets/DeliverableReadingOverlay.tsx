@@ -25,6 +25,7 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
   const close = useUIStore((s) => s.closeDeliverableOverlay);
   const addFloatingDeliverable = useUIStore((s) => s.addFloatingDeliverable);
   const labelForType = useDeliverableTypesStore((s) => s.labelFor);
+  const typeColor = useDeliverableTypesStore((s) => s.colorFor)(deliverable?.type ?? '');
   const isHtml = useDeliverableTypesStore((s) => s.rendererFor)(deliverable?.type ?? '') === 'html';
   const [showCopyPicker, setShowCopyPicker] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -76,7 +77,10 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
       <div className="deliverable-overlay-panel" style={isHtml ? { height: '85vh' } : undefined} onMouseDown={(e) => e.stopPropagation()}>
         {/* Title bar */}
         <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3" style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}>
-          <span className="flex-shrink-0 whitespace-nowrap rounded bg-[var(--theme-accent)]/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[var(--theme-accent)]">
+          <span
+            className={`flex-shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${typeColor ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
+            style={typeColor ? { backgroundColor: typeColor.bg, color: typeColor.text } : undefined}
+          >
             {labelForType(deliverable.type)}
           </span>
 
