@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { statusAnchors } from '@fleex/shared';
 import { TicketNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
@@ -27,12 +28,11 @@ export class CreateSessionFromTicketUseCase {
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) throw new TicketNotFoundError(ticketId);
 
-    // Move ticket to doing only when starting work (backlog/todo).
-    // Opening a session on a reviewing/done/cancelled ticket (e.g. to run
-    // review agents or re-read a merged PR) must not reopen it as doing.
-    const STARTABLE_STATUSES = ['backlog', 'todo'] as const;
-    if (STARTABLE_STATUSES.includes(ticket.status as (typeof STARTABLE_STATUSES)[number])) {
-      const moveDiff = ticket.moveTo('doing');
+    // Move ticket to the work-start column only when starting work (a startable
+    // column). Opening a session on an active/terminal ticket (e.g. to run review
+    // agents or re-read a merged PR) must not reopen it.
+    if (ticket.statusRole.isStartable()) {
+      const moveDiff = ticket.moveTo(statusAnchors.workStart());
       if (Object.keys(moveDiff).length > 0) {
         await this.ticketStore.saveActivity(TicketActivityEntity.create({
           id: randomUUID(),

@@ -1,21 +1,12 @@
 import { useState, useRef, useCallback } from 'react';
 import type { Ticket, TicketStatus, BoardWithCounts } from '@fleex/shared';
-import { TICKET_STATUS_LABELS } from '@fleex/shared';
+import { Status, findStatusColumn } from '@fleex/shared';
 import { KanbanCard } from './KanbanCard';
 import { InlineCardCreator } from './InlineCardCreator';
-import { useTicketStore } from '../../stores/ticketStore';
+import { useTicketStore, UNCATEGORIZED_STATUS } from '../../stores/ticketStore';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
-import { getStatusBadgeClass } from '../../lib/statusColors';
-
-const COLUMN_TITLE_COLOR: Record<string, string> = {
-  backlog: 'text-[var(--theme-text-muted)]',
-  todo: 'text-orange-400',
-  doing: 'text-blue-400',
-  reviewing: 'text-purple-400',
-  done: 'text-green-400',
-  cancelled: 'text-red-400/70',
-};
+import { getStatusBadgeClass, statusTitleClass } from '../../lib/statusColors';
 
 export function KanbanColumn({
   status,
@@ -27,7 +18,7 @@ export function KanbanColumn({
   onToggleCollapse,
   prStates,
 }: {
-  status: TicketStatus;
+  status: string;
   tickets: Ticket[];
   boardId: string;
   isAllBoards?: boolean;
@@ -40,6 +31,8 @@ export function KanbanColumn({
   // Index where the drop indicator should appear (-1 = none, 0..tickets.length)
   const [dropIndex, setDropIndex] = useState(-1);
   const listRef = useRef<HTMLDivElement>(null);
+  const isUncategorized = status === UNCATEGORIZED_STATUS;
+  const label = isUncategorized ? 'Uncategorized' : (findStatusColumn(status)?.label ?? status);
 
   const handleDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('application/x-ticket-id')) return;
@@ -93,9 +86,10 @@ export function KanbanColumn({
     ordered.splice(idx, 0, dragged as Ticket);
 
     // Build position updates
+    const targetStatus = status as TicketStatus;
     const updates = ordered.map((t, i) => ({
       id: t.id,
-      status,
+      status: targetStatus,
       position: i,
     }));
 
@@ -115,7 +109,7 @@ export function KanbanColumn({
     if (movingAcrossColumns) {
       // Use moveTicket for the dragged card (creates 'moved' activity), then reorder the rest
       const moveStore = useTicketStore.getState().moveTicket;
-      await moveStore(ticketId, status, idx);
+      await moveStore(ticketId, targetStatus, idx);
       const rest = updates.filter((u) => u.id !== ticketId);
       if (rest.length > 0) await api.reorderTickets(rest);
     } else {
@@ -138,7 +132,7 @@ export function KanbanColumn({
         <button
           className="flex w-full items-center justify-center py-2 text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)]"
           onClick={onToggleCollapse}
-          title={`Expand ${TICKET_STATUS_LABELS[status]}`}
+          title={`Expand ${label}`}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="9 18 15 12 9 6" />
@@ -150,10 +144,10 @@ export function KanbanColumn({
         </span>
         {/* Vertical label */}
         <span
-          className={cn('mt-3 text-xs font-bold uppercase tracking-wider', COLUMN_TITLE_COLOR[status])}
+          className={cn('mt-3 text-xs font-bold uppercase tracking-wider', statusTitleClass(status))}
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
         >
-          {TICKET_STATUS_LABELS[status]}
+          {label}
         </span>
       </div>
     );
@@ -171,8 +165,8 @@ export function KanbanColumn({
     >
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-4 py-3">
-        <span className={cn('text-sm font-bold uppercase tracking-wider', COLUMN_TITLE_COLOR[status])}>
-          {TICKET_STATUS_LABELS[status]}
+        <span className={cn('text-sm font-bold uppercase tracking-wider', statusTitleClass(status))}>
+          {label}
         </span>
         <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', getStatusBadgeClass(status))}>
           {tickets.length}
@@ -181,7 +175,7 @@ export function KanbanColumn({
           <button
             className="ml-auto flex items-center justify-center text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-text-secondary)]"
             onClick={onToggleCollapse}
-            title={`Collapse ${TICKET_STATUS_LABELS[status]}`}
+            title={`Collapse ${label}`}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
@@ -190,10 +184,10 @@ export function KanbanColumn({
         )}
       </div>
 
-      {/* Inline card creator at top (not for done/cancelled) */}
-      {status !== 'cancelled' && status !== 'done' && (
+      {/* Inline card creator at top (not for terminal or uncategorized columns) */}
+      {!isUncategorized && !Status.of(status).isTerminal() && (
         <div className="px-3 py-1.5">
-          <InlineCardCreator boardId={boardId} status={status} />
+          <InlineCardCreator boardId={boardId} status={status as TicketStatus} />
         </div>
       )}
 

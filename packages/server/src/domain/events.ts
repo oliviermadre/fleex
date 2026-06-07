@@ -402,6 +402,10 @@ export interface TicketGroupBoardRemovedEvent extends DomainEvent {
   boardId: string;
 }
 
+export interface StatusModelUpdatedEvent extends DomainEvent {
+  type: 'status-model.updated';
+}
+
 // ── Union type ──
 
 export type AnyDomainEvent =
@@ -456,7 +460,8 @@ export type AnyDomainEvent =
   | WorkflowNeedsReviewEvent
   | WorkflowRunCompletedEvent
   | WorkflowRunFailedEvent
-  | WorkflowRunCancelledEvent;
+  | WorkflowRunCancelledEvent
+  | StatusModelUpdatedEvent;
 
 // ── Event type string union ──
 

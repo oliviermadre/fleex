@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { TagInput } from '../ui/TagInput';
 import { AppearanceTab } from './AppearanceTab';
+import { StatusColumnsTab } from './StatusColumnsTab';
 import { cn } from '../../lib/cn';
 import type { AgentToken } from '@fleex/shared';
 import * as api from '../../services/api';
@@ -12,6 +13,7 @@ import * as api from '../../services/api';
 const tabLabels: Record<SettingsTab, string> = {
   general: 'General',
   appearance: 'Appearance',
+  statuses: 'Kanban Columns',
   repositories: 'Repositories',
   'pinned-icons': 'Pinned Icons',
   'workspace-actions': 'Workspace Actions',
@@ -137,6 +139,7 @@ export function SettingsPanel() {
             />
           )}
           {settingsTab === 'appearance' && <AppearanceTab />}
+          {settingsTab === 'statuses' && <StatusColumnsTab />}
           {settingsTab === 'repositories' && (
             <RepositoriesTab
               tags={repoPatterns}
@@ -164,12 +167,14 @@ export function SettingsPanel() {
           )}
           {settingsTab === 'agent-tokens' && <AgentTokensTab />}
 
-          {/* Save button */}
-          <div className="mt-8 flex justify-end">
-            <Button variant="primary" onClick={handleSave}>
-              Save Settings
-            </Button>
-          </div>
+          {/* Save button — the Kanban Columns tab manages its own save flow */}
+          {settingsTab !== 'statuses' && (
+            <div className="mt-8 flex justify-end">
+              <Button variant="primary" onClick={handleSave}>
+                Save Settings
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

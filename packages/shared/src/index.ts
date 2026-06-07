@@ -130,6 +130,26 @@ export {
 } from './types/ticket.js';
 
 export type {
+  StatusOutcome,
+  StatusAnchor,
+  StatusColor,
+  StatusColumn,
+  StatusModel,
+  StatusModelValidation,
+} from './status-model.js';
+
+export {
+  DEFAULT_STATUS_MODEL,
+  setActiveStatusModel,
+  getActiveStatusModel,
+  findStatusColumn,
+  resolveAnchor,
+  statusAnchors,
+  Status,
+  validateStatusModel,
+} from './status-model.js';
+
+export type {
   ExecutionMode,
   AgentPersona,
   AgentStructuredOutput,

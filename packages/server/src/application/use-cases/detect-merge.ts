@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { PullRequest } from '@fleex/shared';
+import { statusAnchors } from '@fleex/shared';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -33,9 +34,9 @@ export class DetectMergeUseCase {
       }
 
       for (const ticket of allMatches.values()) {
-        if (ticket.status === 'done' || ticket.status === 'cancelled') continue;
+        if (ticket.statusRole.isTerminal()) continue;
 
-        const diff = ticket.moveTo('done');
+        const diff = ticket.moveTo(statusAnchors.mergeLanding());
         if (Object.keys(diff).length === 0) continue;
 
         // Add github_pr link if not already present

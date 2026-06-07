@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Ticket, TicketDeliverable } from '@fleex/shared';
+import { Status } from '@fleex/shared';
 import * as api from '../../services/api';
 import { useToastStore } from '../../stores/toastStore';
 
@@ -13,8 +14,6 @@ interface TicketPickerModalProps {
 
 const FOCUS_DELAY_MS = 50;      // let the modal finish opening before focusing input
 const SEARCH_DEBOUNCE_MS = 300; // debounce search input to avoid excessive API calls
-
-const OPEN_STATUSES = new Set(['backlog', 'todo', 'doing', 'reviewing']);
 
 export function TicketPickerModal({ open, onClose, deliverable, sourceTicketId }: TicketPickerModalProps) {
   const [query, setQuery] = useState('');
@@ -32,7 +31,7 @@ export function TicketPickerModal({ open, onClose, deliverable, sourceTicketId }
       const all = await api.fetchTickets();
       const filtered = all.filter((t) => {
         if (t.id === sourceTicketId) return false;
-        if (!OPEN_STATUSES.has(t.status)) return false;
+        if (Status.of(t.status).isTerminal()) return false;
         if (q.trim()) {
           const lq = q.toLowerCase();
           return t.title.toLowerCase().includes(lq) || String(t.displayId).includes(lq);

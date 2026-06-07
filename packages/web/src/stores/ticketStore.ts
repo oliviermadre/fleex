@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import type { Board, BoardWithCounts, Ticket, TicketLink, TicketStatus, TicketPriority, TicketType, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@fleex/shared';
-import { TICKET_STATUSES } from '@fleex/shared';
+import { Status, statusAnchors, getActiveStatusModel } from '@fleex/shared';
 import * as api from '../services/api';
 import { useSessionStore } from './sessionStore';
+
+/** Synthetic column key for tickets whose status is not in the active model. */
+export const UNCATEGORIZED_STATUS = '__uncategorized__';
 
 export type TicketTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity' | 'workflow';
 export const VALID_TICKET_TABS: TicketTab[] = ['description', 'comments', 'mentions', 'deliverables', 'activity', 'workflow'];
@@ -55,7 +58,7 @@ interface TicketState {
   clearFilters: () => void;
 
   // Derived
-  ticketsByColumn: (boardId: string | null) => Record<TicketStatus, Ticket[]>;
+  ticketsByColumn: (boardId: string | null) => Record<string, Ticket[]>;
 
   // WebSocket
   handleWsMessage: (msg: TicketWsMessage) => void;
@@ -215,7 +218,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     const [, org, name, num] = match as RegExpMatchArray & [string, string, string, string];
     const ticket = await api.importGitHubIssue(org!, name!, parseInt(num!, 10), boardId);
     // If a specific status was requested (e.g. creating in a specific column), move the ticket
-    if (status && status !== 'backlog') {
+    if (status && status !== statusAnchors.defaultNew()) {
       const moved = await api.moveTicket(ticket.id, status);
       set((s) => {
         if (s.tickets.some((t) => t.id === moved.id)) return s;
@@ -233,7 +236,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   importSlackMessage: async (url, boardId, status) => {
     const ticket = await api.importSlackMessage(url, boardId);
     // If a specific status was requested (e.g. creating in a specific column), move the ticket
-    if (status && status !== 'backlog') {
+    if (status && status !== statusAnchors.defaultNew()) {
       const moved = await api.moveTicket(ticket.id, status);
       set((s) => {
         if (s.tickets.some((t) => t.id === moved.id)) return s;
@@ -350,21 +353,32 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       filtered = filtered.filter((t) => t.favorite === filters.favorite);
     }
 
-    // Auto-hide done/cancelled tickets older than 7 days
+    // Auto-hide terminal (done/cancelled) tickets older than 7 days
     if (filters.hideOldDoneCancelled) {
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       filtered = filtered.filter((t) => {
-        if (t.status !== 'done' && t.status !== 'cancelled') return true;
+        if (!Status.of(t.status).isTerminal()) return true;
         return new Date(t.statusChangedAt).getTime() > sevenDaysAgo;
       });
     }
 
-    const columns = {} as Record<TicketStatus, Ticket[]>;
-    for (const s of TICKET_STATUSES as readonly TicketStatus[]) {
-      const col = filtered.filter((t) => t.status === s);
-      columns[s] = (s === 'done' || s === 'cancelled')
+    const columns = {} as Record<string, Ticket[]>;
+    // Iterate the active status model's columns (dynamic) in display order.
+    const modelColumns = [...getActiveStatusModel().columns].sort((a, b) => a.order - b.order);
+    const modelKeys = new Set(modelColumns.map((c) => c.key));
+    for (const c of modelColumns) {
+      const col = filtered.filter((t) => t.status === c.key);
+      // Terminal columns sort by recency of closure; others by manual position.
+      columns[c.key] = c.terminal
         ? col.sort((a, b) => new Date(b.statusChangedAt).getTime() - new Date(a.statusChangedAt).getTime())
         : col.sort((a, b) => a.position - b.position);
+    }
+    // Safety net: tickets whose status is not part of the model (e.g. left over
+    // from a removed column) land in an "uncategorized" bucket so they stay
+    // visible and rescuable instead of silently vanishing from the board.
+    const orphans = filtered.filter((t) => !modelKeys.has(t.status));
+    if (orphans.length > 0) {
+      columns[UNCATEGORIZED_STATUS] = orphans.sort((a, b) => a.position - b.position);
     }
     return columns;
   },

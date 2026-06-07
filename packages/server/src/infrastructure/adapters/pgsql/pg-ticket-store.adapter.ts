@@ -1,4 +1,5 @@
 import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata } from '@fleex/shared';
+import { statusAnchors } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -187,8 +188,8 @@ export class PgTicketStore implements TicketStorePort {
   // ── Agent queries ──
 
   async getNextTicketForAgent(boardId?: string): Promise<TicketEntity | null> {
-    let sql = `SELECT * FROM tickets WHERE status = 'todo' AND blocked = false AND archived_at IS NULL`;
-    const params: unknown[] = [];
+    const params: unknown[] = [statusAnchors.agentQueue()];
+    let sql = `SELECT * FROM tickets WHERE status = $1 AND blocked = false AND archived_at IS NULL`;
 
     if (boardId) {
       params.push(boardId);
@@ -211,8 +212,8 @@ export class PgTicketStore implements TicketStorePort {
 
   async getClaimedByAgent(agentName: string): Promise<TicketEntity[]> {
     const { rows } = await this.db.query(
-      `SELECT * FROM tickets WHERE assignee = $1 AND status = 'doing' AND archived_at IS NULL`,
-      [agentName],
+      `SELECT * FROM tickets WHERE assignee = $1 AND status = $2 AND archived_at IS NULL`,
+      [agentName, statusAnchors.workStart()],
     );
     return rows.map(rowToTicket);
   }

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { TicketStatus } from '@fleex/shared';
+import { Status } from '@fleex/shared';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
@@ -65,7 +66,7 @@ export class GenerateTicketSummaryUseCase {
   async execute(params: { ticketId: string; status: TicketStatus }): Promise<void> {
     const { ticketId, status } = params;
 
-    if (status !== 'done' && status !== 'cancelled') return;
+    if (!Status.of(status).isTerminal()) return;
 
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) {

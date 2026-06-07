@@ -73,7 +73,7 @@ export function dashboardRoutes(container: Container) {
         // Skip GitHub fetches if rate-limited — return tickets-only dashboard
         if (rateLimited) {
           const activeTickets = allTickets
-            .filter((t) => t.status !== 'done' && t.status !== 'cancelled')
+            .filter((t) => !t.statusRole.isTerminal())
             .map((t) => t.toDTO());
           return {
             activeTickets,
@@ -252,7 +252,7 @@ export function dashboardRoutes(container: Container) {
 
         // Return all non-terminal tickets so linked items can always resolve their ticket
         const activeTickets = allTickets
-          .filter((t) => t.status !== 'done' && t.status !== 'cancelled')
+          .filter((t) => !t.statusRole.isTerminal())
           .map((t) => t.toDTO());
 
         return {

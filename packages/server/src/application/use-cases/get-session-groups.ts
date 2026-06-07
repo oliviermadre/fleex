@@ -1,4 +1,5 @@
 import type { Session, SessionGroup, WorktreeSessionGroup, AgentWorktreeInfo } from '@fleex/shared';
+import { Status } from '@fleex/shared';
 import type { SessionEntity } from '../../domain/entities.js';
 import { SessionGroupingService } from '../../domain/services/session-grouping.js';
 import type { SessionNamingService } from '../../domain/services/session-naming.js';
@@ -179,7 +180,7 @@ export class GetSessionGroupsUseCase {
     }
 
     const allTickets = await this.ticketStore.getAllTickets();
-    const isActive = (status: string) => status === 'doing' || status === 'reviewing';
+    const isActive = (status: string) => Status.of(status).isActive();
 
     // Tickets in doing/reviewing are always surfaced (and may spawn a phantom worktree).
     // Tickets in any other status are surfaced ONLY when they still own a live tmux session,

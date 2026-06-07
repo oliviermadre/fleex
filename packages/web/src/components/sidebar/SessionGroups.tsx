@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import type { Session, SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
-import { TICKET_STATUS } from '@fleex/shared';
+import { Status } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -19,7 +19,7 @@ function isMultiRepoGroup(org: string): boolean {
 }
 
 function isActiveStatus(status: string | undefined): boolean {
-  return status === TICKET_STATUS.DOING || status === TICKET_STATUS.REVIEWING;
+  return status ? Status.of(status).isActive() : false;
 }
 
 /**

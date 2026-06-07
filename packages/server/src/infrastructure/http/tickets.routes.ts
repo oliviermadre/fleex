@@ -3,17 +3,24 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus, TicketType, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, DeliverableType, DeliverableStatus } from '@fleex/shared';
-import { TICKET_STATUSES } from '@fleex/shared';
+import { TICKET_STATUSES, findStatusColumn, statusAnchors } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
-import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
+import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError, InvalidTicketStatusError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 export function ticketRoutes(container: Container) {
   const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+
+  // Reject writes to a status key that is not part of the active status model,
+  // so a stale client (or external caller) can't strand a ticket in a column
+  // that no longer exists.
+  const assertKnownStatus = (status: string) => {
+    if (!findStatusColumn(status)) throw new InvalidTicketStatusError(status);
+  };
 
   // ── Epic enrichment helpers (used by /api/tickets and /api/tickets/:id) ──
 
@@ -194,7 +201,8 @@ export function ticketRoutes(container: Container) {
       if (!board) throw new BoardNotFoundError(boardId);
 
       // Calculate position (top of column)
-      const targetStatus = status ?? 'backlog';
+      const targetStatus = status ?? statusAnchors.defaultNew();
+      assertKnownStatus(targetStatus);
       const existing = await container.ticketStore.getTicketsByStatus(boardId, targetStatus);
       const minPos = existing.length > 0
         ? existing.reduce((min, t) => Math.min(min, t.position), Infinity)
@@ -237,6 +245,7 @@ export function ticketRoutes(container: Container) {
     app.patch<{ Params: { id: string }; Querystring: { silent?: string }; Body: UpdateTicketRequest }>('/api/tickets/:id', async (request) => {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
+      if (request.body.status !== undefined) assertKnownStatus(request.body.status);
 
       const { dueDate, ...rest } = request.body;
       const changes: Parameters<TicketEntity['update']>[0] = { ...rest };
@@ -374,6 +383,7 @@ export function ticketRoutes(container: Container) {
       async (request) => {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
+        assertKnownStatus(request.body.status);
 
         const fromStatus = ticket.status;
         const diff = ticket.moveTo(request.body.status);
@@ -816,6 +826,7 @@ export function ticketRoutes(container: Container) {
     app.post<{ Body: { updates: { id: string; status: TicketStatus; position: number }[] } }>(
       '/api/tickets/reorder',
       async (request) => {
+        for (const upd of request.body.updates) assertKnownStatus(upd.status);
         for (const upd of request.body.updates) {
           const ticket = await container.ticketStore.getTicketById(upd.id);
           if (!ticket) continue;

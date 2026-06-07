@@ -1,7 +1,7 @@
 import type { TicketStatus } from '@fleex/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import { cn } from '../../lib/cn';
-import { STATUS_COLORS } from '../../lib/statusColors';
+import { statusColorToken } from '../../lib/statusColors';
 
 const ABBREVS: Record<string, string> = {
   backlog: 'BKLG',
@@ -23,7 +23,7 @@ export function NanoKanban({ status, onStatusChange, size = 'md' }: {
     <div className="flex overflow-hidden rounded-md border border-[var(--theme-border)]">
       {(TICKET_STATUSES as readonly TicketStatus[]).map((s) => {
         const active = status === s;
-        const colors = STATUS_COLORS[s] ?? STATUS_COLORS.backlog!;
+        const colors = statusColorToken(s);
         return (
           <button
             key={s}

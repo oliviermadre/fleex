@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus } from '@fleex/shared';
-import { TICKET_STATUSES } from '@fleex/shared';
+import { TICKET_STATUSES, statusAnchors } from '@fleex/shared';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { BoardNotFoundError, TicketNotFoundError } from '../../domain/errors.js';
@@ -220,7 +220,11 @@ export function agentApiRoutes(container: Container) {
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const fromStatus = ticket.status;
-      const targetStatus: TicketStatus = ticket.status === 'done' ? 'doing' : 'done';
+      // Toggle: a completed ticket reopens to the work-start column; anything
+      // else is completed (moved to the merge-landing column).
+      const targetStatus: TicketStatus = ticket.statusRole.isCompleted()
+        ? statusAnchors.workStart()
+        : statusAnchors.mergeLanding();
       const diff = ticket.moveTo(targetStatus);
       await container.ticketStore.saveTicket(ticket);
 
