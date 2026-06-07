@@ -3,13 +3,11 @@ import { createPortal } from 'react-dom';
 import type { TicketDeliverable } from '@fleex/shared';
 import { stripHtmlCodeFence } from '@fleex/shared';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 import { TITLE_BAR_HEIGHT, PILL_BORDER_RADIUS } from '../../lib/constants';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
-import { useDocumentsStore } from '../../stores/documentsStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useToastStore } from '../../stores/toastStore';
-import * as api from '../../services/api';
 
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 250;
@@ -48,34 +46,11 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
   onFocus?: () => void;
   isFocused?: boolean;
 }) {
-  const types = useDeliverableTypesStore((s) => s.types);
   const renderer = useDeliverableTypesStore((s) => s.rendererFor)(deliverable.type);
   const typeLabel = useDeliverableTypesStore((s) => s.labelFor)(deliverable.type);
   const typeColor = useDeliverableTypesStore((s) => s.colorFor)(deliverable.type);
+  const updateFloatingDeliverable = useUIStore((s) => s.updateFloatingDeliverable);
   const isHtml = renderer === 'html';
-
-  // Build the type options for the unitary type-change control. Include the
-  // current type even if it's a system/legacy value so the select reflects it.
-  const typeOptions = types.filter((t) => !t.system || t.id === deliverable.type);
-  if (!typeOptions.some((t) => t.id === deliverable.type)) {
-    typeOptions.push({ id: deliverable.type, label: deliverable.type, description: '', renderer });
-  }
-
-  const handleChangeType = useCallback(async (newType: string) => {
-    if (newType === deliverable.type) return;
-    try {
-      const updated = await api.changeDeliverableType(deliverable.id, newType);
-      useUIStore.getState().openDeliverableOverlay(updated);
-      // Refresh the Documents list if it has loaded data.
-      const docs = useDocumentsStore.getState();
-      if (docs.deliverables.length > 0) docs.fetchAll();
-      // Refresh usage counts for the backoffice.
-      useDeliverableTypesStore.getState().load();
-      useToastStore.getState().addToast('success', `Type changed to ${newType}`);
-    } catch {
-      // error toast handled by api.ts
-    }
-  }, [deliverable.id, deliverable.type]);
 
   const { size, effectivePos, setPosition, handleResizeMouseDown } = useFloatingResize({
     minWidth: MIN_WIDTH,
@@ -157,22 +132,25 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
           }}
           onMouseDown={handleTitleMouseDown}
         >
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: '0.05em',
-              padding: '1px 6px',
-              borderRadius: 3,
-              backgroundColor: typeColor?.bg ?? 'var(--theme-accent-muted)',
-              color: typeColor?.text ?? 'var(--theme-accent)',
-              flexShrink: 0,
-              whiteSpace: 'nowrap',
-              textTransform: 'uppercase',
-            }}
-          >
-            {typeLabel}
-          </span>
+          <DeliverableTypePicker deliverable={deliverable} onChanged={updateFloatingDeliverable}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.05em',
+                padding: '1px 6px',
+                borderRadius: 3,
+                backgroundColor: typeColor?.bg ?? 'var(--theme-accent-muted)',
+                color: typeColor?.text ?? 'var(--theme-accent)',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                textTransform: 'uppercase',
+                display: 'inline-block',
+              }}
+            >
+              {typeLabel}
+            </span>
+          </DeliverableTypePicker>
 
           <span
             style={{
@@ -209,28 +187,6 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
           )}
 
           <div style={{ flex: 1 }} />
-
-          {/* Unitary type change */}
-          <select
-            value={deliverable.type}
-            onMouseDown={(e) => e.stopPropagation()}
-            onChange={(e) => { e.stopPropagation(); handleChangeType(e.target.value); }}
-            title="Change deliverable type"
-            style={{
-              fontSize: 10,
-              padding: '1px 4px',
-              borderRadius: 4,
-              border: '1px solid var(--theme-border)',
-              background: 'var(--theme-bg-input)',
-              color: 'var(--theme-text-secondary)',
-              flexShrink: 0,
-              cursor: 'pointer',
-            }}
-          >
-            {typeOptions.map((t) => (
-              <option key={t.id} value={t.id}>{t.label}</option>
-            ))}
-          </select>
 
           <button
             onClick={(e) => { e.stopPropagation(); onClose(); }}

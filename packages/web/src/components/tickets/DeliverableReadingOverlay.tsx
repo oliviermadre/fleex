@@ -4,6 +4,7 @@ import { stripHtmlCodeFence } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { TicketPickerModal } from './TicketPickerModal';
 
 function relativeTime(dateStr: string): string {
@@ -78,12 +79,14 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
       <div className="deliverable-overlay-panel" style={isHtml ? { height: '85vh' } : undefined} onMouseDown={(e) => e.stopPropagation()}>
         {/* Title bar */}
         <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3" style={{ background: 'var(--theme-bg-hover)', flexShrink: 0 }}>
-          <span
-            className={`flex-shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${typeColor ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
-            style={typeColor ? { backgroundColor: typeColor.bg, color: typeColor.text } : undefined}
-          >
-            {labelForType(deliverable.type)}
-          </span>
+          <DeliverableTypePicker deliverable={deliverable} onChanged={(u) => useUIStore.getState().openDeliverableOverlay(u)}>
+            <span
+              className={`flex-shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${typeColor ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
+              style={typeColor ? { backgroundColor: typeColor.bg, color: typeColor.text } : undefined}
+            >
+              {labelForType(deliverable.type)}
+            </span>
+          </DeliverableTypePicker>
 
           <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
             {deliverable.title}

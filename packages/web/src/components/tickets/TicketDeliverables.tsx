@@ -4,6 +4,7 @@ import { appWs } from '../../services/websocket';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { DeliverableFormModal } from './DeliverableFormModal';
 import { TicketPickerModal } from './TicketPickerModal';
 import * as api from '../../services/api';
@@ -162,23 +163,31 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                   <span className="text-[9px] font-bold tracking-wider">NEW</span>
                 </button>
 
+                {/* Type badge — click to change type. Kept outside the row-open
+                    button (no nested buttons); full label, configured colour. */}
+                {(() => {
+                  const c = colorForType(d.type);
+                  return (
+                    <div className="flex-shrink-0 py-2.5 pl-2">
+                      <DeliverableTypePicker
+                        deliverable={d}
+                        onChanged={(u) => setDeliverables((prev) => prev.map((x) => (x.id === u.id ? u : x)))}
+                      >
+                        <span
+                          className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${c ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
+                          style={c ? { backgroundColor: c.bg, color: c.text } : undefined}
+                        >
+                          {labelForType(d.type)}
+                        </span>
+                      </DeliverableTypePicker>
+                    </div>
+                  );
+                })()}
+
                 <button
                   className="flex flex-1 items-center gap-3 px-2 py-2.5 text-left transition-colors hover:bg-[var(--theme-bg-surface-hover)]"
                   onClick={() => handleOpenDeliverable(d)}
                 >
-
-                  {/* Type badge — full label, never truncated; configured colour or theme accent */}
-                  {(() => {
-                    const c = colorForType(d.type);
-                    return (
-                      <span
-                        className={`flex-shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${c ? '' : 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'}`}
-                        style={c ? { backgroundColor: c.bg, color: c.text } : undefined}
-                      >
-                        {labelForType(d.type)}
-                      </span>
-                    );
-                  })()}
 
                   {/* Title + meta */}
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
