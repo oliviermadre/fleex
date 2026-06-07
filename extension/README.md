@@ -23,6 +23,11 @@ execution live in `@fleex/sidepanel-host`, which the extension reaches over
 
 ## Use
 
+- **Conversations** (☰): the hamburger opens a sidebar listing every
+  conversation with a live status dot (grey = idle, blue = working, amber =
+  awaiting your confirmation), its workspace and message count. Create one with
+  **＋ New**, switch by clicking, rename with ✎, close with 🗑. Each conversation
+  keeps its own history and workspace, persisted by the companion.
 - **Chat**: ask "what should I work on on my board?", "create a ticket titled …".
 - **📎 Page**: capture the current tab's content (heuristic extraction) and
   attach it as untrusted reference — then ask to "create a ticket from this
@@ -37,4 +42,9 @@ execution live in `@fleex/sidepanel-host`, which the extension reaches over
 - Page extraction is a dependency-free heuristic (prefers `<article>`/`<main>`,
   strips scripts/styles, caps at ~20k chars). Swapping in Readability + Turndown
   is a future build-step enhancement.
-- `host_permissions` is scoped to `http://localhost:4399/*`.
+- `host_permissions` covers the companion (`http://localhost:4399/*`) plus
+  `http://*/*` / `https://*/*` so the **📎 Page** button can read the active tab
+  from the side panel. `activeTab` alone is insufficient here: it only grants
+  host access when the extension is invoked from the toolbar icon, not when a
+  button inside the persistent side panel is clicked. `chrome://`, the Chrome
+  Web Store, and other extension pages remain unscriptable (expected).

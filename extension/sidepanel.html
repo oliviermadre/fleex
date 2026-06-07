@@ -8,17 +8,29 @@
   </head>
   <body>
     <header>
+      <button id="menu" class="icon" title="Conversations">☰</button>
       <div class="row">
         <strong>Fleex</strong>
         <span id="status" class="status off">offline</span>
       </div>
-      <select id="workspace" title="Workspace">
+      <select id="workspace" title="Workspace for this conversation">
         <option value="">default workspace</option>
       </select>
     </header>
 
-    <main id="log" aria-live="polite"></main>
+    <!-- Conversations sidebar -->
+    <div id="overlay" class="hidden"></div>
+    <aside id="sidebar" class="hidden">
+      <div class="sb-head">
+        <strong>Conversations</strong>
+        <button id="new" class="primary">＋ New</button>
+        <button id="sb-close" class="icon" title="Close">✕</button>
+      </div>
+      <ul id="sessions"></ul>
+    </aside>
 
+    <div id="state-banner" class="hidden"></div>
+    <main id="log" aria-live="polite"></main>
     <div id="page-chip" class="chip hidden"></div>
 
     <footer>

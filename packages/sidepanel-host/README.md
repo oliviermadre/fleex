@@ -31,28 +31,45 @@ FLEEX_MCP_BIN=bun FLEEX_MCP_PREFIX="run /path/to/fleex/packages/cli/index.ts" \
 
 ## WebSocket protocol (`/chat`)
 
+Multiple conversations (**sessions**) are multiplexed over one socket, routed by
+`sessionId`. Sessions are persisted to `~/.fleex/.sidepanel/sessions/<id>.json`
+and survive a restart (a stale `working` status is reset to `idle` on load).
+
 Client → server:
 
 | `type` | Fields | Effect |
 |---|---|---|
-| `user` | `text` | Run an assistant turn |
-| `page` | `content`, `url?`, `title?` | Attach current page (used once, as untrusted reference) |
-| `set_workspace` | `workspace` | Target a workspace (injected as `--workspace`) |
-| `confirm` | `id`, `approved` | Approve/deny a pending mutating tool call |
+| `list_sessions` | — | Request the session list |
+| `new_session` | `workspace?` | Create a conversation; replies `session_created` |
+| `open_session` | `id` | Fetch a conversation's transcript (on switch) |
+| `rename_session` | `id`, `title` | Rename |
+| `delete_session` | `id` | Close/delete |
+| `set_workspace` | `id`, `workspace` | Set a conversation's workspace (`--workspace`) |
+| `user` | `sessionId`, `text` | Run an assistant turn |
+| `page` | `sessionId`, `content`, `url?`, `title?` | Attach current page (used once, untrusted) |
+| `confirm` | `sessionId`, `id`, `approved` | Approve/deny a pending mutating tool call |
 
 Server → client:
 
 | `type` | Fields |
 |---|---|
-| `text` | `text` (streamed delta) |
-| `tool_call` | `id`, `name`, `input`, `argv`, `mutating` |
-| `confirm_request` | `id`, `name`, `argv`, `input` — render a confirm prompt |
-| `tool_result` | `id`, `name`, `ok`, `text` |
-| `tool_denied` | `id`, `name` |
-| `done` | `stopReason` |
-| `error` | `message` |
-| `workspace` / `page_attached` | acks |
+| `sessions` | `sessions: [{ id, title, workspace?, status, messageCount, createdAt }]` — drives the sidebar; re-sent on every change |
+| `session_created` | `id` |
+| `session_history` | `id`, `transcript` — re-render the chat on switch |
+| `text` | `sessionId`, `text` (streamed delta) |
+| `tool_call` | `sessionId`, `id`, `name`, `input`, `argv`, `mutating` |
+| `confirm_request` | `sessionId`, `id`, `name`, `argv`, `input` |
+| `tool_result` | `sessionId`, `id`, `name`, `ok`, `text` |
+| `tool_denied` | `sessionId`, `id`, `name` |
+| `done` | `sessionId`, `stopReason` |
+| `error` | `sessionId?`, `message` |
+| `page_attached` | `sessionId`, `title` |
+
+**Status** (`idle` / `working` / `awaiting_input`) is broadcast via `sessions`
+so the sidebar shows, per conversation, whether the LLM is working, waiting for
+your confirmation, or idle.
 
 **Gating:** read-only tools run automatically; mutating tools emit
 `confirm_request` and block until the client replies with `confirm`. The loop,
-gating, and streaming are unit-tested in `tests/assistant.test.ts`.
+gating, and streaming are unit-tested in `tests/assistant.test.ts`; the session
+store in `tests/sessions.test.ts`.
