@@ -77,6 +77,7 @@ import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { ApiClaudeUsageAdapter } from './adapters/api-claude-usage.adapter.js';
 import { DomainEventLogEntity } from '../domain/entities/domain-event-log.entity.js';
+import { setActiveStatusModel } from '@fleex/shared';
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
 import { CachedSessionStore } from './adapters/cached-session-store.js';
 import { CachedTicketStore } from './adapters/cached-ticket-store.js';
@@ -124,10 +125,20 @@ export async function createContainer() {
     fileStore,
     fileMetaStore,
     ticketGroupStore,
+    statusModelStore,
     workflowTemplateStore,
     workflowRunStore,
     stepRunStore,
   } = await createStores(driver, { execFn, hostFs, homedir: hostHomedir, logger });
+
+  // Load the persisted kanban status model into the active registry so all
+  // status-role lookups (see @fleex/shared) reflect the configured columns.
+  // Absent config → keep the built-in DEFAULT_STATUS_MODEL.
+  const persistedStatusModel = await statusModelStore.getModel();
+  if (persistedStatusModel) {
+    setActiveStatusModel(persistedStatusModel);
+    logger.info('Status model loaded', { columns: persistedStatusModel.columns.length });
+  }
 
   // Wrap stores with write-through in-memory cache (zero DB queries on 1s tick).
   // Shadow the original variables so all downstream code uses cached versions.
@@ -514,6 +525,7 @@ export async function createContainer() {
     fileStore,
     fileMetaStore,
     ticketGroupStore,
+    statusModelStore,
     workflowTemplateStore,
     workflowRunStore,
     stepRunStore,

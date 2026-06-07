@@ -14,6 +14,7 @@ import type { PanelStorePort } from '../../application/ports/panel-store.port.js
 import type { FileStorePort } from '../../application/ports/file-store.port.js';
 import type { FileMetaStorePort } from '../../application/ports/file-meta-store.port.js';
 import type { TicketGroupStorePort } from '../../application/ports/ticket-group-store.port.js';
+import type { StatusModelStorePort } from '../../application/ports/status-model-store.port.js';
 import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
 import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
@@ -39,6 +40,7 @@ export interface StorageStores {
   fileStore: FileStorePort;
   fileMetaStore: FileMetaStorePort;
   ticketGroupStore: TicketGroupStorePort;
+  statusModelStore: StatusModelStorePort;
   workflowTemplateStore: WorkflowTemplateStorePort | null;
   workflowRunStore: WorkflowRunStorePort | null;
   stepRunStore: StepRunStorePort | null;
@@ -98,6 +100,7 @@ async function createJsonStores(deps: {
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { JsonFileMetaStore } = await import('./json-file-meta-store.adapter.js');
   const { JsonTicketGroupStore } = await import('./json-ticket-group-store.adapter.js');
+  const { JsonStatusModelStore } = await import('./json-status-model-store.adapter.js');
 
   // Run pending migrations (JSON adapter — tracking via _migrations.json)
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
@@ -132,8 +135,9 @@ async function createJsonStores(deps: {
   await fileMetaStore.init();
   const ticketGroupStore = new JsonTicketGroupStore(deps.hostFs, deps.homedir, deps.logger);
   await ticketGroupStore.init();
+  const statusModelStore = new JsonStatusModelStore(deps.hostFs, deps.homedir, deps.logger);
 
-  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null, fileStore, fileMetaStore, ticketGroupStore, workflowTemplateStore: null, workflowRunStore: null, stepRunStore: null };
+  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null, fileStore, fileMetaStore, ticketGroupStore, statusModelStore, workflowTemplateStore: null, workflowRunStore: null, stepRunStore: null };
 }
 
 async function createJsonSessionStore(deps: {
@@ -174,6 +178,7 @@ async function createSqliteStores(deps: {
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { SqliteFileMetaStoreAdapter } = await import('./sqlite/sqlite-file-meta-store.adapter.js');
   const { SqliteTicketGroupStoreAdapter } = await import('./sqlite/sqlite-ticket-group-store.adapter.js');
+  const { SqliteStatusModelStoreAdapter } = await import('./sqlite/sqlite-status-model-store.adapter.js');
   const { SqliteWorkflowTemplateStoreAdapter } = await import('./sqlite/sqlite-workflow-template-store.adapter.js');
   const { SqliteWorkflowRunStoreAdapter } = await import('./sqlite/sqlite-workflow-run-store.adapter.js');
   const { SqliteStepRunStoreAdapter } = await import('./sqlite/sqlite-step-run-store.adapter.js');
@@ -210,6 +215,7 @@ async function createSqliteStores(deps: {
     fileStore: new DiskFileStoreAdapter(deps.homedir),
     fileMetaStore: new SqliteFileMetaStoreAdapter(connection),
     ticketGroupStore: new SqliteTicketGroupStoreAdapter(connection),
+    statusModelStore: new SqliteStatusModelStoreAdapter(connection),
     workflowTemplateStore: new SqliteWorkflowTemplateStoreAdapter(connection),
     workflowRunStore: new SqliteWorkflowRunStoreAdapter(connection),
     stepRunStore: new SqliteStepRunStoreAdapter(connection),
@@ -243,6 +249,7 @@ async function createPgsqlStores(deps: {
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { PgFileMetaStore } = await import('./pgsql/pg-file-meta-store.adapter.js');
   const { PgTicketGroupStore } = await import('./pgsql/pg-ticket-group-store.adapter.js');
+  const { PgStatusModelStore } = await import('./pgsql/pg-status-model-store.adapter.js');
 
   const connection = new PgConnection(url);
   await connection.init();
@@ -278,6 +285,7 @@ async function createPgsqlStores(deps: {
     fileStore: new DiskFileStoreAdapter(deps.homedir),
     fileMetaStore: new PgFileMetaStore(connection),
     ticketGroupStore: new PgTicketGroupStore(connection),
+    statusModelStore: new PgStatusModelStore(connection),
     workflowTemplateStore: null,
     workflowRunStore: null,
     stepRunStore: null,
@@ -314,6 +322,7 @@ async function createSupabaseStores(deps: {
   const { SupabaseFileStoreAdapter } = await import('./supabase/supabase-file-store.adapter.js');
   const { SupabaseFileMetaStore } = await import('./supabase/supabase-file-meta-store.adapter.js');
   const { SupabaseTicketGroupStore } = await import('./supabase/supabase-ticket-group-store.adapter.js');
+  const { SupabaseStatusModelStore } = await import('./supabase/supabase-status-model-store.adapter.js');
   const { SupabaseWorkflowTemplateStore } = await import('./supabase/supabase-workflow-template-store.adapter.js');
   const { SupabaseWorkflowRunStore } = await import('./supabase/supabase-workflow-run-store.adapter.js');
   const { SupabaseStepRunStore } = await import('./supabase/supabase-step-run-store.adapter.js');
@@ -350,6 +359,7 @@ async function createSupabaseStores(deps: {
     fileStore: new SupabaseFileStoreAdapter(connection),
     fileMetaStore: new SupabaseFileMetaStore(connection),
     ticketGroupStore: new SupabaseTicketGroupStore(connection),
+    statusModelStore: new SupabaseStatusModelStore(connection),
     workflowTemplateStore: new SupabaseWorkflowTemplateStore(connection),
     workflowRunStore: new SupabaseWorkflowRunStore(connection),
     stepRunStore: new SupabaseStepRunStore(connection),
