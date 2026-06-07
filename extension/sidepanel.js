@@ -94,7 +94,9 @@ function handleStream(ev) {
       break;
     case 'error':
       finalizeAssistant();
-      bubble('msg error', ev.message);
+      bubble('msg error', /Unknown message type/.test(ev.message || '')
+        ? 'The companion is out of date — restart it (bun run packages/sidepanel-host/src/server.ts) to enable conversations.'
+        : ev.message);
       break;
   }
 }
@@ -213,7 +215,9 @@ function updateBanner() {
 function refreshComposer() {
   const busy = activeStatus() !== 'idle';
   sendBtn.disabled = !online || !activeId || busy;
-  input.disabled = !online || !activeId;
+  // Keep the field focusable whenever connected, even before a session exists,
+  // so the user is never stuck with a dead input.
+  input.disabled = !online;
 }
 
 // ── Rendering helpers ─────────────────────────────────────────────────────--
@@ -284,7 +288,12 @@ function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '…' : s |
 // ── Sending ─────────────────────────────────────────────────────────────────
 function submit() {
   const text = input.value.trim();
-  if (!text || !activeId || activeStatus() !== 'idle' || !online) return;
+  if (!text || !online) return;
+  if (!activeId) {
+    bubble('msg error', 'No active conversation. Open ☰ → ＋ New. If this persists, restart the companion — its code may be out of date.');
+    return;
+  }
+  if (activeStatus() !== 'idle') return;
   bubble('msg user', text);
   finalizeAssistant();
   sendMsg({ type: 'user', sessionId: activeId, text });
