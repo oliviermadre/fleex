@@ -34,6 +34,22 @@
         "electron": "^35.0.0",
       },
     },
+    "packages/mcp": {
+      "name": "@fleex/mcp",
+      "version": "0.1.0",
+      "bin": {
+        "fleex-mcp": "./src/server.ts",
+      },
+      "dependencies": {
+        "@fleex/cli": "workspace:*",
+        "commander": "^12.1.0",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.14",
+        "@types/node": "^22.0.0",
+        "typescript": "^5.7.0",
+      },
+    },
     "packages/server": {
       "name": "@fleex/server",
       "version": "0.1.0",
@@ -68,6 +84,10 @@
       "devDependencies": {
         "typescript": "^5.7.0",
       },
+    },
+    "packages/sidepanel-host": {
+      "name": "@fleex/sidepanel-host",
+      "version": "0.1.0",
     },
     "packages/web": {
       "name": "@fleex/web",
@@ -277,9 +297,13 @@
 
     "@fleex/desktop": ["@fleex/desktop@workspace:packages/desktop"],
 
+    "@fleex/mcp": ["@fleex/mcp@workspace:packages/mcp"],
+
     "@fleex/server": ["@fleex/server@workspace:packages/server"],
 
     "@fleex/shared": ["@fleex/shared@workspace:packages/shared"],
+
+    "@fleex/sidepanel-host": ["@fleex/sidepanel-host@workspace:packages/sidepanel-host"],
 
     "@fleex/web": ["@fleex/web@workspace:packages/web"],
 

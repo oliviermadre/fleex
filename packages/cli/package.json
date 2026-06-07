@@ -6,6 +6,13 @@
   "bin": {
     "fleex": "./index.ts"
   },
+  "exports": {
+    "./program": {
+      "types": "./src/core/program.ts",
+      "development": "./src/core/program.ts",
+      "default": "./src/core/program.ts"
+    }
+  },
   "scripts": {
     "dev": "bun run --watch index.ts",
     "build": "echo 'no build step'"
