@@ -3,6 +3,7 @@ import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
 import { appWs } from '../../services/websocket';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { DeliverableFormModal } from './DeliverableFormModal';
 import { TicketPickerModal } from './TicketPickerModal';
 import * as api from '../../services/api';
@@ -24,16 +25,6 @@ function isUrl(text: string): boolean {
   return /^https?:\/\/\S+$/.test(text.trim());
 }
 
-function typeIcon(type: string): string {
-  switch (type) {
-    case 'prd': return 'PRD';
-    case 'spec': return 'SPEC';
-    case 'url': return 'URL';
-    case 'pr': return 'PR';
-    case 'plan': return 'PLAN';
-    default: return type.toUpperCase().slice(0, 4);
-  }
-}
 
 export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
@@ -47,6 +38,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   const seenSet = useUnreadStore((s) => s.seenDeliverablesByTicket[ticketId]);
   const toggleDeliverableSeen = useUnreadStore((s) => s.toggleDeliverableSeen);
   const loadSeenDeliverables = useUnreadStore((s) => s.loadSeenDeliverables);
+  const labelForType = useDeliverableTypesStore((s) => s.labelFor);
 
   const handleOpenDeliverable = useCallback((d: TicketDeliverable) => {
     // Mark as seen when opening
@@ -174,9 +166,9 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                   onClick={() => handleOpenDeliverable(d)}
                 >
 
-                  {/* Type badge */}
-                  <span className="flex-shrink-0 rounded bg-[var(--theme-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-[var(--theme-accent)]">
-                    {typeIcon(d.type)}
+                  {/* Type badge — always show the full label, never truncated */}
+                  <span className="flex-shrink-0 whitespace-nowrap rounded bg-[var(--theme-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--theme-accent)]">
+                    {labelForType(d.type)}
                   </span>
 
                   {/* Title + meta */}

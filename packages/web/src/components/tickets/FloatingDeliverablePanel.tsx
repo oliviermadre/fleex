@@ -30,17 +30,6 @@ function relativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
-function typeIcon(type: string): string {
-  switch (type) {
-    case 'prd': return 'PRD';
-    case 'spec': return 'SPEC';
-    case 'url': return 'URL';
-    case 'pr': return 'PR';
-    case 'plan': return 'PLAN';
-    default: return type.toUpperCase().slice(0, 4);
-  }
-}
-
 const noopToggle = () => {};
 
 export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
@@ -60,6 +49,7 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
 }) {
   const types = useDeliverableTypesStore((s) => s.types);
   const renderer = useDeliverableTypesStore((s) => s.rendererFor)(deliverable.type);
+  const typeLabel = useDeliverableTypesStore((s) => s.labelFor)(deliverable.type);
   const isHtml = renderer === 'html';
 
   // Build the type options for the unitary type-change control. Include the
@@ -175,9 +165,11 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
               backgroundColor: 'var(--theme-accent-muted)',
               color: 'var(--theme-accent)',
               flexShrink: 0,
+              whiteSpace: 'nowrap',
+              textTransform: 'uppercase',
             }}
           >
-            {typeIcon(deliverable.type)}
+            {typeLabel}
           </span>
 
           <span
