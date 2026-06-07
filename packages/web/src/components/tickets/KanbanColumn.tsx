@@ -3,7 +3,7 @@ import type { Ticket, TicketStatus, BoardWithCounts } from '@fleex/shared';
 import { Status, findStatusColumn } from '@fleex/shared';
 import { KanbanCard } from './KanbanCard';
 import { InlineCardCreator } from './InlineCardCreator';
-import { useTicketStore } from '../../stores/ticketStore';
+import { useTicketStore, UNCATEGORIZED_STATUS } from '../../stores/ticketStore';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
 import { getStatusBadgeClass, statusTitleClass } from '../../lib/statusColors';
@@ -18,7 +18,7 @@ export function KanbanColumn({
   onToggleCollapse,
   prStates,
 }: {
-  status: TicketStatus;
+  status: string;
   tickets: Ticket[];
   boardId: string;
   isAllBoards?: boolean;
@@ -31,7 +31,8 @@ export function KanbanColumn({
   // Index where the drop indicator should appear (-1 = none, 0..tickets.length)
   const [dropIndex, setDropIndex] = useState(-1);
   const listRef = useRef<HTMLDivElement>(null);
-  const label = findStatusColumn(status)?.label ?? status;
+  const isUncategorized = status === UNCATEGORIZED_STATUS;
+  const label = isUncategorized ? 'Uncategorized' : (findStatusColumn(status)?.label ?? status);
 
   const handleDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('application/x-ticket-id')) return;
@@ -85,9 +86,10 @@ export function KanbanColumn({
     ordered.splice(idx, 0, dragged as Ticket);
 
     // Build position updates
+    const targetStatus = status as TicketStatus;
     const updates = ordered.map((t, i) => ({
       id: t.id,
-      status,
+      status: targetStatus,
       position: i,
     }));
 
@@ -107,7 +109,7 @@ export function KanbanColumn({
     if (movingAcrossColumns) {
       // Use moveTicket for the dragged card (creates 'moved' activity), then reorder the rest
       const moveStore = useTicketStore.getState().moveTicket;
-      await moveStore(ticketId, status, idx);
+      await moveStore(ticketId, targetStatus, idx);
       const rest = updates.filter((u) => u.id !== ticketId);
       if (rest.length > 0) await api.reorderTickets(rest);
     } else {
@@ -182,10 +184,10 @@ export function KanbanColumn({
         )}
       </div>
 
-      {/* Inline card creator at top (not for terminal columns) */}
-      {!Status.of(status).isTerminal() && (
+      {/* Inline card creator at top (not for terminal or uncategorized columns) */}
+      {!isUncategorized && !Status.of(status).isTerminal() && (
         <div className="px-3 py-1.5">
-          <InlineCardCreator boardId={boardId} status={status} />
+          <InlineCardCreator boardId={boardId} status={status as TicketStatus} />
         </div>
       )}
 

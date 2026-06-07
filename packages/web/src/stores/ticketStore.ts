@@ -4,6 +4,9 @@ import { Status, statusAnchors, getActiveStatusModel } from '@fleex/shared';
 import * as api from '../services/api';
 import { useSessionStore } from './sessionStore';
 
+/** Synthetic column key for tickets whose status is not in the active model. */
+export const UNCATEGORIZED_STATUS = '__uncategorized__';
+
 export type TicketTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity' | 'workflow';
 export const VALID_TICKET_TABS: TicketTab[] = ['description', 'comments', 'mentions', 'deliverables', 'activity', 'workflow'];
 
@@ -362,12 +365,20 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     const columns = {} as Record<string, Ticket[]>;
     // Iterate the active status model's columns (dynamic) in display order.
     const modelColumns = [...getActiveStatusModel().columns].sort((a, b) => a.order - b.order);
+    const modelKeys = new Set(modelColumns.map((c) => c.key));
     for (const c of modelColumns) {
       const col = filtered.filter((t) => t.status === c.key);
       // Terminal columns sort by recency of closure; others by manual position.
       columns[c.key] = c.terminal
         ? col.sort((a, b) => new Date(b.statusChangedAt).getTime() - new Date(a.statusChangedAt).getTime())
         : col.sort((a, b) => a.position - b.position);
+    }
+    // Safety net: tickets whose status is not part of the model (e.g. left over
+    // from a removed column) land in an "uncategorized" bucket so they stay
+    // visible and rescuable instead of silently vanishing from the board.
+    const orphans = filtered.filter((t) => !modelKeys.has(t.status));
+    if (orphans.length > 0) {
+      columns[UNCATEGORIZED_STATUS] = orphans.sort((a, b) => a.position - b.position);
     }
     return columns;
   },

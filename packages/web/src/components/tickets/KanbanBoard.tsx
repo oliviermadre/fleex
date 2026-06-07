@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
 import type { Ticket } from '@fleex/shared';
-import { useTicketStore } from '../../stores/ticketStore';
+import { useTicketStore, UNCATEGORIZED_STATUS } from '../../stores/ticketStore';
 import { useStatusModelStore } from '../../stores/statusModelStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { fetchBulkPRStates } from '../../services/api';
@@ -162,6 +162,19 @@ export function KanbanBoard() {
             prStates={prStates}
           />
         ))}
+        {(filteredColumns[UNCATEGORIZED_STATUS]?.length ?? 0) > 0 && (
+          <KanbanColumn
+            key={UNCATEGORIZED_STATUS}
+            status={UNCATEGORIZED_STATUS}
+            tickets={filteredColumns[UNCATEGORIZED_STATUS] ?? []}
+            boardId={selectedBoardId ?? boards[0]?.id ?? ''}
+            isAllBoards={isAllBoards}
+            boards={isAllBoards ? boards : undefined}
+            collapsed={collapsedColumns.has(UNCATEGORIZED_STATUS)}
+            onToggleCollapse={() => toggleCollapse(UNCATEGORIZED_STATUS)}
+            prStates={prStates}
+          />
+        )}
       </div>
 
     </div>

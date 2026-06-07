@@ -39,7 +39,13 @@ export function statusModelRoutes(container: Container) {
         .filter((k) => !nextKeys.has(k));
 
       // Plan ticket reassignment for removed columns BEFORE mutating anything.
-      const allTickets = await container.ticketStore.getAllTickets();
+      // Include archived tickets — otherwise they'd keep a dead status key and
+      // resurface in a non-existent column when unarchived.
+      const [active, archived] = await Promise.all([
+        container.ticketStore.getAllTickets(),
+        container.ticketStore.getArchivedTickets(undefined, 100_000, 0),
+      ]);
+      const allTickets = [...active, ...archived];
       const reassignPlan: { ticketId: string; from: string; to: TicketStatus }[] = [];
       for (const removed of removedKeys) {
         const affected = allTickets.filter((t) => t.status === removed);

@@ -50,6 +50,12 @@ export class TicketNotFoundError extends DomainError {
   }
 }
 
+export class InvalidTicketStatusError extends DomainError {
+  constructor(status: string) {
+    super(`Unknown ticket status: ${status}`, 'INVALID_TICKET_STATUS');
+  }
+}
+
 export class ApiTokenInvalidError extends DomainError {
   constructor() {
     super('Invalid or missing API token', 'API_TOKEN_INVALID');
