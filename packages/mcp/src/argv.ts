@@ -12,6 +12,12 @@ export interface BuildArgvOptions {
   workspace?: string;
   /** Append `--json` to request structured CLI output (read commands). */
   json?: boolean;
+  /**
+   * Inject the tool's confirmation-skip flag (e.g. `--force`) so the CLI never
+   * blocks on an interactive prompt. Set by executors after the host has
+   * already obtained human approval.
+   */
+  assumeYes?: boolean;
 }
 
 function asString(value: unknown): string {
@@ -62,6 +68,7 @@ export function buildArgv(
   }
 
   if (tool.workspaceAware && opts.workspace) argv.push('--workspace', opts.workspace);
+  if (opts.assumeYes && tool.confirmFlag && !argv.includes(tool.confirmFlag)) argv.push(tool.confirmFlag);
   if (opts.json) argv.push('--json');
 
   return argv;

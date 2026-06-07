@@ -123,6 +123,7 @@ export function generateTools(root: Command, opts: GenerateOptions = {}): Genera
 
     const args = readArguments(cmd);
     const options = readOptions(cmd);
+    const confirmFlag = options.find((o) => o.key === 'force' || o.key === 'yes')?.flag;
     tools.push({
       name: ['fleex', ...rel].join('_').replace(/-/g, '_'),
       commandPath: rel,
@@ -130,6 +131,7 @@ export function generateTools(root: Command, opts: GenerateOptions = {}): Genera
       inputSchema: buildSchema(cmd, args, options),
       mutating: MUTATING_LEAVES.has(cmd.name()),
       workspaceAware: isWorkspaceAware(cmd),
+      ...(confirmFlag ? { confirmFlag } : {}),
       arguments: args,
       options,
     });

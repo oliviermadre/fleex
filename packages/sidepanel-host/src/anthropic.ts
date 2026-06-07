@@ -36,7 +36,9 @@ export function createLlm(client: Anthropic, model: string = DEFAULT_MODEL, maxT
 /** Executor that runs each tool via the fleex CLI with `--json` forced on. */
 export function createExec(execOpts: ExecOptions = {}): ExecFn {
   return async (tool, input) => {
-    const res = await execFleex(tool, input, { ...execOpts, json: true });
+    // assumeYes: the host already obtained human approval for mutating tools,
+    // so inject the CLI's confirm-skip flag to avoid blocking on a prompt.
+    const res = await execFleex(tool, input, { ...execOpts, json: true, assumeYes: true });
     const text = res.ok
       ? res.data !== undefined
         ? JSON.stringify(res.data)

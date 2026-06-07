@@ -32,6 +32,10 @@ function fakeProgram(): Command {
   update.option('--favorite', 'Mark as favorite');
   update.option('--to-board <id>', 'Move to another board');
 
+  const del = ticket.command('delete').description('Delete a ticket');
+  del.argument('<id>', 'Ticket ID');
+  del.option('-f, --force', 'Skip confirmation');
+
   // A parent group with subcommands — must NOT become a tool itself.
   const deliverable = ticket.command('deliverable').description('Manage deliverables');
   const add = deliverable.command('add').description('Add a deliverable');
@@ -57,6 +61,7 @@ describe('generateTools', () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([
       'fleex_ticket_create',
+      'fleex_ticket_delete',
       'fleex_ticket_deliverable_add',
       'fleex_ticket_list',
       'fleex_ticket_move',
@@ -109,6 +114,11 @@ describe('generateTools', () => {
     expect(toBoard?.flag).toBe('--to-board');
   });
 
+  it('detects the confirmation-skip flag on destructive commands', () => {
+    expect(byName(tools, 'fleex_ticket_delete').confirmFlag).toBe('--force');
+    expect(byName(tools, 'fleex_ticket_create').confirmFlag).toBeUndefined();
+  });
+
   it('respects a custom include allowlist', () => {
     const onlyEpic = generateTools(fakeProgram(), { include: ['epic'] });
     expect(onlyEpic).toEqual([]);
@@ -157,6 +167,15 @@ describe('buildArgv', () => {
     expect(buildArgv(list, { status: 'doing' }, { json: true })).toEqual([
       'ticket', 'list', '--status', 'doing', '--json',
     ]);
+  });
+
+  it('injects the confirm flag with assumeYes, without duplicating it', () => {
+    const del = byName(tools, 'fleex_ticket_delete');
+    expect(buildArgv(del, { id: '5' }, { assumeYes: true })).toEqual(['ticket', 'delete', '5', '--force']);
+    // already provided by the model → not duplicated
+    expect(buildArgv(del, { id: '5', force: true }, { assumeYes: true })).toEqual(['ticket', 'delete', '5', '--force']);
+    // assumeYes off → no force flag
+    expect(buildArgv(del, { id: '5' })).toEqual(['ticket', 'delete', '5']);
   });
 
   it('throws when a required positional argument is missing', () => {

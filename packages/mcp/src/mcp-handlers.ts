@@ -71,7 +71,7 @@ export async function callToolResult(
   }
   const exec = ctx.exec ?? execFleex;
   try {
-    const res = await exec(tool, args ?? {}, { ...ctx.execOpts, json: true });
+    const res = await exec(tool, args ?? {}, { ...ctx.execOpts, json: true, assumeYes: true });
     return { content: [{ type: 'text', text: resultText(res) }], isError: !res.ok };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

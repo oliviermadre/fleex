@@ -51,6 +51,12 @@ export interface GeneratedTool {
   mutating: boolean;
   /** True when the command accepts `--workspace`; injected by the host. */
   workspaceAware: boolean;
+  /**
+   * Flag that skips an interactive confirmation prompt (e.g. `--force` on
+   * delete). When present, executors inject it so the non-interactive CLI
+   * never blocks on stdin — human confirmation already happens at the host.
+   */
+  confirmFlag?: string;
   /** Ordered positional arguments (drives argv reconstruction). */
   arguments: ArgSpec[];
   /** Options (drives argv reconstruction). */
