@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Fleex Assistant",
+  "version": "0.1.0",
+  "description": "Side-panel assistant that manages your Fleex workspaces and can capture the current page into tickets and deliverables.",
+  "permissions": ["sidePanel", "scripting", "activeTab", "storage"],
+  "host_permissions": ["http://localhost:4399/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open Fleex Assistant"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fleex Assistant</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header>
+      <div class="row">
+        <strong>Fleex</strong>
+        <span id="status" class="status off">offline</span>
+      </div>
+      <select id="workspace" title="Workspace">
+        <option value="">default workspace</option>
+      </select>
+    </header>
+
+    <main id="log" aria-live="polite"></main>
+
+    <div id="page-chip" class="chip hidden"></div>
+
+    <footer>
+      <button id="attach" title="Attach the current page as reference">📎 Page</button>
+      <textarea id="input" rows="1" placeholder="Ask about your board, create a ticket…"></textarea>
+      <button id="send">Send</button>
+    </footer>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>
