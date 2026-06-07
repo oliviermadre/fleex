@@ -350,6 +350,17 @@ export function isValidDeliverableTypeId(id: string): boolean {
   return /^[a-z0-9][a-z0-9-]{0,48}$/.test(id);
 }
 
+/**
+ * Strip a single wrapping ```` ```html … ``` ```` (or bare ```` ``` … ``` ````) fence from
+ * HTML content. No-op when the content isn't a whole-content fenced block. Used for
+ * html-rendered deliverables, where the raw HTML is dropped into an iframe and an LLM may
+ * have mistakenly wrapped it in a markdown code fence.
+ */
+export function stripHtmlCodeFence(content: string): string {
+  const m = content.trim().match(/^```(?:html)?\s*\n?([\s\S]*?)\n?```$/i);
+  return m ? m[1]!.trim() : content;
+}
+
 export interface TicketDeliverable {
   readonly id: string;
   readonly ticketId: string;

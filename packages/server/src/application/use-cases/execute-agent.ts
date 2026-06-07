@@ -55,19 +55,26 @@ function buildStructuredOutputInstructions(types: DeliverableTypeDef[]): string 
   const selectable = types.filter((t) => !t.system);
   const fallback = selectable.some((t) => t.id === 'report') ? 'report' : (selectable[0]?.id ?? 'report');
   const typeLines = selectable
-    .map((t) => `  - \`"${t.id}"\` — ${t.description}`)
+    .map((t) => {
+      const htmlNote = t.renderer === 'html' ? ' (rendered as a standalone HTML page)' : '';
+      return `  - \`"${t.id}"\` — ${t.description}${htmlNote}`;
+    })
     .join('\n');
+  const htmlTypeIds = selectable.filter((t) => t.renderer === 'html').map((t) => `\`"${t.id}"\``);
+  const htmlRule = htmlTypeIds.length > 0
+    ? `\n- **HTML-rendered types** (${htmlTypeIds.join(', ')}): the \`markdown\` field MUST contain a single, complete, self-contained raw HTML document starting with \`<!DOCTYPE html>\`. Do **NOT** wrap it in a markdown code fence (no \`\`\`html … \`\`\`) — the content is embedded directly into an iframe, so any fence markers would render literally.`
+    : '';
   return `
 # Output Format
 
 Your final response will be structured as JSON with two fields:
 
 - **deliverable**: Use when you have a tangible work product (code, analysis, document, PRD, etc.).
-  Provide a short descriptive title, the full content as markdown, a type, and a status.
-  Set to null if there is nothing to deliver.
+  Provide a short descriptive title, the full content (markdown — or, for HTML-rendered types, a
+  raw HTML document), a type, and a status. Set to null if there is nothing to deliver.
 - **deliverable.type**: Classify the deliverable. Must be one of:
 ${typeLines}
-  Choose the type that best matches your output. When in doubt, use \`"${fallback}"\`.
+  Choose the type that best matches your output. When in doubt, use \`"${fallback}"\`.${htmlRule}
 - **deliverable.status**: Set to "draft" if your work has open questions, uncertainties, or
   needs human review before being acted upon. Set to "final" when the work is complete and
   ready for downstream consumption.

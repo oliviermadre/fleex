@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { stripHtmlCodeFence } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
@@ -156,7 +157,7 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
         {/* Content */}
         {isHtml ? (
           <iframe
-            srcDoc={deliverable.content.replace(/<\\\/script\s*>/gi, '</script>')}
+            srcDoc={stripHtmlCodeFence(deliverable.content).replace(/<\\\/script\s*>/gi, '</script>')}
             className="flex-1"
             style={{
               width: '100%',

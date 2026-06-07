@@ -139,6 +139,7 @@ export {
   labelForType,
   colorForType,
   isValidDeliverableTypeId,
+  stripHtmlCodeFence,
 } from './types/ticket.js';
 
 export type {

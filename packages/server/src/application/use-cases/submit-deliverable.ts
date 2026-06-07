@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
-import { normalizeDeliverableTypes } from '@fleex/shared';
+import { normalizeDeliverableTypes, stripHtmlCodeFence } from '@fleex/shared';
 import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { InvalidDeliverableTypeError } from '../../domain/errors.js';
@@ -30,9 +30,15 @@ export class SubmitDeliverableUseCase {
     // (Existing deliverables with now-invalid types are tolerated on read; only
     // new writes are constrained to the configured set.)
     const validTypes = normalizeDeliverableTypes(this.config.get().deliverableTypes);
-    if (!validTypes.some((t) => t.id === params.type)) {
+    const typeDef = validTypes.find((t) => t.id === params.type);
+    if (!typeDef) {
       throw new InvalidDeliverableTypeError(params.type);
     }
+
+    // html-rendered content is embedded directly into an iframe — defensively
+    // unwrap a markdown code fence the agent may have wrapped the HTML in, so the
+    // stored content (and copy/detach) is clean raw HTML.
+    const content = typeDef.renderer === 'html' ? stripHtmlCodeFence(params.content) : params.content;
 
     const deliverable = TicketDeliverableEntity.create({
       id: randomUUID(),
@@ -40,7 +46,7 @@ export class SubmitDeliverableUseCase {
       agentName: params.agentName,
       type: params.type,
       title: params.title,
-      content: params.content,
+      content,
       status: params.status,
       mentionId: params.mentionId,
     });

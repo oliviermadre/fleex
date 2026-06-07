@@ -1,6 +1,7 @@
 import { memo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { TicketDeliverable } from '@fleex/shared';
+import { stripHtmlCodeFence } from '@fleex/shared';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 import { TITLE_BAR_HEIGHT, PILL_BORDER_RADIUS } from '../../lib/constants';
@@ -265,7 +266,7 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
         {/* Content */}
         {isHtml ? (
           <iframe
-            srcDoc={deliverable.content.replace(/<\\\/script\s*>/gi, '</script>')}
+            srcDoc={stripHtmlCodeFence(deliverable.content).replace(/<\\\/script\s*>/gi, '</script>')}
             style={{
               flex: 1,
               minHeight: 0,
