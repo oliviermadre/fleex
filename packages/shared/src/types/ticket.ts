@@ -294,7 +294,8 @@ export type TicketWsMessageType =
   | 'mention:execution_failed'
   | 'deliverable:created'
   | 'deliverable:updated'
-  | 'deliverable:deleted';
+  | 'deliverable:deleted'
+  | 'status-model:updated';
 
 export interface TicketWsMessage {
   readonly type: TicketWsMessageType;

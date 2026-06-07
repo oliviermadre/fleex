@@ -154,3 +154,66 @@ export class Status {
     return this.column?.anchors.includes(anchor) ?? false;
   }
 }
+
+// ── Validation ───────────────────────────────────────────────────────────────
+
+export type StatusModelValidation =
+  | { ok: true }
+  | { ok: false; errors: string[] };
+
+const REQUIRED_ANCHORS: readonly StatusAnchor[] = ['defaultNew', 'workStart', 'agentQueue', 'mergeLanding'];
+
+/**
+ * Enforce the invariants that replace "the six statuses always exist". A model
+ * is only safe to activate when every automation can resolve its target:
+ *  - exactly one column fills each anchor role
+ *  - the mergeLanding column is a completed terminal
+ *  - at least one terminal (and at least one completed terminal)
+ *  - at least one startable and one active column
+ *  - keys are unique and non-empty; outcome is set iff the column is terminal
+ *
+ * Shared so the editing UI (PR4) can mirror server-side validation exactly.
+ */
+export function validateStatusModel(model: StatusModel): StatusModelValidation {
+  const errors: string[] = [];
+  const { columns } = model;
+
+  if (columns.length === 0) {
+    return { ok: false, errors: ['A status model must have at least one column.'] };
+  }
+
+  // Keys: present and unique.
+  const seen = new Set<string>();
+  for (const c of columns) {
+    if (!c.key || c.key.trim() === '') errors.push('Every column must have a non-empty key.');
+    if (seen.has(c.key)) errors.push(`Duplicate column key: '${c.key}'.`);
+    seen.add(c.key);
+    if (c.terminal && c.outcome === null) errors.push(`Terminal column '${c.key}' must declare an outcome.`);
+    if (!c.terminal && c.outcome !== null) errors.push(`Non-terminal column '${c.key}' must not declare an outcome.`);
+  }
+
+  // Anchors: exactly one column each.
+  for (const anchor of REQUIRED_ANCHORS) {
+    const holders = columns.filter((c) => c.anchors.includes(anchor));
+    if (holders.length === 0) errors.push(`No column fills the '${anchor}' anchor.`);
+    if (holders.length > 1) {
+      errors.push(`The '${anchor}' anchor is filled by more than one column: ${holders.map((c) => c.key).join(', ')}.`);
+    }
+  }
+
+  // mergeLanding must be a completed terminal.
+  const mergeLanding = columns.find((c) => c.anchors.includes('mergeLanding'));
+  if (mergeLanding && !(mergeLanding.terminal && mergeLanding.outcome === 'completed')) {
+    errors.push(`The mergeLanding column '${mergeLanding.key}' must be a terminal column with outcome 'completed'.`);
+  }
+
+  // Coverage of predicate roles.
+  if (!columns.some((c) => c.terminal)) errors.push('At least one column must be terminal.');
+  if (!columns.some((c) => c.terminal && c.outcome === 'completed')) {
+    errors.push("At least one terminal column must have outcome 'completed'.");
+  }
+  if (!columns.some((c) => c.startable)) errors.push('At least one column must be startable.');
+  if (!columns.some((c) => c.active)) errors.push('At least one column must be active.');
+
+  return errors.length === 0 ? { ok: true } : { ok: false, errors };
+}

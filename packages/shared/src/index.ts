@@ -134,6 +134,7 @@ export type {
   StatusAnchor,
   StatusColumn,
   StatusModel,
+  StatusModelValidation,
 } from './status-model.js';
 
 export {
@@ -144,6 +145,7 @@ export {
   resolveAnchor,
   statusAnchors,
   Status,
+  validateStatusModel,
 } from './status-model.js';
 
 export type {

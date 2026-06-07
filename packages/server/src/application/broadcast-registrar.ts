@@ -80,6 +80,9 @@ export class BroadcastRegistrar {
       }
     });
 
+    // ── Status model broadcasts ──
+    bus.on('status-model.updated', () => this.ticketBroadcast('status-model:updated', {}));
+
     // ── Comment broadcasts ──
     bus.on('comment.posted', (e) => this.broadcastCommentEntity(e, 'comment:created'));
     bus.on('comment.updated', (e) => this.broadcastCommentEntity(e, 'comment:updated'));

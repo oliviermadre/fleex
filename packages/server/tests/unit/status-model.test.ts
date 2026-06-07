@@ -5,8 +5,35 @@ import {
   resolveAnchor,
   statusAnchors,
   findStatusColumn,
+  validateStatusModel,
   type StatusModel,
+  type StatusColumn,
 } from '@fleex/shared';
+
+function col(over: Partial<StatusColumn> & Pick<StatusColumn, 'key'>): StatusColumn {
+  return {
+    label: over.key,
+    order: 0,
+    startable: false,
+    active: false,
+    terminal: false,
+    outcome: null,
+    anchors: [],
+    collapsedByDefault: false,
+    ...over,
+  };
+}
+
+/** A minimal model satisfying every invariant, for negative-test mutation. */
+function validModel(): StatusModel {
+  return {
+    columns: [
+      col({ key: 'todo', startable: true, anchors: ['defaultNew', 'agentQueue'] }),
+      col({ key: 'doing', active: true, anchors: ['workStart'] }),
+      col({ key: 'done', terminal: true, outcome: 'completed', anchors: ['mergeLanding'] }),
+    ],
+  };
+}
 
 describe('DEFAULT_STATUS_MODEL', () => {
   it('exposes the six historical columns in order', () => {
@@ -104,5 +131,72 @@ describe('role resolution against an explicit model', () => {
     // 'doing' is not part of this model → no roles
     expect(Status.of('doing', model).isActive()).toBe(false);
     expect(findStatusColumn('shipped', model)?.label).toBe('Shipped');
+  });
+});
+
+describe('validateStatusModel', () => {
+  it('accepts the built-in default model', () => {
+    expect(validateStatusModel(DEFAULT_STATUS_MODEL)).toEqual({ ok: true });
+  });
+
+  it('accepts a minimal valid custom model', () => {
+    expect(validateStatusModel(validModel())).toEqual({ ok: true });
+  });
+
+  it('rejects an empty model', () => {
+    const res = validateStatusModel({ columns: [] });
+    expect(res.ok).toBe(false);
+  });
+
+  it('rejects duplicate keys', () => {
+    const m = validModel();
+    const res = validateStatusModel({ columns: [...m.columns, col({ key: 'todo', startable: true })] });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.errors.some((e) => e.includes('Duplicate'))).toBe(true);
+  });
+
+  it('rejects a missing anchor', () => {
+    const m = validModel();
+    // drop the agentQueue anchor
+    const columns = m.columns.map((c) =>
+      c.key === 'todo' ? { ...c, anchors: ['defaultNew'] as StatusColumn['anchors'] } : c,
+    );
+    const res = validateStatusModel({ columns });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.errors.some((e) => e.includes('agentQueue'))).toBe(true);
+  });
+
+  it('rejects an anchor filled by two columns', () => {
+    const m = validModel();
+    const columns = [...m.columns, col({ key: 'doing2', active: true, anchors: ['workStart'] })];
+    const res = validateStatusModel({ columns });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.errors.some((e) => e.includes('workStart'))).toBe(true);
+  });
+
+  it('rejects a mergeLanding column that is not a completed terminal', () => {
+    const columns = [
+      col({ key: 'todo', startable: true, anchors: ['defaultNew', 'agentQueue'] }),
+      col({ key: 'doing', active: true, anchors: ['workStart', 'mergeLanding'] }),
+      col({ key: 'done', terminal: true, outcome: 'completed' }),
+    ];
+    const res = validateStatusModel({ columns });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.errors.some((e) => e.includes('mergeLanding'))).toBe(true);
+  });
+
+  it('rejects a terminal column without an outcome', () => {
+    const m = validModel();
+    const columns = m.columns.map((c) => (c.key === 'done' ? { ...c, outcome: null } : c));
+    // done also holds mergeLanding → will additionally fail that rule, but the
+    // outcome rule must fire.
+    const res = validateStatusModel({ columns });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.errors.some((e) => e.includes('outcome'))).toBe(true);
+  });
+
+  it('requires at least one startable and one active column', () => {
+    const noStartable = validModel().columns.map((c) => ({ ...c, startable: false }));
+    expect(validateStatusModel({ columns: noStartable }).ok).toBe(false);
   });
 });
