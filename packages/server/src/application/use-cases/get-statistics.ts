@@ -8,6 +8,7 @@ import type {
   AgentExecution,
   TicketLink,
 } from '@fleex/shared';
+import { Status } from '@fleex/shared';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
@@ -80,7 +81,7 @@ export class GetStatisticsUseCase {
     const filteredSessions = sessions.filter((s) => inRange(s.createdAt.toISOString()));
 
     // Compute summary
-    const completedTickets = filteredTickets.filter((t) => t.toDTO().status === 'done');
+    const completedTickets = filteredTickets.filter((t) => Status.of(t.toDTO().status).isCompleted());
     const worktreeSessions = filteredSessions.filter((s) => {
       const dto = s as unknown as Record<string, unknown>;
       return dto.worktreeBranch || dto.type === 'claude';
@@ -89,7 +90,7 @@ export class GetStatisticsUseCase {
       t.toDTO().links.filter((l: TicketLink) => l.type === 'github_pr'),
     );
     const mergedTickets = tickets.filter(
-      (t) => t.toDTO().status === 'done' && t.toDTO().links.some((l: TicketLink) => l.type === 'github_pr'),
+      (t) => Status.of(t.toDTO().status).isCompleted() && t.toDTO().links.some((l: TicketLink) => l.type === 'github_pr'),
     ).filter((t) => inRange(t.toDTO().statusChangedAt));
 
     const userComments = filteredComments.filter((c) => c.toDTO().authorType === 'user');
@@ -139,7 +140,7 @@ export class GetStatisticsUseCase {
     // bucket loop below doesn't re-resolve toDTO()/board name per bucket.
     const doneTickets = tickets
       .map((t) => t.toDTO())
-      .filter((t) => t.status === 'done')
+      .filter((t) => Status.of(t.status).isCompleted())
       .map((t) => ({
         statusChangedAt: t.statusChangedAt,
         boardName: boardNameById.get(t.boardId) ?? 'Unknown',
@@ -180,7 +181,7 @@ export class GetStatisticsUseCase {
         mentionsCreated: bMentions.length,
         mentionsResolved: bMentions.filter((m) => m.toDTO().status === 'resolved').length,
         ticketsCreated: bTickets.length,
-        ticketsCompleted: bTickets.filter((t) => t.toDTO().status === 'done').length,
+        ticketsCompleted: bTickets.filter((t) => Status.of(t.toDTO().status).isCompleted()).length,
         skillsExecuted: bExecutions.filter((e) => e.mentionId.startsWith('skill:')).length,
         panelsExecuted: 0, // Panel events are in domain log, not in agent executions
         totalCostUsd: bExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),

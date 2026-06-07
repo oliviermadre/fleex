@@ -1,4 +1,5 @@
 import type { Ticket, TicketStatus, TicketPriority, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata } from '@fleex/shared';
+import { Status } from '@fleex/shared';
 
 export class TicketEntity {
   constructor(
@@ -99,7 +100,7 @@ export class TicketEntity {
       diff['status'] = { from: this.status, to: changes.status };
       this.status = changes.status;
       this.statusChangedAt = new Date();
-      if (changes.status === 'doing' && !this.firstDoingAt) {
+      if (Status.of(changes.status).fills('workStart') && !this.firstDoingAt) {
         this.firstDoingAt = new Date();
         diff['firstDoingAt'] = { from: null, to: this.firstDoingAt.toISOString() };
       }
@@ -161,11 +162,16 @@ export class TicketEntity {
     this.statusChangedAt = now;
     this.updatedAt = now;
     const diff: Record<string, { from: unknown; to: unknown }> = { status: { from, to: status } };
-    if (status === 'doing' && !this.firstDoingAt) {
+    if (Status.of(status).fills('workStart') && !this.firstDoingAt) {
       this.firstDoingAt = now;
       diff['firstDoingAt'] = { from: null, to: now.toISOString() };
     }
     return diff;
+  }
+
+  /** Semantic roles of the current status (see @fleex/shared status-model). */
+  get statusRole(): Status {
+    return Status.of(this.status);
   }
 
   setGithubMetadata(metadata: GitHubIssueMetadata | null): void {

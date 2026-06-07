@@ -1,3 +1,5 @@
+import type { TicketStatus } from '@fleex/shared';
+import { Status } from '@fleex/shared';
 import type { EventBus } from './event-bus.js';
 import { BroadcastRegistrar, type BroadcastFn } from './broadcast-registrar.js';
 import type { PersonaStorePort } from './ports/persona-store.port.js';
@@ -342,13 +344,14 @@ export class DomainEventListener {
 
   private async handleTicketMovedToDone(event: TicketMovedEvent): Promise<void> {
     if (event.fromStatus === event.toStatus) return; // no-op move (reorder) → pas de transition réelle
-    if (event.toStatus === 'done') {
+    if (Status.of(event.toStatus).isCompleted()) {
       await this.deps.autoReviewWorkflow.handleTicketDone({ ticketId: event.ticketId });
     }
   }
 
   private async handleTicketUpdatedToDone(event: TicketUpdatedEvent): Promise<void> {
-    if (event.changes['status'] && event.changes['status'].to === 'done') {
+    const to = event.changes['status']?.to;
+    if (typeof to === 'string' && Status.of(to).isCompleted()) {
       await this.deps.autoReviewWorkflow.handleTicketDone({ ticketId: event.ticketId });
     }
   }
@@ -368,10 +371,10 @@ export class DomainEventListener {
 
   private handleTicketClosedForSummary(event: TicketMovedEvent): void {
     if (event.fromStatus === event.toStatus) return; // no-op move (reorder) → pas de régénération du summary
-    if (event.toStatus === 'done' || event.toStatus === 'cancelled') {
+    if (Status.of(event.toStatus).isTerminal()) {
       this.deps.generateTicketSummary.execute({
         ticketId: event.ticketId,
-        status: event.toStatus as 'done' | 'cancelled',
+        status: event.toStatus as TicketStatus,
       }).catch((err) => {
         this.deps.logger.error('Ticket summary generation failed', {
           ticketId: event.ticketId,
@@ -382,11 +385,11 @@ export class DomainEventListener {
   }
 
   private handleTicketUpdatedClosedForSummary(event: TicketUpdatedEvent): void {
-    const statusChange = event.changes['status'];
-    if (statusChange && (statusChange.to === 'done' || statusChange.to === 'cancelled')) {
+    const to = event.changes['status']?.to;
+    if (typeof to === 'string' && Status.of(to).isTerminal()) {
       this.deps.generateTicketSummary.execute({
         ticketId: event.ticketId,
-        status: statusChange.to as 'done' | 'cancelled',
+        status: to as TicketStatus,
       }).catch((err) => {
         this.deps.logger.error('Ticket summary generation failed', {
           ticketId: event.ticketId,

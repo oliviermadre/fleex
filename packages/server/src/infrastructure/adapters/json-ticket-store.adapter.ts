@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
+import { FLEEX_DIR, statusAnchors } from '@fleex/shared';
 import type { TicketStatus, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
@@ -175,8 +175,9 @@ export class JsonTicketStore implements TicketStorePort {
   // ── Agent queries ──
 
   async getNextTicketForAgent(boardId?: string): Promise<TicketEntity | null> {
+    const queueStatus = statusAnchors.agentQueue();
     let candidates = Array.from(this.tickets.values()).filter(
-      (t) => t.status === 'todo' && !t.blocked && t.archivedAt === null,
+      (t) => t.status === queueStatus && !t.blocked && t.archivedAt === null,
     );
     if (boardId) {
       candidates = candidates.filter((t) => t.boardId === boardId);
@@ -191,8 +192,9 @@ export class JsonTicketStore implements TicketStorePort {
   }
 
   async getClaimedByAgent(agentName: string): Promise<TicketEntity[]> {
+    const workStatus = statusAnchors.workStart();
     return Array.from(this.tickets.values()).filter(
-      (t) => t.assignee === agentName && t.status === 'doing' && t.archivedAt === null,
+      (t) => t.assignee === agentName && t.status === workStatus && t.archivedAt === null,
     );
   }
 

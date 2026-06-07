@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import type { Ticket, TicketStatus, BoardWithCounts } from '@fleex/shared';
-import { TICKET_STATUS_LABELS } from '@fleex/shared';
+import { TICKET_STATUS_LABELS, Status } from '@fleex/shared';
 import { KanbanCard } from './KanbanCard';
 import { InlineCardCreator } from './InlineCardCreator';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -190,8 +190,8 @@ export function KanbanColumn({
         )}
       </div>
 
-      {/* Inline card creator at top (not for done/cancelled) */}
-      {status !== 'cancelled' && status !== 'done' && (
+      {/* Inline card creator at top (not for terminal columns) */}
+      {!Status.of(status).isTerminal() && (
         <div className="px-3 py-1.5">
           <InlineCardCreator boardId={boardId} status={status} />
         </div>

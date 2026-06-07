@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Board, BoardWithCounts, Ticket, TicketLink, TicketStatus, TicketPriority, TicketType, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@fleex/shared';
-import { TICKET_STATUSES } from '@fleex/shared';
+import { TICKET_STATUSES, Status, statusAnchors } from '@fleex/shared';
 import * as api from '../services/api';
 import { useSessionStore } from './sessionStore';
 
@@ -215,7 +215,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     const [, org, name, num] = match as RegExpMatchArray & [string, string, string, string];
     const ticket = await api.importGitHubIssue(org!, name!, parseInt(num!, 10), boardId);
     // If a specific status was requested (e.g. creating in a specific column), move the ticket
-    if (status && status !== 'backlog') {
+    if (status && status !== statusAnchors.defaultNew()) {
       const moved = await api.moveTicket(ticket.id, status);
       set((s) => {
         if (s.tickets.some((t) => t.id === moved.id)) return s;
@@ -233,7 +233,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   importSlackMessage: async (url, boardId, status) => {
     const ticket = await api.importSlackMessage(url, boardId);
     // If a specific status was requested (e.g. creating in a specific column), move the ticket
-    if (status && status !== 'backlog') {
+    if (status && status !== statusAnchors.defaultNew()) {
       const moved = await api.moveTicket(ticket.id, status);
       set((s) => {
         if (s.tickets.some((t) => t.id === moved.id)) return s;
@@ -350,11 +350,11 @@ export const useTicketStore = create<TicketState>((set, get) => ({
       filtered = filtered.filter((t) => t.favorite === filters.favorite);
     }
 
-    // Auto-hide done/cancelled tickets older than 7 days
+    // Auto-hide terminal (done/cancelled) tickets older than 7 days
     if (filters.hideOldDoneCancelled) {
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       filtered = filtered.filter((t) => {
-        if (t.status !== 'done' && t.status !== 'cancelled') return true;
+        if (!Status.of(t.status).isTerminal()) return true;
         return new Date(t.statusChangedAt).getTime() > sevenDaysAgo;
       });
     }
@@ -362,7 +362,8 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     const columns = {} as Record<TicketStatus, Ticket[]>;
     for (const s of TICKET_STATUSES as readonly TicketStatus[]) {
       const col = filtered.filter((t) => t.status === s);
-      columns[s] = (s === 'done' || s === 'cancelled')
+      // Terminal columns sort by recency of closure; others by manual position.
+      columns[s] = Status.of(s).isTerminal()
         ? col.sort((a, b) => new Date(b.statusChangedAt).getTime() - new Date(a.statusChangedAt).getTime())
         : col.sort((a, b) => a.position - b.position);
     }

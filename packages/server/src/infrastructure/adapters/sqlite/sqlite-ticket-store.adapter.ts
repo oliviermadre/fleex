@@ -1,4 +1,5 @@
 import type { TicketStatus, TicketPriority, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata } from '@fleex/shared';
+import { statusAnchors } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -255,11 +256,11 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     if (boardId) {
       rows = this.conn.db
         .prepare('SELECT * FROM tickets WHERE status = ? AND blocked = 0 AND archived_at IS NULL AND board_id = ?')
-        .all('todo', boardId) as TicketRow[];
+        .all(statusAnchors.agentQueue(), boardId) as TicketRow[];
     } else {
       rows = this.conn.db
         .prepare('SELECT * FROM tickets WHERE status = ? AND blocked = 0 AND archived_at IS NULL')
-        .all('todo') as TicketRow[];
+        .all(statusAnchors.agentQueue()) as TicketRow[];
     }
 
     const candidates = rows.map((r) => this.toTicketEntity(r));
@@ -277,7 +278,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
   async getClaimedByAgent(agentName: string): Promise<TicketEntity[]> {
     const rows = this.conn.db
       .prepare('SELECT * FROM tickets WHERE status = ? AND assignee = ? AND archived_at IS NULL')
-      .all('doing', agentName) as TicketRow[];
+      .all(statusAnchors.workStart(), agentName) as TicketRow[];
     return rows.map((r) => this.toTicketEntity(r));
   }
 

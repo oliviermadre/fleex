@@ -48,7 +48,7 @@ export class AutoReviewWorkflowUseCase {
     if (!config.enableAutoReview) return;
 
     const ticket = await this.ticketStore.getTicketById(params.ticketId);
-    if (!ticket || ticket.status === 'done' || ticket.status === 'cancelled') {
+    if (!ticket || ticket.statusRole.isTerminal()) {
       return;
     }
 

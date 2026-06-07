@@ -1,4 +1,5 @@
 import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata } from '@fleex/shared';
+import { statusAnchors } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -293,7 +294,7 @@ export class SupabaseTicketStore implements TicketStorePort {
     let query = this.conn.client
       .from('tickets')
       .select('*')
-      .eq('status', 'todo')
+      .eq('status', statusAnchors.agentQueue())
       .eq('blocked', false)
       .is('archived_at', null)
       .order('position', { ascending: true })
@@ -324,7 +325,7 @@ export class SupabaseTicketStore implements TicketStorePort {
       .from('tickets')
       .select('*')
       .eq('assignee', agentName)
-      .eq('status', 'doing')
+      .eq('status', statusAnchors.workStart())
       .is('archived_at', null);
     if (error) throw new Error(`SupabaseTicketStore.getClaimedByAgent failed: ${error.message}`);
     return (data as TicketRow[]).map(ticketRowToEntity);
