@@ -196,6 +196,7 @@ function setActive(id) {
   log.innerHTML = '';
   const s = findSession(id);
   if (s) wsSelect.value = s.workspace || '';
+  applyWorkspaceTheme(s ? s.workspace : '');
   sendMsg({ type: 'open_session', id });
   // Re-show a pending confirmation if this session is mid-gate.
   if (pendingConfirm[id]) setTimeout(() => renderConfirm(pendingConfirm[id]), 0);
@@ -437,7 +438,27 @@ attachBtn.onclick = async () => {
 wsSelect.onchange = () => {
   chrome.storage.local.set({ workspace: wsSelect.value });
   if (activeId) sendMsg({ type: 'set_workspace', id: activeId, workspace: wsSelect.value });
+  applyWorkspaceTheme(wsSelect.value);
 };
+// ── Per-workspace theme ──────────────────────────────────────────────────--
+// Fetch the workspace's real Fleex theme (from its app_config via the
+// companion) and apply it to the side panel.
+let themedWorkspace = null;
+async function applyWorkspaceTheme(ws) {
+  const key = ws || '';
+  if (key === themedWorkspace) return;
+  themedWorkspace = key;
+  try {
+    const res = await fetch(`http://${HOST}/theme?workspace=${encodeURIComponent(key)}`);
+    if (!res.ok) { applyTheme(null); themedWorkspace = null; return; }
+    const data = await res.json();
+    applyTheme(resolveTheme(data.activeThemeId, data.customThemes));
+  } catch {
+    applyTheme(null);
+    themedWorkspace = null;
+  }
+}
+
 async function loadWorkspaces() {
   try {
     const res = await fetch(`http://${HOST}/workspaces`);

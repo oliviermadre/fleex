@@ -33,7 +33,11 @@ execution live in `@fleex/sidepanel-host`, which the extension reaches over
   attach it as untrusted reference — then ask to "create a ticket from this
   page" or "add this as a deliverable on #123".
 - **Workspace selector**: targets a specific workspace (passed as
-  `--workspace`); persisted across sessions.
+  `--workspace`); persisted across sessions. The side panel also adopts that
+  workspace's **Fleex theme**: the companion reads the workspace's configured
+  theme from its `app_config` (branch-agnostically, via `GET /theme`) and the
+  panel re-skins to match — built-in palettes are bundled, custom themes come
+  from the workspace's DB.
 - **Confirmation**: read-only actions run automatically; create/update/move/
   delete show the exact `fleex …` command and wait for your Approve/Decline.
 

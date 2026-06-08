@@ -26,6 +26,7 @@ import { createClient, createLlm, createExec, DEFAULT_MODEL } from './anthropic.
 import { buildSystemPrompt, formatPageContext } from './system-prompt.ts';
 import { listWorkspaces } from './workspaces.ts';
 import { SessionStore, type TranscriptItem } from './sessions.ts';
+import { findWorkspaceServerPort } from './instance-discovery.ts';
 
 interface PageRef { url?: string; title?: string; content: string }
 interface WsData { id: string }
@@ -208,6 +209,21 @@ Bun.serve<WsData>({
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname === '/health') return Response.json({ ok: true, tools: tools.length }, { headers: CORS });
     if (url.pathname === '/workspaces') return Response.json(listWorkspaces(), { headers: CORS });
+    if (url.pathname === '/theme') {
+      // Return the selected workspace's configured theme (from its app_config),
+      // resolved branch-agnostically against its running server.
+      const ws = url.searchParams.get('workspace') ?? undefined;
+      const serverPort = await findWorkspaceServerPort(ws);
+      if (!serverPort) return Response.json({}, { headers: CORS });
+      try {
+        const r = await fetch(`http://127.0.0.1:${serverPort}/api/config`, { signal: AbortSignal.timeout(2000) });
+        if (!r.ok) return Response.json({}, { headers: CORS });
+        const cfg = (await r.json()) as { activeThemeId?: string; customThemes?: unknown[] };
+        return Response.json({ activeThemeId: cfg.activeThemeId ?? null, customThemes: cfg.customThemes ?? [] }, { headers: CORS });
+      } catch {
+        return Response.json({}, { headers: CORS });
+      }
+    }
     if (url.pathname === '/chat') {
       const ok = server.upgrade(req, { data: { id: crypto.randomUUID() } satisfies WsData });
       return ok ? undefined : new Response('WebSocket upgrade failed', { status: 400 });
