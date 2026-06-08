@@ -48,6 +48,11 @@ function setOnline(on) {
 // ── Incoming messages ─────────────────────────────────────────────────────--
 function handle(m) {
   switch (m.type) {
+    case 'dev_reload':
+      // Dev-only: the companion detected an extension file change.
+      if (m.full) { try { chrome.runtime.reload(); } catch { location.reload(); } }
+      else location.reload();
+      return;
     case 'sessions':
       onSessions(m.sessions || []);
       return;

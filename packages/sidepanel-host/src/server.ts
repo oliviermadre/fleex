@@ -13,6 +13,8 @@
  *   FLEEX_SIDEPANEL_MODEL    model id (default claude-opus-4-8)
  *   FLEEX_MCP_BIN/PREFIX     fleex binary + prefix args (in-repo dev)
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import type { ServerWebSocket } from 'bun';
 import type Anthropic from '@anthropic-ai/sdk';
 import { buildProgram } from '@fleex/cli/program';
@@ -305,5 +307,33 @@ Bun.serve<WsData>({
     },
   },
 });
+
+// ── Dev hot reload (opt-in) ───────────────────────────────────────────────--
+// With FLEEX_SIDEPANEL_DEV=1, watch the extension directory and tell the side
+// panel to reload on change: a panel `location.reload()` for side-panel files,
+// or a full `chrome.runtime.reload()` when manifest/background change.
+if (process.env.FLEEX_SIDEPANEL_DEV === '1') {
+  const extDir = process.env.FLEEX_EXTENSION_DIR ?? path.resolve(import.meta.dir, '../../../extension');
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let fullPending = false;
+  try {
+    fs.watch(extDir, { recursive: true }, (_evt, filename) => {
+      const name = filename ? String(filename) : '';
+      if (!name || name.startsWith('.') || name.endsWith('~') || name.endsWith('.swp')) return;
+      if (name === 'manifest.json' || name === 'background.js') fullPending = true;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const payload = JSON.stringify({ type: 'dev_reload', full: fullPending });
+        for (const ws of sockets) { try { ws.send(payload); } catch { /* ignore */ } }
+        process.stderr.write(`fleex-sidepanel-host: dev reload (${fullPending ? 'full' : 'panel'}) — ${name}\n`);
+        fullPending = false;
+        timer = null;
+      }, 150);
+    });
+    process.stderr.write(`fleex-sidepanel-host: dev hot reload watching ${extDir}\n`);
+  } catch (e) {
+    process.stderr.write(`fleex-sidepanel-host: dev reload unavailable (${e instanceof Error ? e.message : String(e)})\n`);
+  }
+}
 
 process.stderr.write(`fleex-sidepanel-host listening on http://localhost:${PORT} (${tools.length} tools, ${store.list().length} sessions)\n`);

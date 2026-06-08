@@ -37,6 +37,28 @@ execution live in `@fleex/sidepanel-host`, which the extension reaches over
 - **Confirmation**: read-only actions run automatically; create/update/move/
   delete show the exact `fleex …` command and wait for your Approve/Decline.
 
+## Hot reload (dev)
+
+MV3 has no built-in hot reload, but the companion can drive one. Start it with
+`FLEEX_SIDEPANEL_DEV=1`:
+
+```bash
+FLEEX_SIDEPANEL_DEV=1 FLEEX_MCP_BIN=bun \
+  FLEEX_MCP_PREFIX="run $(pwd)/packages/cli/index.ts" \
+  bun run packages/sidepanel-host/src/server.ts
+```
+
+It watches `extension/` and pushes a `dev_reload` over the WebSocket on change:
+
+- editing `sidepanel.{html,css,js}` → the side panel reloads in place
+  (`location.reload()`);
+- editing `manifest.json` or `background.js` → a full `chrome.runtime.reload()`
+  (the panel closes; reopen it from the toolbar icon).
+
+No more clicking ↻ in `chrome://extensions` for everyday edits. (If a panel
+reload ever serves stale JS in your Chrome build, do one manual extension reload
+to flush, then continue.)
+
 ## Notes
 
 - Page extraction is a dependency-free heuristic (prefers `<article>`/`<main>`,
