@@ -310,6 +310,23 @@ function mdInline(text) {
   return t;
 }
 
+function parseRow(line) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((s) => s.trim());
+}
+function isTableSep(line) {
+  if (!line || line.indexOf('|') === -1) return false;
+  const cells = parseRow(line);
+  return cells.length > 0 && cells.every((c) => /^:?-{1,}:?$/.test(c));
+}
+function cellAlign(sepCell) {
+  const l = sepCell.startsWith(':'), r = sepCell.endsWith(':');
+  return l && r ? 'center' : r ? 'right' : l ? 'left' : '';
+}
+function alignAttr(a) { return a ? ` style="text-align:${a}"` : ''; }
+function isTableStart(lines, i) {
+  return i + 1 < lines.length && lines[i].indexOf('|') !== -1 && isTableSep(lines[i + 1]);
+}
+
 function renderMarkdown(src) {
   const lines = escapeHtml(src).split('\n');
   let html = '';
@@ -340,10 +357,25 @@ function renderMarkdown(src) {
       html += '</ol>';
       continue;
     }
+    if (isTableStart(lines, i)) {
+      const header = parseRow(line);
+      const aligns = parseRow(lines[i + 1]).map(cellAlign);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].indexOf('|') !== -1 && !/^\s*$/.test(lines[i])) {
+        rows.push(parseRow(lines[i])); i++;
+      }
+      const th = header.map((c, idx) => `<th${alignAttr(aligns[idx])}>${mdInline(c)}</th>`).join('');
+      const body = rows
+        .map((r) => `<tr>${r.map((c, idx) => `<td${alignAttr(aligns[idx])}>${mdInline(c)}</td>`).join('')}</tr>`)
+        .join('');
+      html += `<table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>`;
+      continue;
+    }
     if (/^\s*$/.test(line)) { i++; continue; }
     const para = [];
     while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^```/.test(lines[i]) &&
-           !/^#{1,6}\s/.test(lines[i]) && !isUl(lines[i]) && !isOl(lines[i])) {
+           !/^#{1,6}\s/.test(lines[i]) && !isUl(lines[i]) && !isOl(lines[i]) && !isTableStart(lines, i)) {
       para.push(lines[i]); i++;
     }
     html += `<p>${para.map(mdInline).join('<br>')}</p>`;
