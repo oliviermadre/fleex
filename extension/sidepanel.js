@@ -22,6 +22,7 @@ let online = false;
 let activeId = null;
 let sessions = [];
 let currentAssistant = null; // streaming bubble for the active session
+let assistantRaw = ''; // accumulated raw markdown for the streaming bubble
 const pendingConfirm = {}; // sessionId -> last confirm_request event
 let booting = true; // until we've selected/created the first session
 
@@ -72,8 +73,9 @@ function handle(m) {
 function handleStream(ev) {
   switch (ev.type) {
     case 'text':
-      if (!currentAssistant) currentAssistant = bubble('msg assistant', '');
-      currentAssistant.textContent += ev.text;
+      if (!currentAssistant) { currentAssistant = bubble('msg assistant', ''); assistantRaw = ''; }
+      assistantRaw += ev.text;
+      currentAssistant.innerHTML = renderMarkdown(assistantRaw);
       log.scrollTop = log.scrollHeight;
       break;
     case 'tool_call':
@@ -234,14 +236,14 @@ function toolLine(argv) {
   t.innerHTML = `▷ <code>fleex ${escapeHtml(argv.join(' '))}</code>`;
   return t;
 }
-function finalizeAssistant() { currentAssistant = null; }
+function finalizeAssistant() { currentAssistant = null; assistantRaw = ''; }
 
 function renderTranscript(items) {
   log.innerHTML = '';
   currentAssistant = null;
   for (const it of items) {
     if (it.role === 'user') bubble('msg user', it.text);
-    else if (it.role === 'assistant') bubble('msg assistant', it.text);
+    else if (it.role === 'assistant') { bubble('msg assistant', '').innerHTML = renderMarkdown(it.text); }
     else if (it.tool) {
       toolLine(it.tool.argv);
       const s = it.tool.status;
@@ -284,6 +286,65 @@ function escapeHtml(s) {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '…' : s || ''; }
+
+// ── Minimal, XSS-safe Markdown renderer (no external deps; MV3 CSP-friendly) ──
+// Input is HTML-escaped first, then a subset of Markdown is applied producing
+// only known-safe tags. Links are restricted to http(s)/mailto.
+function mdInline(text) {
+  const codes = [];
+  let t = text.replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return ` ${codes.length - 1} `; });
+  t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, url) => {
+    const raw = url.replace(/&amp;/g, '&');
+    return /^(https?:|mailto:)/i.test(raw)
+      ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      : m;
+  });
+  t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  t = t.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>').replace(/(^|[^_\w])_([^_\n]+)_/g, '$1<em>$2</em>');
+  t = t.replace(/ (\d+) /g, (_, i) => `<code>${codes[+i]}</code>`);
+  return t;
+}
+
+function renderMarkdown(src) {
+  const lines = escapeHtml(src).split('\n');
+  let html = '';
+  let i = 0;
+  const isUl = (l) => /^\s*[-*]\s+/.test(l);
+  const isOl = (l) => /^\s*\d+\.\s+/.test(l);
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^```/.test(line)) {
+      i++;
+      let code = '';
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) { code += lines[i] + '\n'; i++; }
+      i++; // closing fence
+      html += `<pre><code>${code.replace(/\n$/, '')}</code></pre>`;
+      continue;
+    }
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { html += `<h${h[1].length}>${mdInline(h[2])}</h${h[1].length}>`; i++; continue; }
+    if (isUl(line)) {
+      html += '<ul>';
+      while (i < lines.length && isUl(lines[i])) { html += `<li>${mdInline(lines[i].replace(/^\s*[-*]\s+/, ''))}</li>`; i++; }
+      html += '</ul>';
+      continue;
+    }
+    if (isOl(line)) {
+      html += '<ol>';
+      while (i < lines.length && isOl(lines[i])) { html += `<li>${mdInline(lines[i].replace(/^\s*\d+\.\s+/, ''))}</li>`; i++; }
+      html += '</ol>';
+      continue;
+    }
+    if (/^\s*$/.test(line)) { i++; continue; }
+    const para = [];
+    while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^```/.test(lines[i]) &&
+           !/^#{1,6}\s/.test(lines[i]) && !isUl(lines[i]) && !isOl(lines[i])) {
+      para.push(lines[i]); i++;
+    }
+    html += `<p>${para.map(mdInline).join('<br>')}</p>`;
+  }
+  return html;
+}
 
 // ── Sending ─────────────────────────────────────────────────────────────────
 function submit() {
