@@ -1067,11 +1067,62 @@ export function ticketRoutes(container: Container) {
       return comments.map((c) => c.toDTO());
     });
 
-    app.post<{ Params: { id: string }; Body: { body: string; executionMode?: 'talk' | 'plan' | 'edit' } }>(
+    app.post<{
+      Params: { id: string };
+      Body: {
+        body: string;
+        executionMode?: 'talk' | 'plan' | 'edit';
+        // How to handle agents that already have an unresolved mention on this
+        // ticket (the frontend warns the user and collects a choice):
+        //  - 'continue_existing': don't create a new mention; the comment wakes
+        //    the existing (waiting_for_info) mention and resumes its session.
+        //  - 'supersede': stop the in-flight run and resolve the prior mention,
+        //    then let the fresh mention take over (resuming the same session).
+        //  - 'queue': create the new mention but let the current run finish
+        //    first — the per-(agent,ticket) scheduler runs it afterwards.
+        mentionConflicts?: Array<{ agent: string; action: 'continue_existing' | 'supersede' | 'queue' }>;
+      };
+    }>(
       '/api/tickets/:id/comments',
       async (request, reply) => {
         const ticket = await container.ticketStore.getTicketById(request.params.id);
         if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+        // ── Resolve mention conflicts before creating the new comment ──
+        const conflicts = request.body.mentionConflicts ?? [];
+        const suppressMentionForAgents: string[] = [];
+        if (conflicts.length > 0) {
+          const ticketMentions = await container.mentionStore.getByTicket(request.params.id);
+          for (const conflict of conflicts) {
+            const existing = ticketMentions.filter(
+              (m) => m.targetType === 'agent' && m.targetAgent === conflict.agent && m.status !== 'resolved',
+            );
+            if (existing.length === 0) continue;
+            if (conflict.action === 'continue_existing') {
+              // Wake the existing mention via the comment; skip a duplicate.
+              suppressMentionForAgents.push(conflict.agent);
+            } else if (conflict.action === 'supersede') {
+              // Stop the in-flight run and close the prior mention so the fresh
+              // one takes over. sessionHistory is keyed by agent+ticket, so the
+              // new run resumes the same Claude session.
+              for (const m of existing) {
+                await container.executeAgent.cancelExecutionForMention(m.id).catch(() => false);
+                m.resolve();
+                await container.mentionStore.save(m);
+                emit({
+                  type: 'mention.resolved',
+                  mentionId: m.id,
+                  ticketId: request.params.id,
+                  targetAgent: m.targetAgent,
+                  resolvedBy: m.targetAgent,
+                  occurredAt: new Date(),
+                });
+              }
+            }
+            // 'queue' → no pre-action; the scheduler serializes it after the
+            // current run for this agent+ticket finishes.
+          }
+        }
 
         const { humanDisplayName, humanMentionName } = container.config.get();
         const { comment, createdMentions } = await container.postComment.execute({
@@ -1082,6 +1133,7 @@ export function ticketRoutes(container: Container) {
           visibility: 'public',
           humanMentionNames: humanMentionName ? [humanMentionName] : [],
           executionMode: request.body.executionMode,
+          suppressMentionForAgents,
         });
 
         // Single event — the DomainEventListener handles broadcasting, auto-trigger, auto-review, wake

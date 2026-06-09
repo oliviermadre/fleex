@@ -14,6 +14,9 @@ import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useToastStore } from '../../stores/toastStore';
+import { Modal } from '../ui/Modal';
+import { Button } from '../ui/Button';
 import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
@@ -34,6 +37,20 @@ function buildMentionLookup(mentions: TicketMention[]): Map<string, Map<string, 
     map.set(text, m.id);
   }
   return lookup;
+}
+
+/**
+ * Extract the agent names mentioned in a comment body (`@agent:name`),
+ * mirroring the server parser: struck-through mentions (`~~@agent:name~~`)
+ * are ignored, since they're treated as cancelled.
+ */
+function parseAgentMentions(body: string): string[] {
+  const withoutStruck = body.replace(/~~[\s\S]*?~~/g, '');
+  const names = new Set<string>();
+  for (const match of withoutStruck.matchAll(/@agent:([a-zA-Z0-9_-]+)/g)) {
+    names.add(match[1]!);
+  }
+  return [...names];
 }
 
 // ── Mention pre-processing ──
@@ -465,6 +482,12 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const [modalExecutionId, setModalExecutionId] = useState<string | null>(null);
   const [modalTitle, setModalTitle] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // When the user mentions an agent that already has a pending/acknowledged
+  // mention on this ticket, we hold the comment and ask how to proceed.
+  const [conflictModal, setConflictModal] = useState<{
+    needChoice: Array<{ agent: string; displayName: string; status: TicketMention['status'] }>;
+    continueExisting: string[];
+  } | null>(null);
   const listEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -782,13 +805,20 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     }
   }, []);
 
-  const handleSubmit = useCallback(async () => {
+  // Actually post the comment. `mentionConflicts` tells the server how to
+  // handle agents that already have an unresolved mention on this ticket.
+  const doPost = useCallback(async (mentionConflicts: api.MentionConflictResolution[]) => {
     const trimmed = body.trim();
-    if (!trimmed || submitting) return;
+    if (!trimmed) return;
 
     setSubmitting(true);
     try {
-      const comment = await api.postTicketComment(ticketId, trimmed, executionMode);
+      const comment = await api.postTicketComment(
+        ticketId,
+        trimmed,
+        executionMode,
+        mentionConflicts.length > 0 ? mentionConflicts : undefined,
+      );
       setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
       // Posting a comment means we're caught up — mark everything as read
       markCommentsRead(ticketId, comment.createdAt).catch(() => {});
@@ -802,7 +832,61 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       setSubmitting(false);
       textareaRef.current?.focus();
     }
-  }, [body, submitting, ticketId, executionMode, markCommentsRead, clearDraft]);
+  }, [body, ticketId, executionMode, markCommentsRead, clearDraft]);
+
+  const handleSubmit = useCallback(async () => {
+    const trimmed = body.trim();
+    if (!trimmed || submitting) return;
+
+    // Detect re-mentions of agents that already have an unresolved mention on
+    // this ticket, so two executions never race on the same worktree.
+    const mentioned = parseAgentMentions(trimmed);
+    if (mentioned.length > 0) {
+      const continueExisting: string[] = [];
+      const needChoice: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> = [];
+      for (const agent of mentioned) {
+        const unresolved = mentions.find(
+          (m) => m.targetType === 'agent' && m.targetAgent === agent && m.status !== 'resolved',
+        );
+        if (!unresolved) continue;
+        if (unresolved.status === 'waiting_for_info') {
+          // The agent is paused waiting for us — the comment will resume it.
+          continueExisting.push(agent);
+        } else {
+          const persona = personas.find((p) => p.name === agent);
+          needChoice.push({ agent, displayName: persona?.displayName || persona?.name || agent, status: unresolved.status });
+        }
+      }
+
+      if (needChoice.length > 0) {
+        // Hold the comment until the user picks supersede vs queue.
+        setConflictModal({ needChoice, continueExisting });
+        return;
+      }
+
+      if (continueExisting.length > 0) {
+        const names = continueExisting.join(', ');
+        useToastStore.getState().addToast(
+          'info',
+          `${names} est déjà en attente de ta réponse — ton message continue la conversation existante.`,
+        );
+        await doPost(continueExisting.map((agent) => ({ agent, action: 'continue_existing' as const })));
+        return;
+      }
+    }
+
+    await doPost([]);
+  }, [body, submitting, mentions, personas, doPost]);
+
+  const confirmConflict = useCallback(async (action: 'supersede' | 'queue') => {
+    if (!conflictModal) return;
+    const conflicts: api.MentionConflictResolution[] = [
+      ...conflictModal.needChoice.map((c) => ({ agent: c.agent, action })),
+      ...conflictModal.continueExisting.map((agent) => ({ agent, action: 'continue_existing' as const })),
+    ];
+    setConflictModal(null);
+    await doPost(conflicts);
+  }, [conflictModal, doPost]);
 
   const autoResize = useCallback(() => {
     const ta = textareaRef.current;
@@ -1105,6 +1189,39 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           title={modalTitle}
           onClose={() => setModalExecutionId(null)}
         />
+      )}
+
+      {/* Mention conflict: agent already has a pending/running request here */}
+      {conflictModal && (
+        <Modal open onClose={() => setConflictModal(null)} maxWidth="max-w-md">
+          <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">
+            Agent déjà sollicité sur ce ticket
+          </h3>
+          <p className="mt-2 text-xs leading-relaxed text-[var(--theme-text-secondary)]">
+            {conflictModal.needChoice.map((c) => c.displayName).join(', ')}{' '}
+            {conflictModal.needChoice.length > 1 ? 'ont' : 'a'} déjà une demande{' '}
+            {conflictModal.needChoice.some((c) => c.status === 'acknowledged') ? 'en cours' : 'en file'}{' '}
+            sur ce ticket. Deux exécutions en parallèle sur le même worktree se gêneraient.
+            Comment veux-tu enchaîner&nbsp;?
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button variant="primary" onClick={() => void confirmConflict('supersede')}>
+              Arrêter l'exécution en cours et reprendre avec ce message
+            </Button>
+            <Button variant="secondary" onClick={() => void confirmConflict('queue')}>
+              Laisser finir, puis enchaîner avec ce message
+            </Button>
+            <Button variant="ghost" onClick={() => setConflictModal(null)}>
+              Annuler
+            </Button>
+          </div>
+          {conflictModal.continueExisting.length > 0 && (
+            <p className="mt-3 text-[11px] text-[var(--theme-text-secondary)]">
+              {conflictModal.continueExisting.join(', ')} est en attente de ta réponse — ton
+              message continuera aussi cette conversation.
+            </p>
+          )}
+        </Modal>
       )}
     </div>
   );

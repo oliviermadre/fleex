@@ -110,6 +110,11 @@ export class ExecuteAgentUseCase {
   private activeExecutions = new Map<string, ActiveExecution>();
   private sessionHistory = new Map<string, string>(); // `${agentName}:${ticketId}` -> sdkSessionId
   private queue: QueueItem[] = [];
+  // `${agentName}:${ticketId}` currently dispatched (parked on the limiter OR
+  // actively running). Enforces at most ONE live execution per agent+ticket so
+  // two SDK runs never race on the same shared worktree or fork the resume
+  // session. Freed when the execution settles (see `drainQueue`).
+  private occupiedAgentTickets = new Set<string>();
 
   /** Set by WS plugin to broadcast agent events in real-time */
   public onEvent: ((event: AgentEventEntity) => void) | null = null;
@@ -382,6 +387,18 @@ export class ExecuteAgentUseCase {
     return true;
   }
 
+  /**
+   * Cancel whatever execution is currently running for a given mention, looked
+   * up by mentionId rather than executionId. Used by the "stop & redo"
+   * (supersede) flow when a user re-mentions an agent that is mid-execution.
+   * Returns false (no-op) if no running execution is tracked for the mention.
+   */
+  async cancelExecutionForMention(mentionId: string): Promise<boolean> {
+    const exec = this.activeExecutions.get(mentionId);
+    if (!exec || exec.status !== 'running') return false;
+    return this.cancelExecution(exec.executionId);
+  }
+
   /** Resolve human mention name: persona override → global config */
   private resolveHumanMentionName(persona: AgentPersonaEntity): string | null {
     if (persona.humanMentionName) return persona.humanMentionName;
@@ -389,13 +406,24 @@ export class ExecuteAgentUseCase {
   }
 
   private drainQueue(): void {
-    // Dispatch every queued mention; the global SDK limiter (acquired inside
-    // executeForMention via sdkLimiter.run) is the only thing that throttles how
-    // many actually run at once. A mention parked on the limiter has not yet
+    // Dispatch queued mentions, but serialize per (agent, ticket): at most one
+    // live execution for a given agent on a given ticket. Siblings stay queued
+    // and are pulled in by the `.finally` re-drain when the in-flight one
+    // settles. This prevents two SDK runs from racing on the same shared
+    // worktree and from forking the resume session (both would read the same
+    // previous sessionId and clobber each other's at completion). Different
+    // tickets (different worktrees) still run in parallel, throttled only by
+    // the global SDK limiter. A mention parked on the limiter has not yet
     // created a worktree, emitted execution_start, or acknowledged — so this is
     // not a "storm": side-effects start only once a slot is granted.
-    while (this.queue.length > 0) {
-      const item = this.queue.shift()!;
+    const remaining: QueueItem[] = [];
+    for (const item of this.queue) {
+      const key = `${item.persona.name}:${item.mention.ticketId}`;
+      if (this.occupiedAgentTickets.has(key)) {
+        remaining.push(item); // an execution for this agent+ticket is already live — wait
+        continue;
+      }
+      this.occupiedAgentTickets.add(key);
       void this.sdkLimiter
         .run(() => this.executeForMention(item.persona, item.mention))
         .catch((err) => {
@@ -407,14 +435,35 @@ export class ExecuteAgentUseCase {
             mentionId: item.mention.id,
             error: err instanceof Error ? err.message : String(err),
           });
+        })
+        .finally(() => {
+          // Free the slot and pull the next queued sibling (if any) for this
+          // agent+ticket. Runs on success, failure, cancel, and the
+          // superseded-mention early-return alike.
+          this.occupiedAgentTickets.delete(key);
+          this.drainQueue();
         });
     }
+    this.queue = remaining;
   }
 
   private async executeForMention(
     persona: AgentPersonaEntity,
     mention: TicketMentionEntity,
   ): Promise<void> {
+    // Guard: the queued copy may have been resolved/superseded while it waited
+    // (e.g. the user posted a follow-up and chose "stop & redo", which resolves
+    // the prior mention). Re-read the live status and skip stale work so we
+    // never run a superseded mention or touch the worktree for nothing.
+    const fresh = await this.mentionStore.getById(mention.id);
+    if (!fresh || fresh.status === 'resolved') {
+      this.logger.info('Skipping superseded/resolved mention', {
+        mentionId: mention.id,
+        targetAgent: mention.targetAgent,
+      });
+      return;
+    }
+
     const executionId = randomUUID();
     const abortController = new AbortController();
     this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'running', abortController });
@@ -613,6 +662,12 @@ export class ExecuteAgentUseCase {
             const msg = message as Record<string, unknown>;
             if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
               sdkSessionId = msg['session_id'] as string;
+              // Persist the session as soon as it exists (not only on success).
+              // If this run is later aborted/superseded, the next mention on the
+              // same agent+ticket can still resume from here — so "stop & redo"
+              // keeps the agent's memory of what it was doing plus the
+              // correction. Completion (step 10) re-sets the same value.
+              this.sessionHistory.set(sessionKey, sdkSessionId);
               await emitEvent('turn_start', { sessionId: sdkSessionId });
             }
 
