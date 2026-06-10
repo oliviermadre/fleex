@@ -14,7 +14,6 @@ import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useToastStore } from '../../stores/toastStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import * as api from '../../services/api';
@@ -837,44 +836,28 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     const trimmed = body.trim();
     if (!trimmed || submitting) return;
 
-    // Detect re-mentions of agents that already have an unresolved mention on
-    // this ticket, so two executions never race on the same worktree.
+    // Detect re-mentions of an agent that already has a queued/in-flight run on
+    // this ticket, so the user can choose stop-&-redo vs run-after. A
+    // waiting_for_info agent is NOT a conflict here: a comment that re-mentions
+    // it is fed to its waiting thread (coalesced server-side), so we post
+    // normally and let the backend handle it.
     const mentioned = parseAgentMentions(trimmed);
     if (mentioned.length > 0) {
-      const waitingNames: string[] = [];
       const needChoice: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> = [];
       for (const agent of mentioned) {
         const unresolved = mentions.find(
-          (m) => m.targetType === 'agent' && m.targetAgent === agent && m.status !== 'resolved',
+          (m) => m.targetType === 'agent' && m.targetAgent === agent &&
+            (m.status === 'pending' || m.status === 'acknowledged'),
         );
         if (!unresolved) continue;
         const persona = personas.find((p) => p.name === agent);
-        const displayName = persona?.displayName || persona?.name || agent;
-        if (unresolved.status === 'waiting_for_info') {
-          // Re-mentioning a waiting agent is a NEW request, queued behind its
-          // pending question (no suppression, no consuming the comment as the
-          // answer). To answer the question, post a comment WITHOUT a mention.
-          waitingNames.push(displayName);
-        } else {
-          // pending / acknowledged: an execution is queued or in flight — let
-          // the user choose stop-&-redo vs run-after.
-          needChoice.push({ agent, displayName, status: unresolved.status });
-        }
+        needChoice.push({ agent, displayName: persona?.displayName || persona?.name || agent, status: unresolved.status });
       }
 
       if (needChoice.length > 0) {
         // Hold the comment until the user picks supersede vs queue.
         setConflictModal({ needChoice });
         return;
-      }
-
-      if (waitingNames.length > 0) {
-        useToastStore.getState().addToast(
-          'info',
-          `${waitingNames.join(', ')} attend ta réponse — ta nouvelle demande sera traitée ensuite. Pour répondre à sa question, commente sans le mentionner.`,
-        );
-        // Fall through: post normally. The mention is created and queued; the
-        // backend will not wake the waiting thread from a comment that re-mentions it.
       }
     }
 

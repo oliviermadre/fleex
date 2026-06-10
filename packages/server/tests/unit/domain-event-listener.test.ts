@@ -426,7 +426,11 @@ describe('DomainEventListener', () => {
       expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', ['agent-a'], undefined);
     });
 
-    it('should exclude an agent freshly re-mentioned by the same comment (new request, not an answer)', async () => {
+    it('still wakes an agent re-mentioned by the same comment (coalesced answer/continuation)', async () => {
+      // "The waiting agent owns your next message": a comment that re-mentions a
+      // waiting agent must WAKE it (the comment is fed to its thread). The
+      // redundant duplicate mention is suppressed server-side in the comment
+      // route, not by excluding it from wake here.
       vi.mocked(mocks.commentStore.getById).mockResolvedValue(null);
 
       eventBus.emit({
@@ -442,7 +446,7 @@ describe('DomainEventListener', () => {
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', ['agent-a'], undefined);
+      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', [], undefined);
     });
   });
 

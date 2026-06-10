@@ -2060,10 +2060,26 @@ export class ExecuteAgentUseCase {
       }
     }
 
+    // Anchor the agent to its OWN task (the comment that created this mention).
+    // Everything above is background context — including other comments that
+    // @mention this agent, which are SEPARATE tasks handled one at a time. This
+    // keeps later clarifications visible without letting one mention swallow the
+    // others' requests into a single batched output.
+    const ownComment = context.comments.find((c) => c.id === mention.commentId)?.body;
     if (isWakeUp) {
-      pushText(`\n---\n\n**WAKE-UP: You previously indicated you were waiting for more information.** New content has been added to this ticket since then. Review the updated context above and continue your work. You MUST produce at least a comment or a deliverable — decide whether to ask someone else, escalate to a human, or move forward on your own.`);
+      pushText(
+        `\n---\n\n**Resuming your task.** You paused waiting for input. Review the latest activity on the ticket: `
+        + `if it answers what you were waiting for, finish your task and resolve; if it redirects you, follow the new direction. `
+        + `Stay focused on YOUR task${ownComment ? ' (your original request below)' : ''} — other comments that @mention you with different requests are separate queued tasks, not for now. `
+        + `You MUST produce at least a comment or a deliverable — ask someone, escalate to a human, or move forward on your own.`
+        + (ownComment ? `\n\n**Your original request** (from ${mention.sourceAgent}):\n> ${ownComment.replace(/\n/g, '\n> ')}` : ''),
+      );
     } else {
-      pushText(`\n---\n\nYou were mentioned in comment ${mention.commentId} by ${mention.sourceAgent}. Please review the ticket context above and respond appropriately.`);
+      pushText(
+        `\n---\n\n**Your task** — respond to this request from ${mention.sourceAgent}:\n`
+        + (ownComment ? `> ${ownComment.replace(/\n/g, '\n> ')}\n\n` : `(comment ${mention.commentId})\n\n`)
+        + `Everything above is context. Other comments that @mention you with different requests are separate tasks, already queued and handled one at a time — do NOT answer them here. Focus only on the request above.`,
+      );
     }
 
     return blocks;

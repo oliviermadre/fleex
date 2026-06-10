@@ -356,16 +356,14 @@ export class DomainEventListener {
   // ── Wake waiting agents on new content ──
 
   private async handleWakeWaitingOnComment(event: CommentPostedEvent): Promise<void> {
-    const exclude = new Set<string>();
-    // Don't self-wake (agent answering on its own ticket).
-    if (event.authorType === 'agent') exclude.add(event.authorName);
-    // A comment that freshly re-mentions an agent is a NEW request for that
-    // agent (queued), not an answer to its pending question — so don't wake it.
-    // Only a plain reply (no mention of that agent) resumes its waiting thread.
-    for (const m of event.createdMentions) {
-      if (m.targetType === 'agent') exclude.add(m.targetAgent);
-    }
-    await this.deps.wakeWaitingAgents.execute(event.ticketId, [...exclude], event.executionMode);
+    // "The waiting agent owns your next message": any comment (plain OR one that
+    // re-mentions the waiting agent) wakes it and is fed to it. A re-mention is
+    // coalesced server-side (no redundant duplicate mention — see the comment
+    // route's suppressMentionForAgents), so waking here is exactly one run and
+    // the agent decides whether the message is its answer or a new direction.
+    // Only exclude the author itself when an agent posts, to avoid self-wake.
+    const exclude = event.authorType === 'agent' ? [event.authorName] : [];
+    await this.deps.wakeWaitingAgents.execute(event.ticketId, exclude, event.executionMode);
   }
 
   private async handleWakeWaitingOnDeliverable(event: DeliverableCreatedEvent): Promise<void> {

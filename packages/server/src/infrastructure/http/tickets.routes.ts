@@ -7,6 +7,7 @@ import { TICKET_STATUSES } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus } from '@fleex/shared';
@@ -1089,10 +1090,26 @@ export function ticketRoutes(container: Container) {
         if (!ticket) throw new TicketNotFoundError(request.params.id);
 
         // ── Resolve mention conflicts before creating the new comment ──
+        const ticketMentions = await container.mentionStore.getByTicket(request.params.id);
         const conflicts = request.body.mentionConflicts ?? [];
         const suppressMentionForAgents: string[] = [];
+
+        // Coalesce: if a comment re-mentions an agent that is currently
+        // waiting_for_info, DON'T create a redundant second mention — the
+        // comment wakes that waiting thread (see handleWakeWaitingOnComment)
+        // and is fed to it as the answer/continuation. The agent decides
+        // whether it's the answer or a new direction, in a single run. This is
+        // server-side and robust against the frontend websocket race.
+        for (const agent of TicketCommentEntity.extractMentions(request.body.body)) {
+          const isWaiting = ticketMentions.some(
+            (m) => m.targetType === 'agent' && m.targetAgent === agent && m.status === 'waiting_for_info',
+          );
+          if (isWaiting && !suppressMentionForAgents.includes(agent)) {
+            suppressMentionForAgents.push(agent);
+          }
+        }
+
         if (conflicts.length > 0) {
-          const ticketMentions = await container.mentionStore.getByTicket(request.params.id);
           for (const conflict of conflicts) {
             const existing = ticketMentions.filter(
               (m) => m.targetType === 'agent' && m.targetAgent === conflict.agent && m.status !== 'resolved',
