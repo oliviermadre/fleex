@@ -481,11 +481,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const [modalExecutionId, setModalExecutionId] = useState<string | null>(null);
   const [modalTitle, setModalTitle] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  // When the user mentions an agent that already has a pending/acknowledged
-  // mention on this ticket, we hold the comment and ask how to proceed.
-  const [conflictModal, setConflictModal] = useState<{
-    needChoice: Array<{ agent: string; displayName: string; status: TicketMention['status'] }>;
-  } | null>(null);
+  // When the user mentions an agent that already has an unresolved mention, we
+  // hold the comment and ask how to proceed. Two kinds of ambiguity:
+  //  - 'busy'    : agent has a queued/in-flight run → supersede vs queue.
+  //  - 'waiting' : agent is waiting_for_info → is this the answer, or a new subject?
+  const [conflictModal, setConflictModal] = useState<
+    | { kind: 'busy'; agents: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> }
+    | { kind: 'waiting'; agents: Array<{ agent: string; displayName: string }> }
+    | null
+  >(null);
   const listEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -836,27 +840,34 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     const trimmed = body.trim();
     if (!trimmed || submitting) return;
 
-    // Detect re-mentions of an agent that already has a queued/in-flight run on
-    // this ticket, so the user can choose stop-&-redo vs run-after. A
-    // waiting_for_info agent is NOT a conflict here: a comment that re-mentions
-    // it is fed to its waiting thread (coalesced server-side), so we post
-    // normally and let the backend handle it.
+    // Detect re-mentions of an agent that already has an unresolved mention, and
+    // disambiguate. A WAITING agent is ambiguous (answer vs new subject) → ask.
+    // A pending/acknowledged agent (queued/in-flight run) → supersede vs queue.
     const mentioned = parseAgentMentions(trimmed);
     if (mentioned.length > 0) {
-      const needChoice: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> = [];
+      const waiting: Array<{ agent: string; displayName: string }> = [];
+      const busy: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> = [];
       for (const agent of mentioned) {
         const unresolved = mentions.find(
-          (m) => m.targetType === 'agent' && m.targetAgent === agent &&
-            (m.status === 'pending' || m.status === 'acknowledged'),
+          (m) => m.targetType === 'agent' && m.targetAgent === agent && m.status !== 'resolved',
         );
         if (!unresolved) continue;
         const persona = personas.find((p) => p.name === agent);
-        needChoice.push({ agent, displayName: persona?.displayName || persona?.name || agent, status: unresolved.status });
+        const displayName = persona?.displayName || persona?.name || agent;
+        if (unresolved.status === 'waiting_for_info') {
+          waiting.push({ agent, displayName });
+        } else if (unresolved.status === 'pending' || unresolved.status === 'acknowledged') {
+          busy.push({ agent, displayName, status: unresolved.status });
+        }
       }
 
-      if (needChoice.length > 0) {
-        // Hold the comment until the user picks supersede vs queue.
-        setConflictModal({ needChoice });
+      // Waiting takes priority: that's the ambiguity the user most needs to resolve.
+      if (waiting.length > 0) {
+        setConflictModal({ kind: 'waiting', agents: waiting });
+        return;
+      }
+      if (busy.length > 0) {
+        setConflictModal({ kind: 'busy', agents: busy });
         return;
       }
     }
@@ -864,10 +875,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     await doPost([]);
   }, [body, submitting, mentions, personas, doPost]);
 
-  const confirmConflict = useCallback(async (action: 'supersede' | 'queue') => {
+  const confirmConflict = useCallback(async (action: api.MentionConflictAction) => {
     if (!conflictModal) return;
-    const conflicts: api.MentionConflictResolution[] = conflictModal.needChoice.map(
-      (c) => ({ agent: c.agent, action }),
+    const conflicts: api.MentionConflictResolution[] = conflictModal.agents.map(
+      (a) => ({ agent: a.agent, action }),
     );
     setConflictModal(null);
     await doPost(conflicts);
@@ -1176,16 +1187,43 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         />
       )}
 
-      {/* Mention conflict: agent already has a pending/running request here */}
-      {conflictModal && (
+      {/* Mention conflict: agent waiting for a reply — answer vs new subject */}
+      {conflictModal?.kind === 'waiting' && (
+        <Modal open onClose={() => setConflictModal(null)} maxWidth="max-w-md">
+          <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">
+            {conflictModal.agents.map((a) => a.displayName).join(', ')} attend ta réponse
+          </h3>
+          <p className="mt-2 text-xs leading-relaxed text-[var(--theme-text-secondary)]">
+            Tu mentionnes un agent qui attend ta réponse à sa question. Ce message est&nbsp;:
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button variant="primary" onClick={() => void confirmConflict('answer')}>
+              Ma réponse à sa question
+            </Button>
+            <Button variant="secondary" onClick={() => void confirmConflict('new_subject')}>
+              Un autre sujet à traiter
+            </Button>
+            <Button variant="ghost" onClick={() => setConflictModal(null)}>
+              Annuler
+            </Button>
+          </div>
+          <p className="mt-3 text-[11px] text-[var(--theme-text-secondary)]">
+            « Autre sujet » : l'agent continue d'attendre ta réponse (à donner dans un autre
+            message) et ta nouvelle demande sera traitée ensuite.
+          </p>
+        </Modal>
+      )}
+
+      {/* Mention conflict: agent already has a queued/in-flight run here */}
+      {conflictModal?.kind === 'busy' && (
         <Modal open onClose={() => setConflictModal(null)} maxWidth="max-w-md">
           <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">
             Agent déjà sollicité sur ce ticket
           </h3>
           <p className="mt-2 text-xs leading-relaxed text-[var(--theme-text-secondary)]">
-            {conflictModal.needChoice.map((c) => c.displayName).join(', ')}{' '}
-            {conflictModal.needChoice.length > 1 ? 'ont' : 'a'} déjà une demande{' '}
-            {conflictModal.needChoice.some((c) => c.status === 'acknowledged') ? 'en cours' : 'en file'}{' '}
+            {conflictModal.agents.map((c) => c.displayName).join(', ')}{' '}
+            {conflictModal.agents.length > 1 ? 'ont' : 'a'} déjà une demande{' '}
+            {conflictModal.agents.some((c) => c.status === 'acknowledged') ? 'en cours' : 'en file'}{' '}
             sur ce ticket. Deux exécutions en parallèle sur le même worktree se gêneraient.
             Comment veux-tu enchaîner&nbsp;?
           </p>

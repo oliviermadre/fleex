@@ -518,7 +518,7 @@ export async function fetchTicketComments(ticketId: string): Promise<import('@fl
   return request<import('@fleex/shared').TicketComment[]>(`/tickets/${encodeURIComponent(ticketId)}/comments`);
 }
 
-export type MentionConflictAction = 'continue_existing' | 'supersede' | 'queue';
+export type MentionConflictAction = 'answer' | 'new_subject' | 'supersede' | 'queue';
 export interface MentionConflictResolution {
   agent: string;
   action: MentionConflictAction;

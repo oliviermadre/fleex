@@ -426,11 +426,29 @@ describe('DomainEventListener', () => {
       expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', ['agent-a'], undefined);
     });
 
-    it('still wakes an agent re-mentioned by the same comment (coalesced answer/continuation)', async () => {
-      // "The waiting agent owns your next message": a comment that re-mentions a
-      // waiting agent must WAKE it (the comment is fed to its thread). The
-      // redundant duplicate mention is suppressed server-side in the comment
-      // route, not by excluding it from wake here.
+    it('wakes a re-mentioned agent when it is NOT in wakeExcludeAgents (answer case)', async () => {
+      // "answer" disambiguation: the duplicate mention is suppressed in the
+      // comment route and the agent is left out of wakeExcludeAgents, so it is
+      // woken here and fed the comment.
+      vi.mocked(mocks.commentStore.getById).mockResolvedValue(null);
+
+      eventBus.emit({
+        type: 'comment.posted',
+        commentId: randomUUID(),
+        ticketId: 't1',
+        authorType: 'user',
+        authorName: 'human',
+        createdMentions: [],
+        occurredAt: new Date(),
+      });
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', [], undefined);
+    });
+
+    it('does NOT wake an agent listed in wakeExcludeAgents (new subject)', async () => {
+      // "new subject" disambiguation: the agent keeps waiting for its answer; the
+      // comment must not wake it.
       vi.mocked(mocks.commentStore.getById).mockResolvedValue(null);
 
       eventBus.emit({
@@ -442,11 +460,12 @@ describe('DomainEventListener', () => {
         createdMentions: [
           { mentionId: randomUUID(), targetAgent: 'agent-a', targetType: 'agent' },
         ],
+        wakeExcludeAgents: ['agent-a'],
         occurredAt: new Date(),
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', [], undefined);
+      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', ['agent-a'], undefined);
     });
   });
 
