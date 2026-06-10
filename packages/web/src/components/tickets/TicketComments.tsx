@@ -486,7 +486,6 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   // mention on this ticket, we hold the comment and ask how to proceed.
   const [conflictModal, setConflictModal] = useState<{
     needChoice: Array<{ agent: string; displayName: string; status: TicketMention['status'] }>;
-    continueExisting: string[];
   } | null>(null);
   const listEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -842,36 +841,40 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     // this ticket, so two executions never race on the same worktree.
     const mentioned = parseAgentMentions(trimmed);
     if (mentioned.length > 0) {
-      const continueExisting: string[] = [];
+      const waitingNames: string[] = [];
       const needChoice: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> = [];
       for (const agent of mentioned) {
         const unresolved = mentions.find(
           (m) => m.targetType === 'agent' && m.targetAgent === agent && m.status !== 'resolved',
         );
         if (!unresolved) continue;
+        const persona = personas.find((p) => p.name === agent);
+        const displayName = persona?.displayName || persona?.name || agent;
         if (unresolved.status === 'waiting_for_info') {
-          // The agent is paused waiting for us — the comment will resume it.
-          continueExisting.push(agent);
+          // Re-mentioning a waiting agent is a NEW request, queued behind its
+          // pending question (no suppression, no consuming the comment as the
+          // answer). To answer the question, post a comment WITHOUT a mention.
+          waitingNames.push(displayName);
         } else {
-          const persona = personas.find((p) => p.name === agent);
-          needChoice.push({ agent, displayName: persona?.displayName || persona?.name || agent, status: unresolved.status });
+          // pending / acknowledged: an execution is queued or in flight — let
+          // the user choose stop-&-redo vs run-after.
+          needChoice.push({ agent, displayName, status: unresolved.status });
         }
       }
 
       if (needChoice.length > 0) {
         // Hold the comment until the user picks supersede vs queue.
-        setConflictModal({ needChoice, continueExisting });
+        setConflictModal({ needChoice });
         return;
       }
 
-      if (continueExisting.length > 0) {
-        const names = continueExisting.join(', ');
+      if (waitingNames.length > 0) {
         useToastStore.getState().addToast(
           'info',
-          `${names} est déjà en attente de ta réponse — ton message continue la conversation existante.`,
+          `${waitingNames.join(', ')} attend ta réponse — ta nouvelle demande sera traitée ensuite. Pour répondre à sa question, commente sans le mentionner.`,
         );
-        await doPost(continueExisting.map((agent) => ({ agent, action: 'continue_existing' as const })));
-        return;
+        // Fall through: post normally. The mention is created and queued; the
+        // backend will not wake the waiting thread from a comment that re-mentions it.
       }
     }
 
@@ -880,10 +883,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
 
   const confirmConflict = useCallback(async (action: 'supersede' | 'queue') => {
     if (!conflictModal) return;
-    const conflicts: api.MentionConflictResolution[] = [
-      ...conflictModal.needChoice.map((c) => ({ agent: c.agent, action })),
-      ...conflictModal.continueExisting.map((agent) => ({ agent, action: 'continue_existing' as const })),
-    ];
+    const conflicts: api.MentionConflictResolution[] = conflictModal.needChoice.map(
+      (c) => ({ agent: c.agent, action }),
+    );
     setConflictModal(null);
     await doPost(conflicts);
   }, [conflictModal, doPost]);
@@ -1215,12 +1217,6 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
               Annuler
             </Button>
           </div>
-          {conflictModal.continueExisting.length > 0 && (
-            <p className="mt-3 text-[11px] text-[var(--theme-text-secondary)]">
-              {conflictModal.continueExisting.join(', ')} est en attente de ta réponse — ton
-              message continuera aussi cette conversation.
-            </p>
-          )}
         </Modal>
       )}
     </div>

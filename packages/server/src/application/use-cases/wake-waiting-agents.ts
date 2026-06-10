@@ -15,14 +15,18 @@ export class WakeWaitingAgentsUseCase {
    * Called when new content (comments, deliverables) is added to a ticket.
    *
    * @param ticketId - The ticket that received new content
-   * @param excludeAgentName - Agent to exclude (to avoid self-wake loops)
+   * @param excludeAgentNames - Agents NOT to wake. Includes the comment author
+   *   (avoids self-wake loops) AND any agent freshly re-mentioned by the same
+   *   comment — a re-mention is a NEW queued request for that agent, not an
+   *   answer to its pending question, so its waiting thread must stay parked.
    * @param executionMode - If provided, update the waiting mention's execution mode before waking
    */
-  async execute(ticketId: string, excludeAgentName?: string, executionMode?: MentionExecutionMode): Promise<void> {
+  async execute(ticketId: string, excludeAgentNames?: readonly string[], executionMode?: MentionExecutionMode): Promise<void> {
+    const excluded = new Set(excludeAgentNames ?? []);
     const waitingMentions = await this.mentionStore.getWaitingByTicket(ticketId);
 
     for (const mention of waitingMentions) {
-      if (excludeAgentName && mention.targetAgent === excludeAgentName) {
+      if (excluded.has(mention.targetAgent)) {
         continue;
       }
 

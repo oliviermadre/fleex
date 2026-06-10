@@ -124,6 +124,13 @@ export class ExecuteAgentUseCase {
   // synchronously at enqueue/wake so a racing `execute()`/`wakeUp` cannot enqueue
   // the same mention twice (kills duplicate executions). Released at settle.
   private claimedMentionIds = new Set<string>();
+  // Mention ids that are running because they were genuinely woken from
+  // `waiting_for_info` (via `wakeUp`). Drives the `isWakeUp` prompt wording:
+  // ONLY a real resume gets the "continue your waiting work" prompt. A fresh
+  // queued mention (which happens to reuse the same session) must get the
+  // "respond to your comment" prompt so its own request is surfaced. Consumed
+  // (deleted) at the top of `executeForMention`.
+  private wokenMentionIds = new Set<string>();
 
   /** Set by WS plugin to broadcast agent events in real-time */
   public onEvent: ((event: AgentEventEntity) => void) | null = null;
@@ -332,6 +339,9 @@ export class ExecuteAgentUseCase {
     const key = `${persona.name}:${mention.ticketId}`;
     const laneFree = !this.occupiedAgentTickets.has(key);
     this.claimedMentionIds.add(mention.id);
+    // Mark this as a GENUINE resume so executeForMention uses the wake-up prompt
+    // ("continue your waiting work") rather than the fresh-mention prompt.
+    this.wokenMentionIds.add(mention.id);
     if (laneFree) this.occupiedAgentTickets.add(key);
 
     mention.wakeUp();
@@ -556,6 +566,12 @@ export class ExecuteAgentUseCase {
     persona: AgentPersonaEntity,
     mention: TicketMentionEntity,
   ): Promise<void> {
+    // Consume the "genuine wake" flag once, up front (so it never leaks, even on
+    // the early-return guard below). A fresh queued mention is NOT a wake-up even
+    // though it reuses the session — it must get the "respond to your comment"
+    // prompt so its own request is surfaced.
+    const isWakeUp = this.wokenMentionIds.delete(mention.id);
+
     // Guard: the queued copy may have been resolved/superseded while it waited
     // (e.g. the user posted a follow-up and chose "stop & redo", which resolves
     // the prior mention). Re-read the live status and skip stale work so we
@@ -647,7 +663,9 @@ export class ExecuteAgentUseCase {
 
       // 6. Build user prompt with ticket context (content blocks for multimodal support)
       const sessionKey = `${persona.name}:${mention.ticketId}`;
-      const isWakeUp = mention.status === 'pending' && this.sessionHistory.has(sessionKey);
+      // `isWakeUp` is decided up front from `wokenMentionIds` (a genuine resume
+      // from waiting_for_info), NOT from "a session exists" — a fresh queued
+      // mention reuses the session but is not a wake-up.
       const userPromptBlocks = await this.composeUserPrompt(context, mention, isWakeUp);
       const userPromptTextLength = userPromptBlocks.reduce((n, b) => n + (b.type === 'text' ? b.text.length : 0), 0);
 

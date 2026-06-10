@@ -139,4 +139,26 @@ describe('ExecuteAgentUseCase — per-(agent,ticket) serialization', () => {
     gates.get('b')!.resolve();
     await flush();
   });
+
+  it('flags a genuinely woken mention as a wake-up, but not a fresh queued one', async () => {
+    // This is the source of the `isWakeUp` prompt decision: only a mention that
+    // transitioned waiting_for_info → pending via wakeUp() should get the
+    // "continue your waiting work" prompt. A fresh queued mention (which reuses
+    // the session) must get the "respond to your comment" prompt instead.
+    const { useCase, mentions } = makeUseCase();
+    const wokenIds = (useCase as unknown as { wokenMentionIds: Set<string> }).wokenMentionIds;
+
+    const woke = makeMention('w1');
+    woke.status = 'waiting_for_info';
+    mentions.set('w1', woke);
+    await useCase.wakeUp(woke);
+    await flush();
+    expect(wokenIds.has('w1')).toBe(true); // wakeUp marked it (stub doesn't consume it)
+
+    const fresh = makeMention('f1');
+    mentions.set('f1', fresh);
+    await useCase.execute('p1');
+    await flush();
+    expect(wokenIds.has('f1')).toBe(false); // a fresh queued mention is NOT a wake-up
+  });
 });

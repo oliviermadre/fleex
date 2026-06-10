@@ -406,7 +406,7 @@ describe('DomainEventListener', () => {
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', undefined, undefined);
+      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', [], undefined);
     });
 
     it('should exclude agent from wake when agent posts comment', async () => {
@@ -423,7 +423,26 @@ describe('DomainEventListener', () => {
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', 'agent-a', undefined);
+      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', ['agent-a'], undefined);
+    });
+
+    it('should exclude an agent freshly re-mentioned by the same comment (new request, not an answer)', async () => {
+      vi.mocked(mocks.commentStore.getById).mockResolvedValue(null);
+
+      eventBus.emit({
+        type: 'comment.posted',
+        commentId: randomUUID(),
+        ticketId: 't1',
+        authorType: 'user',
+        authorName: 'human',
+        createdMentions: [
+          { mentionId: randomUUID(), targetAgent: 'agent-a', targetType: 'agent' },
+        ],
+        occurredAt: new Date(),
+      });
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(mocks.wakeWaitingAgents.execute).toHaveBeenCalledWith('t1', ['agent-a'], undefined);
     });
   });
 
