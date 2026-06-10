@@ -111,10 +111,19 @@ export class ExecuteAgentUseCase {
   private sessionHistory = new Map<string, string>(); // `${agentName}:${ticketId}` -> sdkSessionId
   private queue: QueueItem[] = [];
   // `${agentName}:${ticketId}` currently dispatched (parked on the limiter OR
-  // actively running). Enforces at most ONE live execution per agent+ticket so
-  // two SDK runs never race on the same shared worktree or fork the resume
-  // session. Freed when the execution settles (see `drainQueue`).
+  // actively running). Covers the dispatch→acknowledge window where the DB does
+  // not yet reflect the running mention. The authoritative serialization gate is
+  // `hasActiveThread` (reads the DB), so a `waiting_for_info` mention keeps the
+  // lane closed even after this in-memory key is freed at settle.
   private occupiedAgentTickets = new Set<string>();
+  // Drain loop re-entrancy guard: `drainQueue` is a sync kick; the actual work
+  // runs in `drainLoop`, which coalesces concurrent kicks (the gate is async).
+  private draining = false;
+  private drainPending = false;
+  // Mention ids that have entered the pipeline (queued OR dispatched). Claimed
+  // synchronously at enqueue/wake so a racing `execute()`/`wakeUp` cannot enqueue
+  // the same mention twice (kills duplicate executions). Released at settle.
+  private claimedMentionIds = new Set<string>();
 
   /** Set by WS plugin to broadcast agent events in real-time */
   public onEvent: ((event: AgentEventEntity) => void) | null = null;
@@ -224,19 +233,23 @@ export class ExecuteAgentUseCase {
     // Get pending mentions for this agent
     const pendingMentions = await this.mentionStore.getPendingForAgent(persona.name);
 
-    // Filter out mentions already being executed or already queued
-    const queuedMentionIds = new Set(this.queue.map((q) => q.mention.id));
+    // Filter out mentions already being executed or already in the pipeline.
+    // `claimedMentionIds` covers BOTH queued and dispatched-but-not-yet-acked
+    // mentions, closing the TOCTOU window after `getPendingForAgent` resolves
+    // where a concurrent `execute()` would otherwise re-enqueue the same mention.
     const workableMentions = pendingMentions.filter(
-      (m) => !this.activeExecutions.has(m.id) && !queuedMentionIds.has(m.id),
+      (m) => !this.activeExecutions.has(m.id) && !this.claimedMentionIds.has(m.id),
     );
 
     if (workableMentions.length === 0) {
       return { status: 'no_work', mentionIds: [] };
     }
 
-    // Enqueue all workable mentions
+    // Enqueue all workable mentions. Claim each id SYNCHRONOUSLY (no await
+    // between the filter above and these adds) so the dedup is race-free.
     const mentionIds: string[] = [];
     for (const mention of workableMentions) {
+      this.claimedMentionIds.add(mention.id);
       this.queue.push({ persona, mention });
       mentionIds.push(mention.id);
     }
@@ -276,10 +289,10 @@ export class ExecuteAgentUseCase {
     if (!persona) {
       throw new AgentPersonaNotFoundError(mention.targetAgent);
     }
-    const alreadyQueued = this.queue.some((q) => q.mention.id === mention.id);
-    if (this.activeExecutions.has(mention.id) || alreadyQueued) {
+    if (this.activeExecutions.has(mention.id) || this.claimedMentionIds.has(mention.id)) {
       return { status: 'already_running', mentionIds: [] };
     }
+    this.claimedMentionIds.add(mention.id);
     this.queue.push({ persona, mention });
     this.drainQueue();
     return { status: 'started', mentionIds: [mention.id] };
@@ -295,6 +308,12 @@ export class ExecuteAgentUseCase {
     if (existing && existing.status === 'running') return;
     if (existing) this.activeExecutions.delete(mention.id);
 
+    // Dedup: a concurrent wake (e.g. several sibling comments posted back-to-back,
+    // each firing wake-waiting-agents) already pulled this mention in. Without
+    // this, the same mention would be enqueued and re-run multiple times.
+    if (this.claimedMentionIds.has(mention.id)) return;
+    if (this.queue.some((q) => q.mention.id === mention.id)) return;
+
     const persona = await this.personaStore.getByName(mention.targetAgent);
     if (!persona) {
       this.logger.warn('Cannot wake mention: persona not found', {
@@ -302,6 +321,18 @@ export class ExecuteAgentUseCase {
       });
       return;
     }
+
+    // Decide & claim SYNCHRONOUSLY (no await between the check and the claim).
+    // If the lane is free, this resume owns it and dispatches directly — it must
+    // bypass the queue gate, since while the woken mention is still `pending`
+    // (not yet re-acknowledged) the DB gate would not block siblings, and
+    // routing it through `drainOnce` would see its own just-claimed key as
+    // "occupied" and never dispatch it. If a sibling already holds the lane, we
+    // queue normally and the sibling's settle re-drain picks this up.
+    const key = `${persona.name}:${mention.ticketId}`;
+    const laneFree = !this.occupiedAgentTickets.has(key);
+    this.claimedMentionIds.add(mention.id);
+    if (laneFree) this.occupiedAgentTickets.add(key);
 
     mention.wakeUp();
     await this.mentionStore.save(mention);
@@ -318,8 +349,12 @@ export class ExecuteAgentUseCase {
       mentionId: mention.id, targetAgent: mention.targetAgent, ticketId: mention.ticketId,
     });
 
-    this.queue.push({ persona, mention });
-    this.drainQueue();
+    if (laneFree) {
+      this.dispatch({ persona, mention }, key);
+    } else {
+      this.queue.push({ persona, mention });
+      this.drainQueue();
+    }
   }
 
   getStatus(personaId: string): { running: boolean; activeMentionIds: string[] } {
@@ -399,52 +434,122 @@ export class ExecuteAgentUseCase {
     return this.cancelExecution(exec.executionId);
   }
 
+  /**
+   * Subscribe to lane-freeing events so a queued sibling can start once the
+   * thread holding its (agent, ticket) lane closes. Crucial for EXTERNAL
+   * resolves the scheduler can't observe via an execution settling: a manual UI
+   * resolve of a `waiting_for_info` mention, or a mention deletion. The drain is
+   * idempotent — re-evaluating the DB gate is the source of truth. The
+   * scheduler also emits `mention.resolved` itself; that self-emit is a harmless
+   * no-op here because the in-memory lane key is still held until `dispatch`'s
+   * finally runs (so the gate keeps the sibling queued until then).
+   */
+  subscribeToBus(bus: EventBus): void {
+    const reDrain = (): void => this.drainQueue();
+    bus.on('mention.resolved', reDrain);
+    bus.on('mention.deleted', reDrain);
+  }
+
   /** Resolve human mention name: persona override → global config */
   private resolveHumanMentionName(persona: AgentPersonaEntity): string | null {
     if (persona.humanMentionName) return persona.humanMentionName;
     return this.config.get().humanMentionName ?? null;
   }
 
+  /**
+   * Serialize per (agent, ticket): at most ONE live thread for a given agent on
+   * a given ticket. "Live" means an execution is running (`acknowledged`) OR a
+   * mention is parked in `waiting_for_info` — a queued sibling must wait until
+   * that thread reaches `resolved`. This prevents two SDK runs racing on the
+   * shared worktree / forking the resume session, AND stops a sibling from
+   * starting while the agent is still waiting on the human. Different tickets
+   * (different worktrees) still run in parallel, throttled only by the global
+   * SDK limiter.
+   *
+   * Public entry point: a synchronous "kick". The real work runs in `drainLoop`
+   * because the dispatch gate (`hasActiveThread`) reads the DB and is async.
+   */
   private drainQueue(): void {
-    // Dispatch queued mentions, but serialize per (agent, ticket): at most one
-    // live execution for a given agent on a given ticket. Siblings stay queued
-    // and are pulled in by the `.finally` re-drain when the in-flight one
-    // settles. This prevents two SDK runs from racing on the same shared
-    // worktree and from forking the resume session (both would read the same
-    // previous sessionId and clobber each other's at completion). Different
-    // tickets (different worktrees) still run in parallel, throttled only by
-    // the global SDK limiter. A mention parked on the limiter has not yet
-    // created a worktree, emitted execution_start, or acknowledged — so this is
-    // not a "storm": side-effects start only once a slot is granted.
+    void this.drainLoop();
+  }
+
+  /** Coalesces concurrent kicks: at most one loop runs; a kick that arrives
+   *  mid-pass schedules exactly one more pass afterwards. */
+  private async drainLoop(): Promise<void> {
+    if (this.draining) { this.drainPending = true; return; }
+    this.draining = true;
+    try {
+      do {
+        this.drainPending = false;
+        await this.drainOnce();
+      } while (this.drainPending);
+    } finally {
+      this.draining = false;
+    }
+  }
+
+  private async drainOnce(): Promise<void> {
+    // Take a snapshot and clear the queue so items pushed during the awaits
+    // below are not dropped by the reassignment at the end.
+    const snapshot = this.queue;
+    this.queue = [];
     const remaining: QueueItem[] = [];
-    for (const item of this.queue) {
+    for (const item of snapshot) {
       const key = `${item.persona.name}:${item.mention.ticketId}`;
-      if (this.occupiedAgentTickets.has(key)) {
-        remaining.push(item); // an execution for this agent+ticket is already live — wait
+      // Gate: skip (keep queued) if the lane is occupied in-memory (covers the
+      // dispatch→acknowledge window) OR the DB shows a live/parked thread for
+      // this (agent, ticket). The DB read is what makes `waiting_for_info` hold
+      // the lane until it resolves — no fragile "keep the key" bookkeeping.
+      if (this.occupiedAgentTickets.has(key) ||
+          await this.hasActiveThread(item.persona.name, item.mention.ticketId)) {
+        remaining.push(item);
         continue;
       }
-      this.occupiedAgentTickets.add(key);
-      void this.sdkLimiter
-        .run(() => this.executeForMention(item.persona, item.mention))
-        .catch((err) => {
-          // Last-resort safety net — executeForMention's own finally already
-          // schedules activeExecutions cleanup. We still log so an unexpected
-          // throw never disappears silently.
-          this.logger.error('Agent execution failed', {
-            persona: item.persona.name,
-            mentionId: item.mention.id,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        })
-        .finally(() => {
-          // Free the slot and pull the next queued sibling (if any) for this
-          // agent+ticket. Runs on success, failure, cancel, and the
-          // superseded-mention early-return alike.
-          this.occupiedAgentTickets.delete(key);
-          this.drainQueue();
-        });
+      this.occupiedAgentTickets.add(key); // win the lane BEFORE any further await
+      this.dispatch(item, key);
     }
-    this.queue = remaining;
+    // Re-prepend the still-blocked items ahead of anything enqueued mid-pass.
+    this.queue = [...remaining, ...this.queue];
+  }
+
+  /**
+   * True if the DB shows a live or parked thread for this (agent, ticket): a
+   * mention that is `acknowledged` (running / mid-dispatch) or
+   * `waiting_for_info` (parked, awaiting the human). Reading the DB makes this
+   * authoritative and self-healing across restarts and manual edits.
+   */
+  private async hasActiveThread(agentName: string, ticketId: string): Promise<boolean> {
+    const mentions = await this.mentionStore.getByTicket(ticketId);
+    return mentions.some(
+      (m) => m.targetAgent === agentName &&
+        (m.status === 'acknowledged' || m.status === 'waiting_for_info'),
+    );
+  }
+
+  /**
+   * Run one mention through the SDK limiter. On settle (success, failure,
+   * cancel, or superseded early-return) it frees the lane key + the claimed id
+   * and re-drains so the next queued sibling can start. Shared by `drainOnce`
+   * and `wakeUp` (which claims the lane itself and dispatches directly).
+   */
+  private dispatch(item: QueueItem, key: string): void {
+    void this.sdkLimiter
+      .run(() => this.executeForMention(item.persona, item.mention))
+      .catch((err) => {
+        // Last-resort safety net — executeForMention's own finally already
+        // schedules activeExecutions cleanup. We still log so an unexpected
+        // throw never disappears silently.
+        this.logger.error('Agent execution failed', {
+          persona: item.persona.name,
+          mentionId: item.mention.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      })
+      .finally(() => {
+        this.occupiedAgentTickets.delete(key);
+        this.claimedMentionIds.delete(item.mention.id);
+        this.drainQueue();
+      });
   }
 
   private async executeForMention(
