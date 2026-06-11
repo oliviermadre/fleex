@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import type { Session, SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
-import { TICKET_STATUS } from '@fleex/shared';
+import { worktreeFlow } from '../../lib/sessionFlow';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -16,10 +16,6 @@ function isSystemGroup(org: string, name: string): boolean {
 
 function isMultiRepoGroup(org: string): boolean {
   return org === '_multi-repo';
-}
-
-function isActiveStatus(status: string | undefined): boolean {
-  return status === TICKET_STATUS.DOING || status === TICKET_STATUS.REVIEWING;
 }
 
 /**
@@ -47,24 +43,9 @@ function partitionByFlow(groups: SessionGroup[]): {
   let doneWorktreeCount = 0;
 
   for (const group of groups) {
-    const manualWorktrees = group.worktrees.filter(
-      (wt: WorktreeSessionGroup) =>
-        wt.agentWorktree != null &&
-        isActiveStatus(wt.agentWorktree.ticketStatus) &&
-        wt.sessions.length > 0,
-    );
-    const agenticWorktrees = group.worktrees.filter(
-      (wt: WorktreeSessionGroup) =>
-        wt.agentWorktree != null &&
-        isActiveStatus(wt.agentWorktree.ticketStatus) &&
-        wt.sessions.length === 0,
-    );
-    const doneWorktrees = group.worktrees.filter(
-      (wt: WorktreeSessionGroup) =>
-        wt.agentWorktree != null &&
-        !isActiveStatus(wt.agentWorktree.ticketStatus) &&
-        wt.sessions.length > 0,
-    );
+    const manualWorktrees = group.worktrees.filter((wt: WorktreeSessionGroup) => worktreeFlow(wt) === 'manual');
+    const agenticWorktrees = group.worktrees.filter((wt: WorktreeSessionGroup) => worktreeFlow(wt) === 'agentic');
+    const doneWorktrees = group.worktrees.filter((wt: WorktreeSessionGroup) => worktreeFlow(wt) === 'done');
 
     if (manualWorktrees.length > 0) {
       manualGroups.push({ ...group, worktrees: manualWorktrees });
