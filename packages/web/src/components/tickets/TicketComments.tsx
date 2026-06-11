@@ -14,6 +14,8 @@ import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
+import { Modal } from '../ui/Modal';
+import { Button } from '../ui/Button';
 import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
@@ -34,6 +36,20 @@ function buildMentionLookup(mentions: TicketMention[]): Map<string, Map<string, 
     map.set(text, m.id);
   }
   return lookup;
+}
+
+/**
+ * Extract the agent names mentioned in a comment body (`@agent:name`),
+ * mirroring the server parser: struck-through mentions (`~~@agent:name~~`)
+ * are ignored, since they're treated as cancelled.
+ */
+function parseAgentMentions(body: string): string[] {
+  const withoutStruck = body.replace(/~~[\s\S]*?~~/g, '');
+  const names = new Set<string>();
+  for (const match of withoutStruck.matchAll(/@agent:([a-zA-Z0-9_-]+)/g)) {
+    names.add(match[1]!);
+  }
+  return [...names];
 }
 
 // ── Mention pre-processing ──
@@ -465,6 +481,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const [modalExecutionId, setModalExecutionId] = useState<string | null>(null);
   const [modalTitle, setModalTitle] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // When the user mentions an agent that already has an unresolved mention, we
+  // hold the comment and ask how to proceed. Two kinds of ambiguity:
+  //  - 'busy'    : agent has a queued/in-flight run → supersede vs queue.
+  //  - 'waiting' : agent is waiting_for_info → is this the answer, or a new subject?
+  const [conflictModal, setConflictModal] = useState<
+    | { kind: 'busy'; agents: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> }
+    | { kind: 'waiting'; agents: Array<{ agent: string; displayName: string }> }
+    | null
+  >(null);
   const listEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -782,13 +807,20 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     }
   }, []);
 
-  const handleSubmit = useCallback(async () => {
+  // Actually post the comment. `mentionConflicts` tells the server how to
+  // handle agents that already have an unresolved mention on this ticket.
+  const doPost = useCallback(async (mentionConflicts: api.MentionConflictResolution[]) => {
     const trimmed = body.trim();
-    if (!trimmed || submitting) return;
+    if (!trimmed) return;
 
     setSubmitting(true);
     try {
-      const comment = await api.postTicketComment(ticketId, trimmed, executionMode);
+      const comment = await api.postTicketComment(
+        ticketId,
+        trimmed,
+        executionMode,
+        mentionConflicts.length > 0 ? mentionConflicts : undefined,
+      );
       setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
       // Posting a comment means we're caught up — mark everything as read
       markCommentsRead(ticketId, comment.createdAt).catch(() => {});
@@ -802,7 +834,55 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       setSubmitting(false);
       textareaRef.current?.focus();
     }
-  }, [body, submitting, ticketId, executionMode, markCommentsRead, clearDraft]);
+  }, [body, ticketId, executionMode, markCommentsRead, clearDraft]);
+
+  const handleSubmit = useCallback(async () => {
+    const trimmed = body.trim();
+    if (!trimmed || submitting) return;
+
+    // Detect re-mentions of an agent that already has an unresolved mention, and
+    // disambiguate. A WAITING agent is ambiguous (answer vs new subject) → ask.
+    // A pending/acknowledged agent (queued/in-flight run) → supersede vs queue.
+    const mentioned = parseAgentMentions(trimmed);
+    if (mentioned.length > 0) {
+      const waiting: Array<{ agent: string; displayName: string }> = [];
+      const busy: Array<{ agent: string; displayName: string; status: TicketMention['status'] }> = [];
+      for (const agent of mentioned) {
+        const unresolved = mentions.find(
+          (m) => m.targetType === 'agent' && m.targetAgent === agent && m.status !== 'resolved',
+        );
+        if (!unresolved) continue;
+        const persona = personas.find((p) => p.name === agent);
+        const displayName = persona?.displayName || persona?.name || agent;
+        if (unresolved.status === 'waiting_for_info') {
+          waiting.push({ agent, displayName });
+        } else if (unresolved.status === 'pending' || unresolved.status === 'acknowledged') {
+          busy.push({ agent, displayName, status: unresolved.status });
+        }
+      }
+
+      // Waiting takes priority: that's the ambiguity the user most needs to resolve.
+      if (waiting.length > 0) {
+        setConflictModal({ kind: 'waiting', agents: waiting });
+        return;
+      }
+      if (busy.length > 0) {
+        setConflictModal({ kind: 'busy', agents: busy });
+        return;
+      }
+    }
+
+    await doPost([]);
+  }, [body, submitting, mentions, personas, doPost]);
+
+  const confirmConflict = useCallback(async (action: api.MentionConflictAction) => {
+    if (!conflictModal) return;
+    const conflicts: api.MentionConflictResolution[] = conflictModal.agents.map(
+      (a) => ({ agent: a.agent, action }),
+    );
+    setConflictModal(null);
+    await doPost(conflicts);
+  }, [conflictModal, doPost]);
 
   const autoResize = useCallback(() => {
     const ta = textareaRef.current;
@@ -1105,6 +1185,60 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           title={modalTitle}
           onClose={() => setModalExecutionId(null)}
         />
+      )}
+
+      {/* Mention conflict: agent waiting for a reply — answer vs new subject */}
+      {conflictModal?.kind === 'waiting' && (
+        <Modal open onClose={() => setConflictModal(null)} maxWidth="max-w-md">
+          <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">
+            {conflictModal.agents.map((a) => a.displayName).join(', ')} attend ta réponse
+          </h3>
+          <p className="mt-2 text-xs leading-relaxed text-[var(--theme-text-secondary)]">
+            Tu mentionnes un agent qui attend ta réponse à sa question. Ce message est&nbsp;:
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button variant="primary" onClick={() => void confirmConflict('answer')}>
+              Ma réponse à sa question
+            </Button>
+            <Button variant="secondary" onClick={() => void confirmConflict('new_subject')}>
+              Un autre sujet à traiter
+            </Button>
+            <Button variant="ghost" onClick={() => setConflictModal(null)}>
+              Annuler
+            </Button>
+          </div>
+          <p className="mt-3 text-[11px] text-[var(--theme-text-secondary)]">
+            « Autre sujet » : l'agent continue d'attendre ta réponse (à donner dans un autre
+            message) et ta nouvelle demande sera traitée ensuite.
+          </p>
+        </Modal>
+      )}
+
+      {/* Mention conflict: agent already has a queued/in-flight run here */}
+      {conflictModal?.kind === 'busy' && (
+        <Modal open onClose={() => setConflictModal(null)} maxWidth="max-w-md">
+          <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">
+            Agent déjà sollicité sur ce ticket
+          </h3>
+          <p className="mt-2 text-xs leading-relaxed text-[var(--theme-text-secondary)]">
+            {conflictModal.agents.map((c) => c.displayName).join(', ')}{' '}
+            {conflictModal.agents.length > 1 ? 'ont' : 'a'} déjà une demande{' '}
+            {conflictModal.agents.some((c) => c.status === 'acknowledged') ? 'en cours' : 'en file'}{' '}
+            sur ce ticket. Deux exécutions en parallèle sur le même worktree se gêneraient.
+            Comment veux-tu enchaîner&nbsp;?
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button variant="primary" onClick={() => void confirmConflict('supersede')}>
+              Arrêter l'exécution en cours et reprendre avec ce message
+            </Button>
+            <Button variant="secondary" onClick={() => void confirmConflict('queue')}>
+              Laisser finir, puis enchaîner avec ce message
+            </Button>
+            <Button variant="ghost" onClick={() => setConflictModal(null)}>
+              Annuler
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   );

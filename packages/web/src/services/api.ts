@@ -518,9 +518,20 @@ export async function fetchTicketComments(ticketId: string): Promise<import('@fl
   return request<import('@fleex/shared').TicketComment[]>(`/tickets/${encodeURIComponent(ticketId)}/comments`);
 }
 
-export async function postTicketComment(ticketId: string, body: string, executionMode?: import('@fleex/shared').MentionExecutionMode): Promise<import('@fleex/shared').TicketComment> {
+export type MentionConflictAction = 'answer' | 'new_subject' | 'supersede' | 'queue';
+export interface MentionConflictResolution {
+  agent: string;
+  action: MentionConflictAction;
+}
+
+export async function postTicketComment(
+  ticketId: string,
+  body: string,
+  executionMode?: import('@fleex/shared').MentionExecutionMode,
+  mentionConflicts?: MentionConflictResolution[],
+): Promise<import('@fleex/shared').TicketComment> {
   return request<import('@fleex/shared').TicketComment>(`/tickets/${encodeURIComponent(ticketId)}/comments`, {
-    method: 'POST', body: JSON.stringify({ body, executionMode }),
+    method: 'POST', body: JSON.stringify({ body, executionMode, mentionConflicts }),
   });
 }
 

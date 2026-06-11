@@ -26,6 +26,13 @@ export class PostCommentUseCase {
     parentId?: string | null;
     humanMentionNames?: string[];
     executionMode?: MentionExecutionMode;
+    /**
+     * Agent names for which NO new mention should be created from this comment.
+     * Used when the user re-mentions an agent that is already waiting on this
+     * ticket: the comment still wakes the existing mention (resuming its
+     * session) instead of spawning a duplicate parallel mention.
+     */
+    suppressMentionForAgents?: string[];
   }): Promise<{ comment: TicketCommentEntity; createdMentions: TicketMentionEntity[] }> {
     const comment = TicketCommentEntity.create({
       id: randomUUID(),
@@ -45,10 +52,13 @@ export class PostCommentUseCase {
     const isAgentAuthored = params.authorType === 'agent';
     const mentionMode = params.executionMode ?? 'plan';
 
+    const suppressedAgents = new Set(params.suppressMentionForAgents ?? []);
+
     const createdMentions: TicketMentionEntity[] = [];
     if (!isAgentAuthored) {
       for (const targetAgent of comment.mentions) {
         if (targetAgent === params.authorName) continue; // don't self-mention
+        if (suppressedAgents.has(targetAgent)) continue; // re-mention of a waiting agent: wake the existing one, don't duplicate
         const mention = TicketMentionEntity.create({
           id: randomUUID(),
           ticketId: params.ticketId,

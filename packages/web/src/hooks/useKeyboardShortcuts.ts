@@ -6,6 +6,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useClaudeConfigStore } from '../stores/claudeConfigStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
 import * as api from '../services/api';
+import { worktreeFlow, SESSION_FLOW_ORDER } from '../lib/sessionFlow';
 import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
 import { floatingPositionRegistry } from '../components/main-panel/FloatingSessionOverlay';
 
@@ -45,9 +46,10 @@ export function useKeyboardShortcuts() {
   const layoutGroups = useSettingsStore((s) => s.settings.sessionLayoutGroups);
   const manualFlowCollapsed = useUIStore((s) => s.manualFlowCollapsed);
   const agenticFlowCollapsed = useUIStore((s) => s.agenticFlowCollapsed);
+  const doneFlowCollapsed = useUIStore((s) => s.doneFlowCollapsed);
 
-  // Build a flat list of worktrees in visual (sidebar) order.
-  // Order: System shells → manual worktrees → agentic worktrees.
+  // Build a flat list of worktrees in visual (sidebar) order, matching
+  // SessionGroups: System shells → Manual → Agentic → Done.
   // Collapsed sections are skipped.
   const orderedWorktrees = useMemo(() => {
     const entries: Array<{ key: string; sessions: string[]; ticketId?: string; agentTicketId?: string }> = [];
@@ -110,22 +112,23 @@ export function useKeyboardShortcuts() {
       }
     };
 
-    // 2. Manual worktrees (has tmux sessions) — skip if collapsed
-    if (!manualFlowCollapsed) {
+    // 2. Manual → 3. Agentic → 4. Done, matching the sidebar's on-screen order
+    // (SessionGroups). Classification is shared via `worktreeFlow` so navigation
+    // can never drift from the rendered order. Collapsed sections are skipped.
+    const collapsedByFlow = {
+      manual: manualFlowCollapsed,
+      agentic: agenticFlowCollapsed,
+      done: doneFlowCollapsed,
+    };
+    for (const flow of SESSION_FLOW_ORDER) {
+      if (collapsedByFlow[flow]) continue;
       for (const group of sortedGroups) {
-        addWorktrees(group, (wt) => wt.sessions.length > 0);
-      }
-    }
-
-    // 3. Agentic worktrees (agent-only, no tmux) — skip if collapsed
-    if (!agenticFlowCollapsed) {
-      for (const group of sortedGroups) {
-        addWorktrees(group, (wt) => wt.sessions.length === 0 && wt.agentWorktree != null);
+        addWorktrees(group, (wt) => worktreeFlow(wt) === flow);
       }
     }
 
     return entries;
-  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder, manualFlowCollapsed, agenticFlowCollapsed]);
+  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder, manualFlowCollapsed, agenticFlowCollapsed, doneFlowCollapsed]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {

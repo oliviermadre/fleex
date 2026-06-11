@@ -356,12 +356,19 @@ export class DomainEventListener {
   // ── Wake waiting agents on new content ──
 
   private async handleWakeWaitingOnComment(event: CommentPostedEvent): Promise<void> {
-    const excludeAgent = event.authorType === 'agent' ? event.authorName : undefined;
-    await this.deps.wakeWaitingAgents.execute(event.ticketId, excludeAgent, event.executionMode);
+    // A plain reply (or a re-mention disambiguated as "answer") wakes the waiting
+    // agent and is fed to it. Agents the user marked as "new subject" (or the
+    // race default) are in wakeExcludeAgents and stay waiting. Also exclude the
+    // author itself when an agent posts, to avoid self-wake.
+    const exclude = [
+      ...(event.authorType === 'agent' ? [event.authorName] : []),
+      ...(event.wakeExcludeAgents ?? []),
+    ];
+    await this.deps.wakeWaitingAgents.execute(event.ticketId, exclude, event.executionMode);
   }
 
   private async handleWakeWaitingOnDeliverable(event: DeliverableCreatedEvent): Promise<void> {
-    await this.deps.wakeWaitingAgents.execute(event.ticketId, event.agentName);
+    await this.deps.wakeWaitingAgents.execute(event.ticketId, event.agentName ? [event.agentName] : []);
   }
 
   // ── Auto-generate ticket summary on close ──

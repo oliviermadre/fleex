@@ -61,6 +61,12 @@ export interface CommentPostedEvent extends DomainEvent {
     targetAgent: string;
     targetType: MentionTargetType;
   }>;
+  /**
+   * Agents that must NOT be woken by this comment even if they are
+   * waiting_for_info — the user re-mentioned them for a SEPARATE subject (or the
+   * disambiguation defaulted that way), so their pending question stays open.
+   */
+  wakeExcludeAgents?: string[];
 }
 
 export interface CommentUpdatedEvent extends DomainEvent {

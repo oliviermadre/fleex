@@ -366,6 +366,9 @@ export async function createContainer() {
   // Wire eventBus + config (avoids circular constructor dep)
   createWorktreeUC.eventBus = eventBus;
   executeAgent.eventBus = eventBus;
+  // Re-drain the per-(agent,ticket) queue when a thread frees its lane via an
+  // external resolve/delete (e.g. manual UI resolve of a waiting_for_info mention).
+  executeAgent.subscribeToBus(eventBus);
   executeAgent.fileMetaStore = fileMetaStore;
   executeAgent.fileStore = fileStore;
   executeAgent.bareCloneManager = bareCloneManager;
