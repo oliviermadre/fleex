@@ -1,10 +1,12 @@
 import type { Session, SessionGroup, DashboardPullRequest, DashboardWorktree } from '@fleex/shared';
+import { isSidebarSession } from '@fleex/shared';
 
 /**
  * Running sessions for a ticket, via the backend's authoritative worktree
  * grouping (WorktreeSessionGroup.ticketId). Use this instead of matching
  * against ticket.links — links can be missing or stale, the backend grouping
  * is the source of truth and is what UnifiedWorktreePanel consumes.
+ * Sidebar terminals are excluded — they live in their parent's right panel.
  */
 export function findSessionsForTicketId(
   ticketId: string,
@@ -15,7 +17,7 @@ export function findSessionsForTicketId(
     for (const wt of group.worktrees) {
       if (wt.ticketId !== ticketId && wt.agentWorktree?.ticketId !== ticketId) continue;
       for (const s of wt.sessions) {
-        if (s.status === 'running' && !out.some((x) => x.id === s.id)) {
+        if (s.status === 'running' && !isSidebarSession(s) && !out.some((x) => x.id === s.id)) {
           out.push(s);
         }
       }
@@ -35,6 +37,7 @@ export function findSessionsForPR(
   return sessions.filter(
     (s) =>
       s.status === 'running' &&
+      !isSidebarSession(s) &&
       s.worktreeBranch === pr.headRefName &&
       s.repositoryOrg === pr.org &&
       s.repositoryName === pr.name,

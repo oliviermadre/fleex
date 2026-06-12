@@ -3,6 +3,10 @@ export const FLEEX_SHELL_PREFIX = 'fleex_shell_';
 export const FLEEX_CLAUDE_PREFIX = 'fleex_claude_';
 export const FLEEX_SIDEBAR_PREFIX = 'fleex_sidebar_';
 
+/** A sidebar terminal session, hosted in a parent session's right panel — excluded from main session lists. */
+export const isSidebarSession = (s: { tmuxName: string }): boolean =>
+  s.tmuxName.startsWith(FLEEX_SIDEBAR_PREFIX);
+
 export const DEFAULT_COLS = 120;
 export const DEFAULT_ROWS = 30;
 
