@@ -1197,6 +1197,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         {/* Line 2 — conversation execution bar (mode / model / effort / fast) */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {/* Mode: single pill, cycles Talk→Plan→Edit on click (or Shift+Tab) */}
+          <span className="text-[var(--theme-text-secondary)]">Mode :</span>
           <button
             type="button"
             onClick={cycleMode}
@@ -1208,6 +1209,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           </button>
 
           {/* Model override dropdown — default "Auto (persona)" */}
+          <span className="ml-1 text-[var(--theme-text-secondary)]">Model :</span>
           <label className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[var(--theme-text-secondary)]">
             <span className="opacity-60">🤖</span>
             <select
