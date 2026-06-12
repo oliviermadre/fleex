@@ -21,6 +21,8 @@ interface ExecutionRow {
   last_event_at: string | null;
   model: string | null;
   effective_mode: string | null;
+  effort: string | null;
+  fast_mode: boolean | null;
   duration_ms: number | null;
   cost_usd: number | null;
   input_tokens: number | null;
@@ -48,6 +50,8 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     ticketId: string;
     mentionId: string;
     model?: string;
+    effort?: string;
+    fast?: boolean;
   }): Promise<void> {
     const { error } = await this.conn.client.from('agent_event_executions').insert({
       execution_id: params.executionId,
@@ -58,6 +62,8 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       status: 'running',
       started_at: new Date().toISOString(),
       model: params.model ?? null,
+      effort: params.effort ?? null,
+      fast_mode: params.fast ?? null,
     });
     if (error) throw new Error(`SupabaseAgentEventStore.startExecution failed: ${error.message}`);
   }
@@ -86,12 +92,14 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
   }
 
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string; effectiveMode?: string; durationMs?: number; costUsd?: number;
+    model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
   }): Promise<void> {
     const update: Record<string, unknown> = { status, completed_at: new Date().toISOString() };
     if (metrics?.model) update.model = metrics.model;
     if (metrics?.effectiveMode) update.effective_mode = metrics.effectiveMode;
+    if (metrics?.effort) update.effort = metrics.effort;
+    if (metrics?.fast != null) update.fast_mode = metrics.fast;
     if (metrics?.durationMs != null) update.duration_ms = metrics.durationMs;
     if (metrics?.costUsd != null) update.cost_usd = metrics.costUsd;
     if (metrics?.inputTokens != null) update.input_tokens = metrics.inputTokens;
@@ -217,6 +225,8 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     sdkSessionId: row.sdk_session_id,
     model: row.model ?? null,
     effectiveMode: row.effective_mode ?? null,
+    effort: row.effort ?? null,
+    fast: row.fast_mode ?? null,
     durationMs: row.duration_ms ?? null,
     costUsd: row.cost_usd ?? null,
     inputTokens: row.input_tokens ?? null,

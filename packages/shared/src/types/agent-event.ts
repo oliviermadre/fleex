@@ -11,6 +11,10 @@ export interface AgentExecution {
   readonly sdkSessionId?: string | null;
   readonly model?: string | null;
   readonly effectiveMode?: string | null;
+  /** Resolved reasoning effort that actually ran (if the model supports it). */
+  readonly effort?: string | null;
+  /** Whether fast/low-latency mode actually ran (if the model supports it). */
+  readonly fast?: boolean | null;
   readonly durationMs?: number | null;
   readonly costUsd?: number | null;
   readonly inputTokens?: number | null;

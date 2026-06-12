@@ -685,6 +685,8 @@ export class ExecuteAgentUseCase {
         ticketId: mention.ticketId,
         mentionId: mention.id,
         model: resolved.model,
+        effort: resolved.effort,
+        fast: resolved.fast,
       });
 
       // 4. Compose system prompt from persona files
@@ -920,7 +922,7 @@ export class ExecuteAgentUseCase {
         const reason = abortController.signal.reason instanceof Error && abortController.signal.reason.message === 'timeout'
           ? 'timeout' : 'cancelled';
         await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: resolved.model, effectiveMode });
+        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         mention.resetToPending();
         await this.mentionStore.save(mention);
@@ -940,7 +942,7 @@ export class ExecuteAgentUseCase {
         await emitEvent('error', {
           error: 'Agent SDK produced no output (subprocess likely crashed at startup). Check ~/.fleex/.logs/main/server.log for EPIPE / spawn errors.',
         });
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode });
+        await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         mention.resetToPending();
         await this.mentionStore.save(mention);
@@ -1168,6 +1170,8 @@ export class ExecuteAgentUseCase {
       await this.agentEventStore.completeExecution(executionId, 'completed', {
         model: resolved.model,
         effectiveMode,
+        effort: resolved.effort,
+        fast: resolved.fast,
         durationMs: sdkDurationMs,
         costUsd: sdkCostUsd,
         inputTokens: sdkInputTokens,

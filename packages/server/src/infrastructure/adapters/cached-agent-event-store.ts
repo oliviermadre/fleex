@@ -57,6 +57,8 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     ticketId: string;
     mentionId: string;
     model?: string;
+    effort?: string;
+    fast?: boolean;
   }): Promise<void> {
     await this.inner.startExecution(params);
     this.executions.set(params.executionId, {
@@ -72,6 +74,8 @@ export class CachedAgentEventStore implements AgentEventStorePort {
       sdkSessionId: null,
       model: params.model ?? null,
       effectiveMode: null,
+      effort: params.effort ?? null,
+      fast: params.fast ?? null,
       durationMs: null,
       costUsd: null,
       inputTokens: null,
@@ -82,7 +86,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
   }
 
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string; effectiveMode?: string; durationMs?: number; costUsd?: number;
+    model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
   }): Promise<void> {
     await this.inner.completeExecution(executionId, status, metrics);
@@ -94,6 +98,8 @@ export class CachedAgentEventStore implements AgentEventStorePort {
         completedAt: new Date().toISOString(),
         ...(metrics?.model != null && { model: metrics.model }),
         ...(metrics?.effectiveMode != null && { effectiveMode: metrics.effectiveMode }),
+        ...(metrics?.effort != null && { effort: metrics.effort }),
+        ...(metrics?.fast != null && { fast: metrics.fast }),
         ...(metrics?.durationMs != null && { durationMs: metrics.durationMs }),
         ...(metrics?.costUsd != null && { costUsd: metrics.costUsd }),
         ...(metrics?.inputTokens != null && { inputTokens: metrics.inputTokens }),
