@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
 import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel } from '@fleex/shared';
 import { EFFORT_LEVELS } from '@fleex/shared';
 import Markdown from 'react-markdown';
@@ -14,6 +14,7 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useModels } from '../../hooks/useModels';
+import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -751,7 +752,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const markCommentsRead = useUnreadStore((s) => s.markCommentsRead);
   const cursorsByTicket = useUnreadStore((s) => s.cursorsByTicket);
   const commentLastSeenAt = cursorsByTicket[ticketId]?.commentLastSeenAt ?? null;
-  const listContainerRef = useRef<HTMLDivElement>(null);
+  // Stick-to-bottom: follow new comments / "is working" indicators only when
+  // already scrolled to the bottom. containerRef is the scrollable list element.
+  const {
+    containerRef: listContainerRef,
+    scrollToBottom,
+    maybeStick,
+  } = useStickToBottom<HTMLDivElement>();
+  // Set when the user posts a comment themselves → force scroll to bottom on next render.
+  const forceScrollRef = useRef(false);
   // When user option+clicks to pin cursor, suppress auto-mark-read
   const cursorPinnedRef = useRef(false);
 
@@ -831,9 +840,17 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     return unsub;
   }, [ticketId]);
 
-  useEffect(() => {
-    listEndRef.current?.scrollIntoView({ behavior: 'instant' });
-  }, [comments.length]);
+  // Follow new content (comments + "is working" / "waiting" indicators) only
+  // when already at the bottom. Exception: when the user just posted, force a
+  // scroll to the bottom so they immediately see their comment + the agent ack.
+  useLayoutEffect(() => {
+    if (forceScrollRef.current) {
+      forceScrollRef.current = false;
+      scrollToBottom();
+    } else {
+      maybeStick();
+    }
+  }, [comments.length, runningAgents.length, waitingAgents.length, scrollToBottom, maybeStick]);
 
   // Auto-mark comments as read when scrolled to the bottom.
   // Skipped when the cursor is pinned (user option+clicked to set a manual cursor).
@@ -908,6 +925,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         undefined,
         mentionConflicts.length > 0 ? mentionConflicts : undefined,
       );
+      // The user just posted: force the view to the bottom so they see their
+      // comment and the agent's "is working" acknowledgement without scrolling.
+      forceScrollRef.current = true;
       setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
       // Posting a comment means we're caught up — mark everything as read
       markCommentsRead(ticketId, comment.createdAt).catch(() => {});
