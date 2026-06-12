@@ -21,6 +21,8 @@ interface ExecutionRow {
   last_event_at: string | null;
   model: string | null;
   effective_mode: string | null;
+  effort: string | null;
+  fast_mode: number | null;
   duration_ms: number | null;
   cost_usd: number | null;
   input_tokens: number | null;
@@ -47,17 +49,23 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    model?: string;
+    effort?: string;
+    fast?: boolean;
   }): Promise<void> {
     this.conn.db.prepare(`
       INSERT INTO agent_event_executions
-        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at)
-      VALUES (@execution_id, @persona_id, @ticket_id, @mention_id, 0, 'running', @started_at)
+        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, model, effort, fast_mode)
+      VALUES (@execution_id, @persona_id, @ticket_id, @mention_id, 0, 'running', @started_at, @model, @effort, @fast_mode)
     `).run({
       execution_id: params.executionId,
       persona_id: params.personaId,
       ticket_id: params.ticketId,
       mention_id: params.mentionId,
       started_at: new Date().toISOString(),
+      model: params.model ?? null,
+      effort: params.effort ?? null,
+      fast_mode: params.fast == null ? null : params.fast ? 1 : 0,
     });
   }
 
@@ -72,13 +80,15 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
   }
 
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string; effectiveMode?: string; durationMs?: number; costUsd?: number;
+    model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
   }): Promise<void> {
     this.conn.db.prepare(
       `UPDATE agent_event_executions SET status = ?, completed_at = ?,
        model = COALESCE(?, model),
        effective_mode = COALESCE(?, effective_mode),
+       effort = COALESCE(?, effort),
+       fast_mode = COALESCE(?, fast_mode),
        duration_ms = COALESCE(?, duration_ms),
        cost_usd = COALESCE(?, cost_usd),
        input_tokens = COALESCE(?, input_tokens),
@@ -90,6 +100,8 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
       status, new Date().toISOString(),
       metrics?.model ?? null,
       metrics?.effectiveMode ?? null,
+      metrics?.effort ?? null,
+      metrics?.fast == null ? null : metrics.fast ? 1 : 0,
       metrics?.durationMs ?? null,
       metrics?.costUsd ?? null,
       metrics?.inputTokens ?? null,
@@ -195,6 +207,8 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     sdkSessionId: row.sdk_session_id,
     model: row.model ?? null,
     effectiveMode: row.effective_mode ?? null,
+    effort: row.effort ?? null,
+    fast: row.fast_mode == null ? null : !!row.fast_mode,
     durationMs: row.duration_ms ?? null,
     costUsd: row.cost_usd ?? null,
     inputTokens: row.input_tokens ?? null,

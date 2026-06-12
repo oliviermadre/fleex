@@ -1,4 +1,5 @@
-import type { Ticket, TicketStatus, TicketPriority, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata } from '@fleex/shared';
+import type { Ticket, TicketStatus, TicketPriority, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
+import { DEFAULT_CONVERSATION_MODE } from '@fleex/shared';
 
 export class TicketEntity {
   constructor(
@@ -24,6 +25,12 @@ export class TicketEntity {
     public statusChangedAt: Date,
     public readonly createdAt: Date,
     public updatedAt: Date,
+    // ── Conversation-scoped execution config (appended; default-backed so
+    // existing positional callers keep compiling). ──
+    public conversationMode: ConversationMode = DEFAULT_CONVERSATION_MODE,
+    public modelOverride: string | null = null,
+    public effortOverride: EffortLevel | null = null,
+    public fastMode: boolean = false,
   ) {}
 
   static create(params: {
@@ -168,6 +175,42 @@ export class TicketEntity {
     return diff;
   }
 
+  /**
+   * Update the conversation-scoped execution config. Only the provided keys are
+   * applied; `null` clears the model/effort override. Returns a diff so the
+   * caller can broadcast/log it. Never creates a comment.
+   */
+  updateExecutionConfig(changes: {
+    conversationMode?: ConversationMode;
+    modelOverride?: string | null;
+    effortOverride?: EffortLevel | null;
+    fastMode?: boolean;
+  }): Record<string, { from: unknown; to: unknown }> {
+    const diff: Record<string, { from: unknown; to: unknown }> = {};
+
+    if (changes.conversationMode !== undefined && changes.conversationMode !== this.conversationMode) {
+      diff['conversationMode'] = { from: this.conversationMode, to: changes.conversationMode };
+      this.conversationMode = changes.conversationMode;
+    }
+    if (changes.modelOverride !== undefined && changes.modelOverride !== this.modelOverride) {
+      diff['modelOverride'] = { from: this.modelOverride, to: changes.modelOverride };
+      this.modelOverride = changes.modelOverride;
+    }
+    if (changes.effortOverride !== undefined && changes.effortOverride !== this.effortOverride) {
+      diff['effortOverride'] = { from: this.effortOverride, to: changes.effortOverride };
+      this.effortOverride = changes.effortOverride;
+    }
+    if (changes.fastMode !== undefined && changes.fastMode !== this.fastMode) {
+      diff['fastMode'] = { from: this.fastMode, to: changes.fastMode };
+      this.fastMode = changes.fastMode;
+    }
+
+    if (Object.keys(diff).length > 0) {
+      this.updatedAt = new Date();
+    }
+    return diff;
+  }
+
   setGithubMetadata(metadata: GitHubIssueMetadata | null): void {
     this.githubMetadata = metadata;
     this.updatedAt = new Date();
@@ -273,6 +316,10 @@ export class TicketEntity {
       archivedAt: this.archivedAt?.toISOString() ?? null,
       firstDoingAt: this.firstDoingAt?.toISOString() ?? null,
       statusChangedAt: this.statusChangedAt.toISOString(),
+      conversationMode: this.conversationMode,
+      modelOverride: this.modelOverride,
+      effortOverride: this.effortOverride,
+      fastMode: this.fastMode,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };

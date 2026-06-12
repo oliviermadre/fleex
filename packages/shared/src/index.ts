@@ -30,7 +30,7 @@ export type { ParsedSlackMessageUrl } from './slack.js';
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
 
 export type { ModelFamily, ModelOption, ModelsResponse } from './types/model.js';
-export { FALLBACK_MODELS } from './types/model.js';
+export { FALLBACK_MODELS, inferModelCapabilities } from './types/model.js';
 
 export type {
   HookEventType,
@@ -89,6 +89,8 @@ export type {
   TicketStatus,
   TicketPriority,
   TicketType,
+  ConversationMode,
+  EffortLevel,
   TicketLinkType,
   TicketLink,
   GitHubIssueMetadata,
@@ -97,6 +99,7 @@ export type {
   BoardWithCounts,
   CreateTicketRequest,
   UpdateTicketRequest,
+  UpdateTicketExecutionConfigRequest,
   CreateBoardRequest,
   UpdateBoardRequest,
   TicketActivity,
@@ -132,6 +135,10 @@ export {
   DEFAULT_DELIVERABLE_TYPES,
   TICKET_SUMMARY_TYPE,
   DELIVERABLE_STATUSES,
+  DEFAULT_CONVERSATION_MODE,
+  EFFORT_LEVELS,
+  isConversationMode,
+  isEffortLevel,
   isDeliverableType,
   isDeliverableStatus,
   normalizeDeliverableTypes,

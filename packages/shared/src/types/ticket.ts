@@ -1,6 +1,33 @@
 export type TicketStatus = 'backlog' | 'todo' | 'doing' | 'reviewing' | 'done' | 'cancelled';
 export type TicketPriority = 'none' | 'low' | 'medium' | 'high';
 export type TicketType = 'build' | 'fix' | 'review' | 'ops' | 'lead' | 'think';
+
+/**
+ * Conversation-scoped execution mode. Persisted on the ticket and resolved at
+ * the moment a mention is acknowledged/woken (NOT stamped per-message). Mirrors
+ * the Claude Code mental model where the mode belongs to the conversation.
+ */
+export type ConversationMode = 'talk' | 'plan' | 'edit';
+
+/** Default mode for a brand-new ticket: read-only, the safest starting point. */
+export const DEFAULT_CONVERSATION_MODE: ConversationMode = 'plan';
+
+/**
+ * Reasoning-effort level, conversation-scoped override. Subset of the Claude
+ * Agent SDK's EffortLevel exposed in the UI. Only applied when the resolved
+ * model advertises effort support (see ModelOption.supportsEffort).
+ */
+export type EffortLevel = 'low' | 'medium' | 'high';
+
+export const EFFORT_LEVELS: readonly EffortLevel[] = ['low', 'medium', 'high'] as const;
+
+export function isConversationMode(v: unknown): v is ConversationMode {
+  return v === 'talk' || v === 'plan' || v === 'edit';
+}
+
+export function isEffortLevel(v: unknown): v is EffortLevel {
+  return v === 'low' || v === 'medium' || v === 'high';
+}
 export type TicketLinkType = 'github_issue' | 'github_pr' | 'worktree' | 'session' | 'repository' | 'slack_message';
 
 export interface TicketLink {
@@ -42,8 +69,32 @@ export interface Ticket {
   readonly archivedAt: string | null;
   readonly firstDoingAt: string | null;
   readonly statusChangedAt: string;
+  // ── Conversation-scoped execution config ──
+  // Resolved when a mention is acknowledged/woken, never stamped per-message.
+  /** Current mode of the conversation (talk/plan/edit). Defaults to 'plan'. */
+  readonly conversationMode: ConversationMode;
+  /** When set, overrides the mentioned agent's persona model for the next run. null = inherit persona. */
+  readonly modelOverride: string | null;
+  /** When set, overrides reasoning effort (if the resolved model supports it). null = model/persona default. */
+  readonly effortOverride: EffortLevel | null;
+  /** When true, request fast mode (if the resolved model supports it). */
+  readonly fastMode: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+/**
+ * Partial update of a ticket's conversation-scoped execution config. Applied
+ * via PATCH /api/tickets/:id/execution-config. Persisting it never creates a
+ * comment; it only affects the NEXT mention that acknowledges/wakes.
+ */
+export interface UpdateTicketExecutionConfigRequest {
+  readonly conversationMode?: ConversationMode;
+  /** Pass null to clear the override (inherit persona model). */
+  readonly modelOverride?: string | null;
+  /** Pass null to clear the override. */
+  readonly effortOverride?: EffortLevel | null;
+  readonly fastMode?: boolean;
 }
 
 export interface Board {

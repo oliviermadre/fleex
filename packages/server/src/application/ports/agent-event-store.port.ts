@@ -7,6 +7,16 @@ export interface AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    /**
+     * The model that will run this execution (conversation override or persona
+     * default). Recorded up-front so cost tracking / the audit trail know which
+     * model ran even if the execution is cancelled or crashes before completion.
+     */
+    model?: string;
+    /** Resolved reasoning effort (if the model supports it), recorded up-front. */
+    effort?: string;
+    /** Resolved fast/low-latency mode (if the model supports it), recorded up-front. */
+    fast?: boolean;
   }): Promise<void>;
 
   appendEvent(event: AgentEventEntity): Promise<void>;
@@ -14,6 +24,8 @@ export interface AgentEventStorePort {
   completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string;
     effectiveMode?: string;
+    effort?: string;
+    fast?: boolean;
     durationMs?: number;
     costUsd?: number;
     inputTokens?: number;

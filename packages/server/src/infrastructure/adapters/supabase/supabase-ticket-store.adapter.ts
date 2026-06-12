@@ -1,4 +1,4 @@
-import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata } from '@fleex/shared';
+import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -39,6 +39,10 @@ interface TicketRow {
   archived_at: string | null;
   first_doing_at: string | null;
   status_changed_at: string;
+  conversation_mode: string | null;
+  model_override: string | null;
+  effort_override: string | null;
+  fast_mode: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -90,6 +94,10 @@ function ticketRowToEntity(r: TicketRow): TicketEntity {
     new Date(r.status_changed_at),
     new Date(r.created_at),
     new Date(r.updated_at),
+    (r.conversation_mode as ConversationMode | null) ?? 'plan',
+    r.model_override ?? null,
+    (r.effort_override as EffortLevel | null) ?? null,
+    r.fast_mode === true,
   );
 }
 
@@ -265,6 +273,10 @@ export class SupabaseTicketStore implements TicketStorePort {
       archived_at: ticket.archivedAt?.toISOString() ?? null,
       first_doing_at: ticket.firstDoingAt?.toISOString() ?? null,
       status_changed_at: ticket.statusChangedAt.toISOString(),
+      conversation_mode: ticket.conversationMode,
+      model_override: ticket.modelOverride,
+      effort_override: ticket.effortOverride,
+      fast_mode: ticket.fastMode,
       created_at: ticket.createdAt.toISOString(),
       updated_at: ticket.updatedAt.toISOString(),
     });

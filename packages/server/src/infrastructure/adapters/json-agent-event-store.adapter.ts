@@ -19,6 +19,8 @@ interface ExecutionIndex {
   sdkSessionId?: string | null;
   model?: string;
   effectiveMode?: string;
+  effort?: string;
+  fast?: boolean;
   durationMs?: number;
   costUsd?: number;
   inputTokens?: number;
@@ -56,6 +58,9 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    model?: string;
+    effort?: string;
+    fast?: boolean;
   }): Promise<void> {
     const entry: ExecutionIndex = {
       id: params.executionId,
@@ -67,6 +72,9 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       startedAt: new Date().toISOString(),
       completedAt: null,
       lastEventAt: null,
+      model: params.model ?? undefined,
+      effort: params.effort ?? undefined,
+      fast: params.fast ?? undefined,
     };
     this.index.push(entry);
     await this.syncIndex();
@@ -89,7 +97,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
   }
 
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string; effectiveMode?: string; durationMs?: number; costUsd?: number;
+    model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
   }): Promise<void> {
     const entry = this.index.find((e) => e.id === executionId);
@@ -98,6 +106,8 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       entry.completedAt = new Date().toISOString();
       if (metrics?.model) entry.model = metrics.model;
       if (metrics?.effectiveMode) entry.effectiveMode = metrics.effectiveMode;
+      if (metrics?.effort) entry.effort = metrics.effort;
+      if (metrics?.fast != null) entry.fast = metrics.fast;
       if (metrics?.durationMs != null) entry.durationMs = metrics.durationMs;
       if (metrics?.costUsd != null) entry.costUsd = metrics.costUsd;
       if (metrics?.inputTokens != null) entry.inputTokens = metrics.inputTokens;
@@ -204,6 +214,16 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       completedAt: entry.completedAt,
       lastEventAt: entry.lastEventAt ?? null,
       sdkSessionId: entry.sdkSessionId,
+      model: entry.model ?? null,
+      effectiveMode: entry.effectiveMode ?? null,
+      effort: entry.effort ?? null,
+      fast: entry.fast ?? null,
+      durationMs: entry.durationMs ?? null,
+      costUsd: entry.costUsd ?? null,
+      inputTokens: entry.inputTokens ?? null,
+      outputTokens: entry.outputTokens ?? null,
+      cacheReadTokens: entry.cacheReadTokens ?? null,
+      cacheCreationTokens: entry.cacheCreationTokens ?? null,
     };
   }
 

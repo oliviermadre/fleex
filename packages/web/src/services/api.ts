@@ -332,6 +332,20 @@ export async function updateTicketSilent(id: string, req: import('@fleex/shared'
   return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}?silent=true`, { method: 'PATCH', body: JSON.stringify(req) });
 }
 
+/**
+ * Update the conversation-scoped execution config (mode/model/effort/fast).
+ * Persists immediately and broadcasts ticket:updated; sends no comment.
+ */
+export async function updateTicketExecutionConfig(
+  id: string,
+  req: import('@fleex/shared').UpdateTicketExecutionConfigRequest,
+): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(
+    `/tickets/${encodeURIComponent(id)}/execution-config`,
+    { method: 'PATCH', body: JSON.stringify(req) },
+  );
+}
+
 export async function deleteTicket(id: string): Promise<void> {
   await request<void>(`/tickets/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

@@ -26,12 +26,16 @@ export class PgAgentEventStore implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    model?: string;
+    effort?: string;
+    fast?: boolean;
   }): Promise<void> {
     await this.db.query(
       `INSERT INTO agent_event_executions
-        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at)
-       VALUES ($1, $2, $3, $4, 0, 'running', $5)`,
-      [params.executionId, params.personaId, params.ticketId, params.mentionId, new Date().toISOString()],
+        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, model, effort, fast_mode)
+       VALUES ($1, $2, $3, $4, 0, 'running', $5, $6, $7, $8)`,
+      [params.executionId, params.personaId, params.ticketId, params.mentionId, new Date().toISOString(),
+       params.model ?? null, params.effort ?? null, params.fast ?? null],
     );
   }
 
@@ -47,17 +51,19 @@ export class PgAgentEventStore implements AgentEventStorePort {
   }
 
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string; effectiveMode?: string; durationMs?: number; costUsd?: number;
+    model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
   }): Promise<void> {
     await this.db.query(
       `UPDATE agent_event_executions SET status = $1, completed_at = $2,
        model = COALESCE($3, model), effective_mode = COALESCE($4, effective_mode),
-       duration_ms = COALESCE($5, duration_ms), cost_usd = COALESCE($6, cost_usd),
-       input_tokens = COALESCE($7, input_tokens), output_tokens = COALESCE($8, output_tokens),
-       cache_read_tokens = COALESCE($9, cache_read_tokens), cache_creation_tokens = COALESCE($10, cache_creation_tokens)
-       WHERE execution_id = $11`,
+       effort = COALESCE($5, effort), fast_mode = COALESCE($6, fast_mode),
+       duration_ms = COALESCE($7, duration_ms), cost_usd = COALESCE($8, cost_usd),
+       input_tokens = COALESCE($9, input_tokens), output_tokens = COALESCE($10, output_tokens),
+       cache_read_tokens = COALESCE($11, cache_read_tokens), cache_creation_tokens = COALESCE($12, cache_creation_tokens)
+       WHERE execution_id = $13`,
       [status, new Date().toISOString(), metrics?.model ?? null, metrics?.effectiveMode ?? null,
+       metrics?.effort ?? null, metrics?.fast ?? null,
        metrics?.durationMs ?? null, metrics?.costUsd ?? null, metrics?.inputTokens ?? null,
        metrics?.outputTokens ?? null, metrics?.cacheReadTokens ?? null, metrics?.cacheCreationTokens ?? null, executionId],
     );
@@ -161,6 +167,8 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     sdkSessionId: (row.sdk_session_id as string) ?? null,
     model: (row.model as string) ?? null,
     effectiveMode: (row.effective_mode as string) ?? null,
+    effort: (row.effort as string) ?? null,
+    fast: row.fast_mode == null ? null : (row.fast_mode as boolean),
     durationMs: (row.duration_ms as number) ?? null,
     costUsd: (row.cost_usd as number) ?? null,
     inputTokens: (row.input_tokens as number) ?? null,

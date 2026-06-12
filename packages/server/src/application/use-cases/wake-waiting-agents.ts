@@ -1,4 +1,3 @@
-import type { MentionExecutionMode } from '@fleex/shared';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { ExecuteAgentUseCase } from './execute-agent.js';
 import type { LoggerPort } from '../ports/logger.port.js';
@@ -19,19 +18,18 @@ export class WakeWaitingAgentsUseCase {
    *   (avoids self-wake loops) AND any agent freshly re-mentioned by the same
    *   comment — a re-mention is a NEW queued request for that agent, not an
    *   answer to its pending question, so its waiting thread must stay parked.
-   * @param executionMode - If provided, update the waiting mention's execution mode before waking
+   *
+   * The execution mode is NOT passed in here: it is resolved from the ticket's
+   * conversation-scoped config when the mention is re-acknowledged in
+   * `executeForMention`, so a woken agent always picks up the current settings.
    */
-  async execute(ticketId: string, excludeAgentNames?: readonly string[], executionMode?: MentionExecutionMode): Promise<void> {
+  async execute(ticketId: string, excludeAgentNames?: readonly string[]): Promise<void> {
     const excluded = new Set(excludeAgentNames ?? []);
     const waitingMentions = await this.mentionStore.getWaitingByTicket(ticketId);
 
     for (const mention of waitingMentions) {
       if (excluded.has(mention.targetAgent)) {
         continue;
-      }
-
-      if (executionMode) {
-        mention.executionMode = executionMode;
       }
 
       try {

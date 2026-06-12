@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode } from '@fleex/shared';
+import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel } from '@fleex/shared';
+import { inferModelCapabilities } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
+import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
@@ -562,6 +564,36 @@ export class ExecuteAgentUseCase {
       });
   }
 
+  /**
+   * Resolve the conversation-scoped execution config for a mention about to run.
+   *
+   * - mode  = min(persona ceiling, ticket.conversationMode). A `message` persona
+   *   is capped at `talk`; a `claude_code` persona inherits the ticket's mode.
+   * - model = ticket.modelOverride ?? persona.model.
+   * - effort = ticket.effortOverride, applied only if the resolved model supports it.
+   * - fast  = ticket.fastMode, applied only if the resolved model supports it.
+   *
+   * The ticket may be null (deleted mid-flight) — we fall back to persona defaults
+   * and `plan` mode so execution still proceeds safely.
+   */
+  private resolveExecutionConfig(
+    persona: AgentPersonaEntity,
+    ticket: TicketEntity | null,
+  ): { mode: MentionExecutionMode; model: string; effort?: EffortLevel; fast: boolean } {
+    const conversationMode: MentionExecutionMode = ticket?.conversationMode ?? 'plan';
+    const mode: MentionExecutionMode = persona.executionMode === 'message'
+      ? 'talk'
+      : conversationMode;
+
+    const model = ticket?.modelOverride ?? persona.model;
+    const caps = inferModelCapabilities(model);
+
+    const effort = caps.supportsEffort && ticket?.effortOverride ? ticket.effortOverride : undefined;
+    const fast = caps.supportsFastMode && (ticket?.fastMode ?? false);
+
+    return { mode, model, effort, fast };
+  }
+
   private async executeForMention(
     persona: AgentPersonaEntity,
     mention: TicketMentionEntity,
@@ -596,10 +628,14 @@ export class ExecuteAgentUseCase {
     let acknowledged = false;
 
     try {
-      // 0. Compute effective execution mode: min(mention grant, persona ceiling)
-      const effectiveMode: MentionExecutionMode = persona.executionMode === 'message'
-        ? 'talk'
-        : mention.executionMode;
+      // 0. Resolve the conversation-scoped execution config at acknowledge time.
+      // Mode is min(persona ceiling, ticket.conversationMode); model/effort/fast
+      // come from the ticket overrides (capability-gated). The mention's own mode
+      // is irrelevant — it is overwritten here so the UI badge reflects what ran.
+      const ticket = await this.ticketStore.getTicketById(mention.ticketId);
+      const resolved = this.resolveExecutionConfig(persona, ticket);
+      const effectiveMode = resolved.mode;
+      mention.executionMode = effectiveMode;
 
       // 1. Ensure workspace exists BEFORE acknowledging (skip for talk mode).
       // The workspace is created for every ticket; git worktrees are added
@@ -631,7 +667,6 @@ export class ExecuteAgentUseCase {
       });
 
       // 2b. Claim ticket for agent
-      const ticket = await this.ticketStore.getTicketById(mention.ticketId);
       if (ticket && ticket.assignee !== persona.name) {
         ticket.claim(persona.name);
         await this.ticketStore.saveTicket(ticket);
@@ -649,6 +684,9 @@ export class ExecuteAgentUseCase {
         personaId: persona.id,
         ticketId: mention.ticketId,
         mentionId: mention.id,
+        model: resolved.model,
+        effort: resolved.effort,
+        fast: resolved.fast,
       });
 
       // 4. Compose system prompt from persona files
@@ -672,7 +710,9 @@ export class ExecuteAgentUseCase {
       this.logger.info('Agent execution started', {
         executionId,
         persona: persona.name,
-        model: persona.model,
+        model: resolved.model,
+        effort: resolved.effort ?? null,
+        fast: resolved.fast,
         ticketId: mention.ticketId,
         mentionId: mention.id,
         worktreePath,
@@ -709,7 +749,7 @@ export class ExecuteAgentUseCase {
         personaName: persona.name,
         ticketId: mention.ticketId,
         mentionId: mention.id,
-        model: persona.model,
+        model: resolved.model,
         effectiveMode,
         worktreePath,
         resumeSessionId: previousSessionId ?? null,
@@ -746,11 +786,13 @@ export class ExecuteAgentUseCase {
         const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
         const queryOptions = buildSdkOptions(effectiveMode, {
-          model: persona.model,
+          model: resolved.model,
           systemPrompt,
           cwd: worktreePath,
           outputFormat: this.outputFormatSchema(),
           resume: previousSessionId ?? undefined,
+          effort: resolved.effort,
+          fast: resolved.fast,
         });
 
         // Build the prompt: use content blocks if there are images, plain string otherwise
@@ -879,8 +921,8 @@ export class ExecuteAgentUseCase {
         // Timeout path — cancelExecution didn't run, we need to do cleanup
         const reason = abortController.signal.reason instanceof Error && abortController.signal.reason.message === 'timeout'
           ? 'timeout' : 'cancelled';
-        await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId });
-        await this.agentEventStore.completeExecution(executionId, 'interrupted');
+        await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
+        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         mention.resetToPending();
         await this.mentionStore.save(mention);
@@ -894,13 +936,13 @@ export class ExecuteAgentUseCase {
         this.logger.error('SDK query loop yielded no messages — subprocess likely crashed', {
           executionId,
           persona: persona.name,
-          model: persona.model,
+          model: resolved.model,
           worktreePath,
         });
         await emitEvent('error', {
           error: 'Agent SDK produced no output (subprocess likely crashed at startup). Check ~/.fleex/.logs/main/server.log for EPIPE / spawn errors.',
         });
-        await this.agentEventStore.completeExecution(executionId, 'failed');
+        await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         mention.resetToPending();
         await this.mentionStore.save(mention);
@@ -914,7 +956,7 @@ export class ExecuteAgentUseCase {
       await emitEvent('execution_end', {
         status: 'completed',
         ticketId: mention.ticketId,
-        model: persona.model,
+        model: resolved.model,
         effectiveMode,
         resultLength: resultText.length,
         structuredOutputParsed: structured !== null,
@@ -1121,10 +1163,15 @@ export class ExecuteAgentUseCase {
         });
       }
 
-      // 13. Complete execution tracking (with instrumentation)
+      // 13. Complete execution tracking (with instrumentation).
+      // Persist the *resolved* model (conversation override or persona default)
+      // that actually ran — not persona.model — so cost tracking and the audit
+      // trail reflect which model executed on this run.
       await this.agentEventStore.completeExecution(executionId, 'completed', {
-        model: persona.model,
+        model: resolved.model,
         effectiveMode,
+        effort: resolved.effort,
+        fast: resolved.fast,
         durationMs: sdkDurationMs,
         costUsd: sdkCostUsd,
         inputTokens: sdkInputTokens,
@@ -1284,6 +1331,7 @@ export class ExecuteAgentUseCase {
       personaId: persona.id,
       ticketId,
       mentionId: startMentionId,
+      model: persona.model,
     });
 
     // 4. Compose prompts
@@ -1428,8 +1476,8 @@ export class ExecuteAgentUseCase {
       clearTimeout(timeoutHandle);
 
       if (abortController.signal.aborted) {
-        await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId });
-        await this.agentEventStore.completeExecution(executionId, 'interrupted');
+        await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId, model: persona.model, effectiveMode });
+        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: persona.model, effectiveMode });
         return;
       }
 
@@ -1460,7 +1508,16 @@ export class ExecuteAgentUseCase {
 
       // Short-circuit: workflow orchestrator handles persistence via step_runs
       if (opts?.returnStructured) {
-        await this.agentEventStore.completeExecution(executionId, 'completed');
+        await this.agentEventStore.completeExecution(executionId, 'completed', {
+          model: persona.model,
+          effectiveMode,
+          durationMs: sdkDurationMs,
+          costUsd: sdkCostUsd,
+          inputTokens: sdkInputTokens,
+          outputTokens: sdkOutputTokens,
+          cacheReadTokens: sdkCacheReadTokens,
+          cacheCreationTokens: sdkCacheCreationTokens,
+        });
         this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'completed', abortController });
         this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);
         return { structuredOutput: structured as Record<string, unknown> | null, rawText: resultText, executionId };
@@ -1563,7 +1620,16 @@ export class ExecuteAgentUseCase {
         }
       }
 
-      await this.agentEventStore.completeExecution(executionId, 'completed');
+      await this.agentEventStore.completeExecution(executionId, 'completed', {
+        model: persona.model,
+        effectiveMode,
+        durationMs: sdkDurationMs,
+        costUsd: sdkCostUsd,
+        inputTokens: sdkInputTokens,
+        outputTokens: sdkOutputTokens,
+        cacheReadTokens: sdkCacheReadTokens,
+        cacheCreationTokens: sdkCacheCreationTokens,
+      });
       this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'completed', abortController });
       this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);
 
@@ -1609,7 +1675,7 @@ export class ExecuteAgentUseCase {
         });
         await this.agentEventStore.appendEvent(errorEvent);
         this.onEvent?.(errorEvent);
-        await this.agentEventStore.completeExecution(executionId, 'failed');
+        await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
       } catch {
         // Don't mask original error
       }
@@ -1700,6 +1766,7 @@ export class ExecuteAgentUseCase {
       // Start tracking
       await this.agentEventStore.startExecution({
         executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: `workflow:${executionId}`,
+        model: persona.model,
       });
 
       // Compose prompts
@@ -1759,12 +1826,12 @@ export class ExecuteAgentUseCase {
         }
       } catch (err) {
         await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
-        await this.agentEventStore.completeExecution(executionId, 'failed');
+        await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
         throw err;
       }
 
-      await emitEvent('execution_end', { status: 'completed', ticketId: params.ticketId, resultLength: resultText.length });
-      await this.agentEventStore.completeExecution(executionId, 'completed');
+      await emitEvent('execution_end', { status: 'completed', ticketId: params.ticketId, model: persona.model, effectiveMode, resultLength: resultText.length });
+      await this.agentEventStore.completeExecution(executionId, 'completed', { model: persona.model, effectiveMode });
 
       return { structuredOutput, rawText: resultText, executionId };
     } finally {

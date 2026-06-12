@@ -20,6 +20,8 @@ import migration018 from './migrations/017_add_session_hook_status.js';
 import migration019 from './migrations/018_add_workflows.js';
 import migration020 from './migrations/019_fix_workflow_templates_enabled_type.js';
 import migration021 from './migrations/020_supabase_user_kv.js';
+import migration022 from './migrations/021_add_ticket_execution_config.js';
+import migration023 from './migrations/022_add_execution_effort_and_fast.js';
 
 /**
  * Ordered array of all migrations.
@@ -47,4 +49,6 @@ export const allMigrations: Migration[] = [
   migration019,
   migration020,
   migration021,
+  migration022,
+  migration023,
 ];

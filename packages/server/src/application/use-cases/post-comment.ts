@@ -50,7 +50,11 @@ export class PostCommentUseCase {
     // Create mentions for each @agent:xxx found in the body
     // Phase 1: agent-authored comments do NOT create actionable mentions (no chaining)
     const isAgentAuthored = params.authorType === 'agent';
-    const mentionMode = params.executionMode ?? 'plan';
+    // Agent/panel mentions no longer carry the composer's mode: the effective
+    // mode is resolved from the ticket's conversation-scoped config when the
+    // mention is acknowledged (see ExecuteAgentUseCase.resolveExecutionConfig).
+    // We seed a neutral default so the field is well-typed until then.
+    const mentionMode: MentionExecutionMode = 'plan';
 
     const suppressedAgents = new Set(params.suppressMentionForAgents ?? []);
 

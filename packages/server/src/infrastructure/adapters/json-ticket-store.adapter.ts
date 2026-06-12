@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { FLEEX_DIR } from '@fleex/shared';
-import type { TicketStatus, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata } from '@fleex/shared';
+import type { TicketStatus, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
@@ -50,6 +50,10 @@ interface SerializedTicket {
   archivedAt?: string | null;
   firstDoingAt?: string | null;
   statusChangedAt?: string;
+  conversationMode?: ConversationMode;
+  modelOverride?: string | null;
+  effortOverride?: EffortLevel | null;
+  fastMode?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -299,6 +303,10 @@ export class JsonTicketStore implements TicketStorePort {
           t.firstDoingAt ? new Date(t.firstDoingAt) : null,
           new Date(t.statusChangedAt ?? t.updatedAt),
           new Date(t.createdAt), new Date(t.updatedAt),
+          t.conversationMode ?? 'plan',
+          t.modelOverride ?? null,
+          t.effortOverride ?? null,
+          t.fastMode ?? false,
         );
         this.tickets.set(entity.id, entity);
       }
@@ -356,6 +364,10 @@ export class JsonTicketStore implements TicketStorePort {
         archivedAt: t.archivedAt?.toISOString() ?? null,
         firstDoingAt: t.firstDoingAt?.toISOString() ?? null,
         statusChangedAt: t.statusChangedAt.toISOString(),
+        conversationMode: t.conversationMode,
+        modelOverride: t.modelOverride,
+        effortOverride: t.effortOverride,
+        fastMode: t.fastMode,
         createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.ticketsFile, JSON.stringify(data, null, 2));
