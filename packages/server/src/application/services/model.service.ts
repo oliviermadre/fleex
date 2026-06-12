@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { FALLBACK_MODELS, type ModelFamily, type ModelOption } from '@fleex/shared';
+import { FALLBACK_MODELS, inferModelCapabilities, type ModelFamily, type ModelOption } from '@fleex/shared';
 import type { LoggerPort } from '../ports/logger.port.js';
 
 const FAMILY_ORDER: Record<ModelFamily, number> = {
@@ -97,10 +97,13 @@ function familyOf(id: string): ModelFamily {
 }
 
 function toModelOption(entry: AnthropicModelEntry): ModelOption {
+  const caps = inferModelCapabilities(entry.id);
   return {
     id: entry.id,
     label: entry.display_name?.trim() || deriveLabel(entry.id),
     family: familyOf(entry.id),
+    supportsEffort: caps.supportsEffort,
+    supportsFastMode: caps.supportsFastMode,
   };
 }
 

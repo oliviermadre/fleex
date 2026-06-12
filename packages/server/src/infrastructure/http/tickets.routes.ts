@@ -10,7 +10,7 @@ import { TicketActivityEntity } from '../../domain/entities/ticket-activity.enti
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
-import type { MentionExecutionMode, MentionStatus } from '@fleex/shared';
+import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
 
 export function ticketRoutes(container: Container) {
@@ -262,6 +262,25 @@ export function ticketRoutes(container: Container) {
       emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
       return ticket.toDTO();
     });
+
+    // PATCH /api/tickets/:id/execution-config — conversation-scoped execution
+    // settings (mode, model/effort/fast overrides). Persists immediately and
+    // broadcasts ticket:updated. Sends NO comment and creates NO mention.
+    app.patch<{ Params: { id: string }; Body: UpdateTicketExecutionConfigRequest }>(
+      '/api/tickets/:id/execution-config',
+      async (request) => {
+        const ticket = await container.ticketStore.getTicketById(request.params.id);
+        if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+        const diff = ticket.updateExecutionConfig(request.body);
+        if (Object.keys(diff).length > 0) {
+          await container.ticketStore.saveTicket(ticket);
+          emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
+        }
+
+        return ticket.toDTO();
+      },
+    );
 
     app.delete<{ Params: { id: string } }>('/api/tickets/:id', async (request, reply) => {
       const ticketId = request.params.id;

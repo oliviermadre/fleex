@@ -1,4 +1,4 @@
-import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata } from '@fleex/shared';
+import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -125,8 +125,9 @@ export class PgTicketStore implements TicketStorePort {
       `INSERT INTO tickets (
         id, board_id, display_id, title, description, status, priority, type, position,
         tags, links, blocked, favorite, due_date, assignee,
-        agent_claimed_at, github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+        agent_claimed_at, github_metadata, archived_at, first_doing_at, status_changed_at,
+        conversation_mode, model_override, effort_override, fast_mode, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
       ON CONFLICT (id) DO UPDATE SET
         board_id = $2,
         display_id = $3,
@@ -147,8 +148,12 @@ export class PgTicketStore implements TicketStorePort {
         archived_at = $18,
         first_doing_at = $19,
         status_changed_at = $20,
-        created_at = $21,
-        updated_at = $22`,
+        conversation_mode = $21,
+        model_override = $22,
+        effort_override = $23,
+        fast_mode = $24,
+        created_at = $25,
+        updated_at = $26`,
       [
         ticket.id,
         ticket.boardId,
@@ -170,6 +175,10 @@ export class PgTicketStore implements TicketStorePort {
         ticket.archivedAt?.toISOString() ?? null,
         ticket.firstDoingAt?.toISOString() ?? null,
         ticket.statusChangedAt.toISOString(),
+        ticket.conversationMode,
+        ticket.modelOverride,
+        ticket.effortOverride,
+        ticket.fastMode,
         ticket.createdAt.toISOString(),
         ticket.updatedAt.toISOString(),
       ],
@@ -351,6 +360,10 @@ function rowToTicket(row: Record<string, unknown>): TicketEntity {
     new Date(row.status_changed_at as string),
     new Date(row.created_at as string),
     new Date(row.updated_at as string),
+    (row.conversation_mode as ConversationMode | null) ?? 'plan',
+    (row.model_override as string | null) ?? null,
+    (row.effort_override as EffortLevel | null) ?? null,
+    row.fast_mode === true,
   );
 }
 

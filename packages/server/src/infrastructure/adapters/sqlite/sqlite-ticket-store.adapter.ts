@@ -1,4 +1,4 @@
-import type { TicketStatus, TicketPriority, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata } from '@fleex/shared';
+import type { TicketStatus, TicketPriority, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -37,6 +37,10 @@ interface TicketRow {
   archived_at: string | null;
   first_doing_at: string | null;
   status_changed_at: string;
+  conversation_mode: string | null;
+  model_override: string | null;
+  effort_override: string | null;
+  fast_mode: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -184,11 +188,13 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       INSERT INTO tickets
         (id, board_id, display_id, title, description, status, priority, type, position,
          tags, links, blocked, favorite, due_date, assignee, agent_claimed_at,
-         github_metadata, archived_at, first_doing_at, status_changed_at, created_at, updated_at)
+         github_metadata, archived_at, first_doing_at, status_changed_at,
+         conversation_mode, model_override, effort_override, fast_mode, created_at, updated_at)
       VALUES
         (@id, @board_id, @display_id, @title, @description, @status, @priority, @type, @position,
          @tags, @links, @blocked, @favorite, @due_date, @assignee, @agent_claimed_at,
-         @github_metadata, @archived_at, @first_doing_at, @status_changed_at, @created_at, @updated_at)
+         @github_metadata, @archived_at, @first_doing_at, @status_changed_at,
+         @conversation_mode, @model_override, @effort_override, @fast_mode, @created_at, @updated_at)
       ON CONFLICT(id) DO UPDATE SET
         board_id = excluded.board_id,
         display_id = excluded.display_id,
@@ -209,6 +215,10 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
         archived_at = excluded.archived_at,
         first_doing_at = excluded.first_doing_at,
         status_changed_at = excluded.status_changed_at,
+        conversation_mode = excluded.conversation_mode,
+        model_override = excluded.model_override,
+        effort_override = excluded.effort_override,
+        fast_mode = excluded.fast_mode,
         created_at = excluded.created_at,
         updated_at = excluded.updated_at
     `);
@@ -234,6 +244,10 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       archived_at: ticket.archivedAt?.toISOString() ?? null,
       first_doing_at: ticket.firstDoingAt?.toISOString() ?? null,
       status_changed_at: ticket.statusChangedAt.toISOString(),
+      conversation_mode: ticket.conversationMode,
+      model_override: ticket.modelOverride,
+      effort_override: ticket.effortOverride,
+      fast_mode: ticket.fastMode ? 1 : 0,
       created_at: ticket.createdAt.toISOString(),
       updated_at: ticket.updatedAt.toISOString(),
     });
@@ -423,6 +437,10 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       new Date(row.status_changed_at),
       new Date(row.created_at),
       new Date(row.updated_at),
+      (row.conversation_mode as ConversationMode | null) ?? 'plan',
+      row.model_override ?? null,
+      (row.effort_override as EffortLevel | null) ?? null,
+      row.fast_mode === 1,
     );
   }
 

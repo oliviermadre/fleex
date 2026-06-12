@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode } from '@fleex/shared';
+import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel } from '@fleex/shared';
+import { inferModelCapabilities } from '@fleex/shared';
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
+import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
@@ -562,6 +564,36 @@ export class ExecuteAgentUseCase {
       });
   }
 
+  /**
+   * Resolve the conversation-scoped execution config for a mention about to run.
+   *
+   * - mode  = min(persona ceiling, ticket.conversationMode). A `message` persona
+   *   is capped at `talk`; a `claude_code` persona inherits the ticket's mode.
+   * - model = ticket.modelOverride ?? persona.model.
+   * - effort = ticket.effortOverride, applied only if the resolved model supports it.
+   * - fast  = ticket.fastMode, applied only if the resolved model supports it.
+   *
+   * The ticket may be null (deleted mid-flight) — we fall back to persona defaults
+   * and `plan` mode so execution still proceeds safely.
+   */
+  private resolveExecutionConfig(
+    persona: AgentPersonaEntity,
+    ticket: TicketEntity | null,
+  ): { mode: MentionExecutionMode; model: string; effort?: EffortLevel; fast: boolean } {
+    const conversationMode: MentionExecutionMode = ticket?.conversationMode ?? 'plan';
+    const mode: MentionExecutionMode = persona.executionMode === 'message'
+      ? 'talk'
+      : conversationMode;
+
+    const model = ticket?.modelOverride ?? persona.model;
+    const caps = inferModelCapabilities(model);
+
+    const effort = caps.supportsEffort && ticket?.effortOverride ? ticket.effortOverride : undefined;
+    const fast = caps.supportsFastMode && (ticket?.fastMode ?? false);
+
+    return { mode, model, effort, fast };
+  }
+
   private async executeForMention(
     persona: AgentPersonaEntity,
     mention: TicketMentionEntity,
@@ -596,10 +628,14 @@ export class ExecuteAgentUseCase {
     let acknowledged = false;
 
     try {
-      // 0. Compute effective execution mode: min(mention grant, persona ceiling)
-      const effectiveMode: MentionExecutionMode = persona.executionMode === 'message'
-        ? 'talk'
-        : mention.executionMode;
+      // 0. Resolve the conversation-scoped execution config at acknowledge time.
+      // Mode is min(persona ceiling, ticket.conversationMode); model/effort/fast
+      // come from the ticket overrides (capability-gated). The mention's own mode
+      // is irrelevant — it is overwritten here so the UI badge reflects what ran.
+      const ticket = await this.ticketStore.getTicketById(mention.ticketId);
+      const resolved = this.resolveExecutionConfig(persona, ticket);
+      const effectiveMode = resolved.mode;
+      mention.executionMode = effectiveMode;
 
       // 1. Ensure workspace exists BEFORE acknowledging (skip for talk mode).
       // The workspace is created for every ticket; git worktrees are added
@@ -631,7 +667,6 @@ export class ExecuteAgentUseCase {
       });
 
       // 2b. Claim ticket for agent
-      const ticket = await this.ticketStore.getTicketById(mention.ticketId);
       if (ticket && ticket.assignee !== persona.name) {
         ticket.claim(persona.name);
         await this.ticketStore.saveTicket(ticket);
@@ -672,7 +707,9 @@ export class ExecuteAgentUseCase {
       this.logger.info('Agent execution started', {
         executionId,
         persona: persona.name,
-        model: persona.model,
+        model: resolved.model,
+        effort: resolved.effort ?? null,
+        fast: resolved.fast,
         ticketId: mention.ticketId,
         mentionId: mention.id,
         worktreePath,
@@ -709,7 +746,7 @@ export class ExecuteAgentUseCase {
         personaName: persona.name,
         ticketId: mention.ticketId,
         mentionId: mention.id,
-        model: persona.model,
+        model: resolved.model,
         effectiveMode,
         worktreePath,
         resumeSessionId: previousSessionId ?? null,
@@ -746,11 +783,13 @@ export class ExecuteAgentUseCase {
         const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
         const queryOptions = buildSdkOptions(effectiveMode, {
-          model: persona.model,
+          model: resolved.model,
           systemPrompt,
           cwd: worktreePath,
           outputFormat: this.outputFormatSchema(),
           resume: previousSessionId ?? undefined,
+          effort: resolved.effort,
+          fast: resolved.fast,
         });
 
         // Build the prompt: use content blocks if there are images, plain string otherwise
@@ -894,7 +933,7 @@ export class ExecuteAgentUseCase {
         this.logger.error('SDK query loop yielded no messages — subprocess likely crashed', {
           executionId,
           persona: persona.name,
-          model: persona.model,
+          model: resolved.model,
           worktreePath,
         });
         await emitEvent('error', {
@@ -914,7 +953,7 @@ export class ExecuteAgentUseCase {
       await emitEvent('execution_end', {
         status: 'completed',
         ticketId: mention.ticketId,
-        model: persona.model,
+        model: resolved.model,
         effectiveMode,
         resultLength: resultText.length,
         structuredOutputParsed: structured !== null,

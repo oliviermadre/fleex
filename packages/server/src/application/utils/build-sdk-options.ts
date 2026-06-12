@@ -1,4 +1,4 @@
-import type { MentionExecutionMode } from '@fleex/shared';
+import type { MentionExecutionMode, EffortLevel } from '@fleex/shared';
 
 interface SdkOptionsContext {
   model: string;
@@ -6,6 +6,10 @@ interface SdkOptionsContext {
   cwd?: string | null;
   outputFormat?: Record<string, unknown>;
   resume?: string;
+  /** Reasoning effort override, applied only when the model supports it. */
+  effort?: EffortLevel;
+  /** Fast-mode toggle, applied via SDK settings only when the model supports it. */
+  fast?: boolean;
 }
 
 export function buildSdkOptions(
@@ -18,6 +22,10 @@ export function buildSdkOptions(
     systemPrompt: ctx.systemPrompt,
     ...(cliPath ? { pathToClaudeCodeExecutable: cliPath } : {}),
   };
+
+  // Reasoning effort is a direct query() option; fast mode goes through settings.
+  if (ctx.effort) base.effort = ctx.effort;
+  if (ctx.fast) base.settings = { ...(base.settings as Record<string, unknown> | undefined), fastMode: true };
 
   if (ctx.outputFormat) base.outputFormat = ctx.outputFormat;
 

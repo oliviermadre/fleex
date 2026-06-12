@@ -364,7 +364,7 @@ export class DomainEventListener {
       ...(event.authorType === 'agent' ? [event.authorName] : []),
       ...(event.wakeExcludeAgents ?? []),
     ];
-    await this.deps.wakeWaitingAgents.execute(event.ticketId, exclude, event.executionMode);
+    await this.deps.wakeWaitingAgents.execute(event.ticketId, exclude);
   }
 
   private async handleWakeWaitingOnDeliverable(event: DeliverableCreatedEvent): Promise<void> {

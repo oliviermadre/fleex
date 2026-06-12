@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
+import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel } from '@fleex/shared';
+import { EFFORT_LEVELS } from '@fleex/shared';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -11,6 +12,8 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useModels } from '../../hooks/useModels';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -20,6 +23,13 @@ import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
+
+/** Per-mode color for the conversation execution-mode pill. */
+const MODE_PILL_CLASS: Record<ConversationMode, string> = {
+  talk: 'border-sky-400/40 bg-sky-400/15 text-sky-400',
+  plan: 'border-violet-400/40 bg-violet-400/15 text-violet-400',
+  edit: 'border-emerald-400/40 bg-emerald-400/15 text-emerald-400',
+};
 
 /**
  * Build a lookup: commentId -> mentionText -> mentionId
@@ -500,10 +510,46 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const [acTriggerPos, setAcTriggerPos] = useState(-1); // cursor position of the '@'
   const inputWrapperRef = useRef<HTMLDivElement>(null);
 
-  // Execution mode toggle (Talk / Plan / Edit)
-  // Default to the most recent user-created mention's mode, or 'plan' if none
-  const [executionMode, setExecutionMode] = useState<'talk' | 'plan' | 'edit'>('plan');
-  const modeInitialised = useRef(false);
+  // Conversation-scoped execution config lives on the ticket (persisted server
+  // side, synced via the ticket:updated WS broadcast). The composer reads it
+  // from the ticket store — it is NO LONGER initialised from the latest mention
+  // (that was the "mode changes by itself" bug). Changing any control PATCHes
+  // /execution-config and sends no message.
+  const ticket = useTicketStore((s) => s.tickets.find((t) => t.id === ticketId));
+  const { models } = useModels();
+  const executionMode: ConversationMode = ticket?.conversationMode ?? 'plan';
+  const modelOverride: string | null = ticket?.modelOverride ?? null;
+  const effortOverride: EffortLevel | null = ticket?.effortOverride ?? null;
+  const fastMode: boolean = ticket?.fastMode ?? false;
+
+  // The model whose capabilities drive the Effort/Fast controls. In "Auto"
+  // (no override) we can't know which persona will run, so we hide those
+  // controls — they degrade cleanly and only appear for an explicit, capable
+  // model override.
+  const overriddenModel = useMemo(
+    () => (modelOverride ? models.find((m) => m.id === modelOverride) : undefined),
+    [models, modelOverride],
+  );
+  const showEffort = overriddenModel?.supportsEffort === true;
+  const showFast = overriddenModel?.supportsFastMode === true;
+
+  const patchExecConfig = useCallback(
+    (req: import('@fleex/shared').UpdateTicketExecutionConfigRequest) => {
+      void api.updateTicketExecutionConfig(ticketId, req).catch(() => {});
+    },
+    [ticketId],
+  );
+
+  const cycleMode = useCallback(() => {
+    const order: ConversationMode[] = ['talk', 'plan', 'edit'];
+    const next = order[(order.indexOf(executionMode) + 1) % order.length]!;
+    patchExecConfig({ conversationMode: next });
+  }, [executionMode, patchExecConfig]);
+
+  const setExecutionMode = useCallback(
+    (mode: ConversationMode) => patchExecConfig({ conversationMode: mode }),
+    [patchExecConfig],
+  );
 
   const commentFileUpload = useFileUpload({
     textareaRef,
@@ -662,17 +708,8 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const cursorPinnedRef = useRef(false);
 
   useEffect(() => {
-    modeInitialised.current = false;
     api.fetchTicketComments(ticketId).then(setComments).catch(() => {});
-    api.fetchTicketMentions(ticketId).then((fetched) => {
-      setMentions(fetched);
-      // Initialise mode selector to the most recent mention's mode
-      if (!modeInitialised.current && fetched.length > 0) {
-        const sorted = [...fetched].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-        setExecutionMode(sorted[0]!.executionMode);
-        modeInitialised.current = true;
-      }
-    }).catch(() => {});
+    api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
     api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
     loadCursors(ticketId).catch(() => {});
   }, [ticketId, loadCursors]);
@@ -815,10 +852,12 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
 
     setSubmitting(true);
     try {
+      // No per-message mode is sent: the effective mode/model/effort/fast are
+      // resolved from the ticket's conversation-scoped config at acknowledge.
       const comment = await api.postTicketComment(
         ticketId,
         trimmed,
-        executionMode,
+        undefined,
         mentionConflicts.length > 0 ? mentionConflicts : undefined,
       );
       setComments((prev) => (prev.some((c) => c.id === comment.id) ? prev : [...prev, comment]));
@@ -834,7 +873,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       setSubmitting(false);
       textareaRef.current?.focus();
     }
-  }, [body, ticketId, executionMode, markCommentsRead, clearDraft]);
+  }, [body, ticketId, markCommentsRead, clearDraft]);
 
   const handleSubmit = useCallback(async () => {
     const trimmed = body.trim();
@@ -968,7 +1007,13 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           return;
         }
       }
-      // Execution mode toggle: Ctrl+1/2/3
+      // Execution mode cycle: Shift+Tab (Talk→Plan→Edit→Talk), à la Claude Code.
+      if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        cycleMode();
+        return;
+      }
+      // Execution mode toggle: Ctrl+1/2/3 (direct selection, conservés)
       if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
         if (e.key === '1') { e.preventDefault(); setExecutionMode('talk'); return; }
         if (e.key === '2') { e.preventDefault(); setExecutionMode('plan'); return; }
@@ -980,7 +1025,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         handleSubmit();
       }
     },
-    [acOpen, filteredOptions, acIndex, acceptMention, closeMentionAc, handleSubmit],
+    [acOpen, filteredOptions, acIndex, acceptMention, closeMentionAc, handleSubmit, cycleMode, setExecutionMode],
   );
 
   return (
@@ -1098,84 +1143,121 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         )}
       </div>
 
-      {/* Input area */}
-      <div ref={inputWrapperRef} className="relative flex flex-shrink-0 items-end gap-2 border-t border-[var(--theme-border)] pt-3" {...commentFileUpload.dragProps}>
-        {/* Mention autocomplete popup */}
-        {acOpen && filteredOptions.length > 0 && (
-          <MentionAutocomplete
-            options={filteredOptions}
-            selectedIndex={acIndex}
-            onSelect={acceptMention}
-            position={{ bottom: (textareaRef.current?.offsetHeight ?? 36) + 8, left: 0 }}
+      {/* Composer: line 1 = input + attach + send, line 2 = execution bar */}
+      <div className="flex flex-shrink-0 flex-col gap-2 border-t border-[var(--theme-border)] pt-3">
+        {/* Line 1 — input + actions */}
+        <div ref={inputWrapperRef} className="relative flex items-end gap-2" {...commentFileUpload.dragProps}>
+          {/* Mention autocomplete popup */}
+          {acOpen && filteredOptions.length > 0 && (
+            <MentionAutocomplete
+              options={filteredOptions}
+              selectedIndex={acIndex}
+              onSelect={acceptMention}
+              position={{ bottom: (textareaRef.current?.offsetHeight ?? 36) + 8, left: 0 }}
+            />
+          )}
+          <textarea
+            ref={textareaRef}
+            className={`max-h-40 min-h-[36px] flex-1 resize-none overflow-y-auto rounded-lg border bg-[var(--theme-bg-surface)] px-3 py-2 text-sm leading-snug text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none ${
+              commentFileUpload.isDragOver
+                ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/30'
+                : 'border-[var(--theme-border)]'
+            }`}
+            rows={1}
+            placeholder="Write a comment... (@ to mention)"
+            value={body}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onPaste={commentFileUpload.pasteHandler}
+            onBlur={() => { setTimeout(closeMentionAc, 150); }}
+            disabled={submitting}
           />
-        )}
-        <textarea
-          ref={textareaRef}
-          className={`max-h-40 min-h-[36px] flex-1 resize-none overflow-y-auto rounded-lg border bg-[var(--theme-bg-surface)] px-3 py-2 text-sm leading-snug text-[var(--theme-text-secondary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none ${
-            commentFileUpload.isDragOver
-              ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/30'
-              : 'border-[var(--theme-border)]'
-          }`}
-          rows={1}
-          placeholder="Write a comment... (@ to mention)"
-          value={body}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          onPaste={commentFileUpload.pasteHandler}
-          onBlur={() => { setTimeout(closeMentionAc, 150); }}
-          disabled={submitting}
-        />
-        {/* Execution mode toggle [Talk|Plan|Edit] */}
-        <div className="flex h-[36px] flex-shrink-0 items-center rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] overflow-hidden">
-          {(['talk', 'plan', 'edit'] as const).map((mode) => (
+          <button
+            type="button"
+            className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg text-[var(--theme-text-muted)] transition-opacity hover:text-[var(--theme-accent)] hover:opacity-90"
+            onClick={commentFileUpload.openFilePicker}
+            title="Attach file"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
+          <button
+            className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-white transition-opacity hover:opacity-90 disabled:opacity-30"
+            onClick={handleSubmit}
+            disabled={submitting || !body.trim()}
+            title="Send (Enter)"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Line 2 — conversation execution bar (mode / model / effort / fast) */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {/* Mode: single pill, cycles Talk→Plan→Edit on click (or Shift+Tab) */}
+          <button
+            type="button"
+            onClick={cycleMode}
+            title="Conversation mode — click or Shift+Tab to cycle (Ctrl+1/2/3 to set). Applies to the next agent acknowledge, sends no message."
+            className={`flex items-center gap-1.5 rounded-md border px-2 py-1 font-medium transition-colors ${MODE_PILL_CLASS[executionMode]}`}
+          >
+            <span className="capitalize">{executionMode}</span>
+            <span className="text-[10px] opacity-60">⇧⇥</span>
+          </button>
+
+          {/* Model override dropdown — default "Auto (persona)" */}
+          <label className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[var(--theme-text-secondary)]">
+            <span className="opacity-60">🤖</span>
+            <select
+              value={modelOverride ?? ''}
+              onChange={(e) => patchExecConfig({ modelOverride: e.target.value === '' ? null : e.target.value })}
+              title="Model for the next agent run. Auto = inherit the agent's own model. An override applies to the next mention without changing the agent config."
+              className="cursor-pointer bg-transparent pr-1 text-xs text-[var(--theme-text-secondary)] focus:outline-none"
+            >
+              <option value="">Auto (persona)</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+          </label>
+
+          {/* Effort dropdown — shown only when the resolved model supports it */}
+          {showEffort && (
+            <label className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[var(--theme-text-secondary)]">
+              <span className="opacity-60">◐</span>
+              <select
+                value={effortOverride ?? ''}
+                onChange={(e) => patchExecConfig({ effortOverride: e.target.value === '' ? null : (e.target.value as EffortLevel) })}
+                title="Reasoning effort for the next agent run."
+                className="cursor-pointer bg-transparent pr-1 text-xs text-[var(--theme-text-secondary)] focus:outline-none"
+              >
+                <option value="">Effort: default</option>
+                {EFFORT_LEVELS.map((lvl) => (
+                  <option key={lvl} value={lvl}>Effort: {lvl}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {/* Fast toggle — shown only when the resolved model supports it */}
+          {showFast && (
             <button
-              key={mode}
-              onClick={() => setExecutionMode(mode)}
-              title={`${mode.charAt(0).toUpperCase() + mode.slice(1)} mode (Ctrl+${{ talk: '1', plan: '2', edit: '3' }[mode]})`}
-              className={`flex h-full items-center justify-center px-1.5 transition-colors ${
-                executionMode === mode
-                  ? 'bg-[var(--theme-accent)]/20 text-[var(--theme-accent)]'
-                  : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]'
+              type="button"
+              onClick={() => patchExecConfig({ fastMode: !fastMode })}
+              title="Fast (low-latency) mode for the next agent run."
+              className={`flex items-center gap-1 rounded-md border px-2 py-1 font-medium transition-colors ${
+                fastMode
+                  ? 'border-amber-400/40 bg-amber-400/15 text-amber-400'
+                  : 'border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]'
               }`}
             >
-              {mode === 'talk' && (
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              )}
-              {mode === 'plan' && (
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                </svg>
-              )}
-              {mode === 'edit' && (
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              )}
+              <span>⚡</span>
+              <span>Fast</span>
             </button>
-          ))}
+          )}
         </div>
-        <button
-          type="button"
-          className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg text-[var(--theme-text-muted)] transition-opacity hover:text-[var(--theme-accent)] hover:opacity-90"
-          onClick={commentFileUpload.openFilePicker}
-          title="Attach file"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-          </svg>
-        </button>
-        <button
-          className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-white transition-opacity hover:opacity-90 disabled:opacity-30"
-          onClick={handleSubmit}
-          disabled={submitting || !body.trim()}
-          title="Send (Enter)"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-          </svg>
-        </button>
       </div>
 
       {/* Floating execution panel */}
