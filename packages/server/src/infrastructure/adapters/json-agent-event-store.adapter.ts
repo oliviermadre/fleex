@@ -56,6 +56,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    model?: string;
   }): Promise<void> {
     const entry: ExecutionIndex = {
       id: params.executionId,
@@ -67,6 +68,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       startedAt: new Date().toISOString(),
       completedAt: null,
       lastEventAt: null,
+      model: params.model ?? undefined,
     };
     this.index.push(entry);
     await this.syncIndex();

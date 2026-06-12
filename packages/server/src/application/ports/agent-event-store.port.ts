@@ -7,6 +7,12 @@ export interface AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    /**
+     * The model that will run this execution (conversation override or persona
+     * default). Recorded up-front so cost tracking / the audit trail know which
+     * model ran even if the execution is cancelled or crashes before completion.
+     */
+    model?: string;
   }): Promise<void>;
 
   appendEvent(event: AgentEventEntity): Promise<void>;

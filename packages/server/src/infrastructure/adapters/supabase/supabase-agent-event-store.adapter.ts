@@ -47,6 +47,7 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    model?: string;
   }): Promise<void> {
     const { error } = await this.conn.client.from('agent_event_executions').insert({
       execution_id: params.executionId,
@@ -56,6 +57,7 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       event_count: 0,
       status: 'running',
       started_at: new Date().toISOString(),
+      model: params.model ?? null,
     });
     if (error) throw new Error(`SupabaseAgentEventStore.startExecution failed: ${error.message}`);
   }

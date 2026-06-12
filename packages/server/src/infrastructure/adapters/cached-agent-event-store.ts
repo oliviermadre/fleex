@@ -56,6 +56,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    model?: string;
   }): Promise<void> {
     await this.inner.startExecution(params);
     this.executions.set(params.executionId, {
@@ -69,7 +70,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
       completedAt: null,
       lastEventAt: null,
       sdkSessionId: null,
-      model: null,
+      model: params.model ?? null,
       effectiveMode: null,
       durationMs: null,
       costUsd: null,

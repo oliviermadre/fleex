@@ -26,12 +26,13 @@ export class PgAgentEventStore implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    model?: string;
   }): Promise<void> {
     await this.db.query(
       `INSERT INTO agent_event_executions
-        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at)
-       VALUES ($1, $2, $3, $4, 0, 'running', $5)`,
-      [params.executionId, params.personaId, params.ticketId, params.mentionId, new Date().toISOString()],
+        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, model)
+       VALUES ($1, $2, $3, $4, 0, 'running', $5, $6)`,
+      [params.executionId, params.personaId, params.ticketId, params.mentionId, new Date().toISOString(), params.model ?? null],
     );
   }
 

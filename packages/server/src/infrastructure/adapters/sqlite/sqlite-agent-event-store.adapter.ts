@@ -47,17 +47,19 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     personaId: string;
     ticketId: string;
     mentionId: string;
+    model?: string;
   }): Promise<void> {
     this.conn.db.prepare(`
       INSERT INTO agent_event_executions
-        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at)
-      VALUES (@execution_id, @persona_id, @ticket_id, @mention_id, 0, 'running', @started_at)
+        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, model)
+      VALUES (@execution_id, @persona_id, @ticket_id, @mention_id, 0, 'running', @started_at, @model)
     `).run({
       execution_id: params.executionId,
       persona_id: params.personaId,
       ticket_id: params.ticketId,
       mention_id: params.mentionId,
       started_at: new Date().toISOString(),
+      model: params.model ?? null,
     });
   }
 
