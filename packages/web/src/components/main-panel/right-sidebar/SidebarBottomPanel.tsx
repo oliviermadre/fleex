@@ -97,17 +97,20 @@ export function SidebarBottomPanel({ parentSessionId, ticketDisplayId, cwd }: Pr
                 <path d="M4 6l2 2-2 2M7.5 10h4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <span className="truncate max-w-[100px]">{label}</span>
-              <button
-                type="button"
-                onClick={(e) => handleClose(id, e)}
-                className="hidden items-center justify-center w-4 h-4 rounded text-[var(--theme-text-faint)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)] group-hover/sidebar-tab:flex"
-                title="Close terminal"
-              >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <line x1="4" y1="4" x2="12" y2="12" />
-                  <line x1="12" y1="4" x2="4" y2="12" />
-                </svg>
-              </button>
+              {/* Fixed-size slot so the tab keeps its width when the close button appears on hover */}
+              <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+                <button
+                  type="button"
+                  onClick={(e) => handleClose(id, e)}
+                  className="hidden cursor-pointer items-center justify-center rounded text-[var(--theme-text-faint)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)] group-hover/sidebar-tab:flex absolute inset-0"
+                  title="Close terminal"
+                >
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="4" y1="4" x2="12" y2="12" />
+                    <line x1="12" y1="4" x2="4" y2="12" />
+                  </svg>
+                </button>
+              </span>
               {isActive && (
                 <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-[var(--theme-accent)]" />
               )}

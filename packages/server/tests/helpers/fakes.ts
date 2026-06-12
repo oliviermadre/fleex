@@ -32,7 +32,9 @@ export class FakeTmuxPort implements TmuxPort {
     if (this.listSessionsError) throw this.listSessionsError;
     return Array.from(this.sessions.entries()).map(([name]) => ({
       name,
-      created: new Date().toISOString(),
+      // Match the real adapter: tmux's #{session_created} is epoch SECONDS, which
+      // discover parses via `Number(created) * 1000`. An ISO string would yield NaN.
+      created: Math.floor(Date.now() / 1000).toString(),
       attached: false,
       width: 120,
       height: 30,

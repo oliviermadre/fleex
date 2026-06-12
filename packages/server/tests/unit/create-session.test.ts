@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CreateSessionUseCase } from '../../src/application/use-cases/create-session.js';
 import { SessionNamingService } from '../../src/domain/services/session-naming.js';
+import { sessionIdFromTmuxName } from '../../src/domain/services/session-id.js';
 import {
   FakeTmuxPort,
   FakeSessionStore,
@@ -124,6 +125,16 @@ describe('CreateSessionUseCase', () => {
     // Without git context, name is just fleex_shell_<displayName>
     expect(session.tmuxName).toBe('fleex_shell_shell');
     expect(session.displayName).toBe('Shell');
+  });
+
+  it('derives a deterministic id from the tmux name', async () => {
+    // The session id must be reproducible from the tmux name so that a session
+    // re-discovered later (e.g. after multi-instance store eviction) keeps the
+    // same id — otherwise the parent id encoded in a sidebar's tmux name would
+    // dangle and the reaper would kill a sidebar whose parent is still alive.
+    const session = await useCase.execute({ cwd: '/tmp/no-git', type: 'shell' });
+
+    expect(session.id).toBe(sessionIdFromTmuxName(session.tmuxName));
   });
 
   it('should include displayName in DTO', async () => {

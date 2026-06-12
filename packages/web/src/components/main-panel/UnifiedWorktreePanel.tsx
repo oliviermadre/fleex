@@ -12,7 +12,7 @@ import type { TabDescriptor } from './tab-engine/types';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import * as api from '../../services/api';
 import { SessionRightSidebar } from './right-sidebar/SessionRightSidebar';
-import { FLEEX_SIDEBAR_PREFIX } from '@fleex/shared';
+import { isSidebarSession } from '@fleex/shared';
 
 // Side-effect: register all tab kinds
 import './tab-engine/kinds';
@@ -39,11 +39,16 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
   const personas = useAgentPersonaStore((s) => s.personas);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
 
-  // Build tab descriptors from sessions + executions (grouped by agent).
   // Sidebar-scoped sessions (tmuxName prefixed with fleex_sidebar_) are hosted
-  // inside the right sidebar's bottom panel, NOT the main tab row — filter them out here.
+  // inside the right sidebar's bottom panel, NOT the main tab row or the
+  // SmartSessionButton — filter them out here.
+  const mainSessions = useMemo(
+    () => sessions.filter((s) => !isSidebarSession(s)),
+    [sessions],
+  );
+
+  // Build tab descriptors from sessions + executions (grouped by agent).
   const allTabs = useMemo<TabDescriptor[]>(() => {
-    const mainSessions = sessions.filter((s) => !s.tmuxName.startsWith(FLEEX_SIDEBAR_PREFIX));
     const sessionTabs = mainSessions.map((s) =>
       s.type === 'shell' ? buildShellTab(s) : buildClaudeTab(s),
     );
@@ -64,7 +69,7 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
 
     const ticketTabs = ticket ? [buildTicketTab(ticket)] : [];
     return [...ticketTabs, ...sessionTabs, ...agentTabs];
-  }, [sessions, executions, personas, ticket]);
+  }, [mainSessions, executions, personas, ticket]);
 
   // Tab engine manages ordering, active tab, DnD, keyboard nav
   const engine = useTabEngine(groupId, allTabs);
@@ -210,7 +215,7 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
         trailing={
           !isUnavailable && (
             <SmartSessionButton
-              sessions={sessions}
+              sessions={mainSessions}
               onCreateSession={handleNewTab}
               disabled={isUnavailable}
               size="sm"

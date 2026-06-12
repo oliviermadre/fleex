@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
 import type { CreateSessionRequest } from '@fleex/shared';
 import { SessionEntity } from '../../domain/entities.js';
 import { SessionNamingService } from '../../domain/services/session-naming.js';
+import { sessionIdFromTmuxName } from '../../domain/services/session-id.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { GitPort } from '../ports/git.port.js';
@@ -95,7 +95,7 @@ export class CreateSessionUseCase {
     }
 
     const session = new SessionEntity(
-      randomUUID(),
+      sessionIdFromTmuxName(tmuxName),
       tmuxName,
       request.type,
       'running',
