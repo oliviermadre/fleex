@@ -6,6 +6,8 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Components } from 'react-markdown';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
+import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
+import { useColorMode } from '../../hooks/useActiveTheme';
 
 interface MarkdownRendererProps {
   content: string;
@@ -147,6 +149,8 @@ function MarkdownSection({
   startLine: number;
   onToggleCheckbox: (lineIndex: number) => void;
 }) {
+  const colorMode = useColorMode();
+
   // Extract images — gallery strip at top, inline placeholders in text
   const { images, cleaned: contentWithoutImages } = useMemo(
     () => extractMarkdownImages(content),
@@ -331,6 +335,9 @@ function MarkdownSection({
     // rehype-highlight (detect:true) adds the `hljs` class to ALL pre>code
     // elements. Inline code has no className → reliable block vs inline check.
     code: ({ children, className }) => {
+      if (isMermaidCode(className)) {
+        return <MermaidDiagram code={codeNodeToString(children)} colorMode={colorMode} />;
+      }
       if (className?.includes('hljs')) {
         // Block code — `pre` handles the container styling
         return <code className={className}>{children}</code>;
@@ -343,11 +350,21 @@ function MarkdownSection({
       );
     },
 
-    pre: ({ children }) => (
-      <pre className="my-2 p-3 rounded-md bg-[var(--theme-bg-overlay)] overflow-x-auto text-xs font-mono leading-relaxed">
-        {children}
-      </pre>
-    ),
+    pre: ({ children, node }) => {
+      // A mermaid block renders a <MermaidDiagram> (block-level) — don't wrap it
+      // in the monospace <pre> container meant for code listings.
+      const firstChild = node?.children?.[0];
+      const codeClass =
+        firstChild?.type === 'element' ? firstChild.properties?.className : undefined;
+      if (isMermaidCode(Array.isArray(codeClass) ? codeClass.join(' ') : String(codeClass ?? ''))) {
+        return <>{children}</>;
+      }
+      return (
+        <pre className="my-2 p-3 rounded-md bg-[var(--theme-bg-overlay)] overflow-x-auto text-xs font-mono leading-relaxed">
+          {children}
+        </pre>
+      );
+    },
 
     // ── Tables ───────────────────────────────────────────────────────────────
     table: ({ children }) => (

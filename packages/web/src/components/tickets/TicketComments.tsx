@@ -20,6 +20,8 @@ import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
+import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
+import { useColorMode } from '../../hooks/useActiveTheme';
 
 /**
  * Build a lookup: commentId -> mentionText -> mentionId
@@ -189,6 +191,7 @@ const CommentMarkdown = memo(function CommentMarkdown({
   onRemoveMention: (id: string) => void;
 }) {
   const commentMentions = mentionLookup.get(commentId);
+  const colorMode = useColorMode();
 
   // Normalize literal \n escape sequences from agent output, then encode mentions
   const normalized = body.replace(/\\n/g, '\n');
@@ -343,6 +346,9 @@ const CommentMarkdown = memo(function CommentMarkdown({
 
     // Inline code
     code: ({ children, className }) => {
+      if (isMermaidCode(className)) {
+        return <MermaidDiagram code={codeNodeToString(children)} colorMode={colorMode} />;
+      }
       if (className?.includes('hljs')) {
         return <code className={className}>{children}</code>;
       }
@@ -352,11 +358,20 @@ const CommentMarkdown = memo(function CommentMarkdown({
         </code>
       );
     },
-    pre: ({ children }) => (
-      <pre className="my-1.5 overflow-x-auto rounded-md bg-[var(--theme-bg-overlay)] p-3 text-xs leading-relaxed font-mono">
-        {children}
-      </pre>
-    ),
+    pre: ({ children, node }) => {
+      // Mermaid blocks render a block-level diagram — don't wrap in <pre>.
+      const firstChild = node?.children?.[0];
+      const codeClass =
+        firstChild?.type === 'element' ? firstChild.properties?.className : undefined;
+      if (isMermaidCode(Array.isArray(codeClass) ? codeClass.join(' ') : String(codeClass ?? ''))) {
+        return <>{children}</>;
+      }
+      return (
+        <pre className="my-1.5 overflow-x-auto rounded-md bg-[var(--theme-bg-overlay)] p-3 text-xs leading-relaxed font-mono">
+          {children}
+        </pre>
+      );
+    },
 
     // Tables
     table: ({ children }) => (
