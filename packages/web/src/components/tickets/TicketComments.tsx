@@ -32,6 +32,26 @@ const MODE_PILL_CLASS: Record<ConversationMode, string> = {
 };
 
 /**
+ * Small "ⓘ" icon that surfaces an explanatory tooltip on hover/focus. Used next
+ * to the execution-bar labels (Mode / Model) to clarify what each control does.
+ */
+function InfoHint({ text }: { text: string }) {
+  return (
+    <span
+      tabIndex={0}
+      title={text}
+      aria-label={text}
+      className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-text-secondary)] focus:outline-none focus-visible:text-[var(--theme-text-secondary)]"
+    >
+      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <circle cx="12" cy="12" r="10" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4M12 8h.01" />
+      </svg>
+    </span>
+  );
+}
+
+/**
  * Build a lookup: commentId -> mentionText -> mentionId
  */
 function buildMentionLookup(mentions: TicketMention[]): Map<string, Map<string, string>> {
@@ -1197,7 +1217,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         {/* Line 2 — conversation execution bar (mode / model / effort / fast) */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {/* Mode: single pill, cycles Talk→Plan→Edit on click (or Shift+Tab) */}
-          <span className="text-[var(--theme-text-secondary)]">Mode :</span>
+          <span className="flex items-center gap-1 text-[var(--theme-text-secondary)]">
+            Mode :
+            <InfoHint text="Le mode définit les droits de l'agent au prochain acknowledge : Talk = réponse sans outils, Plan = lecture seule, Edit = écriture (Write/Edit/Bash). Il appartient à la conversation et s'applique à la prochaine exécution, sans envoyer de message." />
+          </span>
           <button
             type="button"
             onClick={cycleMode}
@@ -1209,7 +1232,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           </button>
 
           {/* Model override dropdown — default "Auto (persona)" */}
-          <span className="ml-1 text-[var(--theme-text-secondary)]">Model :</span>
+          <span className="ml-1 flex items-center gap-1 text-[var(--theme-text-secondary)]">
+            Model :
+            <InfoHint text="Le modèle utilisé pour la prochaine exécution de l'agent mentionné. Auto = chaque agent garde le modèle de sa config. Choisir un modèle ici est un override de conversation : il s'applique à la prochaine mention sans modifier la config de l'agent." />
+          </span>
           <label className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[var(--theme-text-secondary)]">
             <span className="opacity-60">🤖</span>
             <select
