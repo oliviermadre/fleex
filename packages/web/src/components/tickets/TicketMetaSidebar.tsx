@@ -1076,7 +1076,10 @@ function PRLinkPicker({
 
     const [, org, name, num] = match as RegExpMatchArray & [string, string, string, string];
     const prNumber = parseInt(num, 10);
-    const ref = `${org}/${name}#${prNumber}`;
+    // Normalize org/repo to canonical lowercase: GitHub names are case-insensitive,
+    // and the PR store is keyed lowercase. A pasted "ODYS-TRAVEL/..." URL would
+    // otherwise produce a ref that never matches the store (badge stuck on green).
+    const ref = `${org.toLowerCase()}/${name.toLowerCase()}#${prNumber}`;
     const label = `#${prNumber}`;
 
     // Don't add duplicate

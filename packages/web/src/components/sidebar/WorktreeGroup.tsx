@@ -79,8 +79,10 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
       if (slashIdx <= 0) continue;
       const org = repoRef.substring(0, slashIdx);
       const name = repoRef.substring(slashIdx + 1);
-      // Find PR in store to get state
-      const storePRs = pullsByRepo[`${org}/${name}`];
+      // Find PR in store to get state (case-insensitive: link refs may carry a
+      // non-canonical org casing, e.g. a pasted "ODYS-TRAVEL/..." URL, while the
+      // store is keyed by the canonical lowercase repo)
+      const storePRs = pullsByRepo[`${org.toLowerCase()}/${name.toLowerCase()}`];
       const storePR = storePRs ? Object.values(storePRs).find((p) => p.number === num) : undefined;
       prs.push({
         org,
