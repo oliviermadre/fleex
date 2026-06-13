@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import type { AgentEvent } from '@fleex/shared';
 import { useAgentEventStore } from '../../stores/agentEventStore';
+import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { cn } from '../../lib/cn';
 
 const EMPTY_EVENTS: AgentEvent[] = [];
@@ -14,9 +15,8 @@ export function AgentEventStream({ executionId }: Props) {
   const loadEvents = useAgentEventStore((s) => s.loadEventsForExecution);
   const subscribeExecution = useAgentEventStore((s) => s.subscribeExecution);
   const unsubscribeExecution = useAgentEventStore((s) => s.unsubscribeExecution);
-  const streaming = useAgentEventStore((s) => !!s.streamingExecutionIds[executionId]);
   const loadStatus = useAgentEventStore((s) => s.eventsLoadStatus[executionId]);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { containerRef, maybeStick } = useStickToBottom<HTMLDivElement>();
 
   useEffect(() => {
     loadEvents(executionId);
@@ -26,16 +26,15 @@ export function AgentEventStream({ executionId }: Props) {
     };
   }, [executionId, loadEvents, subscribeExecution, unsubscribeExecution]);
 
-  // Auto-scroll during streaming
-  useEffect(() => {
-    if (streaming && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [events.length, streaming]);
+  // Follow new events only when the user is already at the bottom; if they
+  // scrolled up to read a step, stay put (no re-scroll on each new line).
+  useLayoutEffect(() => {
+    maybeStick();
+  }, [events.length, maybeStick]);
 
   return (
     <div
-      ref={scrollRef}
+      ref={containerRef}
       className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 font-mono text-sm bg-[var(--theme-bg-primary)]"
     >
       {events.length === 0 ? (
