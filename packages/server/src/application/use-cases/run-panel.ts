@@ -19,9 +19,11 @@ import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { EventBus } from '../event-bus.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
-import type { MentionExecutionMode } from '@fleex/shared';
+import type { AgentEventType, MentionExecutionMode } from '@fleex/shared';
 import { normalizeDeliverableTypes } from '@fleex/shared';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
+import { streamSdkQuery } from '../utils/stream-sdk-query.js';
+import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
@@ -38,6 +40,14 @@ interface SdkMetrics {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
+}
+
+/** Minimal ticket context surfaced in each atomic execution_start header. */
+interface PanelTicketMeta {
+  title: string;
+  status: string;
+  commentsCount: number;
+  deliverablesCount: number;
 }
 
 interface MemberResponse {
@@ -126,6 +136,12 @@ export class RunPanelUseCase {
 
     const topic = params.topic || context.ticket.title;
     const ticketContextBlocks = await this.buildTicketContextBlocks(context);
+    const ticketMeta: PanelTicketMeta = {
+      title: context.ticket.title,
+      status: context.ticket.status,
+      commentsCount: context.comments.length,
+      deliverablesCount: context.deliverables.length,
+    };
 
     this.logger.info('Panel execution started', {
       panelName: panel.name,
@@ -202,6 +218,7 @@ export class RunPanelUseCase {
       worktreePath,
       params.ticketId,
       panelMentionId,
+      ticketMeta,
     );
 
     // 8. Generate synthesis
@@ -212,6 +229,7 @@ export class RunPanelUseCase {
       worktreePath,
       params.ticketId,
       panelMentionId,
+      ticketMeta,
       params.extraContextPrompt,
       params.outputFormatOverride,
     );
@@ -379,6 +397,7 @@ export class RunPanelUseCase {
     worktreePath: string | null,
     ticketId: string,
     mentionId: string,
+    ticketMeta: PanelTicketMeta,
   ): Promise<MemberResponse[]> {
     const sortedMembers = [...panel.members].sort((a, b) => a.order - b.order);
     this.logger.info('Panel members starting', {
@@ -413,7 +432,7 @@ export class RunPanelUseCase {
         const panelMode: MentionExecutionMode = panel.executionMode === 'message' ? 'talk' : 'edit';
 
         return this.sdkLimiter.run(async () => {
-          const response = await this.queryMember(persona, model, topic, ticketContextBlocks, identityEmoji, worktreePath, panelMode, ticketId, mentionId);
+          const response = await this.queryMember(persona, model, topic, ticketContextBlocks, identityEmoji, worktreePath, panelMode, ticketId, mentionId, ticketMeta);
 
           this.logger.info('Panel member completed', {
             persona: persona.name,
@@ -438,9 +457,15 @@ export class RunPanelUseCase {
       maxTurns?: number;
       effectiveMode?: MentionExecutionMode;
       outputFormat?: Record<string, unknown>;
+      /**
+       * When provided, every intermediate SDK message is streamed as an
+       * agent_event — giving panel members & the orchestrator the same rich,
+       * real-time execution log as a persona. Without it the stream is consumed
+       * silently (legacy behaviour for non-logged internal calls).
+       */
+      emitEvent?: (eventType: AgentEventType, data: unknown) => Promise<void> | void;
     },
   ): Promise<{ text: string; structuredOutput: Record<string, unknown> | null; metrics: SdkMetrics }> {
-    const { query } = await import('@anthropic-ai/claude-agent-sdk');
     const mode = options.effectiveMode ?? 'edit';
 
     const queryOptions = buildSdkOptions(mode, {
@@ -455,70 +480,21 @@ export class RunPanelUseCase {
       queryOptions.maxTurns = options.maxTurns;
     }
 
-    let resultText = '';
-    let structuredOutput: Record<string, unknown> | null = null;
-    let messageCount = 0;
-    const metrics: SdkMetrics = {};
+    const noopEmit = () => {};
+    const result = await streamSdkQuery({
+      prompt,
+      queryOptions: queryOptions as Record<string, unknown>,
+      emitEvent: options.emitEvent ?? noopEmit,
+    });
 
-    // If content blocks (multimodal), wrap in SDKUserMessage async iterable
-    const promptArg = Array.isArray(prompt)
-      ? (async function* () {
-          yield {
-            type: 'user' as const,
-            message: { role: 'user' as const, content: prompt },
-            parent_tool_use_id: null,
-            session_id: '',
-          };
-        })()
-      : prompt;
-
-    for await (const message of query({
-      prompt: promptArg,
-      options: queryOptions as Parameters<typeof query>[0]['options'],
-    })) {
-      messageCount++;
-      const msg = message as Record<string, unknown>;
-      if (messageCount <= 3 || 'result' in message) {
-        this.logger.debug('SDK message', {
-          type: msg['type'],
-          subtype: msg['subtype'],
-          hasResult: 'result' in message,
-          messageCount,
-        });
-      }
-      if ('result' in message) {
-        resultText = (message as { result: string }).result;
-        // Capture structured output when outputFormat was requested
-        if (msg['structured_output']) {
-          structuredOutput = msg['structured_output'] as Record<string, unknown>;
-        }
-        // Capture instrumentation from SDK result message
-        if (typeof msg['duration_ms'] === 'number') metrics.durationMs = msg['duration_ms'] as number;
-        if (typeof msg['total_cost_usd'] === 'number') metrics.costUsd = msg['total_cost_usd'] as number;
-        const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;
-        if (modelUsage) {
-          let totalIn = 0, totalOut = 0, totalCacheRead = 0, totalCacheCreation = 0;
-          for (const mu of Object.values(modelUsage)) {
-            totalIn += mu['inputTokens'] ?? 0;
-            totalOut += mu['outputTokens'] ?? 0;
-            totalCacheRead += mu['cacheReadInputTokens'] ?? 0;
-            totalCacheCreation += mu['cacheCreationInputTokens'] ?? 0;
-          }
-          metrics.inputTokens = totalIn;
-          metrics.outputTokens = totalOut;
-          metrics.cacheReadTokens = totalCacheRead;
-          metrics.cacheCreationTokens = totalCacheCreation;
-        }
-      }
-    }
     this.logger.info('SDK query done', {
       model: options.model,
       mode,
-      messageCount,
-      resultLength: resultText.length,
-      costUsd: metrics.costUsd,
+      messageCount: result.messageCount,
+      resultLength: result.resultText.length,
+      costUsd: result.metrics.costUsd,
     });
-    return { text: resultText, structuredOutput, metrics };
+    return { text: result.resultText, structuredOutput: result.structuredOutput, metrics: result.metrics };
   }
 
   private async queryMember(
@@ -531,11 +507,14 @@ export class RunPanelUseCase {
     effectiveMode: MentionExecutionMode,
     ticketId: string,
     mentionId: string,
+    ticketMeta: PanelTicketMeta,
   ): Promise<MemberResponse> {
     const startTime = Date.now();
     const executionId = randomUUID();
 
-    // Track execution + emit event for real-time UI
+    // Track execution + emit events for real-time UI. A single sequence counter
+    // spans execution_start → intermediate stream events → execution_end so the
+    // member's atomic log streams the same rich content as a persona.
     await this.agentEventStore.startExecution({
       executionId,
       personaId: persona.id,
@@ -544,20 +523,20 @@ export class RunPanelUseCase {
       model,
     });
 
-    const startEvent = AgentEventEntity.create({
-      executionId,
-      eventType: 'execution_start',
-      data: { executionId, personaId: persona.id, personaName: persona.name, ticketId, mentionId, model },
-      sequence: 0,
-    });
-    await this.agentEventStore.appendEvent(startEvent);
-    this.onEvent?.(startEvent);
+    let sequence = 0;
+    const emitEvent = async (eventType: AgentEventType, data: unknown) => {
+      const event = AgentEventEntity.create({ executionId, eventType, data, sequence: sequence++ });
+      await this.agentEventStore.appendEvent(event);
+      this.onEvent?.(event);
+    };
 
     // Build system prompt from persona's soul + identity + memory
     const systemParts: string[] = [];
-    if (persona.soulMd) systemParts.push(persona.soulMd);
-    if (persona.identityMd) systemParts.push(persona.identityMd);
-    if (persona.memoryMd) systemParts.push(persona.memoryMd);
+    const contextSections: string[] = [];
+    if (persona.soulMd) { systemParts.push(persona.soulMd); contextSections.push('SOUL.md'); }
+    if (persona.identityMd) { systemParts.push(persona.identityMd); contextSections.push('IDENTITY.md'); }
+    if (persona.memoryMd) { systemParts.push(persona.memoryMd); contextSections.push('MEMORY.md'); }
+    if (worktreePath) contextSections.push(`Working directory (${worktreePath})`);
     const systemPrompt = systemParts.join('\n\n---\n\n');
 
     const codeAccessInstructions = worktreePath
@@ -573,6 +552,27 @@ export class RunPanelUseCase {
 
     const hasImages = promptBlocks.some((b) => b.type === 'image');
     const userPrompt = hasImages ? promptBlocks : promptBlocks.map((b) => (b as { text: string }).text).join('');
+    const userPromptLength = promptBlocks.reduce((n, b) => n + (b.type === 'text' ? (b as { text: string }).text.length : 0), 0);
+
+    await emitEvent('execution_start', buildExecutionStartData({
+      executionId,
+      personaId: persona.id,
+      personaName: persona.name,
+      ticketId,
+      mentionId,
+      model,
+      effectiveMode,
+      worktreePath,
+      kind: 'panel_member',
+      label: persona.displayName || persona.name,
+      systemPromptSections: contextSections,
+      systemPromptLength: systemPrompt.length,
+      userPromptLength,
+      ticketTitle: ticketMeta.title,
+      ticketStatus: ticketMeta.status,
+      commentsCount: ticketMeta.commentsCount,
+      deliverablesCount: ticketMeta.deliverablesCount,
+    }));
 
     try {
       const { text, metrics } = await this.querySDK(userPrompt, {
@@ -581,6 +581,7 @@ export class RunPanelUseCase {
         cwd: worktreePath,
         maxTurns: worktreePath ? 150 : 10,
         effectiveMode,
+        emitEvent,
       });
 
       await this.agentEventStore.completeExecution(executionId, 'completed', {
@@ -589,14 +590,7 @@ export class RunPanelUseCase {
         ...metrics,
       });
 
-      const endEvent = AgentEventEntity.create({
-        executionId,
-        eventType: 'execution_end',
-        data: { status: 'completed', ticketId, effectiveMode, model, ...metrics },
-        sequence: 1,
-      });
-      await this.agentEventStore.appendEvent(endEvent);
-      this.onEvent?.(endEvent);
+      await emitEvent('execution_end', { status: 'completed', ticketId, effectiveMode, model, ...metrics });
 
       return {
         personaName: persona.name,
@@ -616,14 +610,7 @@ export class RunPanelUseCase {
 
       await this.agentEventStore.completeExecution(executionId, 'failed', { model, effectiveMode });
 
-      const failEvent = AgentEventEntity.create({
-        executionId,
-        eventType: 'execution_end',
-        data: { status: 'failed', ticketId, effectiveMode, model, error: errorMsg },
-        sequence: 1,
-      });
-      await this.agentEventStore.appendEvent(failEvent);
-      this.onEvent?.(failEvent);
+      await emitEvent('execution_end', { status: 'failed', ticketId, effectiveMode, model, error: errorMsg });
 
       return {
         personaName: persona.name,
@@ -644,6 +631,7 @@ export class RunPanelUseCase {
     worktreePath: string | null,
     ticketId: string,
     mentionId: string,
+    ticketMeta: PanelTicketMeta,
     extraContextPrompt?: string,
     outputFormatOverride?: typeof STANDARD_OUTPUT_SCHEMA,
   ): Promise<{ text: string; structuredOutput: Record<string, unknown> | null; executionId: string }> {
@@ -660,18 +648,20 @@ export class RunPanelUseCase {
 
     // Orchestrator persona system prompt
     let orchestratorSystemPrompt: string | undefined;
+    const orchestratorContextSections: string[] = [];
     if (panel.orchestratorPersonaId) {
       const orchestratorPersona = await this.personaStore.getById(panel.orchestratorPersonaId);
       if (orchestratorPersona) {
         const parts: string[] = [];
-        if (orchestratorPersona.soulMd) parts.push(orchestratorPersona.soulMd);
-        if (orchestratorPersona.identityMd) parts.push(orchestratorPersona.identityMd);
-        if (orchestratorPersona.memoryMd) parts.push(orchestratorPersona.memoryMd);
+        if (orchestratorPersona.soulMd) { parts.push(orchestratorPersona.soulMd); orchestratorContextSections.push('SOUL.md'); }
+        if (orchestratorPersona.identityMd) { parts.push(orchestratorPersona.identityMd); orchestratorContextSections.push('IDENTITY.md'); }
+        if (orchestratorPersona.memoryMd) { parts.push(orchestratorPersona.memoryMd); orchestratorContextSections.push('MEMORY.md'); }
         if (parts.length > 0) {
           orchestratorSystemPrompt = parts.join('\n\n---\n\n');
         }
       }
     }
+    if (worktreePath) orchestratorContextSections.push(`Working directory (${worktreePath})`);
 
     const synthesisPrompt = `# Panel Discussion — ${panel.displayName}
 
@@ -703,25 +693,38 @@ Be concise and decision-oriented. Write in the same language as the panel member
       model: panel.orchestratorModel,
     });
 
+    // Single sequence counter spanning start → stream → end so the
+    // orchestrator's atomic log streams the same rich content as a persona.
+    let sequence = 0;
+    const emitEvent = async (eventType: AgentEventType, data: unknown) => {
+      const event = AgentEventEntity.create({ executionId, eventType, data, sequence: sequence++ });
+      await this.agentEventStore.appendEvent(event);
+      this.onEvent?.(event);
+    };
+
     // Broadcast orchestrator start so the Execution Log can show it live.
     const orchestratorPersonaForEvent = panel.orchestratorPersonaId
       ? await this.personaStore.getById(panel.orchestratorPersonaId)
       : null;
-    const startEvent = AgentEventEntity.create({
+    await emitEvent('execution_start', buildExecutionStartData({
       executionId,
-      eventType: 'execution_start',
-      data: {
-        executionId,
-        personaId: orchestratorPersonaId,
-        personaName: orchestratorPersonaForEvent?.name ?? panel.name,
-        ticketId,
-        mentionId,
-        model: panel.orchestratorModel,
-      },
-      sequence: 0,
-    });
-    await this.agentEventStore.appendEvent(startEvent);
-    this.onEvent?.(startEvent);
+      personaId: orchestratorPersonaId,
+      personaName: orchestratorPersonaForEvent?.name ?? panel.name,
+      ticketId,
+      mentionId,
+      model: panel.orchestratorModel,
+      effectiveMode,
+      worktreePath,
+      kind: 'panel_orchestrator',
+      label: 'orchestrateur',
+      systemPromptSections: orchestratorContextSections,
+      systemPromptLength: orchestratorSystemPrompt?.length ?? 0,
+      userPromptLength: synthesisPrompt.length,
+      ticketTitle: ticketMeta.title,
+      ticketStatus: ticketMeta.status,
+      commentsCount: ticketMeta.commentsCount,
+      deliverablesCount: ticketMeta.deliverablesCount,
+    }));
 
     try {
       const { text, structuredOutput: rawStructured, metrics } = await this.querySDK(synthesisPrompt, {
@@ -730,6 +733,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
         cwd: worktreePath,
         effectiveMode,
         outputFormat: outputFormatOverride,
+        emitEvent,
       });
 
       await this.agentEventStore.completeExecution(executionId, 'completed', {
@@ -738,14 +742,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
         ...metrics,
       });
 
-      const endEvent = AgentEventEntity.create({
-        executionId,
-        eventType: 'execution_end',
-        data: { status: 'completed', ticketId, effectiveMode, model: panel.orchestratorModel, ...metrics },
-        sequence: 1,
-      });
-      await this.agentEventStore.appendEvent(endEvent);
-      this.onEvent?.(endEvent);
+      await emitEvent('execution_end', { status: 'completed', ticketId, effectiveMode, model: panel.orchestratorModel, ...metrics });
 
       const validTypes = normalizeDeliverableTypes(this.config.get().deliverableTypes)
         .filter((t) => !t.system)
@@ -761,14 +758,7 @@ Be concise and decision-oriented. Write in the same language as the panel member
 
       await this.agentEventStore.completeExecution(executionId, 'failed', { model: panel.orchestratorModel, effectiveMode });
 
-      const failEvent = AgentEventEntity.create({
-        executionId,
-        eventType: 'execution_end',
-        data: { status: 'failed', ticketId, effectiveMode, model: panel.orchestratorModel, error: errorMsg },
-        sequence: 1,
-      });
-      await this.agentEventStore.appendEvent(failEvent);
-      this.onEvent?.(failEvent);
+      await emitEvent('execution_end', { status: 'failed', ticketId, effectiveMode, model: panel.orchestratorModel, error: errorMsg });
 
       const fallbackText = `**🏛️ ${panel.displayName} — Synthesis (auto-generated)**\n\n⚠️ Synthesis generation failed. Individual member responses are available in the full transcript deliverable.\n\n${validResponses.map((r) => `- **${r.emoji} ${r.personaDisplayName}** responded (${r.durationMs}ms)`).join('\n')}`;
       return { text: fallbackText, structuredOutput: null, executionId };

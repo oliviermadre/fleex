@@ -15,6 +15,8 @@ import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
+import { streamSdkQuery, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
+import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
@@ -743,7 +745,7 @@ export class ExecuteAgentUseCase {
       if (humanName) contextSections.push(`Human operator (@${humanName})`);
       if (worktreePath) contextSections.push(`Working directory (${worktreePath})`);
 
-      await emitEvent('execution_start', {
+      await emitEvent('execution_start', buildExecutionStartData({
         executionId,
         personaId: persona.id,
         personaName: persona.name,
@@ -753,16 +755,15 @@ export class ExecuteAgentUseCase {
         effectiveMode,
         worktreePath,
         resumeSessionId: previousSessionId ?? null,
-        context: {
-          systemPromptSections: contextSections,
-          systemPromptLength: systemPrompt.length,
-          userPromptLength: userPromptTextLength,
-          ticketTitle: context.ticket.title,
-          ticketStatus: context.ticket.status,
-          commentsCount: context.comments.length,
-          deliverablesCount: context.deliverables.length,
-        },
-      });
+        kind: 'persona',
+        systemPromptSections: contextSections,
+        systemPromptLength: systemPrompt.length,
+        userPromptLength: userPromptTextLength,
+        ticketTitle: context.ticket.title,
+        ticketStatus: context.ticket.status,
+        commentsCount: context.comments.length,
+        deliverablesCount: context.deliverables.length,
+      }));
 
       // 9. Setup execution timeout
       const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
@@ -783,8 +784,6 @@ export class ExecuteAgentUseCase {
       let sdkCacheCreationTokens: number | undefined;
 
       {
-        const { query } = await import('@anthropic-ai/claude-agent-sdk');
-
         const queryOptions = buildSdkOptions(effectiveMode, {
           model: resolved.model,
           systemPrompt,
@@ -801,92 +800,28 @@ export class ExecuteAgentUseCase {
           ? userPromptBlocks  // Will be wrapped into SDKUserMessage below
           : userPromptBlocks.map((b) => (b as { text: string }).text).join('');
 
-        const runQueryLoop = async () => {
-          // If we have images, wrap blocks in an SDKUserMessage AsyncIterable
-          const promptArg = Array.isArray(userPrompt)
-            ? (async function* () {
-                yield {
-                  type: 'user' as const,
-                  message: { role: 'user' as const, content: userPrompt },
-                  parent_tool_use_id: null,
-                  session_id: previousSessionId ?? '',
-                };
-              })()
-            : userPrompt;
+        // Persist the session as soon as it exists (not only on success). If
+        // this run is later aborted/superseded, the next mention on the same
+        // agent+ticket can still resume from here — so "stop & redo" keeps the
+        // agent's memory of what it was doing plus the correction.
+        const onSessionId = (sid: string) => { this.sessionHistory.set(sessionKey, sid); };
 
-          for await (const message of query({
-            prompt: promptArg,
-            options: queryOptions as Parameters<typeof query>[0]['options'],
-          })) {
-            // Check abort signal between events
-            if (abortController.signal.aborted) {
-              break;
-            }
+        const runStream = (fallbackSession: string) => streamSdkQuery({
+          prompt: userPrompt,
+          queryOptions: queryOptions as Record<string, unknown>,
+          emitEvent,
+          abortSignal: abortController.signal,
+          fallbackSessionId: fallbackSession,
+          onSessionId,
+        });
 
-            // Capture session ID from init message
-            const msg = message as Record<string, unknown>;
-            if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
-              sdkSessionId = msg['session_id'] as string;
-              // Persist the session as soon as it exists (not only on success).
-              // If this run is later aborted/superseded, the next mention on the
-              // same agent+ticket can still resume from here — so "stop & redo"
-              // keeps the agent's memory of what it was doing plus the
-              // correction. Completion (step 10) re-sets the same value.
-              this.sessionHistory.set(sessionKey, sdkSessionId);
-              await emitEvent('turn_start', { sessionId: sdkSessionId });
-            }
-
-            // Capture final result + instrumentation
-            if ('result' in message) {
-              resultText = (message as { result: string }).result;
-
-              // Use SDK's validated structured output if available
-              if (msg['structured_output']) {
-                structuredOutput = msg['structured_output'] as AgentStructuredOutput;
-              }
-
-              // Capture SDK instrumentation data from result message
-              if (typeof msg['duration_ms'] === 'number') sdkDurationMs = msg['duration_ms'] as number;
-              if (typeof msg['total_cost_usd'] === 'number') sdkCostUsd = msg['total_cost_usd'] as number;
-              // Use modelUsage for token breakdown (cumulative per-model totals)
-              const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;
-              if (modelUsage) {
-                let totalIn = 0, totalOut = 0, totalCacheRead = 0, totalCacheCreation = 0;
-                for (const mu of Object.values(modelUsage)) {
-                  totalIn += mu['inputTokens'] ?? 0;
-                  totalOut += mu['outputTokens'] ?? 0;
-                  totalCacheRead += mu['cacheReadInputTokens'] ?? 0;
-                  totalCacheCreation += mu['cacheCreationInputTokens'] ?? 0;
-                }
-                sdkInputTokens = totalIn;
-                sdkOutputTokens = totalOut;
-                sdkCacheReadTokens = totalCacheRead;
-                sdkCacheCreationTokens = totalCacheCreation;
-              }
-
-              if (msg['subtype'] === 'error_max_structured_output_retries') {
-                this.logger.warn('SDK structured output retries exhausted, falling back to parser', {
-                  executionId,
-                  persona: persona.name,
-                });
-              }
-
-              await emitEvent('message_stop', {
-                result: resultText,
-                subtype: msg['subtype'] as string | undefined,
-              });
-            } else {
-              // Store all other SDK messages as events
-              await emitEvent('content_block_delta', msg);
-            }
-          }
-        };
-
+        let streamResult: StreamSdkQueryResult;
         try {
-          await runQueryLoop();
+          streamResult = await runStream(previousSessionId ?? '');
         } catch (queryErr) {
           if (abortController.signal.aborted) {
-            // Abort was triggered — handle below
+            // Abort was triggered — handled below.
+            streamResult = { resultText: '', structuredOutput: null, metrics: {}, messageCount: 0 };
           } else if (previousSessionId) {
             // Stale resume — clear session and retry fresh
             this.logger.warn('SDK query failed with resume, retrying without resume', {
@@ -897,14 +832,28 @@ export class ExecuteAgentUseCase {
             });
             this.sessionHistory.delete(sessionKey);
             delete queryOptions['resume'];
-            sdkSessionId = undefined;
-            resultText = '';
-            structuredOutput = null;
             await emitEvent('execution_retry', { reason: 'stale_resume_session', staleSessionId: previousSessionId });
-            await runQueryLoop(); // If this also fails, propagates to outer catch
+            streamResult = await runStream(''); // If this also fails, propagates to outer catch
           } else {
             throw queryErr;
           }
+        }
+
+        sdkSessionId = streamResult.sessionId;
+        resultText = streamResult.resultText;
+        structuredOutput = streamResult.structuredOutput as AgentStructuredOutput | null;
+        sdkDurationMs = streamResult.metrics.durationMs;
+        sdkCostUsd = streamResult.metrics.costUsd;
+        sdkInputTokens = streamResult.metrics.inputTokens;
+        sdkOutputTokens = streamResult.metrics.outputTokens;
+        sdkCacheReadTokens = streamResult.metrics.cacheReadTokens;
+        sdkCacheCreationTokens = streamResult.metrics.cacheCreationTokens;
+
+        if (streamResult.resultSubtype === 'error_max_structured_output_retries') {
+          this.logger.warn('SDK structured output retries exhausted, falling back to parser', {
+            executionId,
+            persona: persona.name,
+          });
         }
       }
 
@@ -1370,16 +1319,42 @@ export class ExecuteAgentUseCase {
       this.onEvent?.(event);
     };
 
-    await emitEvent('execution_start', {
+    // Build context window summary for observability (parity with persona).
+    const skillContextSections: string[] = [];
+    if (persona.soulMd) skillContextSections.push('SOUL.md');
+    if (persona.identityMd) skillContextSections.push('IDENTITY.md');
+    if (persona.memoryMd) skillContextSections.push('MEMORY.md');
+    skillContextSections.push('Structured output instructions');
+    if (humanName) skillContextSections.push(`Human operator (@${humanName})`);
+    if (worktreePath) skillContextSections.push(`Working directory (${worktreePath})`);
+    skillContextSections.push(`Skill: ${skill.displayName}`);
+    const skillUserPromptLength = skillPromptBlocks.reduce(
+      (n, b) => n + (b.type === 'text' ? (b as { text: string }).text.length : 0),
+      0,
+    );
+
+    await emitEvent('execution_start', buildExecutionStartData({
       executionId,
       personaId: persona.id,
       personaName: persona.name,
       ticketId,
+      mentionId: startMentionId,
+      model: persona.model,
+      // Skills always run with full edit rights.
+      effectiveMode: 'edit',
+      worktreePath,
+      kind: 'skill',
+      label: skill.displayName,
       skillId,
       skillName: skill.commandName,
-      model: persona.model,
-      worktreePath,
-    });
+      systemPromptSections: skillContextSections,
+      systemPromptLength: systemPrompt.length,
+      userPromptLength: skillUserPromptLength,
+      ticketTitle: context.ticket.title,
+      ticketStatus: context.ticket.status,
+      commentsCount: context.comments.length,
+      deliverablesCount: context.deliverables.length,
+    }));
 
     // 6. Acquire a global SDK slot before arming the timeout, so time spent
     // waiting behind other executions never counts toward the execution timeout.
@@ -1394,17 +1369,6 @@ export class ExecuteAgentUseCase {
 
     try {
       // 8. Call Claude Agent SDK
-      const { query } = await import('@anthropic-ai/claude-agent-sdk');
-
-      let sdkSessionId: string | undefined;
-      let resultText = '';
-      let structuredOutput: AgentStructuredOutput | null = null;
-      let sdkDurationMs: number | undefined;
-      let sdkCostUsd: number | undefined;
-      let sdkInputTokens: number | undefined;
-      let sdkOutputTokens: number | undefined;
-      let sdkCacheReadTokens: number | undefined;
-      let sdkCacheCreationTokens: number | undefined;
       const effectiveMode = 'edit' as const;
 
       const sessionKey = `skill:${skill.commandName}:${ticketId}`;
@@ -1420,58 +1384,27 @@ export class ExecuteAgentUseCase {
 
       // Build prompt: content blocks if images, string otherwise
       const skillHasImages = skillPromptBlocks.some((b) => b.type === 'image');
-      const skillPromptArg = skillHasImages
-        ? (async function* () {
-            yield {
-              type: 'user' as const,
-              message: { role: 'user' as const, content: skillPromptBlocks },
-              parent_tool_use_id: null,
-              session_id: previousSessionId ?? '',
-            };
-          })()
+      const skillPrompt = skillHasImages
+        ? skillPromptBlocks
         : skillPromptBlocks.map((b) => (b as { text: string }).text).join('');
 
-      for await (const message of query({
-        prompt: skillPromptArg,
-        options: queryOptions as Parameters<typeof query>[0]['options'],
-      })) {
-        if (abortController.signal.aborted) break;
+      const streamResult = await streamSdkQuery({
+        prompt: skillPrompt,
+        queryOptions: queryOptions as Record<string, unknown>,
+        emitEvent,
+        abortSignal: abortController.signal,
+        fallbackSessionId: previousSessionId ?? '',
+      });
 
-        const msg = message as Record<string, unknown>;
-        if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
-          sdkSessionId = msg['session_id'] as string;
-          await emitEvent('turn_start', { sessionId: sdkSessionId });
-        }
-
-        if ('result' in message) {
-          resultText = (message as { result: string }).result;
-          if (msg['structured_output']) {
-            structuredOutput = msg['structured_output'] as AgentStructuredOutput;
-          }
-
-          // Capture SDK instrumentation data from result message
-          if (typeof msg['duration_ms'] === 'number') sdkDurationMs = msg['duration_ms'] as number;
-          if (typeof msg['total_cost_usd'] === 'number') sdkCostUsd = msg['total_cost_usd'] as number;
-          const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;
-          if (modelUsage) {
-            let totalIn = 0, totalOut = 0, totalCacheRead = 0, totalCacheCreation = 0;
-            for (const mu of Object.values(modelUsage)) {
-              totalIn += mu['inputTokens'] ?? 0;
-              totalOut += mu['outputTokens'] ?? 0;
-              totalCacheRead += mu['cacheReadInputTokens'] ?? 0;
-              totalCacheCreation += mu['cacheCreationInputTokens'] ?? 0;
-            }
-            sdkInputTokens = totalIn;
-            sdkOutputTokens = totalOut;
-            sdkCacheReadTokens = totalCacheRead;
-            sdkCacheCreationTokens = totalCacheCreation;
-          }
-
-          await emitEvent('message_stop', { result: resultText, subtype: msg['subtype'] as string | undefined });
-        } else {
-          await emitEvent('content_block_delta', msg);
-        }
-      }
+      const sdkSessionId = streamResult.sessionId;
+      const resultText = streamResult.resultText;
+      const structuredOutput = streamResult.structuredOutput as AgentStructuredOutput | null;
+      const sdkDurationMs = streamResult.metrics.durationMs;
+      const sdkCostUsd = streamResult.metrics.costUsd;
+      const sdkInputTokens = streamResult.metrics.inputTokens;
+      const sdkOutputTokens = streamResult.metrics.outputTokens;
+      const sdkCacheReadTokens = streamResult.metrics.cacheReadTokens;
+      const sdkCacheCreationTokens = streamResult.metrics.cacheCreationTokens;
 
       clearTimeout(timeoutHandle);
 
@@ -1782,48 +1715,53 @@ export class ExecuteAgentUseCase {
         this.onEvent?.(event);
       };
 
-      await emitEvent('execution_start', {
-        executionId, personaId: persona.id, personaName: persona.name, ticketId: params.ticketId,
-        model: persona.model, effectiveMode, worktreePath,
-        context: {
-          systemPromptSections: ['workflow_step'],
-          systemPromptLength: systemPrompt.length,
-          userPromptLength: userPromptText.length,
-        },
-      });
+      // Build context window summary for observability (parity with persona).
+      const wfContextSections: string[] = [];
+      if (persona.soulMd) wfContextSections.push('SOUL.md');
+      if (persona.identityMd) wfContextSections.push('IDENTITY.md');
+      if (persona.memoryMd) wfContextSections.push('MEMORY.md');
+      wfContextSections.push('Structured output instructions');
+      if (humanName) wfContextSections.push(`Human operator (@${humanName})`);
+      if (worktreePath) wfContextSections.push(`Working directory (${worktreePath})`);
+      wfContextSections.push('Workflow step');
+
+      await emitEvent('execution_start', buildExecutionStartData({
+        executionId,
+        personaId: persona.id,
+        personaName: persona.name,
+        ticketId: params.ticketId,
+        mentionId: `workflow:${executionId}`,
+        model: persona.model,
+        effectiveMode,
+        worktreePath,
+        kind: 'workflow_step',
+        label: 'workflow step',
+        systemPromptSections: wfContextSections,
+        systemPromptLength: systemPrompt.length,
+        userPromptLength: userPromptText.length,
+        ticketTitle: context.ticket.title,
+        ticketStatus: context.ticket.status,
+        commentsCount: context.comments.length,
+        deliverablesCount: context.deliverables.length,
+      }));
 
       // SDK query
-      const { query } = await import('@anthropic-ai/claude-agent-sdk');
       const queryOptions = buildSdkOptions(effectiveMode, {
         model: persona.model, systemPrompt, cwd: worktreePath,
         outputFormat: params.outputFormat,
       });
 
-      let sdkSessionId: string | undefined;
-      let resultText = '';
-      let structuredOutput: Record<string, unknown> | null = null;
       const hasImages = userPromptBlocks.some((b) => b.type === 'image');
-      const promptArg = hasImages
-        ? (async function* () { yield { type: 'user' as const, message: { role: 'user' as const, content: userPromptBlocks }, parent_tool_use_id: null, session_id: '' }; })()
-        : userPromptText;
-
+      let structuredOutput: Record<string, unknown> | null = null;
+      let resultText = '';
       try {
-        for await (const message of query({ prompt: promptArg, options: queryOptions as Parameters<typeof query>[0]['options'] })) {
-          const msg = message as Record<string, unknown>;
-          if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
-            sdkSessionId = msg['session_id'] as string;
-            await emitEvent('turn_start', { sessionId: sdkSessionId });
-          }
-          if ('result' in message) {
-            resultText = (message as { result: string }).result;
-            if (msg['structured_output']) {
-              structuredOutput = msg['structured_output'] as Record<string, unknown>;
-            }
-            await emitEvent('message_stop', { result: resultText, subtype: msg['subtype'] as string | undefined });
-          } else {
-            await emitEvent('content_block_delta', msg);
-          }
-        }
+        const streamResult = await streamSdkQuery({
+          prompt: hasImages ? userPromptBlocks : userPromptText,
+          queryOptions: queryOptions as Record<string, unknown>,
+          emitEvent,
+        });
+        structuredOutput = streamResult.structuredOutput;
+        resultText = streamResult.resultText;
       } catch (err) {
         await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
         await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
