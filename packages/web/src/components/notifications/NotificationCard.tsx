@@ -46,7 +46,7 @@ export function NotificationCard({
         'group flex items-start gap-2.5 rounded-md border border-[var(--theme-border)] border-l-2 px-3 py-2.5 text-left shadow-sm transition-colors',
         'bg-[var(--theme-bg-overlay)]',
         levelAccent[level],
-        onClick && 'cursor-pointer hover:bg-[var(--theme-bg-hover)]',
+        onClick && 'cursor-pointer hover:bg-[var(--theme-bg-overlay-hover)]',
       )}
       onClick={onClick}
       role={onClick ? 'button' : undefined}

@@ -7,6 +7,7 @@ export interface ThemeColors {
   bgSurface: string;
   bgOverlay: string;
   bgHover: string;
+  bgOverlayHover: string;
   border: string;
   borderSubtle: string;
   borderInput: string;
@@ -59,6 +60,7 @@ const ZINC_DARK_NEUTRALS = {
   bgSurface: '#18181b',
   bgOverlay: '#27272a',
   bgHover: 'rgba(39, 39, 42, 0.5)',
+  bgOverlayHover: '#3f3f46',
   border: '#27272a',
   borderSubtle: 'rgba(39, 39, 42, 0.5)',
   borderInput: '#3f3f46',
@@ -180,6 +182,7 @@ export const THEME_LIGHT: Theme = {
     bgSurface: '#ffffff',
     bgOverlay: '#e4e4e7',
     bgHover: 'rgba(228, 228, 231, 0.6)',
+    bgOverlayHover: '#d4d4d8',
     border: '#d4d4d8',
     borderSubtle: 'rgba(212, 212, 216, 0.5)',
     borderInput: '#a1a1aa',
@@ -225,6 +228,7 @@ export const THEME_DARK: Theme = {
     bgSurface: '#1e293b',
     bgOverlay: '#334155',
     bgHover: 'rgba(51, 65, 85, 0.5)',
+    bgOverlayHover: '#475569',
     border: '#334155',
     borderSubtle: 'rgba(51, 65, 85, 0.5)',
     borderInput: '#475569',
@@ -270,6 +274,7 @@ export const THEME_MATRIX: Theme = {
     bgSurface: '#0a0a0a',
     bgOverlay: '#141414',
     bgHover: 'rgba(34, 197, 94, 0.08)',
+    bgOverlayHover: '#242424',
     border: '#1a2e1a',
     borderSubtle: 'rgba(34, 197, 94, 0.1)',
     borderInput: '#1f3d1f',
@@ -315,6 +320,7 @@ export const THEME_SUMMER: Theme = {
     bgSurface: '#fffbeb',
     bgOverlay: '#fef3c7',
     bgHover: 'rgba(254, 243, 199, 0.6)',
+    bgOverlayHover: '#fde68a',
     border: '#fde68a',
     borderSubtle: 'rgba(253, 230, 138, 0.5)',
     borderInput: '#fcd34d',
@@ -360,6 +366,7 @@ export const THEME_FALL: Theme = {
     bgSurface: '#292018',
     bgOverlay: '#3d2e1e',
     bgHover: 'rgba(61, 46, 30, 0.5)',
+    bgOverlayHover: '#4d3a27',
     border: '#3d2e1e',
     borderSubtle: 'rgba(61, 46, 30, 0.5)',
     borderInput: '#5c4033',
@@ -405,6 +412,7 @@ export const THEME_LATTE: Theme = {
     bgSurface: '#e6e9ef',
     bgOverlay: '#dce0e8',
     bgHover: 'rgba(204, 208, 218, 0.5)',
+    bgOverlayHover: '#c5cad6',
     border: '#ccd0da',
     borderSubtle: 'rgba(204, 208, 218, 0.5)',
     borderInput: '#bcc0cc',
@@ -460,6 +468,7 @@ const CSS_VAR_MAP: Record<keyof ThemeColors, string> = {
   bgSurface: '--theme-bg-surface',
   bgOverlay: '--theme-bg-overlay',
   bgHover: '--theme-bg-hover',
+  bgOverlayHover: '--theme-bg-overlay-hover',
   border: '--theme-border',
   borderSubtle: '--theme-border-subtle',
   borderInput: '--theme-border-input',

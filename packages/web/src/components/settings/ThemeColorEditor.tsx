@@ -15,7 +15,7 @@ const COLOR_GROUPS: { label: string; keys: (keyof ThemeColors)[] }[] = [
   },
   {
     label: 'Backgrounds',
-    keys: ['bgBase', 'bgSurface', 'bgOverlay', 'bgHover'],
+    keys: ['bgBase', 'bgSurface', 'bgOverlay', 'bgHover', 'bgOverlayHover'],
   },
   {
     label: 'Borders',
@@ -40,6 +40,7 @@ const LABELS: Record<keyof ThemeColors, string> = {
   bgSurface: 'Surface',
   bgOverlay: 'Overlay',
   bgHover: 'Hover',
+  bgOverlayHover: 'Overlay Hover',
   border: 'Border',
   borderSubtle: 'Subtle',
   borderInput: 'Input',

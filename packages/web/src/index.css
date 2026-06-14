@@ -25,6 +25,7 @@ html, body {
   --theme-bg-surface: #18181b;
   --theme-bg-overlay: #27272a;
   --theme-bg-hover: rgba(39, 39, 42, 0.5);
+  --theme-bg-overlay-hover: #3f3f46;
   --theme-border: #27272a;
   --theme-border-subtle: rgba(39, 39, 42, 0.5);
   --theme-border-input: #3f3f46;
