@@ -9,6 +9,7 @@ import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { deriveTicketUpdateEvents } from '../../domain/services/ticket-audit-events.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
@@ -259,7 +260,12 @@ export function ticketRoutes(container: Container) {
         }));
       }
 
-      emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
+      // Emit semantic events for favorite/blocked/tags so the audit trail records
+      // *what* the user did, not an opaque `ticket.updated`. Remaining fields
+      // (title, priority, due date…) still go through the generic `ticket.updated`.
+      for (const event of deriveTicketUpdateEvents(ticket.id, diff, new Date())) {
+        emit(event);
+      }
       return ticket.toDTO();
     });
 
@@ -534,7 +540,14 @@ export function ticketRoutes(container: Container) {
           source: 'web',
         }));
 
-        emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
+        emit({
+          type: 'ticket.linkAdded',
+          ticketId: ticket.id,
+          linkType: link.type,
+          ref: link.ref,
+          label: link.label,
+          occurredAt: new Date(),
+        });
         return link;
       },
     );
@@ -670,7 +683,12 @@ export function ticketRoutes(container: Container) {
             changes: { linkId: { from: request.params.linkId, to: null } },
             source: 'web',
           }));
-          emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
+          emit({
+            type: 'ticket.linkRemoved',
+            ticketId: ticket.id,
+            ...(link ? { linkType: link.type, ref: link.ref, label: link.label } : {}),
+            occurredAt: new Date(),
+          });
         }
 
         return reply.code(204).send();
@@ -685,7 +703,12 @@ export function ticketRoutes(container: Container) {
     // Workflow: open session from ticket
     app.post<{ Params: { id: string } }>('/api/tickets/:id/open-session', async (request) => {
       const result = await container.createSessionFromTicket.execute(request.params.id);
-      emit({ type: 'ticket.updated', ticketId: request.params.id, changes: {}, occurredAt: new Date() });
+      // The action itself is already audited via `session.created`. We only need
+      // to refresh the ticket in connected UIs (new session/worktree link),
+      // so we broadcast directly instead of emitting an empty `ticket.updated`
+      // that would pollute the audit trail with a content-less row.
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (ticket) container.ticketBroadcast('ticket:updated', ticket.toDTO());
       return result;
     });
 
@@ -787,7 +810,7 @@ export function ticketRoutes(container: Container) {
         });
 
         await container.ticketStore.saveTicket(ticket);
-        emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
+        emit({ type: 'ticket.syncedFromGithub', ticketId: ticket.id, occurredAt: new Date() });
         return ticket.toDTO();
       },
     );
@@ -910,9 +933,21 @@ export function ticketRoutes(container: Container) {
       const mention = await container.mentionStore.getById(request.params.id);
       if (!mention) throw new MentionNotFoundError(request.params.id);
 
+      const previousMode = mention.executionMode;
       mention.executionMode = request.body.executionMode;
       await container.mentionStore.save(mention);
       container.ticketBroadcast('mention:updated', mention.toDTO());
+
+      if (previousMode !== request.body.executionMode) {
+        emit({
+          type: 'mention.executionModeChanged',
+          mentionId: mention.id,
+          ticketId: mention.ticketId,
+          from: previousMode,
+          to: request.body.executionMode,
+          occurredAt: new Date(),
+        });
+      }
 
       return mention.toDTO();
     });

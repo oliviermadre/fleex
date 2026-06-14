@@ -49,4 +49,5 @@ export const HUB_SHARED_EXCLUDED: ReadonlySet<string> = new Set([
   'session.killed',
   'session.hookStatusChanged',
   'worktree.created',
+  'worktree.deleted',
 ]);

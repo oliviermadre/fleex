@@ -66,6 +66,18 @@ export class BroadcastRegistrar {
     bus.on('ticket.created', (e) => this.broadcastTicketEntity(e, 'ticket:created'));
     bus.on('ticket.updated', (e) => this.broadcastTicketEntity(e, 'ticket:updated'));
     bus.on('ticket.moved', (e) => this.broadcastTicketEntity(e, 'ticket:moved'));
+    // Semantic ticket events replace the generic `ticket.updated` for these
+    // actions in the audit trail — they must still trigger a `ticket:updated`
+    // WS push so connected UIs refresh the favorite star, blocked flag, tags
+    // and links live.
+    bus.on('ticket.favorited', (e) => this.broadcastTicketEntity(e, 'ticket:updated'));
+    bus.on('ticket.unfavorited', (e) => this.broadcastTicketEntity(e, 'ticket:updated'));
+    bus.on('ticket.blocked', (e) => this.broadcastTicketEntity(e, 'ticket:updated'));
+    bus.on('ticket.unblocked', (e) => this.broadcastTicketEntity(e, 'ticket:updated'));
+    bus.on('ticket.tagsChanged', (e) => this.broadcastTicketEntity(e, 'ticket:updated'));
+    bus.on('ticket.linkAdded', (e) => this.broadcastTicketEntity(e, 'ticket:updated'));
+    bus.on('ticket.linkRemoved', (e) => this.broadcastTicketEntity(e, 'ticket:updated'));
+    bus.on('ticket.syncedFromGithub', (e) => this.broadcastTicketEntity(e, 'ticket:updated'));
     bus.on('ticket.deleted', (e) => {
       if (e.type === 'ticket.deleted') {
         this.ticketBroadcast('ticket:deleted', { id: e.ticketId });
