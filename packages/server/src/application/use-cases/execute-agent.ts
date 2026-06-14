@@ -3,7 +3,9 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel } from '@fleex/shared';
 import { inferModelCapabilities } from '@fleex/shared';
-import { AgentPersonaNotFoundError } from '../../domain/errors.js';
+import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
+import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
+import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
@@ -110,7 +112,7 @@ ${typeLines}
 `.trim();
 }
 
-export class ExecuteAgentUseCase {
+export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegistryPort {
   private activeExecutions = new Map<string, ActiveExecution>();
   private sessionHistory = new Map<string, string>(); // `${agentName}:${ticketId}` -> sdkSessionId
   private queue: QueueItem[] = [];
@@ -456,6 +458,39 @@ export class ExecuteAgentUseCase {
     const exec = this.activeExecutions.get(mentionId);
     if (!exec || exec.status !== 'running') return false;
     return this.cancelExecution(exec.executionId);
+  }
+
+  /**
+   * ExecutionRegistryPort — register an externally-spawned execution (e.g. a
+   * panel member or orchestrator) so it becomes abortable through
+   * `cancelExecution`. Keyed by executionId (a UUID, so no collision with the
+   * mention/skill/workflow keys). Must be called before the SDK loop starts.
+   */
+  registerExecution(entry: ExecutionRegistryEntry): void {
+    this.activeExecutions.set(entry.executionId, {
+      mentionId: entry.executionId,
+      executionId: entry.executionId,
+      personaId: entry.personaId,
+      ...(entry.ticketId ? { ticketId: entry.ticketId } : {}),
+      status: 'running',
+      abortController: entry.abortController,
+    });
+  }
+
+  /**
+   * ExecutionRegistryPort — settle a registered execution and schedule its
+   * eviction (30s grace preserves the Terminate lookup window, mirroring the
+   * skill path). Idempotent: leaves an already-cancelled ('failed') entry as-is
+   * so a late finalize can't resurrect it to 'running'.
+   */
+  finalizeExecution(executionId: string): void {
+    const exec = this.activeExecutions.get(executionId);
+    if (!exec) return;
+    if (exec.status === 'running') exec.status = 'completed';
+    setTimeout(() => {
+      const e = this.activeExecutions.get(executionId);
+      if (e && e.status !== 'running') this.activeExecutions.delete(executionId);
+    }, 30000);
   }
 
   /**
@@ -1681,6 +1716,12 @@ export class ExecuteAgentUseCase {
     outputFormat: typeof OUTPUT_FORMAT_SCHEMA;
     workflowContextPrompt: string;
     mode: MentionExecutionMode;
+    /**
+     * Called as soon as the execution is registered and its `executionId` is
+     * known (before the SDK query runs), so the orchestrator can persist
+     * `step_run.executionId` live and make the in-flight step cancellable.
+     */
+    onExecutionStarted?: (executionId: string) => void | Promise<void>;
   }): Promise<{
     structuredOutput: Record<string, unknown> | null;
     rawText: string;
@@ -1693,8 +1734,18 @@ export class ExecuteAgentUseCase {
     // concurrent workflow runs are throttled by the one global limit rather than
     // a serial queue. The release fn is idempotent and runs in finally.
     const releaseSdkSlot = await this.sdkLimiter.acquire();
+    const executionId = randomUUID();
+    // Register the execution so the Terminate button / cancel run / force
+    // restart can find and abort it, exactly like mention & skill executions.
+    // Keyed by `workflow:${executionId}` (no backing mention to key on).
+    const workflowExecKey = `workflow:${executionId}`;
+    const abortController = new AbortController();
+    this.activeExecutions.set(workflowExecKey, {
+      mentionId: workflowExecKey, executionId, personaId: persona.id,
+      ticketId: params.ticketId, status: 'running', abortController,
+    });
+    let finalStatus: 'completed' | 'failed' = 'completed';
     try {
-      const executionId = randomUUID();
       const humanName = this.resolveHumanMentionName(persona);
 
       // Effective mode: respect persona ceiling
@@ -1708,9 +1759,14 @@ export class ExecuteAgentUseCase {
 
       // Start tracking
       await this.agentEventStore.startExecution({
-        executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: `workflow:${executionId}`,
+        executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: workflowExecKey,
         model: persona.model,
       });
+
+      // Surface the live executionId to the orchestrator so it can persist
+      // `step_run.executionId` while the step is still running — the handle the
+      // cancel/terminate/force-restart paths need to abort this execution.
+      await params.onExecutionStarted?.(executionId);
 
       // Compose prompts
       const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
@@ -1769,20 +1825,43 @@ export class ExecuteAgentUseCase {
           prompt: hasImages ? userPromptBlocks : userPromptText,
           queryOptions: queryOptions as Record<string, unknown>,
           emitEvent,
+          abortSignal: abortController.signal,
         });
         structuredOutput = streamResult.structuredOutput;
         resultText = streamResult.resultText;
       } catch (err) {
+        // Cancelled (Terminate / cancel run / force restart): cancelExecution()
+        // already emitted `execution_end` (interrupted) and completed the
+        // execution in the store. Don't double-emit; signal the orchestrator to
+        // mark the step cancelled rather than failed.
+        if (abortController.signal.aborted) {
+          finalStatus = 'failed';
+          throw new ExecutionCancelledError(executionId);
+        }
         await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
         await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
+        finalStatus = 'failed';
         throw err;
+      }
+
+      // The SDK can also resolve normally on abort (yields empty result).
+      if (abortController.signal.aborted) {
+        finalStatus = 'failed';
+        throw new ExecutionCancelledError(executionId);
       }
 
       await emitEvent('execution_end', { status: 'completed', ticketId: params.ticketId, model: persona.model, effectiveMode, resultLength: resultText.length });
       await this.agentEventStore.completeExecution(executionId, 'completed', { model: persona.model, effectiveMode });
 
       return { structuredOutput, rawText: resultText, executionId };
+    } catch (err) {
+      if (!(err instanceof ExecutionCancelledError)) finalStatus = 'failed';
+      throw err;
     } finally {
+      // Parity with mention/skill paths: leave a terminal in-memory marker so
+      // getStatus()/cancelExecution() never treat a finished step as running.
+      const exec = this.activeExecutions.get(workflowExecKey);
+      if (exec) exec.status = finalStatus;
       releaseSdkSlot();
     }
   }

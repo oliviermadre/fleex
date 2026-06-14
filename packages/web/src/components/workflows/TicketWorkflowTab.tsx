@@ -30,9 +30,17 @@ export function TicketWorkflowTab({ ticketId }: Props) {
 
   const currentRunId = active?.id ?? selectedRunId ?? history[0]?.id;
 
+  // Always refetch the run detail when this tab mounts or the selected run
+  // changes — never serve a stale cached detail. The tab unmounts on tab switch,
+  // so a cached detail can be arbitrarily out of date (e.g. a step was terminated
+  // or the run advanced to a human gate while the user was on another tab and no
+  // live event refreshed the cache). `detail` is deliberately NOT a dependency:
+  // loadDetail writes to it, so including it would re-fire the effect in a loop.
+  // The store's seq guard discards stale in-flight responses.
   useEffect(() => {
-    if (currentRunId && !detail[currentRunId]) void loadDetail(currentRunId);
-  }, [currentRunId, detail, loadDetail]);
+    if (currentRunId) void loadDetail(currentRunId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRunId, loadDetail]);
 
   if (!runs || runs.length === 0) {
     return (

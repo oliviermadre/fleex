@@ -19,6 +19,7 @@ import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
 import type { EventBus } from '../event-bus.js';
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
+import type { ExecutionRegistryPort } from '../ports/execution-registry.port.js';
 import type { AgentEventType, MentionExecutionMode } from '@fleex/shared';
 import { normalizeDeliverableTypes } from '@fleex/shared';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
@@ -76,6 +77,12 @@ export class RunPanelUseCase {
   public fileStore: FileStorePort | null = null;
   public bareCloneManager: BareCloneManager | null = null;
   public resolver: RepoPathResolver | null = null;
+  /**
+   * Set by the container. Makes each panel-spawned SDK session (member +
+   * orchestrator) abortable via the Terminate endpoint. Without it, panel
+   * sessions are fire-and-forget and cannot be stopped from the UI.
+   */
+  public executionRegistry: ExecutionRegistryPort | null = null;
 
   constructor(
     private readonly panelStore: PanelStorePort,
@@ -464,6 +471,8 @@ export class RunPanelUseCase {
        * silently (legacy behaviour for non-logged internal calls).
        */
       emitEvent?: (eventType: AgentEventType, data: unknown) => Promise<void> | void;
+      /** Stops the SDK loop as soon as it aborts (Terminate from the UI). */
+      abortSignal?: AbortSignal;
     },
   ): Promise<{ text: string; structuredOutput: Record<string, unknown> | null; metrics: SdkMetrics }> {
     const mode = options.effectiveMode ?? 'edit';
@@ -485,6 +494,7 @@ export class RunPanelUseCase {
       prompt,
       queryOptions: queryOptions as Record<string, unknown>,
       emitEvent: options.emitEvent ?? noopEmit,
+      ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
     });
 
     this.logger.info('SDK query done', {
@@ -522,6 +532,12 @@ export class RunPanelUseCase {
       mentionId,
       model,
     });
+
+    // Register this session so the Terminate button can abort it individually,
+    // even though the panel itself keeps running (the orchestrator simply won't
+    // get this member's report). Registered before the SDK loop starts.
+    const abortController = new AbortController();
+    this.executionRegistry?.registerExecution({ executionId, personaId: persona.id, ticketId, abortController });
 
     let sequence = 0;
     const emitEvent = async (eventType: AgentEventType, data: unknown) => {
@@ -582,7 +598,23 @@ export class RunPanelUseCase {
         maxTurns: worktreePath ? 150 : 10,
         effectiveMode,
         emitEvent,
+        abortSignal: abortController.signal,
       });
+
+      // Terminated mid-run: cancelExecution already emitted the interrupted
+      // execution_end and marked the execution. Don't double-complete — just
+      // report this member as failed so it's dropped from the synthesis.
+      if (abortController.signal.aborted) {
+        return {
+          personaName: persona.name,
+          personaDisplayName: persona.displayName || persona.name,
+          emoji,
+          response: '',
+          model,
+          durationMs: Date.now() - startTime,
+          error: 'Cancelled by user',
+        };
+      }
 
       await this.agentEventStore.completeExecution(executionId, 'completed', {
         model,
@@ -601,6 +633,19 @@ export class RunPanelUseCase {
         durationMs: Date.now() - startTime,
       };
     } catch (err) {
+      // An abort can also surface as a thrown error depending on SDK timing.
+      if (abortController.signal.aborted) {
+        return {
+          personaName: persona.name,
+          personaDisplayName: persona.displayName || persona.name,
+          emoji,
+          response: '',
+          model,
+          durationMs: Date.now() - startTime,
+          error: 'Cancelled by user',
+        };
+      }
+
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.logger.error('Panel member query failed', {
         persona: persona.name,
@@ -621,6 +666,8 @@ export class RunPanelUseCase {
         durationMs: Date.now() - startTime,
         error: errorMsg,
       };
+    } finally {
+      this.executionRegistry?.finalizeExecution(executionId);
     }
   }
 
@@ -693,6 +740,10 @@ Be concise and decision-oriented. Write in the same language as the panel member
       model: panel.orchestratorModel,
     });
 
+    // Register the orchestrator session so it too can be terminated from the UI.
+    const abortController = new AbortController();
+    this.executionRegistry?.registerExecution({ executionId, personaId: orchestratorPersonaId, ticketId, abortController });
+
     // Single sequence counter spanning start → stream → end so the
     // orchestrator's atomic log streams the same rich content as a persona.
     let sequence = 0;
@@ -734,7 +785,16 @@ Be concise and decision-oriented. Write in the same language as the panel member
         effectiveMode,
         outputFormat: outputFormatOverride,
         emitEvent,
+        abortSignal: abortController.signal,
       });
+
+      // Terminated mid-run: cancelExecution already emitted the interrupted
+      // execution_end and marked the execution. Return a cancellation note
+      // without double-completing.
+      if (abortController.signal.aborted) {
+        const cancelledText = `**🏛️ ${panel.displayName} — Synthesis**\n\n⚠️ Synthesis cancelled by user. Individual member responses are available in the full transcript deliverable.`;
+        return { text: cancelledText, structuredOutput: null, executionId };
+      }
 
       await this.agentEventStore.completeExecution(executionId, 'completed', {
         model: panel.orchestratorModel,
@@ -750,6 +810,11 @@ Be concise and decision-oriented. Write in the same language as the panel member
       const structuredOutput = (rawStructured ?? parseAgentOutput(text, { validTypes })) as Record<string, unknown> | null;
       return { text: `**🏛️ ${panel.displayName} — Synthesis**\n\n${text}`, structuredOutput, executionId };
     } catch (err) {
+      if (abortController.signal.aborted) {
+        const cancelledText = `**🏛️ ${panel.displayName} — Synthesis**\n\n⚠️ Synthesis cancelled by user. Individual member responses are available in the full transcript deliverable.`;
+        return { text: cancelledText, structuredOutput: null, executionId };
+      }
+
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.logger.error('Panel synthesis generation failed', {
         panelName: panel.name,
@@ -762,6 +827,8 @@ Be concise and decision-oriented. Write in the same language as the panel member
 
       const fallbackText = `**🏛️ ${panel.displayName} — Synthesis (auto-generated)**\n\n⚠️ Synthesis generation failed. Individual member responses are available in the full transcript deliverable.\n\n${validResponses.map((r) => `- **${r.emoji} ${r.personaDisplayName}** responded (${r.durationMs}ms)`).join('\n')}`;
       return { text: fallbackText, structuredOutput: null, executionId };
+    } finally {
+      this.executionRegistry?.finalizeExecution(executionId);
     }
   }
 

@@ -2,12 +2,14 @@ import { WorkflowRunNotFoundError, StepRunNotFoundError } from '../../domain/err
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
 import type { OrchestratorPort } from '../ports/orchestrator.port.js';
+import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 
 export class RetryStepUseCase {
   constructor(
     private readonly runStore: WorkflowRunStorePort,
     private readonly stepRunStore: StepRunStorePort,
     private readonly orchestrator: OrchestratorPort,
+    private readonly canceller: CancelExecutionPort,
   ) {}
 
   async execute(params: { workflowRunId: string; stepRunId: string }): Promise<void> {
@@ -17,11 +19,20 @@ export class RetryStepUseCase {
     const stepRun = await this.stepRunStore.getById(params.stepRunId);
     if (!stepRun) throw new StepRunNotFoundError(params.stepRunId);
 
-    // If the target step_run is still flagged `running` (e.g. an orphan after
-    // a server crash / hot-reload that killed the underlying Claude process),
-    // cancel it so the audit trail makes it clear it was abandoned — and so
-    // it's no longer a candidate for any "active step" UI heuristic.
+    // If the target step_run is still flagged `running`, abort its agent
+    // execution before restarting. The process may genuinely still be alive (a
+    // stuck/looping agent the user wants to force-restart) — without this abort
+    // we'd spawn a second agent on the same worktree, running in parallel with
+    // the old one. Best-effort: an orphan after a crash/hot-reload simply has no
+    // live execution to cancel, and that's fine.
     if (stepRun.status === 'running') {
+      if (stepRun.executionId) {
+        try {
+          await this.canceller.cancelExecution(stepRun.executionId);
+        } catch {
+          // swallow — restarting must proceed regardless
+        }
+      }
       stepRun.cancel();
       await this.stepRunStore.save(stepRun);
     }

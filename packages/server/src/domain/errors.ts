@@ -176,6 +176,18 @@ export class StepRunNotFoundError extends DomainError {
   }
 }
 
+/**
+ * Raised when a workflow step's agent execution is interrupted by an explicit
+ * user action (Terminate button, cancel run, or force restart). It is NOT a
+ * failure: callers must mark the step `cancelled` and avoid emitting
+ * `workflow.run_failed` or advancing the run.
+ */
+export class ExecutionCancelledError extends DomainError {
+  constructor(executionId: string) {
+    super(`Execution cancelled: ${executionId}`, 'EXECUTION_CANCELLED');
+  }
+}
+
 export class InvalidGateOutcomeError extends DomainError {
   constructor(outcome: string, allowed: string[]) {
     super(`Invalid gate outcome "${outcome}". Allowed: ${allowed.join(', ')}`, 'INVALID_GATE_OUTCOME');

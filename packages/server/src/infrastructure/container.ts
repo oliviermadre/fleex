@@ -378,6 +378,9 @@ export async function createContainer() {
   runPanel.fileStore = fileStore;
   runPanel.bareCloneManager = bareCloneManager;
   runPanel.resolver = resolver;
+  // Makes each panel-spawned SDK session (members + orchestrator) abortable via
+  // the Terminate endpoint, just like persona/skill/workflow executions.
+  runPanel.executionRegistry = executeAgent;
   generateTicketSummary.eventBus = eventBus;
   autoReviewWorkflow.eventBus = eventBus;
   // Slack import synthesizes in the background and patches the ticket via ticket.updated.
@@ -421,8 +424,8 @@ export async function createContainer() {
 
     createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus, postComment);
     resolveHumanGate = new ResolveHumanGateUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
-    retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator);
-    cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, eventBus);
+    retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, executeAgent);
+    cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, stepRunStore, executeAgent, eventBus);
 
     logger.info('Workflow orchestration wired', { driver });
   } else {

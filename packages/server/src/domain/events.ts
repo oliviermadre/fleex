@@ -366,6 +366,14 @@ export interface WorkflowNeedsReviewEvent extends DomainEvent {
   ticketId: string;
 }
 
+export interface WorkflowStepCancelledEvent extends DomainEvent {
+  type: 'workflow.step_cancelled';
+  workflowRunId: string;
+  stepRunId: string;
+  stepId: string;
+  ticketId: string;
+}
+
 export interface WorkflowRunCompletedEvent extends DomainEvent {
   type: 'workflow.run_completed';
   workflowRunId: string;
@@ -551,6 +559,7 @@ export type AnyDomainEvent =
   | WorkflowRunCreatedEvent
   | WorkflowStepStartedEvent
   | WorkflowStepCompletedEvent
+  | WorkflowStepCancelledEvent
   | WorkflowNeedsReviewEvent
   | WorkflowRunCompletedEvent
   | WorkflowRunFailedEvent
