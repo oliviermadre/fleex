@@ -7,6 +7,15 @@ import type {
   PanelLeaderboardEntry,
   AgentExecution,
   TicketLink,
+  UsageByTypeBucket,
+  ActivityHeatmapCell,
+  TicketIterations,
+  LeadTimePoint,
+  LeadTimeStats,
+  CumulativeFlowBucket,
+  CycleTimeStatus,
+  ThroughputWipBucket,
+  WorkflowLeaderboardEntry,
 } from '@fleex/shared';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
@@ -17,10 +26,22 @@ import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
+import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 
 interface CacheEntry {
   data: StatisticsResponse;
   expiresAt: number;
+}
+
+/** A persisted domain-event-log row, as returned by the store port. */
+type LogEntry = Awaited<ReturnType<DomainEventLogStorePort['list']>>[number];
+
+const FLOW_STATUSES = ['backlog', 'todo', 'doing', 'reviewing', 'done'] as const;
+
+function percentile(sorted: number[], p: number): number | null {
+  if (sorted.length === 0) return null;
+  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  return sorted[idx]!;
 }
 
 export class GetStatisticsUseCase {
@@ -36,14 +57,18 @@ export class GetStatisticsUseCase {
     private readonly sessionStore: SessionStorePort,
     private readonly skillStore?: SkillStorePort,
     private readonly domainEventLogStore?: DomainEventLogStorePort,
+    private readonly workflowRunStore?: WorkflowRunStorePort | null,
   ) {}
 
   async execute(params: {
     from: string;
     to: string;
     granularity: 'day' | 'week' | 'month';
+    /** Client's Date.getTimezoneOffset() in minutes; buckets the heatmap in the user's local time. */
+    tzOffsetMinutes?: number;
   }): Promise<StatisticsResponse> {
-    const cacheKey = `${params.from}:${params.to}:${params.granularity}`;
+    const tzOffsetMinutes = params.tzOffsetMinutes ?? 0;
+    const cacheKey = `${params.from}:${params.to}:${params.granularity}:${tzOffsetMinutes}`;
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data;
@@ -121,6 +146,7 @@ export class GetStatisticsUseCase {
       ticketsCompleted: completedTickets.length,
       skillsExecuted: skillExecutions.length,
       panelsExecuted: 0, // Will be updated after panel events are fetched
+      workflowsStarted: 0, // Will be updated after workflow events are fetched
       totalCostUsd: filteredExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
       totalInputTokens: filteredExecutions.reduce((sum, e) => sum + (e.inputTokens ?? 0), 0),
       totalOutputTokens: filteredExecutions.reduce((sum, e) => sum + (e.outputTokens ?? 0), 0),
@@ -171,7 +197,8 @@ export class GetStatisticsUseCase {
         prsCreated: bTickets.flatMap((t) =>
           t.toDTO().links.filter((l: TicketLink) => l.type === 'github_pr'),
         ).length,
-        prsMerged: 0, // Approximation: merge detection is event-based
+        // Tickets with a PR link that moved to done within this bucket.
+        prsMerged: mergedTickets.filter((t) => inBucket(t.toDTO().statusChangedAt)).length,
         agentsSpawned: bExecutions.length,
         deliverablesCreated: bDeliverables.length,
         commentsCreated: bComments.length,
@@ -182,7 +209,10 @@ export class GetStatisticsUseCase {
         ticketsCreated: bTickets.length,
         ticketsCompleted: bTickets.filter((t) => t.toDTO().status === 'done').length,
         skillsExecuted: bExecutions.filter((e) => e.mentionId.startsWith('skill:')).length,
-        panelsExecuted: 0, // Panel events are in domain log, not in agent executions
+        // Panels & workflows live outside agent executions — backfilled per
+        // bucket from usageByType once those sources are fetched (see below).
+        panelsExecuted: 0,
+        workflowsStarted: 0,
         totalCostUsd: bExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
         costByAgent: (() => {
           const byAgent: Record<string, number> = {};
@@ -274,8 +304,9 @@ export class GetStatisticsUseCase {
     // Compute panel leaderboard from domain event log
     let panelLeaderboard: PanelLeaderboardEntry[] = [];
     let panelExecutionCount = 0;
+    let panelEvents: LogEntry[] = [];
     if (this.domainEventLogStore) {
-      const panelEvents = await this.domainEventLogStore.list({
+      panelEvents = await this.domainEventLogStore.list({
         limit: 1000,
         eventType: 'panel.executed',
         since: from,
@@ -325,15 +356,257 @@ export class GetStatisticsUseCase {
     // Update panelsExecuted in summary now that we have the count
     const updatedSummary = { ...summary, panelsExecuted: panelExecutionCount };
 
+    // ── Extended analytics ─────────────────────────────────────────────────
+    // All derived from data already loaded above plus the domain event log
+    // (audit trail) — no schema changes or new persistence.
+
+    // Activity heatmap (C4): every agent/skill execution by weekday × hour, in
+    // the *client's* local time. We shift the absolute instant by the client's
+    // tz offset and read UTC getters, so the result is independent of the
+    // server's timezone (no double-shift if the server isn't UTC).
+    const tzShiftMs = tzOffsetMinutes * 60_000;
+    const heatCounts = new Map<string, number>();
+    for (const e of filteredExecutions) {
+      const t = new Date(e.startedAt).getTime();
+      if (Number.isNaN(t)) continue;
+      const local = new Date(t - tzShiftMs);
+      const key = `${local.getUTCDay()}:${local.getUTCHours()}`;
+      heatCounts.set(key, (heatCounts.get(key) ?? 0) + 1);
+    }
+    const activityHeatmap: ActivityHeatmapCell[] = [...heatCounts.entries()].map(([key, count]) => {
+      const [dow, hour] = key.split(':').map(Number) as [number, number];
+      return { dow, hour, count };
+    });
+
+    // Full ticket-move history (audit log) + every workflow run. Moves are
+    // fetched with no lower bound so lead time / CFD can see transitions that
+    // happened before `from`. Workflow stats come from the run store (richer:
+    // template name, status, duration) rather than the event log.
+    let moveEvents: LogEntry[] = [];
+    const [allRuns, fetchedMoves] = await Promise.all([
+      this.workflowRunStore ? this.workflowRunStore.getAll() : Promise.resolve([]),
+      this.domainEventLogStore
+        ? this.domainEventLogStore.list({ limit: 50_000, eventType: 'ticket.moved', until: to })
+        : Promise.resolve([] as LogEntry[]),
+    ]);
+    moveEvents = fetchedMoves;
+    const filteredRuns = allRuns.filter((r) => {
+      const t = r.startedAt.getTime();
+      return t >= from.getTime() && t <= to.getTime();
+    });
+
+    // Workflows started within the selected window (summary KPI).
+    const workflowsStarted = filteredRuns.length;
+
+    // Usage trend by execution mode (C13).
+    const usageByType: UsageByTypeBucket[] = buckets.map((bucket) => {
+      const inB = (d: Date) => d >= bucket.start && d < bucket.end;
+      const bExec = filteredExecutions.filter((e) => inB(new Date(e.startedAt)));
+      return {
+        date: bucket.label,
+        agents: bExec.filter((e) => !e.mentionId.startsWith('skill:')).length,
+        skills: bExec.filter((e) => e.mentionId.startsWith('skill:')).length,
+        panels: panelEvents.filter((e) => inB(e.occurredAt)).length,
+        workflows: filteredRuns.filter((r) => inB(r.startedAt)).length,
+      };
+    });
+
+    // Backfill per-bucket panels/workflows into the time series (same bucket
+    // order) so their KPI sparklines use the timeSeries path like every other
+    // metric.
+    const enrichedTimeSeries: StatisticsTimeBucket[] = timeSeries.map((b, i) => ({
+      ...b,
+      panelsExecuted: usageByType[i]?.panels ?? b.panelsExecuted,
+      workflowsStarted: usageByType[i]?.workflows ?? 0,
+    }));
+
+    // Per-ticket move timelines (sorted ascending).
+    const movesByTicket = new Map<string, Array<{ at: Date; to: string }>>();
+    for (const ev of moveEvents) {
+      const tid = ev.payload['ticketId'] as string | undefined;
+      const toStatus = ev.payload['toStatus'] as string | undefined;
+      if (!tid || !toStatus) continue;
+      const list = movesByTicket.get(tid) ?? [];
+      list.push({ at: ev.occurredAt, to: toStatus });
+      movesByTicket.set(tid, list);
+    }
+    for (const list of movesByTicket.values()) list.sort((a, b) => a.at.getTime() - b.at.getTime());
+
+    // Status of a ticket as of a point in time (null before it existed).
+    const statusAtTime = (ticket: { id: string; createdAt: string }, time: Date): string | null => {
+      const created = new Date(ticket.createdAt);
+      if (Number.isNaN(created.getTime()) || created > time) return null;
+      let status = 'backlog';
+      for (const mv of movesByTicket.get(ticket.id) ?? []) {
+        if (mv.at <= time) status = mv.to;
+        else break;
+      }
+      return status;
+    };
+
+    // Per-ticket interaction counts (full history, used by C14).
+    const mentionTicket = new Map<string, string>();
+    const mentionsByTicket = new Map<string, number>();
+    for (const m of mentions) {
+      const dto = m.toDTO();
+      mentionTicket.set(dto.id, dto.ticketId);
+      mentionsByTicket.set(dto.ticketId, (mentionsByTicket.get(dto.ticketId) ?? 0) + 1);
+    }
+    const commentsByTicket = new Map<string, number>();
+    for (const c of comments) {
+      const tid = c.toDTO().ticketId;
+      commentsByTicket.set(tid, (commentsByTicket.get(tid) ?? 0) + 1);
+    }
+    const agentRunsByTicket = new Map<string, number>();
+    for (const e of executions) {
+      if (e.mentionId.startsWith('skill:')) continue;
+      const tid = mentionTicket.get(e.mentionId);
+      if (!tid) continue;
+      agentRunsByTicket.set(tid, (agentRunsByTicket.get(tid) ?? 0) + 1);
+    }
+    const workflowRunsByTicket = new Map<string, number>();
+    for (const r of allRuns) {
+      workflowRunsByTicket.set(r.ticketId, (workflowRunsByTicket.get(r.ticketId) ?? 0) + 1);
+    }
+
+    // Walk every ticket once to derive lead time, iterations, cycle time and
+    // the set of completions in range.
+    const ticketDTOs = tickets.map((t) => t.toDTO());
+    const leadPoints: LeadTimePoint[] = [];
+    const ticketIterations: TicketIterations[] = [];
+    const doneDates: Date[] = [];
+    const cycleAccum = new Map<string, { total: number; count: number }>();
+
+    for (const t of ticketDTOs) {
+      const moves = movesByTicket.get(t.id) ?? [];
+      let firstDoing: Date | null = null;
+      let lastDone: Date | null = null;
+      for (const mv of moves) {
+        if (mv.to === 'doing' && !firstDoing) firstDoing = mv.at;
+        if (mv.to === 'done') lastDone = mv.at;
+      }
+      // Fallback for tickets done before move history was recorded.
+      if (!lastDone && t.status === 'done') {
+        const sca = new Date(t.statusChangedAt);
+        if (!Number.isNaN(sca.getTime())) lastDone = sca;
+      }
+      if (!lastDone || lastDone < from || lastDone >= to) continue;
+      doneDates.push(lastDone);
+
+      const mentionsN = mentionsByTicket.get(t.id) ?? 0;
+      const commentsN = commentsByTicket.get(t.id) ?? 0;
+      const workflowN = workflowRunsByTicket.get(t.id) ?? 0;
+      ticketIterations.push({
+        ticketId: t.id,
+        title: t.title,
+        mentions: mentionsN,
+        comments: commentsN,
+        agentRuns: agentRunsByTicket.get(t.id) ?? 0,
+        workflowRuns: workflowN,
+        total: mentionsN + commentsN + workflowN,
+      });
+
+      if (firstDoing && lastDone.getTime() >= firstDoing.getTime()) {
+        leadPoints.push({
+          ticketId: t.id,
+          title: t.title,
+          doneAt: lastDone.toISOString(),
+          leadTimeMs: lastDone.getTime() - firstDoing.getTime(),
+        });
+      }
+
+      // Cycle time: time held in each (non-terminal) status until the done.
+      const seq: Array<{ at: Date; status: string }> = [{ at: new Date(t.createdAt), status: 'backlog' }];
+      for (const mv of moves) seq.push({ at: mv.at, status: mv.to });
+      seq.sort((a, b) => a.at.getTime() - b.at.getTime());
+      for (let i = 0; i < seq.length; i++) {
+        const cur = seq[i]!;
+        if (cur.status === 'done' || cur.status === 'cancelled') continue;
+        const nextAt = i + 1 < seq.length ? seq[i + 1]!.at : lastDone;
+        const dur = nextAt.getTime() - cur.at.getTime();
+        if (dur <= 0) continue;
+        const acc = cycleAccum.get(cur.status) ?? { total: 0, count: 0 };
+        acc.total += dur;
+        acc.count += 1;
+        cycleAccum.set(cur.status, acc);
+      }
+    }
+
+    const leadMs = leadPoints.map((p) => p.leadTimeMs).sort((a, b) => a - b);
+    const leadTime: LeadTimeStats = {
+      points: leadPoints,
+      avgMs: leadMs.length > 0 ? Math.round(leadMs.reduce((a, b) => a + b, 0) / leadMs.length) : null,
+      medianMs: percentile(leadMs, 50),
+      p85Ms: percentile(leadMs, 85),
+    };
+
+    const cycleTimeByStatus: CycleTimeStatus[] = FLOW_STATUSES.filter((s) => s !== 'done').map((status) => {
+      const acc = cycleAccum.get(status);
+      return {
+        status,
+        avgMs: acc && acc.count > 0 ? Math.round(acc.total / acc.count) : null,
+        count: acc?.count ?? 0,
+      };
+    });
+
+    // Workflow leaderboard — runs started in range, grouped by template.
+    const runsByTemplate = new Map<string, typeof filteredRuns>();
+    for (const r of filteredRuns) {
+      const list = runsByTemplate.get(r.templateId) ?? [];
+      list.push(r);
+      runsByTemplate.set(r.templateId, list);
+    }
+    const workflowLeaderboard: WorkflowLeaderboardEntry[] = [...runsByTemplate.entries()]
+      .map(([templateId, runs]) => {
+        const name = runs[0]?.templateSnapshot.name ?? templateId;
+        const durations = runs
+          .filter((r) => r.status === 'completed' && r.completedAt)
+          .map((r) => r.completedAt!.getTime() - r.startedAt.getTime())
+          .filter((d) => d > 0);
+        return {
+          workflowId: templateId,
+          workflowName: name,
+          workflowDisplayName: name,
+          executionCount: runs.length,
+          completedCount: runs.filter((r) => r.status === 'completed').length,
+          failedCount: runs.filter((r) => r.status === 'failed').length,
+          avgDurationMs: durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null,
+        };
+      })
+      .sort((a, b) => b.executionCount - a.executionCount);
+
+    // Cumulative flow (C16) + throughput vs WIP (C18) per bucket.
+    const cumulativeFlow: CumulativeFlowBucket[] = [];
+    const throughputWip: ThroughputWipBucket[] = [];
+    for (const bucket of buckets) {
+      const boundary = bucket.end <= to ? bucket.end : to;
+      const counts = { backlog: 0, todo: 0, doing: 0, reviewing: 0, done: 0 };
+      for (const t of ticketDTOs) {
+        const s = statusAtTime(t, boundary);
+        if (s && s in counts) counts[s as keyof typeof counts] += 1;
+      }
+      cumulativeFlow.push({ date: bucket.label, ...counts });
+      const completed = doneDates.filter((d) => d >= bucket.start && d < bucket.end).length;
+      throughputWip.push({ date: bucket.label, completed, wip: counts.doing + counts.reviewing });
+    }
+
     const result: StatisticsResponse = {
       from: params.from,
       to: params.to,
       granularity: params.granularity,
-      summary: updatedSummary,
-      timeSeries,
+      summary: { ...updatedSummary, workflowsStarted },
+      timeSeries: enrichedTimeSeries,
       agentLeaderboard,
       skillLeaderboard,
       panelLeaderboard,
+      workflowLeaderboard,
+      usageByType,
+      activityHeatmap,
+      ticketIterations,
+      leadTime,
+      cumulativeFlow,
+      cycleTimeByStatus,
+      throughputWip,
     };
 
     // Cache for 60 seconds

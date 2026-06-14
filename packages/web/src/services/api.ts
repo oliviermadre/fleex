@@ -782,11 +782,13 @@ export async function fetchStatistics(params: {
   from?: string;
   to?: string;
   granularity?: 'day' | 'week' | 'month';
+  tzOffsetMinutes?: number;
 } = {}): Promise<StatisticsResponse> {
   const qs = new URLSearchParams();
   if (params.from) qs.set('from', params.from);
   if (params.to) qs.set('to', params.to);
   if (params.granularity) qs.set('granularity', params.granularity);
+  if (params.tzOffsetMinutes != null) qs.set('tz', String(params.tzOffsetMinutes));
   const query = qs.toString();
   return request<StatisticsResponse>(`/statistics${query ? `?${query}` : ''}`);
 }

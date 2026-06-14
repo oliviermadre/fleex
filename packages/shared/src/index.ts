@@ -221,8 +221,17 @@ export type {
   AgentLeaderboardEntry,
   SkillLeaderboardEntry,
   PanelLeaderboardEntry,
+  WorkflowLeaderboardEntry,
   StatisticsSummary,
   StatisticsResponse,
+  UsageByTypeBucket,
+  ActivityHeatmapCell,
+  TicketIterations,
+  LeadTimePoint,
+  LeadTimeStats,
+  CumulativeFlowBucket,
+  CycleTimeStatus,
+  ThroughputWipBucket,
 } from './types/statistics.js';
 
 export {

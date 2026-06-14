@@ -1,14 +1,49 @@
-import { useEffect } from 'react';
-import type { StatisticsResponse, StatisticsTimeBucket, AgentLeaderboardEntry, SkillLeaderboardEntry, PanelLeaderboardEntry } from '@fleex/shared';
-import { useStatisticsStore } from '../../stores/statisticsStore';
+import { useEffect, useMemo, useState } from 'react';
+import type {
+  StatisticsResponse,
+  StatisticsSummary,
+  StatisticsTimeBucket,
+  AgentLeaderboardEntry,
+  SkillLeaderboardEntry,
+  PanelLeaderboardEntry,
+  WorkflowLeaderboardEntry,
+} from '@fleex/shared';
+import { useStatisticsStore, type Preset, type Granularity } from '../../stores/statisticsStore';
 import { cn } from '../../lib/cn';
+import {
+  ChartCard,
+  DeliveryComposedChart,
+  DonutChart,
+  EmptyChart,
+  HBarChart,
+  Sparkline,
+  TimeAreaChart,
+  TimeBarChart,
+  colorAt,
+  formatCompact,
+  formatDuration,
+  formatTokens,
+  formatUsd,
+  shortLabel,
+  type DonutSlice,
+  type SeriesDef,
+} from './statCharts';
+import { ActivityHeatmap, CandidateGallery } from './statCandidates';
 
-// ── Time Range Selector ──
+// ── Focus tabs ──────────────────────────────────────────────────────────────
 
-type Preset = 'today' | '7d' | '30d' | '90d' | '1y';
-type Granularity = 'day' | 'week' | 'month';
+type Focus = 'overview' | 'delivery' | 'costs' | 'catalogue';
 
-const PRESETS: { key: Preset; label: string }[] = [
+const FOCUSES: { key: Focus; label: string }[] = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'delivery', label: 'Delivery' },
+  { key: 'costs', label: 'Agentic Costs' },
+  { key: 'catalogue', label: 'Catalogue (10)' },
+];
+
+// ── Time range selector ──────────────────────────────────────────────────────
+
+const PRESETS: { key: Exclude<Preset, 'custom'>; label: string }[] = [
   { key: 'today', label: 'Today' },
   { key: '7d', label: '7D' },
   { key: '30d', label: '30D' },
@@ -18,24 +53,34 @@ const PRESETS: { key: Preset; label: string }[] = [
 
 const GRANULARITIES: { key: Granularity; label: string }[] = [
   { key: 'day', label: 'Day' },
-  { key: 'week', label: 'Wk' },
-  { key: 'month', label: 'Mo' },
+  { key: 'week', label: 'Week' },
+  { key: 'month', label: 'Month' },
 ];
 
-function TimeRangeSelector({
+function Toolbar({
   preset,
   granularity,
-  onPresetChange,
-  onGranularityChange,
+  customFrom,
+  customTo,
+  loading,
+  onPreset,
+  onGranularity,
+  onCustomRange,
+  onRefresh,
 }: {
   preset: Preset;
   granularity: Granularity;
-  onPresetChange: (p: Preset) => void;
-  onGranularityChange: (g: Granularity) => void;
+  customFrom: string;
+  customTo: string;
+  loading: boolean;
+  onPreset: (p: Preset) => void;
+  onGranularity: (g: Granularity) => void;
+  onCustomRange: (from: string, to: string) => void;
+  onRefresh: () => void;
 }) {
   return (
-    <div className="flex items-center gap-4">
-      <div className="flex rounded-lg border border-[var(--theme-border)] overflow-hidden">
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex overflow-hidden rounded-lg border border-[var(--theme-border)]">
         {PRESETS.map((p) => (
           <button
             key={p.key}
@@ -45,13 +90,38 @@ function TimeRangeSelector({
                 ? 'bg-[var(--theme-accent)] text-white'
                 : 'bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
             )}
-            onClick={() => onPresetChange(p.key)}
+            onClick={() => onPreset(p.key)}
           >
             {p.label}
           </button>
         ))}
       </div>
-      <div className="flex rounded-lg border border-[var(--theme-border)] overflow-hidden">
+
+      <div className="flex items-center gap-1 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
+        <input
+          type="date"
+          value={customFrom}
+          max={customTo}
+          onChange={(e) => e.target.value && onCustomRange(e.target.value, customTo)}
+          className={cn(
+            'bg-transparent text-xs text-[var(--theme-text-secondary)] outline-none',
+            preset === 'custom' && 'text-[var(--theme-text-primary)]',
+          )}
+        />
+        <span className="text-[var(--theme-text-faint)]">→</span>
+        <input
+          type="date"
+          value={customTo}
+          min={customFrom}
+          onChange={(e) => e.target.value && onCustomRange(customFrom, e.target.value)}
+          className={cn(
+            'bg-transparent text-xs text-[var(--theme-text-secondary)] outline-none',
+            preset === 'custom' && 'text-[var(--theme-text-primary)]',
+          )}
+        />
+      </div>
+
+      <div className="flex overflow-hidden rounded-lg border border-[var(--theme-border)]">
         {GRANULARITIES.map((g) => (
           <button
             key={g.key}
@@ -61,453 +131,254 @@ function TimeRangeSelector({
                 ? 'bg-[var(--theme-accent)] text-white'
                 : 'bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
             )}
-            onClick={() => onGranularityChange(g.key)}
+            onClick={() => onGranularity(g.key)}
           >
             {g.label}
           </button>
         ))}
       </div>
+
+      <button
+        onClick={onRefresh}
+        disabled={loading}
+        className="flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] disabled:opacity-50"
+        title="Refresh"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn(loading && 'animate-spin')}>
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" />
+        </svg>
+      </button>
     </div>
   );
 }
 
-// ── Stat Card ──
+// ── KPI cards ─────────────────────────────────────────────────────────────────
 
-function StatCard({ icon, value, label }: { icon: React.ReactNode; value: string | number; label: string }) {
+interface KpiDef {
+  key: keyof StatisticsSummary;
+  label: string;
+  color: string;
+  /** Sparkline source from the per-bucket time series … */
+  sparkKey?: keyof StatisticsTimeBucket;
+  /** … or a custom series pulled from anywhere in the response (wins over sparkKey). */
+  spark?: (data: StatisticsResponse) => number[];
+  format: (v: number) => string;
+  /** When true, a downward trend is the good outcome (cost, duration). */
+  goodWhenDown?: boolean;
+}
+
+const KPI_GROUPS: Record<Exclude<Focus, 'catalogue'>, KpiDef[]> = {
+  overview: [
+    // Row 1 — execution modes
+    { key: 'agentsSpawned', label: 'Agents Spawned', color: colorAt(0), sparkKey: 'agentsSpawned', format: formatCompact },
+    { key: 'skillsExecuted', label: 'Skills Run', color: colorAt(6), sparkKey: 'skillsExecuted', format: formatCompact },
+    { key: 'panelsExecuted', label: 'Panels Run', color: colorAt(4), sparkKey: 'panelsExecuted', format: formatCompact },
+    { key: 'workflowsStarted', label: 'Workflows Started', color: colorAt(8), sparkKey: 'workflowsStarted', format: formatCompact },
+    // Row 2 — delivery & cost
+    { key: 'prsCreated', label: 'PRs Created', color: colorAt(9), sparkKey: 'prsCreated', format: formatCompact },
+    { key: 'prsMerged', label: 'PRs Merged', color: colorAt(5), sparkKey: 'prsMerged', format: formatCompact },
+    { key: 'deliverablesCreated', label: 'Deliverables', color: colorAt(1), sparkKey: 'deliverablesCreated', format: formatCompact },
+    { key: 'totalCostUsd', label: 'Total Cost', color: colorAt(2), sparkKey: 'totalCostUsd', format: formatUsd, goodWhenDown: true },
+  ],
+  delivery: [
+    { key: 'ticketsCreated', label: 'Tickets Created', color: colorAt(0), sparkKey: 'ticketsCreated', format: formatCompact },
+    { key: 'ticketsCompleted', label: 'Tickets Completed', color: colorAt(1), sparkKey: 'ticketsCompleted', format: formatCompact },
+    { key: 'prsCreated', label: 'PRs Created', color: colorAt(8), sparkKey: 'prsCreated', format: formatCompact },
+    { key: 'prsMerged', label: 'PRs Merged', color: colorAt(5), format: formatCompact },
+    { key: 'deliverablesCreated', label: 'Deliverables', color: colorAt(2), sparkKey: 'deliverablesCreated', format: formatCompact },
+    { key: 'commentsCreated', label: 'Comments', color: colorAt(3), sparkKey: 'commentsCreated', format: formatCompact },
+    { key: 'worktreesCreated', label: 'Worktrees', color: colorAt(4), sparkKey: 'worktreesCreated', format: formatCompact },
+    { key: 'mentionsResolved', label: 'Mentions Resolved', color: colorAt(6), sparkKey: 'mentionsResolved', format: formatCompact },
+  ],
+  costs: [
+    { key: 'totalCostUsd', label: 'Total Cost', color: colorAt(2), sparkKey: 'totalCostUsd', format: formatUsd, goodWhenDown: true },
+    { key: 'totalInputTokens', label: 'Input Tokens', color: colorAt(0), format: formatTokens },
+    { key: 'totalOutputTokens', label: 'Output Tokens', color: colorAt(8), format: formatTokens },
+    { key: 'agentsSpawned', label: 'Agent Runs', color: colorAt(1), sparkKey: 'agentsSpawned', format: formatCompact },
+    { key: 'skillsExecuted', label: 'Skills Run', color: colorAt(6), sparkKey: 'skillsExecuted', format: formatCompact },
+    { key: 'panelsExecuted', label: 'Panels Run', color: colorAt(4), format: formatCompact },
+    { key: 'avgAgentDurationMs', label: 'Avg Duration', color: colorAt(10), format: formatDuration, goodWhenDown: true },
+    { key: 'activeSessions', label: 'Active Sessions', color: colorAt(5), format: formatCompact },
+  ],
+};
+
+function pctDelta(current: number, previous: number): number | null {
+  if (previous === 0) return current === 0 ? 0 : null;
+  return ((current - previous) / previous) * 100;
+}
+
+function DeltaBadge({ delta, goodWhenDown }: { delta: number | null; goodWhenDown?: boolean }) {
+  if (delta === null) {
+    return <span className="text-[10px] font-medium text-[var(--theme-text-faint)]">new</span>;
+  }
+  if (Math.round(delta) === 0) {
+    return <span className="text-[10px] font-medium text-[var(--theme-text-faint)]">±0%</span>;
+  }
+  const up = delta > 0;
+  const good = goodWhenDown ? !up : up;
+  const color = good ? 'var(--theme-success)' : 'var(--theme-danger)';
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)]">
-        {icon}
-      </div>
-      <div>
-        <div className="text-xl font-bold tabular-nums text-[var(--theme-text-primary)]">{value}</div>
-        <div className="text-[11px] text-[var(--theme-text-muted)]">{label}</div>
-      </div>
-    </div>
+    <span className="flex items-center gap-0.5 text-[10px] font-semibold tabular-nums" style={{ color }}>
+      <span>{up ? '▲' : '▼'}</span>
+      {Math.abs(delta).toFixed(0)}%
+    </span>
   );
 }
 
-// ── Stacked Bar Chart (Pure SVG) ──
-
-function StackedBarChart({ data, metrics, height = 200 }: {
-  data: StatisticsTimeBucket[];
-  metrics: { key: keyof StatisticsTimeBucket; label: string; color: string }[];
-  height?: number;
+function KpiCard({
+  def,
+  current,
+  previous,
+  spark,
+}: {
+  def: KpiDef;
+  current: number;
+  previous: number | undefined;
+  spark: number[];
 }) {
-  if (data.length === 0) return null;
-
-  const totals = data.map((d) =>
-    metrics.reduce((sum, m) => sum + ((d[m.key] as number) ?? 0), 0),
-  );
-  const maxVal = Math.max(...totals, 1);
-  const barWidth = Math.max(4, Math.min(40, (600 - data.length * 2) / data.length));
-  const width = data.length * (barWidth + 2) + 40;
-  const chartH = height - 30;
-
+  const delta = previous !== undefined ? pctDelta(current, previous) : null;
   return (
-    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMinYMid meet">
-      {data.map((d, i) => {
-        const x = 30 + i * (barWidth + 2);
-        let offsetY = 0;
-
-        return (
-          <g key={i}>
-            {metrics.map((m) => {
-              const val = (d[m.key] as number) ?? 0;
-              if (val === 0) return null;
-              const segH = (val / maxVal) * chartH;
-              const y = height - 20 - offsetY - segH;
-              offsetY += segH;
-              return (
-                <rect
-                  key={String(m.key)}
-                  x={x}
-                  y={y}
-                  width={barWidth}
-                  height={segH}
-                  fill={m.color}
-                  opacity={0.85}
-                >
-                  <title>{`${m.label}: ${val}`}</title>
-                </rect>
-              );
-            })}
-            {(i === 0 || i === data.length - 1 || i % Math.max(1, Math.floor(data.length / 6)) === 0) && (
-              <text
-                x={x + barWidth / 2}
-                y={height - 4}
-                textAnchor="middle"
-                fontSize="9"
-                fill="var(--theme-text-faint)"
-              >
-                {d.date.slice(5)}
-              </text>
-            )}
-          </g>
-        );
-      })}
-      <text x="0" y="12" fontSize="9" fill="var(--theme-text-faint)">{maxVal}</text>
-      <text x="0" y={height - 22} fontSize="9" fill="var(--theme-text-faint)">0</text>
-    </svg>
-  );
-}
-
-// ── Time Series Chart with Metric Toggle ──
-
-const METRICS: { key: keyof StatisticsTimeBucket; label: string; color: string }[] = [
-  { key: 'agentsSpawned', label: 'Agents', color: '#f59e0b' },
-  { key: 'ticketsCreated', label: 'Tickets', color: '#3b82f6' },
-  { key: 'commentsCreated', label: 'Comments', color: '#8b5cf6' },
-  { key: 'mentionsCreated', label: 'Mentions', color: '#10b981' },
-  { key: 'deliverablesCreated', label: 'Deliverables', color: '#eab308' },
-  { key: 'skillsExecuted', label: 'Skills', color: '#ec4899' },
-];
-
-function TimeSeriesChart({ data }: { data: StatisticsTimeBucket[] }) {
-  return (
-    <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Activity Over Time</h3>
-        <div className="flex gap-1.5">
-          {METRICS.map((m) => (
-            <span
-              key={String(m.key)}
-              className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-              style={{
-                backgroundColor: `${m.color}30`,
-                color: m.color,
-                border: `1px solid ${m.color}40`,
-              }}
-            >
-              {m.label}
-            </span>
-          ))}
+    <div className="flex flex-col justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3.5 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: def.color }} />
+          <span className="text-[11px] font-medium text-[var(--theme-text-muted)]">{def.label}</span>
         </div>
+        {previous !== undefined && <DeltaBadge delta={delta} goodWhenDown={def.goodWhenDown} />}
       </div>
-      <StackedBarChart data={data} metrics={METRICS} />
+      <div className="mt-2 text-2xl font-bold tabular-nums text-[var(--theme-text-primary)]">{def.format(current)}</div>
+      <div className="mt-1 h-9">
+        {def.sparkKey && <Sparkline data={spark} color={def.color} />}
+      </div>
     </div>
   );
 }
 
-// ── Agent Leaderboard ──
+// ── Leaderboard table ─────────────────────────────────────────────────────────
 
-function AgentLeaderboard({ entries }: { entries: AgentLeaderboardEntry[] }) {
-  if (entries.length === 0) {
-    return (
-      <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
-        <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Agent Leaderboard</h3>
-        <p className="mt-4 text-center text-xs text-[var(--theme-text-faint)]">No agent executions yet</p>
-      </div>
-    );
-  }
+interface Column<T> {
+  header: string;
+  align?: 'left' | 'right';
+  render: (row: T, i: number) => React.ReactNode;
+}
 
+function LeaderboardTable<T>({
+  title,
+  rows,
+  columns,
+  empty,
+  keyOf,
+}: {
+  title: string;
+  rows: T[];
+  columns: Column<T>[];
+  empty: string;
+  keyOf: (row: T) => string;
+}) {
   return (
-    <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
-      <h3 className="mb-3 text-sm font-semibold text-[var(--theme-text-primary)]">Agent Leaderboard</h3>
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-[var(--theme-border)]">
-            <th className="pb-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Agent</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Spawns</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Avg Duration</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Cost</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Avg Tokens</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Done</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Failed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.map((entry, i) => (
-            <tr key={entry.personaId} className="border-b border-[var(--theme-border)] last:border-0">
-              <td className="py-2 text-sm text-[var(--theme-text-primary)]">
-                <span className="mr-2 text-[var(--theme-text-faint)]">#{i + 1}</span>
-                {entry.personaDisplayName}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
-                {entry.spawnCount}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
-                {entry.avgDurationMs != null ? formatDuration(entry.avgDurationMs) : '—'}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-amber-400">
-                {entry.totalCostUsd > 0 ? `$${entry.totalCostUsd.toFixed(2)}` : '—'}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
-                {entry.avgInputTokens != null ? `${Math.round(entry.avgInputTokens / 1000)}k→${Math.round((entry.avgOutputTokens ?? 0) / 1000)}k` : '—'}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-green-400">
-                {entry.completedCount}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-red-400">
-                {entry.failedCount}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <ChartCard title={title}>
+      {rows.length === 0 ? (
+        <p className="py-8 text-center text-xs text-[var(--theme-text-faint)]">{empty}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-[var(--theme-border)]">
+                {columns.map((c, i) => (
+                  <th
+                    key={i}
+                    className={cn(
+                      'pb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]',
+                      c.align === 'right' ? 'text-right' : 'text-left',
+                    )}
+                  >
+                    {c.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={keyOf(row)} className="border-b border-[var(--theme-border)] transition-colors last:border-0 hover:bg-[var(--theme-bg-hover)]">
+                  {columns.map((c, ci) => (
+                    <td
+                      key={ci}
+                      className={cn(
+                        'py-2 text-sm tabular-nums',
+                        c.align === 'right' ? 'text-right' : 'text-left',
+                      )}
+                    >
+                      {c.render(row, i)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </ChartCard>
   );
 }
 
-// ── Skill Leaderboard ──
-
-function SkillLeaderboard({ entries }: { entries: SkillLeaderboardEntry[] }) {
-  if (entries.length === 0) {
-    return (
-      <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
-        <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Skill Leaderboard</h3>
-        <p className="mt-4 text-center text-xs text-[var(--theme-text-faint)]">No skill executions yet</p>
-      </div>
-    );
-  }
-
+function RankCell({ index, name }: { index: number; name: string }) {
   return (
-    <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
-      <h3 className="mb-3 text-sm font-semibold text-[var(--theme-text-primary)]">Skill Leaderboard</h3>
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-[var(--theme-border)]">
-            <th className="pb-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Skill</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Executions</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Done</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Failed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.map((entry, i) => (
-            <tr key={entry.skillId} className="border-b border-[var(--theme-border)] last:border-0">
-              <td className="py-2 text-sm text-[var(--theme-text-primary)]">
-                <span className="mr-2 text-[var(--theme-text-faint)]">#{i + 1}</span>
-                {entry.skillDisplayName}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
-                {entry.executionCount}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-green-400">
-                {entry.completedCount}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-red-400">
-                {entry.failedCount}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <span className="flex items-center gap-2 text-[var(--theme-text-primary)]">
+      <span className="w-5 text-right text-xs text-[var(--theme-text-faint)]">#{index + 1}</span>
+      <span className="truncate">{name}</span>
+    </span>
   );
 }
 
-// ── Panel Leaderboard ──
-
-function PanelLeaderboard({ entries }: { entries: PanelLeaderboardEntry[] }) {
-  if (entries.length === 0) {
-    return (
-      <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
-        <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Panel Leaderboard</h3>
-        <p className="mt-4 text-center text-xs text-[var(--theme-text-faint)]">No panel executions yet</p>
-      </div>
-    );
-  }
-
+/** Inline bar showing this value relative to the column max. */
+function BarValue({ value, max, color, label }: { value: number; max: number; color: string; label: string }) {
+  const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0;
   return (
-    <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
-      <h3 className="mb-3 text-sm font-semibold text-[var(--theme-text-primary)]">Panel Leaderboard</h3>
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-[var(--theme-border)]">
-            <th className="pb-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Panel</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Runs</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Done</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Failed</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Avg Duration</th>
-            <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Avg Members</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.map((entry, i) => (
-            <tr key={entry.panelId} className="border-b border-[var(--theme-border)] last:border-0">
-              <td className="py-2 text-sm text-[var(--theme-text-primary)]">
-                <span className="mr-2 text-[var(--theme-text-faint)]">#{i + 1}</span>
-                {entry.panelDisplayName}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
-                {entry.executionCount}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-green-400">
-                {entry.completedCount}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-red-400">
-                {entry.failedCount}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
-                {entry.avgDurationMs != null ? formatDuration(entry.avgDurationMs) : '—'}
-              </td>
-              <td className="py-2 text-right tabular-nums text-sm text-[var(--theme-text-secondary)]">
-                {entry.avgRespondedMembers != null ? entry.avgRespondedMembers : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="flex items-center justify-end gap-2">
+      <span className="text-[var(--theme-text-secondary)]">{label}</span>
+      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--theme-bg-overlay)]">
+        <span className="block h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </span>
     </div>
   );
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  return `${m}m${rem > 0 ? ` ${rem}s` : ''}`;
+// ── Flatten Record<name, number> time series into stacked-chart rows ───────────
+
+function flattenByKey(
+  buckets: StatisticsTimeBucket[],
+  pick: (b: StatisticsTimeBucket) => Record<string, number>,
+): { rows: Array<Record<string, unknown>>; series: SeriesDef[] } {
+  const names = new Set<string>();
+  for (const b of buckets) for (const n of Object.keys(pick(b) ?? {})) names.add(n);
+  const list = [...names];
+  const series: SeriesDef[] = list.map((name, i) => ({ key: name, label: name, color: colorAt(i) }));
+  const rows = buckets.map((b) => {
+    const src = pick(b) ?? {};
+    const row: Record<string, unknown> = { label: shortLabel(b.date) };
+    for (const name of list) row[name] = src[name] ?? 0;
+    return row;
+  });
+  return { rows, series };
 }
 
-// ── Cost Bar Chart (stacked per agent) ──
-
-const STACK_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899', '#ef4444', '#06b6d4', '#84cc16'];
-
-function CostBarChart({ data }: { data: StatisticsTimeBucket[] }) {
-  if (data.length === 0) return null;
-
-  // Collect all unique agent names across all buckets
-  const agentSet = new Set<string>();
-  for (const d of data) {
-    for (const name of Object.keys(d.costByAgent ?? {})) agentSet.add(name);
-  }
-  const agents = [...agentSet];
-  if (agents.length === 0) return null;
-
-  const height = 220;
-  const legendH = 24;
-  const chartH = height - 30 - legendH;
-  const maxVal = Math.max(...data.map((d) => d.totalCostUsd), 0.01);
-  const barWidth = Math.max(4, Math.min(40, (600 - data.length * 2) / data.length));
-  const width = data.length * (barWidth + 2) + 40;
-
-  return (
-    <div>
-      <svg width="100%" height={height - legendH} viewBox={`0 0 ${width} ${height - legendH}`} preserveAspectRatio="xMinYMid meet">
-        {data.map((d, i) => {
-          const x = 30 + i * (barWidth + 2);
-          let offsetY = 0;
-          const costs = d.costByAgent ?? {};
-          return (
-            <g key={i}>
-              {agents.map((agent, ai) => {
-                const val = costs[agent] ?? 0;
-                if (val === 0) return null;
-                const segH = (val / maxVal) * chartH;
-                const y = height - legendH - 20 - offsetY - segH;
-                offsetY += segH;
-                return (
-                  <rect key={agent} x={x} y={y} width={barWidth} height={segH} fill={STACK_COLORS[ai % STACK_COLORS.length]} opacity={0.85}>
-                    <title>{`${agent}: $${val.toFixed(4)}`}</title>
-                  </rect>
-                );
-              })}
-              {(i === 0 || i === data.length - 1 || i % Math.max(1, Math.floor(data.length / 6)) === 0) && (
-                <text x={x + barWidth / 2} y={height - legendH - 4} textAnchor="middle" fontSize="9" fill="var(--theme-text-faint)">
-                  {d.date.slice(5)}
-                </text>
-              )}
-            </g>
-          );
-        })}
-        <text x="0" y="12" fontSize="9" fill="var(--theme-text-faint)">${maxVal.toFixed(2)}</text>
-        <text x="0" y={height - legendH - 22} fontSize="9" fill="var(--theme-text-faint)">$0</text>
-      </svg>
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 mt-2">
-        {agents.map((agent, i) => (
-          <div key={agent} className="flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: STACK_COLORS[i % STACK_COLORS.length] }} />
-            <span className="text-[10px] text-[var(--theme-text-secondary)]">{agent}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Tickets Done Bar Chart (stacked per board) ──
-
-function TicketsByBoardChart({ data }: { data: StatisticsTimeBucket[] }) {
-  if (data.length === 0) return null;
-
-  // Collect all board names across all buckets
-  const boardSet = new Set<string>();
-  for (const d of data) {
-    for (const name of Object.keys(d.ticketsDoneByBoard ?? {})) boardSet.add(name);
-  }
-  const boards = [...boardSet];
-  if (boards.length === 0) return null;
-
-  const height = 220;
-  const legendH = 24;
-  const chartH = height - 30 - legendH;
-  // Max total done-per-bucket drives the Y scale (stacked bars)
-  const totals = data.map((d) =>
-    Object.values(d.ticketsDoneByBoard ?? {}).reduce((sum, v) => sum + v, 0),
-  );
-  const maxVal = Math.max(...totals, 1);
-  const barWidth = Math.max(4, Math.min(40, (600 - data.length * 2) / data.length));
-  const width = data.length * (barWidth + 2) + 40;
-
-  return (
-    <div>
-      <svg width="100%" height={height - legendH} viewBox={`0 0 ${width} ${height - legendH}`} preserveAspectRatio="xMinYMid meet">
-        {data.map((d, i) => {
-          const x = 30 + i * (barWidth + 2);
-          let offsetY = 0;
-          const counts = d.ticketsDoneByBoard ?? {};
-          return (
-            <g key={i}>
-              {boards.map((board, bi) => {
-                const val = counts[board] ?? 0;
-                if (val === 0) return null;
-                const segH = (val / maxVal) * chartH;
-                const y = height - legendH - 20 - offsetY - segH;
-                offsetY += segH;
-                return (
-                  <rect key={board} x={x} y={y} width={barWidth} height={segH} fill={STACK_COLORS[bi % STACK_COLORS.length]} opacity={0.85}>
-                    <title>{`${board}: ${val} done`}</title>
-                  </rect>
-                );
-              })}
-              {(i === 0 || i === data.length - 1 || i % Math.max(1, Math.floor(data.length / 6)) === 0) && (
-                <text x={x + barWidth / 2} y={height - legendH - 4} textAnchor="middle" fontSize="9" fill="var(--theme-text-faint)">
-                  {d.date.slice(5)}
-                </text>
-              )}
-            </g>
-          );
-        })}
-        <text x="0" y="12" fontSize="9" fill="var(--theme-text-faint)">{maxVal}</text>
-        <text x="0" y={height - legendH - 22} fontSize="9" fill="var(--theme-text-faint)">0</text>
-      </svg>
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 mt-2">
-        {boards.map((board, i) => (
-          <div key={board} className="flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: STACK_COLORS[i % STACK_COLORS.length] }} />
-            <span className="text-[10px] text-[var(--theme-text-secondary)]">{board}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Main Statistics View ──
+// ── Main view ─────────────────────────────────────────────────────────────────
 
 export function StatisticsView() {
   const data = useStatisticsStore((s) => s.data);
+  const previous = useStatisticsStore((s) => s.previous);
   const loading = useStatisticsStore((s) => s.loading);
   const preset = useStatisticsStore((s) => s.preset);
   const granularity = useStatisticsStore((s) => s.granularity);
+  const customFrom = useStatisticsStore((s) => s.customFrom);
+  const customTo = useStatisticsStore((s) => s.customTo);
   const fetch = useStatisticsStore((s) => s.fetch);
   const setPreset = useStatisticsStore((s) => s.setPreset);
   const setGranularity = useStatisticsStore((s) => s.setGranularity);
+  const setCustomRange = useStatisticsStore((s) => s.setCustomRange);
+
+  const [focus, setFocus] = useState<Focus>('overview');
 
   useEffect(() => {
     fetch();
@@ -515,127 +386,51 @@ export function StatisticsView() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header with time range */}
-      <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-6 py-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-[var(--theme-text-primary)]">Statistics</h2>
-          <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase bg-yellow-500/20 text-yellow-400 border border-yellow-500/40">WIP</span>
+      {/* Header */}
+      <div className="border-b border-[var(--theme-border)] px-6 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-0.5">
+            {FOCUSES.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setFocus(f.key)}
+                className={cn(
+                  'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                  focus === f.key
+                    ? 'bg-[var(--theme-accent)] text-white'
+                    : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <Toolbar
+            preset={preset}
+            granularity={granularity}
+            customFrom={customFrom}
+            customTo={customTo}
+            loading={loading}
+            onPreset={setPreset}
+            onGranularity={setGranularity}
+            onCustomRange={setCustomRange}
+            onRefresh={fetch}
+          />
         </div>
-        <TimeRangeSelector
-          preset={preset}
-          granularity={granularity}
-          onPresetChange={setPreset}
-          onGranularityChange={setGranularity}
-        />
       </div>
 
-      {/* Dashboard content */}
+      {/* Content */}
       <div className="flex-1 overflow-auto p-6">
         {loading && !data && (
           <div className="flex items-center justify-center py-20 text-[var(--theme-text-faint)]">
-            <span className="text-sm">Loading statistics...</span>
+            <span className="text-sm">Loading statistics…</span>
           </div>
         )}
 
-        {data && (
-          <div className="space-y-6">
-            {/* KPI Cards Grid */}
-            <div className="grid grid-cols-4 gap-3">
-              <StatCard
-                icon={<WorktreeIcon />}
-                value={data.summary.worktreesCreated}
-                label="Worktrees"
-              />
-              <StatCard
-                icon={<PRIcon />}
-                value={data.summary.prsCreated}
-                label="PRs Created"
-              />
-              <StatCard
-                icon={<AgentIcon />}
-                value={data.summary.agentsSpawned}
-                label="Agents Spawned"
-              />
-              <StatCard
-                icon={<DeliverableIcon />}
-                value={data.summary.deliverablesCreated}
-                label="Deliverables"
-              />
-              <StatCard
-                icon={<CommentIcon />}
-                value={data.summary.commentsCreated}
-                label="Comments"
-              />
-              <StatCard
-                icon={<MentionIcon />}
-                value={data.summary.mentionsCreated}
-                label="Mentions"
-              />
-              <StatCard
-                icon={<TicketIcon />}
-                value={data.summary.ticketsCreated}
-                label="Tickets Created"
-              />
-              <StatCard
-                icon={<DurationIcon />}
-                value={data.summary.avgAgentDurationMs != null ? formatDuration(data.summary.avgAgentDurationMs) : '—'}
-                label="Avg Duration"
-              />
-              <StatCard
-                icon={<SkillIcon />}
-                value={data.summary.skillsExecuted}
-                label="Skills Executed"
-              />
-              <StatCard
-                icon={<CostIcon />}
-                value={data.summary.totalCostUsd > 0 ? `$${data.summary.totalCostUsd.toFixed(2)}` : '$0'}
-                label="Total Cost"
-              />
-              <StatCard
-                icon={<TokenIcon />}
-                value={data.summary.totalInputTokens + data.summary.totalOutputTokens > 0
-                  ? `${Math.round((data.summary.totalInputTokens + data.summary.totalOutputTokens) / 1000)}k`
-                  : '0'}
-                label="Total Tokens"
-              />
-            </div>
+        {data && focus === 'catalogue' && <CandidateGallery data={data} />}
 
-            {/* Time Series */}
-            <TimeSeriesChart data={data.timeSeries} />
-
-            {/* Tickets Done by Board */}
-            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Tickets Done by Board</h3>
-                <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: '#10b98130', color: '#10b981', border: '1px solid #10b98140' }}>Done</span>
-              </div>
-              {data.timeSeries.some((b) => Object.keys(b.ticketsDoneByBoard ?? {}).length > 0)
-                ? <TicketsByBoardChart data={data.timeSeries} />
-                : <p className="py-8 text-center text-xs text-[var(--theme-text-faint)]">No tickets moved to done in this period</p>
-              }
-            </div>
-
-            {/* Cost Over Time */}
-            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">Cost Over Time</h3>
-                <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: '#f59e0b30', color: '#f59e0b', border: '1px solid #f59e0b40' }}>USD</span>
-              </div>
-              {data.timeSeries.some((b) => b.totalCostUsd > 0)
-                ? <CostBarChart data={data.timeSeries} />
-                : <p className="py-8 text-center text-xs text-[var(--theme-text-faint)]">No cost data yet — run an agent to start tracking</p>
-              }
-            </div>
-
-            {/* Agent Leaderboard */}
-            <AgentLeaderboard entries={data.agentLeaderboard} />
-
-            {/* Skill Leaderboard */}
-            <SkillLeaderboard entries={data.skillLeaderboard} />
-
-            {/* Panel Leaderboard */}
-            <PanelLeaderboard entries={data.panelLeaderboard} />
-          </div>
+        {data && focus !== 'catalogue' && (
+          <DashboardContent data={data} previous={previous} focus={focus} />
         )}
 
         {!loading && !data && (
@@ -651,97 +446,262 @@ export function StatisticsView() {
   );
 }
 
-// ── Small Icons for Stat Cards ──
+function DashboardContent({
+  data,
+  previous,
+  focus,
+}: {
+  data: StatisticsResponse;
+  previous: StatisticsResponse | null;
+  focus: Focus;
+}) {
+  const kpis = KPI_GROUPS[focus as Exclude<Focus, 'catalogue'>];
 
-function WorktreeIcon() {
+  const sparkData = (key: keyof StatisticsTimeBucket): number[] =>
+    data.timeSeries.map((b) => Number(b[key] ?? 0));
+
+  const activityRows = useMemo<Record<string, unknown>[]>(
+    () => data.timeSeries.map((b) => ({ ...b, label: shortLabel(b.date) })),
+    [data.timeSeries],
+  );
+
+  const cost = useMemo(() => flattenByKey(data.timeSeries, (b) => b.costByAgent), [data.timeSeries]);
+  const boards = useMemo(() => flattenByKey(data.timeSeries, (b) => b.ticketsDoneByBoard), [data.timeSeries]);
+
+  const costByAgent: DonutSlice[] = useMemo(
+    () =>
+      data.agentLeaderboard
+        .filter((a) => a.totalCostUsd > 0)
+        .map((a) => ({ name: a.personaDisplayName, value: a.totalCostUsd })),
+    [data.agentLeaderboard],
+  );
+
+  const tokensByAgent: DonutSlice[] = useMemo(
+    () =>
+      data.agentLeaderboard
+        .map((a) => ({ name: a.personaDisplayName, value: a.totalInputTokens + a.totalOutputTokens }))
+        .filter((a) => a.value > 0),
+    [data.agentLeaderboard],
+  );
+
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="5" cy="3.5" r="1.5" /><circle cx="11" cy="3.5" r="1.5" /><circle cx="8" cy="12.5" r="1.5" />
-      <line x1="5" y1="5" x2="5" y2="7" /><line x1="11" y1="5" x2="11" y2="7" />
-      <path d="M5 7c0 1.5 1.5 2.5 3 4M11 7c0 1.5-1.5 2.5-3 4" />
-    </svg>
+    <div className="space-y-5">
+      {/* KPI grid */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {kpis.map((def) => (
+          <KpiCard
+            key={def.key}
+            def={def}
+            current={Number(data.summary[def.key] ?? 0)}
+            previous={previous ? Number(previous.summary[def.key] ?? 0) : undefined}
+            spark={def.spark ? def.spark(data) : def.sparkKey ? sparkData(def.sparkKey) : []}
+          />
+        ))}
+      </div>
+
+      {focus === 'overview' && (
+        <>
+          <ChartCard title="Activity Heatmap" subtitle="Agent runs by weekday × hour (your local time) — when Fleex works, including off-hours.">
+            <ActivityHeatmap data={data.activityHeatmap} />
+          </ChartCard>
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <ChartCard title="Delivery Throughput" subtitle="Tickets created vs completed, with PRs created">
+              <DeliveryComposedChart
+                data={activityRows}
+                xKey="label"
+                bars={[
+                  { key: 'ticketsCreated', label: 'Created', color: colorAt(0) },
+                  { key: 'ticketsCompleted', label: 'Completed', color: colorAt(1) },
+                ]}
+                line={{ key: 'prsCreated', label: 'PRs', color: colorAt(8) }}
+              />
+            </ChartCard>
+
+            <ChartCard title="Cost Over Time" subtitle="Agentic spend per bucket, stacked by agent">
+              {cost.series.length > 0 ? (
+                <TimeBarChart data={cost.rows} series={cost.series} xKey="label" format={formatUsd} />
+              ) : (
+                <EmptyChart message="No cost recorded — run an agent to start tracking" />
+              )}
+            </ChartCard>
+          </div>
+        </>
+      )}
+
+      {focus === 'delivery' && (
+        <>
+          <ChartCard title="Delivery Throughput" subtitle="Tickets created vs completed, with PRs created over time">
+            <DeliveryComposedChart
+              data={activityRows}
+              xKey="label"
+              bars={[
+                { key: 'ticketsCreated', label: 'Created', color: colorAt(0) },
+                { key: 'ticketsCompleted', label: 'Completed', color: colorAt(1) },
+              ]}
+              line={{ key: 'prsCreated', label: 'PRs', color: colorAt(8) }}
+            />
+          </ChartCard>
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <ChartCard title="Tickets Done by Board" subtitle="When tickets moved to done, grouped by board">
+              {boards.series.length > 0 ? (
+                <TimeBarChart data={boards.rows} series={boards.series} xKey="label" />
+              ) : (
+                <EmptyChart message="No tickets moved to done in this period" />
+              )}
+            </ChartCard>
+
+            <ChartCard title="Collaboration Volume" subtitle="Comments, mentions and deliverables produced">
+              <TimeAreaChart
+                data={activityRows}
+                xKey="label"
+                series={[
+                  { key: 'commentsCreated', label: 'Comments', color: colorAt(3) },
+                  { key: 'mentionsCreated', label: 'Mentions', color: colorAt(4) },
+                  { key: 'deliverablesCreated', label: 'Deliverables', color: colorAt(5) },
+                ]}
+              />
+            </ChartCard>
+          </div>
+        </>
+      )}
+
+      {focus === 'costs' && (
+        <>
+          <ChartCard title="Cost Over Time" subtitle="Agentic spend per bucket, stacked by agent">
+            {cost.series.length > 0 ? (
+              <TimeBarChart data={cost.rows} series={cost.series} xKey="label" format={formatUsd} />
+            ) : (
+              <EmptyChart message="No cost recorded — run an agent to start tracking" />
+            )}
+          </ChartCard>
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <ChartCard title="Cost Share by Agent" subtitle="Where the budget goes">
+              <DonutChart
+                data={costByAgent}
+                format={formatUsd}
+                centerLabel="total"
+                centerValue={formatUsd(data.summary.totalCostUsd)}
+              />
+            </ChartCard>
+
+            <ChartCard title="Tokens by Agent" subtitle="Total input + output tokens">
+              <HBarChart data={tokensByAgent} format={formatTokens} color={colorAt(0)} />
+            </ChartCard>
+          </div>
+        </>
+      )}
+
+      {/* Leaderboards */}
+      <AgentLeaderboard entries={data.agentLeaderboard} />
+      <WorkflowLeaderboard entries={data.workflowLeaderboard} />
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <SkillLeaderboard entries={data.skillLeaderboard} />
+        <PanelLeaderboard entries={data.panelLeaderboard} />
+      </div>
+    </div>
   );
 }
 
-function PRIcon() {
+// ── Concrete leaderboards ─────────────────────────────────────────────────────
+
+function AgentLeaderboard({ entries }: { entries: AgentLeaderboardEntry[] }) {
+  const maxSpawn = Math.max(1, ...entries.map((e) => e.spawnCount));
+  const maxCost = Math.max(0.0001, ...entries.map((e) => e.totalCostUsd));
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="5" cy="3.5" r="1.5" /><circle cx="5" cy="12.5" r="1.5" /><circle cx="12" cy="7" r="1.5" />
-      <path d="M5 5v6M5 7.5c0-1.5 1-3 4.5-3" />
-    </svg>
+    <LeaderboardTable
+      title="Agent Leaderboard"
+      rows={entries}
+      empty="No agent executions yet"
+      keyOf={(e) => e.personaId}
+      columns={[
+        { header: 'Agent', render: (e, i) => <RankCell index={i} name={e.personaDisplayName} /> },
+        {
+          header: 'Spawns',
+          align: 'right',
+          render: (e) => <BarValue value={e.spawnCount} max={maxSpawn} color={colorAt(0)} label={String(e.spawnCount)} />,
+        },
+        { header: 'Avg Duration', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}</span> },
+        {
+          header: 'Cost',
+          align: 'right',
+          render: (e) => <BarValue value={e.totalCostUsd} max={maxCost} color={colorAt(2)} label={e.totalCostUsd > 0 ? formatUsd(e.totalCostUsd) : '—'} />,
+        },
+        { header: 'Tokens', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.totalInputTokens + e.totalOutputTokens > 0 ? formatTokens(e.totalInputTokens + e.totalOutputTokens) : '—'}</span> },
+        { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
+        { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
+      ]}
+    />
   );
 }
 
-function AgentIcon() {
+function SkillLeaderboard({ entries }: { entries: SkillLeaderboardEntry[] }) {
+  const max = Math.max(1, ...entries.map((e) => e.executionCount));
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" />
-      <path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
-    </svg>
+    <LeaderboardTable
+      title="Skill Leaderboard"
+      rows={entries}
+      empty="No skill executions yet"
+      keyOf={(e) => e.skillId}
+      columns={[
+        { header: 'Skill', render: (e, i) => <RankCell index={i} name={e.skillDisplayName} /> },
+        {
+          header: 'Runs',
+          align: 'right',
+          render: (e) => <BarValue value={e.executionCount} max={max} color={colorAt(6)} label={String(e.executionCount)} />,
+        },
+        { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
+        { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
+      ]}
+    />
   );
 }
 
-function DeliverableIcon() {
+function WorkflowLeaderboard({ entries }: { entries: WorkflowLeaderboardEntry[] }) {
+  const max = Math.max(1, ...entries.map((e) => e.executionCount));
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" /><line x1="9" y1="15" x2="15" y2="15" />
-    </svg>
+    <LeaderboardTable
+      title="Workflow Leaderboard"
+      rows={entries}
+      empty="No workflow runs yet"
+      keyOf={(e) => e.workflowId}
+      columns={[
+        { header: 'Workflow', render: (e, i) => <RankCell index={i} name={e.workflowDisplayName} /> },
+        {
+          header: 'Runs',
+          align: 'right',
+          render: (e) => <BarValue value={e.executionCount} max={max} color={colorAt(8)} label={String(e.executionCount)} />,
+        },
+        { header: 'Avg Duration', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}</span> },
+        { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
+        { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
+      ]}
+    />
   );
 }
 
-function CommentIcon() {
+function PanelLeaderboard({ entries }: { entries: PanelLeaderboardEntry[] }) {
+  const max = Math.max(1, ...entries.map((e) => e.executionCount));
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  );
-}
-
-function MentionIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94" />
-    </svg>
-  );
-}
-
-function TicketIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" />
-    </svg>
-  );
-}
-
-function DurationIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-    </svg>
-  );
-}
-
-function SkillIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  );
-}
-
-function CostIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
-  );
-}
-
-function TokenIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
-    </svg>
+    <LeaderboardTable
+      title="Panel Leaderboard"
+      rows={entries}
+      empty="No panel executions yet"
+      keyOf={(e) => e.panelId}
+      columns={[
+        { header: 'Panel', render: (e, i) => <RankCell index={i} name={e.panelDisplayName} /> },
+        {
+          header: 'Runs',
+          align: 'right',
+          render: (e) => <BarValue value={e.executionCount} max={max} color={colorAt(4)} label={String(e.executionCount)} />,
+        },
+        { header: 'Avg Duration', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}</span> },
+        { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
+        { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
+      ]}
+    />
   );
 }
