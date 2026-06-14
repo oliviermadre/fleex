@@ -8,6 +8,7 @@ import { HumanGateResolvePanel } from './HumanGateResolvePanel';
 import { NeedsReviewRespondPanel } from './NeedsReviewRespondPanel';
 import { FailedStepRetryPanel } from './FailedStepRetryPanel';
 import { RunningStepForceRestartPanel } from './RunningStepForceRestartPanel';
+import { CancelledStepRestartPanel } from './CancelledStepRestartPanel';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { countCompletedSteps } from './workflowProgress';
 import { postTicketComment } from '../../services/api';
@@ -237,6 +238,11 @@ export function WorkflowRunView({ run, stepRuns }: Props) {
               <RunningStepForceRestartPanel
                 startedAt={selectedStepRun.startedAt}
                 onForceRestart={() => retry(run.id, selectedStepRun.id)}
+              />
+            )}
+            {selectedStepRun?.status === 'cancelled' && (
+              <CancelledStepRestartPanel
+                onRestart={() => retry(run.id, selectedStepRun.id)}
               />
             )}
           </div>

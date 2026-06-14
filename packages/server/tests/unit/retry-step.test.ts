@@ -82,6 +82,31 @@ describe('RetryStepUseCase', () => {
     expect(orchestrator.runStep).toHaveBeenCalledWith('run-1', 'a');
   });
 
+  // WHY (#320): a step deliberately terminated from the UI settles to
+  // `cancelled`. The user must be able to restart it from the workflow view —
+  // restart re-arms the run to `running` and spawns a fresh attempt. The step is
+  // no longer running, so there is nothing to abort.
+  it('restarts a cancelled step and re-arms the run to running', async () => {
+    const run = makeRun();
+    run.cancel(); // run settled after the step was terminated
+    const step = runningStep('exec-1');
+    step.cancel(); // step already settled to `cancelled`
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { getById: vi.fn().mockResolvedValue(step), save: vi.fn() };
+    const orchestrator = { runStep: vi.fn() };
+    const canceller = { cancelExecution: vi.fn() };
+    const uc = new RetryStepUseCase(runStore as never, stepRunStore as never, orchestrator as never, canceller as never);
+
+    await uc.execute({ workflowRunId: 'run-1', stepRunId: 'sr-1' });
+
+    // Not running anymore → no second abort attempt.
+    expect(canceller.cancelExecution).not.toHaveBeenCalled();
+    // Run is re-armed and the step is re-scheduled (attempt+1 created downstream).
+    expect(run.status).toBe('running');
+    expect(run.currentStepId).toBe('a');
+    expect(orchestrator.runStep).toHaveBeenCalledWith('run-1', 'a');
+  });
+
   it('still restarts when the abort throws (best-effort)', async () => {
     const run = makeRun();
     const step = runningStep('exec-1');
