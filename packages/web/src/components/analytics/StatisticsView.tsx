@@ -28,15 +28,17 @@ import {
   type DonutSlice,
   type SeriesDef,
 } from './statCharts';
+import { CandidateGallery } from './statCandidates';
 
 // ── Focus tabs ──────────────────────────────────────────────────────────────
 
-type Focus = 'overview' | 'delivery' | 'costs';
+type Focus = 'overview' | 'delivery' | 'costs' | 'catalogue';
 
 const FOCUSES: { key: Focus; label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'delivery', label: 'Delivery' },
   { key: 'costs', label: 'Agentic Costs' },
+  { key: 'catalogue', label: 'Catalogue (18)' },
 ];
 
 // ── Time range selector ──────────────────────────────────────────────────────
@@ -163,7 +165,7 @@ interface KpiDef {
   goodWhenDown?: boolean;
 }
 
-const KPI_GROUPS: Record<Focus, KpiDef[]> = {
+const KPI_GROUPS: Record<Exclude<Focus, 'catalogue'>, KpiDef[]> = {
   overview: [
     { key: 'agentsSpawned', label: 'Agents Spawned', color: colorAt(0), sparkKey: 'agentsSpawned', format: formatCompact },
     { key: 'ticketsCompleted', label: 'Tickets Completed', color: colorAt(1), sparkKey: 'ticketsCompleted', format: formatCompact },
@@ -447,7 +449,9 @@ export function StatisticsView() {
           </div>
         )}
 
-        {data && (
+        {data && focus === 'catalogue' && <CandidateGallery data={data} />}
+
+        {data && focus !== 'catalogue' && (
           <DashboardContent data={data} previous={previous} focus={focus} activeSeries={activeSeries} onToggleSeries={toggleSeries} />
         )}
 
@@ -477,7 +481,7 @@ function DashboardContent({
   activeSeries: Set<string>;
   onToggleSeries: (key: string) => void;
 }) {
-  const kpis = KPI_GROUPS[focus];
+  const kpis = KPI_GROUPS[focus as Exclude<Focus, 'catalogue'>];
 
   const sparkData = (key: keyof StatisticsTimeBucket): number[] =>
     data.timeSeries.map((b) => Number(b[key] ?? 0));

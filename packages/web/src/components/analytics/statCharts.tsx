@@ -8,6 +8,7 @@ import {
   Cell,
   ComposedChart,
   Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -58,6 +59,16 @@ export function formatUsd(n: number): string {
 export function formatTokens(n: number): string {
   if (n === 0) return '0';
   return formatCompact(n);
+}
+
+export function formatPct(n: number): string {
+  return `${Math.round(n)}%`;
+}
+
+export function formatDays(ms: number): string {
+  const days = ms / 86_400_000;
+  if (days < 1) return formatDuration(ms);
+  return `${days.toFixed(1)}d`;
 }
 
 export function formatDuration(ms: number): string {
@@ -129,7 +140,7 @@ interface TooltipPayloadItem {
   dataKey?: string | number;
 }
 
-function StatTooltip({
+export function StatTooltip({
   active,
   payload,
   label,
@@ -177,8 +188,8 @@ function StatTooltip({
   );
 }
 
-const AXIS_TICK = { fontSize: 10, fill: 'var(--theme-text-faint)' } as const;
-const GRID_STROKE = 'var(--theme-border-subtle)';
+export const AXIS_TICK = { fontSize: 10, fill: 'var(--theme-text-faint)' } as const;
+export const GRID_STROKE = 'var(--theme-border-subtle)';
 
 // ── Series definition ───────────────────────────────────────────────────────
 
@@ -198,6 +209,7 @@ export function TimeAreaChart({
   xKey,
   height = 260,
   stacked = true,
+  expand = false,
   format,
 }: {
   data: ReadonlyArray<ChartRow>;
@@ -205,6 +217,8 @@ export function TimeAreaChart({
   xKey: string;
   height?: number;
   stacked?: boolean;
+  /** Normalize the stack to 100% (share-of-total view). */
+  expand?: boolean;
   format?: (v: number) => string;
 }) {
   const gid = useId().replace(/:/g, '');
@@ -212,18 +226,25 @@ export function TimeAreaChart({
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+      <AreaChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }} stackOffset={expand ? 'expand' : undefined}>
         <defs>
           {series.map((s) => (
             <linearGradient key={s.key} id={`${gid}-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={s.color} stopOpacity={0.45} />
-              <stop offset="100%" stopColor={s.color} stopOpacity={0.04} />
+              <stop offset="0%" stopColor={s.color} stopOpacity={expand ? 0.75 : 0.45} />
+              <stop offset="100%" stopColor={s.color} stopOpacity={expand ? 0.35 : 0.04} />
             </linearGradient>
           ))}
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
         <XAxis dataKey={xKey} tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
-        <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => formatCompact(Number(v))} />
+        <YAxis
+          tick={AXIS_TICK}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          domain={expand ? [0, 1] : undefined}
+          tickFormatter={(v) => (expand ? `${Math.round(Number(v) * 100)}%` : formatCompact(Number(v)))}
+        />
         <Tooltip content={<StatTooltip format={format} hideZero />} cursor={{ stroke: GRID_STROKE }} />
         {series.map((s) => (
           <Area
@@ -242,6 +263,48 @@ export function TimeAreaChart({
           />
         ))}
       </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ── Multi-line chart over time (trend comparison) ───────────────────────────
+
+export function TimeLineChart({
+  data,
+  series,
+  xKey,
+  height = 260,
+  format,
+}: {
+  data: ReadonlyArray<ChartRow>;
+  series: SeriesDef[];
+  xKey: string;
+  height?: number;
+  format?: (v: number) => string;
+}) {
+  if (data.length === 0 || series.length === 0) return <EmptyChart message="No data for this period" />;
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+        <XAxis dataKey={xKey} tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
+        <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => (format ? format(Number(v)) : formatCompact(Number(v)))} />
+        <Tooltip content={<StatTooltip format={format} hideZero />} cursor={{ stroke: GRID_STROKE }} />
+        {series.map((s) => (
+          <Line
+            key={s.key}
+            type="monotone"
+            dataKey={s.key}
+            name={s.label}
+            stroke={s.color}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 3 }}
+            isAnimationActive={false}
+          />
+        ))}
+      </LineChart>
     </ResponsiveContainer>
   );
 }

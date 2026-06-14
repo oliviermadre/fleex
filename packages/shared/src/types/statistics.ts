@@ -57,6 +57,73 @@ export interface StatisticsSummary {
   readonly totalOutputTokens: number;
 }
 
+/** Per-bucket counts of each execution mode, for the usage-trend chart (C13). */
+export interface UsageByTypeBucket {
+  readonly date: string;
+  readonly agents: number;
+  readonly skills: number;
+  readonly panels: number;
+  readonly workflows: number;
+}
+
+/** Single cell of the day-of-week × hour activity heatmap (C4). */
+export interface ActivityHeatmapCell {
+  readonly dow: number; // 0 = Sunday … 6 = Saturday
+  readonly hour: number; // 0 … 23
+  readonly count: number;
+}
+
+/** Interaction counts for one ticket completed in the period (C14). */
+export interface TicketIterations {
+  readonly ticketId: string;
+  readonly title: string;
+  readonly mentions: number;
+  readonly comments: number;
+  readonly agentRuns: number;
+  readonly workflowRuns: number;
+  /** comments + mentions + workflow runs — the "conversation length". */
+  readonly total: number;
+}
+
+/** One ticket's first-doing → last-done lead time (C15 control chart). */
+export interface LeadTimePoint {
+  readonly ticketId: string;
+  readonly title: string;
+  readonly doneAt: string; // ISO timestamp of the last move to done
+  readonly leadTimeMs: number;
+}
+
+export interface LeadTimeStats {
+  readonly points: LeadTimePoint[];
+  readonly avgMs: number | null;
+  readonly medianMs: number | null;
+  readonly p85Ms: number | null;
+}
+
+/** Count of tickets in each status at a bucket boundary (C16 CFD). */
+export interface CumulativeFlowBucket {
+  readonly date: string;
+  readonly backlog: number;
+  readonly todo: number;
+  readonly doing: number;
+  readonly reviewing: number;
+  readonly done: number;
+}
+
+/** Average time tickets spent in a given status before moving on (C17). */
+export interface CycleTimeStatus {
+  readonly status: string;
+  readonly avgMs: number | null;
+  readonly count: number;
+}
+
+/** Throughput (tickets completed) vs work-in-progress per bucket (C18). */
+export interface ThroughputWipBucket {
+  readonly date: string;
+  readonly completed: number;
+  readonly wip: number;
+}
+
 export interface StatisticsResponse {
   readonly from: string;
   readonly to: string;
@@ -66,6 +133,14 @@ export interface StatisticsResponse {
   readonly agentLeaderboard: AgentLeaderboardEntry[];
   readonly skillLeaderboard: SkillLeaderboardEntry[];
   readonly panelLeaderboard: PanelLeaderboardEntry[];
+  // ── Extended analytics (derived from existing data; no schema changes) ──
+  readonly usageByType: UsageByTypeBucket[];
+  readonly activityHeatmap: ActivityHeatmapCell[];
+  readonly ticketIterations: TicketIterations[];
+  readonly leadTime: LeadTimeStats;
+  readonly cumulativeFlow: CumulativeFlowBucket[];
+  readonly cycleTimeByStatus: CycleTimeStatus[];
+  readonly throughputWip: ThroughputWipBucket[];
 }
 
 export interface SkillLeaderboardEntry {
