@@ -553,18 +553,20 @@ export function Sparkline({
   height?: number;
 }) {
   const gid = useId().replace(/:/g, '');
-  if (data.length < 2 || data.every((v) => v === 0)) return <div style={{ height }} />;
+  if (data.length < 2) return <div style={{ height }} />;
   const chartData = data.map((v, i) => ({ i, v }));
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={chartData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+      <AreaChart data={chartData} margin={{ top: 2, right: 0, left: 0, bottom: 1 }}>
         <defs>
           <linearGradient id={`spark-${gid}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.4} />
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
+        {/* Keep a flat baseline visible even when every value is 0. */}
+        <YAxis hide domain={[0, (max: number) => (max === 0 ? 1 : max)]} />
         <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} fill={`url(#spark-${gid})`} dot={false} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
