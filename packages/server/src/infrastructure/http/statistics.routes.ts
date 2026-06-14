@@ -21,6 +21,7 @@ export function statisticsRoutes(container: Container) {
         from?: string;
         to?: string;
         granularity?: string;
+        tz?: string;
       };
     }>('/api/statistics', async (request) => {
       const now = new Date();
@@ -31,8 +32,12 @@ export function statisticsRoutes(container: Container) {
       )
         ? (request.query.granularity as 'day' | 'week' | 'month')
         : 'day';
+      // Client's Date.getTimezoneOffset() (minutes). Used to bucket the activity
+      // heatmap by the user's local weekday/hour instead of the server's TZ.
+      const parsedTz = Number(request.query.tz);
+      const tzOffsetMinutes = Number.isFinite(parsedTz) ? parsedTz : 0;
 
-      return getStatistics.execute({ from, to, granularity });
+      return getStatistics.execute({ from, to, granularity, tzOffsetMinutes });
     });
   };
 }

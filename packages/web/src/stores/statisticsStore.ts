@@ -112,10 +112,11 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
       const { granularity } = get();
       const range = currentRange(get());
       const prev = previousRange(range);
+      const tzOffsetMinutes = new Date().getTimezoneOffset();
       const [data, previous] = await Promise.all([
-        api.fetchStatistics({ from: range.from, to: range.to, granularity }),
+        api.fetchStatistics({ from: range.from, to: range.to, granularity, tzOffsetMinutes }),
         api
-          .fetchStatistics({ from: prev.from, to: prev.to, granularity })
+          .fetchStatistics({ from: prev.from, to: prev.to, granularity, tzOffsetMinutes })
           .catch(() => null),
       ]);
       set({ data, previous, loading: false });

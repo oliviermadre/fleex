@@ -274,8 +274,6 @@ export interface Candidate {
   id: string;
   title: string;
   desc: string;
-  chart: string;
-  starred?: boolean;
   render: (data: StatisticsResponse) => React.ReactNode;
 }
 
@@ -284,8 +282,6 @@ export const CANDIDATES: Candidate[] = [
     id: 'C3',
     title: 'Cost Pareto by agent',
     desc: 'Spend per agent (desc) with cumulative %. The 80/20 of your budget.',
-    chart: 'Bar + cumulative line',
-    starred: true,
     render: (data) => {
       const sorted = data.agentLeaderboard.filter((a) => a.totalCostUsd > 0).sort((a, b) => b.totalCostUsd - a.totalCostUsd);
       const total = sorted.reduce((s, a) => s + a.totalCostUsd, 0);
@@ -308,14 +304,12 @@ export const CANDIDATES: Candidate[] = [
     id: 'C4',
     title: 'Activity heatmap',
     desc: 'Agent runs by weekday × hour. When Fleex works — including off-hours autonomy.',
-    chart: 'Heatmap',
     render: (data) => <ActivityHeatmap data={data.activityHeatmap} />,
   },
   {
     id: 'C6',
     title: 'Cost per outcome',
     desc: 'Agentic $ spent per completed ticket. Are we getting cheaper per delivery?',
-    chart: 'Line',
     render: (data) => {
       const rows: Row[] = data.timeSeries.map((b) => ({
         label: shortLabel(b.date),
@@ -339,7 +333,6 @@ export const CANDIDATES: Candidate[] = [
     id: 'C11',
     title: 'Throughput + completion rate',
     desc: 'Tickets created vs completed (bars) with the completion rate (line).',
-    chart: 'Bar + rate line',
     render: (data) => {
       const rows: Row[] = data.timeSeries.map((b) => ({
         label: shortLabel(b.date),
@@ -373,8 +366,6 @@ export const CANDIDATES: Candidate[] = [
     id: 'C13',
     title: 'Usage by type over time',
     desc: 'Agents vs skills vs panels vs workflows — which execution modes you actually use.',
-    chart: 'Multi-line',
-    starred: true,
     render: (data) => {
       const rows: Row[] = data.usageByType.map((b) => ({ ...b, label: shortLabel(b.date) }));
       return (
@@ -396,8 +387,6 @@ export const CANDIDATES: Candidate[] = [
     id: 'C14',
     title: 'Iterations per ticket',
     desc: 'Distribution of conversation length (comments + mentions + workflows) before a ticket is done. Left-heavy = good one-shot rate.',
-    chart: 'Histogram',
-    starred: true,
     render: (data) => {
       if (data.ticketIterations.length === 0) return <EmptyChart message="No tickets completed in this period" />;
       const bins = [
@@ -432,8 +421,6 @@ export const CANDIDATES: Candidate[] = [
     id: 'C15',
     title: 'Lead time control chart',
     desc: 'One point per ticket: x = date done, y = days from first “doing” to done. Mean & upper control limit flag outliers/drift. Y axis is √-scaled to spread the dense low band.',
-    chart: 'Control chart',
-    starred: true,
     render: (data) => {
       const pts = data.leadTime.points;
       if (pts.length === 0) return <EmptyChart message="No tickets with a doing→done history in this period" />;
@@ -480,8 +467,6 @@ export const CANDIDATES: Candidate[] = [
     id: 'C16',
     title: 'Cumulative flow (CFD)',
     desc: 'Tickets in each status over time. Widening bands reveal bottlenecks and growing WIP.',
-    chart: 'Stacked area',
-    starred: true,
     render: (data) => {
       if (data.cumulativeFlow.length === 0) return <EmptyChart message="No ticket history in this period" />;
       const rows: Row[] = data.cumulativeFlow.map((b) => ({ ...b, label: shortLabel(b.date) }));
@@ -504,7 +489,6 @@ export const CANDIDATES: Candidate[] = [
     id: 'C17',
     title: 'Cycle time by status',
     desc: 'Average time tickets sit in each status before moving on. Where the time really goes.',
-    chart: 'H-bar',
     render: (data) => {
       const rows = data.cycleTimeByStatus
         .filter((c) => c.avgMs != null && c.avgMs > 0)
@@ -516,7 +500,6 @@ export const CANDIDATES: Candidate[] = [
     id: 'C18',
     title: 'Throughput vs WIP',
     desc: 'Tickets completed per bucket (bars) against work-in-progress (line). Little’s law sanity check.',
-    chart: 'Bar + line',
     render: (data) => {
       if (data.throughputWip.length === 0) return <EmptyChart message="No ticket history in this period" />;
       const rows: Row[] = data.throughputWip.map((b) => ({ ...b, label: shortLabel(b.date) }));
@@ -539,8 +522,7 @@ export function CandidateGallery({ data }: { data: StatisticsResponse }) {
     <div>
       <div className="mb-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3 text-xs text-[var(--theme-text-secondary)]">
         <span className="font-semibold text-[var(--theme-text-primary)]">10 retained dataviz.</span> Each is independent and keeps its
-        ID (C3, C4, C6, C11, C13–C18) so we can discuss it by name. <span className="text-[var(--theme-warning)]">★</span> marks my top
-        picks. Filter the time range above — everything reacts.
+        ID (C3, C4, C6, C11, C13–C18) so we can discuss it by name. Filter the time range above — everything reacts.
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         {CANDIDATES.map((c) => (
@@ -549,15 +531,9 @@ export function CandidateGallery({ data }: { data: StatisticsResponse }) {
             title={c.title}
             subtitle={c.desc}
             action={
-              <div className="flex shrink-0 items-center gap-1.5">
-                {c.starred && <span className="text-sm text-[var(--theme-warning)]" title="Top pick">★</span>}
-                <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[var(--theme-text-secondary)]">
-                  {c.id}
-                </span>
-                <span className="rounded-md bg-[var(--theme-accent-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-accent)]">
-                  {c.chart}
-                </span>
-              </div>
+              <span className="shrink-0 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[var(--theme-text-secondary)]">
+                {c.id}
+              </span>
             }
           >
             {c.render(data)}

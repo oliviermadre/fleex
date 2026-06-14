@@ -61,8 +61,11 @@ export class GetStatisticsUseCase {
     from: string;
     to: string;
     granularity: 'day' | 'week' | 'month';
+    /** Client's Date.getTimezoneOffset() in minutes; buckets the heatmap in the user's local time. */
+    tzOffsetMinutes?: number;
   }): Promise<StatisticsResponse> {
-    const cacheKey = `${params.from}:${params.to}:${params.granularity}`;
+    const tzOffsetMinutes = params.tzOffsetMinutes ?? 0;
+    const cacheKey = `${params.from}:${params.to}:${params.granularity}:${tzOffsetMinutes}`;
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data;
@@ -349,12 +352,17 @@ export class GetStatisticsUseCase {
     // All derived from data already loaded above plus the domain event log
     // (audit trail) — no schema changes or new persistence.
 
-    // Activity heatmap (C4): every agent/skill execution by weekday × hour.
+    // Activity heatmap (C4): every agent/skill execution by weekday × hour, in
+    // the *client's* local time. We shift the absolute instant by the client's
+    // tz offset and read UTC getters, so the result is independent of the
+    // server's timezone (no double-shift if the server isn't UTC).
+    const tzShiftMs = tzOffsetMinutes * 60_000;
     const heatCounts = new Map<string, number>();
     for (const e of filteredExecutions) {
-      const d = new Date(e.startedAt);
-      if (Number.isNaN(d.getTime())) continue;
-      const key = `${d.getDay()}:${d.getHours()}`;
+      const t = new Date(e.startedAt).getTime();
+      if (Number.isNaN(t)) continue;
+      const local = new Date(t - tzShiftMs);
+      const key = `${local.getUTCDay()}:${local.getUTCHours()}`;
       heatCounts.set(key, (heatCounts.get(key) ?? 0) + 1);
     }
     const activityHeatmap: ActivityHeatmapCell[] = [...heatCounts.entries()].map(([key, count]) => {
