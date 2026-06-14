@@ -12,6 +12,7 @@ const EVENT_DOMAIN_COLORS: Record<string, string> = {
   board: 'bg-cyan-500/20 text-cyan-400',
   session: 'bg-teal-500/20 text-teal-400',
   worktree: 'bg-emerald-500/20 text-emerald-400',
+  execution: 'bg-red-500/20 text-red-400',
 };
 
 function getEventDomain(eventType: string): string {

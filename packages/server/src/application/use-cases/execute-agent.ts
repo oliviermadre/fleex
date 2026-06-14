@@ -432,6 +432,16 @@ export class ExecuteAgentUseCase {
     // 4. Abort the SDK loop (may be hung — this is best-effort to free the async generator)
     exec.abortController.abort(new Error('cancelled'));
 
+    // 5. Audit the user-initiated cancellation (Terminate button / supersede).
+    this.eventBus?.emit({
+      type: 'execution.cancelled',
+      executionId,
+      mentionId,
+      personaId: exec.personaId,
+      ...(exec.ticketId ? { ticketId: exec.ticketId } : {}),
+      occurredAt: new Date(),
+    });
+
     this.logger.info('Agent execution cancelled', { executionId, mentionId });
     return true;
   }

@@ -33,6 +33,58 @@ export interface TicketDeletedEvent extends DomainEvent {
   ticketId: string;
 }
 
+// Semantic ticket events — emitted instead of a generic `ticket.updated`
+// so the audit trail records *what* the user did, not an opaque diff.
+
+export interface TicketLinkAddedEvent extends DomainEvent {
+  type: 'ticket.linkAdded';
+  ticketId: string;
+  linkType: string;
+  ref: string;
+  label: string;
+}
+
+export interface TicketLinkRemovedEvent extends DomainEvent {
+  type: 'ticket.linkRemoved';
+  ticketId: string;
+  /** Best-effort metadata of the removed link (the link is gone by emit time). */
+  linkType?: string;
+  ref?: string;
+  label?: string;
+}
+
+export interface TicketFavoritedEvent extends DomainEvent {
+  type: 'ticket.favorited';
+  ticketId: string;
+}
+
+export interface TicketUnfavoritedEvent extends DomainEvent {
+  type: 'ticket.unfavorited';
+  ticketId: string;
+}
+
+export interface TicketBlockedEvent extends DomainEvent {
+  type: 'ticket.blocked';
+  ticketId: string;
+}
+
+export interface TicketUnblockedEvent extends DomainEvent {
+  type: 'ticket.unblocked';
+  ticketId: string;
+}
+
+export interface TicketTagsChangedEvent extends DomainEvent {
+  type: 'ticket.tagsChanged';
+  ticketId: string;
+  added: string[];
+  removed: string[];
+}
+
+export interface TicketSyncedFromGithubEvent extends DomainEvent {
+  type: 'ticket.syncedFromGithub';
+  ticketId: string;
+}
+
 // ── Board events ──
 
 export interface BoardUpdatedEvent extends DomainEvent {
@@ -150,6 +202,24 @@ export interface MentionExecutionFailedEvent extends DomainEvent {
   reason: string;
   /** Human-readable message for the UI to display verbatim. */
   message: string;
+}
+
+export interface MentionExecutionModeChangedEvent extends DomainEvent {
+  type: 'mention.executionModeChanged';
+  mentionId: string;
+  ticketId: string;
+  from: MentionExecutionMode;
+  to: MentionExecutionMode;
+}
+
+// ── Agent execution events ──
+
+export interface ExecutionCancelledEvent extends DomainEvent {
+  type: 'execution.cancelled';
+  executionId: string;
+  mentionId: string;
+  personaId: string;
+  ticketId?: string;
 }
 
 // ── Deliverable events ──
@@ -328,6 +398,14 @@ export interface WorktreeCreatedEvent extends DomainEvent {
   hookResult?: HookResult;
 }
 
+export interface WorktreeDeletedEvent extends DomainEvent {
+  type: 'worktree.deleted';
+  repoPath: string;
+  worktreePath: string;
+  /** Branch the worktree was checked out on, when resolvable. */
+  branch?: string;
+}
+
 // ── Session events ──
 
 export interface SessionCreatedEvent extends DomainEvent {
@@ -418,6 +496,14 @@ export type AnyDomainEvent =
   | TicketUpdatedEvent
   | TicketMovedEvent
   | TicketDeletedEvent
+  | TicketLinkAddedEvent
+  | TicketLinkRemovedEvent
+  | TicketFavoritedEvent
+  | TicketUnfavoritedEvent
+  | TicketBlockedEvent
+  | TicketUnblockedEvent
+  | TicketTagsChangedEvent
+  | TicketSyncedFromGithubEvent
   | BoardUpdatedEvent
   | BoardDeletedEvent
   | CommentPostedEvent
@@ -430,6 +516,8 @@ export type AnyDomainEvent =
   | MentionWokenUpEvent
   | MentionDeletedEvent
   | MentionExecutionFailedEvent
+  | MentionExecutionModeChangedEvent
+  | ExecutionCancelledEvent
   | DeliverableCreatedEvent
   | DeliverableUpdatedEvent
   | DeliverableDeletedEvent
@@ -446,6 +534,7 @@ export type AnyDomainEvent =
   | PanelDeletedEvent
   | PanelExecutedEvent
   | WorktreeCreatedEvent
+  | WorktreeDeletedEvent
   | SessionCreatedEvent
   | SessionRenamedEvent
   | SessionKilledEvent

@@ -65,7 +65,22 @@ export function repositoryRoutes(container: Container) {
       async (request, reply) => {
         const { org, name } = request.params;
         const barePath = container.resolver.barePath(org, name);
+        // Resolve the branch before removal so the audit event is informative.
+        let branch: string | undefined;
+        try {
+          const worktrees = await container.git.listWorktrees(barePath);
+          branch = worktrees.find((wt) => wt.path === request.body.path)?.branch;
+        } catch {
+          // Best-effort — don't block deletion on a failed branch lookup.
+        }
         await container.git.removeWorktree(barePath, request.body.path);
+        container.eventBus.emit({
+          type: 'worktree.deleted',
+          repoPath: barePath,
+          worktreePath: request.body.path,
+          ...(branch ? { branch } : {}),
+          occurredAt: new Date(),
+        });
         return reply.code(204).send();
       },
     );
