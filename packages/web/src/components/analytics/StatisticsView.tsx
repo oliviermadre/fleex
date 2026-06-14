@@ -15,7 +15,6 @@ import {
   DonutChart,
   EmptyChart,
   HBarChart,
-  LegendChips,
   Sparkline,
   TimeAreaChart,
   TimeBarChart,
@@ -28,7 +27,7 @@ import {
   type DonutSlice,
   type SeriesDef,
 } from './statCharts';
-import { CandidateGallery } from './statCandidates';
+import { ActivityHeatmap, CandidateGallery } from './statCandidates';
 
 // ── Focus tabs ──────────────────────────────────────────────────────────────
 
@@ -168,13 +167,13 @@ interface KpiDef {
 const KPI_GROUPS: Record<Exclude<Focus, 'catalogue'>, KpiDef[]> = {
   overview: [
     { key: 'agentsSpawned', label: 'Agents Spawned', color: colorAt(0), sparkKey: 'agentsSpawned', format: formatCompact },
+    { key: 'workflowsStarted', label: 'Workflows Started', color: colorAt(8), format: formatCompact },
     { key: 'ticketsCompleted', label: 'Tickets Completed', color: colorAt(1), sparkKey: 'ticketsCompleted', format: formatCompact },
-    { key: 'prsCreated', label: 'PRs Created', color: colorAt(8), sparkKey: 'prsCreated', format: formatCompact },
-    { key: 'totalCostUsd', label: 'Total Cost', color: colorAt(2), sparkKey: 'totalCostUsd', format: formatUsd, goodWhenDown: true },
-    { key: 'deliverablesCreated', label: 'Deliverables', color: colorAt(5), sparkKey: 'deliverablesCreated', format: formatCompact },
     { key: 'skillsExecuted', label: 'Skills Run', color: colorAt(6), sparkKey: 'skillsExecuted', format: formatCompact },
-    { key: 'mentionsCreated', label: 'Mentions', color: colorAt(4), sparkKey: 'mentionsCreated', format: formatCompact },
-    { key: 'avgAgentDurationMs', label: 'Avg Agent Duration', color: colorAt(10), format: formatDuration, goodWhenDown: true },
+    { key: 'prsCreated', label: 'PRs Created', color: colorAt(9), sparkKey: 'prsCreated', format: formatCompact },
+    { key: 'prsMerged', label: 'PRs Merged', color: colorAt(5), format: formatCompact },
+    { key: 'deliverablesCreated', label: 'Deliverables', color: colorAt(4), sparkKey: 'deliverablesCreated', format: formatCompact },
+    { key: 'totalCostUsd', label: 'Total Cost', color: colorAt(2), sparkKey: 'totalCostUsd', format: formatUsd, goodWhenDown: true },
   ],
   delivery: [
     { key: 'ticketsCreated', label: 'Tickets Created', color: colorAt(0), sparkKey: 'ticketsCreated', format: formatCompact },
@@ -249,19 +248,6 @@ function KpiCard({
     </div>
   );
 }
-
-// ── Activity series ───────────────────────────────────────────────────────────
-
-const ACTIVITY_SERIES: SeriesDef[] = [
-  { key: 'agentsSpawned', label: 'Agents', color: colorAt(0) },
-  { key: 'ticketsCreated', label: 'Tickets', color: colorAt(1) },
-  { key: 'ticketsCompleted', label: 'Completed', color: colorAt(2) },
-  { key: 'commentsCreated', label: 'Comments', color: colorAt(3) },
-  { key: 'mentionsCreated', label: 'Mentions', color: colorAt(4) },
-  { key: 'deliverablesCreated', label: 'Deliverables', color: colorAt(5) },
-  { key: 'skillsExecuted', label: 'Skills', color: colorAt(6) },
-  { key: 'prsCreated', label: 'PRs', color: colorAt(8) },
-];
 
 // ── Leaderboard table ─────────────────────────────────────────────────────────
 
@@ -387,24 +373,10 @@ export function StatisticsView() {
   const setCustomRange = useStatisticsStore((s) => s.setCustomRange);
 
   const [focus, setFocus] = useState<Focus>('overview');
-  const [activeSeries, setActiveSeries] = useState<Set<string>>(
-    () => new Set(ACTIVITY_SERIES.map((s) => s.key)),
-  );
 
   useEffect(() => {
     fetch();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const toggleSeries = (key: string) =>
-    setActiveSeries((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        if (next.size > 1) next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
 
   return (
     <div className="flex h-full flex-col">
@@ -452,7 +424,7 @@ export function StatisticsView() {
         {data && focus === 'catalogue' && <CandidateGallery data={data} />}
 
         {data && focus !== 'catalogue' && (
-          <DashboardContent data={data} previous={previous} focus={focus} activeSeries={activeSeries} onToggleSeries={toggleSeries} />
+          <DashboardContent data={data} previous={previous} focus={focus} />
         )}
 
         {!loading && !data && (
@@ -472,14 +444,10 @@ function DashboardContent({
   data,
   previous,
   focus,
-  activeSeries,
-  onToggleSeries,
 }: {
   data: StatisticsResponse;
   previous: StatisticsResponse | null;
   focus: Focus;
-  activeSeries: Set<string>;
-  onToggleSeries: (key: string) => void;
 }) {
   const kpis = KPI_GROUPS[focus as Exclude<Focus, 'catalogue'>];
 
@@ -490,7 +458,6 @@ function DashboardContent({
     () => data.timeSeries.map((b) => ({ ...b, label: shortLabel(b.date) })),
     [data.timeSeries],
   );
-  const shownActivity = ACTIVITY_SERIES.filter((s) => activeSeries.has(s.key));
 
   const cost = useMemo(() => flattenByKey(data.timeSeries, (b) => b.costByAgent), [data.timeSeries]);
   const boards = useMemo(() => flattenByKey(data.timeSeries, (b) => b.ticketsDoneByBoard), [data.timeSeries]);
@@ -528,16 +495,8 @@ function DashboardContent({
 
       {focus === 'overview' && (
         <>
-          <ChartCard
-            title="Activity Over Time"
-            subtitle="Stacked volume of every tracked event. Click a chip to toggle a series."
-            action={<LegendChips series={ACTIVITY_SERIES} active={activeSeries} onToggle={onToggleSeries} />}
-          >
-            {shownActivity.length > 0 ? (
-              <TimeAreaChart data={activityRows} series={shownActivity} xKey="label" />
-            ) : (
-              <EmptyChart message="Select at least one series" />
-            )}
+          <ChartCard title="Activity Heatmap" subtitle="Agent runs by weekday × hour (your local time) — when Fleex works, including off-hours.">
+            <ActivityHeatmap data={data.activityHeatmap} />
           </ChartCard>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

@@ -143,6 +143,7 @@ export class GetStatisticsUseCase {
       ticketsCompleted: completedTickets.length,
       skillsExecuted: skillExecutions.length,
       panelsExecuted: 0, // Will be updated after panel events are fetched
+      workflowsStarted: 0, // Will be updated after workflow events are fetched
       totalCostUsd: filteredExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
       totalInputTokens: filteredExecutions.reduce((sum, e) => sum + (e.inputTokens ?? 0), 0),
       totalOutputTokens: filteredExecutions.reduce((sum, e) => sum + (e.outputTokens ?? 0), 0),
@@ -382,6 +383,9 @@ export class GetStatisticsUseCase {
       ]);
     }
 
+    // Workflows started within the selected window (summary KPI).
+    const workflowsStarted = workflowEvents.filter((e) => e.occurredAt >= from && e.occurredAt <= to).length;
+
     // Usage trend by execution mode (C13).
     const usageByType: UsageByTypeBucket[] = buckets.map((bucket) => {
       const inB = (d: Date) => d >= bucket.start && d < bucket.end;
@@ -545,7 +549,7 @@ export class GetStatisticsUseCase {
       from: params.from,
       to: params.to,
       granularity: params.granularity,
-      summary: updatedSummary,
+      summary: { ...updatedSummary, workflowsStarted },
       timeSeries,
       agentLeaderboard,
       skillLeaderboard,

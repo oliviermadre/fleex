@@ -51,6 +51,7 @@ export interface StatisticsSummary {
   readonly ticketsCompleted: number;
   readonly skillsExecuted: number;
   readonly panelsExecuted: number;
+  readonly workflowsStarted: number;
   readonly activeSessions: number;
   readonly totalCostUsd: number;
   readonly totalInputTokens: number;

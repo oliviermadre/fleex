@@ -189,5 +189,8 @@ describe('GetStatisticsUseCase — flow metrics', () => {
 
     // Throughput: the ticket completes in the 06-02 bucket.
     expect(result.throughputWip.find((b) => b.date === '2026-06-02')!.completed).toBe(1);
+
+    // Summary KPI: one workflow.run_created within the window.
+    expect(result.summary.workflowsStarted).toBe(1);
   });
 });

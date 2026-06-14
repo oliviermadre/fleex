@@ -203,7 +203,7 @@ const DOW_ROWS: { label: string; dow: number }[] = [
   { label: 'Sun', dow: 0 },
 ];
 
-function ActivityHeatmap({ data }: { data: StatisticsResponse['activityHeatmap'] }) {
+export function ActivityHeatmap({ data }: { data: StatisticsResponse['activityHeatmap'] }) {
   if (data.length === 0) return <EmptyChart message="No agent activity to map" />;
   const grid = new Map<string, number>();
   let max = 0;
