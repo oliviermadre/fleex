@@ -7,10 +7,12 @@ import {
   CartesianGrid,
   Cell,
   ComposedChart,
+  Legend,
   Line,
   LineChart,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -269,18 +271,29 @@ export function TimeAreaChart({
 
 // ── Multi-line chart over time (trend comparison) ───────────────────────────
 
+/** A dashed horizontal reference line (e.g. a per-series average). */
+export interface MeanLine {
+  value: number;
+  color: string;
+  label?: string;
+}
+
 export function TimeLineChart({
   data,
   series,
   xKey,
   height = 260,
   format,
+  legend = false,
+  meanLines,
 }: {
   data: ReadonlyArray<ChartRow>;
   series: SeriesDef[];
   xKey: string;
   height?: number;
   format?: (v: number) => string;
+  legend?: boolean;
+  meanLines?: MeanLine[];
 }) {
   if (data.length === 0 || series.length === 0) return <EmptyChart message="No data for this period" />;
 
@@ -291,6 +304,16 @@ export function TimeLineChart({
         <XAxis dataKey={xKey} tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
         <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => (format ? format(Number(v)) : formatCompact(Number(v)))} />
         <Tooltip content={<StatTooltip format={format} hideZero />} cursor={{ stroke: GRID_STROKE }} />
+        {legend && <Legend verticalAlign="top" align="right" iconType="plainline" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />}
+        {meanLines?.map((m, i) => (
+          <ReferenceLine
+            key={`mean-${i}`}
+            y={m.value}
+            stroke={m.color}
+            strokeDasharray="5 4"
+            label={m.label ? { value: m.label, position: 'insideTopLeft', fontSize: 9, fill: m.color } : undefined}
+          />
+        ))}
         {series.map((s) => (
           <Line
             key={s.key}

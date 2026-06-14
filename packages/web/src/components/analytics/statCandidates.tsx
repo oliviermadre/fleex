@@ -37,6 +37,13 @@ import {
 
 type Row = Record<string, unknown>;
 
+interface AxisMeanLine {
+  value: number;
+  color: string;
+  axis: 'left' | 'right';
+  label?: string;
+}
+
 /** Composed chart: bars on the left axis, a rate/line on the right axis. */
 function DualAxisComposed({
   rows,
@@ -44,6 +51,7 @@ function DualAxisComposed({
   line,
   rightFormat = formatPct,
   rightDomain,
+  meanLines,
   height = 260,
 }: {
   rows: Row[];
@@ -51,6 +59,7 @@ function DualAxisComposed({
   line: SeriesDef;
   rightFormat?: (v: number) => string;
   rightDomain?: [number, number];
+  meanLines?: AxisMeanLine[];
   height?: number;
 }) {
   if (rows.length === 0) return <EmptyChart message="No data for this period" />;
@@ -62,6 +71,16 @@ function DualAxisComposed({
         <YAxis yAxisId="left" tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => formatCompact(Number(v))} />
         <YAxis yAxisId="right" orientation="right" tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} domain={rightDomain} tickFormatter={(v) => rightFormat(Number(v))} />
         <Tooltip content={<StatTooltip hideZero />} cursor={{ fill: 'var(--theme-bg-hover)' }} />
+        {meanLines?.map((m, i) => (
+          <ReferenceLine
+            key={`mean-${i}`}
+            yAxisId={m.axis}
+            y={m.value}
+            stroke={m.color}
+            strokeDasharray="5 4"
+            label={m.label ? { value: m.label, position: m.axis === 'right' ? 'insideTopRight' : 'insideTopLeft', fontSize: 9, fill: m.color } : undefined}
+          />
+        ))}
         {bars.map((s) => (
           <Bar key={s.key} yAxisId="left" dataKey={s.key} name={s.label} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={36} isAnimationActive={false} />
         ))}
@@ -302,12 +321,16 @@ export const CANDIDATES: Candidate[] = [
         label: shortLabel(b.date),
         perTicket: b.ticketsCompleted > 0 ? b.totalCostUsd / b.ticketsCompleted : 0,
       }));
+      // Average over buckets that actually completed tickets (ignore empty days).
+      const vals = data.timeSeries.filter((b) => b.ticketsCompleted > 0).map((b) => b.totalCostUsd / b.ticketsCompleted);
+      const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
       return (
         <TimeLineChart
           data={rows}
           xKey="label"
           format={formatUsd}
           series={[{ key: 'perTicket', label: '$ / ticket', color: colorAt(1) }]}
+          meanLines={avg != null ? [{ value: avg, color: 'var(--theme-text-secondary)', label: `avg ${formatUsd(avg)}` }] : undefined}
         />
       );
     },
@@ -324,6 +347,11 @@ export const CANDIDATES: Candidate[] = [
         completed: b.ticketsCompleted,
         rate: b.ticketsCreated > 0 ? (b.ticketsCompleted / b.ticketsCreated) * 100 : 0,
       }));
+      const n = data.timeSeries.length || 1;
+      const avgCreated = data.timeSeries.reduce((s, b) => s + b.ticketsCreated, 0) / n;
+      const avgCompleted = data.timeSeries.reduce((s, b) => s + b.ticketsCompleted, 0) / n;
+      const rateVals = data.timeSeries.filter((b) => b.ticketsCreated > 0).map((b) => (b.ticketsCompleted / b.ticketsCreated) * 100);
+      const avgRate = rateVals.length > 0 ? rateVals.reduce((a, b) => a + b, 0) / rateVals.length : null;
       return (
         <DualAxisComposed
           rows={rows}
@@ -332,6 +360,11 @@ export const CANDIDATES: Candidate[] = [
             { key: 'completed', label: 'Completed', color: colorAt(1) },
           ]}
           line={{ key: 'rate', label: 'Completion %', color: colorAt(6) }}
+          meanLines={[
+            { value: avgCreated, color: colorAt(0), axis: 'left', label: `x̄ ${avgCreated.toFixed(1)}` },
+            { value: avgCompleted, color: colorAt(1), axis: 'left', label: `x̄ ${avgCompleted.toFixed(1)}` },
+            ...(avgRate != null ? [{ value: avgRate, color: colorAt(6), axis: 'right' as const, label: `x̄ ${avgRate.toFixed(0)}%` }] : []),
+          ]}
         />
       );
     },
@@ -348,6 +381,7 @@ export const CANDIDATES: Candidate[] = [
         <TimeLineChart
           data={rows}
           xKey="label"
+          legend
           series={[
             { key: 'agents', label: 'Agents', color: '#3b82f6' }, // blue
             { key: 'skills', label: 'Skills', color: '#22c55e' }, // green
@@ -434,6 +468,7 @@ export const CANDIDATES: Candidate[] = [
           yFormat={(v) => `${v.toFixed(0)}d`}
           zRange={[44, 44]}
           refLines={[
+            { y: 1, label: '1d', color: 'var(--theme-success)', dash: true },
             { y: mean, label: `mean ${mean.toFixed(1)}d`, color: 'var(--theme-text-muted)' },
             { y: ucl, label: `UCL ${ucl.toFixed(1)}d`, color: '#ef4444', dash: true },
           ]}
