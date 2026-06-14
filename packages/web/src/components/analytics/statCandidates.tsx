@@ -4,9 +4,6 @@ import {
   CartesianGrid,
   Cell,
   ComposedChart,
-  Funnel,
-  FunnelChart,
-  LabelList,
   Line,
   ReferenceLine,
   ResponsiveContainer,
@@ -21,7 +18,6 @@ import type { StatisticsResponse } from '@fleex/shared';
 import {
   AXIS_TICK,
   ChartCard,
-  DonutChart,
   EmptyChart,
   GRID_STROKE,
   HBarChart,
@@ -31,9 +27,7 @@ import {
   colorAt,
   formatCompact,
   formatDays,
-  formatDuration,
   formatPct,
-  formatTokens,
   formatUsd,
   shortLabel,
   type SeriesDef,
@@ -42,36 +36,6 @@ import {
 // ── Shared small building blocks ────────────────────────────────────────────
 
 type Row = Record<string, unknown>;
-
-/** Horizontal category bars — grouped or stacked — for per-entity comparisons. */
-function CategoryBars({
-  rows,
-  segs,
-  stacked = true,
-  height = 260,
-  format,
-}: {
-  rows: Row[];
-  segs: SeriesDef[];
-  stacked?: boolean;
-  height?: number;
-  format?: (v: number) => string;
-}) {
-  if (rows.length === 0) return <EmptyChart message="No data for this period" />;
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={rows} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} horizontal={false} />
-        <XAxis type="number" tick={AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={(v) => (format ? format(Number(v)) : formatCompact(Number(v)))} />
-        <YAxis type="category" dataKey="name" tick={AXIS_TICK} tickLine={false} axisLine={false} width={120} />
-        <Tooltip content={<StatTooltip format={format} hideZero />} cursor={{ fill: 'var(--theme-bg-hover)' }} />
-        {segs.map((s) => (
-          <Bar key={s.key} dataKey={s.key} name={s.label} stackId={stacked ? 'stack' : undefined} fill={s.color} radius={stacked ? 0 : [0, 3, 3, 0]} maxBarSize={26} isAnimationActive={false} />
-        ))}
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
 
 /** Composed chart: bars on the left axis, a rate/line on the right axis. */
 function DualAxisComposed({
@@ -142,6 +106,7 @@ function BubbleScatter({
   zRange = [60, 500],
   refLines = [],
   xType = 'number',
+  yScale = 'linear',
   height = 300,
 }: {
   points: ScatterPoint[];
@@ -152,12 +117,14 @@ function BubbleScatter({
   zRange?: [number, number];
   refLines?: Array<{ y: number; label: string; color: string; dash?: boolean }>;
   xType?: 'number' | 'time';
+  yScale?: 'linear' | 'sqrt';
   height?: number;
 }) {
   if (points.length === 0) return <EmptyChart message="No data for this period" />;
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ScatterChart margin={{ top: 8, right: 16, left: 0, bottom: 16 }}>
+      {/* Extra right margin so reference-line labels (mean / UCL) aren't clipped. */}
+      <ScatterChart margin={{ top: 8, right: 64, left: 0, bottom: 16 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
         <XAxis
           type="number"
@@ -174,6 +141,8 @@ function BubbleScatter({
           type="number"
           dataKey="y"
           name={yLabel}
+          scale={yScale}
+          domain={yScale === 'sqrt' ? [0, 'auto'] : undefined}
           tick={AXIS_TICK}
           tickLine={false}
           axisLine={false}
@@ -194,7 +163,7 @@ function BubbleScatter({
         ))}
         <Scatter data={points} isAnimationActive={false}>
           {points.map((p, i) => (
-            <Cell key={i} fill={p.color} fillOpacity={0.7} />
+            <Cell key={i} fill={p.color} fillOpacity={0.78} stroke="var(--theme-bg-surface)" strokeWidth={1} />
           ))}
         </Scatter>
       </ScatterChart>
@@ -203,8 +172,17 @@ function BubbleScatter({
 }
 
 // ── Activity heatmap (custom CSS grid) ──────────────────────────────────────
+// Rows run Monday → Sunday. Cells stay keyed by getDay() (0=Sun … 6=Sat).
 
-const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DOW_ROWS: { label: string; dow: number }[] = [
+  { label: 'Mon', dow: 1 },
+  { label: 'Tue', dow: 2 },
+  { label: 'Wed', dow: 3 },
+  { label: 'Thu', dow: 4 },
+  { label: 'Fri', dow: 5 },
+  { label: 'Sat', dow: 6 },
+  { label: 'Sun', dow: 0 },
+];
 
 function ActivityHeatmap({ data }: { data: StatisticsResponse['activityHeatmap'] }) {
   if (data.length === 0) return <EmptyChart message="No agent activity to map" />;
@@ -224,7 +202,7 @@ function ActivityHeatmap({ data }: { data: StatisticsResponse['activityHeatmap']
               {h % 3 === 0 ? h : ''}
             </div>
           ))}
-          {DOW_LABELS.map((label, dow) => (
+          {DOW_ROWS.map(({ label, dow }) => (
             <div key={dow} className="contents">
               <div className="flex items-center text-[9px] text-[var(--theme-text-muted)]">{label}</div>
               {Array.from({ length: 24 }, (_, h) => {
@@ -257,25 +235,19 @@ function ActivityHeatmap({ data }: { data: StatisticsResponse['activityHeatmap']
   );
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Palettes ────────────────────────────────────────────────────────────────
 
-function reliabilityColor(rate: number): string {
-  if (rate >= 0.9) return '#22c55e';
-  if (rate >= 0.7) return '#eab308';
-  return '#ef4444';
-}
+/** C14 — semiologic ramp: more interactions before "done" = hotter = worse. */
+const ITERATION_BIN_COLORS = ['#22c55e', '#38bdf8', '#f59e0b', '#f97316', '#ef4444'];
 
-function cumulative(series: ReadonlyArray<{ date: string }>, keys: string[]): Row[] {
-  const acc: Record<string, number> = {};
-  return series.map((b) => {
-    const row: Row = { label: shortLabel(b.date) };
-    for (const k of keys) {
-      acc[k] = (acc[k] ?? 0) + Number((b as Record<string, unknown>)[k] ?? 0);
-      row[k] = acc[k];
-    }
-    return row;
-  });
-}
+/** C17 — match the app's Kanban status colors (see lib/statusColors.ts). */
+const STATUS_BAR_COLOR: Record<string, string> = {
+  backlog: 'var(--theme-text-muted)',
+  todo: '#fb923c', // orange-400
+  doing: '#60a5fa', // blue-400
+  reviewing: '#c084fc', // purple-400
+  done: '#4ade80', // green-400
+};
 
 // ── Candidate registry ──────────────────────────────────────────────────────
 
@@ -289,52 +261,6 @@ export interface Candidate {
 }
 
 export const CANDIDATES: Candidate[] = [
-  {
-    id: 'C1',
-    title: 'Agent efficiency quadrant',
-    desc: 'Cost vs duration per agent — bubble size = spawns, colour = success rate. Spot the expensive & slow.',
-    chart: 'Bubble scatter',
-    starred: true,
-    render: (data) => {
-      const points: ScatterPoint[] = data.agentLeaderboard
-        .filter((a) => a.avgDurationMs != null && a.avgCostUsd != null)
-        .map((a) => {
-          const done = a.completedCount + a.failedCount;
-          const rate = done > 0 ? a.completedCount / done : 1;
-          return {
-            x: a.avgDurationMs!,
-            y: a.avgCostUsd ?? 0,
-            z: a.spawnCount,
-            color: reliabilityColor(rate),
-            label: a.personaDisplayName,
-            xDisplay: `Avg duration: ${formatDuration(a.avgDurationMs!)}`,
-            yDisplay: `Avg cost: ${formatUsd(a.avgCostUsd ?? 0)}`,
-            extra: `${a.spawnCount} spawns · ${Math.round(rate * 100)}% success`,
-          };
-        });
-      return <BubbleScatter points={points} xLabel="Avg duration" yLabel="Avg cost" xFormat={formatDuration} yFormat={formatUsd} />;
-    },
-  },
-  {
-    id: 'C2',
-    title: 'Agent reliability',
-    desc: 'Completed vs failed runs per agent. Who needs babysitting.',
-    chart: 'Stacked H-bar',
-    render: (data) => {
-      const rows: Row[] = data.agentLeaderboard
-        .filter((a) => a.completedCount + a.failedCount > 0)
-        .map((a) => ({ name: a.personaDisplayName, completed: a.completedCount, failed: a.failedCount }));
-      return (
-        <CategoryBars
-          rows={rows}
-          segs={[
-            { key: 'completed', label: 'Completed', color: '#22c55e' },
-            { key: 'failed', label: 'Failed', color: '#ef4444' },
-          ]}
-        />
-      );
-    },
-  },
   {
     id: 'C3',
     title: 'Cost Pareto by agent',
@@ -367,142 +293,21 @@ export const CANDIDATES: Candidate[] = [
     render: (data) => <ActivityHeatmap data={data.activityHeatmap} />,
   },
   {
-    id: 'C5',
-    title: 'Delivery burn-up',
-    desc: 'Cumulative tickets completed and PRs created. Momentum over the period.',
-    chart: 'Cumulative line',
-    render: (data) => {
-      const rows = cumulative(data.timeSeries, ['ticketsCompleted', 'prsCreated']);
-      return (
-        <TimeLineChart
-          data={rows}
-          xKey="label"
-          series={[
-            { key: 'ticketsCompleted', label: 'Tickets done', color: colorAt(1) },
-            { key: 'prsCreated', label: 'PRs', color: colorAt(8) },
-          ]}
-        />
-      );
-    },
-  },
-  {
     id: 'C6',
     title: 'Cost per outcome',
-    desc: 'Agentic $ spent per completed ticket and per PR. Are we getting cheaper per delivery?',
+    desc: 'Agentic $ spent per completed ticket. Are we getting cheaper per delivery?',
     chart: 'Line',
     render: (data) => {
       const rows: Row[] = data.timeSeries.map((b) => ({
         label: shortLabel(b.date),
         perTicket: b.ticketsCompleted > 0 ? b.totalCostUsd / b.ticketsCompleted : 0,
-        perPR: b.prsCreated > 0 ? b.totalCostUsd / b.prsCreated : 0,
       }));
       return (
         <TimeLineChart
           data={rows}
           xKey="label"
           format={formatUsd}
-          series={[
-            { key: 'perTicket', label: '$ / ticket', color: colorAt(1) },
-            { key: 'perPR', label: '$ / PR', color: colorAt(8) },
-          ]}
-        />
-      );
-    },
-  },
-  {
-    id: 'C7',
-    title: 'Human vs agent mix',
-    desc: 'Share of comments written by humans vs agents over time. Degree of autonomy.',
-    chart: '100% stacked area',
-    render: (data) => {
-      const rows: Row[] = data.timeSeries.map((b) => ({
-        label: shortLabel(b.date),
-        user: b.commentsCreatedByUser,
-        agent: b.commentsCreatedByAgent,
-      }));
-      const hasData = data.timeSeries.some((b) => b.commentsCreatedByUser + b.commentsCreatedByAgent > 0);
-      return hasData ? (
-        <TimeAreaChart
-          data={rows}
-          xKey="label"
-          expand
-          series={[
-            { key: 'agent', label: 'Agent', color: colorAt(0) },
-            { key: 'user', label: 'Human', color: colorAt(3) },
-          ]}
-        />
-      ) : (
-        <EmptyChart message="No comments in this period" />
-      );
-    },
-  },
-  {
-    id: 'C8',
-    title: 'Mention resolution funnel',
-    desc: 'Mentions created → resolved, with the resolution rate.',
-    chart: 'Funnel',
-    render: (data) => {
-      const created = data.summary.mentionsCreated;
-      const resolved = data.summary.mentionsResolved;
-      if (created === 0) return <EmptyChart message="No mentions in this period" />;
-      const funnelData = [
-        { name: `Created (${created})`, value: created, fill: colorAt(4) },
-        { name: `Resolved (${resolved})`, value: Math.max(resolved, 0), fill: colorAt(1) },
-      ];
-      return (
-        <div>
-          <ResponsiveContainer width="100%" height={220}>
-            <FunnelChart>
-              <Tooltip content={<StatTooltip />} />
-              <Funnel dataKey="value" data={funnelData} isAnimationActive={false}>
-                <LabelList position="right" fill="var(--theme-text-secondary)" stroke="none" dataKey="name" fontSize={11} />
-              </Funnel>
-            </FunnelChart>
-          </ResponsiveContainer>
-          <p className="mt-1 text-center text-xs text-[var(--theme-text-muted)]">
-            Resolution rate: <span className="font-semibold text-[var(--theme-text-primary)]">{formatPct((resolved / created) * 100)}</span>
-          </p>
-        </div>
-      );
-    },
-  },
-  {
-    id: 'C9',
-    title: 'Cost share over time',
-    desc: 'How the spend split between agents shifts week to week (normalized to 100%).',
-    chart: '100% stacked area',
-    render: (data) => {
-      const names = new Set<string>();
-      for (const b of data.timeSeries) for (const n of Object.keys(b.costByAgent ?? {})) names.add(n);
-      const list = [...names];
-      if (list.length === 0) return <EmptyChart message="No cost recorded yet" />;
-      const series: SeriesDef[] = list.map((name, i) => ({ key: name, label: name, color: colorAt(i) }));
-      const rows: Row[] = data.timeSeries.map((b) => {
-        const row: Row = { label: shortLabel(b.date) };
-        for (const n of list) row[n] = b.costByAgent?.[n] ?? 0;
-        return row;
-      });
-      return <TimeAreaChart data={rows} xKey="label" series={series} expand format={formatUsd} />;
-    },
-  },
-  {
-    id: 'C10',
-    title: 'Tokens in vs out by agent',
-    desc: 'Input vs output tokens per agent. Context size and verbosity.',
-    chart: 'Grouped H-bar',
-    render: (data) => {
-      const rows: Row[] = data.agentLeaderboard
-        .filter((a) => a.totalInputTokens + a.totalOutputTokens > 0)
-        .map((a) => ({ name: a.personaDisplayName, input: a.totalInputTokens, output: a.totalOutputTokens }));
-      return (
-        <CategoryBars
-          rows={rows}
-          stacked={false}
-          format={formatTokens}
-          segs={[
-            { key: 'input', label: 'Input', color: colorAt(0) },
-            { key: 'output', label: 'Output', color: colorAt(8) },
-          ]}
+          series={[{ key: 'perTicket', label: '$ / ticket', color: colorAt(1) }]}
         />
       );
     },
@@ -532,26 +337,6 @@ export const CANDIDATES: Candidate[] = [
     },
   },
   {
-    id: 'C12',
-    title: 'Skills: usage × reliability',
-    desc: 'Executions per skill, split completed vs failed.',
-    chart: 'Stacked H-bar',
-    render: (data) => {
-      const rows: Row[] = data.skillLeaderboard
-        .filter((s) => s.executionCount > 0)
-        .map((s) => ({ name: s.skillDisplayName, completed: s.completedCount, failed: s.failedCount }));
-      return (
-        <CategoryBars
-          rows={rows}
-          segs={[
-            { key: 'completed', label: 'Completed', color: '#22c55e' },
-            { key: 'failed', label: 'Failed', color: '#ef4444' },
-          ]}
-        />
-      );
-    },
-  },
-  {
     id: 'C13',
     title: 'Usage by type over time',
     desc: 'Agents vs skills vs panels vs workflows — which execution modes you actually use.',
@@ -564,10 +349,10 @@ export const CANDIDATES: Candidate[] = [
           data={rows}
           xKey="label"
           series={[
-            { key: 'agents', label: 'Agents', color: colorAt(0) },
-            { key: 'skills', label: 'Skills', color: colorAt(6) },
-            { key: 'panels', label: 'Panels', color: colorAt(4) },
-            { key: 'workflows', label: 'Workflows', color: colorAt(8) },
+            { key: 'agents', label: 'Agents', color: '#3b82f6' }, // blue
+            { key: 'skills', label: 'Skills', color: '#22c55e' }, // green
+            { key: 'panels', label: 'Panels', color: '#eab308' }, // yellow
+            { key: 'workflows', label: 'Workflows', color: '#ef4444' }, // red
           ]}
         />
       );
@@ -588,10 +373,9 @@ export const CANDIDATES: Candidate[] = [
         { name: '7–10', test: (n: number) => n >= 7 && n <= 10 },
         { name: '11+', test: (n: number) => n >= 11 },
       ];
-      const rows: Row[] = bins.map((b, i) => ({
+      const rows: Row[] = bins.map((b) => ({
         name: b.name,
         count: data.ticketIterations.filter((t) => b.test(t.total)).length,
-        color: colorAt(i),
       }));
       return (
         <ResponsiveContainer width="100%" height={260}>
@@ -602,7 +386,7 @@ export const CANDIDATES: Candidate[] = [
             <Tooltip content={<StatTooltip format={(v) => `${v} tickets`} />} cursor={{ fill: 'var(--theme-bg-hover)' }} />
             <Bar dataKey="count" name="Tickets" radius={[3, 3, 0, 0]} maxBarSize={64} isAnimationActive={false}>
               {rows.map((_, i) => (
-                <Cell key={i} fill={colorAt(i)} />
+                <Cell key={i} fill={ITERATION_BIN_COLORS[i] ?? '#ef4444'} />
               ))}
             </Bar>
           </BarChart>
@@ -613,7 +397,7 @@ export const CANDIDATES: Candidate[] = [
   {
     id: 'C15',
     title: 'Lead time control chart',
-    desc: 'One point per ticket: x = date done, y = days from first “doing” to done. Mean & upper control limit flag outliers/drift.',
+    desc: 'One point per ticket: x = date done, y = days from first “doing” to done. Mean & upper control limit flag outliers/drift. Y axis is √-scaled to spread the dense low band.',
     chart: 'Control chart',
     starred: true,
     render: (data) => {
@@ -624,12 +408,15 @@ export const CANDIDATES: Candidate[] = [
       const variance = days.reduce((a, b) => a + (b - mean) ** 2, 0) / days.length;
       const sigma = Math.sqrt(variance);
       const ucl = mean + 3 * sigma;
-      const points: ScatterPoint[] = pts.map((p) => {
+      // Deterministic ±12h horizontal jitter so same-day tickets fan out instead
+      // of stacking on a single vertical line.
+      const SIX_HOURS = 6 * 3_600_000;
+      const points: ScatterPoint[] = pts.map((p, i) => {
         const d = p.leadTimeMs / 86_400_000;
         return {
-          x: new Date(p.doneAt).getTime(),
+          x: new Date(p.doneAt).getTime() + ((i % 5) - 2) * SIX_HOURS,
           y: d,
-          z: 120,
+          z: 1,
           color: d > ucl ? '#ef4444' : colorAt(0),
           label: p.title || p.ticketId,
           xDisplay: `Done: ${new Date(p.doneAt).toLocaleDateString()}`,
@@ -640,11 +427,12 @@ export const CANDIDATES: Candidate[] = [
         <BubbleScatter
           points={points}
           xType="time"
+          yScale="sqrt"
           xLabel="Done date"
           yLabel="Lead time (days)"
           xFormat={(v) => new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
           yFormat={(v) => `${v.toFixed(0)}d`}
-          zRange={[80, 120]}
+          zRange={[44, 44]}
           refLines={[
             { y: mean, label: `mean ${mean.toFixed(1)}d`, color: 'var(--theme-text-muted)' },
             { y: ucl, label: `UCL ${ucl.toFixed(1)}d`, color: '#ef4444', dash: true },
@@ -685,8 +473,8 @@ export const CANDIDATES: Candidate[] = [
     render: (data) => {
       const rows = data.cycleTimeByStatus
         .filter((c) => c.avgMs != null && c.avgMs > 0)
-        .map((c) => ({ name: c.status, value: c.avgMs as number }));
-      return <HBarChart data={rows} format={formatDays} color={colorAt(2)} />;
+        .map((c) => ({ name: c.status, value: c.avgMs as number, color: STATUS_BAR_COLOR[c.status] }));
+      return <HBarChart data={rows} format={formatDays} />;
     },
   },
   {
@@ -715,9 +503,9 @@ export function CandidateGallery({ data }: { data: StatisticsResponse }) {
   return (
     <div>
       <div className="mb-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3 text-xs text-[var(--theme-text-secondary)]">
-        <span className="font-semibold text-[var(--theme-text-primary)]">18 dataviz candidates.</span> Each is independent and tagged
-        with an ID (C1–C18) so we can discuss it by name. <span className="text-[var(--theme-warning)]">★</span> marks the 6 I'd pick
-        for the real dashboard. Filter the time range above — everything reacts.
+        <span className="font-semibold text-[var(--theme-text-primary)]">10 retained dataviz.</span> Each is independent and keeps its
+        ID (C3, C4, C6, C11, C13–C18) so we can discuss it by name. <span className="text-[var(--theme-warning)]">★</span> marks my top
+        picks. Filter the time range above — everything reacts.
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         {CANDIDATES.map((c) => (

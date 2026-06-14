@@ -38,7 +38,7 @@ const FOCUSES: { key: Focus; label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'delivery', label: 'Delivery' },
   { key: 'costs', label: 'Agentic Costs' },
-  { key: 'catalogue', label: 'Catalogue (18)' },
+  { key: 'catalogue', label: 'Catalogue (10)' },
 ];
 
 // ── Time range selector ──────────────────────────────────────────────────────

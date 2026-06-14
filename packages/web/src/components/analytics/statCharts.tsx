@@ -399,6 +399,8 @@ export function DeliveryComposedChart({
 export interface DonutSlice {
   name: string;
   value: number;
+  /** Optional explicit colour for this slice/bar (overrides the palette). */
+  color?: string;
 }
 
 export function DonutChart({
@@ -473,8 +475,8 @@ export function HBarChart({
         <YAxis type="category" dataKey="name" tick={AXIS_TICK} tickLine={false} axisLine={false} width={110} />
         <Tooltip content={<StatTooltip format={format} />} cursor={{ fill: 'var(--theme-bg-hover)' }} />
         <Bar dataKey="value" radius={[0, 3, 3, 0]} maxBarSize={26} isAnimationActive={false}>
-          {rows.map((_, i) => (
-            <Cell key={i} fill={color ?? colorAt(i)} />
+          {rows.map((r, i) => (
+            <Cell key={i} fill={r.color ?? color ?? colorAt(i)} />
           ))}
         </Bar>
       </BarChart>
