@@ -328,11 +328,28 @@ export function ticketRoutes(container: Container) {
                 const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
                 if (existsSync(wtPath)) {
                   const barePath = container.resolver.barePath(org, name);
-                  await container.git.removeWorktree(barePath, wtPath).catch((err) => {
+                  // Resolve the branch before removal so the audit event is informative.
+                  let branch: string | undefined;
+                  try {
+                    const worktrees = await container.git.listWorktrees(barePath);
+                    branch = worktrees.find((wt) => wt.path === wtPath)?.branch;
+                  } catch {
+                    // Best-effort — don't block deletion on a failed branch lookup.
+                  }
+                  try {
+                    await container.git.removeWorktree(barePath, wtPath);
+                    emit({
+                      type: 'worktree.deleted',
+                      repoPath: barePath,
+                      worktreePath: wtPath,
+                      ...(branch ? { branch } : {}),
+                      occurredAt: new Date(),
+                    });
+                  } catch (err) {
                     container.logger.warn('Failed to remove worktree on ticket delete', {
                       wtPath, ticketId, error: err instanceof Error ? err.message : String(err),
                     });
-                  });
+                  }
                 }
               }
             }
@@ -652,8 +669,23 @@ export function ticketRoutes(container: Container) {
               const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
               if (existsSync(wtPath)) {
                 const barePath = container.resolver.barePath(org, name);
+                // Resolve the branch before removal so the audit event is informative.
+                let branch: string | undefined;
+                try {
+                  const worktrees = await container.git.listWorktrees(barePath);
+                  branch = worktrees.find((wt) => wt.path === wtPath)?.branch;
+                } catch {
+                  // Best-effort — don't block deletion on a failed branch lookup.
+                }
                 await container.git.removeWorktree(barePath, wtPath);
                 container.logger.info('Worktree removed from workspace on repo unlink', { wtPath, ticketId: ticket.id });
+                emit({
+                  type: 'worktree.deleted',
+                  repoPath: barePath,
+                  worktreePath: wtPath,
+                  ...(branch ? { branch } : {}),
+                  occurredAt: new Date(),
+                });
               }
               // Also remove any worktree link that pointed to this repo's workspace path
               const wtLink = ticket.links.find((l) => l.type === 'worktree' && (l.ref === wtPath || l.ref.startsWith(`${org}/${name}:`)));
