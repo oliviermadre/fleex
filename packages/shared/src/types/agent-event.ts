@@ -37,6 +37,54 @@ export type AgentEventType =
   | 'execution_retry'
   | 'error';
 
+/**
+ * Discriminates what kind of run produced an `execution_start` event. Lets the
+ * Execution Log header label an atomic execution at a glance (panel member,
+ * orchestrator, workflow step, skill, …) even though they all stream the same
+ * underlying SDK events.
+ */
+export type ExecutionKind =
+  | 'persona'
+  | 'skill'
+  | 'panel_member'
+  | 'panel_orchestrator'
+  | 'workflow_step';
+
+/** Observability context window summary surfaced in the execution header. */
+export interface ExecutionStartContext {
+  readonly systemPromptSections: string[];
+  readonly systemPromptLength: number;
+  readonly userPromptLength: number;
+  readonly ticketTitle: string;
+  readonly ticketStatus: string;
+  readonly commentsCount: number;
+  readonly deliverablesCount: number;
+}
+
+/**
+ * Payload of the `execution_start` agent event. Produced by a single shared
+ * builder (`buildExecutionStartData`) so every execution kind — persona, skill,
+ * panel member, panel orchestrator, workflow step — emits an identically rich
+ * header (mode badge + ticket + context window summary).
+ */
+export interface ExecutionStartData {
+  readonly executionId: string;
+  readonly personaId: string;
+  readonly personaName: string;
+  readonly ticketId: string;
+  readonly mentionId?: string;
+  readonly model: string;
+  readonly effectiveMode?: string;
+  readonly worktreePath?: string | null;
+  readonly resumeSessionId?: string | null;
+  readonly kind: ExecutionKind;
+  /** Human-friendly label (skill name, "orchestrateur", "workflow step", …). */
+  readonly label?: string;
+  readonly skillId?: string;
+  readonly skillName?: string;
+  readonly context: ExecutionStartContext;
+}
+
 export interface AgentEvent {
   readonly id: string;
   readonly executionId: string;

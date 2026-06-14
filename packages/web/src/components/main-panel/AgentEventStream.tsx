@@ -258,6 +258,7 @@ function EventBlock({ event }: { event: AgentEvent }) {
       const resumeSessionId = data?.['resumeSessionId'] as string | null;
       const sdkSessionId = data?.['sdkSessionId'] as string | null; // backfilled for old events
       const ctx = data?.['context'] as Record<string, unknown> | undefined;
+      const label = data?.['label'] as string | undefined;
       const modeBadge = effectiveMode === 'talk' ? '🗣 talk' : effectiveMode === 'plan' ? '📋 plan' : effectiveMode === 'edit' ? '📝 edit' : null;
       return (
         <div className="py-1 space-y-1">
@@ -269,6 +270,11 @@ function EventBlock({ event }: { event: AgentEvent }) {
             {modeBadge && (
               <span className="rounded-full bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-secondary)]">
                 {modeBadge}
+              </span>
+            )}
+            {label && (
+              <span className="rounded-full bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-faint)]">
+                {label}
               </span>
             )}
           </div>

@@ -1,0 +1,128 @@
+import type { AgentEventType } from '@fleex/shared';
+import type { PromptContentBlock } from './resolve-file-references.js';
+
+/**
+ * SDK instrumentation captured from the final `result` message of a `query()`
+ * stream. All optional because a crashed/aborted run may never reach it.
+ */
+export interface SdkQueryMetrics {
+  durationMs?: number;
+  costUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+}
+
+export interface StreamSdkQueryResult {
+  /** Session id captured from the SDK `init` message, if any. */
+  sessionId?: string;
+  resultText: string;
+  structuredOutput: Record<string, unknown> | null;
+  /** Subtype of the final result message (e.g. `error_max_structured_output_retries`). */
+  resultSubtype?: string;
+  metrics: SdkQueryMetrics;
+  /** Total SDK messages iterated (useful to detect a zero-message crash). */
+  messageCount: number;
+}
+
+export interface StreamSdkQueryParams {
+  prompt: string | PromptContentBlock[];
+  /** Already-built SDK options (model, systemPrompt, cwd, resume, …). */
+  queryOptions: Record<string, unknown>;
+  /**
+   * Called for every intermediate SDK message so the Execution Log gets the
+   * same rich, real-time stream regardless of the caller (persona, skill,
+   * workflow step, panel member, panel orchestrator).
+   */
+  emitEvent: (eventType: AgentEventType, data: unknown) => Promise<void> | void;
+  /** When provided, the loop stops as soon as the signal aborts. */
+  abortSignal?: AbortSignal;
+  /** session_id stamped on the wrapped multimodal user message (resume hint). */
+  fallbackSessionId?: string;
+  /** Invoked the moment the SDK session id is known (lets callers persist it). */
+  onSessionId?: (sessionId: string) => void;
+}
+
+/**
+ * Single source of truth for consuming a Claude Agent SDK `query()` stream and
+ * turning each message into an `agent_event`. Previously every execution path
+ * (persona, skill, workflow step) re-implemented this loop, and the panel path
+ * (`RunPanel.querySDK`) consumed the stream *silently* — which is why a panel
+ * member's execution log only ever showed `execution_start` + `execution_end`.
+ *
+ * Factoring it here guarantees parity: turn_start, content_block_delta and
+ * message_stop events are emitted identically for all callers.
+ */
+export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<StreamSdkQueryResult> {
+  const { prompt, queryOptions, emitEvent, abortSignal, fallbackSessionId, onSessionId } = params;
+  const { query } = await import('@anthropic-ai/claude-agent-sdk');
+
+  let sessionId: string | undefined;
+  let resultText = '';
+  let structuredOutput: Record<string, unknown> | null = null;
+  let resultSubtype: string | undefined;
+  let messageCount = 0;
+  const metrics: SdkQueryMetrics = {};
+
+  // Multimodal prompts must be wrapped in an SDKUserMessage async iterable.
+  const promptArg = Array.isArray(prompt)
+    ? (async function* () {
+        yield {
+          type: 'user' as const,
+          message: { role: 'user' as const, content: prompt },
+          parent_tool_use_id: null,
+          session_id: fallbackSessionId ?? '',
+        };
+      })()
+    : prompt;
+
+  for await (const message of query({
+    prompt: promptArg,
+    options: queryOptions as Parameters<typeof query>[0]['options'],
+  })) {
+    if (abortSignal?.aborted) break;
+    messageCount++;
+    const msg = message as Record<string, unknown>;
+
+    if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
+      sessionId = msg['session_id'] as string;
+      onSessionId?.(sessionId);
+      await emitEvent('turn_start', { sessionId });
+    }
+
+    if ('result' in message) {
+      resultText = (message as { result: string }).result;
+      resultSubtype = msg['subtype'] as string | undefined;
+
+      if (msg['structured_output']) {
+        structuredOutput = msg['structured_output'] as Record<string, unknown>;
+      }
+
+      if (typeof msg['duration_ms'] === 'number') metrics.durationMs = msg['duration_ms'] as number;
+      if (typeof msg['total_cost_usd'] === 'number') metrics.costUsd = msg['total_cost_usd'] as number;
+
+      // modelUsage carries cumulative per-model token totals.
+      const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;
+      if (modelUsage) {
+        let totalIn = 0, totalOut = 0, totalCacheRead = 0, totalCacheCreation = 0;
+        for (const mu of Object.values(modelUsage)) {
+          totalIn += mu['inputTokens'] ?? 0;
+          totalOut += mu['outputTokens'] ?? 0;
+          totalCacheRead += mu['cacheReadInputTokens'] ?? 0;
+          totalCacheCreation += mu['cacheCreationInputTokens'] ?? 0;
+        }
+        metrics.inputTokens = totalIn;
+        metrics.outputTokens = totalOut;
+        metrics.cacheReadTokens = totalCacheRead;
+        metrics.cacheCreationTokens = totalCacheCreation;
+      }
+
+      await emitEvent('message_stop', { result: resultText, subtype: resultSubtype });
+    } else {
+      await emitEvent('content_block_delta', msg);
+    }
+  }
+
+  return { sessionId, resultText, structuredOutput, resultSubtype, metrics, messageCount };
+}
