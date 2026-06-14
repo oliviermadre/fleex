@@ -121,8 +121,22 @@ describe('GetStatisticsUseCase — flow metrics', () => {
     const events = [
       logEntry('ticket.moved', { ticketId: tid, fromStatus: 'todo', toStatus: 'doing' }, '2026-06-01T08:00:00Z'),
       logEntry('ticket.moved', { ticketId: tid, fromStatus: 'doing', toStatus: 'done' }, '2026-06-02T08:00:00Z'),
-      logEntry('workflow.run_created', { ticketId: tid, workflowRunId: 'w1' }, '2026-06-01T09:00:00Z'),
     ];
+
+    // One workflow run for this ticket, started 06-01, completed an hour later.
+    const workflowRunStore = {
+      getAll: vi.fn().mockResolvedValue([
+        {
+          id: 'w1',
+          ticketId: tid,
+          templateId: 'wf-tpl',
+          templateSnapshot: { name: 'Ship it' },
+          status: 'completed',
+          startedAt: new Date('2026-06-01T09:00:00Z'),
+          completedAt: new Date('2026-06-01T10:00:00Z'),
+        },
+      ]),
+    } as unknown as import('../../src/application/ports/workflow-run-store.port.js').WorkflowRunStorePort;
 
     const domainEventLogStore = {
       list: vi.fn(async (p: { eventType?: string; since?: Date; until?: Date }) =>
@@ -169,6 +183,7 @@ describe('GetStatisticsUseCase — flow metrics', () => {
       empty() as unknown as SessionStorePort,
       undefined,
       domainEventLogStore,
+      workflowRunStore,
     );
 
     const result = await useCase.execute(params);
@@ -190,7 +205,14 @@ describe('GetStatisticsUseCase — flow metrics', () => {
     // Throughput: the ticket completes in the 06-02 bucket.
     expect(result.throughputWip.find((b) => b.date === '2026-06-02')!.completed).toBe(1);
 
-    // Summary KPI: one workflow.run_created within the window.
+    // Summary KPI + leaderboard: one workflow run within the window.
     expect(result.summary.workflowsStarted).toBe(1);
+    expect(result.workflowLeaderboard).toHaveLength(1);
+    expect(result.workflowLeaderboard[0]).toMatchObject({
+      workflowDisplayName: 'Ship it',
+      executionCount: 1,
+      completedCount: 1,
+      avgDurationMs: 3_600_000,
+    });
   });
 });

@@ -125,6 +125,16 @@ export interface ThroughputWipBucket {
   readonly wip: number;
 }
 
+export interface WorkflowLeaderboardEntry {
+  readonly workflowId: string;
+  readonly workflowName: string;
+  readonly workflowDisplayName: string;
+  readonly executionCount: number;
+  readonly completedCount: number;
+  readonly failedCount: number;
+  readonly avgDurationMs: number | null;
+}
+
 export interface StatisticsResponse {
   readonly from: string;
   readonly to: string;
@@ -134,6 +144,7 @@ export interface StatisticsResponse {
   readonly agentLeaderboard: AgentLeaderboardEntry[];
   readonly skillLeaderboard: SkillLeaderboardEntry[];
   readonly panelLeaderboard: PanelLeaderboardEntry[];
+  readonly workflowLeaderboard: WorkflowLeaderboardEntry[];
   // ── Extended analytics (derived from existing data; no schema changes) ──
   readonly usageByType: UsageByTypeBucket[];
   readonly activityHeatmap: ActivityHeatmapCell[];

@@ -6,6 +6,7 @@ import type {
   AgentLeaderboardEntry,
   SkillLeaderboardEntry,
   PanelLeaderboardEntry,
+  WorkflowLeaderboardEntry,
 } from '@fleex/shared';
 import { useStatisticsStore, type Preset, type Granularity } from '../../stores/statisticsStore';
 import { cn } from '../../lib/cn';
@@ -158,7 +159,10 @@ interface KpiDef {
   key: keyof StatisticsSummary;
   label: string;
   color: string;
+  /** Sparkline source from the per-bucket time series … */
   sparkKey?: keyof StatisticsTimeBucket;
+  /** … or a custom series pulled from anywhere in the response (wins over sparkKey). */
+  spark?: (data: StatisticsResponse) => number[];
   format: (v: number) => string;
   /** When true, a downward trend is the good outcome (cost, duration). */
   goodWhenDown?: boolean;
@@ -166,13 +170,15 @@ interface KpiDef {
 
 const KPI_GROUPS: Record<Exclude<Focus, 'catalogue'>, KpiDef[]> = {
   overview: [
+    // Row 1 — execution modes
     { key: 'agentsSpawned', label: 'Agents Spawned', color: colorAt(0), sparkKey: 'agentsSpawned', format: formatCompact },
-    { key: 'workflowsStarted', label: 'Workflows Started', color: colorAt(8), format: formatCompact },
-    { key: 'ticketsCompleted', label: 'Tickets Completed', color: colorAt(1), sparkKey: 'ticketsCompleted', format: formatCompact },
     { key: 'skillsExecuted', label: 'Skills Run', color: colorAt(6), sparkKey: 'skillsExecuted', format: formatCompact },
+    { key: 'panelsExecuted', label: 'Panels Run', color: colorAt(4), spark: (d) => d.usageByType.map((b) => b.panels), format: formatCompact },
+    { key: 'workflowsStarted', label: 'Workflows Started', color: colorAt(8), spark: (d) => d.usageByType.map((b) => b.workflows), format: formatCompact },
+    // Row 2 — delivery & cost
     { key: 'prsCreated', label: 'PRs Created', color: colorAt(9), sparkKey: 'prsCreated', format: formatCompact },
-    { key: 'prsMerged', label: 'PRs Merged', color: colorAt(5), format: formatCompact },
-    { key: 'deliverablesCreated', label: 'Deliverables', color: colorAt(4), sparkKey: 'deliverablesCreated', format: formatCompact },
+    { key: 'prsMerged', label: 'PRs Merged', color: colorAt(5), sparkKey: 'prsMerged', format: formatCompact },
+    { key: 'deliverablesCreated', label: 'Deliverables', color: colorAt(1), sparkKey: 'deliverablesCreated', format: formatCompact },
     { key: 'totalCostUsd', label: 'Total Cost', color: colorAt(2), sparkKey: 'totalCostUsd', format: formatUsd, goodWhenDown: true },
   ],
   delivery: [
@@ -488,7 +494,7 @@ function DashboardContent({
             def={def}
             current={Number(data.summary[def.key] ?? 0)}
             previous={previous ? Number(previous.summary[def.key] ?? 0) : undefined}
-            spark={def.sparkKey ? sparkData(def.sparkKey) : []}
+            spark={def.spark ? def.spark(data) : def.sparkKey ? sparkData(def.sparkKey) : []}
           />
         ))}
       </div>
@@ -590,6 +596,7 @@ function DashboardContent({
 
       {/* Leaderboards */}
       <AgentLeaderboard entries={data.agentLeaderboard} />
+      <WorkflowLeaderboard entries={data.workflowLeaderboard} />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <SkillLeaderboard entries={data.skillLeaderboard} />
@@ -646,6 +653,29 @@ function SkillLeaderboard({ entries }: { entries: SkillLeaderboardEntry[] }) {
           align: 'right',
           render: (e) => <BarValue value={e.executionCount} max={max} color={colorAt(6)} label={String(e.executionCount)} />,
         },
+        { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
+        { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
+      ]}
+    />
+  );
+}
+
+function WorkflowLeaderboard({ entries }: { entries: WorkflowLeaderboardEntry[] }) {
+  const max = Math.max(1, ...entries.map((e) => e.executionCount));
+  return (
+    <LeaderboardTable
+      title="Workflow Leaderboard"
+      rows={entries}
+      empty="No workflow runs yet"
+      keyOf={(e) => e.workflowId}
+      columns={[
+        { header: 'Workflow', render: (e, i) => <RankCell index={i} name={e.workflowDisplayName} /> },
+        {
+          header: 'Runs',
+          align: 'right',
+          render: (e) => <BarValue value={e.executionCount} max={max} color={colorAt(8)} label={String(e.executionCount)} />,
+        },
+        { header: 'Avg Duration', align: 'right', render: (e) => <span className="text-[var(--theme-text-secondary)]">{e.avgDurationMs != null ? formatDuration(e.avgDurationMs) : '—'}</span> },
         { header: 'Done', align: 'right', render: (e) => <span style={{ color: 'var(--theme-success)' }}>{e.completedCount}</span> },
         { header: 'Failed', align: 'right', render: (e) => <span style={{ color: e.failedCount > 0 ? 'var(--theme-danger)' : 'var(--theme-text-faint)' }}>{e.failedCount}</span> },
       ]}

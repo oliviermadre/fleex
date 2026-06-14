@@ -218,6 +218,7 @@ export type {
   AgentLeaderboardEntry,
   SkillLeaderboardEntry,
   PanelLeaderboardEntry,
+  WorkflowLeaderboardEntry,
   StatisticsSummary,
   StatisticsResponse,
   UsageByTypeBucket,

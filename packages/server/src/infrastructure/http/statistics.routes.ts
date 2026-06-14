@@ -13,6 +13,7 @@ export function statisticsRoutes(container: Container) {
     container.sessionStore,
     container.skillStore,
     container.domainEventLogStore,
+    container.workflowRunStore,
   );
 
   return async function (app: FastifyInstance) {

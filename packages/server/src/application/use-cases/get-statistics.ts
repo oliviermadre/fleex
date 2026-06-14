@@ -15,6 +15,7 @@ import type {
   CumulativeFlowBucket,
   CycleTimeStatus,
   ThroughputWipBucket,
+  WorkflowLeaderboardEntry,
 } from '@fleex/shared';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
@@ -25,6 +26,7 @@ import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
+import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 
 interface CacheEntry {
   data: StatisticsResponse;
@@ -55,6 +57,7 @@ export class GetStatisticsUseCase {
     private readonly sessionStore: SessionStorePort,
     private readonly skillStore?: SkillStorePort,
     private readonly domainEventLogStore?: DomainEventLogStorePort,
+    private readonly workflowRunStore?: WorkflowRunStorePort | null,
   ) {}
 
   async execute(params: {
@@ -194,7 +197,8 @@ export class GetStatisticsUseCase {
         prsCreated: bTickets.flatMap((t) =>
           t.toDTO().links.filter((l: TicketLink) => l.type === 'github_pr'),
         ).length,
-        prsMerged: 0, // Approximation: merge detection is event-based
+        // Tickets with a PR link that moved to done within this bucket.
+        prsMerged: mergedTickets.filter((t) => inBucket(t.toDTO().statusChangedAt)).length,
         agentsSpawned: bExecutions.length,
         deliverablesCreated: bDeliverables.length,
         commentsCreated: bComments.length,
@@ -371,20 +375,25 @@ export class GetStatisticsUseCase {
       return { dow, hour, count };
     });
 
-    // Workflow runs + full ticket-move history from the audit log. Moves are
+    // Full ticket-move history (audit log) + every workflow run. Moves are
     // fetched with no lower bound so lead time / CFD can see transitions that
-    // happened before `from`.
-    let workflowEvents: LogEntry[] = [];
+    // happened before `from`. Workflow stats come from the run store (richer:
+    // template name, status, duration) rather than the event log.
     let moveEvents: LogEntry[] = [];
-    if (this.domainEventLogStore) {
-      [workflowEvents, moveEvents] = await Promise.all([
-        this.domainEventLogStore.list({ limit: 50_000, eventType: 'workflow.run_created', until: to }),
-        this.domainEventLogStore.list({ limit: 50_000, eventType: 'ticket.moved', until: to }),
-      ]);
-    }
+    const [allRuns, fetchedMoves] = await Promise.all([
+      this.workflowRunStore ? this.workflowRunStore.getAll() : Promise.resolve([]),
+      this.domainEventLogStore
+        ? this.domainEventLogStore.list({ limit: 50_000, eventType: 'ticket.moved', until: to })
+        : Promise.resolve([] as LogEntry[]),
+    ]);
+    moveEvents = fetchedMoves;
+    const filteredRuns = allRuns.filter((r) => {
+      const t = r.startedAt.getTime();
+      return t >= from.getTime() && t <= to.getTime();
+    });
 
     // Workflows started within the selected window (summary KPI).
-    const workflowsStarted = workflowEvents.filter((e) => e.occurredAt >= from && e.occurredAt <= to).length;
+    const workflowsStarted = filteredRuns.length;
 
     // Usage trend by execution mode (C13).
     const usageByType: UsageByTypeBucket[] = buckets.map((bucket) => {
@@ -395,7 +404,7 @@ export class GetStatisticsUseCase {
         agents: bExec.filter((e) => !e.mentionId.startsWith('skill:')).length,
         skills: bExec.filter((e) => e.mentionId.startsWith('skill:')).length,
         panels: panelEvents.filter((e) => inB(e.occurredAt)).length,
-        workflows: workflowEvents.filter((e) => inB(e.occurredAt)).length,
+        workflows: filteredRuns.filter((r) => inB(r.startedAt)).length,
       };
     });
 
@@ -444,10 +453,8 @@ export class GetStatisticsUseCase {
       agentRunsByTicket.set(tid, (agentRunsByTicket.get(tid) ?? 0) + 1);
     }
     const workflowRunsByTicket = new Map<string, number>();
-    for (const ev of workflowEvents) {
-      const tid = ev.payload['ticketId'] as string | undefined;
-      if (!tid) continue;
-      workflowRunsByTicket.set(tid, (workflowRunsByTicket.get(tid) ?? 0) + 1);
+    for (const r of allRuns) {
+      workflowRunsByTicket.set(r.ticketId, (workflowRunsByTicket.get(r.ticketId) ?? 0) + 1);
     }
 
     // Walk every ticket once to derive lead time, iterations, cycle time and
@@ -530,6 +537,32 @@ export class GetStatisticsUseCase {
       };
     });
 
+    // Workflow leaderboard — runs started in range, grouped by template.
+    const runsByTemplate = new Map<string, typeof filteredRuns>();
+    for (const r of filteredRuns) {
+      const list = runsByTemplate.get(r.templateId) ?? [];
+      list.push(r);
+      runsByTemplate.set(r.templateId, list);
+    }
+    const workflowLeaderboard: WorkflowLeaderboardEntry[] = [...runsByTemplate.entries()]
+      .map(([templateId, runs]) => {
+        const name = runs[0]?.templateSnapshot.name ?? templateId;
+        const durations = runs
+          .filter((r) => r.status === 'completed' && r.completedAt)
+          .map((r) => r.completedAt!.getTime() - r.startedAt.getTime())
+          .filter((d) => d > 0);
+        return {
+          workflowId: templateId,
+          workflowName: name,
+          workflowDisplayName: name,
+          executionCount: runs.length,
+          completedCount: runs.filter((r) => r.status === 'completed').length,
+          failedCount: runs.filter((r) => r.status === 'failed').length,
+          avgDurationMs: durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null,
+        };
+      })
+      .sort((a, b) => b.executionCount - a.executionCount);
+
     // Cumulative flow (C16) + throughput vs WIP (C18) per bucket.
     const cumulativeFlow: CumulativeFlowBucket[] = [];
     const throughputWip: ThroughputWipBucket[] = [];
@@ -554,6 +587,7 @@ export class GetStatisticsUseCase {
       agentLeaderboard,
       skillLeaderboard,
       panelLeaderboard,
+      workflowLeaderboard,
       usageByType,
       activityHeatmap,
       ticketIterations,
