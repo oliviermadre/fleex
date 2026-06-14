@@ -378,6 +378,9 @@ export async function createContainer() {
   runPanel.fileStore = fileStore;
   runPanel.bareCloneManager = bareCloneManager;
   runPanel.resolver = resolver;
+  // Makes each panel-spawned SDK session (members + orchestrator) abortable via
+  // the Terminate endpoint, just like persona/skill/workflow executions.
+  runPanel.executionRegistry = executeAgent;
   generateTicketSummary.eventBus = eventBus;
   autoReviewWorkflow.eventBus = eventBus;
   // Slack import synthesizes in the background and patches the ticket via ticket.updated.

@@ -5,6 +5,7 @@ import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, Menti
 import { inferModelCapabilities } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
+import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
@@ -111,7 +112,7 @@ ${typeLines}
 `.trim();
 }
 
-export class ExecuteAgentUseCase implements CancelExecutionPort {
+export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegistryPort {
   private activeExecutions = new Map<string, ActiveExecution>();
   private sessionHistory = new Map<string, string>(); // `${agentName}:${ticketId}` -> sdkSessionId
   private queue: QueueItem[] = [];
@@ -457,6 +458,39 @@ export class ExecuteAgentUseCase implements CancelExecutionPort {
     const exec = this.activeExecutions.get(mentionId);
     if (!exec || exec.status !== 'running') return false;
     return this.cancelExecution(exec.executionId);
+  }
+
+  /**
+   * ExecutionRegistryPort — register an externally-spawned execution (e.g. a
+   * panel member or orchestrator) so it becomes abortable through
+   * `cancelExecution`. Keyed by executionId (a UUID, so no collision with the
+   * mention/skill/workflow keys). Must be called before the SDK loop starts.
+   */
+  registerExecution(entry: ExecutionRegistryEntry): void {
+    this.activeExecutions.set(entry.executionId, {
+      mentionId: entry.executionId,
+      executionId: entry.executionId,
+      personaId: entry.personaId,
+      ...(entry.ticketId ? { ticketId: entry.ticketId } : {}),
+      status: 'running',
+      abortController: entry.abortController,
+    });
+  }
+
+  /**
+   * ExecutionRegistryPort — settle a registered execution and schedule its
+   * eviction (30s grace preserves the Terminate lookup window, mirroring the
+   * skill path). Idempotent: leaves an already-cancelled ('failed') entry as-is
+   * so a late finalize can't resurrect it to 'running'.
+   */
+  finalizeExecution(executionId: string): void {
+    const exec = this.activeExecutions.get(executionId);
+    if (!exec) return;
+    if (exec.status === 'running') exec.status = 'completed';
+    setTimeout(() => {
+      const e = this.activeExecutions.get(executionId);
+      if (e && e.status !== 'running') this.activeExecutions.delete(executionId);
+    }, 30000);
   }
 
   /**
