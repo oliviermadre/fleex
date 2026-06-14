@@ -93,6 +93,9 @@ export function apiGet<T = any>(url: string): Promise<T> {
 export function apiPost<T = any>(url: string, body: unknown): Promise<T> {
   return request<T>('POST', url, body);
 }
+export function apiPut<T = any>(url: string, body: unknown): Promise<T> {
+  return request<T>('PUT', url, body);
+}
 export function apiPatch<T = any>(url: string, body: unknown): Promise<T> {
   return request<T>('PATCH', url, body);
 }
