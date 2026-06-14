@@ -137,6 +137,13 @@ export class RunWorkflowStepUseCase {
           stepRun.cancel();
           await this.deps.stepRunStore.save(stepRun);
         }
+        // Emit a workflow event so the Workflow view refreshes live. Without
+        // this, a Terminate on a step leaves the UI showing "running" until a
+        // manual page refresh (the DB is `cancelled`, but nothing was pushed).
+        this.deps.eventBus.emit({
+          type: 'workflow.step_cancelled', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
+          ticketId: run.ticketId, occurredAt: new Date(),
+        });
         return;
       }
       stepRun.fail({ message: err instanceof Error ? err.message : String(err) });

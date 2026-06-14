@@ -164,6 +164,16 @@ export class BroadcastRegistrar {
         });
       }
     });
+    bus.on('workflow.step_cancelled', (e) => {
+      if (e.type === 'workflow.step_cancelled') {
+        this.ticketBroadcast('workflow:step_cancelled', {
+          workflowRunId: e.workflowRunId,
+          stepRunId: e.stepRunId,
+          stepId: e.stepId,
+          ticketId: e.ticketId,
+        });
+      }
+    });
     bus.on('workflow.needs_review', (e) => {
       if (e.type === 'workflow.needs_review') {
         this.ticketBroadcast('workflow:needs_review', {

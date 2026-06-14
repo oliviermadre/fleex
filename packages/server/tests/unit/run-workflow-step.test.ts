@@ -203,6 +203,12 @@ describe('RunWorkflowStepUseCase', () => {
     expect(eventBus.emit).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.run_failed' }));
     // The step_run is left `cancelled`, never `running`.
     expect(savedStepRuns.at(-1)?.status).toBe('cancelled');
+    // WHY (#320 follow-up): a `workflow.step_cancelled` event MUST be emitted so
+    // the Workflow view refreshes live. Without it the UI stays on "running"
+    // until a manual page refresh.
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'workflow.step_cancelled', workflowRunId: 'run-1', stepId: 'a',
+    }));
   });
 
   // WHY: cancel/terminate of an in-flight step needs the live executionId. If we
