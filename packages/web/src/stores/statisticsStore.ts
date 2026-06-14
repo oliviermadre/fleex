@@ -2,8 +2,8 @@ import { create } from 'zustand';
 import type { StatisticsResponse } from '@fleex/shared';
 import * as api from '../services/api';
 
-type Preset = 'today' | '7d' | '30d' | '90d' | '1y';
-type Granularity = 'day' | 'week' | 'month';
+export type Preset = 'today' | '7d' | '30d' | '90d' | '1y' | 'custom';
+export type Granularity = 'day' | 'week' | 'month';
 
 function formatLocalDate(d: Date): string {
   const y = d.getFullYear();
@@ -12,7 +12,12 @@ function formatLocalDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function presetToRange(preset: Preset): { from: string; to: string } {
+interface Range {
+  from: string;
+  to: string;
+}
+
+function presetToRange(preset: Exclude<Preset, 'custom'>): Range {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrow = new Date(today);
@@ -45,45 +50,97 @@ function presetToRange(preset: Preset): { from: string; to: string } {
   return { from: formatLocalDate(from), to };
 }
 
+/**
+ * The immediately preceding window of equal length, used to compute
+ * period-over-period deltas (e.g. "+12% vs previous 7 days").
+ */
+function previousRange(range: Range): Range {
+  const from = new Date(range.from);
+  const to = new Date(range.to);
+  const durationMs = to.getTime() - from.getTime();
+  const prevTo = new Date(from.getTime());
+  const prevFrom = new Date(from.getTime() - durationMs);
+  return { from: formatLocalDate(prevFrom), to: formatLocalDate(prevTo) };
+}
+
+/** Auto-pick a sensible granularity when the user changes only the date range. */
+function autoGranularity(range: Range): Granularity {
+  const from = new Date(range.from);
+  const to = new Date(range.to);
+  const days = (to.getTime() - from.getTime()) / 86_400_000;
+  if (days <= 31) return 'day';
+  if (days <= 120) return 'week';
+  return 'month';
+}
+
 interface StatisticsState {
   data: StatisticsResponse | null;
+  /** Same metrics for the immediately-preceding window, for trend deltas. */
+  previous: StatisticsResponse | null;
   loading: boolean;
   preset: Preset;
   granularity: Granularity;
+  customFrom: string;
+  customTo: string;
   fetch: () => Promise<void>;
   setPreset: (preset: Preset) => void;
   setGranularity: (granularity: Granularity) => void;
+  setCustomRange: (from: string, to: string) => void;
 }
+
+function currentRange(state: Pick<StatisticsState, 'preset' | 'customFrom' | 'customTo'>): Range {
+  if (state.preset === 'custom' && state.customFrom && state.customTo) {
+    return { from: state.customFrom, to: state.customTo };
+  }
+  return presetToRange(state.preset === 'custom' ? '7d' : state.preset);
+}
+
+const defaultRange = presetToRange('7d');
 
 export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   data: null,
+  previous: null,
   loading: false,
   preset: '7d',
   granularity: 'day',
+  customFrom: defaultRange.from,
+  customTo: defaultRange.to,
 
   fetch: async () => {
     set({ loading: true });
     try {
-      const { preset, granularity } = get();
-      const range = presetToRange(preset);
-      const data = await api.fetchStatistics({
-        from: range.from,
-        to: range.to,
-        granularity,
-      });
-      set({ data, loading: false });
+      const { granularity } = get();
+      const range = currentRange(get());
+      const prev = previousRange(range);
+      const [data, previous] = await Promise.all([
+        api.fetchStatistics({ from: range.from, to: range.to, granularity }),
+        api
+          .fetchStatistics({ from: prev.from, to: prev.to, granularity })
+          .catch(() => null),
+      ]);
+      set({ data, previous, loading: false });
     } catch {
       set({ loading: false });
     }
   },
 
   setPreset: (preset) => {
-    set({ preset });
+    if (preset === 'custom') {
+      const range = currentRange(get());
+      set({ preset, granularity: autoGranularity(range) });
+    } else {
+      set({ preset });
+    }
     get().fetch();
   },
 
   setGranularity: (granularity) => {
     set({ granularity });
+    get().fetch();
+  },
+
+  setCustomRange: (from, to) => {
+    set({ preset: 'custom', customFrom: from, customTo: to, granularity: autoGranularity({ from, to }) });
     get().fetch();
   },
 }));
