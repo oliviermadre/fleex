@@ -20,6 +20,15 @@ export interface StepExecutionInput {
     }[];
     previousOutputs: Record<string, Record<string, unknown>>;
   };
+  /**
+   * Invoked by the executor as soon as the underlying agent execution has
+   * started and its `executionId` is known — i.e. while the step is still
+   * running, not at completion. Lets the orchestrator persist
+   * `step_run.executionId` live so an in-flight step can be cancelled
+   * (Terminate / cancel run / force restart). Optional: executors that have no
+   * cancellable execution (human gate) simply never call it.
+   */
+  onExecutionStarted?: (executionId: string) => void | Promise<void>;
 }
 
 export interface StepExecutorResult {

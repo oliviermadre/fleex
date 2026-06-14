@@ -28,6 +28,7 @@ export class AgentStepExecutor implements StepExecutor {
       outputFormat,
       workflowContextPrompt,
       mode,
+      onExecutionStarted: input.onExecutionStarted,
     });
 
     return { output: this.toStepOutput(structuredOutput, rawText), executionId };

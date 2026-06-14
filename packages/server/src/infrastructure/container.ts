@@ -421,8 +421,8 @@ export async function createContainer() {
 
     createWorkflowRun = new CreateWorkflowRunUseCase(workflowTemplateStore, workflowRunStore, workflowOrchestrator, eventBus, postComment);
     resolveHumanGate = new ResolveHumanGateUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, eventBus, postComment, logger);
-    retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator);
-    cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, eventBus);
+    retryStep = new RetryStepUseCase(workflowRunStore, stepRunStore, workflowOrchestrator, executeAgent);
+    cancelWorkflowRun = new CancelWorkflowRunUseCase(workflowRunStore, stepRunStore, executeAgent, eventBus);
 
     logger.info('Workflow orchestration wired', { driver });
   } else {

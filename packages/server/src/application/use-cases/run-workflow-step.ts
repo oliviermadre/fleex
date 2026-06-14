@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { StepRunEntity } from '../../domain/entities/step-run.entity.js';
 import { EdgeEvaluator } from '../services/edge-evaluator.js';
-import { WorkflowRunNotFoundError } from '../../domain/errors.js';
+import { WorkflowRunNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { StepRunStorePort } from '../ports/step-run-store.port.js';
 import type { OrchestratorPort } from '../ports/orchestrator.port.js';
@@ -74,6 +74,13 @@ export class RunWorkflowStepUseCase {
           workflowName: run.templateSnapshot.name, stepName: step.name,
           outgoingEdges, previousOutputs,
         },
+        // Persist the live executionId the moment the agent starts, so the run /
+        // step can be cancelled while still in flight (Terminate, cancel run,
+        // force restart) instead of only after it completes.
+        onExecutionStarted: async (executionId) => {
+          stepRun.executionId = executionId;
+          await this.deps.stepRunStore.save(stepRun);
+        },
       };
 
       // 4. Dispatch to executor
@@ -120,6 +127,18 @@ export class RunWorkflowStepUseCase {
         });
       }
     } catch (err) {
+      // An explicit user interruption (Terminate / cancel run / force restart)
+      // is not a failure: the execution was already marked `interrupted` and the
+      // run/step were (or will be) marked `cancelled` by the cancelling
+      // use-case. Don't fail the run or emit `workflow.run_failed`, and don't
+      // advance the edge — just make sure the step_run isn't left `running`.
+      if (err instanceof ExecutionCancelledError) {
+        if (stepRun.status === 'running') {
+          stepRun.cancel();
+          await this.deps.stepRunStore.save(stepRun);
+        }
+        return;
+      }
       stepRun.fail({ message: err instanceof Error ? err.message : String(err) });
       run.fail();
       await this.deps.stepRunStore.save(stepRun);
