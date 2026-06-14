@@ -209,7 +209,10 @@ export class GetStatisticsUseCase {
         ticketsCreated: bTickets.length,
         ticketsCompleted: bTickets.filter((t) => t.toDTO().status === 'done').length,
         skillsExecuted: bExecutions.filter((e) => e.mentionId.startsWith('skill:')).length,
-        panelsExecuted: 0, // Panel events are in domain log, not in agent executions
+        // Panels & workflows live outside agent executions — backfilled per
+        // bucket from usageByType once those sources are fetched (see below).
+        panelsExecuted: 0,
+        workflowsStarted: 0,
         totalCostUsd: bExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
         costByAgent: (() => {
           const byAgent: Record<string, number> = {};
@@ -408,6 +411,15 @@ export class GetStatisticsUseCase {
       };
     });
 
+    // Backfill per-bucket panels/workflows into the time series (same bucket
+    // order) so their KPI sparklines use the timeSeries path like every other
+    // metric.
+    const enrichedTimeSeries: StatisticsTimeBucket[] = timeSeries.map((b, i) => ({
+      ...b,
+      panelsExecuted: usageByType[i]?.panels ?? b.panelsExecuted,
+      workflowsStarted: usageByType[i]?.workflows ?? 0,
+    }));
+
     // Per-ticket move timelines (sorted ascending).
     const movesByTicket = new Map<string, Array<{ at: Date; to: string }>>();
     for (const ev of moveEvents) {
@@ -583,7 +595,7 @@ export class GetStatisticsUseCase {
       to: params.to,
       granularity: params.granularity,
       summary: { ...updatedSummary, workflowsStarted },
-      timeSeries,
+      timeSeries: enrichedTimeSeries,
       agentLeaderboard,
       skillLeaderboard,
       panelLeaderboard,

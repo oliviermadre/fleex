@@ -173,8 +173,8 @@ const KPI_GROUPS: Record<Exclude<Focus, 'catalogue'>, KpiDef[]> = {
     // Row 1 — execution modes
     { key: 'agentsSpawned', label: 'Agents Spawned', color: colorAt(0), sparkKey: 'agentsSpawned', format: formatCompact },
     { key: 'skillsExecuted', label: 'Skills Run', color: colorAt(6), sparkKey: 'skillsExecuted', format: formatCompact },
-    { key: 'panelsExecuted', label: 'Panels Run', color: colorAt(4), spark: (d) => d.usageByType.map((b) => b.panels), format: formatCompact },
-    { key: 'workflowsStarted', label: 'Workflows Started', color: colorAt(8), spark: (d) => d.usageByType.map((b) => b.workflows), format: formatCompact },
+    { key: 'panelsExecuted', label: 'Panels Run', color: colorAt(4), sparkKey: 'panelsExecuted', format: formatCompact },
+    { key: 'workflowsStarted', label: 'Workflows Started', color: colorAt(8), sparkKey: 'workflowsStarted', format: formatCompact },
     // Row 2 — delivery & cost
     { key: 'prsCreated', label: 'PRs Created', color: colorAt(9), sparkKey: 'prsCreated', format: formatCompact },
     { key: 'prsMerged', label: 'PRs Merged', color: colorAt(5), sparkKey: 'prsMerged', format: formatCompact },

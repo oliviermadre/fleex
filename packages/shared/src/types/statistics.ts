@@ -14,6 +14,7 @@ export interface StatisticsTimeBucket {
   readonly ticketsCompleted: number;
   readonly skillsExecuted: number;
   readonly panelsExecuted: number;
+  readonly workflowsStarted: number;
   readonly totalCostUsd: number;
   readonly costByAgent: Record<string, number>; // personaName → costUsd
   readonly ticketsDoneByBoard: Record<string, number>; // boardName → count of tickets moved to done in this bucket
