@@ -13,6 +13,10 @@ import type {
   DashboardPullRequest,
   DashboardWorktree,
   DashboardGitHubIssue,
+  NeedsYouItem,
+  InFlightItem,
+  DashboardDeliverable,
+  ActiveRecentTicket,
 } from '@fleex/shared';
 import { TICKET_PRIORITIES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import { importGitHubIssue, importGitHubPR, executeSkill } from '../../services/api';
@@ -33,6 +37,7 @@ import { ImportTaskButton } from './ImportTaskButton';
 import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
 import { PriorityIndicator } from '../tickets/PriorityIndicator';
 import { findSessionsForTicketId, findSessionsForPR, hasLocalWorktreeForPR } from './dashboard-helpers';
+import { appWs } from '../../services/websocket';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -997,6 +1002,313 @@ function SyncToolbar() {
   );
 }
 
+// ── Launchpad icons ──────────────────────────────────────────────────────────
+
+function AlertIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 1.5 15 14H1L8 1.5z" /><line x1="8" y1="6.5" x2="8" y2="9.5" /><circle cx="8" cy="11.5" r="0.4" fill="currentColor" />
+    </svg>
+  );
+}
+function PlayIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6.5" /><polygon points="6.5,5 11,8 6.5,11" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+function DocIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 1.5h6L13 5v9.5H3z" /><polyline points="9,1.5 9,5 13,5" /><line x1="5.5" y1="8" x2="10.5" y2="8" /><line x1="5.5" y1="10.5" x2="10.5" y2="10.5" />
+    </svg>
+  );
+}
+function PlusIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><line x1="8" y1="3" x2="8" y2="13" /><line x1="3" y1="8" x2="13" y2="8" /></svg>
+  );
+}
+function WorkflowIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="4" height="4" rx="1" /><rect x="10" y="10" width="4" height="4" rx="1" /><path d="M4 6v3a1 1 0 0 0 1 1h7" />
+    </svg>
+  );
+}
+function LogIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="3" y1="4" x2="13" y2="4" /><line x1="3" y1="8" x2="13" y2="8" /><line x1="3" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
+// ── Launchpad metadata ───────────────────────────────────────────────────────
+
+const NEEDS_YOU_META: Record<NeedsYouItem['kind'], { label: string; color: string }> = {
+  failed_run: { label: 'Failed', color: '#f87171' },
+  mention_waiting: { label: 'Mention', color: '#c084fc' },
+  plan_ready: { label: 'Plan', color: '#60a5fa' },
+  review_requested: { label: 'PR', color: '#4ade80' },
+  stale: { label: 'Stale', color: 'var(--theme-text-faint)' },
+};
+
+const IN_FLIGHT_META: Record<InFlightItem['kind'], { label: string; color: string }> = {
+  flow: { label: 'Flow', color: '#4ade80' },
+  agent: { label: 'Agent', color: '#60a5fa' },
+  panel: { label: 'Panel', color: '#c084fc' },
+  skill: { label: 'Skill', color: '#fbbf24' },
+};
+
+const DELIVERABLE_LABEL: Record<string, string> = {
+  prd: 'PRD', spec: 'SPEC', plan: 'PLAN', code: 'CODE',
+  report: 'REPORT', url: 'URL', html: 'HTML', 'ticket-summary': 'SUMMARY',
+};
+
+function KindBadge({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      className="inline-flex flex-shrink-0 items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
+      style={{ color, backgroundColor: `color-mix(in srgb, ${color} 16%, transparent)` }}
+    >
+      {label}
+    </span>
+  );
+}
+
+// ── Launchpad sections ───────────────────────────────────────────────────────
+
+function KpiCard({ value, label, sub, accent }: { value: string; label: string; sub?: string; accent?: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] px-4 py-3">
+      <div className="text-2xl font-bold tabular-nums text-[var(--theme-text-primary)]" style={accent ? { color: accent } : undefined}>{value}</div>
+      <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">{label}</div>
+      <div className="mt-0.5 h-3.5 text-[11px] text-[var(--theme-text-faint)]">{sub ?? ''}</div>
+    </div>
+  );
+}
+
+function KpiStrip({ stats }: { stats: NonNullable<DashboardData['stats']> }) {
+  const draftConflict = [
+    stats.prsDraft ? `${stats.prsDraft} draft` : '',
+    stats.prsConflict ? `${stats.prsConflict} conflict` : '',
+  ].filter(Boolean).join(' · ');
+  const cards = [
+    { value: String(stats.liveRuns), label: 'Live runs', sub: stats.liveRunsNeedReview > 0 ? `${stats.liveRunsNeedReview} need review` : 'running', accent: stats.liveRuns > 0 ? '#60a5fa' : undefined },
+    { value: String(stats.needsReview), label: 'Needs review', sub: stats.needsReviewFailed > 0 ? `${stats.needsReviewFailed} failed` : undefined, accent: stats.needsReviewFailed > 0 ? '#f87171' : undefined },
+    { value: String(stats.prsMine), label: 'PRs (mine)', sub: draftConflict || undefined },
+    { value: String(stats.deliverablesToday), label: 'Deliverables', sub: 'today', accent: stats.deliverablesToday > 0 ? '#4ade80' : undefined },
+    { value: `$${stats.spendTodayUsd.toFixed(2)}`, label: 'Agentic spend', sub: 'today', accent: '#c084fc' },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" style={{ animation: 'dashFadeIn 0.4s ease-out both' }}>
+      {cards.map((c) => <KpiCard key={c.label} value={c.value} label={c.label} sub={c.sub} accent={c.accent} />)}
+    </div>
+  );
+}
+
+function QuickAction({ icon, label, hint, onClick, disabled }: { icon: React.ReactNode; label: string; hint?: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      className={cn(
+        'flex flex-1 items-center gap-2.5 rounded-xl border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] px-4 py-3 text-left transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-bg-hover)]',
+        disabled && 'pointer-events-none opacity-40',
+      )}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      <span className="flex-shrink-0 text-[var(--theme-accent)]">{icon}</span>
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">{label}</span>
+        {hint && <span className="truncate text-[11px] text-[var(--theme-text-faint)]">{hint}</span>}
+      </span>
+    </button>
+  );
+}
+
+function QuickActions({
+  onNewTicket, onTriggerWorkflow, onResume, onExecLog, resumeHint, resumeDisabled,
+}: {
+  onNewTicket: () => void;
+  onTriggerWorkflow: () => void;
+  onResume: () => void;
+  onExecLog: () => void;
+  resumeHint?: string;
+  resumeDisabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row" style={{ animation: 'dashFadeIn 0.4s ease-out 40ms both' }}>
+      <QuickAction icon={<PlusIcon />} label="New ticket" hint="describe or paste" onClick={onNewTicket} />
+      <QuickAction icon={<WorkflowIcon />} label="Trigger workflow" hint="⌘K" onClick={onTriggerWorkflow} />
+      <QuickAction icon={<RefreshIcon spinning={false} />} label="Resume last session" hint={resumeHint} onClick={onResume} disabled={resumeDisabled} />
+      <QuickAction icon={<LogIcon />} label="Execution Log" hint="all runs" onClick={onExecLog} />
+    </div>
+  );
+}
+
+function NeedsYouSection({ items, onOpen }: { items: NeedsYouItem[]; onOpen: (i: NeedsYouItem) => void }) {
+  return (
+    <SectionShell delay={80}>
+      <SectionHeader icon={<span className="text-amber-400"><AlertIcon /></span>} title="Needs You" count={items.length} />
+      {items.length === 0 ? (
+        <EmptyState icon={<AlertIcon />} message="Rien ne t'attend. Profite du calme." />
+      ) : (
+        <div className="flex flex-col">
+          {items.map((it) => {
+            const meta = NEEDS_YOU_META[it.kind];
+            return (
+              <button
+                key={it.id}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--theme-bg-hover)]"
+                onClick={() => onOpen(it)}
+              >
+                <KindBadge label={meta.label} color={meta.color} />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm text-[var(--theme-text-primary)]">{it.title}</span>
+                  <span className="truncate text-xs text-[var(--theme-text-muted)]">{it.subtitle}</span>
+                </span>
+                <span className="flex-shrink-0 text-[11px] text-[var(--theme-text-faint)]">{timeAgo(it.at)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </SectionShell>
+  );
+}
+
+function InFlightSection({ items, onOpen, onExecLog }: { items: InFlightItem[]; onOpen: (i: InFlightItem) => void; onExecLog: () => void }) {
+  return (
+    <SectionShell delay={120}>
+      <SectionHeader
+        icon={<span className="text-blue-400"><PlayIcon /></span>}
+        title="In Flight"
+        count={items.length}
+        toolbar={(
+          <button className="text-[11px] text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-accent)]" onClick={onExecLog}>
+            Execution Log →
+          </button>
+        )}
+      />
+      {items.length === 0 ? (
+        <EmptyState icon={<PlayIcon />} message="Aucune exécution en cours." />
+      ) : (
+        <div className="flex flex-col">
+          {items.map((it) => {
+            const meta = IN_FLIGHT_META[it.kind];
+            const progress =
+              it.kind === 'flow' && it.stepTotal ? `${it.stepIndex ?? '?'}/${it.stepTotal}` :
+              it.kind === 'panel' && it.membersTotal ? `${it.membersDone ?? 0}/${it.membersTotal}` :
+              null;
+            return (
+              <button
+                key={it.id}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--theme-bg-hover)]"
+                onClick={() => onOpen(it)}
+              >
+                <KindBadge label={meta.label} color={meta.color} />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm text-[var(--theme-text-primary)]">
+                    {it.title}
+                    {it.ticketDisplayId != null && (
+                      <span className="text-[var(--theme-text-faint)]"> · #t-{it.ticketDisplayId}</span>
+                    )}
+                  </span>
+                  {it.detail && <span className="truncate text-xs text-[var(--theme-text-muted)]">{it.detail}</span>}
+                </span>
+                {progress && <span className="flex-shrink-0 font-mono text-[11px] text-[var(--theme-text-faint)]">{progress}</span>}
+                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-blue-400" style={{ animation: 'dashPulse 2s ease-in-out infinite' }} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </SectionShell>
+  );
+}
+
+function ActiveRecentTicketsSection({ tickets, onOpen }: { tickets: ActiveRecentTicket[]; onOpen: (ticketId: string) => void }) {
+  return (
+    <SectionShell delay={160}>
+      <SectionHeader icon={<GitBranchIcon />} title="Active Tickets (7d)" count={tickets.length} />
+      {tickets.length === 0 ? (
+        <EmptyState icon={<GitBranchIcon />} message="Aucun ticket actif récemment." />
+      ) : (
+        <div className="flex flex-col">
+          {tickets.map((t) => (
+            <button
+              key={t.id}
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[var(--theme-bg-overlay)]"
+              onClick={() => onOpen(t.id)}
+            >
+              <span
+                className="flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                style={{ backgroundColor: `${STATUS_COLOR[t.status] ?? '#60a5fa'}22`, color: STATUS_COLOR[t.status] ?? '#60a5fa' }}
+              >
+                {TICKET_STATUS_LABELS[t.status] ?? t.status}
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm text-[var(--theme-text-primary)]">{t.title}</span>
+                <span className="truncate text-[10px] text-[var(--theme-text-faint)]">#t-{t.displayId} · {t.activitySources.join(', ')}</span>
+              </span>
+              <span className="flex-shrink-0 text-[11px] text-[var(--theme-text-faint)]">{timeAgo(t.lastActivityAt)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </SectionShell>
+  );
+}
+
+function RecentOutputsSection({ items, onOpen }: { items: DashboardDeliverable[]; onOpen: (ticketId: string) => void }) {
+  return (
+    <SectionShell delay={200}>
+      <SectionHeader icon={<span className="text-green-400"><DocIcon /></span>} title="Recent Agentic Outputs" count={items.length} />
+      {items.length === 0 ? (
+        <EmptyState icon={<DocIcon />} message="Aucun livrable récent." />
+      ) : (
+        <div className="flex flex-col">
+          {items.map((d) => (
+            <button
+              key={d.id}
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--theme-bg-hover)]"
+              onClick={() => onOpen(d.ticketId)}
+            >
+              <KindBadge label={DELIVERABLE_LABEL[d.type] ?? d.type.toUpperCase()} color="#4ade80" />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm text-[var(--theme-text-primary)]">{d.title}</span>
+                <span className="truncate text-xs text-[var(--theme-text-muted)]">
+                  by {d.agentName}{d.ticketDisplayId != null ? ` · #t-${d.ticketDisplayId}` : ''}
+                </span>
+              </span>
+              <span className="flex-shrink-0 text-[11px] text-[var(--theme-text-faint)]">{timeAgo(d.createdAt)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </SectionShell>
+  );
+}
+
+// ── Realtime: debounced refetch on relevant WS events ────────────────────────
+
+function useDashboardRealtime(fetchDash: () => void) {
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer) return;
+      timer = setTimeout(() => { timer = null; fetchDash(); }, 1500);
+    };
+    const unsubs = ['tickets', 'agent-events', 'dashboard'].map((ch) => appWs.onChannel(ch, schedule));
+    return () => {
+      unsubs.forEach((u) => u());
+      if (timer) clearTimeout(timer);
+    };
+  }, [fetchDash]);
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export function DashboardView() {
@@ -1108,6 +1420,46 @@ export function DashboardView() {
     }
   }, [importingKey, fetchDash]);
 
+  // ── Live updates: refetch (debounced) on relevant WS events ──
+  useDashboardRealtime(fetchDash);
+
+  // ── Launchpad data (optional fields; default to empty) ──
+  const stats = data?.stats;
+  const needsYou = data?.needsYou ?? [];
+  const inFlight = data?.inFlight ?? [];
+  const recentOutputs = data?.recentOutputs ?? [];
+  const activeRecentTickets = data?.activeRecentTickets ?? [];
+
+  // Resume the most-recently-attached session (global, beyond per-worktree tracking).
+  const lastSession = useMemo(() => {
+    const attached = sessions.filter((s) => s.lastAttachedAt);
+    if (attached.length === 0) return sessions[0] ?? null;
+    return [...attached].sort(
+      (a, b) => new Date(b.lastAttachedAt!).getTime() - new Date(a.lastAttachedAt!).getTime(),
+    )[0] ?? null;
+  }, [sessions]);
+
+  const navigateToTicketId = useCallback((ticketId: string | null) => {
+    if (!ticketId) { navigate('/tickets'); return; }
+    const ticket = allTickets.find((t) => t.id === ticketId);
+    if (ticket) handleTicketNavigate(ticket);
+    else navigate('/tickets');
+  }, [allTickets, handleTicketNavigate, navigate]);
+
+  const handleNeedsYouOpen = useCallback((item: NeedsYouItem) => {
+    if (item.href) { window.open(item.href, '_blank', 'noopener,noreferrer'); return; }
+    navigateToTicketId(item.ticketId);
+  }, [navigateToTicketId]);
+
+  const handleInFlightOpen = useCallback((item: InFlightItem) => {
+    if (item.ticketId) navigateToTicketId(item.ticketId);
+    else navigate('/execution-log');
+  }, [navigateToTicketId, navigate]);
+
+  const handleResume = useCallback(() => {
+    if (lastSession) navigate(`/sessions/${lastSession.id}`);
+  }, [lastSession, navigate]);
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: KEYFRAMES }} />
@@ -1148,51 +1500,36 @@ export function DashboardView() {
           {data && (
             <div className="flex flex-col gap-5">
 
-              {/* ── AGENT ACTIVITY ── */}
-              {(recentActivity.length > 0 || totalUnread > 0) && (
-                <SectionShell delay={0}>
-                  <SectionHeader
-                    icon={<span className="text-purple-400"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" /></svg></span>}
-                    title="Agent Activity"
-                    count={recentActivity.length}
-                    subtitle={totalUnread > 0 ? `${totalUnread} unread` : undefined}
-                  />
-                  {recentActivity.length > 0 ? (
-                    <div className="flex flex-col gap-1">
-                      {recentActivity.map((a) => (
-                        <button
-                          key={a.id}
-                          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
-                          onClick={() => {
-                            const ticket = storeTickets.find((t) => t.id === a.ticketId);
-                            if (ticket) {
-                              navigate('/tickets');
-                              setTimeout(() => useTicketStore.getState().selectTicket(ticket.id), 100);
-                            }
-                          }}
-                        >
-                          <span className={cn(
-                            'h-1.5 w-1.5 flex-shrink-0 rounded-full',
-                            a.status === 'completed' ? 'bg-green-400' : a.status === 'failed' ? 'bg-red-400' : 'bg-yellow-400',
-                          )} />
-                          <span className="font-medium text-purple-400">{a.personaName}</span>
-                          <span className="text-[var(--theme-text-muted)]">
-                            {a.status === 'completed' ? 'finished' : a.status === 'failed' ? 'failed' : 'interrupted'}
-                          </span>
-                          <span className="min-w-0 truncate text-[var(--theme-text-secondary)]">{a.ticketTitle}</span>
-                          <span className="ml-auto flex-shrink-0 text-[var(--theme-text-faint)]">
-                            {timeAgo(a.completedAt ?? a.startedAt)}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-[var(--theme-text-muted)]">
-                      {totalUnread} unread items across your tickets
-                    </p>
-                  )}
-                </SectionShell>
-              )}
+              {/* ── KPI STRIP ── */}
+              {stats && <KpiStrip stats={stats} />}
+
+              {/* ── QUICK ACTIONS ── */}
+              <QuickActions
+                onNewTicket={() => navigate('/tickets')}
+                onTriggerWorkflow={() => useUIStore.getState().openCommandPalette()}
+                onResume={handleResume}
+                onExecLog={() => navigate('/execution-log')}
+                resumeHint={lastSession ? lastSession.displayName : 'no session'}
+                resumeDisabled={!lastSession}
+              />
+
+              {/* ── NEEDS YOU + IN FLIGHT ── */}
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                <NeedsYouSection items={needsYou} onOpen={handleNeedsYouOpen} />
+                <InFlightSection items={inFlight} onOpen={handleInFlightOpen} onExecLog={() => navigate('/execution-log')} />
+              </div>
+
+              {/* ── ACTIVE TICKETS + RECENT OUTPUTS ── */}
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                <ActiveRecentTicketsSection tickets={activeRecentTickets} onOpen={navigateToTicketId} />
+                <RecentOutputsSection items={recentOutputs} onOpen={navigateToTicketId} />
+              </div>
+
+              {/* ── INBOX (demoted intake) ── */}
+              <div className="mt-1 flex items-center gap-2 px-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Inbox</span>
+                <span className="h-px flex-1 bg-[var(--theme-border-subtle)]" />
+              </div>
 
               {/* ── ISSUES ── */}
               <GithubSection

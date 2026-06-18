@@ -10,6 +10,7 @@ import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
+import { createSdkTraceCapture } from '../utils/sdk-trace-capture.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
@@ -104,6 +105,7 @@ export class GenerateTicketSummaryUseCase {
     // Call Claude via Agent SDK (same auth as all other agents — no API key needed)
     let summaryText: string;
     const releaseSdkSlot = await this.sdkLimiter.acquire();
+    const sdkTrace = createSdkTraceCapture();
     try {
       const { query } = await import('@anthropic-ai/claude-agent-sdk');
       let resultText = '';
@@ -115,6 +117,8 @@ export class GenerateTicketSummaryUseCase {
           allowedTools: [],
           permissionMode: 'dontAsk' as const,
           maxTurns: 0,
+          debug: true,
+          stderr: sdkTrace.onStderr,
         },
       })) {
         if ('result' in message) {
@@ -130,6 +134,8 @@ export class GenerateTicketSummaryUseCase {
       this.logger.error('Claude Agent SDK call failed for ticket summary', {
         ticketId,
         error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        sdkTrace: sdkTrace.getTrace(),
       });
       return;
     } finally {

@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, statSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import type { DiffStats, GitRemoteInfo, Worktree } from '@fleex/shared';
 import type { GitPort } from '../../application/ports/git.port.js';
@@ -249,6 +249,25 @@ export class GitCliAdapter implements GitPort {
     } catch {
       this.logger.debug('Failed to get log oneline', { repoPath, branch, base });
       return '';
+    }
+  }
+
+  async getLastCommitDate(wtPath: string): Promise<string | null> {
+    try {
+      const { stdout } = await this.execFn(
+        'git', ['log', '-1', '--format=%cI'],
+        { cwd: wtPath, timeout: 10_000 },
+      );
+      const iso = stdout.trim();
+      if (iso) return iso;
+    } catch {
+      this.logger.debug('Failed to get last commit date, falling back to mtime', { wtPath });
+    }
+    // Fallback: directory mtime (e.g. empty/unborn branch or git failure)
+    try {
+      return new Date(statSync(wtPath).mtimeMs).toISOString();
+    } catch {
+      return null;
     }
   }
 

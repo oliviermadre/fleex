@@ -19,6 +19,7 @@ import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import { streamSdkQuery, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
+import { createSdkTraceCapture } from '../utils/sdk-trace-capture.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
@@ -673,6 +674,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // branch below: pre-ack failures emit a dedicated `mention.execution_failed`
     // event so the UI never silently hangs in Pending.
     let acknowledged = false;
+    // Captures the SDK subprocess stderr; surfaced to the logs only on failure.
+    const sdkTrace = createSdkTraceCapture();
 
     try {
       // 0. Resolve the conversation-scoped execution config at acknowledge time.
@@ -838,6 +841,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           effort: resolved.effort,
           fast: resolved.fast,
         });
+        queryOptions['stderr'] = sdkTrace.onStderr;
 
         // Build the prompt: use content blocks if there are images, plain string otherwise
         const hasImages = userPromptBlocks.some((b) => b.type === 'image');
@@ -874,6 +878,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
               persona: persona.name,
               staleSessionId: previousSessionId,
               error: queryErr instanceof Error ? queryErr.message : String(queryErr),
+              sdkTrace: sdkTrace.getTrace(),
             });
             this.sessionHistory.delete(sessionKey);
             delete queryOptions['resume'];
@@ -932,6 +937,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           persona: persona.name,
           model: resolved.model,
           worktreePath,
+          sdkTrace: sdkTrace.getTrace(),
         });
         await emitEvent('error', {
           error: 'Agent SDK produced no output (subprocess likely crashed at startup). Check ~/.fleex/.logs/main/server.log for EPIPE / spawn errors.',
@@ -1223,6 +1229,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         mentionId: mention.id,
         acknowledged,
         error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        sdkTrace: sdkTrace.getTrace(),
       });
       throw err;
     } finally {
@@ -1412,6 +1420,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       abortController.abort(new Error('timeout'));
     }, timeoutMs);
 
+    // Captures the SDK subprocess stderr; surfaced to the logs only on failure.
+    const sdkTrace = createSdkTraceCapture();
+
     try {
       // 8. Call Claude Agent SDK
       const effectiveMode = 'edit' as const;
@@ -1426,6 +1437,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputFormat: opts?.outputFormatOverride ?? this.outputFormatSchema(),
         resume: previousSessionId ?? undefined,
       });
+      queryOptions['stderr'] = sdkTrace.onStderr;
 
       // Build prompt: content blocks if images, string otherwise
       const skillHasImages = skillPromptBlocks.some((b) => b.type === 'image');
@@ -1688,6 +1700,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         persona: persona.name,
         ticketId,
         error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        sdkTrace: sdkTrace.getTrace(),
       });
       throw err;
     } finally {
@@ -1816,6 +1830,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         model: persona.model, systemPrompt, cwd: worktreePath,
         outputFormat: params.outputFormat,
       });
+      // Captures the SDK subprocess stderr; surfaced to the logs only on failure.
+      const sdkTrace = createSdkTraceCapture();
+      queryOptions['stderr'] = sdkTrace.onStderr;
 
       const hasImages = userPromptBlocks.some((b) => b.type === 'image');
       let structuredOutput: Record<string, unknown> | null = null;
@@ -1838,6 +1855,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           finalStatus = 'failed';
           throw new ExecutionCancelledError(executionId);
         }
+        this.logger.error('Workflow step execution failed', {
+          executionId,
+          persona: persona.name,
+          ticketId: params.ticketId,
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+          sdkTrace: sdkTrace.getTrace(),
+        });
         await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
         await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
         finalStatus = 'failed';

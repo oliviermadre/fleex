@@ -24,6 +24,7 @@ import { GetSessionGroupsUseCase } from '../application/use-cases/get-session-gr
 import { DiscoverExistingSessionsUseCase } from '../application/use-cases/discover-existing-sessions.js';
 import { ListRepositoriesUseCase } from '../application/use-cases/list-repositories.js';
 import { ListWorktreesUseCase } from '../application/use-cases/list-worktrees.js';
+import { ListWorktreeDetailsUseCase } from '../application/use-cases/list-worktree-details.js';
 import { CreateWorktreeUseCase } from '../application/use-cases/create-worktree.js';
 import { ReconcileWorktreeUseCase } from '../application/use-cases/reconcile-worktree.js';
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
@@ -255,6 +256,7 @@ export async function createContainer() {
   const importSlackMessage = new ImportSlackMessageUseCase(ticketStore_, slackImportAdapter, logger);
 
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
+  const listWorktreesUC = new ListWorktreesUseCase(git, logger, resolver, bareCloneManager);
 
   // Domain event bus
   // Two buses to support multi-instance fan-out without duplicating side-effects:
@@ -483,7 +485,8 @@ export async function createContainer() {
     discoverSessions,
     processHookEvent,
     listRepositories: new ListRepositoriesUseCase(git, config, logger, hostFs, resolver),
-    listWorktrees: new ListWorktreesUseCase(git, logger, resolver, bareCloneManager),
+    listWorktrees: listWorktreesUC,
+    listWorktreeDetails: new ListWorktreeDetailsUseCase(listWorktreesUC, git, ticketStore_, resolver, logger),
     createWorktree: createWorktreeUC,
     getClaudeUsage,
     agentTokenStore,

@@ -20,6 +20,8 @@ export interface GitPort {
   getDiffStats(repoPath: string, branch: string, baseBranch?: string): Promise<DiffStats>;
   getDiffSummary(repoPath: string, branch: string, baseBranch?: string): Promise<string>;
   getLogOneline(repoPath: string, branch: string, baseBranch?: string, limit?: number): Promise<string>;
+  /** ISO date of the last commit reachable from HEAD in the worktree, or null. */
+  getLastCommitDate(wtPath: string): Promise<string | null>;
   repairWorktrees(repoPath: string): Promise<void>;
   pruneWorktrees(repoPath: string): Promise<void>;
 }
