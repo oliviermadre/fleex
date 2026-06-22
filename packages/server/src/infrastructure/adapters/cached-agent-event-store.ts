@@ -1,6 +1,6 @@
 import type { AgentExecution } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort } from '../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert } from '../../application/ports/agent-event-store.port.js';
 
 /**
  * Write-through in-memory cache over any AgentEventStorePort.
@@ -116,6 +116,33 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     if (cached) {
       this.executions.set(executionId, { ...cached, sdkSessionId });
     }
+  }
+
+  async upsertCliExecution(p: CliExecutionUpsert): Promise<void> {
+    await this.inner.upsertCliExecution(p);
+    this.executions.set(p.executionId, {
+      id: p.executionId,
+      personaId: 'cli',
+      ticketId: p.ticketId,
+      mentionId: p.mentionId,
+      eventCount: 0,
+      status: 'completed',
+      startedAt: p.startedAt,
+      completedAt: p.completedAt,
+      lastEventAt: null,
+      sdkSessionId: p.sdkSessionId,
+      model: p.model,
+      effectiveMode: null,
+      effort: null,
+      fast: null,
+      durationMs: p.durationMs,
+      costUsd: p.costUsd,
+      inputTokens: p.inputTokens,
+      outputTokens: p.outputTokens,
+      cacheReadTokens: p.cacheReadTokens,
+      cacheCreationTokens: p.cacheCreationTokens,
+      source: 'cli',
+    });
   }
 
   async appendEvent(event: AgentEventEntity): Promise<void> {

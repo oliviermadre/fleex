@@ -29,6 +29,7 @@ import { ReconcileWorktreeUseCase } from '../application/use-cases/reconcile-wor
 import { EnrichClaudeActivityUseCase } from '../application/use-cases/enrich-claude-activity.js';
 import { GetClaudeUsageUseCase } from '../application/use-cases/get-claude-usage.js';
 import { ProcessHookEventUseCase } from '../application/use-cases/process-hook-event.js';
+import { IngestCliSessionUseCase } from '../application/use-cases/ingest-cli-session.js';
 import type { PgUserStore } from './adapters/pg-user-store.adapter.js';
 import type { SessionManager } from './auth/session-manager.js';
 import type { SupabaseUserStore } from './adapters/supabase/supabase-user-store.adapter.js';
@@ -451,8 +452,10 @@ export async function createContainer() {
   const discoverSessions = new DiscoverExistingSessionsUseCase(tmux, sessionStore_, namingService, logger, git, resolver, ticketStore_);
   const getSessionGroups = new GetSessionGroupsUseCase(sessionStore_, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore_, personaStore_, agentEventStore_, reconcileWorktree, hostFs, config, namingService);
 
-  // Claude Code hook event processor (POST /api/hook)
-  const processHookEvent = new ProcessHookEventUseCase(sessionStore_, eventBus, logger);
+  // Claude Code hook event processor (POST /api/hook). On SessionEnd it also
+  // ingests finished manual CLI sessions (source='cli') for cost tracking.
+  const ingestCliSession = new IngestCliSessionUseCase(ticketStore_, agentEventStore_, logger);
+  const processHookEvent = new ProcessHookEventUseCase(sessionStore_, eventBus, logger, ingestCliSession);
 
   return {
     logger,

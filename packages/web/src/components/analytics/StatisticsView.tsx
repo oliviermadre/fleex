@@ -157,12 +157,16 @@ function Toolbar({
 
 interface KpiDef {
   key: keyof StatisticsSummary;
+  /** Unique id for React + de-dup when several KPIs share a summary `key`. Defaults to `key`. */
+  id?: string;
   label: string;
   color: string;
   /** Sparkline source from the per-bucket time series … */
   sparkKey?: keyof StatisticsTimeBucket;
   /** … or a custom series pulled from anywhere in the response (wins over sparkKey). */
   spark?: (data: StatisticsResponse) => number[];
+  /** Override the displayed value (current & previous) when it isn't a plain summary scalar. */
+  value?: (data: StatisticsResponse) => number;
   format: (v: number) => string;
   /** When true, a downward trend is the good outcome (cost, duration). */
   goodWhenDown?: boolean;
@@ -193,6 +197,9 @@ const KPI_GROUPS: Record<Exclude<Focus, 'catalogue'>, KpiDef[]> = {
   ],
   costs: [
     { key: 'totalCostUsd', label: 'Total Cost', color: colorAt(2), sparkKey: 'totalCostUsd', format: formatUsd, goodWhenDown: true },
+    // Same global total, split by origin (agentic SDK vs manual CLI).
+    { key: 'totalCostUsd', id: 'sdkCost', label: 'SDK Cost', color: colorAt(0), value: (d) => d.summary.totalCostBySource.sdk, spark: (d) => d.timeSeries.map((b) => b.costBySource.sdk), format: formatUsd, goodWhenDown: true },
+    { key: 'totalCostUsd', id: 'cliCost', label: 'CLI Cost', color: colorAt(1), value: (d) => d.summary.totalCostBySource.cli, spark: (d) => d.timeSeries.map((b) => b.costBySource.cli), format: formatUsd, goodWhenDown: true },
     { key: 'totalInputTokens', label: 'Input Tokens', color: colorAt(0), format: formatTokens },
     { key: 'totalOutputTokens', label: 'Output Tokens', color: colorAt(8), format: formatTokens },
     { key: 'agentsSpawned', label: 'Agent Runs', color: colorAt(1), sparkKey: 'agentsSpawned', format: formatCompact },
@@ -466,6 +473,10 @@ function DashboardContent({
   );
 
   const cost = useMemo(() => flattenByKey(data.timeSeries, (b) => b.costByAgent), [data.timeSeries]);
+  const costSource = useMemo(
+    () => flattenByKey(data.timeSeries, (b) => ({ SDK: b.costBySource.sdk, CLI: b.costBySource.cli })),
+    [data.timeSeries],
+  );
   const boards = useMemo(() => flattenByKey(data.timeSeries, (b) => b.ticketsDoneByBoard), [data.timeSeries]);
 
   const costByAgent: DonutSlice[] = useMemo(
@@ -490,10 +501,10 @@ function DashboardContent({
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {kpis.map((def) => (
           <KpiCard
-            key={def.key}
+            key={def.id ?? def.key}
             def={def}
-            current={Number(data.summary[def.key] ?? 0)}
-            previous={previous ? Number(previous.summary[def.key] ?? 0) : undefined}
+            current={def.value ? def.value(data) : Number(data.summary[def.key] ?? 0)}
+            previous={previous ? (def.value ? def.value(previous) : Number(previous.summary[def.key] ?? 0)) : undefined}
             spark={def.spark ? def.spark(data) : def.sparkKey ? sparkData(def.sparkKey) : []}
           />
         ))}
@@ -574,6 +585,14 @@ function DashboardContent({
               <TimeBarChart data={cost.rows} series={cost.series} xKey="label" format={formatUsd} />
             ) : (
               <EmptyChart message="No cost recorded — run an agent to start tracking" />
+            )}
+          </ChartCard>
+
+          <ChartCard title="Cost by Source" subtitle="Share of spend: agentic (SDK) vs manual CLI sessions, over time">
+            {costSource.rows.length > 0 ? (
+              <TimeBarChart data={costSource.rows} series={costSource.series} xKey="label" format={formatUsd} percent />
+            ) : (
+              <EmptyChart message="No cost recorded yet" />
             )}
           </ChartCard>
 

@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort } from '../../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
 import type { SqliteConnection } from './connection.js';
 
 interface ExecutionRow {
@@ -29,6 +29,7 @@ interface ExecutionRow {
   output_tokens: number | null;
   cache_read_tokens: number | null;
   cache_creation_tokens: number | null;
+  source: string | null;
 }
 
 export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
@@ -160,6 +161,38 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     ).run(sdkSessionId, executionId);
   }
 
+  async upsertCliExecution(p: CliExecutionUpsert): Promise<void> {
+    this.conn.db.prepare(`
+      INSERT INTO agent_event_executions
+        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at,
+         completed_at, sdk_session_id, model, duration_ms, cost_usd, input_tokens,
+         output_tokens, cache_read_tokens, cache_creation_tokens, source)
+      VALUES (@execution_id, 'cli', @ticket_id, @mention_id, 0, 'completed', @started_at,
+         @completed_at, @sdk_session_id, @model, @duration_ms, @cost_usd, @input_tokens,
+         @output_tokens, @cache_read_tokens, @cache_creation_tokens, 'cli')
+      ON CONFLICT(execution_id) DO UPDATE SET
+        completed_at = excluded.completed_at, sdk_session_id = excluded.sdk_session_id,
+        model = excluded.model, duration_ms = excluded.duration_ms, cost_usd = excluded.cost_usd,
+        input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
+        cache_read_tokens = excluded.cache_read_tokens,
+        cache_creation_tokens = excluded.cache_creation_tokens, source = 'cli'
+    `).run({
+      execution_id: p.executionId,
+      ticket_id: p.ticketId,
+      mention_id: p.mentionId,
+      started_at: p.startedAt,
+      completed_at: p.completedAt,
+      sdk_session_id: p.sdkSessionId,
+      model: p.model,
+      duration_ms: p.durationMs,
+      cost_usd: p.costUsd,
+      input_tokens: p.inputTokens,
+      output_tokens: p.outputTokens,
+      cache_read_tokens: p.cacheReadTokens,
+      cache_creation_tokens: p.cacheCreationTokens,
+    });
+  }
+
   async markInterruptedExecutions(): Promise<string[]> {
     const rows = this.conn.db
       .prepare("SELECT mention_id FROM agent_event_executions WHERE status = 'running'")
@@ -215,5 +248,6 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     outputTokens: row.output_tokens ?? null,
     cacheReadTokens: row.cache_read_tokens ?? null,
     cacheCreationTokens: row.cache_creation_tokens ?? null,
+    source: (row.source as AgentExecution['source']) ?? null,
   };
 }

@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort } from '../../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
 import type { SupabaseConnection } from './connection.js';
 
 interface ExecutionRow {
@@ -29,6 +29,7 @@ interface ExecutionRow {
   output_tokens: number | null;
   cache_read_tokens: number | null;
   cache_creation_tokens: number | null;
+  source: string | null;
 }
 
 export class SupabaseAgentEventStore implements AgentEventStorePort {
@@ -111,6 +112,31 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       .update(update)
       .eq('execution_id', executionId);
     if (error) throw new Error(`SupabaseAgentEventStore.completeExecution failed: ${error.message}`);
+  }
+
+  async upsertCliExecution(p: CliExecutionUpsert): Promise<void> {
+    const { error } = await this.conn.client
+      .from('agent_event_executions')
+      .upsert({
+        execution_id: p.executionId,
+        persona_id: 'cli',
+        ticket_id: p.ticketId,
+        mention_id: p.mentionId,
+        event_count: 0,
+        status: 'completed',
+        started_at: p.startedAt,
+        completed_at: p.completedAt,
+        sdk_session_id: p.sdkSessionId,
+        model: p.model,
+        duration_ms: p.durationMs,
+        cost_usd: p.costUsd,
+        input_tokens: p.inputTokens,
+        output_tokens: p.outputTokens,
+        cache_read_tokens: p.cacheReadTokens,
+        cache_creation_tokens: p.cacheCreationTokens,
+        source: 'cli',
+      }, { onConflict: 'execution_id' });
+    if (error) throw new Error(`SupabaseAgentEventStore.upsertCliExecution failed: ${error.message}`);
   }
 
   async getEventsByExecution(executionId: string): Promise<AgentEventEntity[]> {
@@ -233,5 +259,6 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     outputTokens: row.output_tokens ?? null,
     cacheReadTokens: row.cache_read_tokens ?? null,
     cacheCreationTokens: row.cache_creation_tokens ?? null,
+    source: (row.source as AgentExecution['source']) ?? null,
   };
 }

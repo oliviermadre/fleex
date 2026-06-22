@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort } from '../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert } from '../../application/ports/agent-event-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { HostFs } from '../host/types.js';
 
@@ -27,6 +27,7 @@ interface ExecutionIndex {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
+  source?: 'sdk' | 'cli';
 }
 
 export class JsonAgentEventStore implements AgentEventStorePort {
@@ -171,6 +172,27 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     }
   }
 
+  async upsertCliExecution(p: CliExecutionUpsert): Promise<void> {
+    const existing = this.index.find((e) => e.id === p.executionId);
+    const entry: ExecutionIndex = existing ?? {
+      id: p.executionId, personaId: 'cli', ticketId: p.ticketId, mentionId: p.mentionId,
+      eventCount: 0, status: 'completed', startedAt: p.startedAt, completedAt: null, lastEventAt: null,
+    };
+    entry.status = 'completed';
+    entry.completedAt = p.completedAt;
+    entry.sdkSessionId = p.sdkSessionId;
+    entry.source = 'cli';
+    entry.model = p.model ?? undefined;
+    entry.durationMs = p.durationMs ?? undefined;
+    entry.costUsd = p.costUsd ?? undefined;
+    entry.inputTokens = p.inputTokens ?? undefined;
+    entry.outputTokens = p.outputTokens ?? undefined;
+    entry.cacheReadTokens = p.cacheReadTokens ?? undefined;
+    entry.cacheCreationTokens = p.cacheCreationTokens ?? undefined;
+    if (!existing) this.index.push(entry);
+    await this.syncIndex();
+  }
+
   async markInterruptedExecutions(): Promise<string[]> {
     const mentionIds: string[] = [];
     const now = new Date().toISOString();
@@ -224,6 +246,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       outputTokens: entry.outputTokens ?? null,
       cacheReadTokens: entry.cacheReadTokens ?? null,
       cacheCreationTokens: entry.cacheCreationTokens ?? null,
+      source: entry.source ?? null,
     };
   }
 

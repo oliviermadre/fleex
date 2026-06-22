@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort } from '../../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
 import type { PgConnection } from './connection.js';
 
 export class PgAgentEventStore implements AgentEventStorePort {
@@ -66,6 +66,25 @@ export class PgAgentEventStore implements AgentEventStorePort {
        metrics?.effort ?? null, metrics?.fast ?? null,
        metrics?.durationMs ?? null, metrics?.costUsd ?? null, metrics?.inputTokens ?? null,
        metrics?.outputTokens ?? null, metrics?.cacheReadTokens ?? null, metrics?.cacheCreationTokens ?? null, executionId],
+    );
+  }
+
+  async upsertCliExecution(p: CliExecutionUpsert): Promise<void> {
+    await this.db.query(
+      `INSERT INTO agent_event_executions
+        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at,
+         completed_at, sdk_session_id, model, duration_ms, cost_usd, input_tokens,
+         output_tokens, cache_read_tokens, cache_creation_tokens, source)
+       VALUES ($1, 'cli', $2, $3, 0, 'completed', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'cli')
+       ON CONFLICT (execution_id) DO UPDATE SET
+         completed_at = EXCLUDED.completed_at, sdk_session_id = EXCLUDED.sdk_session_id,
+         model = EXCLUDED.model, duration_ms = EXCLUDED.duration_ms, cost_usd = EXCLUDED.cost_usd,
+         input_tokens = EXCLUDED.input_tokens, output_tokens = EXCLUDED.output_tokens,
+         cache_read_tokens = EXCLUDED.cache_read_tokens,
+         cache_creation_tokens = EXCLUDED.cache_creation_tokens, source = 'cli'`,
+      [p.executionId, p.ticketId, p.mentionId, p.startedAt, p.completedAt, p.sdkSessionId,
+       p.model, p.durationMs, p.costUsd, p.inputTokens, p.outputTokens, p.cacheReadTokens,
+       p.cacheCreationTokens],
     );
   }
 
@@ -175,5 +194,6 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     outputTokens: (row.output_tokens as number) ?? null,
     cacheReadTokens: (row.cache_read_tokens as number) ?? null,
     cacheCreationTokens: (row.cache_creation_tokens as number) ?? null,
+    source: (row.source as AgentExecution['source']) ?? null,
   };
 }

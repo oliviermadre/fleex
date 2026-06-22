@@ -17,7 +17,15 @@ export interface StatisticsTimeBucket {
   readonly workflowsStarted: number;
   readonly totalCostUsd: number;
   readonly costByAgent: Record<string, number>; // personaName → costUsd
+  /** Cost split by execution origin (agentic SDK vs manual CLI) for this bucket. */
+  readonly costBySource: CostBySource;
   readonly ticketsDoneByBoard: Record<string, number>; // boardName → count of tickets moved to done in this bucket
+}
+
+/** Cost (USD) split by execution origin. */
+export interface CostBySource {
+  readonly sdk: number;
+  readonly cli: number;
 }
 
 export interface AgentLeaderboardEntry {
@@ -55,6 +63,8 @@ export interface StatisticsSummary {
   readonly workflowsStarted: number;
   readonly activeSessions: number;
   readonly totalCostUsd: number;
+  /** Global cost split by execution origin (agentic SDK vs manual CLI). */
+  readonly totalCostBySource: CostBySource;
   readonly totalInputTokens: number;
   readonly totalOutputTokens: number;
 }

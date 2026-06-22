@@ -21,6 +21,12 @@ export interface AgentExecution {
   readonly outputTokens?: number | null;
   readonly cacheReadTokens?: number | null;
   readonly cacheCreationTokens?: number | null;
+  /**
+   * Origin of the execution. `sdk` = Fleex agentic run (default; NULL is read as
+   * `sdk`). `cli` = a manual `claude` CLI session in a ticket worktree, ingested
+   * from its transcript. Lets stats break cost down by agentic vs manual usage.
+   */
+  readonly source?: 'sdk' | 'cli' | null;
 }
 
 export type AgentEventType =

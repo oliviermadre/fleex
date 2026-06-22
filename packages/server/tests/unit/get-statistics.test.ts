@@ -94,6 +94,48 @@ describe('GetStatisticsUseCase — ticketsDoneByBoard', () => {
   });
 });
 
+// ── Cost by source (agentic SDK vs manual CLI) ──────────────────────────────
+
+describe('GetStatisticsUseCase — costBySource', () => {
+  const params = { from: '2026-06-01', to: '2026-06-04', granularity: 'day' as const };
+
+  it('splits cost into sdk vs cli, treating a NULL/absent source as sdk', async () => {
+    const executions = {
+      getAllExecutions: vi.fn().mockResolvedValue([
+        // source absent → counts as sdk
+        { mentionId: 'm1', personaId: 'p1', startedAt: '2026-06-01T09:00:00Z', completedAt: '2026-06-01T09:05:00Z', status: 'completed', costUsd: 2 },
+        // explicit sdk
+        { mentionId: 'm2', personaId: 'p1', startedAt: '2026-06-01T10:00:00Z', completedAt: '2026-06-01T10:05:00Z', status: 'completed', costUsd: 3, source: 'sdk' },
+        // manual CLI session
+        { mentionId: 'cli:abc', personaId: 'cli', startedAt: '2026-06-01T11:00:00Z', completedAt: '2026-06-01T11:30:00Z', status: 'completed', costUsd: 10, source: 'cli' },
+      ]),
+    } as unknown as AgentEventStorePort;
+    const empty = () => ({ getAll: vi.fn().mockResolvedValue([]) });
+    const ticketStore = {
+      getAllTickets: vi.fn().mockResolvedValue([]),
+      getAllBoards: vi.fn().mockResolvedValue([]),
+    } as unknown as TicketStorePort;
+
+    const useCase = new GetStatisticsUseCase(
+      ticketStore,
+      empty() as unknown as CommentStorePort,
+      empty() as unknown as MentionStorePort,
+      empty() as unknown as DeliverableStorePort,
+      executions,
+      empty() as unknown as PersonaStorePort,
+      empty() as unknown as SessionStorePort,
+    );
+
+    const result = await useCase.execute(params);
+
+    expect(result.summary.totalCostBySource).toEqual({ sdk: 5, cli: 10 });
+    expect(result.summary.totalCostUsd).toBe(15); // unchanged global total still includes CLI
+    // All three land in the 06-01 bucket.
+    expect(result.timeSeries[0]!.costBySource).toEqual({ sdk: 5, cli: 10 });
+    expect(result.timeSeries[1]!.costBySource).toEqual({ sdk: 0, cli: 0 });
+  });
+});
+
 // ── Extended flow metrics (lead time, iterations, usage trend) ──────────────
 
 function logEntry(eventType: string, payload: Record<string, unknown>, occurredAt: string): DomainEventLogEntity {

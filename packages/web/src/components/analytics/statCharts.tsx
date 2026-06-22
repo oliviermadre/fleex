@@ -340,6 +340,7 @@ export function TimeBarChart({
   xKey,
   height = 240,
   stacked = true,
+  percent = false,
   format,
 }: {
   data: ReadonlyArray<ChartRow>;
@@ -347,16 +348,25 @@ export function TimeBarChart({
   xKey: string;
   height?: number;
   stacked?: boolean;
+  /** 100%-stacked: bars fill the height and the Y axis shows each series' share. */
+  percent?: boolean;
   format?: (v: number) => string;
 }) {
   if (data.length === 0 || series.length === 0) return <EmptyChart message="No data for this period" />;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+      <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }} stackOffset={percent ? 'expand' : undefined}>
         <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
         <XAxis dataKey={xKey} tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
-        <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => (format ? format(Number(v)) : formatCompact(Number(v)))} />
+        <YAxis
+          tick={AXIS_TICK}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          domain={percent ? [0, 1] : undefined}
+          tickFormatter={(v) => (percent ? `${Math.round(Number(v) * 100)}%` : format ? format(Number(v)) : formatCompact(Number(v)))}
+        />
         <Tooltip content={<StatTooltip format={format} hideZero />} cursor={{ fill: 'var(--theme-bg-hover)' }} />
         {series.map((s, i) => (
           <Bar
