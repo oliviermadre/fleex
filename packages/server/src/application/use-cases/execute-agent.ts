@@ -1820,6 +1820,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const hasImages = userPromptBlocks.some((b) => b.type === 'image');
       let structuredOutput: Record<string, unknown> | null = null;
       let resultText = '';
+      // SDK instrumentation — must be threaded into completeExecution below so
+      // workflow-step cost/tokens land in the stats (parity with persona/skill
+      // paths). Previously dropped, which made every workflow run cost $0.
+      let sdkSessionId: string | undefined;
+      let sdkDurationMs: number | undefined;
+      let sdkCostUsd: number | undefined;
+      let sdkInputTokens: number | undefined;
+      let sdkOutputTokens: number | undefined;
+      let sdkCacheReadTokens: number | undefined;
+      let sdkCacheCreationTokens: number | undefined;
       try {
         const streamResult = await streamSdkQuery({
           prompt: hasImages ? userPromptBlocks : userPromptText,
@@ -1829,6 +1839,13 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         });
         structuredOutput = streamResult.structuredOutput;
         resultText = streamResult.resultText;
+        sdkSessionId = streamResult.sessionId;
+        sdkDurationMs = streamResult.metrics.durationMs;
+        sdkCostUsd = streamResult.metrics.costUsd;
+        sdkInputTokens = streamResult.metrics.inputTokens;
+        sdkOutputTokens = streamResult.metrics.outputTokens;
+        sdkCacheReadTokens = streamResult.metrics.cacheReadTokens;
+        sdkCacheCreationTokens = streamResult.metrics.cacheCreationTokens;
       } catch (err) {
         // Cancelled (Terminate / cancel run / force restart): cancelExecution()
         // already emitted `execution_end` (interrupted) and completed the
@@ -1850,8 +1867,33 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         throw new ExecutionCancelledError(executionId);
       }
 
-      await emitEvent('execution_end', { status: 'completed', ticketId: params.ticketId, model: persona.model, effectiveMode, resultLength: resultText.length });
-      await this.agentEventStore.completeExecution(executionId, 'completed', { model: persona.model, effectiveMode });
+      // Persist the SDK session id so this workflow step is linked to its
+      // transcript (parity with persona/skill paths — enables resume and the
+      // cost backfill to match this execution by session id).
+      if (sdkSessionId) {
+        await this.agentEventStore.updateSessionId(executionId, sdkSessionId);
+      }
+
+      await emitEvent('execution_end', {
+        status: 'completed', ticketId: params.ticketId, model: persona.model, effectiveMode,
+        resultLength: resultText.length,
+        durationMs: sdkDurationMs,
+        costUsd: sdkCostUsd,
+        inputTokens: sdkInputTokens,
+        outputTokens: sdkOutputTokens,
+        cacheReadTokens: sdkCacheReadTokens,
+        cacheCreationTokens: sdkCacheCreationTokens,
+      });
+      await this.agentEventStore.completeExecution(executionId, 'completed', {
+        model: persona.model,
+        effectiveMode,
+        durationMs: sdkDurationMs,
+        costUsd: sdkCostUsd,
+        inputTokens: sdkInputTokens,
+        outputTokens: sdkOutputTokens,
+        cacheReadTokens: sdkCacheReadTokens,
+        cacheCreationTokens: sdkCacheCreationTokens,
+      });
 
       return { structuredOutput, rawText: resultText, executionId };
     } catch (err) {
