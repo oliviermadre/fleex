@@ -48,15 +48,23 @@ function attachCommand(parent: Command, def: CommandDef): void {
   cmd.description(def.description);
   if (def.aliases?.length) cmd.aliases(def.aliases);
   if (def.setup) def.setup(cmd);
+  const hasOption = (long: string): boolean => cmd.options.some((o) => o.long === long);
   // Global `--json` flag on every command: machine-readable output for
   // programmatic consumers (the MCP tool layer). Hidden from the MCP tool
   // schemas (see @fleex/mcp generator) and injected automatically when needed.
-  cmd.option('--json', 'Output machine-readable JSON instead of formatted text');
+  // Some commands (e.g. `repo list`, `workflow show`) declare their own `--json`
+  // in setup — keep theirs and only add ours when absent, so registration never
+  // conflicts. The preAction hook below activates JSON mode either way.
+  if (!hasOption('--json')) {
+    cmd.option('--json', 'Output machine-readable JSON instead of formatted text');
+  }
   cmd.hook('preAction', (thisCommand) => {
     if (thisCommand.opts().json) setJsonMode(true);
   });
   if (def.workspaceAware) {
-    cmd.option('--workspace <name>', 'Target the named workspace instance (defaults to the is_default workspace)');
+    if (!hasOption('--workspace')) {
+      cmd.option('--workspace <name>', 'Target the named workspace instance (defaults to the is_default workspace)');
+    }
     cmd.hook('preAction', (thisCommand) => {
       const ws = thisCommand.opts().workspace as string | undefined;
       if (ws) activateWorkspace(ws);
