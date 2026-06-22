@@ -114,9 +114,11 @@ export class SessionStore {
     return this.sessions.get(id);
   }
 
-  /** Newest first. */
+  /** Newest first. Reversing insertion order first makes the stable sort
+   *  break createdAt ties (same-millisecond creates) by newest-inserted-first. */
   list(): SessionSummary[] {
     return [...this.sessions.values()]
+      .reverse()
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map(toSummary);
   }
