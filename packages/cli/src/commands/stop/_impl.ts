@@ -4,6 +4,7 @@ import { info, warn, ok } from '../../core/colors.ts';
 import { FLEEX_HOME, resolveInstance, ensureDirs } from '../../core/instance.ts';
 import { SERVICES } from '../../core/ports.ts';
 import { isAlive, killByPort, killGroup, killTree, sleep } from '../../core/process.ts';
+import { countRunningInstances, stopCompanion } from '../../core/companion.ts';
 
 export async function stopInstance(slug: string): Promise<void> {
   const runDir = path.join(FLEEX_HOME, '.run', slug);
@@ -75,10 +76,18 @@ export async function stopAllInstances(): Promise<void> {
   for (const slug of entries) {
     await stopInstance(slug);
   }
+  // `--all` tears down everything, including the shared companion singleton.
+  if (await stopCompanion()) ok('Companion stopped.');
 }
 
 export async function stopCurrent(): Promise<void> {
   const ctx = resolveInstance();
   ensureDirs(ctx);
   await stopInstance(ctx.instanceSlug);
+  // The companion is a machine-wide singleton, so a single `fleex stop` leaves
+  // it running for other instances — but if this was the last one, shut it down
+  // too so nothing is left dangling.
+  if (countRunningInstances() === 0) {
+    if (await stopCompanion()) ok('No instances left running — companion stopped.');
+  }
 }

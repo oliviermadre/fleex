@@ -8,18 +8,34 @@ execution live in `@fleex/sidepanel-host`, which the extension reaches over
 
 ## Setup
 
-1. Start the companion (holds the Anthropic key, runs the assistant):
+1. Put your Anthropic key in `~/.fleex/config` (once):
 
    ```bash
-   export ANTHROPIC_API_KEY=sk-ant-...
-   bun run packages/sidepanel-host/src/server.ts
-   # in-repo dev: FLEEX_MCP_BIN=bun FLEEX_MCP_PREFIX="run $(pwd)/packages/cli/index.ts" bun run packages/sidepanel-host/src/server.ts
+   echo 'ANTHROPIC_API_KEY=sk-ant-...' >> ~/.fleex/config
    ```
 
-2. Load the extension: `chrome://extensions` → enable Developer mode →
+2. Start the companion. `fleex start` brings it up automatically alongside the
+   stack, or start it on its own:
+
+   ```bash
+   fleex start            # stack + companion
+   # or just the companion:
+   fleex companion start  # idempotent; one singleton serves every workspace
+   ```
+
+   The companion is a **machine-wide singleton** on `ws://localhost:4399`: a
+   single process serves all workspaces (each conversation carries its own
+   `--workspace`). It runs from `~/.fleex/repo` (canonical install) — override
+   with `FLEEX_COMPANION_REPO` for companion development.
+
+3. Load the extension: `chrome://extensions` → enable Developer mode →
    **Load unpacked** → select this `extension/` folder.
 
-3. Click the toolbar icon to open the side panel.
+4. Click the toolbar icon to open the side panel.
+
+`fleex stop` leaves the companion running for other instances; it shuts down
+with the **last** instance, and `fleex stop --all` always stops it.
+`fleex companion status` / `fleex companion stop` manage it directly.
 
 ## Use
 
