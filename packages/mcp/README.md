@@ -30,6 +30,25 @@ const result = await execFleex(tools.find(t => t.name === 'fleex_ticket_list')!,
 
 ## Run as an MCP server
 
+The simplest entry point is the CLI wrapper, which sets the env for you and
+re-invokes the same fleex it ships with (so the tool surface never drifts from
+the running CLI):
+
+```bash
+# foreground stdio server scoped to one workspace
+fleex mcp start --workspace evaneos
+
+# limit the exposed command groups (default: ticket,epic)
+fleex mcp start --workspace evaneos --include ticket,epic,panel
+```
+
+`fleex mcp start` is **foreground-only**: a stdio server stays attached to
+stdin/stdout for the protocol and exits when the client disconnects — there is
+no background/daemon mode for stdio transport. Let your MCP client own its
+lifecycle.
+
+You can also run the server module directly:
+
 ```bash
 # production (fleex on PATH)
 bunx @fleex/mcp
@@ -42,6 +61,8 @@ FLEEX_MCP_BIN=bun FLEEX_MCP_PREFIX="run /path/to/fleex/packages/cli/index.ts" \
 Register it with any MCP client, e.g. Claude Code:
 
 ```bash
+claude mcp add fleex -- fleex mcp start --workspace evaneos
+# or, without the CLI wrapper:
 claude mcp add fleex -- bunx @fleex/mcp
 ```
 
