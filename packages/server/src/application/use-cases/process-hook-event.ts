@@ -4,6 +4,7 @@ import { mapHookEventToStatus } from '@fleex/shared';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { EventBus } from '../event-bus.js';
+import type { IngestCliSessionUseCase } from './ingest-cli-session.js';
 
 /** Result returned to `POST /api/hook`. Always 200, never bubbles errors back to Claude. */
 export interface ProcessHookEventResult {
@@ -31,6 +32,8 @@ export class ProcessHookEventUseCase {
     private readonly sessionStore: SessionStorePort,
     private readonly eventBus: EventBus,
     private readonly logger: LoggerPort,
+    /** Optional — when present, finished manual CLI sessions are ingested for cost tracking. */
+    private readonly ingestCliSession?: IngestCliSessionUseCase,
   ) {}
 
   async execute(event: HookEventPayload): Promise<ProcessHookEventResult> {
@@ -45,6 +48,26 @@ export class ProcessHookEventUseCase {
         ? event.payload['tool_name']
         : undefined,
     });
+
+    // Real-time CLI cost ingestion: at session end, record a finished manual
+    // `claude` CLI session (independent of whether a Fleex session matches the
+    // cwd — manual sessions usually have no Fleex session record). Best-effort;
+    // never blocks the status mapping below or fails the hook.
+    if (event.event === 'sessionEnd' && this.ingestCliSession) {
+      const p = event.payload ?? {};
+      const sessionId = typeof p['session_id'] === 'string' ? (p['session_id'] as string) : '';
+      const transcriptPath = typeof p['transcript_path'] === 'string' ? (p['transcript_path'] as string) : '';
+      try {
+        const res = await this.ingestCliSession.execute({ sessionId, transcriptPath, cwd: event.cwd });
+        if (res.ingested) {
+          this.logger.info('CLI session cost ingested', { sessionId, ticketId: res.ticketId, costUsd: res.costUsd });
+        }
+      } catch (err) {
+        this.logger.warn('CLI session ingestion failed (ignored)', {
+          error: err instanceof Error ? err.message : String(err), sessionId,
+        });
+      }
+    }
 
     const update = mapHookEventToStatus(event);
     if (!update) {

@@ -1,6 +1,23 @@
 import type { AgentExecution } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 
+/** Params for `upsertCliExecution` — a fully-computed CLI session execution row. */
+export interface CliExecutionUpsert {
+  executionId: string;
+  sdkSessionId: string;
+  ticketId: string;
+  mentionId: string;
+  model: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  durationMs: number | null;
+  costUsd: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheCreationTokens: number | null;
+}
+
 export interface AgentEventStorePort {
   startExecution(params: {
     executionId: string;
@@ -35,6 +52,14 @@ export interface AgentEventStorePort {
   }): Promise<void>;
 
   updateSessionId(executionId: string, sdkSessionId: string): Promise<void>;
+
+  /**
+   * Insert (or refresh) a CLI-origin execution ingested from a Claude transcript.
+   * Idempotent on `executionId` (caller uses a stable `cli:<sessionId>` key) and
+   * tagged `source='cli'`. Never produced by the agentic loop — only by the CLI
+   * session ingestion (real-time SessionEnd hook + backfill script).
+   */
+  upsertCliExecution(params: CliExecutionUpsert): Promise<void>;
 
   /** Mark all 'running' executions as 'interrupted'. Returns affected mention IDs. */
   markInterruptedExecutions(): Promise<string[]>;

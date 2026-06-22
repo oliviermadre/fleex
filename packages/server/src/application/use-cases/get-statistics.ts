@@ -44,6 +44,18 @@ function percentile(sorted: number[], p: number): number | null {
   return sorted[idx]!;
 }
 
+/** Execution origin for the cost-by-source breakdown. NULL is read as agentic (`sdk`). */
+function sourceOf(e: AgentExecution): 'sdk' | 'cli' {
+  return e.source === 'cli' ? 'cli' : 'sdk';
+}
+
+/** Sum costUsd grouped by source over a set of executions. */
+function costBySourceOf(execs: AgentExecution[]): { sdk: number; cli: number } {
+  const acc = { sdk: 0, cli: 0 };
+  for (const e of execs) acc[sourceOf(e)] += e.costUsd ?? 0;
+  return acc;
+}
+
 export class GetStatisticsUseCase {
   private cache = new Map<string, CacheEntry>();
 
@@ -148,6 +160,7 @@ export class GetStatisticsUseCase {
       panelsExecuted: 0, // Will be updated after panel events are fetched
       workflowsStarted: 0, // Will be updated after workflow events are fetched
       totalCostUsd: filteredExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
+      totalCostBySource: costBySourceOf(filteredExecutions),
       totalInputTokens: filteredExecutions.reduce((sum, e) => sum + (e.inputTokens ?? 0), 0),
       totalOutputTokens: filteredExecutions.reduce((sum, e) => sum + (e.outputTokens ?? 0), 0),
       activeSessions: sessions.filter((s) => {
@@ -214,6 +227,7 @@ export class GetStatisticsUseCase {
         panelsExecuted: 0,
         workflowsStarted: 0,
         totalCostUsd: bExecutions.reduce((sum, e) => sum + (e.costUsd ?? 0), 0),
+        costBySource: costBySourceOf(bExecutions),
         costByAgent: (() => {
           const byAgent: Record<string, number> = {};
           for (const e of bExecutions) {
