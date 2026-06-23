@@ -66,4 +66,16 @@ describe('execFleex', () => {
       '--workspace', 'acme',
     ]);
   });
+
+  it('emits no --workspace for an empty workspace (never --workspace "")', async () => {
+    const tool = createTool();
+    const res = await execFleex(
+      tool,
+      { title: 'Fix bug' },
+      { bin: NODE, prefixArgs: ECHO_ARGV, workspace: '' },
+    );
+    const argv = JSON.parse(res.stdout) as string[];
+    expect(argv).not.toContain('--workspace');
+    expect(argv).toEqual(['ticket', 'create', '--title', 'Fix bug']);
+  });
 });

@@ -37,3 +37,19 @@ export function listWorkspaces(): WorkspaceInfo[] {
 export function defaultWorkspace(): string | undefined {
   return listWorkspaces().find((w) => w.isDefault)?.name;
 }
+
+/**
+ * Resolves the workspace to pin for execution. A session with no explicit
+ * workspace (empty string from the selector's "default" option, or undefined)
+ * is mapped to the configured default workspace name — never left empty.
+ *
+ * This matters because the companion is a machine singleton: relying on the
+ * CLI's ambient default (the current worktree instance, which may be a stopped
+ * workspace like `tada`) is non-deterministic. Pinning the `isDefault`
+ * workspace makes "default workspace" mean the workspace actually named
+ * default. Falls back to undefined (no `--workspace`) only when no default is
+ * configured.
+ */
+export function resolveWorkspace(sessionWorkspace?: string): string | undefined {
+  return sessionWorkspace || defaultWorkspace();
+}

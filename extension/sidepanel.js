@@ -2,6 +2,23 @@
 
 const HOST = 'localhost:4399';
 
+// ── Icons (inline SVG, Lucide-style, monochrome, inherit currentColor) ────────
+const ICON_PATHS = {
+  edit: '<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
+  trash:
+    '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  ban: '<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>',
+  chevron: '<path d="m9 18 6-6-6-6"/>',
+};
+
+function iconEl(name) {
+  const markup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
+  const doc = new DOMParser().parseFromString(markup, 'image/svg+xml');
+  return document.importNode(doc.documentElement, true);
+}
+
 const log = document.getElementById('log');
 const statusEl = document.getElementById('status');
 const input = document.getElementById('input');
@@ -87,13 +104,12 @@ function handleStream(ev) {
       finalizeAssistant();
       toolLine(ev.argv);
       break;
-    case 'tool_result': {
-      const t = bubble(ev.ok ? 'tool' : 'tool fail');
-      t.textContent = `${ev.ok ? '✓' : '✗'} ${ev.name}${ev.ok ? '' : ': ' + truncate(ev.text, 200)}`;
+    case 'tool_result':
+      statusBubble(ev.ok ? 'tool' : 'tool fail', ev.ok ? 'check' : 'x',
+        `${ev.name}${ev.ok ? '' : ': ' + truncate(ev.text, 200)}`);
       break;
-    }
     case 'tool_denied':
-      bubble('tool').textContent = `⊘ declined ${ev.name}`;
+      statusBubble('tool', 'ban', `declined ${ev.name}`);
       break;
     case 'done':
       finalizeAssistant();
@@ -160,12 +176,14 @@ function renderSidebar() {
     const rename = document.createElement('button');
     rename.className = 'icon';
     rename.title = 'Rename';
-    rename.textContent = '✎';
+    rename.setAttribute('aria-label', 'Rename');
+    rename.appendChild(iconEl('edit'));
     rename.onclick = (e) => { e.stopPropagation(); startRename(li, s); };
     const del = document.createElement('button');
     del.className = 'icon';
     del.title = 'Close conversation';
-    del.textContent = '🗑';
+    del.setAttribute('aria-label', 'Close conversation');
+    del.appendChild(iconEl('trash'));
     del.onclick = (e) => { e.stopPropagation(); sendMsg({ type: 'delete_session', id: s.id }); };
     act.append(rename, del);
 
@@ -237,9 +255,21 @@ function bubble(cls, text) {
   log.scrollTop = log.scrollHeight;
   return el;
 }
+// A tool bubble led by a status icon followed by plain text.
+function statusBubble(cls, iconName, text) {
+  const el = bubble(cls);
+  const ic = iconEl(iconName);
+  ic.classList.add('inline-ic', `ic-${iconName}`);
+  el.append(ic, document.createTextNode(' ' + text));
+  return el;
+}
 function toolLine(argv) {
   const t = bubble('tool');
-  t.innerHTML = `▷ <code>fleex ${escapeHtml(argv.join(' '))}</code>`;
+  const ic = iconEl('chevron');
+  ic.classList.add('inline-ic', 'ic-chevron');
+  const code = document.createElement('code');
+  code.textContent = `fleex ${argv.join(' ')}`;
+  t.append(ic, document.createTextNode(' '), code);
   return t;
 }
 function finalizeAssistant() { currentAssistant = null; assistantRaw = ''; }
@@ -253,9 +283,9 @@ function renderTranscript(items) {
     else if (it.tool) {
       toolLine(it.tool.argv);
       const s = it.tool.status;
-      if (s === 'ok') bubble('tool').textContent = `✓ ${it.tool.name}`;
-      else if (s === 'fail') bubble('tool fail').textContent = `✗ ${it.tool.name}: ${truncate(it.tool.text || '', 200)}`;
-      else if (s === 'denied') bubble('tool').textContent = `⊘ declined ${it.tool.name}`;
+      if (s === 'ok') statusBubble('tool', 'check', it.tool.name);
+      else if (s === 'fail') statusBubble('tool fail', 'x', `${it.tool.name}: ${truncate(it.tool.text || '', 200)}`);
+      else if (s === 'denied') statusBubble('tool', 'ban', `declined ${it.tool.name}`);
     }
   }
   if (pendingConfirm[activeId]) renderConfirm(pendingConfirm[activeId]);
@@ -470,7 +500,16 @@ async function loadWorkspaces() {
       wsSelect.appendChild(opt);
     }
     const saved = (await chrome.storage.local.get('workspace')).workspace;
-    if (saved && [...wsSelect.options].some((o) => o.value === saved)) wsSelect.value = saved;
+    if (saved && [...wsSelect.options].some((o) => o.value === saved)) {
+      wsSelect.value = saved;
+    } else {
+      // No saved choice: preselect the configured default workspace so the
+      // selector reflects (and sends) the workspace actually named default,
+      // not the empty "let the CLI decide" option.
+      const def = list.find((w) => w.isDefault);
+      if (def) wsSelect.value = def.name;
+    }
+    applyWorkspaceTheme(wsSelect.value);
   } catch {
     /* host offline */
   }

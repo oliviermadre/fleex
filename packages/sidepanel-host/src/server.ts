@@ -24,7 +24,7 @@ import { runAssistant, type AssistantEvent } from './assistant.ts';
 import { toAnthropicTools } from './tools.ts';
 import { createClient, createLlm, createExec, DEFAULT_MODEL } from './anthropic.ts';
 import { buildSystemPrompt, formatPageContext } from './system-prompt.ts';
-import { listWorkspaces } from './workspaces.ts';
+import { listWorkspaces, resolveWorkspace } from './workspaces.ts';
 import { SessionStore, type TranscriptItem } from './sessions.ts';
 import { findWorkspaceServerPort } from './instance-discovery.ts';
 
@@ -101,6 +101,10 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
     return;
   }
 
+  // A session with no explicit workspace resolves to the configured default,
+  // so we never fall back to the CLI's ambient (worktree-current) workspace.
+  const workspace = resolveWorkspace(session.workspace);
+
   store.maybeTitleFrom(sessionId, text);
 
   const content: Anthropic.ContentBlockParam[] = [{ type: 'text', text }];
@@ -163,7 +167,7 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
     }
   };
 
-  const exec = createExec({ ...baseExecOpts, workspace: session.workspace });
+  const exec = createExec({ ...baseExecOpts, workspace });
   const confirm = (req: { id: string; name: string; input: Record<string, unknown>; argv: string[] }) =>
     new Promise<boolean>((resolve) => {
       store.setStatus(sessionId, 'awaiting_input');
@@ -183,10 +187,10 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
       confirm,
       tools,
       anthropicTools,
-      system: buildSystemPrompt({ workspace: session.workspace }),
+      system: buildSystemPrompt({ workspace }),
       messages: session.messages,
       onEvent,
-      workspace: session.workspace,
+      workspace,
     });
   } catch (e) {
     broadcastEvent(sessionId, { type: 'error', message: e instanceof Error ? e.message : String(e) });

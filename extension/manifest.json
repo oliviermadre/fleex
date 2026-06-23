@@ -5,11 +5,23 @@
   "description": "Side-panel assistant that manages your Fleex workspaces and can capture the current page into tickets and deliverables.",
   "permissions": ["sidePanel", "scripting", "activeTab", "storage"],
   "host_permissions": ["http://localhost:4399/*", "http://*/*", "https://*/*"],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Open Fleex Assistant"
+    "default_title": "Open Fleex Assistant",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   },
   "side_panel": {
     "default_path": "sidepanel.html"
