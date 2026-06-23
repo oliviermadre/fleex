@@ -207,7 +207,15 @@ Bun.serve<WsData>({
   async fetch(req, server) {
     const url = new URL(req.url);
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    if (url.pathname === '/health') return Response.json({ ok: true, tools: tools.length }, { headers: CORS });
+    if (url.pathname === '/health') {
+      // hasApiKey lets `fleex companion` detect a booted-but-keyless host (e.g.
+      // started before ANTHROPIC_API_KEY landed in ~/.fleex/config) and restart
+      // it instead of silently reusing one that can't talk to Claude.
+      return Response.json(
+        { ok: true, tools: tools.length, hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY) },
+        { headers: CORS },
+      );
+    }
     if (url.pathname === '/workspaces') return Response.json(listWorkspaces(), { headers: CORS });
     if (url.pathname === '/theme') {
       // Return the selected workspace's configured theme (from its app_config),

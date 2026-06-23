@@ -84,8 +84,11 @@ export function buildCompanionLaunch(ctx: CompanionLaunchContext): CompanionLaun
 
   const env: Record<string, string> = {};
   // config file first (defaults), then the live env overrides it.
+  // Skip empty-string env vars: an unset-but-exported `ANTHROPIC_API_KEY=`
+  // (common in shells) would otherwise clobber the real key from the config
+  // file, booting a "healthy" companion that can't authenticate to Claude.
   for (const [k, v] of Object.entries(ctx.configEnv)) env[k] = v;
-  for (const [k, v] of Object.entries(ctx.baseEnv)) if (v !== undefined) env[k] = v;
+  for (const [k, v] of Object.entries(ctx.baseEnv)) if (v !== undefined && v !== '') env[k] = v;
 
   // Re-invoke THIS repo's CLI for every tool call (flag > env > default).
   env.FLEEX_MCP_BIN = ctx.baseEnv.FLEEX_MCP_BIN ?? ctx.execPath;
@@ -94,17 +97,30 @@ export function buildCompanionLaunch(ctx: CompanionLaunchContext): CompanionLaun
   return { bin: ctx.execPath, args: [serverPath], cwd: ctx.repoDir, env };
 }
 
-/** True if the companion answers /health on `port`. */
-export async function isCompanionHealthy(port: number = COMPANION_PORT, timeoutMs = 1500): Promise<boolean> {
+export interface CompanionHealth {
+  ok: boolean;
+  /** Whether the running host has an Anthropic key (older builds omit it → undefined). */
+  hasApiKey?: boolean;
+}
+
+/** Probe /health; null if nothing answers on `port`. */
+export async function probeCompanion(port: number = COMPANION_PORT, timeoutMs = 1500): Promise<CompanionHealth | null> {
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     const res = await fetch(`http://localhost:${port}/health`, { signal: ctrl.signal });
     clearTimeout(t);
-    return res.ok;
+    if (!res.ok) return null;
+    const body = (await res.json()) as CompanionHealth;
+    return { ok: true, hasApiKey: body?.hasApiKey };
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** True if the companion answers /health on `port`. */
+export async function isCompanionHealthy(port: number = COMPANION_PORT, timeoutMs = 1500): Promise<boolean> {
+  return (await probeCompanion(port, timeoutMs)) !== null;
 }
 
 export function readCompanionPid(): number | null {

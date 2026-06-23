@@ -38,6 +38,18 @@ describe('buildCompanionLaunch', () => {
     expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-from-shell');
   });
 
+  it('keeps the config key when the shell exports an empty ANTHROPIC_API_KEY', () => {
+    // A bare `export ANTHROPIC_API_KEY=` (or an unset-but-present var) shows up
+    // as '' in process.env. That must NOT clobber the real key from the config
+    // file — otherwise the companion boots "healthy" but can't authenticate.
+    const { env } = buildCompanionLaunch({
+      ...ctx,
+      configEnv: { ANTHROPIC_API_KEY: 'sk-ant-from-config' },
+      baseEnv: { ANTHROPIC_API_KEY: '' } as NodeJS.ProcessEnv,
+    });
+    expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-from-config');
+  });
+
   it('honours an explicit FLEEX_MCP_BIN/PREFIX override (power user / dev)', () => {
     const base = { FLEEX_MCP_BIN: 'fleex', FLEEX_MCP_PREFIX: '' } as NodeJS.ProcessEnv;
     const { env } = buildCompanionLaunch({ ...ctx, baseEnv: base });
