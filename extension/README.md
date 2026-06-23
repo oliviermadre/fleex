@@ -55,6 +55,12 @@ with the **last** instance, and `fleex stop --all` always stops it.
   theme from its `app_config` (branch-agnostically, via `GET /theme`) and the
   panel re-skins to match — built-in palettes are bundled, custom themes come
   from the workspace's DB.
+- **Model selector** (composer bar): picks the Anthropic model for the
+  conversation. The list comes from the companion's `GET /models` (the canonical
+  `FALLBACK_MODELS` shared with the web app); the choice is per-conversation and
+  persisted. "Default model" leaves it to the companion default
+  (`FLEEX_SIDEPANEL_MODEL` or `claude-opus-4-8`). The companion rebuilds the LLM
+  per turn from the conversation's model.
 - **Confirmation**: read-only actions run automatically; create/update/move/
   delete show the exact `fleex …` command and wait for your Approve/Decline.
 

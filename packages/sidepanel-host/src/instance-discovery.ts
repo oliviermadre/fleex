@@ -55,6 +55,29 @@ function isListening(port: number, timeoutMs = 300): Promise<boolean> {
 }
 
 /**
+ * Resolve the first live instance for `workspace` (defaults to the is_default
+ * workspace). Returns null if none is running. `probe` is injectable for
+ * testing.
+ */
+export async function findRunningInstance(
+  workspace?: string,
+  probe: (port: number) => Promise<boolean> = isListening,
+): Promise<RunningInstance | null> {
+  const ws = workspace && workspace.trim() ? workspace : defaultWorkspace();
+  if (!ws) return null;
+  for (const inst of listWorkspaceInstances(ws)) {
+    if (await probe(inst.server)) return inst;
+  }
+  return null;
+}
+
+/** The branch portion of an instance slug `<workspace>@<branch>`. */
+export function instanceBranch(slug: string): string {
+  const at = slug.indexOf('@');
+  return at === -1 ? slug : slug.slice(at + 1);
+}
+
+/**
  * Resolve the server port of a live stack for `workspace` (defaults to the
  * is_default workspace). Returns null if none is running. `probe` is injectable
  * for testing.
@@ -63,10 +86,5 @@ export async function findWorkspaceServerPort(
   workspace?: string,
   probe: (port: number) => Promise<boolean> = isListening,
 ): Promise<number | null> {
-  const ws = workspace && workspace.trim() ? workspace : defaultWorkspace();
-  if (!ws) return null;
-  for (const inst of listWorkspaceInstances(ws)) {
-    if (await probe(inst.server)) return inst.server;
-  }
-  return null;
+  return (await findRunningInstance(workspace, probe))?.server ?? null;
 }

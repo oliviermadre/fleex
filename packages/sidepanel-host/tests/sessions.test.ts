@@ -24,6 +24,19 @@ describe('SessionStore', () => {
     expect(store.get(a.id)!.status).toBe('idle');
   });
 
+  it('stores and surfaces a per-conversation model', () => {
+    const store = new SessionStore(dir);
+    const s = store.create({ model: 'claude-haiku-4-5' });
+    expect(store.get(s.id)!.model).toBe('claude-haiku-4-5');
+    expect(store.list()[0]!.model).toBe('claude-haiku-4-5');
+    // A session with no model omits the field (host default applies).
+    const plain = store.create({});
+    expect(store.get(plain.id)!.model).toBeUndefined();
+    expect(store.list().find((x) => x.id === plain.id)!.model).toBeUndefined();
+    // Survives a reload.
+    expect(new SessionStore(dir).get(s.id)!.model).toBe('claude-haiku-4-5');
+  });
+
   it('renames and deletes', () => {
     const store = new SessionStore(dir);
     const s = store.create();

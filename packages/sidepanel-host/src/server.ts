@@ -23,13 +23,49 @@ import type { ExecOptions } from '@fleex/mcp';
 import { runAssistant, type AssistantEvent } from './assistant.ts';
 import { toAnthropicTools } from './tools.ts';
 import { createClient, createLlm, createExec, DEFAULT_MODEL } from './anthropic.ts';
+import { FALLBACK_MODELS } from '@fleex/shared';
 import { buildSystemPrompt, formatPageContext } from './system-prompt.ts';
 import { listWorkspaces, resolveWorkspace } from './workspaces.ts';
 import { SessionStore, type TranscriptItem } from './sessions.ts';
-import { findWorkspaceServerPort } from './instance-discovery.ts';
+import {
+  findRunningInstance,
+  findWorkspaceServerPort,
+  instanceBranch,
+} from './instance-discovery.ts';
 
 interface PageRef { url?: string; title?: string; content: string }
 interface WsData { id: string }
+
+interface ThemeConfig { activeThemeId: string | null; customThemes: unknown[] }
+
+/** Read a live workspace server's theme config (activeThemeId + customThemes). */
+async function fetchThemeConfig(serverPort: number): Promise<ThemeConfig> {
+  try {
+    const r = await fetch(`http://127.0.0.1:${serverPort}/api/config`, { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) return { activeThemeId: null, customThemes: [] };
+    const cfg = (await r.json()) as { activeThemeId?: string; customThemes?: unknown[] };
+    return { activeThemeId: cfg.activeThemeId ?? null, customThemes: cfg.customThemes ?? [] };
+  } catch {
+    return { activeThemeId: null, customThemes: [] };
+  }
+}
+
+/**
+ * Enrich each configured workspace with its live instance's branch and theme
+ * config, so the side panel can color each picker dot with the workspace's own
+ * accent and show which branch is running. Workspaces with no live instance
+ * come back with branch/activeThemeId null. Probed in parallel.
+ */
+async function listWorkspacesEnriched() {
+  return Promise.all(
+    listWorkspaces().map(async (w) => {
+      const inst = await findRunningInstance(w.name);
+      if (!inst) return { ...w, branch: null, activeThemeId: null, customThemes: [] };
+      const theme = await fetchThemeConfig(inst.server);
+      return { ...w, branch: instanceBranch(inst.slug), ...theme };
+    }),
+  );
+}
 
 /** Events streamed to the client: assistant events plus a server-level error. */
 type ServerEvent = AssistantEvent | { type: 'error'; message: string };
@@ -37,11 +73,11 @@ type ServerEvent = AssistantEvent | { type: 'error'; message: string };
 const PORT = Number(process.env.FLEEX_SIDEPANEL_PORT ?? 4399);
 const MODEL = process.env.FLEEX_SIDEPANEL_MODEL ?? DEFAULT_MODEL;
 
-// Shared, built once.
+// Shared, built once. The llm is built per-turn from the session's model
+// (see handleUserTurn), so a conversation can pick its own Anthropic model.
 const tools = generateTools(await buildProgram());
 const anthropicTools = toAnthropicTools(tools);
 const client = createClient();
-const llm = createLlm(client, MODEL);
 const store = new SessionStore();
 
 const baseExecOpts: ExecOptions = {
@@ -104,6 +140,8 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
   // A session with no explicit workspace resolves to the configured default,
   // so we never fall back to the CLI's ambient (worktree-current) workspace.
   const workspace = resolveWorkspace(session.workspace);
+  // The model is per-conversation; an unset session model uses the host default.
+  const llm = createLlm(client, session.model || MODEL);
 
   store.maybeTitleFrom(sessionId, text);
 
@@ -220,21 +258,19 @@ Bun.serve<WsData>({
         { headers: CORS },
       );
     }
-    if (url.pathname === '/workspaces') return Response.json(listWorkspaces(), { headers: CORS });
+    if (url.pathname === '/workspaces') return Response.json(await listWorkspacesEnriched(), { headers: CORS });
+    if (url.pathname === '/models') {
+      // Canonical model list (shared with the web app). The host default is
+      // marked so the panel can label its "Default" option.
+      return Response.json({ models: FALLBACK_MODELS, default: MODEL }, { headers: CORS });
+    }
     if (url.pathname === '/theme') {
       // Return the selected workspace's configured theme (from its app_config),
       // resolved branch-agnostically against its running server.
       const ws = url.searchParams.get('workspace') ?? undefined;
       const serverPort = await findWorkspaceServerPort(ws);
       if (!serverPort) return Response.json({}, { headers: CORS });
-      try {
-        const r = await fetch(`http://127.0.0.1:${serverPort}/api/config`, { signal: AbortSignal.timeout(2000) });
-        if (!r.ok) return Response.json({}, { headers: CORS });
-        const cfg = (await r.json()) as { activeThemeId?: string; customThemes?: unknown[] };
-        return Response.json({ activeThemeId: cfg.activeThemeId ?? null, customThemes: cfg.customThemes ?? [] }, { headers: CORS });
-      } catch {
-        return Response.json({}, { headers: CORS });
-      }
+      return Response.json(await fetchThemeConfig(serverPort), { headers: CORS });
     }
     if (url.pathname === '/chat') {
       const ok = server.upgrade(req, { data: { id: crypto.randomUUID() } satisfies WsData });
@@ -260,7 +296,7 @@ Bun.serve<WsData>({
           send(ws, { type: 'sessions', sessions: store.list() });
           break;
         case 'new_session': {
-          const s = store.create({ workspace: asString(msg.workspace) });
+          const s = store.create({ workspace: asString(msg.workspace), model: asString(msg.model) });
           broadcastSessions();
           send(ws, { type: 'session_created', id: s.id });
           break;
@@ -294,6 +330,16 @@ Bun.serve<WsData>({
           const s = id ? store.get(id) : undefined;
           if (s) {
             s.workspace = asString(msg.workspace);
+            store.save(s.id);
+            broadcastSessions();
+          }
+          break;
+        }
+        case 'set_model': {
+          const id = asString(msg.id);
+          const s = id ? store.get(id) : undefined;
+          if (s) {
+            s.model = asString(msg.model);
             store.save(s.id);
             broadcastSessions();
           }

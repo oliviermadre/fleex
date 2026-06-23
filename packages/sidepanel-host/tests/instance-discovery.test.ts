@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { listWorkspaceInstances, findWorkspaceServerPort } from '../src/instance-discovery.ts';
+import {
+  listWorkspaceInstances,
+  findWorkspaceServerPort,
+  findRunningInstance,
+  instanceBranch,
+} from '../src/instance-discovery.ts';
 
 let home: string;
 let runDir: string;
@@ -55,5 +60,31 @@ describe('findWorkspaceServerPort', () => {
     mkInstance('sqlite@main', { gateway: 1, server: 55275, web: 3 });
     const got = await findWorkspaceServerPort('sqlite', async () => false);
     expect(got).toBeNull();
+  });
+});
+
+describe('findRunningInstance', () => {
+  it('returns the live instance (slug + server), not just the port', async () => {
+    mkInstance('sqlite@main', { gateway: 1, server: 55275, web: 3 });
+    mkInstance('sqlite@feature', { gateway: 4, server: 55280, web: 6 });
+    const got = await findRunningInstance('sqlite', async (port) => port === 55280);
+    expect(got).toEqual({ slug: 'sqlite@feature', server: 55280 });
+  });
+
+  it('returns null when nothing is listening', async () => {
+    mkInstance('sqlite@main', { gateway: 1, server: 55275, web: 3 });
+    const got = await findRunningInstance('sqlite', async () => false);
+    expect(got).toBeNull();
+  });
+});
+
+describe('instanceBranch', () => {
+  it('extracts the branch portion after the @', () => {
+    expect(instanceBranch('default@main')).toBe('main');
+    expect(instanceBranch('tada@nas-feat-cli-session-cost-tracking')).toBe('nas-feat-cli-session-cost-tracking');
+  });
+
+  it('returns the whole slug when there is no @', () => {
+    expect(instanceBranch('weird-slug')).toBe('weird-slug');
   });
 });

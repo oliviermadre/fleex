@@ -25,6 +25,8 @@ export interface SessionData {
   id: string;
   title: string;
   workspace?: string;
+  /** Anthropic model id for this conversation; falls back to the host default. */
+  model?: string;
   status: SessionStatus;
   createdAt: string;
   messages: Anthropic.MessageParam[];
@@ -36,6 +38,7 @@ export interface SessionSummary {
   id: string;
   title: string;
   workspace?: string;
+  model?: string;
   status: SessionStatus;
   messageCount: number;
   createdAt: string;
@@ -57,6 +60,7 @@ export function toSummary(s: SessionData): SessionSummary {
     id: s.id,
     title: s.title,
     ...(s.workspace ? { workspace: s.workspace } : {}),
+    ...(s.model ? { model: s.model } : {}),
     status: s.status,
     messageCount: messageCount(s),
     createdAt: s.createdAt,
@@ -123,11 +127,12 @@ export class SessionStore {
       .map(toSummary);
   }
 
-  create(opts: { workspace?: string; title?: string } = {}): SessionData {
+  create(opts: { workspace?: string; title?: string; model?: string } = {}): SessionData {
     const s: SessionData = {
       id: randomUUID(),
       title: opts.title?.trim() || DEFAULT_TITLE,
       ...(opts.workspace ? { workspace: opts.workspace } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
       status: 'idle',
       createdAt: new Date().toISOString(),
       messages: [],
