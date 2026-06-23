@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { c, info, statusColor } from '../../../core/colors.ts';
+import { c, info, statusColor, isJsonMode } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
 import { resolveEpicId } from '../_shared.ts';
 
@@ -51,6 +51,8 @@ const def: CommandDef = {
     if (opts.status && !opts.board) {
       tickets = tickets.filter((t) => t.status === opts.status);
     }
+
+    if (isJsonMode()) { process.stdout.write(JSON.stringify(tickets) + '\n'); return; }
 
     if (tickets.length === 0) { info('No tickets found.'); return; }
 

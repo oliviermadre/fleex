@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fleex Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" />
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <div id="app">
+
+      <!-- Left resize handle -->
+      <div id="resize-handle" title="Drag to resize"></div>
+
+      <!-- Header -->
+      <header>
+        <button id="sb-toggle" class="hdr-icon" title="Conversations" aria-label="Conversations">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
+          </svg>
+        </button>
+        <button id="new-conv" class="hdr-icon" title="New conversation" aria-label="New conversation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+          </svg>
+        </button>
+
+        <div class="hdr-brand">
+          <svg class="brand-bolt" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor"/>
+          </svg>
+          <span class="brand-name">fleex<em>.dev</em></span>
+          <span id="status" title="Offline"></span>
+        </div>
+
+        <button id="ws-btn" class="ws-pill" title="Switch workspace" aria-haspopup="true">
+          <span class="ws-dot"></span>
+          <span id="ws-label">default</span>
+        </button>
+      </header>
+
+      <!-- Popovers (hidden by default) -->
+      <div id="ws-popover"    class="popover hidden" role="menu"></div>
+      <div id="model-popover" class="popover hidden" role="menu"></div>
+      <div id="ctx-menu"      class="popover hidden" role="menu"></div>
+
+      <!-- Chat thread -->
+      <main id="thread" aria-live="polite" aria-label="Conversation"></main>
+
+      <!-- Composer -->
+      <footer>
+        <div id="page-chip" class="chip hidden"></div>
+        <div class="composer">
+          <textarea id="input" rows="1" placeholder="Ask about your board, create a ticket…" aria-label="Message"></textarea>
+          <div class="composer-toolbar">
+            <button id="ctx-btn" class="tool-btn" title="Attach…" aria-label="Attach context" aria-haspopup="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </button>
+            <button id="model-btn" class="model-pill" title="Select model" aria-haspopup="true">model</button>
+            <button id="send">Send</button>
+          </div>
+        </div>
+      </footer>
+
+      <!-- Sidebar overlay + panel -->
+      <div id="overlay" class="hidden" aria-hidden="true"></div>
+      <aside id="sidebar" class="hidden" aria-label="Conversations">
+        <div class="sb-head">
+          <strong>Conversations</strong>
+          <button id="new-sb" class="sb-icon" title="New conversation" aria-label="New conversation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+            </svg>
+          </button>
+          <button id="sb-close" class="sb-icon" title="Close" aria-label="Close sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+            </svg>
+          </button>
+        </div>
+        <input id="sb-search" type="search" placeholder="Search conversations…" autocomplete="off" />
+        <div id="sb-filter" class="segmented">
+          <button class="seg active" data-filter="all">All</button>
+        </div>
+        <ul id="sessions"></ul>
+      </aside>
+
+      <!-- Toast notification -->
+      <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    </div>
+
+    <script src="themes.js"></script>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

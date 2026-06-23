@@ -16,6 +16,7 @@ import { SERVICES, allocatePorts, writePorts } from '../../core/ports.ts';
 import { isRunning, savePid, waitForService } from '../../core/process.ts';
 import { runStatus } from '../status/_impl.ts';
 import { launchDesktop } from '../desktop/_impl.ts';
+import { ensureCompanion } from '../companion/start/_impl.ts';
 import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
 
 export interface StartOptions {
@@ -164,6 +165,11 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   process.stdout.write(`  ${c.cyan('web'.padEnd(10))} ${`http://localhost:${ports.web}`.padEnd(30)} ${c.dim(logFile('web', ctx))}\n`);
   process.stdout.write('\n');
   info(`Use ${c.bold('fleex status')} to check, ${c.bold('fleex stop')} to shut down.`);
+
+  // Bring up the side-panel companion (backs the Chrome extension). Idempotent
+  // and machine-wide: one process serves every instance/workspace, so repeated
+  // `fleex start`s reuse the same healthy companion rather than spawning more.
+  await ensureCompanion({ quiet: true });
 
   if (opts.desktop) {
     await launchDesktop({ web: ports.web });

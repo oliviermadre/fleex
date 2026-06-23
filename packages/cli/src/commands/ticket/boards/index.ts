@@ -1,5 +1,5 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { c, info } from '../../../core/colors.ts';
+import { c, info, isJsonMode } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
 
 interface Board {
@@ -16,6 +16,7 @@ const def: CommandDef = {
   action: async () => {
     const base = apiBase();
     const boards = await apiGet<Board[]>(`${base}/api/boards`);
+    if (isJsonMode()) { process.stdout.write(JSON.stringify(boards) + '\n'); return; }
     if (boards.length === 0) {
       info('No boards found.');
       return;

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0f0f1a"/>
+    </linearGradient>
+  </defs>
+  <!-- Brand dark rounded square (slight inset for a transparent margin) -->
+  <rect x="32" y="32" width="960" height="960" rx="208" fill="url(#bg)"/>
+  <!-- Fleex lightning bolt — exact titlebar path (24×24), scaled & centered -->
+  <path transform="translate(174,200) scale(26)" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="#6ee7b7"/>
+</svg>
