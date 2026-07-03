@@ -1172,6 +1172,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputTokens: sdkOutputTokens,
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
+        commentId: resultCommentId,
+        deliverableId: resultDeliverableId,
       });
       this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'completed', abortController });
       this.onExecutionComplete?.(persona.id, 'completed', mention.id);
@@ -1501,6 +1503,11 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         return { structuredOutput: structured as Record<string, unknown> | null, rawText: resultText, executionId };
       }
 
+      // Track the artifacts this skill run produced so the execution row can link
+      // to them (parity with the persona path) — no `agentName` pattern-matching.
+      let resultCommentId: string | undefined;
+      let resultDeliverableId: string | undefined;
+
       if (structured) {
         if (structured.comment) {
           const { comment, createdMentions } = await this.postComment.execute({
@@ -1511,6 +1518,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
             parentId: announceComment.id,
             humanMentionNames: humanName ? [humanName] : [],
           });
+          resultCommentId = comment.id;
 
           if (this.eventBus) {
             this.eventBus.emit({
@@ -1558,6 +1566,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
               content: structured.deliverable.markdown,
               status: structured.deliverable.status,
             });
+            resultDeliverableId = deliverable.id;
 
             this.eventBus?.emit({
               type: 'deliverable.created',
@@ -1584,6 +1593,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           parentId: announceComment.id,
           humanMentionNames: humanName ? [humanName] : [],
         });
+        resultCommentId = comment.id;
 
         if (this.eventBus) {
           this.eventBus.emit({
@@ -1607,6 +1617,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         outputTokens: sdkOutputTokens,
         cacheReadTokens: sdkCacheReadTokens,
         cacheCreationTokens: sdkCacheCreationTokens,
+        commentId: resultCommentId,
+        deliverableId: resultDeliverableId,
       });
       this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'completed', abortController });
       this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);

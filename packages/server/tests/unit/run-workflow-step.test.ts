@@ -20,6 +20,7 @@ const makeRun = () => WorkflowRunEntity.create({
 const makeArtifactStubs = () => ({
   submitDeliverable: { execute: vi.fn().mockResolvedValue({ id: 'd-1' }) },
   postComment: { execute: vi.fn().mockResolvedValue({ comment: { id: 'c-1' }, createdMentions: [] }) },
+  agentEventStore: { setExecutionOutputs: vi.fn() },
 });
 
 describe('RunWorkflowStepUseCase', () => {
@@ -47,6 +48,7 @@ describe('RunWorkflowStepUseCase', () => {
       },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
@@ -81,6 +83,7 @@ describe('RunWorkflowStepUseCase', () => {
       executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
@@ -91,6 +94,71 @@ describe('RunWorkflowStepUseCase', () => {
     expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
       type: 'deliverable.created', deliverableId: 'd-1', ticketId: 't-1', status: 'final',
     }));
+  });
+
+  // WHY: the read-side (Comments tab deliverable chips + inline Human Gate card)
+  // derives artifacts from an explicit execution→comment/deliverable FK instead of
+  // pattern-matching on agentName. The orchestrator MUST stamp that FK with the
+  // ids it just produced; if it stops doing so, chips silently vanish from the UI.
+  it('links the execution to the comment/deliverable it produced via setExecutionOutputs', async () => {
+    const run = makeRun();
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { save: vi.fn(), getLatestForStep: vi.fn().mockResolvedValue(null), getByWorkflowRun: vi.fn().mockResolvedValue([]) };
+    const agentExecutor = { execute: vi.fn().mockResolvedValue({
+      output: {
+        schemaFields: {}, result: 'ok',
+        comment: 'Step done',
+        deliverable: { type: 'report', title: 'T', markdown: '# T', status: 'final' },
+      },
+      executionId: 'exec-1',
+    }) };
+    const orchestrator = { runStep: vi.fn() };
+    const eventBus = { emit: vi.fn() };
+
+    const artifacts = makeArtifactStubs();
+    const uc = new RunWorkflowStepUseCase({
+      runStore: runStore as never, stepRunStore: stepRunStore as never,
+      orchestrator: orchestrator as never, eventBus: eventBus as never,
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
+    });
+
+    await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
+
+    expect(artifacts.agentEventStore.setExecutionOutputs).toHaveBeenCalledWith('exec-1', {
+      commentId: 'c-1', deliverableId: 'd-1',
+    });
+  });
+
+  // WHY: a human_gate step is deterministic and has no execution row, so there is
+  // no FK to stamp. Calling setExecutionOutputs with an undefined executionId would
+  // be a no-op at best and a crash at worst — the orchestrator must skip it.
+  it('does NOT call setExecutionOutputs when the step produced no execution (deterministic step)', async () => {
+    const run = makeRun();
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { save: vi.fn(), getLatestForStep: vi.fn().mockResolvedValue(null), getByWorkflowRun: vi.fn().mockResolvedValue([]) };
+    // No executionId, but the step still emits a comment (e.g. a gate summary).
+    const deterministic = { execute: vi.fn().mockResolvedValue({
+      output: { schemaFields: {}, result: 'ok', comment: 'Gate note' },
+    }) };
+    const orchestrator = { runStep: vi.fn() };
+    const eventBus = { emit: vi.fn() };
+
+    const artifacts = makeArtifactStubs();
+    const uc = new RunWorkflowStepUseCase({
+      runStore: runStore as never, stepRunStore: stepRunStore as never,
+      orchestrator: orchestrator as never, eventBus: eventBus as never,
+      executors: { agent: deterministic as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
+    });
+
+    await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
+
+    expect(artifacts.agentEventStore.setExecutionOutputs).not.toHaveBeenCalled();
   });
 
   it('completes the run when no outgoing edges match', async () => {
@@ -112,6 +180,7 @@ describe('RunWorkflowStepUseCase', () => {
       executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'final' });
@@ -139,6 +208,7 @@ describe('RunWorkflowStepUseCase', () => {
       executors: { agent: {} as never, skill: {} as never, panel: {} as never, human_gate: humanGate as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
@@ -162,6 +232,7 @@ describe('RunWorkflowStepUseCase', () => {
       executors: { agent: failing as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
@@ -194,6 +265,7 @@ describe('RunWorkflowStepUseCase', () => {
       executors: { agent: cancelled as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
@@ -240,6 +312,7 @@ describe('RunWorkflowStepUseCase', () => {
       executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
     });
 
     await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });

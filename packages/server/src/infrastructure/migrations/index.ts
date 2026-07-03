@@ -23,6 +23,7 @@ import migration021 from './migrations/020_supabase_user_kv.js';
 import migration022 from './migrations/021_add_ticket_execution_config.js';
 import migration023 from './migrations/022_add_execution_effort_and_fast.js';
 import migration024 from './migrations/023_add_execution_source.js';
+import migration025 from './migrations/024_add_execution_output_refs.js';
 
 /**
  * Ordered array of all migrations.
@@ -53,4 +54,5 @@ export const allMigrations: Migration[] = [
   migration022,
   migration023,
   migration024,
+  migration025,
 ];

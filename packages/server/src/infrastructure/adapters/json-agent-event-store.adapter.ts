@@ -28,6 +28,8 @@ interface ExecutionIndex {
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
   source?: 'sdk' | 'cli';
+  commentId?: string;
+  deliverableId?: string;
 }
 
 export class JsonAgentEventStore implements AgentEventStorePort {
@@ -100,6 +102,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
+    commentId?: string; deliverableId?: string;
   }): Promise<void> {
     const entry = this.index.find((e) => e.id === executionId);
     if (entry) {
@@ -115,6 +118,17 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       if (metrics?.outputTokens != null) entry.outputTokens = metrics.outputTokens;
       if (metrics?.cacheReadTokens != null) entry.cacheReadTokens = metrics.cacheReadTokens;
       if (metrics?.cacheCreationTokens != null) entry.cacheCreationTokens = metrics.cacheCreationTokens;
+      if (metrics?.commentId != null) entry.commentId = metrics.commentId;
+      if (metrics?.deliverableId != null) entry.deliverableId = metrics.deliverableId;
+      await this.syncIndex();
+    }
+  }
+
+  async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
+    const entry = this.index.find((e) => e.id === executionId);
+    if (entry) {
+      if (refs.commentId != null) entry.commentId = refs.commentId;
+      if (refs.deliverableId != null) entry.deliverableId = refs.deliverableId;
       await this.syncIndex();
     }
   }
@@ -247,6 +261,8 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       cacheReadTokens: entry.cacheReadTokens ?? null,
       cacheCreationTokens: entry.cacheCreationTokens ?? null,
       source: entry.source ?? null,
+      commentId: entry.commentId ?? null,
+      deliverableId: entry.deliverableId ?? null,
     };
   }
 

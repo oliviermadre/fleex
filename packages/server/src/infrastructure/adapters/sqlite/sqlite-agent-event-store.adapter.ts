@@ -30,6 +30,8 @@ interface ExecutionRow {
   cache_read_tokens: number | null;
   cache_creation_tokens: number | null;
   source: string | null;
+  comment_id: string | null;
+  deliverable_id: string | null;
 }
 
 export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
@@ -83,6 +85,7 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
+    commentId?: string; deliverableId?: string;
   }): Promise<void> {
     this.conn.db.prepare(
       `UPDATE agent_event_executions SET status = ?, completed_at = ?,
@@ -95,7 +98,9 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
        input_tokens = COALESCE(?, input_tokens),
        output_tokens = COALESCE(?, output_tokens),
        cache_read_tokens = COALESCE(?, cache_read_tokens),
-       cache_creation_tokens = COALESCE(?, cache_creation_tokens)
+       cache_creation_tokens = COALESCE(?, cache_creation_tokens),
+       comment_id = COALESCE(?, comment_id),
+       deliverable_id = COALESCE(?, deliverable_id)
        WHERE execution_id = ?`
     ).run(
       status, new Date().toISOString(),
@@ -109,8 +114,19 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
       metrics?.outputTokens ?? null,
       metrics?.cacheReadTokens ?? null,
       metrics?.cacheCreationTokens ?? null,
+      metrics?.commentId ?? null,
+      metrics?.deliverableId ?? null,
       executionId,
     );
+  }
+
+  async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
+    this.conn.db.prepare(
+      `UPDATE agent_event_executions SET
+       comment_id = COALESCE(?, comment_id),
+       deliverable_id = COALESCE(?, deliverable_id)
+       WHERE execution_id = ?`
+    ).run(refs.commentId ?? null, refs.deliverableId ?? null, executionId);
   }
 
   async getEventsByExecution(executionId: string): Promise<AgentEventEntity[]> {
@@ -249,5 +265,7 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     cacheReadTokens: row.cache_read_tokens ?? null,
     cacheCreationTokens: row.cache_creation_tokens ?? null,
     source: (row.source as AgentExecution['source']) ?? null,
+    commentId: row.comment_id ?? null,
+    deliverableId: row.deliverable_id ?? null,
   };
 }

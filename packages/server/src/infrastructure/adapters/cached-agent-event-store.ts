@@ -88,6 +88,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
+    commentId?: string; deliverableId?: string;
   }): Promise<void> {
     await this.inner.completeExecution(executionId, status, metrics);
     const cached = this.executions.get(executionId);
@@ -106,6 +107,20 @@ export class CachedAgentEventStore implements AgentEventStorePort {
         ...(metrics?.outputTokens != null && { outputTokens: metrics.outputTokens }),
         ...(metrics?.cacheReadTokens != null && { cacheReadTokens: metrics.cacheReadTokens }),
         ...(metrics?.cacheCreationTokens != null && { cacheCreationTokens: metrics.cacheCreationTokens }),
+        ...(metrics?.commentId != null && { commentId: metrics.commentId }),
+        ...(metrics?.deliverableId != null && { deliverableId: metrics.deliverableId }),
+      });
+    }
+  }
+
+  async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
+    await this.inner.setExecutionOutputs(executionId, refs);
+    const cached = this.executions.get(executionId);
+    if (cached) {
+      this.executions.set(executionId, {
+        ...cached,
+        ...(refs.commentId != null && { commentId: refs.commentId }),
+        ...(refs.deliverableId != null && { deliverableId: refs.deliverableId }),
       });
     }
   }

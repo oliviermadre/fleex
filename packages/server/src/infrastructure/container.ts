@@ -416,6 +416,7 @@ export async function createContainer() {
       },
       submitDeliverable,
       postComment,
+      agentEventStore: agentEventStore_,
     });
 
     workflowOrchestrator = new WorkflowOrchestrator(runWorkflowStep, logger);
