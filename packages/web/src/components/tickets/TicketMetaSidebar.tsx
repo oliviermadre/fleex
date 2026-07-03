@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { Ticket, TicketLink, TicketStatus, TicketPriority, TicketType, GitHubIssueMetadata, WorktreeSessionGroup } from '@fleex/shared';
-import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS, isSlackImportTag } from '@fleex/shared';
+import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS, isSlackImportTag, isNotionImportTag } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
@@ -344,8 +344,8 @@ function CollapsedTicketMetaSidebar({
           />
         )}
 
-        {/* Tags (excluding reserved Slack-import lifecycle tags) */}
-        {ticket.tags.some((t: string) => !isSlackImportTag(t)) && (
+        {/* Tags (excluding reserved Slack/Notion-import lifecycle tags) */}
+        {ticket.tags.some((t: string) => !isSlackImportTag(t) && !isNotionImportTag(t)) && (
           <CollapsedIndicator
             icon={
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
@@ -353,7 +353,7 @@ function CollapsedTicketMetaSidebar({
                 <circle cx="5" cy="5" r="1" fill="currentColor" />
               </svg>
             }
-            onMouseEnter={(e) => showTooltip(e, 'Tags', ticket.tags.filter((t: string) => !isSlackImportTag(t)).join(', '))}
+            onMouseEnter={(e) => showTooltip(e, 'Tags', ticket.tags.filter((t: string) => !isSlackImportTag(t) && !isNotionImportTag(t)).join(', '))}
             onMouseLeave={hideTooltip}
           />
         )}
@@ -649,7 +649,7 @@ function ExpandedTicketMetaSidebar({
           Tags
         </label>
         <div className="flex flex-wrap gap-1">
-          {ticket.tags.filter((t: string) => !isSlackImportTag(t)).map((tag: string) => (
+          {ticket.tags.filter((t: string) => !isSlackImportTag(t) && !isNotionImportTag(t)).map((tag: string) => (
             <span
               key={tag}
               className="flex items-center gap-1 rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-secondary)]"

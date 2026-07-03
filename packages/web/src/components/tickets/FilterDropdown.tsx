@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { TicketPriority, TicketType } from '@fleex/shared';
-import { TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS, isSlackImportTag } from '@fleex/shared';
+import { TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS, isSlackImportTag, isNotionImportTag } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { PriorityIndicator } from './PriorityIndicator';
@@ -42,8 +42,8 @@ export function FilterDropdown() {
     }
     const tagSet = new Set<string>();
     for (const t of tickets) {
-      // Reserved Slack-import lifecycle tags are status, not user-filterable tags.
-      for (const tag of t.tags) if (!isSlackImportTag(tag)) tagSet.add(tag);
+      // Reserved Slack/Notion-import lifecycle tags are status, not user-filterable tags.
+      for (const tag of t.tags) if (!isSlackImportTag(tag) && !isNotionImportTag(tag)) tagSet.add(tag);
     }
     return { repos: [...repoSet].sort(), tags: [...tagSet].sort() };
   }, [tickets, resolvedRepositories]);
