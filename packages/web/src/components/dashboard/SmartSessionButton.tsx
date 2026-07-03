@@ -10,6 +10,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { useToastStore } from '../../stores/toastStore';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { cn } from '../../lib/cn';
 
@@ -20,7 +21,12 @@ interface SmartSessionButtonProps {
   disabled?: boolean;
   size?: 'sm' | 'md';
   ticketId?: string;
-  onExecuteSkill?: (skillId: string) => void;
+  /**
+   * Launch a skill. May return a promise so the button can await it, show a
+   * transient "Launching…" state, and surface success/error toasts. Call sites
+   * MUST NOT swallow the rejection (no `.catch`) — the button handles feedback.
+   */
+  onExecuteSkill?: (skillId: string) => void | Promise<unknown>;
   /** Always show the dropdown menu on click, even with 0-1 sessions and no skills. */
   alwaysShowMenu?: boolean;
 }
@@ -226,8 +232,11 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const skills = useSkillStore((s) => s.skills);
+  const addToast = useToastStore((s) => s.addToast);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [internalCreating, setInternalCreating] = useState(false);
+  // Transient acknowledgement while a workflow/skill launch is in flight.
+  const [launching, setLaunching] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const portalRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -291,16 +300,38 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   };
 
   const handleExecuteSkill = onExecuteSkill
-    ? (skillId: string) => {
-        onExecuteSkill(skillId);
+    ? async (skillId: string) => {
         setDropdownOpen(false);
+        const skill = enabledSkills.find((s) => s.id === skillId);
+        const label = skill ? `/${skill.commandName}` : 'skill';
+        setLaunching(true);
+        try {
+          await onExecuteSkill(skillId);
+          addToast('success', `🧩 Skill ${label} lancé`);
+        } catch (err) {
+          console.error('Failed to execute skill:', err);
+          addToast('error', `Échec du lancement du skill ${label}`);
+        } finally {
+          setLaunching(false);
+        }
       }
     : undefined;
 
   const handleStartWorkflow = ticketId
-    ? (templateId: string) => {
-        void startRun(ticketId, templateId).catch((err) => console.error('Failed to start workflow:', err));
+    ? async (templateId: string) => {
         setDropdownOpen(false);
+        const template = enabledTemplates.find((t) => t.id === templateId);
+        const name = template?.name ?? 'workflow';
+        setLaunching(true);
+        try {
+          await startRun(ticketId, templateId);
+          addToast('success', `🚦 Workflow "${name}" lancé`);
+        } catch (err) {
+          console.error('Failed to start workflow:', err);
+          addToast('error', `Échec du lancement du workflow "${name}"`);
+        } finally {
+          setLaunching(false);
+        }
       }
     : undefined;
 
@@ -318,6 +349,21 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
     );
 
   const hasSkills = (enabledSkills.length > 0 && !!ticketId && !!onExecuteSkill) || (enabledTemplates.length > 0 && !!ticketId);
+
+  // ── Transient state: a workflow/skill launch is in flight ──
+  // Reuses the "creating" spinner pattern so every surface where the button
+  // appears gives the same immediate acknowledgement that the action started.
+  // The confirmation itself lands as a toast once the promise resolves.
+  if (launching) {
+    return (
+      <div className="relative flex-shrink-0">
+        <button className={cn(shell(statusTheme('working')), 'pointer-events-none')} disabled>
+          <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin motion-reduce:animate-none" />
+          <span className="whitespace-nowrap">Launching…</span>
+        </button>
+      </div>
+    );
+  }
 
   // ── State 1: No sessions — "Start" ──
   if (sessions.length === 0 && !alwaysShowMenu) {

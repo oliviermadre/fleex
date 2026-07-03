@@ -323,7 +323,7 @@ export function KanbanCard({
             <SmartSessionButton
               sessions={ticketSessions}
               ticketId={ticket.id}
-              onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
+              onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
             />
           </div>
         </div>

@@ -222,7 +222,7 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
               ticketId={ticket?.id}
               onExecuteSkill={
                 ticket
-                  ? (skillId) => api.executeSkill(skillId, ticket.id).catch(console.error)
+                  ? (skillId) => api.executeSkill(skillId, ticket.id)
                   : undefined
               }
               alwaysShowMenu

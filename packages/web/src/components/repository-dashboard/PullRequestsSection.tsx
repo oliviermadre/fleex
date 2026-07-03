@@ -154,7 +154,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
             <SmartSessionButton
               sessions={prSessions}
               ticketId={ticket.id}
-              onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
+              onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
               size="sm"
               alwaysShowMenu
             />

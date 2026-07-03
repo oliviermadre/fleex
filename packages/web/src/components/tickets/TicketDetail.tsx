@@ -253,7 +253,7 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
               <SmartSessionButton
                 sessions={ticketSessions}
                 ticketId={ticketId}
-                onExecuteSkill={(skillId) => api.executeSkill(skillId, ticketId).catch(console.error)}
+                onExecuteSkill={(skillId) => api.executeSkill(skillId, ticketId)}
               />
             </div>
           )}
