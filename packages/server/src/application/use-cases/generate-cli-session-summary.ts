@@ -86,7 +86,7 @@ export class GenerateCliSessionSummaryUseCase {
     }
 
     const dateStr = formatSessionDate(new Date());
-    const userPrompt = buildPrompt(turns, dateStr);
+    const userPrompt = buildSessionPrompt(turns, dateStr);
 
     // Call Claude via Agent SDK (same auth as every other agent — no API key).
     let summaryText: string;
@@ -155,15 +155,76 @@ function formatSessionDate(d: Date): string {
   return d.toISOString().slice(0, 16).replace('T', ' ');
 }
 
-/** Render the reconstructed turns into the SDK user prompt. */
-function buildPrompt(turns: TranscriptTurn[], dateStr: string): string {
-  const parts: string[] = [];
-  parts.push('# Claude Code CLI session');
-  parts.push(`Session date (use exactly this value in the header): ${dateStr}`);
-  parts.push('\n## Conversation\n');
-  for (const turn of turns) {
-    parts.push(`**${turn.role === 'user' ? 'User' : 'Assistant'}:**\n${turn.text}\n`);
-  }
+/**
+ * Ceiling on the reconstructed conversation we feed to the model. Haiku's window
+ * is ~200K tokens (~3-4 chars/token); we stay far under so the summary call can
+ * never overflow — the failure mode that silently drops the *longest, most
+ * decision-rich* sessions. These are safety ceilings, not aggressive compression:
+ * once tool/subagent/system noise is stripped, genuine dialogue rarely approaches
+ * them. Values are in characters (cheap to measure, no tokenizer needed).
+ */
+export const MAX_TURN_CHARS = 16_000; // a single verbose turn / pasted blob
+export const MAX_TRANSCRIPT_CHARS = 240_000; // the whole conversation (~60-80K tokens)
+
+/** Render the (budgeted) reconstructed turns into the SDK user prompt. */
+export function buildSessionPrompt(turns: TranscriptTurn[], dateStr: string): string {
+  const { head, tail, elided } = fitToBudget(turns);
+  const render = (t: TranscriptTurn) => `**${t.role === 'user' ? 'User' : 'Assistant'}:**\n${t.text}\n`;
+  const parts: string[] = [
+    '# Claude Code CLI session',
+    `Session date (use exactly this value in the header): ${dateStr}`,
+    '\n## Conversation\n',
+  ];
+  for (const turn of head) parts.push(render(turn));
+  if (elided > 0) parts.push(`\n_[… ${elided} intermediate turn(s) elided to fit the summary budget …]_\n`);
+  for (const turn of tail) parts.push(render(turn));
   parts.push(`\n---\nWrite the CLI session summary now, or output ${SKIP_SENTINEL} if it is not worth persisting.`);
   return parts.join('\n');
+}
+
+/**
+ * Keep the conversation within {@link MAX_TRANSCRIPT_CHARS}. Each turn is first
+ * capped ({@link truncateTurnText}); if the total still overflows we keep turns
+ * from the start (the ask + initial plan) and from the end (final decisions +
+ * outcome) — the two highest-signal regions for a decision summary — and report
+ * how many middle turns were elided so the prompt can flag the gap.
+ */
+function fitToBudget(turns: TranscriptTurn[]): { head: TranscriptTurn[]; tail: TranscriptTurn[]; elided: number } {
+  const capped = turns.map((t): TranscriptTurn => ({ role: t.role, text: truncateTurnText(t.text) }));
+  const total = capped.reduce((n, t) => n + t.text.length, 0);
+  if (total <= MAX_TRANSCRIPT_CHARS) return { head: capped, tail: [], elided: 0 };
+
+  const half = Math.floor(MAX_TRANSCRIPT_CHARS / 2);
+  const head: TranscriptTurn[] = [];
+  let headChars = 0;
+  let i = 0;
+  for (; i < capped.length; i++) {
+    const len = capped[i]!.text.length;
+    if (head.length > 0 && headChars + len > half) break;
+    head.push(capped[i]!);
+    headChars += len;
+  }
+  const tail: TranscriptTurn[] = [];
+  let tailChars = 0;
+  let j = capped.length - 1;
+  for (; j >= i; j--) {
+    const len = capped[j]!.text.length;
+    if (tail.length > 0 && tailChars + len > half) break;
+    tail.unshift(capped[j]!);
+    tailChars += len;
+  }
+  return { head, tail, elided: Math.max(j - i + 1, 0) };
+}
+
+/**
+ * Truncate one over-long turn, keeping its head and tail. The ends carry the ask
+ * and the resolution; the middle of a giant paste (a log dump, a huge file) is the
+ * least informative, so that is what we drop.
+ */
+function truncateTurnText(text: string): string {
+  if (text.length <= MAX_TURN_CHARS) return text;
+  const head = Math.ceil(MAX_TURN_CHARS * 0.6);
+  const tail = MAX_TURN_CHARS - head;
+  const omitted = text.length - MAX_TURN_CHARS;
+  return `${text.slice(0, head)}\n\n[… ${omitted.toLocaleString('en-US')} characters truncated …]\n\n${text.slice(text.length - tail)}`;
 }

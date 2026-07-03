@@ -8,7 +8,13 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: vi.fn() }));
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { CLI_SESSION_SUMMARY_TYPE } from '@fleex/shared';
-import { GenerateCliSessionSummaryUseCase } from '../../src/application/use-cases/generate-cli-session-summary.js';
+import {
+  GenerateCliSessionSummaryUseCase,
+  buildSessionPrompt,
+  MAX_TURN_CHARS,
+  MAX_TRANSCRIPT_CHARS,
+} from '../../src/application/use-cases/generate-cli-session-summary.js';
+import type { TranscriptTurn } from '../../src/application/utils/cli-session-ingest.js';
 import { SdkConcurrencyLimiter } from '../../src/application/services/sdk-concurrency-limiter.js';
 import { TicketDeliverableEntity } from '../../src/domain/entities/ticket-deliverable.entity.js';
 import type { DeliverableStorePort } from '../../src/application/ports/deliverable-store.port.js';
@@ -142,5 +148,42 @@ describe('GenerateCliSessionSummaryUseCase', () => {
 
     expect(saved).toHaveLength(2);
     expect(saved.map((d) => d.mentionId).sort()).toEqual(['cli:sessA', 'cli:sessB']);
+  });
+});
+
+describe('buildSessionPrompt (context-overflow guard)', () => {
+  const turn = (role: 'user' | 'assistant', text: string): TranscriptTurn => ({ role, text });
+
+  it('passes short sessions through verbatim (no truncation, no elision)', () => {
+    const prompt = buildSessionPrompt([turn('user', 'Refactor the parser'), turn('assistant', 'Chose A over B.')], '2026-07-03 10:00');
+    expect(prompt).toContain('Refactor the parser');
+    expect(prompt).toContain('Chose A over B.');
+    expect(prompt).not.toContain('truncated');
+    expect(prompt).not.toContain('elided');
+  });
+
+  it('truncates a single over-long turn to head + tail, preserving both ends', () => {
+    const huge = 'HEAD_MARKER' + 'x'.repeat(MAX_TURN_CHARS) + 'TAIL_MARKER';
+    const prompt = buildSessionPrompt([turn('user', 'go'), turn('assistant', huge)], '2026-07-03 10:00');
+
+    expect(prompt).toContain('HEAD_MARKER'); // start of the giant turn kept
+    expect(prompt).toContain('TAIL_MARKER'); // end of the giant turn kept
+    expect(prompt).toContain('characters truncated'); // and the middle dropped
+    expect(prompt.length).toBeLessThan(MAX_TURN_CHARS + 2_000);
+  });
+
+  it('bounds a very long session and keeps the head + tail turns, eliding the middle', () => {
+    // ~40 turns × ~15K chars ≈ 600K chars > MAX_TRANSCRIPT_CHARS (240K).
+    const turns: TranscriptTurn[] = [turn('user', 'FIRST_TURN please refactor')];
+    for (let i = 0; i < 40; i++) turns.push(turn(i % 2 === 0 ? 'assistant' : 'user', `mid ${i} ` + 'y'.repeat(15_000)));
+    turns.push(turn('assistant', 'LAST_TURN done, shipped the fix'));
+
+    const prompt = buildSessionPrompt(turns, '2026-07-03 10:00');
+
+    expect(prompt).toContain('FIRST_TURN'); // opening ask preserved
+    expect(prompt).toContain('LAST_TURN'); // final outcome preserved
+    expect(prompt).toContain('intermediate turn(s) elided'); // middle dropped with a marker
+    // Bounded well under haiku's window (budget + per-turn slack + fixed prompt overhead).
+    expect(prompt.length).toBeLessThan(MAX_TRANSCRIPT_CHARS + 40_000);
   });
 });
