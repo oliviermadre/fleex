@@ -1,5 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect, useCallback } from 'react';
 import type { Session } from '@fleex/shared';
 import { StatusDot } from '../ui/StatusDot';
 import { deriveDisplayStatus, aggregateBranchStatus } from '../../lib/deriveStatus';
@@ -11,7 +10,7 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { useToastStore } from '../../stores/toastStore';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 
 interface SmartSessionButtonProps {
@@ -104,8 +103,9 @@ function DropdownContent({
   onClose,
   creating,
   hasTicketId,
-  anchorRect,
-  portalRef,
+  floatingRef,
+  floatingStyles,
+  floatingProps,
 }: {
   sessions: Session[];
   enabledSkills: { id: string; displayName: string; commandName: string }[];
@@ -117,17 +117,17 @@ function DropdownContent({
   onClose: () => void;
   creating: boolean;
   hasTicketId: boolean;
-  anchorRect?: DOMRect | null;
-  portalRef?: React.Ref<HTMLDivElement>;
+  floatingRef: (node: HTMLElement | null) => void;
+  floatingStyles: React.CSSProperties;
+  floatingProps: Record<string, unknown>;
 }) {
-  const content = (
+  return (
+    <FloatingPortal>
     <div
-      ref={portalRef}
-      className={cn(
-        'z-50 min-w-[220px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl',
-        anchorRect ? 'fixed' : 'absolute right-0 top-full mt-1',
-      )}
-      style={anchorRect ? { left: anchorRect.left, top: anchorRect.bottom + 4 } : undefined}
+      ref={floatingRef}
+      style={floatingStyles}
+      {...floatingProps}
+      className="z-50 min-w-[220px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
     >
       {/* Sessions group */}
       {sessions.length > 0 && (
@@ -223,9 +223,8 @@ function DropdownContent({
         </>
       )}
     </div>
+    </FloatingPortal>
   );
-
-  return anchorRect ? createPortal(content, document.body) : content;
 }
 
 export function SmartSessionButton({ sessions, creating: externalCreating, onCreateSession: externalOnCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill, alwaysShowMenu }: SmartSessionButtonProps) {
@@ -233,25 +232,12 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const skills = useSkillStore((s) => s.skills);
   const addToast = useToastStore((s) => s.addToast);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const { open: dropdownOpen, setOpen: setDropdownOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover();
   const [internalCreating, setInternalCreating] = useState(false);
   // Transient acknowledgement while a workflow/skill launch is in flight.
   const [launching, setLaunching] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const portalRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
 
   const creating = externalCreating || internalCreating;
-
-  const toggleDropdown = useCallback(() => {
-    setDropdownOpen((prev) => {
-      if (!prev && buttonRef.current) {
-        setAnchorRect(buttonRef.current.getBoundingClientRect());
-      }
-      return !prev;
-    });
-  }, []);
 
   const handleCreateSession = useCallback(async () => {
     // An explicit parent handler wins over the ticketId-based floating fallback:
@@ -291,8 +277,6 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   const enabledTemplates = templates.filter((t) => t.enabled);
 
   useEffect(() => { void refreshTemplates(); }, [refreshTemplates]);
-
-  useClickOutside([dropdownRef, portalRef], () => setDropdownOpen(false), dropdownOpen);
 
   const handleOpenFloating = (sessionId: string) => {
     addFloatingSession(sessionId);
@@ -370,14 +354,11 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
     // If we have skills, show dropdown instead of direct action
     if (hasSkills) {
       return (
-        <div className="relative flex-shrink-0" ref={dropdownRef}>
+        <div className="relative flex-shrink-0">
           <button
-            ref={buttonRef}
+            ref={refs.setReference}
             className={cn(shell(OPEN_THEME), (disabled || creating) && 'pointer-events-none opacity-50')}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleDropdown();
-            }}
+            {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
             disabled={disabled || creating}
           >
             {creating ? (
@@ -401,8 +382,9 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
               onClose={() => setDropdownOpen(false)}
               creating={creating}
               hasTicketId={!!ticketId}
-              anchorRect={anchorRect}
-              portalRef={portalRef}
+              floatingRef={refs.setFloating}
+              floatingStyles={floatingStyles}
+              floatingProps={getFloatingProps()}
             />
           )}
         </div>
@@ -451,14 +433,11 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   const aggregated = sessions.length > 0 ? aggregateBranchStatus(sessions) : null;
   const theme = aggregated ? statusTheme(aggregated.status) : OPEN_THEME;
   return (
-    <div className="relative flex-shrink-0" ref={dropdownRef}>
+    <div className="relative flex-shrink-0">
       <button
-        ref={buttonRef}
+        ref={refs.setReference}
         className={shell(theme)}
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleDropdown();
-        }}
+        {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
       >
         {aggregated ? (
           <>
@@ -489,8 +468,9 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
           onClose={() => setDropdownOpen(false)}
           creating={creating}
           hasTicketId={!!ticketId}
-          anchorRect={anchorRect}
-          portalRef={portalRef}
+          floatingRef={refs.setFloating}
+          floatingStyles={floatingStyles}
+          floatingProps={getFloatingProps()}
         />
       )}
     </div>

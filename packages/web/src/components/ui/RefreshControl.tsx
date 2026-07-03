@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { REPO_REFRESH_INTERVALS, REPO_REFRESH_LABELS } from '@fleex/shared';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 
 interface RefreshControlProps {
@@ -32,9 +32,15 @@ export function RefreshControl({
   rateLimitWarning,
   compact = false,
 }: RefreshControlProps) {
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [timeAgo, setTimeAgo] = useState('');
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const {
+    open: dropdownOpen,
+    setOpen: setDropdownOpen,
+    refs,
+    floatingStyles,
+    getReferenceProps,
+    getFloatingProps,
+  } = usePopover({ placement: 'bottom-end' });
 
   useEffect(() => {
     if (!lastRefreshedAt) return;
@@ -45,12 +51,10 @@ export function RefreshControl({
     return () => clearInterval(interval);
   }, [lastRefreshedAt]);
 
-  useClickOutside(dropdownRef, () => setDropdownOpen(false), dropdownOpen);
-
   const handleIntervalSelect = useCallback((ms: number) => {
     onIntervalChange(ms);
     setDropdownOpen(false);
-  }, [onIntervalChange]);
+  }, [onIntervalChange, setDropdownOpen]);
 
   return (
     <div className="flex items-center gap-2">
@@ -88,10 +92,11 @@ export function RefreshControl({
       )}
 
       {/* Auto-refresh dropdown */}
-      <div className="relative" ref={dropdownRef}>
+      <div className="relative">
         <button
+          ref={refs.setReference}
           className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-secondary)]"
-          onClick={() => setDropdownOpen(!dropdownOpen)}
+          {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
         >
           {refreshIntervalMs > 0
             ? REPO_REFRESH_LABELS[refreshIntervalMs] ?? `${refreshIntervalMs / 1000}s`
@@ -102,25 +107,32 @@ export function RefreshControl({
         </button>
 
         {dropdownOpen && (
-          <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
-            {REPO_REFRESH_INTERVALS.map((ms: number) => (
-              <button
-                key={ms}
-                className={cn(
-                  'flex w-full items-center justify-between px-3 py-1.5 text-xs transition-colors hover:bg-[var(--theme-bg-overlay)]',
-                  ms === refreshIntervalMs ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)]',
-                )}
-                onClick={() => handleIntervalSelect(ms)}
-              >
-                <span>{REPO_REFRESH_LABELS[ms]}</span>
-                {ms === refreshIntervalMs && (
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                    <path d="M1.5 5.5l2.5 2.5 5-5" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                  </svg>
-                )}
-              </button>
-            ))}
-          </div>
+          <FloatingPortal>
+            <div
+              ref={refs.setFloating}
+              style={floatingStyles}
+              {...getFloatingProps()}
+              className="z-50 min-w-[120px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
+            >
+              {REPO_REFRESH_INTERVALS.map((ms: number) => (
+                <button
+                  key={ms}
+                  className={cn(
+                    'flex w-full items-center justify-between px-3 py-1.5 text-xs transition-colors hover:bg-[var(--theme-bg-overlay)]',
+                    ms === refreshIntervalMs ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-secondary)]',
+                  )}
+                  onClick={() => handleIntervalSelect(ms)}
+                >
+                  <span>{REPO_REFRESH_LABELS[ms]}</span>
+                  {ms === refreshIntervalMs && (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                      <path d="M1.5 5.5l2.5 2.5 5-5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          </FloatingPortal>
         )}
       </div>
 

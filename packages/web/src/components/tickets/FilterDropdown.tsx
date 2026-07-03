@@ -1,12 +1,11 @@
-import { useState, useRef, useMemo } from 'react';
-import { createPortal } from 'react-dom';
+import { useMemo } from 'react';
 import type { TicketPriority, TicketType } from '@fleex/shared';
 import { TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS, isSlackImportTag } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { PriorityIndicator } from './PriorityIndicator';
 import { TYPE_ICONS } from './TicketTypeBadge';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 
 export function FilterDropdown() {
@@ -16,9 +15,10 @@ export function FilterDropdown() {
   const clearFilters = useTicketStore((s) => s.clearFilters);
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
 
-  const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const { open, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({
+    placement: 'bottom-end',
+    role: 'dialog',
+  });
 
   const activeFilterCount =
     (filters.repo ? 1 : 0) +
@@ -48,14 +48,10 @@ export function FilterDropdown() {
     return { repos: [...repoSet].sort(), tags: [...tagSet].sort() };
   }, [tickets, resolvedRepositories]);
 
-  useClickOutside([buttonRef, menuRef], () => setOpen(false), open);
-
-  const rect = buttonRef.current?.getBoundingClientRect();
-
   return (
     <>
       <button
-        ref={buttonRef}
+        ref={refs.setReference}
         className={cn(
           'relative flex h-8 w-8 items-center justify-center rounded-md transition-colors',
           activeFilterCount > 0
@@ -63,7 +59,7 @@ export function FilterDropdown() {
             : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
           open && 'bg-[var(--theme-bg-hover)]',
         )}
-        onClick={() => setOpen(!open)}
+        {...getReferenceProps()}
         title="Filter tickets"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -76,11 +72,13 @@ export function FilterDropdown() {
         )}
       </button>
 
-      {open && rect && createPortal(
+      {open && (
+        <FloatingPortal>
         <div
-          ref={menuRef}
-          className="fixed z-50 w-[280px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4 shadow-xl"
-          style={{ right: window.innerWidth - rect.right, top: rect.bottom + 4 }}
+          ref={refs.setFloating}
+          style={floatingStyles}
+          {...getFloatingProps()}
+          className="z-50 w-[280px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-4 shadow-xl"
         >
           {/* Header */}
           <div className="mb-3 flex items-center justify-between">
@@ -261,8 +259,8 @@ export function FilterDropdown() {
               </button>
             </div>
           </div>
-        </div>,
-        document.body,
+        </div>
+        </FloatingPortal>
       )}
     </>
   );

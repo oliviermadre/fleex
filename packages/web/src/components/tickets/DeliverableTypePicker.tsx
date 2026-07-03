@@ -1,10 +1,9 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { type ReactNode } from 'react';
 import type { TicketDeliverable } from '@fleex/shared';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useDocumentsStore } from '../../stores/documentsStore';
 import { useToastStore } from '../../stores/toastStore';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
 
@@ -27,13 +26,8 @@ export function DeliverableTypePicker({
 }) {
   const types = useDeliverableTypesStore((s) => s.types);
   const labelFor = useDeliverableTypesStore((s) => s.labelFor);
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover();
 
-  useClickOutside([triggerRef, menuRef], () => setOpen(false), open);
-
-  const rect = triggerRef.current?.getBoundingClientRect();
   const selectable = types.filter((t) => !t.system);
 
   const select = async (typeId: string) => {
@@ -54,49 +48,48 @@ export function DeliverableTypePicker({
   return (
     <>
       <button
-        ref={triggerRef}
+        ref={refs.setReference}
         type="button"
         className="cursor-pointer rounded transition-opacity hover:opacity-70 focus:outline-none"
         title="Click to change type"
         onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((prev) => !prev);
-        }}
+        {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
       >
         {children}
       </button>
 
-      {open && rect && createPortal(
-        <div
-          ref={menuRef}
-          className="fixed z-[1000] max-h-[60vh] min-w-[240px] overflow-y-auto rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
-          style={{ left: rect.left, top: rect.bottom + 4 }}
-        >
-          {selectable.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={cn(
-                'flex w-full flex-col gap-0.5 px-3 py-1.5 text-left transition-colors hover:bg-[var(--theme-bg-hover)]',
-                t.id === deliverable.type ? 'bg-[var(--theme-bg-hover)]' : '',
-              )}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); select(t.id); }}
-            >
-              <span
-                className="text-xs font-medium"
-                style={{ color: t.color?.text ?? 'var(--theme-accent)' }}
+      {open && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            {...getFloatingProps()}
+            className="z-[1000] min-w-[240px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
+          >
+            {selectable.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={cn(
+                  'flex w-full flex-col gap-0.5 px-3 py-1.5 text-left transition-colors hover:bg-[var(--theme-bg-hover)]',
+                  t.id === deliverable.type ? 'bg-[var(--theme-bg-hover)]' : '',
+                )}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); select(t.id); }}
               >
-                {t.label}
-              </span>
-              {t.description && (
-                <span className="text-[10px] text-[var(--theme-text-faint)]">{t.description}</span>
-              )}
-            </button>
-          ))}
-        </div>,
-        document.body,
+                <span
+                  className="text-xs font-medium"
+                  style={{ color: t.color?.text ?? 'var(--theme-accent)' }}
+                >
+                  {t.label}
+                </span>
+                {t.description && (
+                  <span className="text-[10px] text-[var(--theme-text-faint)]">{t.description}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </FloatingPortal>
       )}
     </>
   );

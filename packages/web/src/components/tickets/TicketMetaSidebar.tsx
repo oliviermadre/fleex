@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { Ticket, TicketLink, TicketStatus, TicketPriority, TicketType, GitHubIssueMetadata, WorktreeSessionGroup } from '@fleex/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS, isSlackImportTag } from '@fleex/shared';
@@ -8,7 +7,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { usePopover, useTooltip, FloatingPortal } from '../../hooks/usePopover';
 
 import * as api from '../../services/api';
 import { PriorityIndicator } from './PriorityIndicator';
@@ -23,41 +22,48 @@ import { cn } from '../../lib/cn';
 interface TooltipData {
   label: string;
   value: string;
-  top: number;
-  left: number;
 }
 
-function CollapsedMetaTooltip({ data }: { data: TooltipData | null }) {
-  if (!data) return null;
-  return createPortal(
-    <div
-      className="pointer-events-none fixed z-[100]"
-      style={{ top: data.top, right: `calc(100vw - ${data.left}px + 10px)`, transform: 'translateY(-50%)' }}
-    >
-      <div className="whitespace-nowrap rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-3 py-2 shadow-xl">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">{data.label}</div>
-        <div className="text-xs text-[var(--theme-text-primary)]">{data.value}</div>
+type CollapsedMetaTooltipApi = ReturnType<typeof useCollapsedMetaTooltip>;
+
+function CollapsedMetaTooltip({ ctl }: { ctl: CollapsedMetaTooltipApi }) {
+  const { tooltip, refs, floatingStyles, getFloatingProps } = ctl;
+  if (!tooltip) return null;
+  return (
+    <FloatingPortal>
+      <div
+        ref={refs.setFloating}
+        style={floatingStyles}
+        {...getFloatingProps()}
+        className="pointer-events-none z-[100]"
+      >
+        <div className="whitespace-nowrap rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-3 py-2 shadow-xl">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">{tooltip.label}</div>
+          <div className="text-xs text-[var(--theme-text-primary)]">{tooltip.value}</div>
+        </div>
       </div>
-    </div>,
-    document.body,
+    </FloatingPortal>
   );
 }
 
 function useCollapsedMetaTooltip() {
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const hideTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // Positioned to the LEFT of the hovered item; flip/shift keep it on-screen.
+  const { refs, floatingStyles, getFloatingProps } = useTooltip({ placement: 'left' });
 
   const show = useCallback((e: React.MouseEvent, label: string, value: string) => {
     clearTimeout(hideTimeout.current);
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setTooltip({ label, value, top: rect.top + rect.height / 2, left: rect.left });
-  }, []);
+    refs.setPositionReference({ getBoundingClientRect: () => rect });
+    setTooltip({ label, value });
+  }, [refs]);
 
   const hide = useCallback(() => {
     hideTimeout.current = setTimeout(() => setTooltip(null), 80);
   }, []);
 
-  return { tooltip, show, hide } as const;
+  return { tooltip, show, hide, refs, floatingStyles, getFloatingProps } as const;
 }
 
 // ── Type picker dropdown ──
@@ -73,15 +79,15 @@ function TypePickerDropdown({
   value: TicketType | null;
   onChange: (type: TicketType | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useClickOutside(ref, () => setOpen(false), open);
+  const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({
+    placement: 'bottom-start',
+  });
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        ref={refs.setReference}
+        {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
         className={cn(
           'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-colors',
           'border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] hover:bg-[var(--theme-bg-hover)]',
@@ -102,34 +108,41 @@ function TypePickerDropdown({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[180px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] py-1 shadow-xl">
-          {/* None option */}
-          <button
-            className={cn(
-              'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-              value === null ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-muted)]',
-            )}
-            onClick={() => { onChange(null); setOpen(false); }}
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            {...getFloatingProps()}
+            className="z-50 min-w-[180px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] py-1 shadow-xl"
           >
-            {LABEL_NONE}
-          </button>
-          <div className="my-1 border-t border-[var(--theme-border)]" />
-
-          {/* Types */}
-          {(TICKET_TYPES as readonly string[]).map((t) => (
+            {/* None option */}
             <button
-              key={t}
               className={cn(
                 'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-                value === t ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-primary)]',
+                value === null ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-muted)]',
               )}
-              onClick={() => { onChange(t as TicketType); setOpen(false); }}
+              onClick={() => { onChange(null); setOpen(false); }}
             >
-              <span className="text-xs leading-none">{TYPE_ICONS[t as TicketType]}</span>
-              <span>{TICKET_TYPE_LABELS[t]}</span>
+              {LABEL_NONE}
             </button>
-          ))}
-        </div>
+            <div className="my-1 border-t border-[var(--theme-border)]" />
+
+            {/* Types */}
+            {(TICKET_TYPES as readonly string[]).map((t) => (
+              <button
+                key={t}
+                className={cn(
+                  'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                  value === t ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-primary)]',
+                )}
+                onClick={() => { onChange(t as TicketType); setOpen(false); }}
+              >
+                <span className="text-xs leading-none">{TYPE_ICONS[t as TicketType]}</span>
+                <span>{TICKET_TYPE_LABELS[t]}</span>
+              </button>
+            ))}
+          </div>
+        </FloatingPortal>
       )}
     </div>
   );
@@ -200,7 +213,8 @@ function CollapsedTicketMetaSidebar({
   ticket: Ticket;
 }) {
   const toggleTicketMetaSidebar = useUIStore((s) => s.toggleTicketMetaSidebar);
-  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedMetaTooltip();
+  const tooltipCtl = useCollapsedMetaTooltip();
+  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
 
   const worktreeLink = ticket.links.find((l: TicketLink) => l.type === 'worktree');
   const repoLink = ticket.links.find((l: TicketLink) => l.type === 'repository');
@@ -387,7 +401,7 @@ function CollapsedTicketMetaSidebar({
       </div>
 
 
-      <CollapsedMetaTooltip data={tooltip} />
+      <CollapsedMetaTooltip ctl={tooltipCtl} />
     </div>
   );
 }
@@ -1276,15 +1290,13 @@ function AssigneeField({
   const personas = useAgentPersonaStore((s) => s.personas);
   const loaded = useAgentPersonaStore((s) => s.loaded);
   const loadPersonas = useAgentPersonaStore((s) => s.loadPersonas);
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({
+    placement: 'bottom-start',
+  });
 
   useEffect(() => {
     if (!loaded) loadPersonas();
   }, [loaded, loadPersonas]);
-
-  // Close dropdown on outside click
-  useClickOutside(containerRef, () => setOpen(false), open);
 
   const handleSelect = (name: string | null) => {
     onChange(name);
@@ -1292,18 +1304,19 @@ function AssigneeField({
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
         Assignee
       </label>
       <button
+        ref={refs.setReference}
         className={cn(
           'flex w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors',
           assignee
             ? 'border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-hover)]'
             : 'border-dashed border-[var(--theme-border)] text-[10px] text-[var(--theme-text-muted)] hover:border-[var(--theme-border-input)] hover:text-[var(--theme-text-secondary)]',
         )}
-        onClick={() => setOpen(!open)}
+        {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
       >
         {assignee ? (
           <>
@@ -1321,7 +1334,13 @@ function AssigneeField({
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            {...getFloatingProps()}
+            className="z-50 min-w-[200px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
+          >
           {/* Unassigned option */}
           <button
             className={cn(
@@ -1393,7 +1412,8 @@ function AssigneeField({
               )}
             </button>
           ))}
-        </div>
+          </div>
+        </FloatingPortal>
       )}
     </div>
   );

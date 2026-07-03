@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useState } from 'react';
 import { DELIVERABLE_RENDERERS, DELIVERABLE_COLOR_PRESETS, type DeliverableRenderer, type DeliverableTypeColor } from '@fleex/shared';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useToastStore } from '../../stores/toastStore';
 import { Button } from '../ui/Button';
@@ -64,24 +64,15 @@ function ColorPicker({
   disabled?: boolean;
   onApply: (color: DeliverableTypeColor | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({
+    gap: 6,
+    role: null,
+  });
   const [pending, setPending] = useState<DeliverableTypeColor | null>(color);
-  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setPending(color);
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) setPos({ top: rect.bottom + 6, left: rect.left });
-    const onDocClick = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (popRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
   }, [open, color]);
 
   if (disabled) {
@@ -93,20 +84,22 @@ function ColorPicker({
   return (
     <>
       <button
-        ref={triggerRef}
+        ref={refs.setReference}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
         title="Change colour"
         className="cursor-pointer rounded transition-opacity hover:opacity-80"
       >
         <BadgePreview label={label} color={color} />
       </button>
 
-      {open && createPortal(
+      {open && (
+        <FloatingPortal>
         <div
-          ref={popRef}
-          className="fixed z-[1000] w-64 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] p-3 shadow-xl"
-          style={{ top: pos.top, left: pos.left }}
+          ref={refs.setFloating}
+          style={floatingStyles}
+          {...getFloatingProps()}
+          className="z-[1000] w-64 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] p-3 shadow-xl"
         >
           {/* Preview */}
           <div className="mb-2 flex items-center gap-2">
@@ -156,8 +149,8 @@ function ColorPicker({
               </button>
             </div>
           </div>
-        </div>,
-        document.body,
+        </div>
+        </FloatingPortal>
       )}
     </>
   );

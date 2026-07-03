@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { TicketMention, MentionStatus, MentionExecutionMode, AgentExecution, TicketWsMessage, MentionExecutionFailedPayload } from '@fleex/shared';
 import { appWs } from '../../services/websocket';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -6,7 +6,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useToastStore } from '../../stores/toastStore';
 import { FloatingExecutionPanel } from './ExecutionModal';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import * as api from '../../services/api';
 
 function relativeTime(dateStr: string): string {
@@ -60,18 +60,18 @@ function StatusDropdown({
   currentStatus: MentionStatus;
   onSelect: (status: MentionStatus) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useClickOutside(ref, () => setOpen(false), open);
+  const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({
+    placement: 'bottom-end',
+  });
 
   const cfg = STATUS_CONFIG[currentStatus]!;
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={refs.setReference}
         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors hover:opacity-80 ${cfg.bg} ${cfg.color}`}
-        onClick={() => setOpen(!open)}
+        {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
         title="Change status"
       >
         <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
@@ -81,26 +81,33 @@ function StatusDropdown({
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
-          {STATUS_ORDER.map((s) => {
-            const sc = STATUS_CONFIG[s]!;
-            return (
-              <button
-                key={s}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-[var(--theme-bg-hover)] ${
-                  s === currentStatus ? 'font-semibold' : ''
-                } ${sc.color}`}
-                onClick={() => {
-                  onSelect(s);
-                  setOpen(false);
-                }}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${sc.dot}`} />
-                {sc.label}
-              </button>
-            );
-          })}
-        </div>
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            {...getFloatingProps()}
+            className="z-20 min-w-[120px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
+          >
+            {STATUS_ORDER.map((s) => {
+              const sc = STATUS_CONFIG[s]!;
+              return (
+                <button
+                  key={s}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors hover:bg-[var(--theme-bg-hover)] ${
+                    s === currentStatus ? 'font-semibold' : ''
+                  } ${sc.color}`}
+                  onClick={() => {
+                    onSelect(s);
+                    setOpen(false);
+                  }}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${sc.dot}`} />
+                  {sc.label}
+                </button>
+              );
+            })}
+          </div>
+        </FloatingPortal>
       )}
     </div>
   );

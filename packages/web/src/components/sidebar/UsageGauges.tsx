@@ -1,6 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import type { ClaudeUsage, ClaudeUsageMetric } from '@fleex/shared';
+import { useTooltip, FloatingPortal } from '../../hooks/usePopover';
 import {
   MS_IN_MINUTE,
   MINUTES_IN_HOUR,
@@ -48,45 +47,26 @@ interface TooltipProps {
 }
 
 function Tooltip({ children, content }: TooltipProps) {
-  const [visible, setVisible] = useState(false);
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
-  const triggerRef = useRef<HTMLDivElement>(null);
-
-  const updatePosition = useCallback(() => {
-    if (!triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    // Position below the trigger, horizontally centered
-    setCoords({
-      top: rect.bottom + 6,
-      left: rect.left + rect.width / 2,
-    });
-  }, []);
-
-  useEffect(() => {
-    if (visible) updatePosition();
-  }, [visible, updatePosition]);
+  const { open, refs, floatingStyles, getReferenceProps, getFloatingProps } = useTooltip({ placement: 'bottom' });
 
   return (
-    <div
-      ref={triggerRef}
-      onMouseEnter={() => setVisible(true)}
-      onMouseLeave={() => setVisible(false)}
-    >
-      {children}
-      {visible && coords && createPortal(
-        <div
-          className="pointer-events-none fixed z-[9999] min-w-[180px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 shadow-lg"
-          style={{
-            top: coords.top,
-            left: coords.left,
-            transform: 'translateX(-50%)',
-          }}
-        >
-          {content}
-        </div>,
-        document.body,
+    <>
+      <div ref={refs.setReference} {...getReferenceProps()}>
+        {children}
+      </div>
+      {open && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            {...getFloatingProps()}
+            className="pointer-events-none z-[9999] min-w-[180px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 shadow-lg"
+          >
+            {content}
+          </div>
+        </FloatingPortal>
       )}
-    </div>
+    </>
   );
 }
 

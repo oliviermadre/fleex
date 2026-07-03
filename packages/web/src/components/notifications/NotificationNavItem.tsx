@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { NotificationCard } from './NotificationCard';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 
 /** Grace period before the hover flyout closes, so the cursor can travel from
  *  the nav item across the small gap into the panel without it vanishing. */
 const CLOSE_DELAY_MS = 150;
-/** Horizontal gap between the sidebar edge and the flyout. */
-const FLYOUT_GAP_PX = 4;
 
 function BellIcon() {
   return (
@@ -35,9 +34,7 @@ export function NotificationNavItem({ collapsed }: { collapsed: boolean }) {
   const closePanel = useNotificationStore((s) => s.closePanel);
   const clear = useNotificationStore((s) => s.clear);
 
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const closeTimer = useRef<number | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   const cancelClose = () => {
     if (closeTimer.current !== null) {
@@ -48,8 +45,6 @@ export function NotificationNavItem({ collapsed }: { collapsed: boolean }) {
 
   const open = useCallback(() => {
     cancelClose();
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) setPos({ top: rect.top, left: rect.right + FLYOUT_GAP_PX });
     openPanel();
   }, [openPanel]);
 
@@ -61,6 +56,18 @@ export function NotificationNavItem({ collapsed }: { collapsed: boolean }) {
     }, CLOSE_DELAY_MS);
   }, [closePanel]);
 
+  // Viewport-aware positioning: flip/shift keep the flyout fully on-screen
+  // even near the bottom edge.
+  const { refs, floatingStyles, getFloatingProps } = usePopover({
+    placement: 'right-start',
+    role: null,
+    enableClick: false,
+    open: panelOpen,
+    onOpenChange: (o) => {
+      if (!o) closePanel();
+    },
+  });
+
   // Clean up a pending timer on unmount.
   useEffect(() => cancelClose, []);
 
@@ -69,7 +76,7 @@ export function NotificationNavItem({ collapsed }: { collapsed: boolean }) {
   return (
     <>
       <button
-        ref={triggerRef}
+        ref={refs.setReference}
         type="button"
         onMouseEnter={open}
         onMouseLeave={scheduleClose}
@@ -117,13 +124,16 @@ export function NotificationNavItem({ collapsed }: { collapsed: boolean }) {
         )}
       </button>
 
-      {panelOpen && pos && (
-        <div
-          onMouseEnter={open}
-          onMouseLeave={scheduleClose}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9998 }}
-          className="flex max-h-[70vh] w-80 max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] shadow-xl"
-        >
+      {panelOpen && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            onMouseEnter={open}
+            onMouseLeave={scheduleClose}
+            style={{ ...floatingStyles, zIndex: 9998 }}
+            {...getFloatingProps()}
+            className="flex max-h-[70vh] w-80 max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] shadow-xl"
+          >
           <div className="flex items-center justify-between border-b border-[var(--theme-border-subtle)] px-3 py-2">
             <span className="text-xs font-semibold text-[var(--theme-text-primary)]">Notifications</span>
             {notifications.length > 0 && (
@@ -158,7 +168,8 @@ export function NotificationNavItem({ collapsed }: { collapsed: boolean }) {
               </div>
             )}
           </div>
-        </div>
+          </div>
+        </FloatingPortal>
       )}
     </>
   );

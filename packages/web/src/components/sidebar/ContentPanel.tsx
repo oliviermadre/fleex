@@ -1,8 +1,8 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { SessionGroup, Session, WorktreeSessionGroup, TicketLink, RepositorySummary } from '@fleex/shared';
 import { TOOLTIP_HIDE_DELAY_MS } from '@fleex/shared';
+import { useTooltip, FloatingPortal } from '../../hooks/usePopover';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -69,45 +69,53 @@ function BranchesContent() {
 
 // ── Shared collapsed infrastructure ──
 
-/** Fixed-position tooltip rendered via portal, outside any overflow container */
+/** Tooltip content rendered to the right of a collapsed sidebar item. */
 interface TooltipData {
   line1: string;
   line2: string;
-  top: number;   // center-Y of the hovered element (viewport coords)
-  right: number; // right edge of the hovered element (viewport coords)
 }
 
-function CollapsedTooltip({ data }: { data: TooltipData | null }) {
-  if (!data) return null;
-  return createPortal(
-    <div
-      className="pointer-events-none fixed z-[100]"
-      style={{ top: data.top, left: data.right + 10, transform: 'translateY(-50%)' }}
-    >
-      <div className="whitespace-nowrap rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-3 py-2 shadow-xl">
-        <div className="text-sm font-bold text-[var(--theme-text-primary)]">{data.line1}</div>
-        <div className="text-xs text-[var(--theme-text-muted)]">{data.line2}</div>
+type CollapsedTooltipApi = ReturnType<typeof useCollapsedTooltip>;
+
+/** Floating-UI positioned tooltip rendered via portal, outside any overflow container */
+function CollapsedTooltip({ ctl }: { ctl: CollapsedTooltipApi }) {
+  const { tooltip, refs, floatingStyles, getFloatingProps } = ctl;
+  if (!tooltip) return null;
+  return (
+    <FloatingPortal>
+      <div
+        ref={refs.setFloating}
+        style={floatingStyles}
+        {...getFloatingProps()}
+        className="pointer-events-none z-[100]"
+      >
+        <div className="whitespace-nowrap rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-3 py-2 shadow-xl">
+          <div className="text-sm font-bold text-[var(--theme-text-primary)]">{tooltip.line1}</div>
+          <div className="text-xs text-[var(--theme-text-muted)]">{tooltip.line2}</div>
+        </div>
       </div>
-    </div>,
-    document.body,
+    </FloatingPortal>
   );
 }
 
 function useCollapsedTooltip() {
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const hideTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // Positioned to the RIGHT of the hovered row; flip/shift keep it on-screen.
+  const { refs, floatingStyles, getFloatingProps } = useTooltip({ placement: 'right' });
 
   const show = useCallback((e: React.MouseEvent, line1: string, line2: string) => {
     clearTimeout(hideTimeout.current);
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setTooltip({ line1, line2, top: rect.top + rect.height / 2, right: rect.right });
-  }, []);
+    refs.setPositionReference({ getBoundingClientRect: () => rect });
+    setTooltip({ line1, line2 });
+  }, [refs]);
 
   const hide = useCallback(() => {
     hideTimeout.current = setTimeout(() => setTooltip(null), TOOLTIP_HIDE_DELAY_MS);
   }, []);
 
-  return { tooltip, show, hide } as const;
+  return { tooltip, show, hide, refs, floatingStyles, getFloatingProps } as const;
 }
 
 /** Expand button — same height as SidebarHeader, shared by all collapsed panels */
@@ -315,7 +323,8 @@ function CollapsedBranchesPanel() {
   const repoOrder = useSettingsStore((s) => s.settings.repoOrder);
   const worktreeOrder = useSettingsStore((s) => s.settings.worktreeOrder);
   const tickets = useTicketStore((s) => s.tickets);
-  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+  const tooltipCtl = useCollapsedTooltip();
+  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
 
   const worktreeHasTicket = useMemo(() => {
     const set = new Set<string>();
@@ -411,7 +420,7 @@ function CollapsedBranchesPanel() {
         <CollapsedSectionDivider />
         {!agenticFlowCollapsed && repoGroups.map((group) => renderWorktrees(group, (wt) => wt.sessions.length === 0 && wt.agentWorktree != null))}
       </div>
-      <CollapsedTooltip data={tooltip} />
+      <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
   );
 }
@@ -425,7 +434,8 @@ function CollapsedRepositoriesPanel() {
   const summaries = useRepositoryDashboardStore((s) => s.summaries);
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const collapsedGroups = useUIStore((s) => s.collapsedGroups);
-  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+  const tooltipCtl = useCollapsedTooltip();
+  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
 
   const orgGroups = useMemo(() => {
     const groups = new Map<string, RepositorySummary[]>();
@@ -478,7 +488,7 @@ function CollapsedRepositoriesPanel() {
           );
         })}
       </div>
-      <CollapsedTooltip data={tooltip} />
+      <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
   );
 }
@@ -502,7 +512,8 @@ function CollapsedTicketsPanel() {
   const selectBoard = useTicketStore((s) => s.selectBoard);
   const ticketsByColumn = useTicketStore((s) => s.ticketsByColumn);
   const filters = useTicketStore((s) => s.filters);
-  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+  const tooltipCtl = useCollapsedTooltip();
+  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
 
   const columns = ticketsByColumn(selectedBoardId);
   const activeFilterCount =
@@ -543,8 +554,6 @@ function CollapsedTicketsPanel() {
               key={status}
               className="flex w-full items-center justify-center gap-1.5 py-1.5"
               onMouseEnter={(e) => {
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                // manual show since we use onMouseEnter on div not button
                 showTooltip(e, status.charAt(0).toUpperCase() + status.slice(1), `${count} ticket${count !== 1 ? 's' : ''}`);
               }}
               onMouseLeave={hideTooltip}
@@ -571,7 +580,7 @@ function CollapsedTicketsPanel() {
           </>
         )}
       </div>
-      <CollapsedTooltip data={tooltip} />
+      <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
   );
 }
@@ -584,7 +593,8 @@ function CollapsedClaudeConfigPanel() {
   const tree = useClaudeConfigStore((s) => s.tree);
   const selectedFile = useClaudeConfigStore((s) => s.selectedFile);
   const selectFile = useClaudeConfigStore((s) => s.selectFile);
-  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+  const tooltipCtl = useCollapsedTooltip();
+  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
 
   // Flatten tree to top-level entries
   const items = useMemo(() => {
@@ -630,7 +640,7 @@ function CollapsedClaudeConfigPanel() {
           );
         })}
       </div>
-      <CollapsedTooltip data={tooltip} />
+      <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
   );
 }
@@ -644,7 +654,8 @@ function CollapsedAgentsPanel() {
   const personas = useAgentPersonaStore((s) => s.personas);
   const selectedPersonaId = useAgentPersonaStore((s) => s.selectedPersonaId);
   const executionStatuses = useAgentPersonaStore((s) => s.executionStatuses);
-  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+  const tooltipCtl = useCollapsedTooltip();
+  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
 
   return (
     <CollapsedShell>
@@ -682,7 +693,7 @@ function CollapsedAgentsPanel() {
           );
         })}
       </div>
-      <CollapsedTooltip data={tooltip} />
+      <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
   );
 }
@@ -696,7 +707,8 @@ function CollapsedScratchpadsPanel() {
   const scratchpadList = useScratchpadStore((s) => s.scratchpadList);
   const selectedScratchpadKey = useScratchpadStore((s) => s.selectedScratchpadKey);
   const collapsedGroups = useUIStore((s) => s.collapsedGroups);
-  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+  const tooltipCtl = useCollapsedTooltip();
+  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
 
   const handleSelect = (key: string) => {
     if (key === '__global__') {
@@ -797,7 +809,7 @@ function CollapsedScratchpadsPanel() {
           </>
         )}
       </div>
-      <CollapsedTooltip data={tooltip} />
+      <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
   );
 }
@@ -825,7 +837,8 @@ const ANALYTICS_TABS: { key: 'audit-trail' | 'statistics'; label: string; icon: 
 function CollapsedAnalyticsPanel() {
   const navigate = useNavigate();
   const analyticsTab = useUIStore((s) => s.analyticsTab);
-  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+  const tooltipCtl = useCollapsedTooltip();
+  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
 
   return (
     <CollapsedShell>
@@ -848,7 +861,7 @@ function CollapsedAnalyticsPanel() {
           );
         })}
       </div>
-      <CollapsedTooltip data={tooltip} />
+      <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
   );
 }
@@ -901,7 +914,8 @@ const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ReactNode }[
 function CollapsedSettingsPanel() {
   const navigate = useNavigate();
   const settingsTab = useUIStore((s) => s.settingsTab);
-  const { tooltip, show: showTooltip, hide: hideTooltip } = useCollapsedTooltip();
+  const tooltipCtl = useCollapsedTooltip();
+  const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
 
   return (
     <CollapsedShell>
@@ -924,7 +938,7 @@ function CollapsedSettingsPanel() {
           );
         })}
       </div>
-      <CollapsedTooltip data={tooltip} />
+      <CollapsedTooltip ctl={tooltipCtl} />
     </CollapsedShell>
   );
 }

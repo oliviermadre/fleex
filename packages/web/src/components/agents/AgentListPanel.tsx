@@ -11,6 +11,7 @@ import { CreatePanelModal } from './CreatePanelModal';
 import { CreateWorkflowModal } from './CreateWorkflowModal';
 import { ModelBadge } from './ModelBadge';
 import { cn } from '../../lib/cn';
+import { useContextMenuPopover, FloatingPortal } from '../../hooks/usePopover';
 
 export function AgentListPanel() {
   const navigate = useNavigate();
@@ -37,7 +38,14 @@ export function AgentListPanel() {
   const [skillModalOpen, setSkillModalOpen] = useState(false);
   const [panelModalOpen, setPanelModalOpen] = useState(false);
   const [workflowModalOpen, setWorkflowModalOpen] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ id: string; kind: 'persona' | 'skill' | 'panel' | 'workflow'; x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ id: string; kind: 'persona' | 'skill' | 'panel' | 'workflow' } | null>(null);
+  const { open: menuOpen, openAt, close: closeMenu, refs: menuRefs, floatingStyles: menuStyles, getFloatingProps: getMenuProps } = useContextMenuPopover();
+
+  const openContextMenu = (e: React.MouseEvent, id: string, kind: 'persona' | 'skill' | 'panel' | 'workflow') => {
+    e.preventDefault();
+    setContextMenu({ id, kind });
+    openAt(e.clientX, e.clientY);
+  };
 
   useEffect(() => {
     if (!panelsLoaded) loadPanels();
@@ -117,10 +125,7 @@ export function AgentListPanel() {
                     : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
                 )}
                 onClick={() => navigate(`/agents/${persona.id}`, { replace: true })}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenu({ id: persona.id, kind: 'persona', x: e.clientX, y: e.clientY });
-                }}
+                onContextMenu={(e) => openContextMenu(e, persona.id, 'persona')}
               >
                 {/* Status dot */}
                 <span
@@ -192,10 +197,7 @@ export function AgentListPanel() {
                   selectSkill(skill.id);
                   navigate(`/agents/skill/${skill.id}`, { replace: true });
                 }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenu({ id: skill.id, kind: 'skill', x: e.clientX, y: e.clientY });
-                }}
+                onContextMenu={(e) => openContextMenu(e, skill.id, 'skill')}
               >
                 <span
                   className={cn(
@@ -264,10 +266,7 @@ export function AgentListPanel() {
                   selectPanel(panel.id);
                   navigate(`/agents/panel/${panel.id}`, { replace: true });
                 }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenu({ id: panel.id, kind: 'panel', x: e.clientX, y: e.clientY });
-                }}
+                onContextMenu={(e) => openContextMenu(e, panel.id, 'panel')}
               >
                 <span
                   className={cn(
@@ -337,10 +336,7 @@ export function AgentListPanel() {
                   selectWorkflow(template.id);
                   navigate(`/agents/workflow/${template.id}`, { replace: true });
                 }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenu({ id: template.id, kind: 'workflow', x: e.clientX, y: e.clientY });
-                }}
+                onContextMenu={(e) => openContextMenu(e, template.id, 'workflow')}
               >
                 <span className="shrink-0 text-base leading-none">{template.emoji}</span>
                 <div className="min-w-0 flex-1">
@@ -364,12 +360,13 @@ export function AgentListPanel() {
       </div>
 
       {/* Context menu */}
-      {contextMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
+      {menuOpen && contextMenu && (
+        <FloatingPortal>
           <div
-            className="fixed z-50 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
+            ref={menuRefs.setFloating}
+            style={menuStyles}
+            {...getMenuProps()}
+            className="z-50 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
           >
             <button
               className="flex w-full items-center gap-2 px-4 py-1.5 text-xs text-red-400 hover:bg-[var(--theme-bg-hover)]"
@@ -383,13 +380,14 @@ export function AgentListPanel() {
                 } else {
                   deletePanelAction(contextMenu.id);
                 }
+                closeMenu();
                 setContextMenu(null);
               }}
             >
               Delete
             </button>
           </div>
-        </>
+        </FloatingPortal>
       )}
 
       <CreateAgentModal open={modalOpen} onClose={() => setModalOpen(false)} />

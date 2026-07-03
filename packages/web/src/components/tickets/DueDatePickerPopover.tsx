@@ -1,8 +1,6 @@
-import { useState, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import type { Ticket } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { DueDateBadge } from './DueDateBadge';
 
 function formatDateInputValue(isoString: string | null): string {
@@ -35,13 +33,9 @@ function getEndOfWeekDateString(): string {
 
 export function DueDatePickerPopover({ ticket }: { ticket: Ticket }) {
   const updateTicket = useTicketStore((s) => s.updateTicket);
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useClickOutside([triggerRef, menuRef], () => setOpen(false), open);
-
-  const rect = triggerRef.current?.getBoundingClientRect();
+  const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({
+    role: 'dialog',
+  });
 
   const handleDateChange = (value: string) => {
     if (value) {
@@ -59,12 +53,9 @@ export function DueDatePickerPopover({ ticket }: { ticket: Ticket }) {
   return (
     <>
       <button
-        ref={triggerRef}
+        ref={refs.setReference}
         className="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors hover:bg-[var(--theme-bg-hover)] text-[var(--theme-text-secondary)]"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((prev) => !prev);
-        }}
+        {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
         title={ticket.dueDate ? 'Changer la due date' : 'Définir une due date'}
       >
         {/* Calendar icon */}
@@ -81,46 +72,48 @@ export function DueDatePickerPopover({ ticket }: { ticket: Ticket }) {
         )}
       </button>
 
-      {open && rect && createPortal(
-        <div
-          ref={menuRef}
-          className="fixed z-50 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 shadow-xl"
-          style={{ left: rect.left, top: rect.bottom + 4 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-            Due date
+      {open && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            {...getFloatingProps()}
+            className="z-50 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+              Due date
+            </div>
+            <div className="mb-2 flex gap-2">
+              <button
+                className="flex-1 rounded-md border border-[var(--theme-border-input)] px-2 py-1.5 text-xs text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+                onClick={() => handleDateChange(getTodayDateString())}
+              >
+                Aujourd'hui
+              </button>
+              <button
+                className="flex-1 rounded-md border border-[var(--theme-border-input)] px-2 py-1.5 text-xs text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+                onClick={() => handleDateChange(getEndOfWeekDateString())}
+              >
+                Ven.
+              </button>
+            </div>
+            <input
+              type="date"
+              className="block w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1.5 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+              value={formatDateInputValue(ticket.dueDate)}
+              onChange={(e) => handleDateChange(e.target.value)}
+            />
+            {ticket.dueDate && (
+              <button
+                className="mt-2 w-full rounded-md px-2 py-1 text-xs text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-danger,#ef4444)]"
+                onClick={handleClear}
+              >
+                Effacer
+              </button>
+            )}
           </div>
-          <div className="mb-2 flex gap-2">
-            <button
-              className="flex-1 rounded-md border border-[var(--theme-border-input)] px-2 py-1.5 text-xs text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-              onClick={() => handleDateChange(getTodayDateString())}
-            >
-              Aujourd'hui
-            </button>
-            <button
-              className="flex-1 rounded-md border border-[var(--theme-border-input)] px-2 py-1.5 text-xs text-[var(--theme-text-primary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-              onClick={() => handleDateChange(getEndOfWeekDateString())}
-            >
-              Ven.
-            </button>
-          </div>
-          <input
-            type="date"
-            className="block w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1.5 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
-            value={formatDateInputValue(ticket.dueDate)}
-            onChange={(e) => handleDateChange(e.target.value)}
-          />
-          {ticket.dueDate && (
-            <button
-              className="mt-2 w-full rounded-md px-2 py-1 text-xs text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-danger,#ef4444)]"
-              onClick={handleClear}
-            >
-              Effacer
-            </button>
-          )}
-        </div>,
-        document.body,
+        </FloatingPortal>
       )}
     </>
   );

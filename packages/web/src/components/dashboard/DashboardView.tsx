@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createPortal } from 'react-dom';
 import type {
   Ticket,
   TicketLink,
@@ -25,7 +24,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { getPrBadgeClasses } from '../../lib/prBadgeStyle';
 import { notifyHookStarted } from '../../lib/hookResultToast';
 import { SmartSessionButton } from './SmartSessionButton';
@@ -334,11 +333,15 @@ function DashboardItemRow({
   onNavigate: (ticket: Ticket) => void;
 }) {
   const navigate = useNavigate();
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
-  const statusMenuRef = useRef<HTMLDivElement>(null);
+  const {
+    open: statusMenuOpen,
+    setOpen: setStatusMenuOpen,
+    refs: statusRefs,
+    floatingStyles: statusFloatingStyles,
+    getReferenceProps: getStatusReferenceProps,
+    getFloatingProps: getStatusFloatingProps,
+  } = usePopover({ placement: 'bottom-start' });
   const updateTicket = useTicketStore.getState().updateTicket;
-
-  useClickOutside(statusMenuRef, () => setStatusMenuOpen(false), statusMenuOpen);
 
   const ghUrl = kind === 'issue'
     ? `https://github.com/${item.org}/${item.name}/issues/${item.number}`
@@ -462,12 +465,13 @@ function DashboardItemRow({
         </span>
         <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--theme-text-muted)]">
           {/* Status chip with dropdown */}
-          <div className="relative" ref={statusMenuRef} onClick={(e) => e.stopPropagation()}>
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
             <span
+              ref={statusRefs.setReference}
               className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
               role="button"
               tabIndex={-1}
-              onClick={() => setStatusMenuOpen(!statusMenuOpen)}
+              {...getStatusReferenceProps({ onClick: (e) => e.stopPropagation() })}
             >
               <span
                 className="inline-block h-1.5 w-1.5 rounded-full"
@@ -479,30 +483,37 @@ function DashboardItemRow({
               {statusLabel}
             </span>
             {statusMenuOpen && (
-              <div className="absolute left-0 top-full z-50 mt-1 min-w-[120px] rounded-lg border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
-                {INLINE_STATUSES.map((s) => (
-                  <button
-                    key={s}
-                    className={cn(
-                      'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-                      ticket.status === s && 'font-semibold text-[var(--theme-accent)]',
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (ticket.status !== s) {
-                        onStatusChange(ticket.id, s);
-                      }
-                      setStatusMenuOpen(false);
-                    }}
-                  >
-                    <span
-                      className="inline-block h-1.5 w-1.5 rounded-full"
-                      style={{ backgroundColor: STATUS_COLOR[s] }}
-                    />
-                    {TICKET_STATUS_LABELS[s] ?? s}
-                  </button>
-                ))}
-              </div>
+              <FloatingPortal>
+                <div
+                  ref={statusRefs.setFloating}
+                  style={statusFloatingStyles}
+                  {...getStatusFloatingProps()}
+                  className="z-50 min-w-[120px] rounded-lg border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
+                >
+                  {INLINE_STATUSES.map((s) => (
+                    <button
+                      key={s}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                        ticket.status === s && 'font-semibold text-[var(--theme-accent)]',
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (ticket.status !== s) {
+                          onStatusChange(ticket.id, s);
+                        }
+                        setStatusMenuOpen(false);
+                      }}
+                    >
+                      <span
+                        className="inline-block h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: STATUS_COLOR[s] }}
+                      />
+                      {TICKET_STATUS_LABELS[s] ?? s}
+                    </button>
+                  ))}
+                </div>
+              </FloatingPortal>
             )}
           </div>
           {board && (
@@ -581,13 +592,22 @@ function SectionToolbar({
   searchQuery: string;
   setSearchQuery: (v: string) => void;
 }) {
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [sortOpen, setSortOpen] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
-  const sortRef = useRef<HTMLDivElement>(null);
-
-  useClickOutside(filterRef, () => setFilterOpen(false), filterOpen);
-  useClickOutside(sortRef, () => setSortOpen(false), sortOpen);
+  const {
+    open: filterOpen,
+    setOpen: setFilterOpen,
+    refs: filterRefs,
+    floatingStyles: filterFloatingStyles,
+    getReferenceProps: getFilterReferenceProps,
+    getFloatingProps: getFilterFloatingProps,
+  } = usePopover({ placement: 'bottom-end' });
+  const {
+    open: sortOpen,
+    setOpen: setSortOpen,
+    refs: sortRefs,
+    floatingStyles: sortFloatingStyles,
+    getReferenceProps: getSortReferenceProps,
+    getFloatingProps: getSortFloatingProps,
+  } = usePopover({ placement: 'bottom-end' });
 
   const isFilterActive = repoFilter !== 'all';
 
@@ -610,8 +630,9 @@ function SectionToolbar({
 
       {/* Filter icon */}
       {repos.length > 1 && (
-        <div className="relative" ref={filterRef}>
+        <div className="relative">
           <button
+            ref={filterRefs.setReference}
             className={cn(
               'relative flex h-6 w-6 items-center justify-center rounded-md transition-colors',
               isFilterActive
@@ -619,12 +640,18 @@ function SectionToolbar({
                 : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
               filterOpen && 'bg-[var(--theme-bg-hover)]',
             )}
-            onClick={() => { setFilterOpen(!filterOpen); setSortOpen(false); }}
+            {...getFilterReferenceProps({ onClick: () => setSortOpen(false) })}
           >
             <FilterIcon />
           </button>
           {filterOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 shadow-xl">
+            <FloatingPortal>
+            <div
+              ref={filterRefs.setFloating}
+              style={filterFloatingStyles}
+              {...getFilterFloatingProps()}
+              className="z-50 min-w-[200px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 shadow-xl"
+            >
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Repository</span>
                 {isFilterActive && (
@@ -664,13 +691,15 @@ function SectionToolbar({
                 ))}
               </div>
             </div>
+            </FloatingPortal>
           )}
         </div>
       )}
 
       {/* Sort icon */}
-      <div className="relative" ref={sortRef}>
+      <div className="relative">
         <button
+          ref={sortRefs.setReference}
           className={cn(
             'flex h-6 w-6 items-center justify-center rounded-md transition-colors',
             sortOrder !== 'recent'
@@ -678,12 +707,18 @@ function SectionToolbar({
               : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
             sortOpen && 'bg-[var(--theme-bg-hover)]',
           )}
-          onClick={() => { setSortOpen(!sortOpen); setFilterOpen(false); }}
+          {...getSortReferenceProps({ onClick: () => setFilterOpen(false) })}
         >
           <SortIcon />
         </button>
         {sortOpen && (
-          <div className="absolute right-0 top-full z-50 mt-1 min-w-[130px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-1.5 shadow-xl">
+          <FloatingPortal>
+          <div
+            ref={sortRefs.setFloating}
+            style={sortFloatingStyles}
+            {...getSortFloatingProps()}
+            className="z-50 min-w-[130px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-1.5 shadow-xl"
+          >
             {([
               { value: 'recent' as const, label: 'Recent' },
               { value: 'oldest' as const, label: 'Ancien' },
@@ -702,6 +737,7 @@ function SectionToolbar({
               </button>
             ))}
           </div>
+          </FloatingPortal>
         )}
       </div>
     </div>
@@ -922,11 +958,14 @@ function SyncToolbar() {
   const setAutoSyncInterval = useDashboardStore((s) => s.setAutoSyncInterval);
   const fetchDash = useDashboardStore((s) => s.fetch);
 
-  const [syncOpen, setSyncOpen] = useState(false);
-  const syncBtnRef = useRef<HTMLButtonElement>(null);
-  const syncMenuRef = useRef<HTMLDivElement>(null);
-
-  useClickOutside([syncBtnRef, syncMenuRef], () => setSyncOpen(false), syncOpen);
+  const {
+    open: syncOpen,
+    setOpen: setSyncOpen,
+    refs: syncRefs,
+    floatingStyles: syncFloatingStyles,
+    getReferenceProps: getSyncReferenceProps,
+    getFloatingProps: getSyncFloatingProps,
+  } = usePopover();
 
   const syncAge = useLiveSyncAge(lastFetchedAt);
   const currentLabel = SYNC_OPTIONS.find((o) => o.ms === autoSyncIntervalMs)?.label ?? 'Disabled';
@@ -940,14 +979,14 @@ function SyncToolbar() {
 
       {/* Auto-sync dropdown */}
       <button
-        ref={syncBtnRef}
+        ref={syncRefs.setReference}
         className={cn(
           'flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors',
           autoSyncIntervalMs > 0
             ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
             : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
         )}
-        onClick={() => setSyncOpen(!syncOpen)}
+        {...getSyncReferenceProps({ onClick: (e) => e.stopPropagation() })}
       >
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="8" cy="8" r="6" />
@@ -956,28 +995,30 @@ function SyncToolbar() {
         {currentLabel}
         <ChevronDownIcon />
       </button>
-      {syncOpen && syncBtnRef.current && createPortal(
-        <div
-          ref={syncMenuRef}
-          className="fixed z-50 min-w-[120px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-1.5 shadow-xl"
-          style={{ left: syncBtnRef.current.getBoundingClientRect().left, top: syncBtnRef.current.getBoundingClientRect().bottom + 4 }}
-        >
-          {SYNC_OPTIONS.map((opt) => (
-            <button
-              key={opt.ms}
-              className={cn(
-                'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-                autoSyncIntervalMs === opt.ms
-                  ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
-                  : 'text-[var(--theme-text-secondary)]',
-              )}
-              onClick={() => { setAutoSyncInterval(opt.ms); setSyncOpen(false); }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>,
-        document.body,
+      {syncOpen && (
+        <FloatingPortal>
+          <div
+            ref={syncRefs.setFloating}
+            style={syncFloatingStyles}
+            {...getSyncFloatingProps()}
+            className="z-50 min-w-[120px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-1.5 shadow-xl"
+          >
+            {SYNC_OPTIONS.map((opt) => (
+              <button
+                key={opt.ms}
+                className={cn(
+                  'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                  autoSyncIntervalMs === opt.ms
+                    ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
+                    : 'text-[var(--theme-text-secondary)]',
+                )}
+                onClick={() => { setAutoSyncInterval(opt.ms); setSyncOpen(false); }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </FloatingPortal>
       )}
 
       {/* Refresh now */}

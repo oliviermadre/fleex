@@ -1,54 +1,77 @@
-import { useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect } from 'react';
 import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { useContextMenuPopover, FloatingPortal } from '../../hooks/usePopover';
 
 export function TreeContextMenu() {
   const contextMenu = useClaudeConfigStore((s) => s.contextMenu);
   const closeContextMenu = useClaudeConfigStore((s) => s.closeContextMenu);
   const startCreate = useClaudeConfigStore((s) => s.startCreate);
   const requestDelete = useClaudeConfigStore((s) => s.requestDelete);
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  useClickOutside(menuRef, closeContextMenu, !!contextMenu);
+  const { open, openAt, close, refs, floatingStyles, getFloatingProps } = useContextMenuPopover();
 
-  if (!contextMenu) return null;
+  // The store owns when the menu should show + at which coordinates; feed those
+  // coords into the virtual reference whenever the store opens the menu.
+  useEffect(() => {
+    if (contextMenu) {
+      openAt(contextMenu.x, contextMenu.y);
+    } else {
+      close();
+    }
+  }, [contextMenu, openAt, close]);
 
-  const { x, y, targetPath, targetIsDir } = contextMenu;
+  // When the popover dismisses itself (outside-click / Escape), clear the store.
+  useEffect(() => {
+    if (!open && contextMenu) {
+      closeContextMenu();
+    }
+  }, [open, contextMenu, closeContextMenu]);
+
+  if (!contextMenu || !open) return null;
+
+  const { targetPath, targetIsDir } = contextMenu;
   const name = targetPath.split('/').pop() ?? targetPath;
 
-  return createPortal(
-    <div
-      ref={menuRef}
-      className="fixed z-50 min-w-[160px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
-      style={{ left: x, top: y }}
-    >
-      {targetIsDir ? (
-        <>
+  const handleAction = (action: () => void) => {
+    action();
+    close();
+    closeContextMenu();
+  };
+
+  return (
+    <FloatingPortal>
+      <div
+        ref={refs.setFloating}
+        style={floatingStyles}
+        {...getFloatingProps()}
+        className="z-50 min-w-[160px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl"
+      >
+        {targetIsDir ? (
+          <>
+            <MenuItem
+              label="New File"
+              onClick={() => handleAction(() => startCreate(targetPath, 'file'))}
+            />
+            <MenuItem
+              label="New Folder"
+              onClick={() => handleAction(() => startCreate(targetPath, 'directory'))}
+            />
+            <div className="my-1 border-t border-[var(--theme-border)]" />
+            <MenuItem
+              label="Delete Folder"
+              danger
+              onClick={() => handleAction(() => requestDelete(targetPath, name, true))}
+            />
+          </>
+        ) : (
           <MenuItem
-            label="New File"
-            onClick={() => startCreate(targetPath, 'file')}
-          />
-          <MenuItem
-            label="New Folder"
-            onClick={() => startCreate(targetPath, 'directory')}
-          />
-          <div className="my-1 border-t border-[var(--theme-border)]" />
-          <MenuItem
-            label="Delete Folder"
+            label="Delete File"
             danger
-            onClick={() => requestDelete(targetPath, name, true)}
+            onClick={() => handleAction(() => requestDelete(targetPath, name, false))}
           />
-        </>
-      ) : (
-        <MenuItem
-          label="Delete File"
-          danger
-          onClick={() => requestDelete(targetPath, name, false)}
-        />
-      )}
-    </div>,
-    document.body,
+        )}
+      </div>
+    </FloatingPortal>
   );
 }
 

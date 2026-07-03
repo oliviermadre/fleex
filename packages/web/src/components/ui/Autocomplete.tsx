@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 
 interface AutocompleteOption {
@@ -31,7 +31,14 @@ export function Autocomplete({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+
+  const { refs, floatingStyles, getFloatingProps } = usePopover({
+    placement: 'bottom-start',
+    role: 'listbox',
+    enableClick: false,
+    open: isOpen,
+    onOpenChange: setIsOpen,
+  });
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? '';
 
@@ -52,9 +59,9 @@ export function Autocomplete({
     return () => clearTimeout(timer);
   }, [autoFocus]);
 
-  // Close on outside click. The input's own onKeyDown keeps handling Escape
-  // (with preventDefault/stopPropagation) so it is intentionally left in place.
-  useClickOutside(containerRef, () => setIsOpen(false), isOpen);
+  // Outside-click / Escape dismissal is handled by usePopover via onOpenChange.
+  // The input's own onKeyDown keeps handling Escape (with preventDefault/
+  // stopPropagation) so it is intentionally left in place.
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -112,8 +119,13 @@ export function Autocomplete({
 
   const displayValue = isOpen ? query : selectedLabel;
 
+  // Match the dropdown width to the input. Read at render so it tracks resize
+  // across re-renders (open toggle, typing).
+  const referenceWidth = refs.reference.current?.getBoundingClientRect?.().width;
+  const listStyles = { ...floatingStyles, width: referenceWidth };
+
   return (
-    <div ref={containerRef} className="relative flex flex-col gap-1">
+    <div ref={refs.setReference} className="relative flex flex-col gap-1">
       {label && (
         <label htmlFor={id} className="text-xs font-medium text-[var(--theme-text-secondary)]">
           {label}
@@ -139,9 +151,12 @@ export function Autocomplete({
         autoComplete="off"
       />
       {isOpen && filtered.length > 0 && (
+        <FloatingPortal>
         <ul
-          ref={listRef}
-          className="absolute top-full left-0 z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
+          ref={(node) => { refs.setFloating(node); listRef.current = node; }}
+          style={listStyles}
+          {...getFloatingProps()}
+          className="z-50 overflow-auto rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
         >
           {filtered.map((option, index) => (
             <li
@@ -162,11 +177,19 @@ export function Autocomplete({
             </li>
           ))}
         </ul>
+        </FloatingPortal>
       )}
       {isOpen && filtered.length === 0 && query && (
-        <div className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-muted)]">
+        <FloatingPortal>
+        <div
+          ref={refs.setFloating}
+          style={listStyles}
+          {...getFloatingProps()}
+          className="z-50 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-muted)]"
+        >
           No matches
         </div>
+        </FloatingPortal>
       )}
     </div>
   );

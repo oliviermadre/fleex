@@ -7,6 +7,7 @@ import type { BoardWithCounts } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { fetchEvents } from '../../services/api';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { EpicProgressBar } from './EpicProgressBar';
@@ -796,7 +797,7 @@ function EpicBoardsPicker({
   onAdd: (boardId: string) => void;
   onRemove: (boardId: string) => void;
 }) {
-  const [showDropdown, setShowDropdown] = useState(false);
+  const { open: showDropdown, setOpen: setShowDropdown, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ placement: 'bottom-start' });
 
   const associatedBoards = boards.filter((b) => group.boardIds.includes(b.id));
   const unassociatedBoards = boards.filter((b) => !group.boardIds.includes(b.id));
@@ -827,27 +828,35 @@ function EpicBoardsPicker({
       {unassociatedBoards.length > 0 && (
         <div className="relative mt-1">
           <button
+            ref={refs.setReference}
             className="text-[10px] text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-accent)]"
-            onClick={() => setShowDropdown((p) => !p)}
+            {...getReferenceProps()}
           >
             + Add board
           </button>
           {showDropdown && (
-            <div className="absolute left-0 top-full z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg">
-              {unassociatedBoards.map((board) => (
-                <button
-                  key={board.id}
-                  className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-                  onClick={() => {
-                    onAdd(board.id);
-                    setShowDropdown(false);
-                  }}
-                >
-                  <span>{board.emoji}</span>
-                  <span className="truncate">{board.name}</span>
-                </button>
-              ))}
-            </div>
+            <FloatingPortal>
+              <div
+                ref={refs.setFloating}
+                style={floatingStyles}
+                {...getFloatingProps()}
+                className="z-[100] min-w-[180px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
+              >
+                {unassociatedBoards.map((board) => (
+                  <button
+                    key={board.id}
+                    className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+                    onClick={() => {
+                      onAdd(board.id);
+                      setShowDropdown(false);
+                    }}
+                  >
+                    <span>{board.emoji}</span>
+                    <span className="truncate">{board.name}</span>
+                  </button>
+                ))}
+              </div>
+            </FloatingPortal>
           )}
         </div>
       )}
