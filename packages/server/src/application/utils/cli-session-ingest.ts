@@ -109,3 +109,53 @@ export async function computeSessionCost(transcriptPath: string): Promise<Sessio
   for (const [m, tok] of modelTokens) if (tok > best) { best = tok; r.model = m; }
   return r;
 }
+
+/** One reconstructed conversation turn (tool-call noise already stripped). */
+export interface TranscriptTurn {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+/**
+ * Reconstruct the human-readable conversation from a Claude transcript JSONL:
+ * the ordered user/assistant *text* turns, with all tool-call machinery
+ * (`tool_use` requests, `tool_result` payloads, thinking blocks, system/summary
+ * lines) discarded. This is what a session summary should reason over — the
+ * decisions and dialogue, not the tool spam.
+ *
+ * Parsing mirrors {@link computeSessionCost}: same JSONL, malformed lines skipped.
+ */
+export async function reconstructTranscript(transcriptPath: string): Promise<TranscriptTurn[]> {
+  const raw = await readFile(transcriptPath, 'utf-8');
+  const turns: TranscriptTurn[] = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    let d: Record<string, unknown>;
+    try { d = JSON.parse(line); } catch { continue; }
+    const type = d['type'];
+    if (type !== 'user' && type !== 'assistant') continue;
+    const msg = d['message'] as Record<string, unknown> | undefined;
+    if (!msg) continue;
+    const text = extractText(msg['content']).trim();
+    if (!text) continue;
+    turns.push({ role: type, text });
+  }
+  return turns;
+}
+
+/** Collect the plain-text content of a message, ignoring non-text blocks. */
+function extractText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  const parts: string[] = [];
+  for (const block of content) {
+    if (
+      block && typeof block === 'object'
+      && (block as { type?: unknown }).type === 'text'
+      && typeof (block as { text?: unknown }).text === 'string'
+    ) {
+      parts.push((block as { text: string }).text);
+    }
+  }
+  return parts.join('\n');
+}

@@ -318,6 +318,14 @@ function preset(key: string): DeliverableTypeColor {
 export const TICKET_SUMMARY_TYPE = 'ticket-summary';
 
 /**
+ * The stable id of the auto-generated per-session summary produced when a manual
+ * Claude *CLI* session ends inside a Fleex worktree. Captures the decisions and
+ * arbitrations made during the session — knowledge that otherwise lives only in
+ * the ephemeral transcript (SDK sessions already persist this via comments).
+ */
+export const CLI_SESSION_SUMMARY_TYPE = 'cli-session-summary';
+
+/**
  * Default preset — mirrors the historically hardcoded behaviour. Used when a
  * workspace has not customised its deliverable types. `html` is kept for
  * backward compatibility with existing deliverables; new workspaces can add
@@ -332,6 +340,7 @@ export const DEFAULT_DELIVERABLE_TYPES: DeliverableTypeDef[] = [
   { id: 'url', label: 'URL', description: 'External link (content should be the URL)', renderer: 'markdown', color: preset('cyan') },
   { id: 'html', label: 'HTML', description: 'Self-contained HTML document (rendered as an iframe embed). The content must be a complete `<!DOCTYPE html>...` string.', renderer: 'html', color: preset('amber') },
   { id: TICKET_SUMMARY_TYPE, label: 'Ticket Summary', description: 'Auto-generated ticket summary (system use only)', renderer: 'markdown', color: preset('rose'), system: true },
+  { id: CLI_SESSION_SUMMARY_TYPE, label: 'CLI Session Summary', description: 'Auto-generated summary of a manual Claude CLI session (system use only)', renderer: 'markdown', color: preset('teal'), system: true },
 ];
 
 /**
