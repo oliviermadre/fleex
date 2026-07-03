@@ -49,7 +49,19 @@ export interface AgentEventStorePort {
     outputTokens?: number;
     cacheReadTokens?: number;
     cacheCreationTokens?: number;
+    /** Comment produced by this run (persona/skill/panel path, known at completion). */
+    commentId?: string;
+    /** Deliverable produced by this run (persona/skill/panel path, known at completion). */
+    deliverableId?: string;
   }): Promise<void>;
+
+  /**
+   * Link an already-completed execution to the artifacts it produced. Used by the
+   * workflow-step path, where the execution completes inside `execute-agent`
+   * (returning only its structured output) and the orchestrator persists the
+   * comment/deliverable afterwards. No-op if `executionId` doesn't exist.
+   */
+  setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void>;
 
   updateSessionId(executionId: string, sdkSessionId: string): Promise<void>;
 

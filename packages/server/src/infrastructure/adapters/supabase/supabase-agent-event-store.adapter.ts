@@ -30,6 +30,8 @@ interface ExecutionRow {
   cache_read_tokens: number | null;
   cache_creation_tokens: number | null;
   source: string | null;
+  comment_id: string | null;
+  deliverable_id: string | null;
 }
 
 export class SupabaseAgentEventStore implements AgentEventStorePort {
@@ -95,6 +97,7 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
+    commentId?: string; deliverableId?: string;
   }): Promise<void> {
     const update: Record<string, unknown> = { status, completed_at: new Date().toISOString() };
     if (metrics?.model) update.model = metrics.model;
@@ -107,11 +110,25 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     if (metrics?.outputTokens != null) update.output_tokens = metrics.outputTokens;
     if (metrics?.cacheReadTokens != null) update.cache_read_tokens = metrics.cacheReadTokens;
     if (metrics?.cacheCreationTokens != null) update.cache_creation_tokens = metrics.cacheCreationTokens;
+    if (metrics?.commentId != null) update.comment_id = metrics.commentId;
+    if (metrics?.deliverableId != null) update.deliverable_id = metrics.deliverableId;
     const { error } = await this.conn.client
       .from('agent_event_executions')
       .update(update)
       .eq('execution_id', executionId);
     if (error) throw new Error(`SupabaseAgentEventStore.completeExecution failed: ${error.message}`);
+  }
+
+  async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
+    const update: Record<string, unknown> = {};
+    if (refs.commentId != null) update.comment_id = refs.commentId;
+    if (refs.deliverableId != null) update.deliverable_id = refs.deliverableId;
+    if (Object.keys(update).length === 0) return;
+    const { error } = await this.conn.client
+      .from('agent_event_executions')
+      .update(update)
+      .eq('execution_id', executionId);
+    if (error) throw new Error(`SupabaseAgentEventStore.setExecutionOutputs failed: ${error.message}`);
   }
 
   async upsertCliExecution(p: CliExecutionUpsert): Promise<void> {
@@ -260,5 +277,7 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     cacheReadTokens: row.cache_read_tokens ?? null,
     cacheCreationTokens: row.cache_creation_tokens ?? null,
     source: (row.source as AgentExecution['source']) ?? null,
+    commentId: row.comment_id ?? null,
+    deliverableId: row.deliverable_id ?? null,
   };
 }

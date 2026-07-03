@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
-import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel } from '@fleex/shared';
+import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel, StepRun, WorkflowStep, WorkflowRun } from '@fleex/shared';
 import { EFFORT_LEVELS } from '@fleex/shared';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,6 +12,8 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunStore';
+import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useModels } from '../../hooks/useModels';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
@@ -732,20 +734,112 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   }, [ticketId, seenDeliverables, toggleDeliverableSeen, floatingDeliverableIds, bringDeliverableToFront, openDeliverableOverlay]);
 
   // Map each comment (the agent's resolved/result comment) to its linked deliverables.
-  // Link path: deliverable ← mention.resolvedDeliverableId, surfaced on mention.resolvedCommentId.
+  // Two link paths are unioned so chips appear regardless of what produced the comment:
+  //   1. mention.resolvedCommentId ← mention.resolvedDeliverableId (persona/@-mention flow).
+  //   2. execution.commentId ← execution.deliverableId (explicit FK, covers ALL sources:
+  //      workflow steps, panels, skills — which never populate a mention). This replaces the
+  //      old agentName pattern-matching, so a Human Gate draft's deliverable chip shows up too.
   const deliverablesByComment = useMemo(() => {
     const deliverableById = new Map(deliverables.map((d) => [d.id, d]));
     const map = new Map<string, TicketDeliverable[]>();
+    const addLink = (commentId: string, d: TicketDeliverable) => {
+      const arr = map.get(commentId);
+      if (!arr) { map.set(commentId, [d]); return; }
+      if (!arr.some((x) => x.id === d.id)) arr.push(d); // dedup: both paths can name the same pair
+    };
     for (const m of mentions) {
       if (!m.resolvedCommentId || !m.resolvedDeliverableId) continue;
       const d = deliverableById.get(m.resolvedDeliverableId);
-      if (!d) continue;
-      const arr = map.get(m.resolvedCommentId);
-      if (arr) arr.push(d);
-      else map.set(m.resolvedCommentId, [d]);
+      if (d) addLink(m.resolvedCommentId, d);
+    }
+    for (const e of executionsByTicket[ticketId] ?? []) {
+      if (!e.commentId || !e.deliverableId) continue;
+      const d = deliverableById.get(e.deliverableId);
+      if (d) addLink(e.commentId, d);
     }
     return map;
-  }, [deliverables, mentions]);
+  }, [deliverables, mentions, executionsByTicket, ticketId]);
+
+  // ── Inline Human Gate card (B.2 / B.3) ──────────────────────────────────────
+  // Surface a workflow's Human Gate directly in the Comments thread so an
+  // approve/reject decision no longer requires a detour to the Workflow tab.
+  // Subscribe to the RAW per-ticket runs array (store helpers return fresh arrays
+  // and would break Zustand's equality check → render loop). The parent
+  // (TicketDetail) already calls loadForTicket + wires workflow:* events into
+  // applyEvent, so runsByTicket + detail stay fresh in real time.
+  const workflowRuns = useWorkflowRunStore((s) => s.runsByTicket[ticketId]);
+  const workflowDetail = useWorkflowRunStore((s) => s.detail);
+  const loadWorkflowDetail = useWorkflowRunStore((s) => s.loadDetail);
+  const resolveGate = useWorkflowRunStore((s) => s.resolveGate);
+
+  // Ensure the step-run detail is loaded for every active run on this ticket.
+  // Detection (like WorkflowRunView) reads step-run status, which lives in the
+  // detail — not in the runs list. Once a run is in `detail`, applyEvent keeps it
+  // fresh on later workflow:* events (that's what makes the card live-update).
+  useEffect(() => {
+    for (const r of workflowRuns ?? []) {
+      if (ACTIVE_STATUSES.has(r.status)) void loadWorkflowDetail(r.id);
+    }
+    // workflowDetail intentionally excluded: loadWorkflowDetail writes to it, so
+    // depending on it would re-fire this effect in a loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowRuns, loadWorkflowDetail]);
+
+  interface GateCard {
+    run: WorkflowRun;
+    step: WorkflowStep;
+    stepRun: StepRun;
+    outcomes: string[];
+    reviewDeliverables: TicketDeliverable[];
+  }
+
+  // One card per human_gate step run currently in `needs_review` (concurrent runs
+  // ⇒ multiple cards). The deliverables "to review" are those produced by the
+  // run's step executions, resolved via the explicit execution→deliverable FK
+  // (executionsByTicket), most recent first — never via agentName matching.
+  const gateCards = useMemo<GateCard[]>(() => {
+    const cards: GateCard[] = [];
+    const execById = new Map((executionsByTicket[ticketId] ?? []).map((e) => [e.id, e]));
+    const deliverableById = new Map(deliverables.map((d) => [d.id, d]));
+    for (const run of workflowRuns ?? []) {
+      if (!ACTIVE_STATUSES.has(run.status)) continue;
+      const d = workflowDetail[run.id];
+      if (!d) continue;
+      const stepById = new Map(run.templateSnapshot.steps.map((s) => [s.id, s]));
+
+      // Deliverables produced anywhere in this run, most recent first, deduped.
+      const orderedStepRuns = [...d.stepRuns].sort((a, b) => {
+        const ta = a.completedAt ?? a.startedAt ?? a.createdAt;
+        const tb = b.completedAt ?? b.startedAt ?? b.createdAt;
+        return tb.localeCompare(ta);
+      });
+      const reviewDeliverables: TicketDeliverable[] = [];
+      const seen = new Set<string>();
+      for (const sr of orderedStepRuns) {
+        if (!sr.executionId) continue;
+        const exec = execById.get(sr.executionId);
+        if (!exec?.deliverableId) continue;
+        const del = deliverableById.get(exec.deliverableId);
+        if (del && !seen.has(del.id)) { seen.add(del.id); reviewDeliverables.push(del); }
+      }
+
+      // Only the latest attempt of each step can be "awaiting" a decision.
+      const latestPerStep = new Map<string, StepRun>();
+      for (const sr of d.stepRuns) {
+        const cur = latestPerStep.get(sr.stepId);
+        if (!cur || sr.attempt > cur.attempt) latestPerStep.set(sr.stepId, sr);
+      }
+      for (const sr of latestPerStep.values()) {
+        if (sr.status !== 'needs_review') continue;
+        const step = stepById.get(sr.stepId);
+        if (!step || step.executorType !== 'human_gate') continue;
+        const outcomes = (sr.output?.schemaFields?.outcomes as string[] | undefined)
+          ?? step.humanGateOutcomes ?? [];
+        cards.push({ run, step, stepRun: sr, outcomes, reviewDeliverables });
+      }
+    }
+    return cards;
+  }, [workflowRuns, workflowDetail, executionsByTicket, ticketId, deliverables]);
 
   // Read cursor for "new messages" line
   const loadCursors = useUnreadStore((s) => s.loadCursors);
@@ -1204,6 +1298,47 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 <span className="rounded bg-orange-400/15 px-1.5 py-0.5 text-[10px] font-medium text-orange-400">
                   {agent.mode}
                 </span>
+              </div>
+            ))}
+            {/* Inline Human Gate action card(s) — approve/reject without leaving Comments.
+                The gate's own "🚪 Human Gate…" comment stays above as a trace. */}
+            {gateCards.map(({ run, step, stepRun, outcomes, reviewDeliverables }) => (
+              <div
+                key={stepRun.id}
+                className="my-3 rounded-lg border border-[var(--theme-accent)]/40 bg-[var(--theme-accent)]/5 p-3"
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-base leading-none">🚪</span>
+                  <div className="text-xs font-semibold text-[var(--theme-text-primary)]">
+                    Human Gate — {run.templateSnapshot.emoji} {run.templateSnapshot.name}
+                    <span className="font-normal text-[var(--theme-text-muted)]"> › {step.name}</span>
+                  </div>
+                </div>
+                {reviewDeliverables.length > 0 && (
+                  <div className="mb-3">
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-faint)]">
+                      To review
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {reviewDeliverables.map((d) => (
+                        <DeliverableChip key={d.id} deliverable={d} onOpen={handleOpenDeliverable} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {outcomes.length > 0 ? (
+                  <HumanGateResolvePanel
+                    runId={run.id}
+                    stepRunId={stepRun.id}
+                    outcomes={outcomes}
+                    onResolve={(outcome, notes) => resolveGate(run.id, stepRun.id, outcome, notes)}
+                  />
+                ) : (
+                  // Degraded state (invalid config) — no orphan CTA; point to the Workflow tab.
+                  <div className="text-xs text-[var(--theme-text-muted)]">
+                    No outcomes configured — resolve this gate from the Workflow tab.
+                  </div>
+                )}
               </div>
             ))}
             <div ref={listEndRef} />

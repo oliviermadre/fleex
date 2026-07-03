@@ -53,6 +53,7 @@ export class PgAgentEventStore implements AgentEventStorePort {
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
     inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
+    commentId?: string; deliverableId?: string;
   }): Promise<void> {
     await this.db.query(
       `UPDATE agent_event_executions SET status = $1, completed_at = $2,
@@ -60,12 +61,23 @@ export class PgAgentEventStore implements AgentEventStorePort {
        effort = COALESCE($5, effort), fast_mode = COALESCE($6, fast_mode),
        duration_ms = COALESCE($7, duration_ms), cost_usd = COALESCE($8, cost_usd),
        input_tokens = COALESCE($9, input_tokens), output_tokens = COALESCE($10, output_tokens),
-       cache_read_tokens = COALESCE($11, cache_read_tokens), cache_creation_tokens = COALESCE($12, cache_creation_tokens)
-       WHERE execution_id = $13`,
+       cache_read_tokens = COALESCE($11, cache_read_tokens), cache_creation_tokens = COALESCE($12, cache_creation_tokens),
+       comment_id = COALESCE($13, comment_id), deliverable_id = COALESCE($14, deliverable_id)
+       WHERE execution_id = $15`,
       [status, new Date().toISOString(), metrics?.model ?? null, metrics?.effectiveMode ?? null,
        metrics?.effort ?? null, metrics?.fast ?? null,
        metrics?.durationMs ?? null, metrics?.costUsd ?? null, metrics?.inputTokens ?? null,
-       metrics?.outputTokens ?? null, metrics?.cacheReadTokens ?? null, metrics?.cacheCreationTokens ?? null, executionId],
+       metrics?.outputTokens ?? null, metrics?.cacheReadTokens ?? null, metrics?.cacheCreationTokens ?? null,
+       metrics?.commentId ?? null, metrics?.deliverableId ?? null, executionId],
+    );
+  }
+
+  async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
+    await this.db.query(
+      `UPDATE agent_event_executions SET
+       comment_id = COALESCE($1, comment_id), deliverable_id = COALESCE($2, deliverable_id)
+       WHERE execution_id = $3`,
+      [refs.commentId ?? null, refs.deliverableId ?? null, executionId],
     );
   }
 
@@ -195,5 +207,7 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     cacheReadTokens: (row.cache_read_tokens as number) ?? null,
     cacheCreationTokens: (row.cache_creation_tokens as number) ?? null,
     source: (row.source as AgentExecution['source']) ?? null,
+    commentId: (row.comment_id as string) ?? null,
+    deliverableId: (row.deliverable_id as string) ?? null,
   };
 }

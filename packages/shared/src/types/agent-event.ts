@@ -27,6 +27,18 @@ export interface AgentExecution {
    * from its transcript. Lets stats break cost down by agentic vs manual usage.
    */
   readonly source?: 'sdk' | 'cli' | null;
+  /**
+   * The comment this run produced, if any. Explicit link (added in migration 024)
+   * so the UI can pair a comment with its deliverable without pattern-matching on
+   * `agentName`. NULL for runs that produced no comment or predate the migration.
+   */
+  readonly commentId?: string | null;
+  /**
+   * The deliverable this run produced, if any. Same rationale as `commentId`:
+   * lets the Comments tab surface a deliverable chip (incl. the Human Gate one)
+   * from a first-class link rather than a heuristic.
+   */
+  readonly deliverableId?: string | null;
 }
 
 export type AgentEventType =

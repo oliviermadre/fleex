@@ -9,6 +9,7 @@ import type { StepExecutor, StepExecutionInput } from '../services/step-executor
 import type { EventBus } from '../event-bus.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
 import type { PostCommentUseCase } from './post-comment.js';
+import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import type { WorkflowExecutorType, StepOutput, WorkflowStep } from '@fleex/shared';
 
@@ -20,6 +21,12 @@ export interface RunWorkflowStepDeps {
   executors: Record<WorkflowExecutorType, StepExecutor>;
   submitDeliverable: SubmitDeliverableUseCase;
   postComment: PostCommentUseCase;
+  /**
+   * Links the step's execution to the artifacts it produced (comment/deliverable).
+   * The step's `execute-agent` run completes before the orchestrator persists the
+   * artifacts, so we stamp the refs here rather than at completion time.
+   */
+  agentEventStore: AgentEventStorePort;
 }
 
 export class RunWorkflowStepUseCase {
@@ -91,7 +98,7 @@ export class RunWorkflowStepUseCase {
 
       // 5. Handle result
       if (result.output.result === 'needs_review') {
-        await this.persistStepArtifacts(run, step, result.output);
+        await this.persistStepArtifacts(run, step, result.output, executionId);
         stepRun.markNeedsReview({ output: result.output, executionId });
         run.block();
         await this.deps.stepRunStore.save(stepRun);
@@ -106,7 +113,7 @@ export class RunWorkflowStepUseCase {
       // 6. Resolve edges
       const edges = run.outgoingEdges(step.id);
       const nextEdge = EdgeEvaluator.resolve(result.output, edges);
-      await this.persistStepArtifacts(run, step, result.output);
+      await this.persistStepArtifacts(run, step, result.output, executionId);
       stepRun.complete({ output: result.output, nextEdgeId: nextEdge?.id ?? null, executionId });
       await this.deps.stepRunStore.save(stepRun);
       this.deps.eventBus.emit({
@@ -169,9 +176,12 @@ export class RunWorkflowStepUseCase {
     run: WorkflowRunEntity,
     step: WorkflowStep,
     output: StepOutput,
+    executionId: string | undefined,
   ): Promise<void> {
     const author = `workflow:${run.templateSnapshot.name} → ${step.name}`;
     const now = new Date();
+    let deliverableId: string | undefined;
+    let commentId: string | undefined;
     if (output.deliverable) {
       const deliverable = await this.deps.submitDeliverable.execute({
         ticketId: run.ticketId,
@@ -181,6 +191,7 @@ export class RunWorkflowStepUseCase {
         content: output.deliverable.markdown,
         status: output.deliverable.status,
       });
+      deliverableId = deliverable.id;
       // Emit deliverable.created so the BroadcastRegistrar pushes it to the UI in
       // real time — mirrors execute-agent/run-panel. Without this, the deliverable
       // only appears after a manual refresh.
@@ -201,6 +212,7 @@ export class RunWorkflowStepUseCase {
         authorName: author,
         body: output.comment,
       });
+      commentId = comment.id;
       // Emit comment.posted for the real-time UI broadcast. createdMentions is left
       // empty on purpose: workflows orchestrate via edges, not mentions, so we don't
       // want a step comment to auto-trigger agents or the auto-review workflow.
@@ -213,6 +225,14 @@ export class RunWorkflowStepUseCase {
         createdMentions: [],
         occurredAt: now,
       });
+    }
+
+    // Link the execution to the artifacts it produced, so the Comments tab can
+    // derive a deliverable chip (and the Human Gate deliverable) from an explicit
+    // FK instead of pattern-matching on `agentName`. Deterministic executors
+    // (e.g. human_gate) have no execution to stamp.
+    if (executionId && (commentId || deliverableId)) {
+      await this.deps.agentEventStore.setExecutionOutputs(executionId, { commentId, deliverableId });
     }
   }
 }
