@@ -112,7 +112,7 @@ export function IssuesBanner({ org, name, issues, loading }: Props) {
             <SmartSessionButton
               sessions={issueSessions}
               ticketId={ticket.id}
-              onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
+              onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
               size="sm"
               alwaysShowMenu
             />

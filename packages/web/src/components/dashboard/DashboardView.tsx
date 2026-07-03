@@ -555,7 +555,7 @@ function DashboardItemRow({
         <SmartSessionButton
           sessions={sessions}
           ticketId={ticket.id}
-          onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id).catch(console.error)}
+          onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
         />
       </span>
     </div>
