@@ -412,6 +412,18 @@ export async function retrySlackImport(ticketId: string): Promise<import('@fleex
   });
 }
 
+export async function importNotionPage(url: string, boardId: string): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>('/tickets/import-notion-page', {
+    method: 'POST', body: JSON.stringify({ url, boardId }),
+  });
+}
+
+export async function retryNotionImport(ticketId: string): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(ticketId)}/retry-notion-import`, {
+    method: 'POST',
+  });
+}
+
 export async function importGitHubPR(
   org: string, name: string, prNumber: number, prTitle: string, headRefName: string, boardId: string,
 ): Promise<import('@fleex/shared').Ticket> {

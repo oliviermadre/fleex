@@ -39,6 +39,7 @@ import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
 import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
 import { ImportGitHubIssueUseCase } from '../application/use-cases/import-github-issue.js';
 import { ImportSlackMessageUseCase } from '../application/use-cases/import-slack-message.js';
+import { ImportNotionPageUseCase } from '../application/use-cases/import-notion-page.js';
 import { BackfillPRTicketUseCase } from '../application/use-cases/backfill-pr-ticket.js';
 import { PostCommentUseCase } from '../application/use-cases/post-comment.js';
 import { ResolveMentionUseCase } from '../application/use-cases/resolve-mention.js';
@@ -75,6 +76,7 @@ import { TmuxCliAdapter } from './adapters/tmux-cli.adapter.js';
 import { GitCliAdapter } from './adapters/git-cli.adapter.js';
 import { GitHubGraphQLAdapter } from './adapters/github-graphql.adapter.js';
 import { ClaudeSlackImportAdapter } from './adapters/claude-slack-import.adapter.js';
+import { ClaudeNotionImportAdapter } from './adapters/claude-notion-import.adapter.js';
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { ApiClaudeUsageAdapter } from './adapters/api-claude-usage.adapter.js';
@@ -255,6 +257,11 @@ export async function createContainer() {
   const slackImportAdapter = new ClaudeSlackImportAdapter(sdkLimiter, logger);
   const importSlackMessage = new ImportSlackMessageUseCase(ticketStore_, slackImportAdapter, logger);
 
+  // Notion page import: retrieval + synthesis delegated to Claude's native
+  // Notion integration via the Agent SDK (gated by the shared sdkLimiter).
+  const notionImportAdapter = new ClaudeNotionImportAdapter(sdkLimiter, logger);
+  const importNotionPage = new ImportNotionPageUseCase(ticketStore_, notionImportAdapter, logger);
+
   const wakeWaitingAgents = new WakeWaitingAgentsUseCase(mentionStore, executeAgent, logger);
 
   // Domain event bus
@@ -386,6 +393,8 @@ export async function createContainer() {
   autoReviewWorkflow.eventBus = eventBus;
   // Slack import synthesizes in the background and patches the ticket via ticket.updated.
   importSlackMessage.eventBus = eventBus;
+  // Notion import synthesizes in the background and patches the ticket via ticket.updated.
+  importNotionPage.eventBus = eventBus;
 
   // ── Phase B: Workflow orchestration ──────────────────────────────────────
   // Stores are non-null for sqlite and supabase adapters, null for json/pgsql.
@@ -495,6 +504,7 @@ export async function createContainer() {
     createSessionFromTicket,
     importGitHubIssue,
     importSlackMessage,
+    importNotionPage,
     backfillPRTicket,
     commentStore,
     mentionStore,

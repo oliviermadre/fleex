@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { NameInputModal } from '../ui/NameInputModal';
 import type { TicketPriority } from '@fleex/shared';
-import { TICKET_PRIORITIES, isSlackMessageUrl, isSlackImportTag } from '@fleex/shared';
+import { TICKET_PRIORITIES, isSlackMessageUrl, isSlackImportTag, isNotionUrl, isNotionImportTag } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -25,6 +25,7 @@ export function TicketsContentPanel() {
   const createTicket = useTicketStore((s) => s.createTicket);
   const importGitHubIssue = useTicketStore((s) => s.importGitHubIssue);
   const importSlackMessage = useTicketStore((s) => s.importSlackMessage);
+  const importNotionPage = useTicketStore((s) => s.importNotionPage);
 
   const [quickTitle, setQuickTitle] = useState('');
   const [quickImporting, setQuickImporting] = useState(false);
@@ -52,8 +53,8 @@ export function TicketsContentPanel() {
     }
     const tagSet = new Set<string>();
     for (const t of tickets) {
-      // Reserved Slack-import lifecycle tags are status, not user-filterable tags.
-      for (const tag of t.tags) if (!isSlackImportTag(tag)) tagSet.add(tag);
+      // Reserved Slack/Notion-import lifecycle tags are status, not user-filterable tags.
+      for (const tag of t.tags) if (!isSlackImportTag(tag) && !isNotionImportTag(tag)) tagSet.add(tag);
     }
     return { repos: [...repoSet].sort(), tags: [...tagSet].sort() };
   }, [tickets, resolvedRepositories]);
@@ -94,6 +95,9 @@ export function TicketsContentPanel() {
       } else if (isSlackMessageUrl(trimmed)) {
         setQuickImporting(true);
         await importSlackMessage(trimmed, boardId);
+      } else if (isNotionUrl(trimmed)) {
+        setQuickImporting(true);
+        await importNotionPage(trimmed, boardId);
       } else {
         await createTicket({ boardId, title: trimmed });
       }
@@ -231,7 +235,7 @@ export function TicketsContentPanel() {
           <input
             type="text"
             className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
-            placeholder="Ticket title, GitHub issue or Slack message URL..."
+            placeholder="Ticket title, GitHub / Slack / Notion URL..."
             value={quickTitle}
             onChange={(e) => { setQuickTitle(e.target.value); setQuickError(null); }}
             onKeyDown={(e) => {

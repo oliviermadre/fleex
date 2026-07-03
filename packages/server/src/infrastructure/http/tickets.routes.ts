@@ -793,6 +793,27 @@ export function ticketRoutes(container: Container) {
       },
     );
 
+    // Import Notion page as ticket
+    app.post<{ Body: { url: string; boardId: string } }>(
+      '/api/tickets/import-notion-page',
+      async (request, reply) => {
+        const { url, boardId } = request.body;
+        const ticket = await container.importNotionPage.execute(url, boardId);
+        emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
+        return reply.code(201).send(ticket.toDTO());
+      },
+    );
+
+    // Retry a failed background Notion import (re-arms the ticket to pending and re-runs synthesis).
+    // The use case emits ticket.updated itself, so the route just returns the re-armed ticket.
+    app.post<{ Params: { id: string } }>(
+      '/api/tickets/:id/retry-notion-import',
+      async (request, reply) => {
+        const ticket = await container.importNotionPage.retry(request.params.id);
+        return reply.code(200).send(ticket.toDTO());
+      },
+    );
+
     // Import GitHub PR as ticket
     app.post<{ Body: { org: string; name: string; prNumber: number; prTitle: string; headRefName: string; boardId: string } }>(
       '/api/tickets/import-github-pr',

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import type { BoardWithCounts } from '@fleex/shared';
-import { isSlackMessageUrl } from '@fleex/shared';
+import { isSlackMessageUrl, isNotionUrl } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { BoardSelectorDropdown } from './BoardSelectorDropdown';
@@ -24,6 +24,7 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived, hideActions }
   const createBoard = useTicketStore((s) => s.createBoard);
   const importGitHubIssue = useTicketStore((s) => s.importGitHubIssue);
   const importSlackMessage = useTicketStore((s) => s.importSlackMessage);
+  const importNotionPage = useTicketStore((s) => s.importNotionPage);
 
   const [showQuickCreate, setShowQuickCreate] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
@@ -62,6 +63,9 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived, hideActions }
       } else if (isSlackMessageUrl(trimmed)) {
         setQuickImporting(true);
         await importSlackMessage(trimmed, boardId);
+      } else if (isNotionUrl(trimmed)) {
+        setQuickImporting(true);
+        await importNotionPage(trimmed, boardId);
       } else {
         await createTicket({ boardId, title: trimmed });
       }
@@ -149,7 +153,7 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived, hideActions }
                 ref={inputRef}
                 type="text"
                 className="h-8 w-64 rounded-md border border-[var(--theme-accent)] bg-[var(--theme-bg-surface)] px-3 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
-                placeholder="Title, GitHub issue or Slack message URL..."
+                placeholder="Title, GitHub / Slack / Notion URL..."
                 value={quickTitle}
                 onChange={(e) => { setQuickTitle(e.target.value); setQuickError(null); }}
                 onKeyDown={(e) => {

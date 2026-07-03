@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { TicketStatus } from '@fleex/shared';
-import { isSlackMessageUrl } from '@fleex/shared';
+import { isSlackMessageUrl, isNotionUrl } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 
 const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;
@@ -15,6 +15,7 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
   const createTicket = useTicketStore((s) => s.createTicket);
   const importGitHubIssue = useTicketStore((s) => s.importGitHubIssue);
   const importSlackMessage = useTicketStore((s) => s.importSlackMessage);
+  const importNotionPage = useTicketStore((s) => s.importNotionPage);
 
   useEffect(() => {
     if (active && inputRef.current) {
@@ -35,13 +36,16 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
     setError(null);
 
     try {
-      // Detect GitHub issue URL or Slack message link
+      // Detect GitHub issue URL, Slack message link or Notion page link
       if (GITHUB_ISSUE_RE.test(trimmed)) {
         setImporting(true);
         await importGitHubIssue(trimmed, boardId, status);
       } else if (isSlackMessageUrl(trimmed)) {
         setImporting(true);
         await importSlackMessage(trimmed, boardId, status);
+      } else if (isNotionUrl(trimmed)) {
+        setImporting(true);
+        await importNotionPage(trimmed, boardId, status);
       } else {
         await createTicket({ boardId, title: trimmed, status });
       }
@@ -70,6 +74,7 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
 
   const isGitHubUrl = GITHUB_ISSUE_RE.test(title.trim());
   const isSlackUrl = isSlackMessageUrl(title.trim());
+  const isNotionPageUrl = isNotionUrl(title.trim());
 
   if (!active) {
     return (
@@ -88,7 +93,7 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
         ref={inputRef}
         className="w-full resize-none bg-transparent text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:outline-none"
         rows={2}
-        placeholder="Card title, GitHub issue or Slack message URL..."
+        placeholder="Card title, GitHub / Slack / Notion URL..."
         value={title}
         onChange={(e) => { setTitle(e.target.value); setError(null); }}
         onKeyDown={handleKeyDown}
@@ -111,6 +116,17 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
           <span>Will import &amp; summarize from Slack</span>
         </div>
       )}
+      {isNotionPageUrl && !isGitHubUrl && !isSlackUrl && !importing && !error && (
+        <div className="flex items-center gap-1.5 pt-1 text-[10px] text-[var(--theme-text-muted)]">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" className="text-[var(--theme-text-secondary)]">
+            <rect x="3" y="1.5" width="10" height="13" rx="1.5" />
+            <line x1="5.5" y1="5" x2="10.5" y2="5" />
+            <line x1="5.5" y1="8" x2="10.5" y2="8" />
+            <line x1="5.5" y1="11" x2="8.5" y2="11" />
+          </svg>
+          <span>Will import &amp; summarize from Notion</span>
+        </div>
+      )}
       {error && (
         <span className="text-[10px] text-[var(--theme-danger)]">{error}</span>
       )}
@@ -119,7 +135,7 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
             <circle cx="8" cy="8" r="6" strokeDasharray="30" strokeDashoffset="10" />
           </svg>
-          <span>{isSlackUrl && !isGitHubUrl ? 'Summarizing Slack thread...' : 'Importing from GitHub...'}</span>
+          <span>{isNotionPageUrl && !isGitHubUrl && !isSlackUrl ? 'Summarizing Notion page...' : isSlackUrl && !isGitHubUrl ? 'Summarizing Slack thread...' : 'Importing from GitHub...'}</span>
         </div>
       )}
     </div>

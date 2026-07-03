@@ -28,7 +28,7 @@ export function isConversationMode(v: unknown): v is ConversationMode {
 export function isEffortLevel(v: unknown): v is EffortLevel {
   return v === 'low' || v === 'medium' || v === 'high';
 }
-export type TicketLinkType = 'github_issue' | 'github_pr' | 'worktree' | 'session' | 'repository' | 'slack_message';
+export type TicketLinkType = 'github_issue' | 'github_pr' | 'worktree' | 'session' | 'repository' | 'slack_message' | 'notion_page';
 
 export interface TicketLink {
   readonly id: string;

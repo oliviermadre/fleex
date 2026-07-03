@@ -211,3 +211,18 @@ export class SlackImportError extends DomainError {
     super(message, slackCode);
   }
 }
+
+export type NotionImportErrorCode = 'NOTION_INVALID_URL';
+
+/**
+ * Raised when importing a ticket from a Notion page link fails synchronously
+ * (the only synchronous failure is a non-Notion URL). Mirrors
+ * {@link SlackImportError}: the asynchronous failure modes (integration
+ * unavailable, inaccessible, empty) are carried on the ticket via the reserved
+ * failed tag rather than thrown, so they never reach the HTTP layer as errors.
+ */
+export class NotionImportError extends DomainError {
+  constructor(message: string, public readonly notionCode: NotionImportErrorCode) {
+    super(message, notionCode);
+  }
+}

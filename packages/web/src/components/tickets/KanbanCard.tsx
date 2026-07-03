@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Ticket, TicketLink, BoardWithCounts } from '@fleex/shared';
-import { TICKET_STATUS, SLACK_IMPORT_PENDING_TAG, SLACK_IMPORT_FAILED_TAG, isSlackImportTag } from '@fleex/shared';
+import { TICKET_STATUS, SLACK_IMPORT_PENDING_TAG, SLACK_IMPORT_FAILED_TAG, isSlackImportTag, NOTION_IMPORT_PENDING_TAG, NOTION_IMPORT_FAILED_TAG, isNotionImportTag } from '@fleex/shared';
 import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { TypePickerPopover } from './TypePickerPopover';
 import { DueDateBadge } from './DueDateBadge';
@@ -62,6 +62,7 @@ export function KanbanCard({
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const archiveTicket = useTicketStore((s) => s.archiveTicket);
   const retrySlackImport = useTicketStore((s) => s.retrySlackImport);
+  const retryNotionImport = useTicketStore((s) => s.retryNotionImport);
   const [retrying, setRetrying] = useState(false);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const unread = useUnreadStore((s) => s.getUnread(ticket.id));
@@ -91,8 +92,11 @@ export function KanbanCard({
   const isSlackImportPending = ticket.tags.includes(SLACK_IMPORT_PENDING_TAG);
   const isSlackImportFailed = ticket.tags.includes(SLACK_IMPORT_FAILED_TAG);
   const slackThreaded = ticket.links.some((l: TicketLink) => l.type === 'slack_message' && l.label === 'Slack thread');
+  // Async Notion-import lifecycle mirrors Slack (same reserved-tag mechanism).
+  const isNotionImportPending = ticket.tags.includes(NOTION_IMPORT_PENDING_TAG);
+  const isNotionImportFailed = ticket.tags.includes(NOTION_IMPORT_FAILED_TAG);
   // Reserved lifecycle tags are status, not user tags — keep them out of the chip row.
-  const displayTags = ticket.tags.filter((t: string) => !isSlackImportTag(t));
+  const displayTags = ticket.tags.filter((t: string) => !isSlackImportTag(t) && !isNotionImportTag(t));
 
   const handleRetrySlackImport = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -100,6 +104,15 @@ export function KanbanCard({
     setRetrying(true);
     retrySlackImport(ticket.id)
       .catch((err) => console.error('Failed to retry Slack import:', err))
+      .finally(() => setRetrying(false));
+  };
+
+  const handleRetryNotionImport = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (retrying) return;
+    setRetrying(true);
+    retryNotionImport(ticket.id)
+      .catch((err) => console.error('Failed to retry Notion import:', err))
       .finally(() => setRetrying(false));
   };
 
@@ -228,6 +241,35 @@ export function KanbanCard({
             onClick={handleRetrySlackImport}
             disabled={retrying}
             title="Retry the Slack import"
+          >
+            {retrying ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      )}
+
+      {/* ── NOTION IMPORT STATUS ── background synthesis is slow; show progress / retry */}
+      {isNotionImportPending && (
+        <div className="flex items-center gap-1.5 px-3 pb-1.5 text-[11px] text-[var(--theme-accent)]">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin flex-shrink-0">
+            <circle cx="8" cy="8" r="6" strokeDasharray="30" strokeDashoffset="10" />
+          </svg>
+          <span>Summarizing Notion page…</span>
+        </div>
+      )}
+      {isNotionImportFailed && (
+        <div className="flex items-center gap-2 px-3 pb-1.5 text-[11px]" onClick={(e) => e.stopPropagation()}>
+          <span className="inline-flex items-center gap-1 text-[var(--theme-danger)]">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" className="flex-shrink-0">
+              <circle cx="8" cy="8" r="6.5" />
+              <path d="M8 4.5v4M8 11h.01" />
+            </svg>
+            Notion import failed
+          </span>
+          <button
+            className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)] disabled:opacity-50"
+            onClick={handleRetryNotionImport}
+            disabled={retrying}
+            title="Retry the Notion import"
           >
             {retrying ? 'Retrying…' : 'Retry'}
           </button>

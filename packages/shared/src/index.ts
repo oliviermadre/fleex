@@ -27,6 +27,17 @@ export {
 } from './slack.js';
 export type { ParsedSlackMessageUrl } from './slack.js';
 
+export {
+  NOTION_URL_RE,
+  parseNotionUrl,
+  isNotionUrl,
+  NOTION_IMPORT_PENDING_TAG,
+  NOTION_IMPORT_FAILED_TAG,
+  NOTION_IMPORT_TAGS,
+  isNotionImportTag,
+} from './notion.js';
+export type { ParsedNotionUrl } from './notion.js';
+
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
 
 export type { ModelFamily, ModelOption, ModelsResponse } from './types/model.js';

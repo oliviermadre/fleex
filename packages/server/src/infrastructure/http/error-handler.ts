@@ -24,6 +24,7 @@ const CODE_TO_STATUS: Record<string, number> = {
   SLACK_INTEGRATION_UNAVAILABLE: 422,
   SLACK_CONVERSATION_INACCESSIBLE: 422,
   SLACK_CONVERSATION_EMPTY: 422,
+  NOTION_INVALID_URL: 422,
 };
 
 export function registerErrorHandler(app: FastifyInstance): void {
