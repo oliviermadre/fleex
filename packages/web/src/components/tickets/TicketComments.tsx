@@ -28,6 +28,8 @@ import { useCommentDraft } from '../../hooks/useCommentDraft';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
+import { preprocessMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { TicketMentionChip } from '../markdown/TicketMentionChip';
 
 /** Per-mode color for the conversation execution-mode pill. */
 const MODE_PILL_CLASS: Record<ConversationMode, string> = {
@@ -101,49 +103,9 @@ function parseAgentMentions(body: string): string[] {
 }
 
 // ── Mention pre-processing ──
-
-/**
- * Encode @mentions as markdown links with a custom href prefix so that
- * react-markdown can process the rest of the content normally, and we can
- * intercept mentions in the `a` component override.
- *
- * Content inside backtick code spans is left untouched.
- *
- * Mapping:
- *   @agent:name        →  [@agent:name](#fleex-agent:name)
- *   @panel:name        →  [@panel:name](#fleex-panel:name)
- *   @skill:name        →  [@skill:name](#fleex-skill:name)
- *   @username          →  [@username](#fleex-human:username)
- *   ~~@agent:name~~    →  [@agent:name](#fleex-struck:agent:name)
- *   ~~@skill:name~~    →  [@skill:name](#fleex-struck:skill:name)
- *   ~~@username~~      →  [@username](#fleex-struck:username)
- */
-function preprocessMentions(body: string): string {
-  return body.replace(
-    // Group 1: code span (preserve verbatim)
-    // Group 2: struck agent mention
-    // Group 3: struck panel mention
-    // Group 4: struck skill mention
-    // Group 5: struck human mention
-    // Group 6: active agent mention
-    // Group 7: active panel mention
-    // Group 8: active skill mention
-    // Group 9: active human mention
-    /(```[\s\S]*?```|`[^`]*`)|~~(@agent:[a-zA-Z0-9_-]+)~~|~~(@panel:[a-zA-Z0-9_-]+)~~|~~(@skill:[a-zA-Z0-9_-]+)~~|~~(@[a-zA-Z0-9_-]+)~~|(@agent:[a-zA-Z0-9_-]+)|(@panel:[a-zA-Z0-9_-]+)|(@skill:[a-zA-Z0-9_-]+)|(@[a-zA-Z0-9_-]+)/g,
-    (_match, codeSpan, struckAgent, struckPanel, struckSkill, struckHuman, activeAgent, activePanel, activeSkill, activeHuman) => {
-      if (codeSpan !== undefined) return codeSpan;
-      if (struckAgent !== undefined) return `[${struckAgent}](#fleex-struck:${struckAgent.slice(1)})`;
-      if (struckPanel !== undefined) return `[${struckPanel}](#fleex-struck:${struckPanel.slice(1)})`;
-      if (struckSkill !== undefined) return `[${struckSkill}](#fleex-struck:${struckSkill.slice(1)})`;
-      if (struckHuman !== undefined) return `[${struckHuman}](#fleex-struck:${struckHuman.slice(1)})`;
-      if (activeAgent !== undefined) return `[${activeAgent}](#fleex-agent:${activeAgent.slice(1)})`;
-      if (activePanel !== undefined) return `[${activePanel}](#fleex-panel:${activePanel.slice(1)})`;
-      if (activeSkill !== undefined) return `[${activeSkill}](#fleex-skill:${activeSkill.slice(1)})`;
-      if (activeHuman !== undefined) return `[${activeHuman}](#fleex-human:${activeHuman.slice(1)})`;
-      return _match;
-    },
-  );
-}
+// `preprocessMentions` lives in ../markdown/mentions (shared with the generic
+// MarkdownRenderer, which uses the ticket-only variant). It now also encodes
+// @ticket:<id> mentions, handled below in the `a` override via #fleex-ticket:.
 
 function MentionSpan({ text, mentionId, onRemove, className }: {
   text: string;
@@ -265,6 +227,10 @@ const CommentMarkdown = memo(function CommentMarkdown({
             {children}
           </span>
         );
+      }
+      if (href?.startsWith(TICKET_MENTION_HREF_PREFIX)) {
+        // Ticket reference — purely referential chip, navigates to the ticket.
+        return <TicketMentionChip idRef={href.slice(TICKET_MENTION_HREF_PREFIX.length)} />;
       }
       if (href?.startsWith('#fleex-agent:')) {
         const name = href.slice('#fleex-agent:'.length);
@@ -480,7 +446,7 @@ interface MentionOption {
   /** Display label shown in the dropdown */
   label: string;
   /** Secondary text (e.g. "agent" or "human") */
-  type: 'agent' | 'human' | 'panel' | 'skill' | 'workflow';
+  type: 'agent' | 'human' | 'panel' | 'skill' | 'workflow' | 'ticket';
 }
 
 function MentionAutocomplete({
@@ -520,9 +486,9 @@ function MentionAutocomplete({
           onMouseDown={(e) => { e.preventDefault(); onSelect(opt); }}
         >
           <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[10px] font-bold ${
-            opt.type === 'agent' ? 'bg-purple-500/20 text-purple-400' : opt.type === 'panel' ? 'bg-blue-500/20 text-blue-400' : opt.type === 'skill' ? 'bg-emerald-500/20 text-emerald-400' : opt.type === 'workflow' ? 'bg-orange-500/20 text-orange-400' : 'bg-amber-500/20 text-amber-400'
+            opt.type === 'agent' ? 'bg-purple-500/20 text-purple-400' : opt.type === 'panel' ? 'bg-blue-500/20 text-blue-400' : opt.type === 'skill' ? 'bg-emerald-500/20 text-emerald-400' : opt.type === 'workflow' ? 'bg-orange-500/20 text-orange-400' : opt.type === 'ticket' ? 'bg-slate-500/20 text-slate-400' : 'bg-amber-500/20 text-amber-400'
           }`}>
-            {opt.type === 'agent' ? 'A' : opt.type === 'panel' ? 'P' : opt.type === 'skill' ? 'S' : opt.type === 'workflow' ? 'W' : 'H'}
+            {opt.type === 'agent' ? 'A' : opt.type === 'panel' ? 'P' : opt.type === 'skill' ? 'S' : opt.type === 'workflow' ? 'W' : opt.type === 'ticket' ? 'T' : 'H'}
           </span>
           <span className="flex-1 truncate font-medium">{opt.label}</span>
           <span className="text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
@@ -621,6 +587,8 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const humanMentionName = useSettingsStore(
     (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
   );
+  // All loaded tickets — powers the @ticket: autocomplete (filtered client-side).
+  const allTickets = useTicketStore((s) => s.tickets);
 
   useEffect(() => {
     if (!panelsLoaded) loadPanels();
@@ -702,15 +670,32 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         type: 'human' as const,
       });
     }
+    for (const t of allTickets) {
+      opts.push({
+        insertText: `@ticket:${t.displayId}`,
+        label: `#${t.displayId} ${t.title}`,
+        type: 'ticket' as const,
+      });
+    }
     return opts;
-  }, [personas, panels, skills, workflowTemplates, humanMentionName]);
+  }, [personas, panels, skills, workflowTemplates, humanMentionName, allTickets]);
+
+  // Max ticket suggestions shown at once — tickets can be numerous, so we surface
+  // them only once the user has typed a query and cap the list to stay usable.
+  const MAX_TICKET_SUGGESTIONS = 8;
 
   const filteredOptions = useMemo(() => {
     if (!acOpen) return [];
     const q = acQuery.toLowerCase();
-    return allMentionOptions.filter((o) =>
-      o.label.toLowerCase().includes(q) || o.insertText.toLowerCase().includes(q),
-    );
+    const matches = (o: MentionOption) =>
+      o.label.toLowerCase().includes(q) || o.insertText.toLowerCase().includes(q);
+    const nonTicket = allMentionOptions.filter((o) => o.type !== 'ticket' && matches(o));
+    // Bare "@" (empty query) would otherwise dump every ticket into the dropdown.
+    if (q.length === 0) return nonTicket;
+    const tickets = allMentionOptions
+      .filter((o) => o.type === 'ticket' && matches(o))
+      .slice(0, MAX_TICKET_SUGGESTIONS);
+    return [...nonTicket, ...tickets];
   }, [acOpen, acQuery, allMentionOptions]);
 
   // Deliverable overlay opening (chips linked to comments via mentions)
@@ -1134,8 +1119,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       if (!/\s/.test(fragment)) {
         setAcOpen(true);
         setAcTriggerPos(atIdx);
-        // Strip "agent:" prefix for filtering so typing "@agent:cat" matches "catalyst"
-        const q = fragment.replace(/^(agent|panel|skill):/, '');
+        // Strip the type prefix for filtering so typing "@agent:cat" matches
+        // "catalyst" and "@ticket:37" matches ticket #37 by displayId/title.
+        const q = fragment.replace(/^(agent|panel|skill|workflow|ticket):/, '');
         setAcQuery(q);
         setAcIndex(0);
         return;

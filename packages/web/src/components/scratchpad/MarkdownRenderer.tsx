@@ -8,6 +8,8 @@ import type { Components } from 'react-markdown';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
+import { preprocessTicketMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
+import { TicketMentionChip } from '../markdown/TicketMentionChip';
 
 interface MarkdownRendererProps {
   content: string;
@@ -157,6 +159,14 @@ function MarkdownSection({
     [content],
   );
 
+  // Encode @ticket:<id> mentions as #fleex-ticket links so the `a` override can
+  // render them as chips. This is inline-only (no line added/removed), so the
+  // checkbox line indices computed from `contentWithoutImages` stay valid.
+  const processed = useMemo(
+    () => preprocessTicketMentions(contentWithoutImages),
+    [contentWithoutImages],
+  );
+
   // Pre-compute checkbox line indices within this segment (0-indexed, local)
   const lines = useMemo(() => contentWithoutImages.split('\n'), [contentWithoutImages]);
   const checkboxLocalLines = useMemo(
@@ -183,6 +193,10 @@ function MarkdownSection({
         if (img) {
           return <ImagePlaceholder src={img.src} alt={img.alt} index={idx} />;
         }
+      }
+      // Ticket mention — clickable chip that navigates to the referenced ticket
+      if (href?.startsWith(TICKET_MENTION_HREF_PREFIX)) {
+        return <TicketMentionChip idRef={href.slice(TICKET_MENTION_HREF_PREFIX.length)} />;
       }
       return (
         <a
@@ -396,7 +410,7 @@ function MarkdownSection({
     <>
       <ImageGalleryStrip images={images} />
       <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
-        {contentWithoutImages}
+        {processed}
       </Markdown>
     </>
   );
