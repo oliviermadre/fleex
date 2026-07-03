@@ -109,3 +109,81 @@ export async function computeSessionCost(transcriptPath: string): Promise<Sessio
   for (const [m, tok] of modelTokens) if (tok > best) { best = tok; r.model = m; }
   return r;
 }
+
+/** One reconstructed conversation turn (tool-call noise already stripped). */
+export interface TranscriptTurn {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+/**
+ * Reconstruct the human-readable conversation from a Claude transcript JSONL:
+ * the ordered user/assistant *text* turns, with everything that is context
+ * plumbing rather than dialogue discarded — because the decisions/arbitrations a
+ * summary must preserve live in the exchange, not in the machinery that built the
+ * context. Dropped:
+ *  - `tool_use` requests / `tool_result` payloads / thinking blocks (tool spam);
+ *  - subagent turns (`isSidechain`) — a dispatched agent's internal work;
+ *  - system-injected meta lines (`isMeta`) — hook context, caveats;
+ *  - inline wrappers that ride inside user text blocks (`<system-reminder>`,
+ *    slash-command echoes, local command output) — see {@link stripInjectedNoise}.
+ *
+ * This both raises signal for the summary and keeps the prompt small, so long
+ * sessions can't overflow the model's context window.
+ *
+ * Parsing mirrors {@link computeSessionCost}: same JSONL, malformed lines skipped.
+ */
+export async function reconstructTranscript(transcriptPath: string): Promise<TranscriptTurn[]> {
+  const raw = await readFile(transcriptPath, 'utf-8');
+  const turns: TranscriptTurn[] = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    let d: Record<string, unknown>;
+    try { d = JSON.parse(line); } catch { continue; }
+    const type = d['type'];
+    if (type !== 'user' && type !== 'assistant') continue;
+    // Not part of the human↔LLM exchange: subagent sidechains and system-injected
+    // meta are context-construction, not decisions.
+    if (d['isSidechain'] === true || d['isMeta'] === true) continue;
+    const msg = d['message'] as Record<string, unknown> | undefined;
+    if (!msg) continue;
+    const text = stripInjectedNoise(extractText(msg['content'])).trim();
+    if (!text) continue;
+    turns.push({ role: type, text });
+  }
+  return turns;
+}
+
+/**
+ * Strip Claude Code's system-injected wrappers that ride inside otherwise-textual
+ * user turns: system reminders, slash-command echoes, and local command output.
+ * None of it is something the developer typed or the model reasoned about — it is
+ * pure context plumbing, so it is both noise for a decision summary and a needless
+ * context cost. A no-op when the wrappers are absent.
+ */
+function stripInjectedNoise(text: string): string {
+  return text
+    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '')
+    .replace(/<command-name>[\s\S]*?<\/command-name>/g, '')
+    .replace(/<command-message>[\s\S]*?<\/command-message>/g, '')
+    .replace(/<command-args>[\s\S]*?<\/command-args>/g, '')
+    .replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/g, '')
+    .replace(/<local-command-stderr>[\s\S]*?<\/local-command-stderr>/g, '');
+}
+
+/** Collect the plain-text content of a message, ignoring non-text blocks. */
+function extractText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  const parts: string[] = [];
+  for (const block of content) {
+    if (
+      block && typeof block === 'object'
+      && (block as { type?: unknown }).type === 'text'
+      && typeof (block as { text?: unknown }).text === 'string'
+    ) {
+      parts.push((block as { text: string }).text);
+    }
+  }
+  return parts.join('\n');
+}

@@ -59,6 +59,7 @@ import { UpdatePanelUseCase } from '../application/use-cases/update-panel.js';
 import { DeletePanelUseCase } from '../application/use-cases/delete-panel.js';
 import { RunPanelUseCase } from '../application/use-cases/run-panel.js';
 import { GenerateTicketSummaryUseCase } from '../application/use-cases/generate-ticket-summary.js';
+import { GenerateCliSessionSummaryUseCase } from '../application/use-cases/generate-cli-session-summary.js';
 import { AgentStepExecutor } from '../application/services/step-executors/agent-step-executor.js';
 import { SkillStepExecutor } from '../application/services/step-executors/skill-step-executor.js';
 import { PanelStepExecutor } from '../application/services/step-executors/panel-step-executor.js';
@@ -453,9 +454,12 @@ export async function createContainer() {
   const getSessionGroups = new GetSessionGroupsUseCase(sessionStore_, tmux, groupingService, logger, enrichClaudeActivity, discoverSessions, ticketStore_, personaStore_, agentEventStore_, reconcileWorktree, hostFs, config, namingService);
 
   // Claude Code hook event processor (POST /api/hook). On SessionEnd it also
-  // ingests finished manual CLI sessions (source='cli') for cost tracking.
+  // ingests finished manual CLI sessions (source='cli') for cost tracking, then
+  // persists their decision trail as a `cli-session-summary` deliverable.
   const ingestCliSession = new IngestCliSessionUseCase(ticketStore_, agentEventStore_, logger);
-  const processHookEvent = new ProcessHookEventUseCase(sessionStore_, eventBus, logger, ingestCliSession);
+  const generateCliSessionSummary = new GenerateCliSessionSummaryUseCase(deliverableStore, logger, sdkLimiter);
+  generateCliSessionSummary.eventBus = eventBus;
+  const processHookEvent = new ProcessHookEventUseCase(sessionStore_, eventBus, logger, ingestCliSession, generateCliSessionSummary);
 
   return {
     logger,

@@ -5,6 +5,7 @@ import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { IngestCliSessionUseCase } from './ingest-cli-session.js';
+import type { GenerateCliSessionSummaryUseCase } from './generate-cli-session-summary.js';
 
 /** Result returned to `POST /api/hook`. Always 200, never bubbles errors back to Claude. */
 export interface ProcessHookEventResult {
@@ -34,6 +35,8 @@ export class ProcessHookEventUseCase {
     private readonly logger: LoggerPort,
     /** Optional — when present, finished manual CLI sessions are ingested for cost tracking. */
     private readonly ingestCliSession?: IngestCliSessionUseCase,
+    /** Optional — when present, ingested CLI sessions also get a decision-trail summary deliverable. */
+    private readonly generateCliSessionSummary?: GenerateCliSessionSummaryUseCase,
   ) {}
 
   async execute(event: HookEventPayload): Promise<ProcessHookEventResult> {
@@ -61,6 +64,19 @@ export class ProcessHookEventUseCase {
         const res = await this.ingestCliSession.execute({ sessionId, transcriptPath, cwd: event.cwd });
         if (res.ingested) {
           this.logger.info('CLI session cost ingested', { sessionId, ticketId: res.ticketId, costUsd: res.costUsd });
+          // The session is a confirmed CLI session owned by this workspace's
+          // ticket — also persist its decision trail as a deliverable. Isolated
+          // try/catch: a summary failure must never affect cost ingestion or the
+          // hook response (best-effort, non-blocking).
+          if (this.generateCliSessionSummary && res.ticketId) {
+            try {
+              await this.generateCliSessionSummary.execute({ sessionId, ticketId: res.ticketId, transcriptPath });
+            } catch (err) {
+              this.logger.warn('CLI session summary generation failed (ignored)', {
+                error: err instanceof Error ? err.message : String(err), sessionId,
+              });
+            }
+          }
         }
       } catch (err) {
         this.logger.warn('CLI session ingestion failed (ignored)', {
