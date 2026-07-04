@@ -46,14 +46,25 @@ activer l'auth SSO de Fleex (`GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` +
 
 - **Kanban** : swipe entre les colonnes, sélecteur de board, création rapide de
   ticket, temps réel via WebSocket.
-- **Ticket** : description (markdown), changement de statut, **repos liés**
-  (ajout/suppression — indispensable pour les worktrees et le contexte des
-  agents), conversation avec autocomplete `@` (agents, panels, skills,
-  workflows, tickets) pour lancer une session SDK (modes talk/plan/edit,
-  gestion des mentions en conflit comme sur desktop).
+- **Ticket** : titre et description **éditables**, changement de statut,
+  détails (priorité, type, tags, échéance, favori, bloqué, changement de
+  board, archivage, suppression), **repos liés** (ajout/suppression —
+  indispensable pour les worktrees et le contexte des agents).
+- **Conversation** : autocomplete `@` (agents, panels, skills, workflows,
+  tickets) pour lancer une session SDK, modes talk/plan/edit + overrides
+  modèle/effort/fast (config de conversation, comme desktop), actions sur les
+  mentions (relancer ▶, marquer résolu, supprimer), deliverables liés à chaque
+  commentaire.
+- **Deliverables** (onglet) : liste avec état lu/non-lu, lecture plein écran,
+  création (titre, type, draft/final, markdown) et suppression.
 - **Runs** : historique des exécutions du ticket, flux d'événements live
   (thinking, tool calls, résultat), bouton stop.
+- **Workflow** : étapes du run, résolution des human gates, réponses aux
+  questions d'agents, retry, annulation.
 - **Assistant** (onglet dédié) : le même assistant LLM que la Chrome extension.
+
+Principe : **parité des actions métier** avec le desktop — seule l'UX
+purement desktop (fenêtres flottantes, DAG, terminaux xterm) n'est pas portée.
 
 ## Assistant LLM
 

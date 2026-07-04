@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { EFFORT_LEVELS } from '@fleex/shared';
 import type {
   ConversationMode,
+  EffortLevel,
   Ticket,
   TicketComment,
   TicketDeliverable,
@@ -17,6 +19,8 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useTicketStore } from '../stores/ticketStore';
 import { useUnreadStore } from '../stores/unreadStore';
 import { useAgentEventStore } from '../stores/agentEventStore';
+import { useModels } from '../hooks/useModels';
+import { useToastStore } from '../stores/toastStore';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
@@ -374,12 +378,60 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
     }
   }, []);
 
-  const setMode = useCallback(
-    (mode: ConversationMode) => {
-      api.updateTicketExecutionConfig(ticketId, { conversationMode: mode }).catch(() => {});
+  const patchExecConfig = useCallback(
+    (req: import('@fleex/shared').UpdateTicketExecutionConfigRequest) => {
+      api.updateTicketExecutionConfig(ticketId, req).catch(() => {});
     },
     [ticketId],
   );
+
+  const setMode = useCallback(
+    (mode: ConversationMode) => patchExecConfig({ conversationMode: mode }),
+    [patchExecConfig],
+  );
+
+  // ── Execution config (model/effort/fast overrides) + mention actions ──
+  const { models } = useModels();
+  const [showConfig, setShowConfig] = useState(false);
+  const [mentionSheet, setMentionSheet] = useState<TicketMention | null>(null);
+  const overriddenModel = ticket.modelOverride
+    ? models.find((m) => m.id === ticket.modelOverride)
+    : undefined;
+  const hasOverrides = !!(ticket.modelOverride || ticket.effortOverride || ticket.fastMode);
+
+  const runMention = useCallback(async (m: TicketMention) => {
+    setMentionSheet(null);
+    try {
+      const result = await api.runMention(m.id);
+      if (result.status === 'no_work') {
+        useToastStore.getState().addToast('info', `Rien à exécuter pour ${m.targetAgent}`);
+      } else if (result.status === 'already_running') {
+        useToastStore.getState().addToast('info', `${m.targetAgent} tourne déjà`);
+      }
+    } catch {
+      // toast raised by the api layer
+    }
+  }, []);
+
+  const resolveMention = useCallback(async (m: TicketMention) => {
+    setMentionSheet(null);
+    try {
+      const updated = await api.updateMentionStatus(m.id, 'resolved');
+      setMentions((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+    } catch {
+      // toast raised by the api layer
+    }
+  }, []);
+
+  const removeMention = useCallback(async (m: TicketMention) => {
+    setMentionSheet(null);
+    try {
+      await api.deleteMentionFromComment(m.id);
+      setMentions((prev) => prev.filter((x) => x.id !== m.id));
+    } catch {
+      // toast raised by the api layer
+    }
+  }, []);
 
   const doPost = useCallback(
     async (conflicts: api.MentionConflictResolution[]) => {
@@ -485,12 +537,13 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                   {commentMentions.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {commentMentions.map((m) => (
-                        <span
+                        <button
                           key={m.id}
+                          onClick={() => setMentionSheet(m)}
                           className="rounded-full bg-[var(--theme-bg-hover)] px-2 py-0.5 text-[10px] text-[var(--theme-text-muted)]"
                         >
                           @{m.targetAgent} · {MENTION_STATUS_LABEL[m.status]}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -625,6 +678,17 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
           </div>
           <div className="flex-1" />
           <button
+            onClick={() => setShowConfig(true)}
+            className={`shrink-0 rounded-lg border px-3 py-1 text-sm ${
+              hasOverrides
+                ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
+                : 'border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
+            }`}
+            aria-label="Config d'exécution (modèle, effort, fast)"
+          >
+            ⚙{hasOverrides ? '·' : ''}
+          </button>
+          <button
             onClick={openMentionPicker}
             className="shrink-0 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-1 text-sm font-semibold text-[var(--theme-text-muted)]"
             aria-label="Mentionner un agent, skill, panel ou workflow"
@@ -659,6 +723,107 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
           deliverable={openDeliverable}
           onClose={() => setOpenDeliverable(null)}
         />
+      )}
+
+      {/* Execution config sheet — conversation-scoped overrides, like desktop */}
+      {showConfig && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={() => setShowConfig(false)}>
+          <div
+            className="w-full rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--theme-text-muted)]">
+              Config d'exécution
+            </p>
+            <p className="mb-3 text-[11px] text-[var(--theme-text-faint)]">
+              S'applique à la prochaine mention de cette conversation, sans modifier la config des agents.
+            </p>
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+              Modèle
+            </label>
+            <select
+              value={ticket.modelOverride ?? ''}
+              onChange={(e) => patchExecConfig({ modelOverride: e.target.value === '' ? null : e.target.value })}
+              className="mb-3 w-full appearance-none rounded-lg bg-[var(--theme-bg-secondary)] px-3 py-2.5 text-sm text-[var(--theme-text-primary)]"
+            >
+              <option value="">Auto (persona)</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+            {overriddenModel?.supportsEffort === true && (
+              <>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                  Effort de raisonnement
+                </label>
+                <select
+                  value={ticket.effortOverride ?? ''}
+                  onChange={(e) =>
+                    patchExecConfig({ effortOverride: e.target.value === '' ? null : (e.target.value as EffortLevel) })
+                  }
+                  className="mb-3 w-full appearance-none rounded-lg bg-[var(--theme-bg-secondary)] px-3 py-2.5 text-sm text-[var(--theme-text-primary)]"
+                >
+                  <option value="">Défaut</option>
+                  {EFFORT_LEVELS.map((lvl) => (
+                    <option key={lvl} value={lvl}>{lvl}</option>
+                  ))}
+                </select>
+              </>
+            )}
+            {overriddenModel?.supportsFastMode === true && (
+              <button
+                onClick={() => patchExecConfig({ fastMode: !ticket.fastMode })}
+                className={`w-full rounded-lg border px-3 py-2.5 text-sm font-medium ${
+                  ticket.fastMode
+                    ? 'border-amber-400/40 bg-amber-400/15 text-amber-400'
+                    : 'border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
+                }`}
+              >
+                ⚡ Fast mode {ticket.fastMode ? 'activé' : 'désactivé'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mention actions sheet */}
+      {mentionSheet && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={() => setMentionSheet(null)}>
+          <div
+            className="w-full rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--theme-text-muted)]">
+              @{mentionSheet.targetAgent} · {MENTION_STATUS_LABEL[mentionSheet.status]}
+            </p>
+            <div className="flex flex-col gap-2">
+              {mentionSheet.status !== 'resolved' && mentionSheet.targetType === 'agent' && (
+                <button
+                  onClick={() => runMention(mentionSheet)}
+                  className="rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-white"
+                >
+                  ▶ Relancer l'exécution
+                </button>
+              )}
+              {mentionSheet.status !== 'resolved' && (
+                <button
+                  onClick={() => resolveMention(mentionSheet)}
+                  className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-4 py-3 text-sm font-medium text-[var(--theme-text-primary)]"
+                >
+                  ✓ Marquer résolu
+                </button>
+              )}
+              <button
+                onClick={() => removeMention(mentionSheet)}
+                className="rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400"
+              >
+                Supprimer la mention
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
