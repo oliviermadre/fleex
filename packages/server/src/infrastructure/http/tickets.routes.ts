@@ -10,6 +10,7 @@ import { TicketActivityEntity } from '../../domain/entities/ticket-activity.enti
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { deriveTicketUpdateEvents } from '../../domain/services/ticket-audit-events.js';
+import { deriveTicketAgentActivity } from '../../domain/services/ticket-agent-activity.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
@@ -1444,6 +1445,49 @@ export function ticketRoutes(container: Container) {
       }
 
       return results;
+    });
+
+    /**
+     * Bulk query: real-time agentic activity for tickets (accepts ?ticketIds=id1,id2,...).
+     * Powers the Kanban card activity pill (#381). Board-scoped: the frontend sends the
+     * visible ticket IDs and gets back one entry each (including `idle`), so the response
+     * is authoritative and the client can self-clean stale pills.
+     */
+    app.get('/api/tickets/agent-activity', async (request) => {
+      const raw = (request.query as Record<string, string>).ticketIds ?? '';
+      const requestedIds = raw ? raw.split(',').filter(Boolean) : [];
+      if (requestedIds.length === 0) return [];
+
+      const requested = new Set(requestedIds);
+
+      // Workflow stores are optional (only wired when workflow templates exist).
+      const [executions, mentions, runningRuns, needsReviewRuns, blockedRuns] = await Promise.all([
+        container.agentEventStore.getAllExecutions(),
+        container.mentionStore.getAll(),
+        container.workflowRunStore?.getByStatus('running') ?? Promise.resolve([]),
+        container.workflowRunStore?.getByStatus('needs_review') ?? Promise.resolve([]),
+        container.workflowRunStore?.getByStatus('blocked') ?? Promise.resolve([]),
+      ]);
+
+      const runningExecutionTicketIds = executions
+        .filter((e) => e.status === 'running' && requested.has(e.ticketId))
+        .map((e) => e.ticketId);
+      const waitingMentionTicketIds = mentions
+        .filter((m) => m.status === 'waiting_for_info' && requested.has(m.ticketId))
+        .map((m) => m.ticketId);
+      const runningWorkflowTicketIds = runningRuns
+        .filter((r) => requested.has(r.ticketId))
+        .map((r) => r.ticketId);
+      const waitingWorkflowTicketIds = [...needsReviewRuns, ...blockedRuns]
+        .filter((r) => requested.has(r.ticketId))
+        .map((r) => r.ticketId);
+
+      return deriveTicketAgentActivity(requestedIds, {
+        runningExecutionTicketIds,
+        runningWorkflowTicketIds,
+        waitingMentionTicketIds,
+        waitingWorkflowTicketIds,
+      });
     });
   };
 }

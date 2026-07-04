@@ -20,7 +20,7 @@ export function StatusDot({ status, size = 'md', className }: Props) {
   if (isActive) {
     return (
       <span className={cn('relative inline-flex shrink-0', px, className)}>
-        <span className="absolute inset-0 animate-ping rounded-full bg-blue-500 opacity-60" />
+        <span className="absolute inset-0 animate-ping rounded-full bg-blue-500 opacity-60 motion-reduce:animate-none" />
         <span className={cn('relative inline-flex rounded-full bg-blue-500', px)} />
       </span>
     );

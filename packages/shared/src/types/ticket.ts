@@ -450,6 +450,30 @@ export interface TicketUnreadCounts {
   readonly unreadDeliverables: number;
 }
 
+// ── Agentic activity (Kanban card indicator, #381) ──
+
+/**
+ * Real-time agentic activity of a ticket, surfaced as a pill on the Kanban card.
+ * Derived server-side from executions, mentions and workflow runs.
+ *
+ * - `running`: at least one `AgentExecution` or `WorkflowRun` is actively running.
+ * - `waiting`: the ticket needs a human action — an agent set a mention to
+ *   `waiting_for_info`, or a workflow run is `needs_review` / `blocked` (human gate).
+ * - `idle`: no agentic activity in progress.
+ *
+ * Precedence when both apply: `waiting` wins (it is the actionable state).
+ * Distinct from the manual `ticket.blocked` flag and from the audit-trail
+ * `TicketActivity` entries above.
+ */
+export type AgentActivityState = 'running' | 'waiting' | 'idle';
+
+export interface TicketAgentActivity {
+  readonly ticketId: string;
+  readonly activity: AgentActivityState;
+  /** Optional human-readable detail for the card tooltip. */
+  readonly detail?: string;
+}
+
 // ── Summaries ──
 
 export interface TicketSummaryRef {

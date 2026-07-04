@@ -12,6 +12,7 @@ import { EpicBanner } from './EpicBanner';
 import { RoadmapView } from './RoadmapView';
 import { EpicDetailView } from './EpicDetailView';
 import { useUnreadStore } from '../../stores/unreadStore';
+import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 
 export function KanbanBoard() {
   const rawBoards = useTicketStore((s) => s.boards);
@@ -22,6 +23,7 @@ export function KanbanBoard() {
   const filters = useTicketStore((s) => s.filters);
   const searchQuery = useTicketStore((s) => s.searchQuery);
   const loadUnreadCounts = useUnreadStore((s) => s.loadUnreadCounts);
+  const loadActivity = useTicketActivityStore((s) => s.loadActivity);
 
   // Epic stores
   const activeView = useTicketGroupStore((s) => s.activeView);
@@ -29,9 +31,10 @@ export function KanbanBoard() {
   const selectedEpicIds = useTicketGroupStore((s) => s.selectedEpicIds);
   const groupTicketIds = useTicketGroupStore((s) => s.groupTicketIds);
 
-  // Load unread counts on mount and when tickets change
+  // Load unread counts + agentic activity on mount and when tickets change
   const ticketIds = useMemo(() => tickets.map((t) => t.id), [tickets]);
   useEffect(() => { loadUnreadCounts(ticketIds); }, [ticketIds, loadUnreadCounts]);
+  useEffect(() => { loadActivity(ticketIds); }, [ticketIds, loadActivity]);
 
   const [prStates, setPrStates] = useState<Record<string, string>>({});
 
