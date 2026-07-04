@@ -46,11 +46,39 @@ activer l'auth SSO de Fleex (`GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` +
 
 - **Kanban** : swipe entre les colonnes, sélecteur de board, création rapide de
   ticket, temps réel via WebSocket.
-- **Ticket** : description (markdown), changement de statut, conversation avec
-  `@agent:nom` pour lancer une session SDK (modes talk/plan/edit, gestion des
-  mentions en conflit comme sur desktop).
+- **Ticket** : description (markdown), changement de statut, **repos liés**
+  (ajout/suppression — indispensable pour les worktrees et le contexte des
+  agents), conversation avec autocomplete `@` (agents, panels, skills,
+  workflows, tickets) pour lancer une session SDK (modes talk/plan/edit,
+  gestion des mentions en conflit comme sur desktop).
 - **Runs** : historique des exécutions du ticket, flux d'événements live
   (thinking, tool calls, résultat), bouton stop.
+- **Assistant** (onglet dédié) : le même assistant LLM que la Chrome extension.
+
+## Assistant LLM
+
+L'onglet Assistant parle au **companion** (`packages/sidepanel-host`) — le même
+backend que l'extension Chrome : même prompt engine conscient de Fleex (outils
+générés depuis le CLI, `fleex documentation` disponible comme outil), chaque
+conversation est épinglée à un **workspace** (le companion injecte
+`--workspace <nom>` dans chaque commande), et toute commande **mutante** exige
+ton approbation explicite — la commande `fleex …` exacte est affichée avant
+exécution.
+
+Prérequis sur le laptop :
+
+1. Le companion tourne : `fleex companion status` (démarré automatiquement par
+   `fleex start` ; sinon `fleex companion start`). Il lit `ANTHROPIC_API_KEY`
+   dans `~/.fleex/config`.
+2. En **dev** (`fleex start`), rien d'autre : le dev server Vite proxie
+   `/assistant/*` vers le companion (port 4399 par défaut,
+   `FLEEX_SIDEPANEL_PORT` sinon).
+3. En **prod** (build servi par le serveur Fastify), ajoute un mount de chemin
+   au proxy Tailscale :
+
+   ```bash
+   tailscale serve --bg --https=443 --set-path=/assistant http://localhost:4399
+   ```
 
 ## Dépannage
 

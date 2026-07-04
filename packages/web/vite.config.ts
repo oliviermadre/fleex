@@ -6,6 +6,8 @@ import path from 'node:path';
 const webPort = parseInt(process.env['VITE_DEV_PORT'] || '5173', 10);
 const serverUrl = process.env['VITE_PROXY_TARGET'] || 'http://localhost:3000';
 const serverWs = serverUrl.replace(/^http/, 'ws');
+// Side-panel companion (machine-wide singleton, also used by the mobile assistant)
+const companionUrl = `http://localhost:${process.env['FLEEX_SIDEPANEL_PORT'] || '4399'}`;
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -35,6 +37,14 @@ export default defineConfig({
       '/auth': {
         target: serverUrl,
         changeOrigin: true,
+      },
+      // Mobile assistant → companion host (same protocol as the Chrome side
+      // panel). Path prefix is stripped: /assistant/chat → :4399/chat.
+      '/assistant': {
+        target: companionUrl,
+        changeOrigin: true,
+        ws: true,
+        rewrite: (p) => p.replace(/^\/assistant/, ''),
       },
     },
   },

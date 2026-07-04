@@ -6,6 +6,7 @@ import { useAgentEventStore } from '../stores/agentEventStore';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { MobileConversation } from './MobileConversation';
 import { MobileExecutions } from './MobileExecutions';
+import { MobileTicketRepos } from './MobileTicketRepos';
 
 type Tab = 'description' | 'conversation' | 'runs';
 
@@ -69,6 +70,9 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
           {ticket.title}
         </h1>
       </div>
+
+      {/* Repository links — required for worktrees and agent context */}
+      <MobileTicketRepos ticket={ticket} />
 
       {/* Tabs */}
       <nav className="flex shrink-0 gap-1 border-b border-[var(--theme-border)] px-3 pt-2">
