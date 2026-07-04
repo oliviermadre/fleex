@@ -3,6 +3,7 @@ import type {
   ConversationMode,
   Ticket,
   TicketComment,
+  TicketDeliverable,
   TicketMention,
   TicketWsMessage,
 } from '@fleex/shared';
@@ -15,8 +16,10 @@ import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTicketStore } from '../stores/ticketStore';
 import { useUnreadStore } from '../stores/unreadStore';
+import { useAgentEventStore } from '../stores/agentEventStore';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
+import { MobileDeliverableReader } from './MobileDeliverableReader';
 
 const MODES: { id: ConversationMode; label: string }[] = [
   { id: 'talk', label: '🗣 Talk' },
@@ -66,6 +69,37 @@ const MENTION_TYPE_BADGE: Record<MentionOption['type'], { letter: string; classN
 // Tickets can be numerous — only surface them once a query is typed, capped.
 const MAX_TICKET_SUGGESTIONS = 8;
 
+function isUrl(text: string): boolean {
+  return /^https?:\/\/\S+$/.test(text.trim());
+}
+
+function DeliverableChip({
+  deliverable,
+  seen,
+  onOpen,
+}: {
+  deliverable: TicketDeliverable;
+  seen: boolean;
+  onOpen: (d: TicketDeliverable) => void;
+}) {
+  return (
+    <button
+      onClick={() => onOpen(deliverable)}
+      className="flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-hover)] px-2.5 py-1.5 text-left"
+    >
+      {!seen && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--theme-accent)]" />}
+      <span className="shrink-0 text-xs">📄</span>
+      <span className="min-w-0 truncate text-[11px] font-medium text-[var(--theme-text-primary)]">
+        {deliverable.title}
+      </span>
+      <span className="shrink-0 text-[9px] uppercase tracking-wide text-[var(--theme-text-faint)]">
+        {deliverable.type}
+        {deliverable.status === 'draft' ? ' · draft' : ''}
+      </span>
+    </button>
+  );
+}
+
 export function MobileConversation({ ticket }: { ticket: Ticket }) {
   const ticketId = ticket.id;
   const personas = useAgentPersonaStore((s) => s.personas);
@@ -93,11 +127,20 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
 
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [mentions, setMentions] = useState<TicketMention[]>([]);
+  const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
+  const [openDeliverable, setOpenDeliverable] = useState<TicketDeliverable | null>(null);
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
+
+  // Seen-state drives the unread dot on each deliverable chip
+  const seenDeliverables = useUnreadStore((s) => s.seenDeliverablesByTicket[ticketId]);
+  const loadSeenDeliverables = useUnreadStore((s) => s.loadSeenDeliverables);
+  // Executions carry the explicit comment↔deliverable FK (workflow/panel/skill
+  // sources never populate a mention) — already loaded/subscribed by the parent.
+  const executions = useAgentEventStore((s) => s.executionsByTicket[ticketId]);
 
   // ── Mention autocomplete (triggered by typing '@' in the textarea) ──
   const [acOpen, setAcOpen] = useState(false);
@@ -215,7 +258,9 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
   useEffect(() => {
     api.fetchTicketComments(ticketId).then(setComments).catch(() => {});
     api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
-  }, [ticketId]);
+    api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
+    loadSeenDeliverables(ticketId).catch(() => {});
+  }, [ticketId, loadSeenDeliverables]);
 
   // Opening the conversation on the phone = caught up
   useEffect(() => {
@@ -255,6 +300,20 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
         const d = msg.data as { id: string; ticketId: string };
         if (d.ticketId !== ticketId) return;
         setMentions((prev) => prev.filter((x) => x.id !== d.id));
+      } else if (msg.type === 'deliverable:created') {
+        const d = msg.data as TicketDeliverable;
+        if (d.ticketId !== ticketId) return;
+        setDeliverables((prev) => (prev.some((x) => x.id === d.id) ? prev : [...prev, d]));
+      } else if (msg.type === 'deliverable:updated') {
+        const d = msg.data as TicketDeliverable;
+        if (d.ticketId !== ticketId) return;
+        setDeliverables((prev) => prev.map((x) => (x.id === d.id ? d : x)));
+        setOpenDeliverable((cur) => (cur?.id === d.id ? d : cur));
+      } else if (msg.type === 'deliverable:deleted') {
+        const d = msg.data as { id: string; ticketId: string };
+        if (d.ticketId !== ticketId) return;
+        setDeliverables((prev) => prev.filter((x) => x.id !== d.id));
+        setOpenDeliverable((cur) => (cur?.id === d.id ? null : cur));
       }
     });
     return unsub;
@@ -271,6 +330,49 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
     }
     return map;
   }, [mentions]);
+
+  // Same union as desktop TicketComments: a deliverable is attached to the
+  // comment that delivered it, through either link path —
+  //   1. mention.resolvedCommentId ↔ mention.resolvedDeliverableId (@-mention flow)
+  //   2. execution.commentId ↔ execution.deliverableId (explicit FK — covers
+  //      workflow steps, panels and skills, which never populate a mention)
+  const deliverablesByComment = useMemo(() => {
+    const byId = new Map(deliverables.map((d) => [d.id, d]));
+    const map = new Map<string, TicketDeliverable[]>();
+    const linked = new Set<string>();
+    const addLink = (commentId: string, d: TicketDeliverable) => {
+      linked.add(d.id);
+      const arr = map.get(commentId);
+      if (!arr) {
+        map.set(commentId, [d]);
+        return;
+      }
+      if (!arr.some((x) => x.id === d.id)) arr.push(d);
+    };
+    for (const m of mentions) {
+      if (!m.resolvedCommentId || !m.resolvedDeliverableId) continue;
+      const d = byId.get(m.resolvedDeliverableId);
+      if (d) addLink(m.resolvedCommentId, d);
+    }
+    for (const e of executions ?? []) {
+      if (!e.commentId || !e.deliverableId) continue;
+      const d = byId.get(e.deliverableId);
+      if (d) addLink(e.commentId, d);
+    }
+    const orphans = deliverables.filter((d) => !linked.has(d.id));
+    return { map, orphans };
+  }, [deliverables, mentions, executions]);
+
+  const isSeen = (d: TicketDeliverable) => seenDeliverables?.has(d.id) ?? false;
+
+  // URL deliverables (e.g. a PR link) open externally, like on desktop
+  const handleOpenDeliverable = useCallback((d: TicketDeliverable) => {
+    if (isUrl(d.content)) {
+      window.open(d.content.trim(), '_blank', 'noopener');
+    } else {
+      setOpenDeliverable(d);
+    }
+  }, []);
 
   const setMode = useCallback(
     (mode: ConversationMode) => {
@@ -346,7 +448,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Comments */}
       <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        {comments.length === 0 ? (
+        {comments.length === 0 && deliverablesByComment.orphans.length === 0 ? (
           <p className="py-8 text-center text-sm text-[var(--theme-text-faint)]">
             Aucun commentaire — mentionne un agent pour lancer une session.
           </p>
@@ -392,9 +494,29 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                       ))}
                     </div>
                   )}
+                  {(deliverablesByComment.map.get(c.id) ?? []).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {(deliverablesByComment.map.get(c.id) ?? []).map((d) => (
+                        <DeliverableChip key={d.id} deliverable={d} seen={isSeen(d)} onOpen={handleOpenDeliverable} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
+            {/* Deliverables not linked to any comment stay reachable */}
+            {deliverablesByComment.orphans.length > 0 && (
+              <div className="rounded-xl border border-dashed border-[var(--theme-border)] p-3">
+                <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-[var(--theme-text-muted)]">
+                  Autres deliverables
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {deliverablesByComment.orphans.map((d) => (
+                    <DeliverableChip key={d.id} deliverable={d} seen={isSeen(d)} onOpen={handleOpenDeliverable} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -529,6 +651,15 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
           </button>
         </div>
       </div>
+
+      {/* Deliverable reader */}
+      {openDeliverable && (
+        <MobileDeliverableReader
+          ticketId={ticketId}
+          deliverable={openDeliverable}
+          onClose={() => setOpenDeliverable(null)}
+        />
+      )}
     </div>
   );
 }
