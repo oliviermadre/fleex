@@ -9,6 +9,11 @@ import type {
 import * as api from '../services/api';
 import { appWs } from '../services/websocket';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
+import { usePanelStore } from '../stores/panelStore';
+import { useSkillStore } from '../stores/skillStore';
+import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { useTicketStore } from '../stores/ticketStore';
 import { useUnreadStore } from '../stores/unreadStore';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
@@ -40,10 +45,51 @@ type Conflict = {
   agents: { agent: string; displayName: string }[];
 };
 
+// Same option model as the desktop composer (TicketComments): every mention
+// target the server understands — agents, panels, skills, workflows, the
+// human name and tickets.
+interface MentionOption {
+  insertText: string;
+  label: string;
+  type: 'agent' | 'human' | 'panel' | 'skill' | 'workflow' | 'ticket';
+}
+
+const MENTION_TYPE_BADGE: Record<MentionOption['type'], { letter: string; className: string }> = {
+  agent: { letter: 'A', className: 'bg-purple-500/20 text-purple-400' },
+  panel: { letter: 'P', className: 'bg-blue-500/20 text-blue-400' },
+  skill: { letter: 'S', className: 'bg-emerald-500/20 text-emerald-400' },
+  workflow: { letter: 'W', className: 'bg-orange-500/20 text-orange-400' },
+  ticket: { letter: 'T', className: 'bg-slate-500/20 text-slate-400' },
+  human: { letter: 'H', className: 'bg-amber-500/20 text-amber-400' },
+};
+
+// Tickets can be numerous — only surface them once a query is typed, capped.
+const MAX_TICKET_SUGGESTIONS = 8;
+
 export function MobileConversation({ ticket }: { ticket: Ticket }) {
   const ticketId = ticket.id;
   const personas = useAgentPersonaStore((s) => s.personas);
   const markCommentsRead = useUnreadStore((s) => s.markCommentsRead);
+
+  // Mention targets beyond personas — loaded lazily like the desktop composer
+  const panels = usePanelStore((s) => s.panels);
+  const panelsLoaded = usePanelStore((s) => s.loaded);
+  const loadPanels = usePanelStore((s) => s.loadPanels);
+  const skills = useSkillStore((s) => s.skills);
+  const skillsLoaded = useSkillStore((s) => s.loaded);
+  const loadSkills = useSkillStore((s) => s.loadSkills);
+  const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
+  const refreshWorkflowTemplates = useWorkflowTemplateStore((s) => s.refresh);
+  const humanMentionName = useSettingsStore(
+    (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
+  );
+  const allTickets = useTicketStore((s) => s.tickets);
+
+  useEffect(() => {
+    if (!panelsLoaded) loadPanels();
+    if (!skillsLoaded) loadSkills();
+    if (workflowTemplates.length === 0) void refreshWorkflowTemplates();
+  }, [panelsLoaded, loadPanels, skillsLoaded, loadSkills, workflowTemplates.length, refreshWorkflowTemplates]);
 
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [mentions, setMentions] = useState<TicketMention[]>([]);
@@ -52,6 +98,119 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
+
+  // ── Mention autocomplete (triggered by typing '@' in the textarea) ──
+  const [acOpen, setAcOpen] = useState(false);
+  const [acQuery, setAcQuery] = useState('');
+  const [acTriggerPos, setAcTriggerPos] = useState(-1);
+
+  const allMentionOptions = useMemo<MentionOption[]>(() => {
+    const opts: MentionOption[] = personas.map((p) => ({
+      insertText: `@agent:${p.name}`,
+      label: p.displayName || p.name,
+      type: 'agent' as const,
+    }));
+    for (const panel of panels) {
+      if (panel.enabled) {
+        opts.push({ insertText: `@panel:${panel.name}`, label: panel.displayName || panel.name, type: 'panel' });
+      }
+    }
+    for (const skill of skills) {
+      if (skill.enabled) {
+        opts.push({ insertText: `@skill:${skill.commandName}`, label: skill.displayName || skill.commandName, type: 'skill' });
+      }
+    }
+    for (const wf of workflowTemplates) {
+      if (wf.enabled) {
+        opts.push({ insertText: `@workflow:${wf.slug}`, label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name, type: 'workflow' });
+      }
+    }
+    if (humanMentionName) {
+      opts.push({ insertText: `@${humanMentionName}`, label: humanMentionName, type: 'human' });
+    }
+    for (const t of allTickets) {
+      opts.push({ insertText: `@ticket:${t.displayId}`, label: `#${t.displayId} ${t.title}`, type: 'ticket' });
+    }
+    return opts;
+  }, [personas, panels, skills, workflowTemplates, humanMentionName, allTickets]);
+
+  const filteredOptions = useMemo(() => {
+    if (!acOpen) return [];
+    const q = acQuery.toLowerCase();
+    const matches = (o: MentionOption) =>
+      o.label.toLowerCase().includes(q) || o.insertText.toLowerCase().includes(q);
+    const nonTicket = allMentionOptions.filter((o) => o.type !== 'ticket' && matches(o));
+    // Bare "@" would otherwise dump every ticket into the list
+    if (q.length === 0) return nonTicket;
+    const tickets = allMentionOptions
+      .filter((o) => o.type === 'ticket' && matches(o))
+      .slice(0, MAX_TICKET_SUGGESTIONS);
+    return [...nonTicket, ...tickets];
+  }, [acOpen, acQuery, allMentionOptions]);
+
+  const closeMentionAc = useCallback(() => {
+    setAcOpen(false);
+    setAcQuery('');
+    setAcTriggerPos(-1);
+  }, []);
+
+  // Same trigger detection as desktop: last '@' before the cursor, at the
+  // start or after whitespace, with no space typed after it yet.
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const val = e.target.value;
+      const cursor = e.target.selectionStart;
+      setBody(val);
+
+      const textBeforeCursor = val.slice(0, cursor);
+      const atIdx = textBeforeCursor.lastIndexOf('@');
+      if (atIdx >= 0 && (atIdx === 0 || /\s/.test(textBeforeCursor[atIdx - 1]!))) {
+        const fragment = textBeforeCursor.slice(atIdx + 1);
+        if (!/\s/.test(fragment)) {
+          setAcOpen(true);
+          setAcTriggerPos(atIdx);
+          setAcQuery(fragment.replace(/^(agent|panel|skill|workflow|ticket):/, ''));
+          return;
+        }
+      }
+      closeMentionAc();
+    },
+    [closeMentionAc],
+  );
+
+  const acceptMention = useCallback(
+    (opt: MentionOption) => {
+      const ta = textareaRef.current;
+      if (!ta || acTriggerPos < 0) return;
+      const before = body.slice(0, acTriggerPos);
+      const after = body.slice(ta.selectionStart);
+      const newBody = before + opt.insertText + ' ' + after;
+      setBody(newBody);
+      closeMentionAc();
+      const newCursor = acTriggerPos + opt.insertText.length + 1;
+      requestAnimationFrame(() => {
+        ta.focus();
+        ta.setSelectionRange(newCursor, newCursor);
+      });
+    },
+    [body, acTriggerPos, closeMentionAc],
+  );
+
+  // '@' button: appends a trigger at the end of the draft and opens the list —
+  // more discoverable on a phone keyboard than knowing to type '@'.
+  const openMentionPicker = useCallback(() => {
+    const ta = textareaRef.current;
+    const sep = body.length === 0 || body.endsWith(' ') || body.endsWith('\n') ? '' : ' ';
+    const newBody = `${body}${sep}@`;
+    setBody(newBody);
+    setAcOpen(true);
+    setAcTriggerPos(newBody.length - 1);
+    setAcQuery('');
+    requestAnimationFrame(() => {
+      ta?.focus();
+      ta?.setSelectionRange(newBody.length, newBody.length);
+    });
+  }, [body]);
 
   useEffect(() => {
     api.fetchTicketComments(ticketId).then(setComments).catch(() => {});
@@ -119,14 +278,6 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
     },
     [ticketId],
   );
-
-  const insertMention = useCallback((name: string) => {
-    setBody((prev) => {
-      const sep = prev.length === 0 || prev.endsWith(' ') || prev.endsWith('\n') ? '' : ' ';
-      return `${prev}${sep}@agent:${name} `;
-    });
-    textareaRef.current?.focus();
-  }, []);
 
   const doPost = useCallback(
     async (conflicts: api.MentionConflictResolution[]) => {
@@ -299,13 +450,42 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
         </div>
       )}
 
+      {/* Mention autocomplete */}
+      {acOpen && filteredOptions.length > 0 && (
+        <div className="max-h-52 shrink-0 overflow-y-auto border-t border-[var(--theme-border)] bg-[var(--theme-bg-secondary)]">
+          {filteredOptions.map((opt) => {
+            const badge = MENTION_TYPE_BADGE[opt.type];
+            return (
+              <button
+                key={opt.insertText}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  acceptMention(opt);
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left active:bg-[var(--theme-bg-hover)]"
+              >
+                <span
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded text-[11px] font-bold ${badge.className}`}
+                >
+                  {badge.letter}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--theme-text-primary)]">
+                  {opt.label}
+                </span>
+                <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Composer */}
       <div
         className="shrink-0 border-t border-[var(--theme-border)] px-3 pb-2 pt-2"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
       >
-        {/* Mode + persona chips */}
-        <div className="mb-2 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
+        {/* Mode + mention trigger */}
+        <div className="mb-2 flex items-center gap-1.5">
           <div className="flex shrink-0 overflow-hidden rounded-lg border border-[var(--theme-border)]">
             {MODES.map((m) => (
               <button
@@ -321,22 +501,22 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
               </button>
             ))}
           </div>
-          {personas.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => insertMention(p.name)}
-              className="shrink-0 rounded-full bg-[var(--theme-bg-secondary)] px-2.5 py-1 text-[11px] text-[var(--theme-text-muted)]"
-            >
-              @{p.displayName || p.name}
-            </button>
-          ))}
+          <div className="flex-1" />
+          <button
+            onClick={openMentionPicker}
+            className="shrink-0 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-1 text-sm font-semibold text-[var(--theme-text-muted)]"
+            aria-label="Mentionner un agent, skill, panel ou workflow"
+          >
+            @
+          </button>
         </div>
         <div className="flex items-end gap-2">
           <textarea
             ref={textareaRef}
             value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Message… (@agent:nom pour lancer une session)"
+            onChange={handleInputChange}
+            onBlur={() => setTimeout(closeMentionAc, 200)}
+            placeholder="Message… (@ pour mentionner)"
             rows={2}
             className="min-h-0 flex-1 resize-none rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-base leading-snug text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
           />
