@@ -3,12 +3,15 @@ import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { Ticket, TicketStatus } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
 import { useAgentEventStore } from '../stores/agentEventStore';
+import { useWorkflowRunStore, ACTIVE_STATUSES } from '../stores/workflowRunStore';
+import { appWs } from '../services/websocket';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { MobileConversation } from './MobileConversation';
 import { MobileExecutions } from './MobileExecutions';
 import { MobileTicketRepos } from './MobileTicketRepos';
+import { MobileWorkflow } from './MobileWorkflow';
 
-type Tab = 'description' | 'conversation' | 'runs';
+type Tab = 'description' | 'conversation' | 'runs' | 'workflow';
 
 export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
@@ -21,6 +24,13 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
     (s) => (s.executionsByTicket[ticket.id] ?? []).filter((e) => e.status === 'running').length,
   );
 
+  const loadWorkflowRuns = useWorkflowRunStore((s) => s.loadForTicket);
+  const workflowRuns = useWorkflowRunStore((s) => s.runsByTicket[ticket.id]);
+  const activeWorkflowRun = workflowRuns?.find((r) => ACTIVE_STATUSES.has(r.status));
+  // A gate or a question is waiting on the user → badge the tab
+  const workflowNeedsHuman =
+    activeWorkflowRun?.status === 'needs_review' || activeWorkflowRun?.status === 'blocked';
+
   const [tab, setTab] = useState<Tab>('conversation');
 
   // Live agent activity for this ticket (new executions stream in via WS)
@@ -30,10 +40,32 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
     return () => unsubscribeTicket(ticket.id);
   }, [ticket.id, loadExecutionsForTicket, subscribeTicket, unsubscribeTicket]);
 
+  // Workflow runs: loaded at detail level so the tab badge works without
+  // opening the tab; workflow:* WS events keep the store fresh (same wiring
+  // as the desktop TicketDetail).
+  useEffect(() => {
+    void loadWorkflowRuns(ticket.id);
+    const unsub = appWs.onChannel('tickets', (raw) => {
+      if (!raw.type.startsWith('workflow:')) return;
+      const data = raw.data as { ticketId?: string };
+      if (data?.ticketId === ticket.id) {
+        useWorkflowRunStore.getState().applyEvent({
+          type: raw.type,
+          ticketId: ticket.id,
+          payload: raw.data as Record<string, unknown>,
+        });
+      }
+    });
+    return unsub;
+  }, [ticket.id, loadWorkflowRuns]);
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'description', label: 'Description' },
     { id: 'conversation', label: 'Conversation' },
     { id: 'runs', label: runningCount > 0 ? `Runs ●` : 'Runs' },
+    ...(workflowRuns && workflowRuns.length > 0
+      ? [{ id: 'workflow' as const, label: workflowNeedsHuman ? 'Workflow ✋' : 'Workflow' }]
+      : []),
   ];
 
   return (
@@ -105,6 +137,7 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
       )}
       {tab === 'conversation' && <MobileConversation ticket={ticket} />}
       {tab === 'runs' && <MobileExecutions ticketId={ticket.id} />}
+      {tab === 'workflow' && <MobileWorkflow ticketId={ticket.id} />}
     </div>
   );
 }
