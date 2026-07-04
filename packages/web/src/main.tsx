@@ -8,3 +8,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>
 );
+
+// PWA installability (Add to Home Screen). Requires a secure context — met on
+// localhost or behind `tailscale serve` (HTTPS). See docs/mobile.md.
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}

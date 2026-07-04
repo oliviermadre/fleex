@@ -11,7 +11,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: webPort,
-    allowedHosts: ['.nip.io'],
+    // .ts.net: Tailscale MagicDNS hostnames, so the dev server can be reached
+    // from a phone via `tailscale serve` (see docs/mobile.md)
+    allowedHosts: ['.nip.io', '.ts.net'],
     historyApiFallback: true,
     proxy: {
       '/api': {

@@ -9,11 +9,23 @@ import { RouterSync } from './router/RouterSync';
 import { useFaviconStatus } from './hooks/useFaviconStatus';
 import { useTheme } from './hooks/useTheme';
 import { useTerminalFont } from './hooks/useTerminalFont';
+import { useMobileMode } from './mobile/useMobileMode';
+import { MobileApp } from './mobile/MobileApp';
 
 export function App() {
   useFaviconStatus();
   useTheme();
   useTerminalFont();
+  const isMobile = useMobileMode();
+
+  if (isMobile) {
+    return (
+      <BrowserRouter>
+        <MobileApp />
+        <ToastContainer />
+      </BrowserRouter>
+    );
+  }
 
   return (
     <BrowserRouter>

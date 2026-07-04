@@ -17,6 +17,7 @@ Manage multiple Claude agents, monitor terminals in real time, track work via ka
 - **Scratchpads** — auto-saving markdown notes per repo
 - **10 built-in themes** — Fleex, Ember, Ocean, Verdant, Light, Dark, Matrix, Summer, Fall, Catppuccin Latte
 - **Multi-machine support** — gateway architecture for remote hosts
+- **Mobile PWA** — kanban, tickets and live SDK agent sessions from your phone over Tailscale ([docs/mobile.md](docs/mobile.md))
 
 ## Architecture
 
