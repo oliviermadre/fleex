@@ -34,6 +34,9 @@ import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
 import { PriorityIndicator } from '../tickets/PriorityIndicator';
 import { findSessionsForTicketId, findSessionsForPR, hasLocalWorktreeForPR } from './dashboard-helpers';
 
+// Wait for the /tickets route to mount before selecting the ticket.
+const NAV_SELECT_DELAY_MS = 100;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function timeAgo(dateStr: string): string {
@@ -1209,7 +1212,7 @@ export function DashboardView() {
                             const ticket = storeTickets.find((t) => t.id === a.ticketId);
                             if (ticket) {
                               navigate('/tickets');
-                              setTimeout(() => useTicketStore.getState().selectTicket(ticket.id), 100);
+                              setTimeout(() => useTicketStore.getState().selectTicket(ticket.id), NAV_SELECT_DELAY_MS);
                             }
                           }}
                         >
