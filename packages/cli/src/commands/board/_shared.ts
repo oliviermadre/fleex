@@ -1,4 +1,4 @@
-import { die, err, c } from '../../core/colors.ts';
+import { die, err, info, c, isJsonMode } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
 import { matchById, type MatchResult } from '../../core/match.ts';
 
@@ -6,6 +6,39 @@ export interface Board {
   id: string;
   name: string;
   emoji?: string;
+}
+
+type StatusKey = 'backlog' | 'todo' | 'doing' | 'reviewing' | 'done' | 'cancelled';
+
+export interface BoardWithCounts extends Board {
+  ticketCounts?: Partial<Record<StatusKey, number>>;
+}
+
+/**
+ * Fetch all boards and print them with per-status ticket counts (or the raw
+ * JSON array in --json mode). Shared by `board list` and `ticket boards` so the
+ * two surfaces render identically and can never drift.
+ */
+export async function listBoardsWithCounts(): Promise<void> {
+  const boards = await apiGet<BoardWithCounts[]>(`${apiBase()}/api/boards`);
+  if (isJsonMode()) {
+    process.stdout.write(JSON.stringify(boards) + '\n');
+    return;
+  }
+  if (boards.length === 0) {
+    info('No boards found.');
+    return;
+  }
+  process.stdout.write('\n');
+  process.stdout.write(`  ${c.bold('Board                       Backlog   Todo  Doing Review   Done  Canc.  ID')}\n`);
+  process.stdout.write('  ──────────────────────────  ───────  ─────  ───── ──────  ─────  ─────  ────────────────────────────────────\n');
+  for (const b of boards) {
+    const label = `${b.emoji ?? ''} ${b.name}`.trim().slice(0, 26).padEnd(26);
+    const cnt = b.ticketCounts ?? {};
+    const n = (k: StatusKey) => String(cnt[k] ?? 0).padStart(6);
+    process.stdout.write(`  ${label} ${n('backlog')}  ${n('todo')}  ${n('doing')} ${n('reviewing')}  ${n('done')}  ${n('cancelled')}  ${c.dim(b.id)}\n`);
+  }
+  process.stdout.write('\n');
 }
 
 /**
@@ -42,5 +75,5 @@ export async function resolveBoard(input: string): Promise<Board> {
     }
     process.exit(1);
   }
-  die(`No board matches "${input}". List boards with ${c.cyan('fleex ticket boards')}.`);
+  die(`No board matches "${input}". List boards with ${c.cyan('fleex board list')}.`);
 }

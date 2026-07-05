@@ -1,10 +1,11 @@
 import type { CommandDef } from '../../../core/types.ts';
-import { listBoardsWithCounts } from '../../board/_shared.ts';
+import { listBoardsWithCounts } from '../_shared.ts';
 
 const def: CommandDef = {
   workspaceAware: true,
-  name: 'boards',
-  description: 'List boards with ticket counts per status (alias of `board list`)',
+  name: 'list',
+  aliases: ['ls'],
+  description: 'List boards with ticket counts per status',
   action: async () => {
     await listBoardsWithCounts();
   },
