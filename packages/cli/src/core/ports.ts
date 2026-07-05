@@ -2,6 +2,7 @@ import net from 'node:net';
 import fs from 'node:fs';
 import { die } from './colors.ts';
 import { resolveInstance, type InstanceContext } from './instance.ts';
+import { defaultWorkspaceName } from './workspaces.ts';
 
 export const SERVICES = ['gateway', 'server', 'web', 'desktop'] as const;
 export type Service = (typeof SERVICES)[number];
@@ -71,9 +72,48 @@ export function loadPorts(ctx: InstanceContext = resolveInstance()): Ports | nul
   }
 }
 
+/**
+ * Build the "stack not running" error. It names the *exact* instance that was
+ * looked up (workspace / branch / slug) so a mismatch is obvious, gives the
+ * precise command to start that instance, and — when the workspace was picked
+ * from an inherited `$FLEEX_WORKSPACE` rather than the configured default —
+ * spells out how to target the default instead. This is what turns the old
+ * opaque "Stack not running" into a self-explanatory diagnostic. Pure: returns
+ * the string, the caller decides whether/how to print it.
+ */
+export function stackNotRunningMessage(ctx: InstanceContext = resolveInstance()): string {
+  const { workspace, workspaceSource: source, branch, instanceSlug } = ctx;
+  const lines: string[] = [];
+
+  if (workspace) {
+    lines.push(`Stack not running for workspace '${workspace}' (branch '${branch}', instance '${instanceSlug}').`);
+  } else {
+    lines.push(`Stack not running for branch '${branch}' (instance '${instanceSlug}').`);
+  }
+
+  const def = defaultWorkspaceName();
+  // Plain `fleex start` resolves to the default workspace, so only add the flag
+  // when the target isn't the default (otherwise the command would start a
+  // *different* instance than the one reported missing).
+  const startCmd =
+    workspace && def !== workspace ? `fleex start --workspace ${workspace}` : 'fleex start';
+  lines.push('', 'Start it with:', `  ${startCmd}`);
+
+  // The likely footgun: a stale env var silently steered us to another instance.
+  if (source === 'env' && def && def !== workspace) {
+    lines.push(
+      '',
+      `Note: workspace '${workspace}' came from an inherited $FLEEX_WORKSPACE, not the default '${def}'.`,
+      `To target the default instead: unset FLEEX_WORKSPACE   (or pass --workspace ${def})`,
+    );
+  }
+
+  return lines.join('\n');
+}
+
 /** Throws (exits) if no ports file is found. */
 export function requirePorts(ctx: InstanceContext = resolveInstance()): Ports {
   const p = loadPorts(ctx);
-  if (!p) die('Stack not running. Start it with: fleex start');
+  if (!p) die(stackNotRunningMessage(ctx));
   return p;
 }
