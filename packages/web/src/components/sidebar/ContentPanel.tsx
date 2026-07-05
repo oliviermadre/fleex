@@ -19,6 +19,7 @@ import { ClaudeConfigTree } from '../claude-config/ClaudeConfigTree';
 import { ScratchpadsContent } from '../scratchpad/ScratchpadsContent';
 import { TicketsContentPanel } from '../tickets/TicketsContentPanel';
 import { AgentListPanel } from '../agents/AgentListPanel';
+import { AssistantSidebar } from '../assistant/AssistantSidebar';
 import { RepositoriesIcon } from './icons';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { aggregateBranchStatus, type DisplayStatus } from '../../lib/deriveStatus';
@@ -54,6 +55,7 @@ export function ContentPanel() {
       {activePanel === 'scratchpads' && <ScratchpadsContent />}
       {activePanel === 'analytics' && <AnalyticsNav />}
       {activePanel === 'settings' && <SettingsNav />}
+      {activePanel === 'assistant' && <AssistantSidebar />}
     </div>
   );
 }

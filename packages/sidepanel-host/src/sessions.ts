@@ -29,6 +29,8 @@ export interface SessionData {
   model?: string;
   status: SessionStatus;
   createdAt: string;
+  /** Timestamp of the last user/assistant message (absent on legacy sessions). */
+  lastMessageAt?: string;
   messages: Anthropic.MessageParam[];
   transcript: TranscriptItem[];
 }
@@ -42,6 +44,8 @@ export interface SessionSummary {
   status: SessionStatus;
   messageCount: number;
   createdAt: string;
+  /** Last user/assistant message time; falls back to createdAt for legacy sessions. */
+  lastMessageAt: string;
 }
 
 const DEFAULT_TITLE = 'New conversation';
@@ -64,6 +68,7 @@ export function toSummary(s: SessionData): SessionSummary {
     status: s.status,
     messageCount: messageCount(s),
     createdAt: s.createdAt,
+    lastMessageAt: s.lastMessageAt ?? s.createdAt,
   };
 }
 
@@ -165,6 +170,14 @@ export class SessionStore {
     const s = this.sessions.get(id);
     if (!s || s.status === status) return;
     s.status = status;
+    this.save(id);
+  }
+
+  /** Stamp the last-message time (called when a user/assistant item lands). */
+  touchMessage(id: string): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    s.lastMessageAt = new Date().toISOString();
     this.save(id);
   }
 
