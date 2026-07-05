@@ -2,15 +2,7 @@ import type { CommandDef } from '../../../../core/types.ts';
 import { c, info, present } from '../../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../../core/api.ts';
 import { resolveTicketId } from '../../../ticket/_shared.ts';
-
-interface WorkflowRun {
-  id: string;
-  status: string;
-  templateSnapshot?: { name?: string };
-  currentStepId?: string | null;
-  triggeredBy?: string;
-  startedAt?: string;
-}
+import type { WorkflowRun } from '../../_shared.ts';
 
 interface ListOptions { board?: string }
 
@@ -34,14 +26,15 @@ const def: CommandDef = {
         return;
       }
       process.stdout.write('\n');
-      process.stdout.write(`  ${c.bold('RUN ID     STATUS        WORKFLOW                 STARTED')}\n`);
-      process.stdout.write('  ──────────  ────────────  ───────────────────────  ────────────────────\n');
+      const header = `${'RUN ID'.padEnd(36)}  ${'STATUS'.padEnd(12)}  ${'WORKFLOW'.padEnd(23)}  STARTED`;
+      process.stdout.write(`  ${c.bold(header)}\n`);
+      process.stdout.write(`  ${'─'.repeat(36)}  ${'─'.repeat(12)}  ${'─'.repeat(23)}  ${'─'.repeat(20)}\n`);
       for (const r of runs) {
-        const id = r.id.slice(0, 8).padEnd(10);
+        const id = r.id.padEnd(36);
         const status = (r.status ?? '-').padEnd(12);
         const wf = (r.templateSnapshot?.name ?? '-').slice(0, 23).padEnd(23);
         const started = r.startedAt ?? '-';
-        process.stdout.write(`  ${id} ${status} ${wf} ${started}\n`);
+        process.stdout.write(`  ${id}  ${status}  ${wf}  ${started}\n`);
       }
       process.stdout.write('\n');
       info(`${runs.length} run(s)`);

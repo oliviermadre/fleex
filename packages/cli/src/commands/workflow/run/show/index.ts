@@ -1,28 +1,8 @@
 import type { CommandDef } from '../../../../core/types.ts';
 import { c, present } from '../../../../core/colors.ts';
-import { apiBase, apiGet } from '../../../../core/api.ts';
+import { fetchRunDetail } from '../../_shared.ts';
 
-interface WorkflowRun {
-  id: string;
-  ticketId: string;
-  status: string;
-  currentStepId?: string | null;
-  triggeredBy?: string;
-  triggeredFrom?: string;
-  startedAt?: string;
-  completedAt?: string | null;
-  templateSnapshot?: { name?: string; steps?: { id: string; name?: string }[] };
-}
-
-interface StepRun {
-  id: string;
-  stepId: string;
-  attempt: number;
-  status: string;
-  result?: string | null;
-}
-
-interface RunDetail { run: WorkflowRun; stepRuns: StepRun[] }
+interface ShowOptions { ticket?: string }
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -30,10 +10,11 @@ const def: CommandDef = {
   aliases: ['view'],
   description: 'Show a workflow run and its step runs',
   setup(cmd) {
-    cmd.argument('<runId>', 'Workflow run UUID');
+    cmd.argument('<runId>', 'Workflow run UUID or short id prefix (needs --ticket)');
+    cmd.option('--ticket <id>', 'Ticket display ID (#42) or UUID — required to resolve a run prefix');
   },
-  action: async (runId: string) => {
-    const detail = await apiGet<RunDetail>(`${apiBase()}/api/workflows/runs/${encodeURIComponent(runId)}`);
+  action: async (runId: string, opts: ShowOptions) => {
+    const detail = await fetchRunDetail(runId, opts.ticket);
     present(detail, () => {
       const { run, stepRuns } = detail;
       const stepName = new Map((run.templateSnapshot?.steps ?? []).map((s) => [s.id, s.name ?? s.id]));
@@ -55,7 +36,7 @@ const def: CommandDef = {
         for (const s of stepRuns) {
           const name = stepName.get(s.stepId) ?? s.stepId;
           const res = s.result ? ` → ${s.result}` : '';
-          process.stdout.write(`    ${c.dim(s.id.slice(0, 8))}  ${s.status.padEnd(12)} attempt ${s.attempt}  ${name}${res}\n`);
+          process.stdout.write(`    ${c.dim(s.id)}  ${s.status.padEnd(12)} attempt ${s.attempt}  ${name}${res}\n`);
         }
       }
       process.stdout.write('\n');
