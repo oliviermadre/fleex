@@ -76,20 +76,28 @@ conversation est épinglée à un **workspace** (le companion injecte
 ton approbation explicite — la commande `fleex …` exacte est affichée avant
 exécution.
 
-Prérequis sur le laptop :
+Prérequis sur le laptop — un seul :
 
-1. Le companion tourne : `fleex companion status` (démarré automatiquement par
-   `fleex start` ; sinon `fleex companion start`). Il lit `ANTHROPIC_API_KEY`
-   dans `~/.fleex/config`.
-2. En **dev** (`fleex start`), rien d'autre : le dev server Vite proxie
-   `/companion/*` vers le companion (port 4399 par défaut,
-   `FLEEX_SIDEPANEL_PORT` sinon).
-3. En **prod** (build servi par le serveur Fastify), ajoute un mount de chemin
-   au proxy Tailscale :
+- Le companion tourne : `fleex companion status` (démarré automatiquement par
+  `fleex start` ; sinon `fleex companion start`). Il lit `ANTHROPIC_API_KEY`
+  dans `~/.fleex/config`.
 
-   ```bash
-   tailscale serve --bg --https=443 --set-path=/companion http://localhost:4399
-   ```
+C'est tout. Avec `fleex start` (qui lance toujours le dev server Vite), le
+proxy `/companion/*` → companion (port 4399 par défaut, `FLEEX_SIDEPANEL_PORT`
+sinon) est intégré — ton `tailscale serve` unique vers le port web couvre
+l'app, l'API, les WebSockets **et** l'assistant. Aucun `--set-path` à ajouter.
+
+<details>
+<summary>Cas particulier : servir le build statique sans Vite</summary>
+
+Si tu sers `web/dist` directement via le serveur Fastify (`bun run build`
+puis `bun run start`, sans passer par `fleex start`), rien ne proxie
+`/companion` — ajoute alors un mount de chemin au proxy Tailscale :
+
+```bash
+tailscale serve --bg --https=443 --set-path=/companion http://localhost:4399
+```
+</details>
 
 ## Dépannage
 
