@@ -3,19 +3,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useAssistantStore, type AssistantSession } from '../../stores/assistantStore';
 import { cn } from '../../lib/cn';
 import { tintSolid, tintText } from '../../lib/tints';
-
-/** "x unit ago" relative time, matching the comment feed's tone. */
-export function relativeTime(iso: string): string {
-  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
+import { formatRelativeTime } from '../../lib/relativeTime';
 
 /** Idle vs answering indicator: pulses while the LLM is working. */
 export function AssistantStatusDot({ status, size = 8 }: { status: AssistantSession['status']; size?: number }) {
@@ -157,7 +145,7 @@ export function AssistantSidebar() {
                 <p className="truncate text-[10px] text-[var(--theme-text-faint)]">
                   {s.messageCount} message{s.messageCount > 1 ? 's' : ''}
                   {' · '}
-                  {relativeTime(s.lastMessageAt ?? s.createdAt)}
+                  {formatRelativeTime(s.lastMessageAt ?? s.createdAt, { maxUnit: 'month' })}
                   {s.workspace ? ` · ${s.workspace}` : ''}
                 </p>
               </div>

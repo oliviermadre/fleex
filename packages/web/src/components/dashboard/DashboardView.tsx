@@ -25,6 +25,7 @@ import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
 import { tintText, tintSolid } from '../../lib/tints';
+import { formatRelativeTime } from '../../lib/relativeTime';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { getPrBadgeClasses } from '../../lib/prBadgeStyle';
 import { notifyHookStarted } from '../../lib/hookResultToast';
@@ -39,16 +40,6 @@ import { GitHubIcon } from '../sidebar/icons';
 const NAV_SELECT_DELAY_MS = 100;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
-}
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -369,7 +360,7 @@ function DashboardItemRow({
               #{item.number}
               <GitHubIcon size={11} />
             </a>
-            <span className="text-[var(--theme-text-faint)]">{timeAgo(item.createdAt)}</span>
+            <span className="text-[var(--theme-text-faint)]">{formatRelativeTime(item.createdAt, 'compact')}</span>
           </div>
         </div>
         <span className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -554,7 +545,7 @@ function DashboardItemRow({
           >
             <GitHubIcon size={11} />
           </a>
-          <span className="text-[var(--theme-text-faint)]">{timeAgo(item.createdAt)}</span>
+          <span className="text-[var(--theme-text-faint)]">{formatRelativeTime(item.createdAt, 'compact')}</span>
         </div>
       </div>
 
@@ -945,7 +936,7 @@ function useLiveSyncAge(lastFetchedAt: Date | null): string {
     return () => clearInterval(id);
   }, [lastFetchedAt]);
   if (!lastFetchedAt) return 'never';
-  return timeAgo(lastFetchedAt.toISOString());
+  return formatRelativeTime(lastFetchedAt.toISOString(), 'compact');
 }
 
 function SyncToolbar() {
@@ -1219,7 +1210,7 @@ export function DashboardView() {
                           </span>
                           <span className="min-w-0 truncate text-[var(--theme-text-secondary)]">{a.ticketTitle}</span>
                           <span className="ml-auto flex-shrink-0 text-[var(--theme-text-faint)]">
-                            {timeAgo(a.completedAt ?? a.startedAt)}
+                            {formatRelativeTime(a.completedAt ?? a.startedAt, 'compact')}
                           </span>
                         </button>
                       ))}

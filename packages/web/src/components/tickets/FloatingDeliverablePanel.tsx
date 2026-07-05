@@ -6,6 +6,7 @@ import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 import { TITLE_BAR_HEIGHT, PILL_BORDER_RADIUS } from '../../lib/constants';
+import { formatRelativeTime as relativeTime } from '../../lib/relativeTime';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useUIStore } from '../../stores/uiStore';
 
@@ -15,19 +16,6 @@ const DEFAULT_WIDTH = 650;
 const DEFAULT_HEIGHT = 500;
 const HTML_DEFAULT_WIDTH = 900;
 const HTML_DEFAULT_HEIGHT = 700;
-
-function relativeTime(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = now - then;
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 const noopToggle = () => {};
 
