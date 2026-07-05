@@ -137,6 +137,25 @@ export async function resolveTicketId(input: string, boardId?: string): Promise<
 }
 
 /**
+ * Resolve any ticket — active OR archived — to its UUID.
+ *
+ * `resolveTicketId` only queries the active-ticket list, so it can't find an
+ * archived ticket (needed by `ticket unarchive`). `GET /api/tickets/:id`
+ * accepts a UUID or displayId and spans archived tickets, and the archive /
+ * unarchive routes require a UUID — so we resolve through it here.
+ */
+export async function resolveAnyTicketUuid(input: string): Promise<string> {
+  const cleaned = input.startsWith('#') ? input.slice(1) : input;
+  if (cleaned.includes('-') && cleaned.length >= 36) return cleaned;
+  if (!/^\d+$/.test(cleaned)) {
+    die(`Invalid ticket ID: ${input} (use a display ID number or UUID)`);
+  }
+  const base = apiBase();
+  const ticket = await apiGet<{ id: string }>(`${base}/api/tickets/${encodeURIComponent(cleaned)}`);
+  return ticket.id;
+}
+
+/**
  * Resolve a board ID. If `specified` is provided, return it. Otherwise:
  *   - If exactly one board exists, auto-select it.
  *   - Otherwise print the list and exit.
