@@ -6,12 +6,13 @@ import { create } from 'zustand';
  * conversations multiplexed by sessionId. Consumed by both the mobile
  * Assistant tab and the desktop Assistant panel.
  *
- * Reachability: `/assistant/*` is proxied to the companion (default
+ * Reachability: `/companion/*` is proxied to the companion (default
  * localhost:4399) — by Vite in dev, or a `tailscale serve --set-path` mount in
- * prod (see docs/mobile.md).
+ * prod (see docs/mobile.md). The prefix is deliberately NOT `/assistant`,
+ * which is the desktop SPA route and would shadow it.
  */
 
-export const ASSISTANT_BASE = '/assistant';
+export const ASSISTANT_BASE = '/companion';
 
 export type AssistantSessionStatus = 'idle' | 'working' | 'awaiting_input';
 
@@ -52,7 +53,8 @@ interface AssistantState {
   sessions: AssistantSession[];
   activeId: string | null;
   itemsBySession: Record<string, AssistantChatItem[]>;
-  confirmReq: AssistantConfirmRequest | null;
+  /** Pending mutating-command approvals — one per session can be in flight. */
+  confirmReqs: AssistantConfirmRequest[];
   errorMsg: string | null;
   workspaces: AssistantWorkspace[];
 
@@ -64,7 +66,7 @@ interface AssistantState {
   renameSession: (id: string, title: string) => void;
   setModel: (id: string, model: string | undefined) => void;
   sendUser: (text: string) => void;
-  answerConfirm: (approved: boolean) => void;
+  answerConfirm: (id: string, approved: boolean) => void;
   clearError: () => void;
 }
 
@@ -154,16 +156,18 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
         }));
         break;
       }
-      case 'confirm_request':
-        set({
-          confirmReq: {
-            sessionId: sessionId ?? '',
-            id: msg.id as string,
-            name: msg.name as string,
-            argv: (msg.argv as string[]) ?? [],
-          },
-        });
+      case 'confirm_request': {
+        const req: AssistantConfirmRequest = {
+          sessionId: sessionId ?? '',
+          id: msg.id as string,
+          name: msg.name as string,
+          argv: (msg.argv as string[]) ?? [],
+        };
+        set((s) => ({
+          confirmReqs: s.confirmReqs.some((r) => r.id === req.id) ? s.confirmReqs : [...s.confirmReqs, req],
+        }));
         break;
+      }
       case 'error':
         if (!sessionId || sessionId === get().activeId) {
           set({ errorMsg: msg.message as string });
@@ -193,7 +197,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
       // A stale socket (replaced by a reconnect) must not clobber the live one.
       if (ws === socket) {
         ws = null;
-        set({ connected: false });
+        // The server unwinds pending confirmations as denied on disconnect.
+        set({ connected: false, confirmReqs: [] });
         retryTimer = setTimeout(connect, 3000);
       }
     };
@@ -212,7 +217,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
     sessions: [],
     activeId: null,
     itemsBySession: {},
-    confirmReq: null,
+    confirmReqs: [],
     errorMsg: null,
     workspaces: [],
 
@@ -266,11 +271,10 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
       sendMsg({ type: 'user', sessionId: activeId, text: trimmed });
     },
 
-    answerConfirm: (approved) => {
-      const req = get().confirmReq;
-      if (!req) return;
-      sendMsg({ type: 'confirm', id: req.id, approved });
-      set({ confirmReq: null });
+    answerConfirm: (id, approved) => {
+      if (!get().confirmReqs.some((r) => r.id === id)) return;
+      sendMsg({ type: 'confirm', id, approved });
+      set((s) => ({ confirmReqs: s.confirmReqs.filter((r) => r.id !== id) }));
     },
 
     clearError: () => set({ errorMsg: null }),

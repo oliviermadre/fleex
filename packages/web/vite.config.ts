@@ -38,13 +38,14 @@ export default defineConfig({
         target: serverUrl,
         changeOrigin: true,
       },
-      // Mobile assistant → companion host (same protocol as the Chrome side
-      // panel). Path prefix is stripped: /assistant/chat → :4399/chat.
-      '/assistant': {
+      // Assistant (mobile tab + desktop panel) → companion host (same protocol
+      // as the Chrome side panel). Path prefix is stripped:
+      // /companion/chat → :4399/chat. NOT /assistant — that's the SPA route.
+      '/companion': {
         target: companionUrl,
         changeOrigin: true,
         ws: true,
-        rewrite: (p) => p.replace(/^\/assistant/, ''),
+        rewrite: (p) => p.replace(/^\/companion/, ''),
       },
     },
   },

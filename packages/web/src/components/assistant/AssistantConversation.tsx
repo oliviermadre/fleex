@@ -50,10 +50,11 @@ export function AssistantConversation() {
   const sessions = useAssistantStore((s) => s.sessions);
   const activeId = useAssistantStore((s) => s.activeId);
   const items = useAssistantStore((s) => (s.activeId ? s.itemsBySession[s.activeId] ?? EMPTY_ITEMS : EMPTY_ITEMS));
-  const confirmReq = useAssistantStore((s) => s.confirmReq);
+  const confirmReqs = useAssistantStore((s) => s.confirmReqs);
   const errorMsg = useAssistantStore((s) => s.errorMsg);
   const ensureConnected = useAssistantStore((s) => s.ensureConnected);
   const newSession = useAssistantStore((s) => s.newSession);
+  const openSession = useAssistantStore((s) => s.openSession);
   const sendUser = useAssistantStore((s) => s.sendUser);
   const answerConfirm = useAssistantStore((s) => s.answerConfirm);
   const setModel = useAssistantStore((s) => s.setModel);
@@ -347,33 +348,61 @@ export function AssistantConversation() {
               {errorMsg}
             </p>
           )}
-          {/* Mutating command approval */}
-          {confirmReq && confirmReq.sessionId === session.id && (
-            <div className="rounded-xl border border-[var(--theme-accent)]/50 bg-[var(--theme-bg-surface)] p-4">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--theme-text-muted)]">
-                L'assistant veut exécuter
+        </div>
+      </div>
+
+      {/* Mutating command approval — pinned OUTSIDE the scroll area so it can
+          never sit unnoticed below the fold while the assistant waits. */}
+      {confirmReqs
+        .filter((r) => r.sessionId === session.id)
+        .map((req) => (
+          <div key={req.id} className="shrink-0 border-t border-[var(--theme-accent)]/40 bg-[var(--theme-bg-surface)] px-6 py-3">
+            <div className="mx-auto max-w-3xl">
+              <p className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[var(--theme-text-muted)]">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                L'assistant attend ta confirmation
               </p>
-              <pre className="mb-3 overflow-x-auto rounded-lg bg-[var(--theme-bg-overlay)] p-3 font-mono text-xs leading-relaxed text-[var(--theme-text-primary)]">
-                fleex {confirmReq.argv.join(' ')}
+              <pre className="mb-3 max-h-32 overflow-auto rounded-lg bg-[var(--theme-bg-overlay)] p-3 font-mono text-xs leading-relaxed text-[var(--theme-text-primary)]">
+                fleex {req.argv.join(' ')}
               </pre>
               <div className="flex justify-end gap-2">
                 <button
-                  onClick={() => answerConfirm(false)}
+                  onClick={() => answerConfirm(req.id, false)}
                   className="rounded-md border border-[var(--theme-border)] px-4 py-1.5 text-xs font-medium text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]"
                 >
                   Refuser
                 </button>
                 <button
-                  onClick={() => answerConfirm(true)}
+                  onClick={() => answerConfirm(req.id, true)}
                   className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--theme-accent-hover)]"
                 >
                   Approuver
                 </button>
               </div>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        ))}
+
+      {/* Confirmations pending in OTHER conversations — surface them here too */}
+      {confirmReqs
+        .filter((r) => r.sessionId !== session.id)
+        .map((req) => (
+          <div key={req.id} className="shrink-0 border-t border-amber-400/30 bg-amber-400/10 px-6 py-2">
+            <div className="mx-auto flex max-w-3xl items-center gap-2 text-xs text-[var(--theme-text-primary)]">
+              <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
+              <span className="min-w-0 flex-1 truncate">
+                Une commande attend ta confirmation dans «{' '}
+                {sessions.find((s) => s.id === req.sessionId)?.title ?? 'autre conversation'} »
+              </span>
+              <button
+                onClick={() => openSession(req.sessionId)}
+                className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-1 text-xs font-semibold text-white hover:bg-[var(--theme-accent-hover)]"
+              >
+                Ouvrir
+              </button>
+            </div>
+          </div>
+        ))}
 
       {/* Composer */}
       <div className="shrink-0 border-t border-[var(--theme-border)] px-6 py-3">

@@ -35,7 +35,7 @@ export function MobileAssistant() {
   const workspaces = useAssistantStore((s) => s.workspaces);
   const activeId = useAssistantStore((s) => s.activeId);
   const items = useAssistantStore((s) => (s.activeId ? s.itemsBySession[s.activeId] ?? EMPTY_ITEMS : EMPTY_ITEMS));
-  const confirmReq = useAssistantStore((s) => s.confirmReq);
+  const confirmReq = useAssistantStore((s) => s.confirmReqs[0] ?? null);
   const errorMsg = useAssistantStore((s) => s.errorMsg);
   const ensureConnected = useAssistantStore((s) => s.ensureConnected);
   const newSession = useAssistantStore((s) => s.newSession);
@@ -93,7 +93,7 @@ export function MobileAssistant() {
           Le companion ne répond pas. Sur le laptop, lance{' '}
           <code className="rounded bg-[var(--theme-bg-secondary)] px-1.5 py-0.5">fleex companion start</code>{' '}
           (démarré automatiquement par <code className="rounded bg-[var(--theme-bg-secondary)] px-1.5 py-0.5">fleex start</code>),
-          puis vérifie le proxy <code className="rounded bg-[var(--theme-bg-secondary)] px-1.5 py-0.5">/assistant</code> — voir docs/mobile.md.
+          puis vérifie le proxy <code className="rounded bg-[var(--theme-bg-secondary)] px-1.5 py-0.5">/companion</code> — voir docs/mobile.md.
         </p>
         <p className="text-[10px] text-[var(--theme-text-faint)]">Reconnexion automatique…</p>
       </div>
@@ -223,13 +223,13 @@ export function MobileAssistant() {
             </pre>
             <div className="flex gap-2">
               <button
-                onClick={() => answerConfirm(false)}
+                onClick={() => answerConfirm(confirmReq.id, false)}
                 className="flex-1 rounded-lg bg-[var(--theme-bg-hover)] px-4 py-3 text-sm font-medium text-[var(--theme-text-primary)]"
               >
                 Refuser
               </button>
               <button
-                onClick={() => answerConfirm(true)}
+                onClick={() => answerConfirm(confirmReq.id, true)}
                 className="flex-1 rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-white"
               >
                 Approuver

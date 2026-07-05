@@ -82,13 +82,13 @@ Prérequis sur le laptop :
    `fleex start` ; sinon `fleex companion start`). Il lit `ANTHROPIC_API_KEY`
    dans `~/.fleex/config`.
 2. En **dev** (`fleex start`), rien d'autre : le dev server Vite proxie
-   `/assistant/*` vers le companion (port 4399 par défaut,
+   `/companion/*` vers le companion (port 4399 par défaut,
    `FLEEX_SIDEPANEL_PORT` sinon).
 3. En **prod** (build servi par le serveur Fastify), ajoute un mount de chemin
    au proxy Tailscale :
 
    ```bash
-   tailscale serve --bg --https=443 --set-path=/assistant http://localhost:4399
+   tailscale serve --bg --https=443 --set-path=/companion http://localhost:4399
    ```
 
 ## Dépannage
