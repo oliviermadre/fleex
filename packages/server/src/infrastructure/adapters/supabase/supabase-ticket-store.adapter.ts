@@ -179,6 +179,18 @@ export class SupabaseTicketStore implements TicketStorePort {
     return data ? ticketRowToEntity(data as TicketRow) : null;
   }
 
+  async getTicketByDisplayId(displayId: number): Promise<TicketEntity | null> {
+    // No `archived_at` filter — display ids are globally unique and this lookup
+    // must reach archived tickets (used by `ticket unarchive`).
+    const { data, error } = await this.conn.client
+      .from('tickets')
+      .select('*')
+      .eq('display_id', displayId)
+      .maybeSingle();
+    if (error) throw new Error(`SupabaseTicketStore.getTicketByDisplayId failed: ${error.message}`);
+    return data ? ticketRowToEntity(data as TicketRow) : null;
+  }
+
   async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {
     const { data, error } = await this.conn.client
       .from('tickets')

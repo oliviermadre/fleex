@@ -27,7 +27,9 @@ const def: CommandDef = {
       process.stdout.write('\n');
       for (const cm of comments) {
         const color = cm.authorType === 'agent' ? c.cyan : cm.authorType === 'user' ? c.green : (s: string) => s;
-        const shortId = c.dim(`#${cm.id.slice(0, 8)}`);
+        // Show the bare 8-char id (no '#') so it matches `ticket mentions` and
+        // can be pasted straight into `comment-delete`.
+        const shortId = c.dim(cm.id.slice(0, 8));
         process.stdout.write(`  ${color(c.bold(cm.authorName))} ${c.dim(`(${cm.authorType})`)}  ${c.dim(cm.createdAt)}  ${shortId}\n`);
         for (const line of cm.body.split('\n')) {
           process.stdout.write(`    ${line}\n`);

@@ -94,7 +94,27 @@ export class CachedTicketStore implements TicketStorePort, RemoteCacheSync {
 
   async getTicketById(id: string): Promise<TicketEntity | null> {
     await this.ensureWarmed();
-    return this.tickets.get(id) ?? null;
+    const cached = this.tickets.get(id);
+    if (cached) return cached;
+    // The cache is warmed from getAllTickets(), which excludes archived tickets,
+    // so a miss may be an archived ticket rather than a non-existent one. Fall
+    // back to the source of truth (which spans archived) and memoise it, keeping
+    // the cache transparent. Archived entries stay filtered out of getAllTickets
+    // by their archivedAt, so this never leaks them into the Kanban view.
+    const fresh = await this.inner.getTicketById(id);
+    if (fresh) this.tickets.set(fresh.id, fresh);
+    return fresh;
+  }
+
+  async getTicketByDisplayId(displayId: number): Promise<TicketEntity | null> {
+    await this.ensureWarmed();
+    const cached = [...this.tickets.values()].find((t) => t.displayId === displayId);
+    if (cached) return cached;
+    // Not in the (active-only) cache — could be an archived ticket. Resolve via
+    // the source of truth and memoise, mirroring getTicketById above.
+    const fresh = await this.inner.getTicketByDisplayId(displayId);
+    if (fresh) this.tickets.set(fresh.id, fresh);
+    return fresh;
   }
 
   async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {

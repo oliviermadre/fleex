@@ -34,6 +34,19 @@ describe('matchById', () => {
     if (r.kind === 'found') expect(r.item.name).toBe('alpha');
   });
 
+  it('tolerates a leading "#" copied from list output (prefix)', () => {
+    // Lists no longer print a leading '#', but a user may still type one.
+    const r = matchById(items, '#bbbbbbbb');
+    expect(r.kind).toBe('found');
+    if (r.kind === 'found') expect(r.item.name).toBe('beta');
+  });
+
+  it('tolerates a leading "#" on a full UUID', () => {
+    const r = matchById(items, '#bbbbbbbb-1111-2222-3333-444444444444');
+    expect(r.kind).toBe('found');
+    if (r.kind === 'found') expect(r.item.name).toBe('beta');
+  });
+
   it('returns none for an unknown id', () => {
     expect(matchById(items, 'zzzz').kind).toBe('none');
   });

@@ -141,8 +141,9 @@ export async function resolveTicketId(input: string, boardId?: string): Promise<
  *
  * `resolveTicketId` only queries the active-ticket list, so it can't find an
  * archived ticket (needed by `ticket unarchive`). `GET /api/tickets/:id`
- * accepts a UUID or displayId and spans archived tickets, and the archive /
- * unarchive routes require a UUID — so we resolve through it here.
+ * accepts a UUID or displayId and spans archived tickets on both branches
+ * (UUID via getTicketById, displayId via getTicketByDisplayId), and the
+ * archive / unarchive routes require a UUID — so we resolve through it here.
  */
 export async function resolveAnyTicketUuid(input: string): Promise<string> {
   const cleaned = input.startsWith('#') ? input.slice(1) : input;

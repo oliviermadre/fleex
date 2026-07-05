@@ -51,7 +51,7 @@ const def: CommandDef = {
     }
 
     await apiDelete(`${base}/api/tickets/${uuid}/comments/${comment.id}`);
-    ok(`Deleted comment ${c.dim(`#${comment.id.slice(0, 8)}`)} by ${label}`);
+    ok(`Deleted comment ${c.dim(comment.id.slice(0, 8))} by ${label}`);
   },
 };
 

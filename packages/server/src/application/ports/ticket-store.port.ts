@@ -13,6 +13,13 @@ export interface TicketStorePort {
   // Tickets
   getAllTickets(): Promise<TicketEntity[]>;
   getTicketById(id: string): Promise<TicketEntity | null>;
+  /**
+   * Look up a ticket by its globally-unique display id.
+   * Spans archived tickets (like `getTicketById`, unlike `getAllTickets`), so
+   * callers such as `ticket unarchive` can resolve a ticket by the id shown to
+   * the user even after it has been archived.
+   */
+  getTicketByDisplayId(displayId: number): Promise<TicketEntity | null>;
   getTicketsByBoard(boardId: string): Promise<TicketEntity[]>;
   getTicketsByStatus(boardId: string, status: TicketStatus): Promise<TicketEntity[]>;
   getTicketsLinkedTo(type: TicketLinkType, ref: string): Promise<TicketEntity[]>;

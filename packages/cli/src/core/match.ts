@@ -23,7 +23,9 @@ export type MatchResult<T> =
  * refuse to act rather than guess. An empty `input` never matches.
  */
 export function matchById<T extends { id: string }>(items: readonly T[], input: string): MatchResult<T> {
-  const needle = input.trim();
+  // Tolerate a leading '#' a user may have copied from list output — it never
+  // appears in a UUID, so stripping it can't cause a false match.
+  const needle = input.trim().replace(/^#/, '');
   if (!needle) return { kind: 'none' };
 
   const exact = items.find((x) => x.id === needle);

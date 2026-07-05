@@ -158,6 +158,13 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
     return row ? this.toTicketEntity(row) : null;
   }
 
+  async getTicketByDisplayId(displayId: number): Promise<TicketEntity | null> {
+    // No `archived_at IS NULL` filter — display ids are globally unique and this
+    // lookup must reach archived tickets (used by `ticket unarchive`).
+    const row = this.conn.db.prepare('SELECT * FROM tickets WHERE display_id = ?').get(displayId) as TicketRow | undefined;
+    return row ? this.toTicketEntity(row) : null;
+  }
+
   async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {
     const rows = this.conn.db
       .prepare('SELECT * FROM tickets WHERE board_id = ? AND archived_at IS NULL ORDER BY position ASC')
