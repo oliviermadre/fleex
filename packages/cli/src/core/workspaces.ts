@@ -4,6 +4,7 @@ import path from 'node:path';
 import { parseDotEnv, applyEnv } from './env.ts';
 import { warn, die, err } from './colors.ts';
 import { runRules, makeRuleContext } from './workspaces-validation.ts';
+import { setSelectedWorkspace } from './workspace-selection.ts';
 
 /**
  * A workspace is a named, isolated configuration context. Its `env` block is
@@ -290,6 +291,11 @@ export function activateWorkspace(name?: string): Workspace | null {
 
   checkPermissions(filePath);
   process.env.FLEEX_WORKSPACE = ws.name;
+  // Record the selection in-process so resolveInstance() can tell a --workspace
+  // flag / resolved-default apart from an ambient FLEEX_WORKSPACE (which the line
+  // above makes indistinguishable in the env alone). A caller-supplied name is a
+  // flag; an absent one is the configured default.
+  setSelectedWorkspace(ws.name, name !== undefined ? 'flag' : 'default');
   applyEnv(ws.env, { override: true });
   // basePath is the source of truth for the server's repositoriesBasePath —
   // carry it via env so the config adapter overrides the DB value.

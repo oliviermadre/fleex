@@ -1,0 +1,22 @@
+import type { CommandDef } from '../../../core/types.ts';
+import { ok, present } from '../../../core/colors.ts';
+import { apiBase, apiPost } from '../../../core/api.ts';
+import { resolveAnyTicketUuid } from '../_shared.ts';
+
+interface ArchiveResult { displayId: number; title: string }
+
+const def: CommandDef = {
+  workspaceAware: true,
+  name: 'archive',
+  description: 'Archive a ticket (archive <id>)',
+  setup(cmd) {
+    cmd.argument('<id>', 'Ticket display ID or UUID');
+  },
+  action: async (idArg: string) => {
+    const uuid = await resolveAnyTicketUuid(idArg);
+    const ticket = await apiPost<ArchiveResult>(`${apiBase()}/api/tickets/${uuid}/archive`, {});
+    present(ticket, () => ok(`Archived ticket #${ticket.displayId} "${ticket.title}"`));
+  },
+};
+
+export default def;

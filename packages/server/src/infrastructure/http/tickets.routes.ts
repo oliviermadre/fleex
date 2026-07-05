@@ -178,9 +178,9 @@ export function ticketRoutes(container: Container) {
       const raw = request.params.id.replace(/^#/, '');
       let ticket: TicketEntity | null;
       if (/^\d+$/.test(raw)) {
-        const did = Number.parseInt(raw, 10);
-        const all = await container.ticketStore.getAllTickets();
-        ticket = all.find((t) => t.displayId === did) ?? null;
+        // getTicketByDisplayId spans archived tickets, so this resolves an
+        // archived ticket by its display id too (needed by `ticket unarchive`).
+        ticket = await container.ticketStore.getTicketByDisplayId(Number.parseInt(raw, 10));
       } else {
         ticket = await container.ticketStore.getTicketById(raw);
       }

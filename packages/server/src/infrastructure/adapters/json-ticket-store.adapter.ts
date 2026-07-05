@@ -129,6 +129,12 @@ export class JsonTicketStore implements TicketStorePort {
     return this.tickets.get(id) ?? null;
   }
 
+  async getTicketByDisplayId(displayId: number): Promise<TicketEntity | null> {
+    // Spans archived tickets (no archivedAt filter) — display ids are globally
+    // unique and `ticket unarchive` needs to resolve an archived ticket.
+    return Array.from(this.tickets.values()).find((t) => t.displayId === displayId) ?? null;
+  }
+
   async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {
     return Array.from(this.tickets.values())
       .filter((t) => t.boardId === boardId && t.archivedAt === null)

@@ -8,13 +8,16 @@ const DIM = chalk.dim;
 const def: CommandDef = {
   name: 'workflow',
   aliases: ['wf'],
-  description: 'List & inspect workflow templates',
+  description: 'Manage workflow templates & runs (list, show, run, gate, step)',
   isParent: true,
   extraHelp: `\n${SECTION('Examples:')}
   ${DIM('$')} fleex workflow list                ${DIM('# all workflow templates + @workflow: handle')}
-  ${DIM('$')} fleex workflow list --enabled      ${DIM('# only enabled workflows')}
   ${DIM('$')} fleex workflow show spec-dev-pr    ${DIM('# detail + steps of one workflow')}
   ${DIM('$')} fleex trigger 42 --workflow spec-dev-pr
+  ${DIM('$')} fleex workflow run list 42         ${DIM('# runs for ticket #42')}
+  ${DIM('$')} fleex workflow run cancel <runId> -f
+  ${DIM('$')} fleex workflow gate resolve <runId> <stepRunId> --outcome approved
+  ${DIM('$')} fleex workflow step retry <runId> <stepRunId>
 `,
   action: (...args: unknown[]) => {
     const cmd = args[args.length - 1] as Command;

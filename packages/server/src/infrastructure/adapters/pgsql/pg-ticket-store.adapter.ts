@@ -96,6 +96,13 @@ export class PgTicketStore implements TicketStorePort {
     return rows.length > 0 ? rowToTicket(rows[0]) : null;
   }
 
+  async getTicketByDisplayId(displayId: number): Promise<TicketEntity | null> {
+    // No `archived_at IS NULL` filter — display ids are globally unique and this
+    // lookup must reach archived tickets (used by `ticket unarchive`).
+    const { rows } = await this.db.query('SELECT * FROM tickets WHERE display_id = $1', [displayId]);
+    return rows.length > 0 ? rowToTicket(rows[0]) : null;
+  }
+
   async getTicketsByBoard(boardId: string): Promise<TicketEntity[]> {
     const { rows } = await this.db.query(
       'SELECT * FROM tickets WHERE board_id = $1 AND archived_at IS NULL ORDER BY position ASC',

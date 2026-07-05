@@ -33,8 +33,9 @@ export interface CommandDef {
    * plus a preAction hook that activates the named workspace before the action
    * runs (so the resolved instance is `workspace@branch`). Use for any command
    * that resolves the current instance — ticket/epic/import/export/logs/doctor/
-   * stop/remove. Without the flag, `resolveInstance()` already falls back to the
-   * default workspace, so this only adds the explicit override.
+   * stop/remove. Without the flag, `resolveInstance()` falls back to an ambient
+   * `FLEEX_WORKSPACE` env var and then to the default workspace, so this only
+   * adds the explicit override.
    */
   workspaceAware?: boolean;
 }

@@ -32,7 +32,12 @@ ${SECTION('Examples:')}
   ${DIM('$')} fleex ticket update 42 --to-board ${GREEN('<board-id>')}    ${DIM('# move to another board')}
   ${DIM('$')} fleex ticket update 42 --add-epic abc12345  ${DIM('# add/remove from an epic')}
   ${DIM('$')} fleex ticket move 42 done                  ${DIM('# mark as done')}
+  ${DIM('$')} fleex ticket archive 42                    ${DIM('# archive (unarchive to restore)')}
   ${DIM('$')} fleex ticket comment 42 "Looks good"       ${DIM('# add a comment')}
+  ${DIM('$')} fleex ticket comments 42                   ${DIM('# list comments (with ids)')}
+  ${DIM('$')} fleex ticket comment-delete 42 a1b2c3d4    ${DIM('# delete a comment by id')}
+  ${DIM('$')} fleex ticket mentions 42                   ${DIM('# list mentions + their ids')}
+  ${DIM('$')} fleex ticket mention resolve 42 a1b2c3d4   ${DIM('# resolve/ack/wait/run/delete a mention')}
   ${DIM('$')} fleex ticket link 42 --repo github/fleex    ${DIM('# link a repo (auto-creates worktree)')}
   ${DIM('$')} fleex ticket link 42 --pr org/name#123      ${DIM('# attach a PR (link PR before repo)')}
   ${DIM('$')} fleex ticket link 42 --issue org/name#45    ${DIM('# attach a GitHub issue')}

@@ -2,8 +2,9 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { die } from './colors.ts';
+import { die, isJsonMode, c } from './colors.ts';
 import { defaultWorkspaceName } from './workspaces.ts';
+import { getSelectedWorkspace, type WorkspaceSource } from './workspace-selection.ts';
 
 export const FLEEX_HOME = process.env.FLEEX_HOME ?? path.join(os.homedir(), '.fleex');
 export const DEFAULT_REPO_DIR = path.join(FLEEX_HOME, 'repo');
@@ -16,11 +17,60 @@ export interface InstanceContext {
   portsFile: string;
   /** Active workspace name, or null in legacy (branch-only) mode. */
   workspace: string | null;
+  /** How {@link workspace} was chosen — see {@link resolveWorkspaceSelection}. */
+  workspaceSource: WorkspaceSource;
   /** Git branch the repo is on (or "default"). */
   branch: string;
 }
 
 let cached: InstanceContext | null = null;
+
+export interface WorkspaceSelection {
+  /** The resolved workspace name, or null in legacy mode (no workspaces.json). */
+  workspace: string | null;
+  source: WorkspaceSource;
+}
+
+/**
+ * Resolve which workspace this process targets, and how the choice was made.
+ *
+ * Precedence (documented, MCP/desktop rely on it — like `AWS_PROFILE`):
+ *   1. an explicit activation — a `--workspace` flag or a resolved default,
+ *      recorded by {@link activateWorkspace} (see workspace-selection.ts);
+ *   2. an ambient `FLEEX_WORKSPACE` env var (inherited from the shell / a
+ *      parent process such as the MCP server);
+ *   3. the single `is_default` workspace from workspaces.json;
+ *   4. legacy mode — no workspaces.json — yielding a branch-only slug.
+ *
+ * Pure (no caching): safe to call for the slug and, separately, for diagnostics.
+ */
+export function resolveWorkspaceSelection(): WorkspaceSelection {
+  const sel = getSelectedWorkspace();
+  if (sel) return { workspace: sel.name, source: sel.source };
+
+  const env = process.env.FLEEX_WORKSPACE;
+  if (env && env.trim() !== '') return { workspace: env.trim(), source: 'env' };
+
+  const def = defaultWorkspaceName();
+  if (def) return { workspace: def, source: 'default' };
+
+  return { workspace: null, source: 'legacy' };
+}
+
+/**
+ * Breadcrumb text shown (dim, on stderr, human mode only) when the targeted
+ * workspace comes from an ambient `FLEEX_WORKSPACE` — *not* a `--workspace` flag
+ * — AND differs from the configured default. This makes an inherited env var
+ * impossible to miss, even when the command succeeds, so it can never silently
+ * steer the CLI to another instance unnoticed. Returns null when there is
+ * nothing worth warning about. Pure (returns the string, caller does the I/O).
+ */
+export function ambientWorkspaceWarning(sel: WorkspaceSelection): string | null {
+  if (sel.source !== 'env') return null;
+  const def = defaultWorkspaceName();
+  if (!def || def === sel.workspace) return null;
+  return `[fleex] workspace: ${sel.workspace} (from $FLEEX_WORKSPACE, not the default '${def}') — pass --workspace to override`;
+}
 
 /** Slug suitable for filesystem use. */
 export function slugify(input: string): string {
@@ -74,13 +124,20 @@ export function resolveInstance(): InstanceContext {
   });
   const branchName = (branch.status === 0 ? branch.stdout.trim() : 'default') || 'default';
 
-  // FLEEX_WORKSPACE is set by activateWorkspace() before the first call here.
-  // When it isn't (e.g. read-only commands that never activate a workspace),
-  // fall back to the single default workspace so the slug resolves to the
-  // running `default@branch` instance instead of the branch-only legacy slug.
-  const wsEnv = process.env.FLEEX_WORKSPACE;
-  const workspace = wsEnv && wsEnv.trim() !== '' ? wsEnv : defaultWorkspaceName();
+  // Resolve which workspace this process targets — and how the choice was made —
+  // via the single source of truth (see resolveWorkspaceSelection). This honours
+  // an explicit --workspace / resolved default first, then an ambient
+  // FLEEX_WORKSPACE, then the is_default workspace, then legacy branch-only mode.
+  const { workspace, source } = resolveWorkspaceSelection();
   const slug = instanceSlug(workspace, branchName);
+
+  // Breadcrumb (once, human mode only): if the target came from an *inherited*
+  // FLEEX_WORKSPACE that differs from the configured default, say so on stderr so
+  // a stale env var can never silently steer commands to another instance.
+  if (!isJsonMode()) {
+    const warning = ambientWorkspaceWarning({ workspace, source });
+    if (warning) process.stderr.write(c.dim(warning) + '\n');
+  }
 
   cached = {
     repoDir,
@@ -89,6 +146,7 @@ export function resolveInstance(): InstanceContext {
     instanceLog: path.join(FLEEX_HOME, '.logs', slug),
     portsFile: path.join(FLEEX_HOME, '.run', slug, 'ports.json'),
     workspace,
+    workspaceSource: source,
     branch: branchName,
   };
   return cached;
