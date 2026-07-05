@@ -4,11 +4,13 @@ import { TICKET_STATUS, SLACK_IMPORT_PENDING_TAG, SLACK_IMPORT_FAILED_TAG, isSla
 import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { TypePickerPopover } from './TypePickerPopover';
 import { DueDateBadge } from './DueDateBadge';
+import { ActivityPill } from './ActivityPill';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useUnreadStore } from '../../stores/unreadStore';
+import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { executeSkill } from '../../services/api';
 import { cn } from '../../lib/cn';
@@ -65,6 +67,10 @@ export function KanbanCard({
   const [retrying, setRetrying] = useState(false);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
   const unread = useUnreadStore((s) => s.getUnread(ticket.id));
+  // Read a stable primitive (the enum) so a board-wide reconcile only re-renders
+  // the cards whose activity actually changed.
+  const activity = useTicketActivityStore((s) => s.activityByTicket[ticket.id] ?? 'idle');
+  const activityDetail = useTicketActivityStore((s) => s.detailByTicket[ticket.id]);
   const groups = useTicketGroupStore((s) => s.groups);
   const ticketGroupIds = useTicketGroupStore((s) => s.ticketGroupIds);
 
@@ -291,6 +297,8 @@ export function KanbanCard({
       {!isCompleted && (
         <div className="px-3 pb-1.5 space-y-1.5 text-xs text-[var(--theme-text-muted)]">
           <div className="flex items-center gap-1.5">
+            {/* Agentic activity (running / waiting) — persists across the board */}
+            <ActivityPill activity={activity} detail={activityDetail} />
             {/* Assignee */}
             {ticket.assignee && (
               ticket.assignee === 'user' ? (

@@ -124,6 +124,8 @@ export type {
   TicketContextEpic,
   TicketReadCursors,
   TicketUnreadCounts,
+  AgentActivityState,
+  TicketAgentActivity,
   TicketWsMessageType,
   TicketWsMessage,
 } from './types/ticket.js';

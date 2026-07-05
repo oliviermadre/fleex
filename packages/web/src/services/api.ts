@@ -587,6 +587,11 @@ export async function fetchUnreadCounts(ticketIds?: string[]): Promise<import('@
   return request<import('@fleex/shared').TicketUnreadCounts[]>(`/tickets/unread-counts${params}`);
 }
 
+export async function fetchTicketAgentActivity(ticketIds: string[]): Promise<import('@fleex/shared').TicketAgentActivity[]> {
+  if (!ticketIds.length) return [];
+  return request<import('@fleex/shared').TicketAgentActivity[]>(`/tickets/agent-activity?ticketIds=${ticketIds.join(',')}`);
+}
+
 // ── Agent Tokens API ──
 
 export async function fetchAgentTokens(): Promise<import('@fleex/shared').AgentToken[]> {
