@@ -19,7 +19,7 @@ import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents';
+type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant';
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
@@ -81,6 +81,11 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   // Dashboard
   if (pathname === '/dashboard') {
     return { ...base, panel: 'dashboard' };
+  }
+
+  // Assistant (companion-backed LLM chat)
+  if (pathname === '/assistant') {
+    return { ...base, panel: 'assistant' };
   }
 
   // Agent worktree within sessions panel
@@ -336,6 +341,8 @@ export function storeToUrl(
     }
     case 'documents':
       return { pathname: '/documents', search: '' };
+    case 'assistant':
+      return { pathname: '/assistant', search: '' };
     case 'execution-log':
       return { pathname: '/execution-log', search: '' };
     case 'cluster':

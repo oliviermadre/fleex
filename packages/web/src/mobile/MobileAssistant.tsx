@@ -1,53 +1,22 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
+import {
+  useAssistantStore,
+  type AssistantChatItem,
+  type AssistantToolStatus,
+} from '../stores/assistantStore';
 
 /**
- * Mobile client for the Fleex assistant — the same companion host that backs
- * the Chrome side panel extension (packages/sidepanel-host). Same WS protocol,
- * same prompt engine: the host builds the system prompt, injects
- * `--workspace <name>` into every CLI invocation, and gates mutating commands
- * behind an explicit confirmation round-trip (rendered here as an approval
- * sheet showing the exact `fleex …` command).
- *
- * Reachability: `/assistant/*` is proxied to the companion (default
- * localhost:4399) — by Vite in dev, or by a `tailscale serve --set-path`
- * mount in prod (see docs/mobile.md).
+ * Mobile client for the Fleex assistant — same companion host as the Chrome
+ * side panel and the desktop Assistant panel; the WS protocol lives in
+ * assistantStore. Mutating fleex commands are approved from a bottom sheet
+ * showing the exact command.
  */
 
-const ASSISTANT_BASE = '/assistant';
+const EMPTY_ITEMS: AssistantChatItem[] = [];
 
-type SessionStatus = 'idle' | 'working' | 'awaiting_input';
-
-interface SessionSummary {
-  id: string;
-  title: string;
-  workspace?: string;
-  model?: string;
-  status: SessionStatus;
-}
-
-interface WorkspaceInfo {
-  name: string;
-  isDefault: boolean;
-  branch?: string | null;
-}
-
-type ChatItem =
-  | { kind: 'user'; text: string }
-  | { kind: 'assistant'; text: string }
-  | { kind: 'tool'; id?: string; name: string; argv: string[]; status: 'running' | 'ok' | 'fail' | 'denied'; text?: string };
-
-interface ConfirmRequest {
-  sessionId: string;
-  id: string;
-  name: string;
-  argv: string[];
-}
-
-type ToolStatus = 'running' | 'ok' | 'fail' | 'denied';
-
-function toolStatusBadge(status: ToolStatus): { label: string; className: string } {
+function toolStatusBadge(status: AssistantToolStatus): { label: string; className: string } {
   switch (status) {
     case 'running':
       return { label: '⏳', className: 'text-amber-400' };
@@ -61,157 +30,27 @@ function toolStatusBadge(status: ToolStatus): { label: string; className: string
 }
 
 export function MobileAssistant() {
-  const [connected, setConnected] = useState(false);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [items, setItems] = useState<ChatItem[]>([]);
-  const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const connected = useAssistantStore((s) => s.connected);
+  const sessions = useAssistantStore((s) => s.sessions);
+  const workspaces = useAssistantStore((s) => s.workspaces);
+  const activeId = useAssistantStore((s) => s.activeId);
+  const items = useAssistantStore((s) => (s.activeId ? s.itemsBySession[s.activeId] ?? EMPTY_ITEMS : EMPTY_ITEMS));
+  const confirmReq = useAssistantStore((s) => s.confirmReq);
+  const errorMsg = useAssistantStore((s) => s.errorMsg);
+  const ensureConnected = useAssistantStore((s) => s.ensureConnected);
+  const newSession = useAssistantStore((s) => s.newSession);
+  const openSessionInStore = useAssistantStore((s) => s.openSession);
+  const deleteSession = useAssistantStore((s) => s.deleteSession);
+  const sendUser = useAssistantStore((s) => s.sendUser);
+  const answerConfirm = useAssistantStore((s) => s.answerConfirm);
+
   const [showSessions, setShowSessions] = useState(false);
   const [draft, setDraft] = useState('');
-
-  const wsRef = useRef<WebSocket | null>(null);
-  const activeIdRef = useRef<string | null>(null);
-  activeIdRef.current = activeId;
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
 
-  const sendMsg = useCallback((msg: Record<string, unknown>) => {
-    const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
-  }, []);
-
-  // ── WebSocket lifecycle with reconnect ──
   useEffect(() => {
-    let disposed = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const connect = () => {
-      if (disposed) return;
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${proto}//${window.location.host}${ASSISTANT_BASE}/chat`);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        if (wsRef.current !== ws) return;
-        setConnected(true);
-        setErrorMsg(null);
-        // Reload the open conversation after a reconnect
-        if (activeIdRef.current) ws.send(JSON.stringify({ type: 'open_session', id: activeIdRef.current }));
-      };
-      ws.onclose = () => {
-        // A stale socket (replaced by a StrictMode remount or a reconnect)
-        // must not clobber the ref of the live one — its close arrives async.
-        if (wsRef.current === ws) {
-          wsRef.current = null;
-          setConnected(false);
-          if (!disposed) retryTimer = setTimeout(connect, 3000);
-        }
-      };
-      ws.onmessage = (event) => {
-        if (wsRef.current !== ws) return;
-        let msg: Record<string, unknown>;
-        try {
-          msg = JSON.parse(event.data as string);
-        } catch {
-          return;
-        }
-        handleServerMessage(msg);
-      };
-    };
-
-    const handleServerMessage = (msg: Record<string, unknown>) => {
-      const forActive = msg.sessionId === activeIdRef.current;
-      switch (msg.type) {
-        case 'sessions':
-          setSessions((msg.sessions as SessionSummary[]) ?? []);
-          break;
-        case 'session_created':
-          setActiveId(msg.id as string);
-          setItems([]);
-          sendMsg({ type: 'open_session', id: msg.id });
-          break;
-        case 'session_history': {
-          if (msg.id !== activeIdRef.current) break;
-          const transcript = (msg.transcript as unknown[]) ?? [];
-          setItems(
-            transcript.map((t): ChatItem => {
-              const o = t as Record<string, unknown>;
-              if (o.tool) {
-                const tool = o.tool as { name: string; argv: string[]; status: ToolStatus; text?: string };
-                return { kind: 'tool', name: tool.name, argv: tool.argv ?? [], status: tool.status, text: tool.text };
-              }
-              return { kind: o.role === 'user' ? 'user' : 'assistant', text: (o.text as string) ?? '' };
-            }),
-          );
-          break;
-        }
-        case 'text': {
-          if (!forActive) break;
-          const delta = msg.text as string;
-          setItems((prev) => {
-            const last = prev[prev.length - 1];
-            if (last?.kind === 'assistant') {
-              return [...prev.slice(0, -1), { kind: 'assistant', text: last.text + delta }];
-            }
-            return [...prev, { kind: 'assistant', text: delta }];
-          });
-          break;
-        }
-        case 'tool_call': {
-          if (!forActive) break;
-          setItems((prev) => [
-            ...prev,
-            { kind: 'tool', id: msg.id as string, name: msg.name as string, argv: (msg.argv as string[]) ?? [], status: 'running' },
-          ]);
-          break;
-        }
-        case 'tool_result':
-        case 'tool_denied': {
-          if (!forActive) break;
-          const status: ToolStatus = msg.type === 'tool_denied' ? 'denied' : (msg.ok as boolean) ? 'ok' : 'fail';
-          setItems((prev) =>
-            prev.map((it) =>
-              it.kind === 'tool' && it.id === msg.id
-                ? { ...it, status, text: (msg.text as string | undefined) ?? it.text }
-                : it,
-            ),
-          );
-          break;
-        }
-        case 'confirm_request':
-          setConfirmReq({
-            sessionId: msg.sessionId as string,
-            id: msg.id as string,
-            name: msg.name as string,
-            argv: (msg.argv as string[]) ?? [],
-          });
-          break;
-        case 'error':
-          if (forActive || !msg.sessionId) setErrorMsg(msg.message as string);
-          break;
-        default:
-          break;
-      }
-    };
-
-    connect();
-    return () => {
-      disposed = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      wsRef.current?.close();
-      wsRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sendMsg]);
-
-  // Workspaces for the new-session picker (companion enriches with branch)
-  useEffect(() => {
-    fetch(`${ASSISTANT_BASE}/workspaces`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((ws: WorkspaceInfo[]) => setWorkspaces(Array.isArray(ws) ? ws : []))
-      .catch(() => {});
-  }, [connected]);
+    ensureConnected();
+  }, [ensureConnected]);
 
   useLayoutEffect(() => {
     maybeStick();
@@ -222,40 +61,27 @@ export function MobileAssistant() {
 
   const openSession = useCallback(
     (id: string) => {
-      setActiveId(id);
-      setItems([]);
+      openSessionInStore(id);
       setShowSessions(false);
-      sendMsg({ type: 'open_session', id });
     },
-    [sendMsg],
+    [openSessionInStore],
   );
 
-  const newSession = useCallback(
+  const createSession = useCallback(
     (workspace?: string) => {
-      sendMsg({ type: 'new_session', ...(workspace ? { workspace } : {}) });
+      newSession(workspace);
       setShowSessions(false);
     },
-    [sendMsg],
+    [newSession],
   );
 
   const handleSend = useCallback(() => {
     const text = draft.trim();
     if (!text || !activeId || busy) return;
-    setItems((prev) => [...prev, { kind: 'user', text }]);
-    sendMsg({ type: 'user', sessionId: activeId, text });
+    sendUser(text);
     setDraft('');
-    setErrorMsg(null);
     scrollToBottom();
-  }, [draft, activeId, busy, sendMsg, scrollToBottom]);
-
-  const answerConfirm = useCallback(
-    (approved: boolean) => {
-      if (!confirmReq) return;
-      sendMsg({ type: 'confirm', id: confirmReq.id, approved });
-      setConfirmReq(null);
-    },
-    [confirmReq, sendMsg],
-  );
+  }, [draft, activeId, busy, sendUser, scrollToBottom]);
 
   // ── Disconnected: setup hint ──
   if (!connected) {
@@ -293,7 +119,7 @@ export function MobileAssistant() {
           <span className="shrink-0 text-xs text-[var(--theme-text-faint)]">▾</span>
         </button>
         <button
-          onClick={() => newSession()}
+          onClick={() => createSession()}
           className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-2 text-sm font-semibold text-white"
           aria-label="Nouvelle conversation"
         >
@@ -309,7 +135,7 @@ export function MobileAssistant() {
               L'assistant pilote tes boards, tickets, epics et deliverables via le CLI fleex.
             </p>
             <button
-              onClick={() => newSession()}
+              onClick={() => createSession()}
               className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-white"
             >
               Nouvelle conversation
@@ -427,7 +253,7 @@ export function MobileAssistant() {
             <div className="mb-4 flex flex-wrap gap-1.5">
               {workspaces.length === 0 ? (
                 <button
-                  onClick={() => newSession()}
+                  onClick={() => createSession()}
                   className="rounded-full bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white"
                 >
                   + Workspace par défaut
@@ -436,7 +262,7 @@ export function MobileAssistant() {
                 workspaces.map((w) => (
                   <button
                     key={w.name}
-                    onClick={() => newSession(w.name)}
+                    onClick={() => createSession(w.name)}
                     className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text-primary)]"
                   >
                     + {w.name}
@@ -466,16 +292,10 @@ export function MobileAssistant() {
                         {s.workspace}
                       </span>
                     )}
-                    {s.status !== 'idle' && <span className="shrink-0 text-[10px] text-amber-400">●</span>}
+                    {s.status !== 'idle' && <span className="shrink-0 animate-pulse text-[10px] text-amber-400">●</span>}
                   </button>
                   <button
-                    onClick={() => {
-                      sendMsg({ type: 'delete_session', id: s.id });
-                      if (s.id === activeId) {
-                        setActiveId(null);
-                        setItems([]);
-                      }
-                    }}
+                    onClick={() => deleteSession(s.id)}
                     className="shrink-0 rounded-lg px-2 py-3 text-xs text-[var(--theme-text-faint)] active:text-[var(--theme-danger)]"
                     aria-label={`Supprimer ${s.title}`}
                   >

@@ -153,6 +153,7 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
   }
   session.messages.push({ role: 'user', content });
   session.transcript.push({ role: 'user', text });
+  store.touchMessage(sessionId);
   store.setStatus(sessionId, 'working');
   store.save(sessionId);
   broadcastSessions();
@@ -164,6 +165,7 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
     if (assistantBuf) {
       session.transcript.push({ role: 'assistant', text: assistantBuf });
       assistantBuf = '';
+      store.touchMessage(sessionId);
       store.save(sessionId);
     }
   };

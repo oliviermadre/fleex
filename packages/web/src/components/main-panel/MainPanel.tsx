@@ -26,6 +26,7 @@ import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { DashboardView } from '../dashboard/DashboardView';
 import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
 import { DocumentsPage } from '../documents/DocumentsPage';
+import { AssistantConversation } from '../assistant/AssistantConversation';
 
 function GroupEmptyCell() {
   return (
@@ -83,6 +84,10 @@ export function MainPanel() {
 
   if (activePanel === 'dashboard') {
     return <DashboardView />;
+  }
+
+  if (activePanel === 'assistant') {
+    return <AssistantConversation />;
   }
 
   if (activePanel === 'settings') {
