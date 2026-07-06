@@ -42,7 +42,7 @@ registerTabKind('execution', {
   Icon: ExecutionIcon,
   Content: ExecutionContent,
   StatusIndicator: ExecutionStatus,
-  defaultCapabilities: { closable: false, renamable: false, orderable: true },
+  defaultCapabilities: { closable: false, renamable: false, orderable: true, floatable: false },
 });
 
 // ——— Builder ———
@@ -54,7 +54,7 @@ export function buildAgentTab(personaId: string, personaName: string, executions
     key: `a:${personaId}`,
     kind: 'execution',
     label: `${personaName} (${executions.length})`,
-    capabilities: { closable: false, renamable: false, orderable: true },
+    capabilities: { closable: false, renamable: false, orderable: true, floatable: false },
     meta: {
       personaId,
       executions,
@@ -70,7 +70,7 @@ export function buildExecutionTab(execution: AgentExecution): TabDescriptor {
     key: `e:${execution.id}`,
     kind: 'execution',
     label: time,
-    capabilities: { closable: false, renamable: false, orderable: true },
+    capabilities: { closable: false, renamable: false, orderable: true, floatable: false },
     meta: {
       executionId: execution.id,
       executionStatus: execution.status,

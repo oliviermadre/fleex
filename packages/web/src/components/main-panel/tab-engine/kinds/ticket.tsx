@@ -26,7 +26,7 @@ function TicketContent({ tab }: TabContentProps) {
 registerTabKind('ticket', {
   Icon: TicketIcon,
   Content: TicketContent,
-  defaultCapabilities: { closable: false, renamable: false, orderable: true },
+  defaultCapabilities: { closable: false, renamable: false, orderable: true, floatable: false },
 });
 
 // ——— Builder ———
@@ -36,7 +36,7 @@ export function buildTicketTab(ticket: Ticket): TabDescriptor {
     key: `t:${ticket.id}`,
     kind: 'ticket',
     label: 'Ticket Details',
-    capabilities: { closable: false, renamable: false, orderable: true },
+    capabilities: { closable: false, renamable: false, orderable: true, floatable: false },
     meta: { ticketId: ticket.id },
   };
 }

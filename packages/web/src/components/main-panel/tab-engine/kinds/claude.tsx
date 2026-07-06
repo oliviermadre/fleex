@@ -32,7 +32,7 @@ registerTabKind('claude', {
   Icon: ClaudeIcon,
   Content: TerminalTabContent,
   StatusIndicator: ClaudeStatus,
-  defaultCapabilities: { closable: true, renamable: true, orderable: true },
+  defaultCapabilities: { closable: true, renamable: true, orderable: true, floatable: true },
 
   onClose: async (tab) => {
     const sessionId = tab.meta.sessionId as string;
@@ -56,7 +56,7 @@ export function buildClaudeTab(session: Session): TabDescriptor {
     key: `c:${session.id}`,
     kind: 'claude',
     label: session.displayName || session.tmuxName || session.id.slice(0, 8),
-    capabilities: { closable: true, renamable: true, orderable: true },
+    capabilities: { closable: true, renamable: true, orderable: true, floatable: true },
     meta: { sessionId: session.id, displayStatus: status.status },
   };
 }

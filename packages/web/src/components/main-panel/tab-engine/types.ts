@@ -6,6 +6,8 @@ export interface TabCapabilities {
   closable: boolean;
   renamable: boolean;
   orderable: boolean;
+  /** Can this tab's underlying session be detached to the floating overlay? */
+  floatable: boolean;
 }
 
 /**

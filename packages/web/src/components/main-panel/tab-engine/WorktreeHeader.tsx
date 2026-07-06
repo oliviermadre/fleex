@@ -2,7 +2,6 @@ import { useMemo, useCallback } from 'react';
 import type { Session, WorktreeSessionGroup, Ticket, PullRequest, TicketStatus } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { getPrBadgeClasses } from '../../../lib/prBadgeStyle';
-import { useUIStore } from '../../../stores/uiStore';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { usePullRequestStore } from '../../../stores/pullRequestStore';
@@ -62,10 +61,6 @@ function PrBadge({ pr, org, name }: { pr: PullRequest; org: string; name: string
 const ICON_BTN = 'flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)] overflow-hidden';
 
 export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, ticket, splitFocused }: Props) {
-  const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
-  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
-  const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
-  const isFloating = activeSession ? floatingSessionIds.includes(activeSession.id) : false;
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const basePath = useSettingsStore((s) => s.settings.basePath);
   const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
@@ -207,26 +202,6 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
           <div className="w-[100px] shrink-0">
             <NanoKanban status={ticket.status} onStatusChange={handleStatusChange} size="sm" />
           </div>
-        )}
-
-        {/* Floating session toggle (when a session is active) */}
-        {activeSession && (
-          <button
-            className={cn(
-              'flex h-6 w-6 items-center justify-center rounded transition-colors border-none',
-              isFloating
-                ? 'text-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
-                : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-accent)] bg-transparent hover:bg-[var(--theme-bg-hover)]',
-            )}
-            onClick={() => isFloating ? removeFloatingSession(activeSession.id) : addFloatingSession(activeSession.id)}
-            title={isFloating ? 'Re-attach to main panel' : 'Detach to floating overlay'}
-          >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="2" width="9" height="9" rx="1.5" />
-              <path d="M13 7V3h-4" />
-              <line x1="13" y1="3" x2="7" y2="9" />
-            </svg>
-          </button>
         )}
       </div>
     </div>

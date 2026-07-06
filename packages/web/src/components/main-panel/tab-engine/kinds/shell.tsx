@@ -32,7 +32,7 @@ registerTabKind('shell', {
   Icon: ShellIcon,
   Content: TerminalTabContent,
   StatusIndicator: ShellStatus,
-  defaultCapabilities: { closable: true, renamable: true, orderable: true },
+  defaultCapabilities: { closable: true, renamable: true, orderable: true, floatable: true },
 
   onClose: async (tab) => {
     const sessionId = tab.meta.sessionId as string;
@@ -56,7 +56,7 @@ export function buildShellTab(session: Session): TabDescriptor {
     key: `s:${session.id}`,
     kind: 'shell',
     label: session.displayName || session.tmuxName || session.id.slice(0, 8),
-    capabilities: { closable: true, renamable: true, orderable: true },
+    capabilities: { closable: true, renamable: true, orderable: true, floatable: true },
     meta: { sessionId: session.id, displayStatus: status.status },
   };
 }

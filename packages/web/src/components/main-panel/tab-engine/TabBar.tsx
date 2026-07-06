@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { cn } from '../../../lib/cn';
+import { useUIStore } from '../../../stores/uiStore';
 import { getTabKind } from './registry';
 import type { TabDescriptor } from './types';
 import type { TabDragState } from './useTabEngine';
@@ -30,6 +31,17 @@ interface TabItemProps {
 
 function TabItem({ tab, isActive, onSelect, onClose, onRename, drag }: TabItemProps) {
   const kind = getTabKind(tab.kind);
+
+  // Floating overlay toggle (session-backed tabs only)
+  const sessionId = tab.capabilities.floatable ? (tab.meta.sessionId as string | undefined) : undefined;
+  const isFloating = useUIStore((s) => (sessionId ? s.floatingSessionIds.includes(sessionId) : false));
+  const addFloatingSession = useUIStore((s) => s.addFloatingSession);
+  const removeFloatingSession = useUIStore((s) => s.removeFloatingSession);
+  const toggleFloating = useCallback(() => {
+    if (!sessionId) return;
+    if (isFloating) removeFloatingSession(sessionId);
+    else addFloatingSession(sessionId);
+  }, [sessionId, isFloating, addFloatingSession, removeFloatingSession]);
 
   // Inline rename state
   const [editing, setEditing] = useState(false);
@@ -112,7 +124,7 @@ function TabItem({ tab, isActive, onSelect, onClose, onRename, drag }: TabItemPr
           <span className="text-[var(--theme-text-faint)]">({tab.meta.eventCount as number})</span>
         )}
 
-        {/* Status indicator / close button slot */}
+        {/* Status indicator / close (+ detach) button slot — fixed size, never grows the tab; hover row overlaps leftward over the label instead */}
         <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
           {/* Status indicator (default state) */}
           {StatusIndicator && (
@@ -120,18 +132,46 @@ function TabItem({ tab, isActive, onSelect, onClose, onRename, drag }: TabItemPr
               <StatusIndicator tab={tab} />
             </span>
           )}
-          {/* Close button (hover state, only if closable) */}
-          {tab.capabilities.closable && onClose && (
-            <button
-              className="hidden items-center justify-center rounded text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)] group-hover/tab:flex absolute inset-0"
-              onClick={(e) => { e.stopPropagation(); onClose(); }}
-              title="Close tab"
+          {/* Hover row: detach (if floatable) + close (if closable) */}
+          {(tab.capabilities.floatable || (tab.capabilities.closable && onClose)) && (
+            <span
+              className={cn(
+                'hidden items-center justify-end gap-0.5 group-hover/tab:flex absolute z-10',
+                tab.capabilities.floatable ? 'right-0 top-0 h-4 w-[34px]' : 'inset-0'
+              )}
             >
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="4" y1="4" x2="12" y2="12" />
-                <line x1="12" y1="4" x2="4" y2="12" />
-              </svg>
-            </button>
+              {tab.capabilities.floatable && (
+                <button
+                  className={cn(
+                    'flex h-4 w-4 items-center justify-center rounded bg-[var(--theme-bg-surface)] transition-colors hover:bg-[var(--theme-bg-overlay)]',
+                    isFloating ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-accent)]'
+                  )}
+                  onClick={(e) => { e.stopPropagation(); toggleFloating(); }}
+                  title={isFloating ? 'Re-attach to main panel' : 'Detach to floating overlay'}
+                >
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="2" width="9" height="9" rx="1.5" />
+                    <path d="M13 7V3h-4" />
+                    <line x1="13" y1="3" x2="7" y2="9" />
+                  </svg>
+                </button>
+              )}
+              {tab.capabilities.closable && onClose && (
+                <button
+                  className={cn(
+                    'flex h-4 w-4 items-center justify-center rounded text-[var(--theme-text-faint)] transition-colors hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)]',
+                    tab.capabilities.floatable && 'bg-[var(--theme-bg-surface)]'
+                  )}
+                  onClick={(e) => { e.stopPropagation(); onClose(); }}
+                  title="Close tab"
+                >
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="4" y1="4" x2="12" y2="12" />
+                    <line x1="12" y1="4" x2="4" y2="12" />
+                  </svg>
+                </button>
+              )}
+            </span>
           )}
         </span>
 
