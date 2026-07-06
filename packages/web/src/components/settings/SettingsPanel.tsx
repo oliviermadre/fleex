@@ -9,6 +9,7 @@ import { DeliverableTypesTab } from './DeliverableTypesTab';
 import { cn } from '../../lib/cn';
 import type { AgentToken } from '@fleex/shared';
 import * as api from '../../services/api';
+import { useConfirm } from '../ui/useConfirm';
 
 const tabLabels: Record<SettingsTab, string> = {
   general: 'General',
@@ -880,6 +881,8 @@ function AgentTokensTab() {
     api.fetchAgentTokens().then((t) => { setTokens(t); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
+  const confirm = useConfirm();
+
   const handleCreate = async () => {
     const name = newName.trim();
     if (!name) return;
@@ -890,7 +893,7 @@ function AgentTokensTab() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Revoke this token? Any agents using it will lose access.')) return;
+    if (!(await confirm({ title: 'Revoke token', message: 'Revoke this token? Any agents using it will lose access.', confirmLabel: 'Revoke', danger: true }))) return;
     await api.deleteAgentToken(id);
     setTokens((prev) => prev.filter((t) => t.id !== id));
   };

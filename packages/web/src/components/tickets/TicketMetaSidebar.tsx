@@ -5,6 +5,7 @@ import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES, TICKET_TYPES,
 import { useTicketStore } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { GitHubIcon } from '../sidebar/icons';
+import { useConfirm } from '../ui/useConfirm';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -467,9 +468,10 @@ function ExpandedTicketMetaSidebar({
   };
 
   const selectTicketTab = useSessionStore((s) => s.selectTicketTab);
+  const confirm = useConfirm();
 
   const handleDelete = async () => {
-    if (!confirm('Delete this ticket?')) return;
+    if (!(await confirm({ title: 'Delete ticket', message: 'Delete this ticket?', confirmLabel: 'Delete', danger: true }))) return;
 
     // Find a sibling task to navigate to after deletion
     const allWorktrees: { ticketId?: string; sessionId?: string }[] = [];

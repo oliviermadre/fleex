@@ -9,8 +9,10 @@ import { useUIStore } from '../../stores/uiStore';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
+import { useConfirm } from '../ui/useConfirm';
 
 export function TicketsContentPanel() {
+  const confirm = useConfirm();
   const rawBoards = useTicketStore((s) => s.boards);
   const boards = useMemo(() => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)), [rawBoards]);
   const tickets = useTicketStore((s) => s.tickets);
@@ -210,8 +212,8 @@ export function TicketsContentPanel() {
                   {boards.length > 1 && (
                     <button
                       className={cn('rounded px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-danger)]', tintClasses('red').hoverBg)}
-                      onClick={() => {
-                        if (confirm(`Delete board "${selectedBoard.name}"?`)) {
+                      onClick={async () => {
+                        if (await confirm({ title: 'Delete board', message: `Delete board "${selectedBoard.name}"?`, confirmLabel: 'Delete', danger: true })) {
                           deleteBoard(selectedBoard.id);
                         }
                       }}

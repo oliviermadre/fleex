@@ -4,11 +4,13 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
+import { useConfirm } from '../ui/useConfirm';
 
 export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
   const updateBoard = useTicketStore((s) => s.updateBoard);
   const deleteBoard = useTicketStore((s) => s.deleteBoard);
   const boards = useTicketStore((s) => s.boards);
+  const confirm = useConfirm();
 
   const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover();
   const [renaming, setRenaming] = useState(false);
@@ -36,8 +38,8 @@ export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
     setOpen(false);
   };
 
-  const handleDelete = () => {
-    if (confirm(`Delete board "${board.name}"? All tickets will be removed.`)) {
+  const handleDelete = async () => {
+    if (await confirm({ title: 'Delete board', message: `Delete board "${board.name}"? All tickets will be removed.`, confirmLabel: 'Delete', danger: true })) {
       deleteBoard(board.id);
     }
     setOpen(false);

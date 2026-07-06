@@ -6,6 +6,7 @@ import type { DomainEventLog } from '@fleex/shared';
 import type { BoardWithCounts } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useConfirm } from '../ui/useConfirm';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { fetchEvents } from '../../services/api';
@@ -59,8 +60,10 @@ export function EpicDetailView() {
     await updateGroup(group.id, { groupStatus: newStatus, timeframe: newTimeframe });
   };
 
+  const confirm = useConfirm();
+
   const handleDelete = async () => {
-    if (!confirm(`Delete epic "${group.name}"? Tickets will not be deleted.`)) return;
+    if (!(await confirm({ title: 'Delete epic', message: `Delete epic "${group.name}"? Tickets will not be deleted.`, confirmLabel: 'Delete', danger: true }))) return;
     await deleteGroup(group.id);
     setSelectedEpicDetail(null);
   };
