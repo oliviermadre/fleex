@@ -115,24 +115,30 @@ function CollapsedSidebar({ onExpand }: { onExpand: () => void }) {
         type="button"
         onClick={onExpand}
         title="Scratchpads"
-        className="flex w-full items-center justify-center py-3 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+        className="flex w-full flex-col items-center justify-center gap-1 py-2.5 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
       >
         <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11z" />
           <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" strokeWidth="1" />
         </svg>
+        <span className="max-w-full truncate text-[10px] font-medium leading-none tracking-tight text-[var(--theme-text-faint)]">
+          Notes
+        </span>
       </button>
       <button
         type="button"
         onClick={onExpand}
         title="Auxiliary terminals"
-        className="flex w-full items-center justify-center py-3 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+        className="flex w-full flex-col items-center justify-center gap-1 py-2.5 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
       >
         <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
           <polyline points="4.5,6.5 7,9 4.5,11.5" />
           <line x1="9" y1="11.5" x2="11.5" y2="11.5" />
         </svg>
+        <span className="max-w-full truncate text-[10px] font-medium leading-none tracking-tight text-[var(--theme-text-faint)]">
+          Term
+        </span>
       </button>
     </div>
   );
