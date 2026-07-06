@@ -58,6 +58,21 @@ export function NavSidebar() {
           onClick={() => navigate('/dashboard')}
         />
 
+        {/* Assistant (companion-backed LLM chat) */}
+        <NavItem
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
+              <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" />
+            </svg>
+          }
+          label="Assistant"
+          shortLabel="Assistant"
+          active={activePanel === 'assistant'}
+          collapsed={navCollapsed}
+          onClick={() => navigate('/assistant')}
+        />
+
         {/* Sessions (live agent runs) */}
         <NavItem
           icon={
@@ -74,21 +89,6 @@ export function NavSidebar() {
           collapsed={navCollapsed}
           badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
           onClick={() => navigate('/sessions')}
-        />
-
-        {/* Assistant (companion-backed LLM chat) */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
-              <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" />
-            </svg>
-          }
-          label="Assistant"
-          shortLabel="AI"
-          active={activePanel === 'assistant'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/assistant')}
         />
 
         {/* Kanban (was Backlog / Tickets) */}
