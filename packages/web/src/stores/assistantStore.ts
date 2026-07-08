@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useSettingsStore } from './settingsStore';
 
 /**
  * Shared client for the Fleex assistant companion (packages/sidepanel-host) —
@@ -228,7 +229,12 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
     },
 
     newSession: (workspace) => {
-      sendMsg({ type: 'new_session', ...(workspace ? { workspace } : {}) });
+      // The companion is a machine-wide singleton; without a workspace it pins
+      // the configured *default*, not the one the user is viewing. Fall back to
+      // the app's active workspace (surfaced by the server via /config) so a new
+      // session reasons and runs tools against the current workspace.
+      const active = workspace || useSettingsStore.getState().settings.workspace || undefined;
+      sendMsg({ type: 'new_session', ...(active ? { workspace: active } : {}) });
     },
 
     openSession: (id) => {

@@ -5,13 +5,19 @@ import type { Container } from '../container.js';
 export function configRoutes(container: Container) {
   return async function (app: FastifyInstance) {
     app.get('/api/config', async () => {
-      return container.config.get();
+      // Surface the workspace this instance targets (from the CLI-injected
+      // FLEEX_WORKSPACE env) so the web can pin assistant sessions to the
+      // workspace the user is viewing. Read-only, never persisted — see the PUT
+      // handler, which strips it back out.
+      const workspace = process.env['FLEEX_WORKSPACE']?.trim() || undefined;
+      return { ...container.config.get(), ...(workspace ? { workspace } : {}) };
     });
 
-    app.put<{ Body: Partial<AppConfig> }>('/api/config', async (request) => {
+    app.put<{ Body: Partial<AppConfig> & { workspace?: string } }>('/api/config', async (request) => {
       // basePath is managed by ~/.fleex/workspaces.json (injected via env at
       // startup), not the DB — ignore any attempt to change it through the API.
-      const { basePath: _ignoredBasePath, ...updatable } = request.body;
+      // workspace is likewise env-derived and echoed back on GET, never stored.
+      const { basePath: _ignoredBasePath, workspace: _ignoredWorkspace, ...updatable } = request.body;
       await container.config.update(updatable);
 
       // Auto-resolve repository patterns when repositories change

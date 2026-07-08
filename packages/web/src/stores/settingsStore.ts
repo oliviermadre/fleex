@@ -55,6 +55,13 @@ export interface AppSettings {
   agentMaxConcurrency: number;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
+  /**
+   * Name of the workspace this server instance targets, surfaced read-only by
+   * the server from its `FLEEX_WORKSPACE` env (never persisted client-side).
+   * Empty when the server didn't report one. Used to pin new assistant sessions
+   * to the workspace the user is actually viewing — see assistantStore.
+   */
+  workspace: string;
 }
 
 interface SettingsState {
@@ -98,6 +105,7 @@ const defaultSettings: AppSettings = {
   agentMaxConcurrency: 1,
   humanDisplayName: '',
   repoConfigs: {},
+  workspace: '',
 };
 
 function loadFromStorage(): AppSettings {
