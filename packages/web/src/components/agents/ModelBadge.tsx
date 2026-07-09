@@ -14,6 +14,7 @@ interface ModelBadgeProps {
 }
 
 function familyOf(id: string): ModelFamily {
+  if (id.includes('fable')) return 'fable';
   if (id.includes('opus')) return 'opus';
   if (id.includes('sonnet')) return 'sonnet';
   if (id.includes('haiku')) return 'haiku';
@@ -23,12 +24,14 @@ function familyOf(id: string): ModelFamily {
 /**
  * Family palette. Chosen for legibility on the dark sidebar (Tailwind 400/500
  * range on a translucent tinted background — same hue, never washed out).
+ * - fable  → purple (flagship, Claude 5 gen)
  * - opus   → red    (heavyweight, premium)
  * - sonnet → orange (mid-tier daily driver)
  * - haiku  → green  (fast, cheap)
  * - other  → gray   (unknown / unscored)
  */
 const FAMILY_STYLES: Record<ModelFamily, string> = {
+  fable: 'bg-purple-500/15 text-purple-300',
   opus: 'bg-red-500/15 text-red-300',
   sonnet: 'bg-orange-500/15 text-orange-300',
   haiku: 'bg-green-500/15 text-green-300',

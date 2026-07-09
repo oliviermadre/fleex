@@ -3,10 +3,11 @@ import { FALLBACK_MODELS, inferModelCapabilities, type ModelFamily, type ModelOp
 import type { LoggerPort } from '../ports/logger.port.js';
 
 const FAMILY_ORDER: Record<ModelFamily, number> = {
-  opus: 0,
-  sonnet: 1,
-  haiku: 2,
-  other: 3,
+  fable: 0,
+  opus: 1,
+  sonnet: 2,
+  haiku: 3,
+  other: 4,
 };
 
 const DEFAULT_TTL_MS = 60 * 60 * 1000; // 1h
@@ -90,6 +91,7 @@ function isLegacy(id: string): boolean {
 }
 
 function familyOf(id: string): ModelFamily {
+  if (id.includes('fable')) return 'fable';
   if (id.includes('opus')) return 'opus';
   if (id.includes('sonnet')) return 'sonnet';
   if (id.includes('haiku')) return 'haiku';
@@ -125,14 +127,17 @@ function deriveLabel(id: string): string {
 /**
  * Extract a numeric weight from a model id for descending version sort.
  * 'claude-opus-4-8' → 408; 'claude-sonnet-4-6' → 406; 'claude-haiku-4-5' → 405.
+ * Single-token gen naming ('claude-sonnet-5') → 500 (major 5, minor 0).
  * Unknown shapes get 0.
  */
 function versionWeight(id: string): number {
   const nums = id.match(/\d+/g);
   if (!nums || nums.length === 0) return 0;
+  // Single numeric token is the generation itself → treat as "major.0".
+  if (nums.length === 1) return parseInt(nums[0] ?? '0', 10) * 100;
   // Take the last two numeric tokens to form a "major.minor" key.
   const last = nums[nums.length - 1] ?? '0';
-  const prev = nums.length > 1 ? nums[nums.length - 2] ?? '0' : '0';
+  const prev = nums[nums.length - 2] ?? '0';
   return parseInt(prev, 10) * 100 + parseInt(last, 10);
 }
 

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { AgentPersona, ExecutionMode } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { useModels } from '../../hooks/useModels';
+import { ModelSelect } from './ModelSelect';
 
 interface AgentConfigTabProps {
   persona: AgentPersona;
@@ -9,7 +9,6 @@ interface AgentConfigTabProps {
 
 export function AgentConfigTab({ persona }: AgentConfigTabProps) {
   const updatePersona = useAgentPersonaStore((s) => s.updatePersona);
-  const { models } = useModels();
 
   const [name, setName] = useState(persona.name);
   const [displayName, setDisplayName] = useState(persona.displayName);
@@ -79,21 +78,15 @@ export function AgentConfigTab({ persona }: AgentConfigTabProps) {
         <label className="mb-1 block text-xs font-medium text-[var(--theme-text-muted)]">
           Model
         </label>
-        <select
+        <ModelSelect
           value={model}
-          onChange={(e) => {
-            setModel(e.target.value);
-            save({ model: e.target.value });
+          onChange={(v) => {
+            setModel(v);
+            save({ model: v });
           }}
-          className="w-full max-w-sm rounded border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 py-2 text-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
-        >
-          {models.find((m) => m.id === model) ? null : (
-            <option value={model}>{model}</option>
-          )}
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
+          className="max-w-sm"
+          ariaLabel="Model"
+        />
       </div>
 
       <div>

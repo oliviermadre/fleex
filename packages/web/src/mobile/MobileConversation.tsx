@@ -23,6 +23,7 @@ import { useModels } from '../hooks/useModels';
 import { useToastStore } from '../stores/toastStore';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
+import { ModelSelect } from '../components/agents/ModelSelect';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
 
 const MODES: { id: ConversationMode; label: string }[] = [
@@ -742,16 +743,13 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
             <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
               Modèle
             </label>
-            <select
+            <ModelSelect
               value={ticket.modelOverride ?? ''}
-              onChange={(e) => patchExecConfig({ modelOverride: e.target.value === '' ? null : e.target.value })}
-              className="mb-3 w-full appearance-none rounded-lg bg-[var(--theme-bg-secondary)] px-3 py-2.5 text-sm text-[var(--theme-text-primary)]"
-            >
-              <option value="">Auto (persona)</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </select>
+              onChange={(v) => patchExecConfig({ modelOverride: v === '' ? null : v })}
+              leadingOption={{ value: '', label: 'Auto (persona)' }}
+              className="mb-3"
+              ariaLabel="Modèle"
+            />
             {overriddenModel?.supportsEffort === true && (
               <>
                 <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">

@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import type { ExecutionMode, PanelMember } from '@fleex/shared';
 import { usePanelStore } from '../../stores/panelStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { useModels } from '../../hooks/useModels';
 import { ModelBadge } from './ModelBadge';
+import { ModelSelect } from './ModelSelect';
 import { cn } from '../../lib/cn';
 
 function PanelEmptyState() {
@@ -30,11 +30,6 @@ export function PanelDetailView() {
   const updatePanel = usePanelStore((s) => s.updatePanel);
   const deletePanel = usePanelStore((s) => s.deletePanel);
   const personas = useAgentPersonaStore((s) => s.personas);
-  const { models } = useModels();
-  const memberModelOptions = [
-    { value: 'inherited', label: 'Inherited from persona' },
-    ...models.map((m) => ({ value: m.id, label: m.label })),
-  ];
 
   const panel = panels.find((p) => p.id === selectedPanelId);
 
@@ -260,28 +255,20 @@ export function PanelDetailView() {
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">Orchestrator Model</label>
-              <select
-                className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+              <ModelSelect
                 value={orchestratorModel}
-                onChange={(e) => setOrchestratorModel(e.target.value)}
-              >
-                {models.map((opt) => (
-                  <option key={opt.id} value={opt.id}>{opt.label}</option>
-                ))}
-              </select>
+                onChange={setOrchestratorModel}
+                ariaLabel="Orchestrator model"
+              />
               <p className="mt-1 text-xs text-[var(--theme-text-muted)]">Model used to generate the synthesis</p>
             </div>
             <div className="flex-1">
               <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">Default Member Model</label>
-              <select
-                className="w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+              <ModelSelect
                 value={defaultMemberModel}
-                onChange={(e) => setDefaultMemberModel(e.target.value)}
-              >
-                {models.map((opt) => (
-                  <option key={opt.id} value={opt.id}>{opt.label}</option>
-                ))}
-              </select>
+                onChange={setDefaultMemberModel}
+                ariaLabel="Default member model"
+              />
               <p className="mt-1 text-xs text-[var(--theme-text-muted)]">Fallback model for members set to "inherited"</p>
             </div>
           </div>
@@ -312,15 +299,13 @@ export function PanelDetailView() {
                     {persona?.displayName ?? 'Unknown'}
                     <span className="ml-2 text-xs text-[var(--theme-text-muted)]">{persona?.name}</span>
                   </span>
-                  <select
-                    className="rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+                  <ModelSelect
+                    variant="inline"
                     value={member.modelOverride}
-                    onChange={(e) => updateMemberModel(i, e.target.value)}
-                  >
-                    {memberModelOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => updateMemberModel(i, v)}
+                    leadingOption={{ value: 'inherited', label: 'Inherited from persona' }}
+                    ariaLabel="Member model"
+                  />
                   <button
                     className="text-[var(--theme-text-faint)] transition-colors hover:text-red-400"
                     onClick={() => removeMember(i)}

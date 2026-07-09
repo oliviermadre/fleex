@@ -2,7 +2,7 @@
  * A Claude model exposed in the UI dropdowns.
  * Sourced either from the Anthropic API (dynamic) or from FALLBACK_MODELS.
  */
-export type ModelFamily = 'opus' | 'sonnet' | 'haiku' | 'other';
+export type ModelFamily = 'fable' | 'opus' | 'sonnet' | 'haiku' | 'other';
 
 export interface ModelOption {
   id: string; // e.g. 'claude-opus-4-8'
@@ -26,15 +26,19 @@ export function inferModelCapabilities(id: string): { supportsEffort: boolean; s
   // Extract a "major.minor" weight, e.g. opus-4-8 → 408, sonnet-4-6 → 406.
   const nums = lower.match(/\d+/g);
   let weight = 0;
-  if (nums && nums.length >= 1) {
+  if (nums && nums.length === 1) {
+    // Single numeric token is the generation itself → "major.0", e.g. sonnet-5 → 500.
+    weight = parseInt(nums[0] ?? '0', 10) * 100;
+  } else if (nums && nums.length > 1) {
     const last = nums[nums.length - 1] ?? '0';
-    const prev = nums.length > 1 ? nums[nums.length - 2] ?? '0' : '0';
+    const prev = nums[nums.length - 2] ?? '0';
     weight = parseInt(prev, 10) * 100 + parseInt(last, 10);
   }
   const isOpus = lower.includes('opus');
   const isSonnet = lower.includes('sonnet');
-  // Opus ≥ 4.5 and Sonnet ≥ 4.6 expose effort + fast mode.
-  const capable = (isOpus && weight >= 405) || (isSonnet && weight >= 406);
+  const isFable = lower.includes('fable');
+  // Opus ≥ 4.5, Sonnet ≥ 4.6, and the Fable line (Claude 5 gen) expose effort + fast mode.
+  const capable = (isOpus && weight >= 405) || (isSonnet && weight >= 406) || isFable;
   return { supportsEffort: capable, supportsFastMode: capable };
 }
 
@@ -51,8 +55,10 @@ export interface ModelsResponse {
  *  - as the canonical default order when the dynamic list cannot be filtered
  */
 export const FALLBACK_MODELS: ModelOption[] = [
+  { id: 'claude-fable-5', label: 'Claude Fable 5', family: 'fable', supportsEffort: true, supportsFastMode: true },
   { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', family: 'opus', supportsEffort: true, supportsFastMode: true },
   { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', family: 'opus', supportsEffort: true, supportsFastMode: true },
+  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', family: 'sonnet', supportsEffort: true, supportsFastMode: true },
   { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', family: 'sonnet', supportsEffort: true, supportsFastMode: true },
   { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', family: 'haiku', supportsEffort: false, supportsFastMode: false },
 ];

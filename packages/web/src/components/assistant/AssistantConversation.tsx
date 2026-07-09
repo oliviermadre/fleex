@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { useFileUpload } from '../../hooks/useFileUpload';
-import { useModels } from '../../hooks/useModels';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { ModelSelect } from '../agents/ModelSelect';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { useSkillStore } from '../../stores/skillStore';
@@ -59,7 +59,6 @@ export function AssistantConversation() {
   const answerConfirm = useAssistantStore((s) => s.answerConfirm);
   const setModel = useAssistantStore((s) => s.setModel);
 
-  const { models } = useModels();
   const [draft, setDraft] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
@@ -284,20 +283,16 @@ export function AssistantConversation() {
           </span>
         )}
         {/* Per-conversation model — same principle as the ticket composer */}
-        <label className="flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-secondary)]">
-          <span className="opacity-60">🤖</span>
-          <select
-            value={session.model ?? ''}
-            onChange={(e) => setModel(session.id, e.target.value || undefined)}
-            className="cursor-pointer bg-transparent pr-1 text-xs text-[var(--theme-text-secondary)] focus:outline-none"
-            title="Modèle de cette conversation. Défaut = modèle du companion."
-          >
-            <option value="">Model: default</option>
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>{m.label}</option>
-            ))}
-          </select>
-        </label>
+        <ModelSelect
+          variant="inline"
+          icon="🤖"
+          value={session.model ?? ''}
+          onChange={(v) => setModel(session.id, v || undefined)}
+          leadingOption={{ value: '', label: 'Model: default' }}
+          title="Modèle de cette conversation. Défaut = modèle du companion."
+          ariaLabel="Conversation model"
+          className="shrink-0"
+        />
       </div>
 
       {/* Transcript */}

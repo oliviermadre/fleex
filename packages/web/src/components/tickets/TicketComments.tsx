@@ -14,6 +14,7 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunStore';
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
+import { ModelSelect } from '../agents/ModelSelect';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useModels } from '../../hooks/useModels';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
@@ -1405,20 +1406,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             Model :
             <InfoHint text="Le modèle utilisé pour la prochaine exécution de l'agent mentionné. Auto = chaque agent garde le modèle de sa config. Choisir un modèle ici est un override de conversation : il s'applique à la prochaine mention sans modifier la config de l'agent." />
           </span>
-          <label className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[var(--theme-text-secondary)]">
-            <span className="opacity-60">🤖</span>
-            <select
-              value={modelOverride ?? ''}
-              onChange={(e) => patchExecConfig({ modelOverride: e.target.value === '' ? null : e.target.value })}
-              title="Model for the next agent run. Auto = inherit the agent's own model. An override applies to the next mention without changing the agent config."
-              className="cursor-pointer bg-transparent pr-1 text-xs text-[var(--theme-text-secondary)] focus:outline-none"
-            >
-              <option value="">Auto (persona)</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </select>
-          </label>
+          <ModelSelect
+            variant="inline"
+            icon="🤖"
+            value={modelOverride ?? ''}
+            onChange={(v) => patchExecConfig({ modelOverride: v === '' ? null : v })}
+            leadingOption={{ value: '', label: 'Auto (persona)' }}
+            title="Model for the next agent run. Auto = inherit the agent's own model. An override applies to the next mention without changing the agent config."
+            ariaLabel="Model override"
+          />
 
           {/* Effort dropdown — shown only when the resolved model supports it */}
           {showEffort && (

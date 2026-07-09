@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { useModels } from '../../hooks/useModels';
+import { ModelSelect } from './ModelSelect';
 import { cn } from '../../lib/cn';
 
 interface CreateAgentModalProps {
@@ -11,7 +11,6 @@ interface CreateAgentModalProps {
 export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
   const createPersona = useAgentPersonaStore((s) => s.createPersona);
   const selectPersona = useAgentPersonaStore((s) => s.selectPersona);
-  const { models } = useModels();
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [model, setModel] = useState('claude-sonnet-4-6');
@@ -86,18 +85,7 @@ export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
             <label className="mb-1 block text-xs font-medium text-[var(--theme-text-muted)]">
               Model
             </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full rounded border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-3 py-2 text-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
-            >
-              {models.find((m) => m.id === model) ? null : (
-                <option value={model}>{model}</option>
-              )}
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </select>
+            <ModelSelect value={model} onChange={setModel} ariaLabel="Model" />
           </div>
         </div>
 
