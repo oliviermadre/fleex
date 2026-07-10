@@ -355,9 +355,12 @@ function EventBlock({ event }: { event: AgentEvent }) {
     }
     case 'error': {
       const error = data?.['error'] as string ?? 'Unknown error';
+      // Errors can carry multi-line CLI stderr — render it preformatted,
+      // monospace and scrollable so the real reason is readable, not clipped.
       return (
         <div className="py-2 px-3 rounded bg-red-500/10 border border-red-500/30 text-red-400">
-          Error: {error}
+          <div className="font-semibold mb-1">Error</div>
+          <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-64 overflow-auto m-0">{error}</pre>
         </div>
       );
     }

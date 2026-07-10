@@ -14,6 +14,19 @@ export interface SdkQueryMetrics {
   cacheCreationTokens?: number;
 }
 
+/**
+ * Compact a possibly-huge CLI stderr blob for logs/UI. A stream-json parse
+ * failure echoes the entire (base64-heavy) input on one line, so the useful
+ * bits are the error prefix and the trailing reason; the middle is noise. Keeps
+ * the head and tail, eliding the middle.
+ */
+export function summarizeStderr(raw: string, keep = 4096): string {
+  const s = raw.trim();
+  if (s.length <= keep * 2 + 100) return s;
+  const elidedKB = Math.round((s.length - keep * 2) / 1024);
+  return `${s.slice(0, keep)}\n\n…[${elidedKB} KB elided]…\n\n${s.slice(-keep)}`;
+}
+
 export interface StreamSdkQueryResult {
   /** Session id captured from the SDK `init` message, if any. */
   sessionId?: string;
@@ -24,6 +37,13 @@ export interface StreamSdkQueryResult {
   metrics: SdkQueryMetrics;
   /** Total SDK messages iterated (useful to detect a zero-message crash). */
   messageCount: number;
+  /**
+   * stderr text captured from the spawned Claude Code CLI subprocess. Normally
+   * the SDK discards the child's stderr (stdio `"ignore"`); we opt into it so a
+   * crash ("exited with code 1") carries the real reason instead of an opaque
+   * exit code. Empty string when the CLI wrote nothing to stderr.
+   */
+  stderr: string;
 }
 
 export interface StreamSdkQueryParams {
@@ -65,6 +85,28 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
   let messageCount = 0;
   const metrics: SdkQueryMetrics = {};
 
+  // Capture the CLI subprocess stderr. By default the SDK sets the child's
+  // stderr to stdio `"ignore"` (discarded), so a startup crash surfaces only as
+  // "Claude Code process exited with code 1" with no reason. Providing an
+  // `stderr` callback flips it to a drained pipe and lets us keep the real
+  // error (e.g. stream-json stdin parse failure) for logs and the UI.
+  let stderrBuf = '';
+  const MAX_STDERR = 4 * 1024 * 1024; // safety cap; a single CLI error line can be ~0.5 MB
+  (queryOptions as Record<string, unknown>)['stderr'] = (chunk: string) => {
+    stderrBuf += chunk;
+    if (stderrBuf.length > MAX_STDERR) stderrBuf = stderrBuf.slice(-MAX_STDERR);
+  };
+  // stderr keeps arriving on the pipe after the subprocess-exit error is thrown;
+  // wait for it to stop growing (bounded) so we capture the full reason, not a
+  // partial/empty snapshot.
+  const waitForStderrFlush = async () => {
+    let prev = -1;
+    for (let i = 0; i < 25 && prev !== stderrBuf.length; i++) {
+      prev = stderrBuf.length;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  };
+
   // Multimodal prompts must be wrapped in an SDKUserMessage async iterable.
   const promptArg = Array.isArray(prompt)
     ? (async function* () {
@@ -77,52 +119,66 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
       })()
     : prompt;
 
-  for await (const message of query({
-    prompt: promptArg,
-    options: queryOptions as Parameters<typeof query>[0]['options'],
-  })) {
-    if (abortSignal?.aborted) break;
-    messageCount++;
-    const msg = message as Record<string, unknown>;
+  try {
+    for await (const message of query({
+      prompt: promptArg,
+      options: queryOptions as Parameters<typeof query>[0]['options'],
+    })) {
+      if (abortSignal?.aborted) break;
+      messageCount++;
+      const msg = message as Record<string, unknown>;
 
-    if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
-      sessionId = msg['session_id'] as string;
-      onSessionId?.(sessionId);
-      await emitEvent('turn_start', { sessionId });
-    }
-
-    if ('result' in message) {
-      resultText = (message as { result: string }).result;
-      resultSubtype = msg['subtype'] as string | undefined;
-
-      if (msg['structured_output']) {
-        structuredOutput = msg['structured_output'] as Record<string, unknown>;
+      if (msg['type'] === 'system' && msg['subtype'] === 'init' && msg['session_id']) {
+        sessionId = msg['session_id'] as string;
+        onSessionId?.(sessionId);
+        await emitEvent('turn_start', { sessionId });
       }
 
-      if (typeof msg['duration_ms'] === 'number') metrics.durationMs = msg['duration_ms'] as number;
-      if (typeof msg['total_cost_usd'] === 'number') metrics.costUsd = msg['total_cost_usd'] as number;
+      if ('result' in message) {
+        resultText = (message as { result: string }).result;
+        resultSubtype = msg['subtype'] as string | undefined;
 
-      // modelUsage carries cumulative per-model token totals.
-      const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;
-      if (modelUsage) {
-        let totalIn = 0, totalOut = 0, totalCacheRead = 0, totalCacheCreation = 0;
-        for (const mu of Object.values(modelUsage)) {
-          totalIn += mu['inputTokens'] ?? 0;
-          totalOut += mu['outputTokens'] ?? 0;
-          totalCacheRead += mu['cacheReadInputTokens'] ?? 0;
-          totalCacheCreation += mu['cacheCreationInputTokens'] ?? 0;
+        if (msg['structured_output']) {
+          structuredOutput = msg['structured_output'] as Record<string, unknown>;
         }
-        metrics.inputTokens = totalIn;
-        metrics.outputTokens = totalOut;
-        metrics.cacheReadTokens = totalCacheRead;
-        metrics.cacheCreationTokens = totalCacheCreation;
-      }
 
-      await emitEvent('message_stop', { result: resultText, subtype: resultSubtype });
-    } else {
-      await emitEvent('content_block_delta', msg);
+        if (typeof msg['duration_ms'] === 'number') metrics.durationMs = msg['duration_ms'] as number;
+        if (typeof msg['total_cost_usd'] === 'number') metrics.costUsd = msg['total_cost_usd'] as number;
+
+        // modelUsage carries cumulative per-model token totals.
+        const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;
+        if (modelUsage) {
+          let totalIn = 0, totalOut = 0, totalCacheRead = 0, totalCacheCreation = 0;
+          for (const mu of Object.values(modelUsage)) {
+            totalIn += mu['inputTokens'] ?? 0;
+            totalOut += mu['outputTokens'] ?? 0;
+            totalCacheRead += mu['cacheReadInputTokens'] ?? 0;
+            totalCacheCreation += mu['cacheCreationInputTokens'] ?? 0;
+          }
+          metrics.inputTokens = totalIn;
+          metrics.outputTokens = totalOut;
+          metrics.cacheReadTokens = totalCacheRead;
+          metrics.cacheCreationTokens = totalCacheCreation;
+        }
+
+        await emitEvent('message_stop', { result: resultText, subtype: resultSubtype });
+      } else {
+        await emitEvent('content_block_delta', msg);
+      }
     }
+  } catch (err) {
+    // Attach the captured CLI stderr so the reason survives everywhere the
+    // thrown error is handled (server.log + the `error` agent event → UI),
+    // instead of a bare "Claude Code process exited with code 1".
+    await waitForStderrFlush();
+    const summary = summarizeStderr(stderrBuf);
+    if (summary) {
+      const augmented = err instanceof Error ? err : new Error(String(err));
+      augmented.message = `${augmented.message}\n\n[Claude CLI stderr]\n${summary}`;
+      throw augmented;
+    }
+    throw err;
   }
 
-  return { sessionId, resultText, structuredOutput, resultSubtype, metrics, messageCount };
+  return { sessionId, resultText, structuredOutput, resultSubtype, metrics, messageCount, stderr: stderrBuf };
 }

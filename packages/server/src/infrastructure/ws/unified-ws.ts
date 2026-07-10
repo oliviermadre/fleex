@@ -221,7 +221,7 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
         }
       }
 
-      if (dto.eventType === 'execution_start' || dto.eventType === 'execution_end') {
+      if (dto.eventType === 'execution_start' || dto.eventType === 'execution_end' || dto.eventType === 'error') {
         const ticketId = (dto.data as Record<string, unknown>)?.['ticketId'] as string | undefined;
         for (const client of clients.values()) {
           // Skip clients already subscribed to this execution

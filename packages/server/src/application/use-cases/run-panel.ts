@@ -31,7 +31,7 @@ import type { FileStorePort } from '../ports/file-store.port.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
-import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
+import { resolveFileReferences, promptHasImageAttachment, type PromptContentBlock } from '../utils/resolve-file-references.js';
 import type { STANDARD_OUTPUT_SCHEMA } from '../utils/merge-output-schemas.js';
 
 interface SdkMetrics {
@@ -482,6 +482,7 @@ export class RunPanelUseCase {
       systemPrompt: options.systemPrompt ?? '',
       cwd: options.cwd,
       outputFormat: options.outputFormat,
+      talkCanReadImages: mode === 'talk' && Array.isArray(prompt) && promptHasImageAttachment(prompt),
     });
 
     // For non-talk modes, override maxTurns if explicitly provided

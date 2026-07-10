@@ -17,7 +17,7 @@ import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
-import { streamSdkQuery, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
+import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
@@ -34,7 +34,7 @@ import type { EventBus } from '../event-bus.js';
 import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
-import { resolveFileReferences, type PromptContentBlock } from '../utils/resolve-file-references.js';
+import { resolveFileReferences, promptHasImageAttachment, type PromptContentBlock } from '../utils/resolve-file-references.js';
 import { STANDARD_OUTPUT_SCHEMA as OUTPUT_FORMAT_SCHEMA, buildStandardOutputSchema } from '../utils/merge-output-schemas.js';
 import { normalizeDeliverableTypes } from '@fleex/shared';
 import type { DeliverableTypeDef } from '@fleex/shared';
@@ -827,6 +827,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       let sdkOutputTokens: number | undefined;
       let sdkCacheReadTokens: number | undefined;
       let sdkCacheCreationTokens: number | undefined;
+      let cliStderr = '';
 
       {
         const queryOptions = buildSdkOptions(effectiveMode, {
@@ -837,6 +838,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           resume: previousSessionId ?? undefined,
           effort: resolved.effort,
           fast: resolved.fast,
+          talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
         });
 
         // Build the prompt: use content blocks if there are images, plain string otherwise
@@ -866,7 +868,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         } catch (queryErr) {
           if (abortController.signal.aborted) {
             // Abort was triggered — handled below.
-            streamResult = { resultText: '', structuredOutput: null, metrics: {}, messageCount: 0 };
+            streamResult = { resultText: '', structuredOutput: null, metrics: {}, messageCount: 0, stderr: '' };
           } else if (previousSessionId) {
             // Stale resume — clear session and retry fresh
             this.logger.warn('SDK query failed with resume, retrying without resume', {
@@ -893,6 +895,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         sdkOutputTokens = streamResult.metrics.outputTokens;
         sdkCacheReadTokens = streamResult.metrics.cacheReadTokens;
         sdkCacheCreationTokens = streamResult.metrics.cacheCreationTokens;
+        cliStderr = streamResult.stderr ?? '';
 
         if (streamResult.resultSubtype === 'error_max_structured_output_retries') {
           this.logger.warn('SDK structured output retries exhausted, falling back to parser', {
@@ -927,15 +930,21 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
       // 11a. Detect SDK subprocess crash: zero messages yielded
       if (!sdkSessionId && resultText === '' && !structuredOutput) {
+        const stderrSummary = summarizeStderr(cliStderr);
         this.logger.error('SDK query loop yielded no messages — subprocess likely crashed', {
           executionId,
           persona: persona.name,
           model: resolved.model,
           worktreePath,
+          cliStderr: stderrSummary || '(empty — CLI wrote nothing to stderr)',
         });
-        await emitEvent('error', {
-          error: 'Agent SDK produced no output (subprocess likely crashed at startup). Check ~/.fleex/.logs/main/server.log for EPIPE / spawn errors.',
-        });
+        const errorText = stderrSummary
+          ? `Agent SDK produced no output (subprocess crashed at startup).\n\n[Claude CLI stderr]\n${stderrSummary}`
+          : 'Agent SDK produced no output (subprocess likely crashed at startup). Check ~/.fleex/.logs/<instance>/server.log for EPIPE / spawn errors.';
+        await emitEvent('error', { error: errorText, ticketId: mention.ticketId });
+        // Emit execution_end so every log view flips out of "running" and shows
+        // the failed state (the store keys failure off execution_end).
+        await emitEvent('execution_end', { status: 'failed', reason: 'subprocess_crash', ticketId: mention.ticketId, model: resolved.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         mention.resetToPending();
@@ -1202,16 +1211,26 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         });
       }
 
-      // Emit error event
+      // Emit error event (err.message already carries the CLI stderr, appended
+      // by streamSdkQuery) followed by execution_end so every log view flips out
+      // of "running" and renders the failed state.
       try {
         const errorEvent = AgentEventEntity.create({
           executionId,
           eventType: 'error',
-          data: { error: err instanceof Error ? err.message : String(err) },
-          sequence: 999999,
+          data: { error: err instanceof Error ? err.message : String(err), ticketId: mention.ticketId },
+          sequence: 999998,
         });
         await this.agentEventStore.appendEvent(errorEvent);
         this.onEvent?.(errorEvent);
+        const endEvent = AgentEventEntity.create({
+          executionId,
+          eventType: 'execution_end',
+          data: { status: 'failed', reason: 'startup_error', ticketId: mention.ticketId },
+          sequence: 999999,
+        });
+        await this.agentEventStore.appendEvent(endEvent);
+        this.onEvent?.(endEvent);
         await this.agentEventStore.completeExecution(executionId, 'failed');
       } catch {
         // Don't let event store errors mask the original error
@@ -1827,6 +1846,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const queryOptions = buildSdkOptions(effectiveMode, {
         model: persona.model, systemPrompt, cwd: worktreePath,
         outputFormat: params.outputFormat,
+        talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
       });
 
       const hasImages = userPromptBlocks.some((b) => b.type === 'image');

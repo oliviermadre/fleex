@@ -1,16 +1,67 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { TextBlockParam, ImageBlockParam } from '@anthropic-ai/sdk/resources/messages/messages';
+import { FLEEX_DIR } from '@fleex/shared';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
 
 export type PromptContentBlock = TextBlockParam | ImageBlockParam;
 
-// Max image size to inline as base64 (larger images get a text placeholder)
+// Max image size to materialize on disk for the agent to Read.
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB (API limit per image)
 
 // Max text file size to inline
 const MAX_TEXT_BYTES = 100 * 1024; // 100 KB
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const IMAGE_EXT_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+};
+
+// Where materialized prompt images are written for the agent's Read tool.
+const ATTACHMENTS_DIR = join(homedir(), FLEEX_DIR, 'files', 'prompt-attachments');
+
+/**
+ * Write an image blob to a local file and return its absolute path, so the
+ * prompt can reference it by path instead of inlining base64.
+ *
+ * Why not inline base64: an image turns the prompt into a content-block array,
+ * which the SDK streams to the CLI over stdin as one huge stream-json line. The
+ * CLI's stdin parser truncates large lines and crashes ("exited with code 1").
+ * Referencing a file keeps the prompt a plain string and lets the agent load the
+ * image via its Read tool. Returns null on any failure (caller falls back).
+ */
+async function materializeImage(
+  fileId: string,
+  mimeType: string,
+  fileStore: FileStorePort,
+): Promise<string | null> {
+  try {
+    const buffer = await fileStore.getBuffer(fileId);
+    if (!buffer) return null;
+    await mkdir(ATTACHMENTS_DIR, { recursive: true });
+    const ext = IMAGE_EXT_BY_MIME[mimeType] ?? 'bin';
+    const path = join(ATTACHMENTS_DIR, `${fileId}.${ext}`);
+    await writeFile(path, buffer);
+    return path;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when any block references a materialized image attachment (see
+ * `materializeImage`). Since images are emitted as a text pointer, not an
+ * image block, callers use this to know the prompt carries an image the agent
+ * must open with Read — e.g. talk mode must then enable the Read tool.
+ */
+export function promptHasImageAttachment(blocks: PromptContentBlock[]): boolean {
+  return blocks.some((b) => b.type === 'text' && b.text.includes(ATTACHMENTS_DIR));
+}
 
 // Matches ![alt](/api/files/{uuid}) or [text](/api/files/{uuid})
 const FILE_REF_PATTERN = /(!?)\[([^\]]*)\]\(\/api\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/g;
@@ -57,15 +108,13 @@ export async function resolveFileReferences(
     }
 
     if (IMAGE_MIME_TYPES.has(meta.mimeType) && meta.sizeBytes <= MAX_IMAGE_BYTES) {
-      const buffer = await fileStore.getBuffer(fileId);
-      if (buffer) {
+      // Materialize the image to a local file and reference it by path (see
+      // materializeImage) rather than inlining base64, which would crash the CLI.
+      const localPath = await materializeImage(fileId, meta.mimeType, fileStore);
+      if (localPath) {
         blocks.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: meta.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-            data: buffer.toString('base64'),
-          },
+          type: 'text',
+          text: `[Image attachment "${meta.originalName}" (${meta.mimeType}) saved at ${localPath} — use the Read tool on this path to view it.]`,
         });
         continue;
       }

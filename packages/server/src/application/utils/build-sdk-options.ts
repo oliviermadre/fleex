@@ -10,6 +10,12 @@ interface SdkOptionsContext {
   effort?: EffortLevel;
   /** Fast-mode toggle, applied via SDK settings only when the model supports it. */
   fast?: boolean;
+  /**
+   * Talk mode only: the prompt references an image attachment materialized to a
+   * file. Talk is normally tool-free, but an image can only be viewed via the
+   * Read tool, so we enable just Read (+ a few turns) when one is present.
+   */
+  talkCanReadImages?: boolean;
 }
 
 export function buildSdkOptions(
@@ -33,6 +39,20 @@ export function buildSdkOptions(
     case 'talk':
       // One-shot: no agentic loop, no tools. dontAsk denies all unlisted tools.
       // maxTurns: 0 is a defense-in-depth guard against any tool round-trip.
+      //
+      // Exception: when the prompt carries an image attachment, the only way to
+      // show it (talk has no worktree, images aren't inlined) is to let the
+      // agent Read the materialized file. Enable ONLY Read, with a few turns so
+      // the Read result can feed back before the final answer.
+      if (ctx.talkCanReadImages) {
+        return {
+          ...base,
+          allowedTools: ['Read'],
+          permissionMode: 'bypassPermissions',
+          allowDangerouslySkipPermissions: true,
+          maxTurns: 4,
+        };
+      }
       return { ...base, allowedTools: [], permissionMode: 'dontAsk', maxTurns: 0 };
 
     case 'plan':
