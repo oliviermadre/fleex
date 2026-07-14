@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/jpeg" href="favicon.jpg">
+<title>Fleex — Orchestrate work, not terminals</title>
+<meta name="description" content="Fleex is the open-source, local-first agentic delivery system. Every ticket becomes a multi-repo workspace, a team of agents, and a knowledge record that outlives the session.">
+<style>
+  /* ── Tokens ─────────────────────────────────────────────────────────── */
+  :root {
+    --ink: #f4f5fb;
+    --surface: #ffffff;
+    --surface-2: #eef0f9;
+    --line: #dcdfef;
+    --line-soft: #e7e9f5;
+    --text: #171a2e;
+    --text-2: #4c5170;
+    --text-3: #7c81a1;
+    --brand: #4653e8;
+    --brand-2: #7c4fe0;
+    --ice: #0e94c4;
+    --ice-soft: rgba(14, 148, 196, .10);
+    --chip-bg: #eceefc;
+    --ok: #178a4c;
+    --warn: #a16207;
+    --card-shadow: 0 1px 2px rgba(23, 26, 46, .05), 0 12px 32px -16px rgba(23, 26, 46, .18);
+    --term-bg: #10121f;
+    --term-text: #d6daf0;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #0a0b12;
+      --surface: #131624;
+      --surface-2: #191d30;
+      --line: #262b45;
+      --line-soft: #1d2136;
+      --text: #eceef8;
+      --text-2: #a3a9c8;
+      --text-3: #6e7492;
+      --brand: #6472ff;
+      --brand-2: #9d7bff;
+      --ice: #8fdcf5;
+      --ice-soft: rgba(143, 220, 245, .08);
+      --chip-bg: #1d2138;
+      --ok: #4ade80;
+      --warn: #fbbf24;
+      --card-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 16px 40px -20px rgba(0,0,0,.6);
+      --term-bg: #0d0f1b;
+      --term-text: #d6daf0;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #0a0b12; --surface: #131624; --surface-2: #191d30; --line: #262b45;
+    --line-soft: #1d2136; --text: #eceef8; --text-2: #a3a9c8; --text-3: #6e7492;
+    --brand: #6472ff; --brand-2: #9d7bff; --ice: #8fdcf5; --ice-soft: rgba(143,220,245,.08);
+    --chip-bg: #1d2138; --ok: #4ade80; --warn: #fbbf24;
+    --card-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 16px 40px -20px rgba(0,0,0,.6);
+    --term-bg: #0d0f1b; --term-text: #d6daf0;
+  }
+  :root[data-theme="light"] {
+    --ink: #f4f5fb; --surface: #ffffff; --surface-2: #eef0f9; --line: #dcdfef;
+    --line-soft: #e7e9f5; --text: #171a2e; --text-2: #4c5170; --text-3: #7c81a1;
+    --brand: #4653e8; --brand-2: #7c4fe0; --ice: #0e94c4; --ice-soft: rgba(14,148,196,.10);
+    --chip-bg: #eceefc; --ok: #178a4c; --warn: #a16207;
+    --card-shadow: 0 1px 2px rgba(23,26,46,.05), 0 12px 32px -16px rgba(23,26,46,.18);
+    --term-bg: #10121f; --term-text: #d6daf0;
+  }
+
+  /* ── Base ───────────────────────────────────────────────────────────── */
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16.5px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace; }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--ice); outline-offset: 2px; border-radius: 4px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+  section { padding: 84px 0; border-top: 1px solid var(--line-soft); }
+  h1, h2, h3 { line-height: 1.15; text-wrap: balance; margin: 0; }
+  h2 {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: clamp(26px, 3.4vw, 36px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 14px 0 12px;
+  }
+  .lede { color: var(--text-2); max-width: 62ch; margin: 0 0 40px; font-size: 18px; }
+  p { margin: 0 0 1em; }
+
+  /* Ticket-status chip used as section eyebrow — the product's own vocabulary */
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--text-2);
+    background: var(--chip-bg);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 14px;
+  }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ice); }
+
+  /* ── Nav ────────────────────────────────────────────────────────────── */
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 0;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); letter-spacing: -.01em; }
+  .logo:hover { text-decoration: none; }
+  .logo svg { display: block; }
+  .nav-links { display: flex; gap: 26px; align-items: center; font-size: 14.5px; }
+  .nav-links a { color: var(--text-2); }
+  .nav-links a:hover { color: var(--text); text-decoration: none; }
+  .nav-links a.gh {
+    color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 14px; background: var(--surface);
+  }
+  .nav-links a.gh:hover { border-color: var(--brand); }
+
+  /* ── Hero ───────────────────────────────────────────────────────────── */
+  .hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 56px; align-items: center; padding: 64px 0 92px; }
+  .hero h1 {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: clamp(34px, 4.6vw, 54px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin: 22px 0 18px;
+  }
+  .hero h1 .strike { position: relative; color: var(--text-3); white-space: nowrap; }
+  .hero h1 .strike::after {
+    content: ""; position: absolute; left: -2%; right: -2%; top: 54%; height: 3px;
+    background: var(--brand); transform: rotate(-2deg); border-radius: 2px;
+  }
+  .hero h1 .work { color: var(--ice); }
+  .hero .sub { color: var(--text-2); font-size: 18.5px; max-width: 54ch; margin-bottom: 34px; }
+  .hero .sub strong { color: var(--text); font-weight: 600; }
+
+  .install-line {
+    display: flex; align-items: stretch; gap: 0; max-width: 560px;
+    background: var(--term-bg); color: var(--term-text);
+    border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .install-line code {
+    flex: 1; padding: 13px 16px; font-size: 13px; overflow-x: auto; white-space: nowrap;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .install-line code .p { color: #7dd7f0; }
+  .install-line button {
+    border: 0; border-left: 1px solid rgba(255,255,255,.1); background: transparent; color: #aeb4d4;
+    padding: 0 16px; cursor: pointer; font-family: inherit; font-size: 13px;
+  }
+  .install-line button:hover { color: #fff; background: rgba(255,255,255,.06); }
+  .hero-ctas { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 16px; }
+  .soon { font-size: 13.5px; color: var(--text-3); }
+  .soon .badge {
+    display: inline-block; border: 1px dashed var(--line); border-radius: 6px; padding: 2px 8px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; color: var(--text-2);
+    margin: 0 2px;
+  }
+
+  /* ── Live ticket (hero demo) ───────────────────────────────────────── */
+  .ticket {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    font-size: 13.5px;
+  }
+  .ticket-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .ticket-id { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; color: var(--text-3); }
+  .ticket-title { font-weight: 650; font-size: 15px; flex: 1 1 100%; }
+  .ticket-status {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; font-weight: 700;
+    letter-spacing: .1em; padding: 3px 9px; border-radius: 999px;
+    background: var(--ice-soft); color: var(--ice); border: 1px solid var(--ice);
+    transition: opacity .4s;
+  }
+  .repo-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .repo-chip {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px;
+    background: var(--chip-bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; color: var(--text-2);
+  }
+  .ticket-feed { padding: 8px 18px 16px; min-height: 316px; display: flex; flex-direction: column; }
+  .evt { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line-soft); opacity: 0; transform: translateY(6px); transition: opacity .5s, transform .5s; }
+  .evt.on { opacity: 1; transform: none; }
+  .evt:last-child { border-bottom: 0; }
+  .evt .ico {
+    width: 26px; height: 26px; flex: none; border-radius: 7px; display: grid; place-items: center;
+    font-size: 12px; background: var(--chip-bg); border: 1px solid var(--line);
+  }
+  .evt .who { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--text-3); display: block; }
+  .evt .msg { color: var(--text-2); }
+  .evt .msg em { font-style: normal; color: var(--ice); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+  .evt .msg .pill {
+    display: inline-block; font-size: 11px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    border: 1px solid var(--line); background: var(--surface-2); border-radius: 5px; padding: 1px 7px; color: var(--text-2);
+  }
+  .evt.deliv { background: var(--ice-soft); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 6px 0; }
+  .ticket-foot {
+    border-top: 1px solid var(--line-soft); padding: 11px 18px; display: flex; justify-content: space-between; align-items: center;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .ticket-foot .cost { color: var(--text-2); }
+  .ticket-caption { text-align: center; color: var(--text-3); font-size: 13px; margin-top: 14px; }
+
+  /* ── The shift ─────────────────────────────────────────────────────── */
+  .shift-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .shift-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 26px 28px; }
+  .shift-card.them { border-style: dashed; }
+  .shift-card h3 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; margin-bottom: 14px; }
+  .shift-card.us h3 { color: var(--ice); }
+  .shift-card ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; color: var(--text-2); }
+  .shift-card li { padding-left: 22px; position: relative; }
+  .shift-card.them li::before { content: "—"; position: absolute; left: 0; color: var(--text-3); }
+  .shift-card.us li::before { content: "→"; position: absolute; left: 0; color: var(--ice); font-family: ui-monospace, Menlo, monospace; }
+  .shift-card.us li strong, .shift-card.them li strong { color: var(--text); font-weight: 600; }
+  .kicker { margin-top: 26px; font-size: 19px; color: var(--text); max-width: 60ch; }
+  .kicker .mono { color: var(--ice); font-size: 17px; }
+
+  /* ── Concepts ──────────────────────────────────────────────────────── */
+  .concepts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .concept { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+  .concept .glyph {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 15px; font-weight: 700; color: var(--ice);
+    background: var(--ice-soft); border: 1px solid var(--line); width: 40px; height: 40px; border-radius: 10px;
+    display: grid; place-items: center;
+  }
+  .concept h3 { font-size: 17px; font-weight: 650; }
+  .concept p { color: var(--text-2); font-size: 14.5px; margin: 0; }
+  .concept .fine { color: var(--text-3); font-size: 12.5px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* ── Ladder ────────────────────────────────────────────────────────── */
+  .ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); }
+  .rung { padding: 24px 22px 26px; border-left: 1px solid var(--line-soft); position: relative; }
+  .rung:first-child { border-left: 0; }
+  .rung .stage { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; letter-spacing: .12em; color: var(--text-3); text-transform: uppercase; }
+  .rung h3 { font-size: 15.5px; margin: 8px 0 8px; }
+  .rung p { font-size: 13.5px; color: var(--text-2); margin: 0; }
+  .rung .bar { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, var(--brand), var(--brand-2)); opacity: 0; }
+  .rung.lit .bar { opacity: 1; }
+  .rung.lit { background: var(--surface-2); }
+  .ladder-note { color: var(--text-3); font-size: 14px; margin-top: 16px; }
+  .ladder-note strong { color: var(--text-2); }
+
+  /* ── Comparison ────────────────────────────────────────────────────── */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 14px; }
+  th, td { padding: 13px 18px; text-align: left; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+  thead th { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); font-weight: 600; border-bottom: 1px solid var(--line); }
+  tbody th { font-weight: 600; color: var(--text); width: 26%; }
+  td { color: var(--text-2); }
+  td.na { color: var(--text-3); }
+  th.fleex-col, td.fleex-col { background: var(--ice-soft); border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+  thead th.fleex-col { color: var(--ice); }
+  td.fleex-col { color: var(--text); }
+  .yes { color: var(--ok); font-weight: 600; }
+  .table-note { color: var(--text-3); font-size: 13px; margin-top: 14px; max-width: 75ch; }
+
+  /* ── DIY objections ────────────────────────────────────────────────── */
+  .diy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .diy-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px; }
+  .diy-card .quote { font-size: 15px; color: var(--text); font-weight: 600; margin-bottom: 10px; }
+  .diy-card .quote::before { content: "“"; color: var(--brand); }
+  .diy-card .quote::after { content: "”"; color: var(--brand); }
+  .diy-card .concede { color: var(--ok); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; margin-bottom: 8px; }
+  .diy-card p { color: var(--text-2); font-size: 14.5px; margin: 0; }
+  .diy-punch { margin-top: 26px; font-size: 19px; max-width: 58ch; }
+
+  /* ── Install ───────────────────────────────────────────────────────── */
+  .install-cols { display: grid; grid-template-columns: 1.2fr .8fr; gap: 40px; align-items: start; }
+  .term {
+    background: var(--term-bg); color: var(--term-text); border-radius: 12px; border: 1px solid var(--line);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px;
+    overflow: hidden;
+  }
+  .term-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.15); }
+  .term-bar span { margin-left: 8px; font-size: 11px; color: #7b81a3; letter-spacing: .08em; }
+  .term pre { margin: 0; padding: 18px 18px 20px; overflow-x: auto; line-height: 1.75; }
+  .term .c { color: #6b7194; }
+  .term .p { color: #7dd7f0; }
+  .term .cmdline { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .term .copy2 { background: none; border: 1px solid rgba(255,255,255,.15); color: #aeb4d4; border-radius: 6px; font-size: 11px; padding: 2px 9px; cursor: pointer; font-family: inherit; }
+  .term .copy2:hover { color: #fff; border-color: rgba(255,255,255,.4); }
+  .prereqs { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+  .prereqs .repo-chip { font-size: 12px; padding: 4px 10px; }
+  .install-side h3 { font-size: 16px; margin-bottom: 10px; }
+  .install-side p { color: var(--text-2); font-size: 14.5px; }
+  .roadmap-badges { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+  .roadmap-badges .rb {
+    display: flex; align-items: center; gap: 10px; border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px;
+    color: var(--text-2); font-size: 14px; background: var(--surface);
+  }
+  .roadmap-badges .rb .tag { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--warn); border: 1px solid var(--warn); border-radius: 5px; padding: 1px 7px; white-space: nowrap; }
+
+  /* ── First steps ───────────────────────────────────────────────────── */
+  .steps { counter-reset: step; display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .step { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px 26px; position: relative; }
+  .step::before {
+    counter-increment: step; content: counter(step, decimal-leading-zero);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 700; font-size: 13px;
+    color: var(--ice); background: var(--ice-soft); border: 1px solid var(--line);
+    border-radius: 8px; padding: 4px 9px; display: inline-block; margin-bottom: 12px;
+  }
+  .step h3 { font-size: 17px; margin-bottom: 8px; }
+  .step p { color: var(--text-2); font-size: 14.5px; margin: 0; }
+  .step code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; background: var(--chip-bg); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--text); }
+  .step .aha {
+    margin-top: 12px; font-size: 13px; color: var(--ice);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .steps-close { margin-top: 30px; font-size: 18px; max-width: 60ch; }
+
+  /* ── Footer ────────────────────────────────────────────────────────── */
+  footer { border-top: 1px solid var(--line-soft); padding: 44px 0 60px; color: var(--text-3); font-size: 14px; }
+  .foot-grid { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; align-items: baseline; }
+  footer a { color: var(--text-2); }
+
+  /* ── Motion & responsive ───────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .evt { transition: none; }
+  }
+  @media (max-width: 940px) {
+    .hero { grid-template-columns: 1fr; gap: 44px; padding: 40px 0 64px; }
+    .concepts, .diy { grid-template-columns: 1fr 1fr; }
+    .ladder { grid-template-columns: 1fr 1fr; }
+    .rung:nth-child(3) { border-left: 0; }
+    .rung { border-top: 1px solid var(--line-soft); }
+    .rung:nth-child(-n+2) { border-top: 0; }
+    .install-cols { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    section { padding: 60px 0; }
+    .shift-grid, .concepts, .diy, .steps, .ladder { grid-template-columns: 1fr; }
+    .rung { border-left: 0; }
+    .nav-links { gap: 16px; }
+    .nav-links a:not(.gh) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <nav>
+    <a class="logo" href="#">
+      <svg width="30" height="30" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="fg" x1="6" y1="8" x2="42" y2="42" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#4b63f2"/><stop offset="1" stop-color="#8b5cf6"/>
+          </linearGradient>
+        </defs>
+        <rect x="7" y="9" width="34" height="31" rx="10" fill="url(#fg)"/>
+        <rect x="2" y="19" width="5" height="12" rx="2.5" fill="url(#fg)"/>
+        <rect x="41" y="19" width="5" height="12" rx="2.5" fill="url(#fg)"/>
+        <path d="M20 19l-5 5.5 5 5.5M28 19l5 5.5-5 5.5" stroke="#c9f0fb" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      fleex
+    </a>
+    <div class="nav-links">
+      <a href="#concepts">Concepts</a>
+      <a href="#compare">Compare</a>
+      <a href="#install">Install</a>
+      <a href="#first-steps">First steps</a>
+      <a class="gh" href="https://github.com/oliviermadre/fleex">GitHub ↗</a>
+    </div>
+  </nav>
+
+  <!-- ── Hero ─────────────────────────────────────────────────────────── -->
+  <div class="hero">
+    <div>
+      <span class="chip">Agentic delivery system · open source · local-first</span>
+      <h1>Orchestrate <span class="strike">terminals</span> <span class="work">work</span>.</h1>
+      <p class="sub">
+        Session managers run your agents in parallel — then forget everything.
+        Fleex makes the <strong>ticket</strong> the unit of work: one workspace across repos,
+        a team of composable agents, and a knowledge record that outlives every session.
+        <strong>Your agents ship. Fleex remembers.</strong>
+      </p>
+      <div class="install-line">
+        <code id="install-cmd"><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/oliviermadre/fleex/main/install.sh | bash</code>
+        <button id="copy-hero" aria-label="Copy install command">copy</button>
+      </div>
+      <div class="hero-ctas">
+        <span class="soon">Prefer an app? <span class="badge">macOS .dmg</span> and <span class="badge">brew install --cask fleex</span> are on the way.</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="ticket" aria-label="Live example of a Fleex ticket accumulating work">
+        <div class="ticket-head">
+          <span class="ticket-id">FLX-142</span>
+          <span class="ticket-status" id="tk-status">DOING</span>
+          <span style="flex:1"></span>
+          <span class="repo-chips">
+            <span class="repo-chip">web · wt/flx-142</span>
+            <span class="repo-chip">server · wt/flx-142</span>
+          </span>
+          <span class="ticket-title">Unify pricing across web &amp; server</span>
+        </div>
+        <div class="ticket-feed" id="tk-feed">
+          <div class="evt"><span class="ico">▸</span><div><span class="who">panel · pricing-review</span><div class="msg">3 personas convened — <em>architect</em>, <em>reviewer</em>, <em>security</em>. Plan approved.</div></div></div>
+          <div class="evt"><span class="ico">⌥</span><div><span class="who">agent · builder-1 → server</span><div class="msg">PR opened <span class="pill">server#312</span> — pricing service extracted.</div></div></div>
+          <div class="evt"><span class="ico">⌥</span><div><span class="who">agent · builder-2 → web</span><div class="msg">PR opened <span class="pill">web#87</span> — consumes new endpoint. <em>@reviewer</em> please verify.</div></div></div>
+          <div class="evt deliv"><span class="ico">◆</span><div><span class="who">deliverable</span><div class="msg"><strong>pricing-migration-spec.md</strong> — rollout plan, API contract, edge cases.</div></div></div>
+          <div class="evt"><span class="ico">∑</span><div><span class="who">session summary · auto</span><div class="msg">Manual terminal session ended → summary attached. Context kept, not lost.</div></div></div>
+        </div>
+        <div class="ticket-foot">
+          <span>2 repos · 2 PRs · 4 sessions</span>
+          <span class="cost">cost <span id="tk-cost">$0.00</span></span>
+        </div>
+      </div>
+      <p class="ticket-caption">A Fleex ticket, filling itself in. This record is exportable — it's yours.</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ── The shift ────────────────────────────────────────────────────── -->
+  <section id="shift">
+    <div class="wrap">
+      <span class="chip">The shift</span>
+      <h2>The session is ephemeral compute.<br>The ticket is durable work.</h2>
+      <p class="lede">The current generation of agent environments won the parallelization battle — isolated worktrees, many sessions at once. Then the session ends, and everything it knew evaporates.</p>
+      <div class="shift-grid">
+        <div class="shift-card them">
+          <h3>Session-first (the current ADEs)</h3>
+          <ul>
+            <li>The <strong>session grid</strong> is the main screen.</li>
+            <li>Tickets are <strong>imported as prompts</strong> from Linear or Jira.</li>
+            <li>One worktree = one task = <strong>one repo</strong>.</li>
+            <li>When a session closes, its context becomes <strong>a transcript nobody rereads</strong>.</li>
+            <li>Costs live in your provider dashboard, <strong>unattributed</strong>.</li>
+          </ul>
+        </div>
+        <div class="shift-card us">
+          <h3>Ticket-first (Fleex)</h3>
+          <ul>
+            <li>The <strong>kanban</strong> is the main screen. Sessions are the debug view.</li>
+            <li>The ticket is the <strong>persistent primitive</strong> — it owns the workspace, sessions, deliverables and costs.</li>
+            <li>One ticket = one workspace = <strong>N repos × N worktrees × N PRs</strong>.</li>
+            <li>Every session — even a manual terminal one — <strong>leaves a summary in the ticket</strong>.</li>
+            <li>Every dollar is attributed to <strong>a ticket, a persona, a panel</strong>.</li>
+          </ul>
+        </div>
+      </div>
+      <p class="kicker">Sessions come and go. The ticket accumulates. <span class="mono">// That's the whole idea.</span></p>
+    </div>
+  </section>
+
+  <!-- ── Core concepts ────────────────────────────────────────────────── -->
+  <section id="concepts">
+    <div class="wrap">
+      <span class="chip">Core concepts</span>
+      <h2>Six primitives. One system.</h2>
+      <p class="lede">Each one is useful alone. Wired together through the ticket, they compound.</p>
+      <div class="concepts">
+        <div class="concept">
+          <span class="glyph">▦</span>
+          <h3>Ticket-first kanban</h3>
+          <p>A local-first board (SQLite, PostgreSQL, Supabase or JSON) that is your orchestrator, not a mirror of one. Drag a ticket — work starts.</p>
+          <span class="fine">backlog → todo → doing → reviewing → done</span>
+        </div>
+        <div class="concept">
+          <span class="glyph">⧉</span>
+          <h3>One workspace per ticket</h3>
+          <p>Real tasks cross repo boundaries. A Fleex ticket natively holds multiple repos, worktrees and PRs — front + back + infra is <strong>one</strong> ticket, not three orphaned sessions.</p>
+          <span class="fine">multi-repo × multi-worktree × multi-PR</span>
+        </div>
+        <div class="concept">
+          <span class="glyph">λ</span>
+          <h3>Agentic primitives</h3>
+          <p>Personas, skills, workflows — and <strong>panels</strong>: committees of agents that deliberate. Handoff works like it does between colleagues: an @mention, with a tracked lifecycle.</p>
+          <span class="fine">pending → acknowledged → resolved</span>
+        </div>
+        <div class="concept">
+          <span class="glyph">∑</span>
+          <h3>Knowledge that compounds</h3>
+          <p>Tickets carry the discussion, the deliverables, and auto-summaries of every session — including manual terminal ones. Six months later, the “why” is still there.</p>
+          <span class="fine">exports to OKF — Open Knowledge Format</span>
+        </div>
+        <div class="concept">
+          <span class="glyph">⌁</span>
+          <h3>Headless everywhere</h3>
+          <p>CLI, MCP, mobile PWA, Chrome side-panel, chat assistant. Launch a panel from your phone; query your knowledge base from Claude. Fleex is a platform, not an app window.</p>
+          <span class="fine">agents API v1 · MCP · multi-machine gateway</span>
+        </div>
+        <div class="concept">
+          <span class="glyph">$</span>
+          <h3>Cost per primitive</h3>
+          <p>Usage tracked per ticket, persona, panel — SDK sessions <em>and</em> CLI sessions. Answer “what did this ticket cost?” without opening a billing console.</p>
+          <span class="fine">the ccusage you never have to run</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Ladder ───────────────────────────────────────────────────────── -->
+  <section id="ladder">
+    <div class="wrap">
+      <span class="chip">Start where you are</span>
+      <h2>You don't have to believe in stage 3 to start at stage 1.</h2>
+      <p class="lede">Most of us climbed this ladder one rung at a time. Fleex is useful from the first rung — and it's already holding the next one when you reach for it.</p>
+      <div class="ladder">
+        <div class="rung"><span class="bar"></span>
+          <span class="stage">Stage 0</span>
+          <h3>One session at a time</h3>
+          <p>You talk to one agent in one terminal. Fleex already saves a summary when it ends.</p>
+        </div>
+        <div class="rung lit"><span class="bar"></span>
+          <span class="stage">Stage 1</span>
+          <h3>Parallel sessions</h3>
+          <p>Isolated worktrees, live terminals side by side. Everything a session manager gives you — start here.</p>
+        </div>
+        <div class="rung lit"><span class="bar"></span>
+          <span class="stage">Stage 2</span>
+          <h3>Project management</h3>
+          <p>More parallelism → you need to track who's doing what. Group sessions into tickets on the kanban.</p>
+        </div>
+        <div class="rung lit"><span class="bar"></span>
+          <span class="stage">Stage 3</span>
+          <h3>Knowledge &amp; control</h3>
+          <p>Tickets accumulate context, deliverables and costs. Your delivery has a memory — and a ledger.</p>
+        </div>
+      </div>
+      <p class="ladder-note"><strong>The honest part:</strong> you won't feel the need for stages 2–3 until you've lived stage 1. That's fine. Fleex meets you at the session grid and grows with you.</p>
+    </div>
+  </section>
+
+  <!-- ── Comparison ───────────────────────────────────────────────────── -->
+  <section id="compare">
+    <div class="wrap">
+      <span class="chip">Compare</span>
+      <h2>Parallel worktrees are table stakes.<br>Everyone has them. Then what?</h2>
+      <p class="lede">Conductor, Orca and Emdash are excellent session managers — credit where due. The comparison that matters is what's left when the session ends.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col"></th>
+              <th scope="col" class="fleex-col">Fleex</th>
+              <th scope="col">Conductor</th>
+              <th scope="col">Orca</th>
+              <th scope="col">Emdash</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Parallel agents, isolated worktrees</th>
+              <td class="fleex-col"><span class="yes">✓</span></td>
+              <td><span class="yes">✓</span></td>
+              <td><span class="yes">✓</span></td>
+              <td><span class="yes">✓</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Tickets</th>
+              <td class="fleex-col"><span class="yes">✓</span> Native primitive — owns workspace, sessions, deliverables, costs</td>
+              <td>Import from Linear/GitHub as task input</td>
+              <td class="na">—</td>
+              <td>Import from Linear, Jira, GitHub &amp; more as task input</td>
+            </tr>
+            <tr>
+              <th scope="row">Multi-repo per task</th>
+              <td class="fleex-col"><span class="yes">✓</span> N repos × N worktrees × N PRs per ticket</td>
+              <td class="na">1 workspace = 1 repo</td>
+              <td class="na">1 worktree = 1 task</td>
+              <td class="na">1 worktree = 1 task</td>
+            </tr>
+            <tr>
+              <th scope="row">Agent collaboration</th>
+              <td class="fleex-col"><span class="yes">✓</span> @mentions with lifecycle, private threads, panels (committees)</td>
+              <td class="na">Review &amp; merge by hand</td>
+              <td>Orchestration skill (inter-terminal messages)</td>
+              <td>Scheduled runs</td>
+            </tr>
+            <tr>
+              <th scope="row">What survives the session</th>
+              <td class="fleex-col"><span class="yes">✓</span> Ticket record: discussion, deliverables, auto-summaries — even for manual sessions</td>
+              <td class="na">Transcript</td>
+              <td class="na">Logs, diffs, status</td>
+              <td class="na">Transcript, reusable prompts</td>
+            </tr>
+            <tr>
+              <th scope="row">Knowledge export</th>
+              <td class="fleex-col"><span class="yes">✓</span> OKF — Open Knowledge Format</td>
+              <td class="na">—</td>
+              <td class="na">—</td>
+              <td class="na">—</td>
+            </tr>
+            <tr>
+              <th scope="row">Headless orchestration</th>
+              <td class="fleex-col"><span class="yes">✓</span> Agents API, MCP, CLI, mobile PWA, Chrome ext, chat</td>
+              <td class="na">—</td>
+              <td>Partial (desktop + mobile app)</td>
+              <td class="na">—</td>
+            </tr>
+            <tr>
+              <th scope="row">Cost attribution</th>
+              <td class="fleex-col"><span class="yes">✓</span> Per ticket, persona, panel — SDK &amp; CLI sessions</td>
+              <td class="na">—</td>
+              <td class="na">—</td>
+              <td class="na">—</td>
+            </tr>
+            <tr>
+              <th scope="row">Open source, your data local</th>
+              <td class="fleex-col"><span class="yes">✓</span> Local-first (SQLite/PG/Supabase)</td>
+              <td class="na">Proprietary Mac app</td>
+              <td><span class="yes">✓</span> Apache 2.0</td>
+              <td><span class="yes">✓</span> Open source</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-note">Honest caveats: Orca and Emdash support 25+ CLI agents; Fleex is Claude-first by design — depth before breadth. If agent variety is your first requirement today, they're good tools. When your question becomes “where did last month's work and knowledge go?”, come back.</p>
+    </div>
+  </section>
+
+  <!-- ── DIY ──────────────────────────────────────────────────────────── -->
+  <section id="diy">
+    <div class="wrap">
+      <span class="chip">For the builders</span>
+      <h2>“I could build that myself.”<br>Yes. You could.</h2>
+      <p class="lede">Every feature below is replicable with a script — we know, we wrote those scripts first. The value isn't any single piece. It's that they're already wired to each other, through the ticket.</p>
+      <div class="diy">
+        <div class="diy-card">
+          <div class="quote">I can save context with a git or Claude hook</div>
+          <div class="concede">✓ true — about 30 lines</div>
+          <p>Now make it fire for SDK sessions <em>and</em> manual terminal ones, land in the right ticket, sit next to the deliverables it explains, and export with everything else. In Fleex that hook ships wired. Zero config.</p>
+        </div>
+        <div class="diy-card">
+          <div class="quote">I can track costs with ccusage</div>
+          <div class="concede">✓ true — great tool</div>
+          <p>It tells you what <em>you</em> spent. It can't tell you what <em>ticket FLX-142</em> cost, across four sessions, two personas and a panel — because it doesn't know tickets exist. Attribution needs the primitive.</p>
+        </div>
+        <div class="diy-card">
+          <div class="quote">I can do multi-repo with /add-files</div>
+          <div class="concede">✓ true — for one session</div>
+          <p>That's files in a context window, not work across repos. A Fleex ticket holds two worktrees and two PRs with their reviews, discussion and history — and it's still one object on your board next week.</p>
+        </div>
+      </div>
+      <p class="diy-punch">Fleex is those scripts — already written, already wired to the ticket, already exporting to a format you own.</p>
+    </div>
+  </section>
+
+  <!-- ── Install ──────────────────────────────────────────────────────── -->
+  <section id="install">
+    <div class="wrap">
+      <span class="chip">Install</span>
+      <h2>One command. An interactive wizard does the rest.</h2>
+      <p class="lede">Today Fleex installs from the terminal — fitting, for the last time you'll need to live there.</p>
+      <div class="install-cols">
+        <div>
+          <div class="term">
+            <div class="term-bar"><i></i><i></i><i></i><span>bash</span></div>
+            <pre><span class="c"># install — clones to ~/.fleex, checks prerequisites, runs the setup wizard</span>
+<div class="cmdline"><span><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/oliviermadre/fleex/main/install.sh | bash</span><button class="copy2" id="copy-install" aria-label="Copy install command">copy</button></div>
+<span class="c"># then start everything — gateway, server, web UI</span>
+<span class="p">$</span> fleex start
+<span class="c"># → opens your browser. Add a repo, spin up agents, go.</span></pre>
+          </div>
+          <div class="prereqs" aria-label="Prerequisites">
+            <span class="repo-chip">requires: git</span>
+            <span class="repo-chip">bun ≥ 1.3.5</span>
+            <span class="repo-chip">tmux</span>
+            <span class="repo-chip">claude CLI</span>
+            <span class="repo-chip">gh (optional)</span>
+          </div>
+        </div>
+        <div class="install-side">
+          <h3>The wizard sets you up</h3>
+          <p>Display name, worktree path, storage driver (SQLite by default — nothing to host). It seeds three agent personas and a personal board so the app isn't empty on first launch.</p>
+          <h3>Coming soon</h3>
+          <div class="roadmap-badges">
+            <span class="rb"><span class="tag">soon</span> macOS app — signed .dmg, double-click install</span>
+            <span class="rb"><span class="tag">soon</span> brew install --cask fleex</span>
+            <span class="rb"><span class="tag">soon</span> tmux optional — only terminal sessions need it</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── First steps ──────────────────────────────────────────────────── -->
+  <section id="first-steps">
+    <div class="wrap">
+      <span class="chip">Zero → aha</span>
+      <h2>Your first ten minutes</h2>
+      <p class="lede">You don't need to change how you work. Start with parallel sessions — the thing you came for — and let the ticket reveal itself.</p>
+      <div class="steps">
+        <div class="step">
+          <h3>Install &amp; start</h3>
+          <p>Run the install command, answer the wizard, then <code>fleex start</code>. Your browser opens on a board that already has personas and a demo ticket to explore.</p>
+          <span class="aha">→ first screen in ~3 minutes</span>
+        </div>
+        <div class="step">
+          <h3>Add a repo, launch parallel sessions</h3>
+          <p>Register a repository, open two or three sessions in isolated worktrees, watch the terminals stream live. Familiar territory — this is the session-manager part.</p>
+          <span class="aha">→ everything your current tool does</span>
+        </div>
+        <div class="step">
+          <h3>Group them into a ticket</h3>
+          <p>Those three sessions are really one piece of work. Promote them into a ticket: it now owns the worktrees, the PRs, and the conversation. Drag it across the board as it progresses.</p>
+          <span class="aha">→ the work has a name and a place</span>
+        </div>
+        <div class="step">
+          <h3>End a session. Watch the summary land.</h3>
+          <p>Close any session — even a plain terminal one. A summary appears in the ticket automatically: what was done, what was decided, what's left. No hook to write. It was always on.</p>
+          <span class="aha">→ this is the aha. Nothing evaporates.</span>
+        </div>
+      </div>
+      <p class="steps-close">From here, the ladder is yours: @mention a reviewer persona, convene a panel, check what the ticket cost, export it all to OKF. Or don't — stage 1 alone is already a good tool.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-grid">
+    <span>Fleex — open source, local-first. Your tickets, your data, your format (<span class="mono">OKF</span>).</span>
+    <span>
+      <a href="https://github.com/oliviermadre/fleex">GitHub</a> ·
+      <a href="https://github.com/oliviermadre/fleex/blob/main/docs/mobile.md">Mobile PWA</a> ·
+      <a href="https://github.com/oliviermadre/fleex/blob/main/docs/agent-guide.md">Agents API</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var CMD = 'curl -fsSL https://raw.githubusercontent.com/oliviermadre/fleex/main/install.sh | bash';
+    function wireCopy(id) {
+      var btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        navigator.clipboard.writeText(CMD).then(function () {
+          var prev = btn.textContent;
+          btn.textContent = 'copied';
+          setTimeout(function () { btn.textContent = prev; }, 1600);
+        });
+      });
+    }
+    wireCopy('copy-hero');
+    wireCopy('copy-install');
+
+    // Live ticket: staged reveal, looping. Static when reduced motion is preferred.
+    var evts = Array.prototype.slice.call(document.querySelectorAll('#tk-feed .evt'));
+    var costEl = document.getElementById('tk-cost');
+    var statusEl = document.getElementById('tk-status');
+    var costs = [0.42, 1.87, 3.24, 4.61, 5.03];
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (reduced) {
+      evts.forEach(function (e) { e.classList.add('on'); });
+      costEl.textContent = '$' + costs[costs.length - 1].toFixed(2);
+      statusEl.textContent = 'REVIEWING';
+      return;
+    }
+
+    var STEP = 1700, HOLD = 4200;
+    function run() {
+      evts.forEach(function (e) { e.classList.remove('on'); });
+      statusEl.textContent = 'DOING';
+      costEl.textContent = '$0.00';
+      evts.forEach(function (e, i) {
+        setTimeout(function () {
+          e.classList.add('on');
+          costEl.textContent = '$' + costs[i].toFixed(2);
+          if (i === evts.length - 1) statusEl.textContent = 'REVIEWING';
+        }, 600 + i * STEP);
+      });
+      setTimeout(run, 600 + evts.length * STEP + HOLD);
+    }
+    run();
+  })();
+</script>
+</body>
+</html>
