@@ -3,6 +3,7 @@ import type { Skill } from '@fleex/shared';
 import { useSkillStore } from '../../stores/skillStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
+import { tint } from '../../lib/tints';
 
 const TABS = [
   { key: 'config' as const, label: 'Config' },
@@ -193,7 +194,7 @@ export function SkillEditor() {
         <span className={cn(
           'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
           skill.enabled
-            ? 'bg-green-500/10 text-green-400'
+            ? tint('green')
             : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)]',
         )}>
           {skill.enabled ? 'Enabled' : 'Disabled'}

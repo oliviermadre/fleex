@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { TicketMention, MentionStatus, MentionExecutionMode, AgentExecution, TicketWsMessage, MentionExecutionFailedPayload } from '@fleex/shared';
 import { appWs } from '../../services/websocket';
+import { tint, tintText, tintClasses } from '../../lib/tints';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
@@ -25,27 +26,27 @@ function relativeTime(dateStr: string): string {
 const STATUS_CONFIG: Record<MentionStatus, { label: string; color: string; bg: string; dot: string }> = {
   pending: {
     label: 'Pending',
-    color: 'text-yellow-400',
-    bg: 'bg-yellow-500/15',
-    dot: 'bg-yellow-400',
+    color: tintText('yellow'),
+    bg: tintClasses('yellow').bg,
+    dot: tintClasses('yellow').solid,
   },
   acknowledged: {
     label: 'Acknowledged',
-    color: 'text-blue-400',
-    bg: 'bg-blue-500/15',
-    dot: 'bg-blue-400',
+    color: tintText('blue'),
+    bg: tintClasses('blue').bg,
+    dot: tintClasses('blue').solid,
   },
   waiting_for_info: {
     label: 'Waiting',
-    color: 'text-orange-400',
-    bg: 'bg-orange-500/15',
-    dot: 'bg-orange-400',
+    color: tintText('orange'),
+    bg: tintClasses('orange').bg,
+    dot: tintClasses('orange').solid,
   },
   resolved: {
     label: 'Resolved',
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-500/15',
-    dot: 'bg-emerald-400',
+    color: tintText('green'),
+    bg: tintClasses('green').bg,
+    dot: tintClasses('green').solid,
   },
 };
 
@@ -114,9 +115,9 @@ function StatusDropdown({
 }
 
 const MODE_CONFIG: Record<MentionExecutionMode, { label: string; color: string; bg: string }> = {
-  talk: { label: 'Talk', color: 'text-cyan-400', bg: 'bg-cyan-500/15' },
-  plan: { label: 'Plan', color: 'text-amber-400', bg: 'bg-amber-500/15' },
-  edit: { label: 'Edit', color: 'text-emerald-400', bg: 'bg-emerald-500/15' },
+  talk: { label: 'Talk', color: tintText('teal'), bg: tintClasses('teal').bg },
+  plan: { label: 'Plan', color: tintText('yellow'), bg: tintClasses('yellow').bg },
+  edit: { label: 'Edit', color: tintText('green'), bg: tintClasses('green').bg },
 };
 
 function MentionModeToggle({
@@ -386,7 +387,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                 {/* Top row: source -> target + status + delete */}
                 <div className="flex items-center gap-2">
                   {/* Source */}
-                  <span className="text-xs font-medium text-blue-400">
+                  <span className={`text-xs font-medium ${tintText('blue')}`}>
                     {displaySource(m.sourceAgent)}
                   </span>
 
@@ -396,12 +397,12 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                   </svg>
 
                   {/* Target agent */}
-                  <span className={`text-xs font-medium ${m.targetType === 'human' ? 'text-amber-400' : 'text-purple-400'}`}>
+                  <span className={`text-xs font-medium ${m.targetType === 'human' ? tintText('yellow') : tintText('purple')}`}>
                     {m.targetType === 'human' ? `@${m.targetAgent}` : m.targetAgent}
                   </span>
 
                   {m.targetType === 'human' && (
-                    <span className="rounded-full bg-amber-500/15 px-1.5 py-px text-[9px] font-medium text-amber-400">
+                    <span className={`rounded-full px-1.5 py-px text-[9px] font-medium ${tint('yellow')}`}>
                       human
                     </span>
                   )}
@@ -414,8 +415,8 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                     <button
                       className={`rounded p-0.5 transition-all ${
                         executionByMention.get(m.id)?.status === 'running'
-                          ? 'animate-pulse text-blue-400'
-                          : 'text-[var(--theme-text-faint)] opacity-0 hover:bg-blue-500/15 hover:text-blue-400 group-hover:opacity-100'
+                          ? `animate-pulse ${tintText('blue')}`
+                          : `text-[var(--theme-text-faint)] opacity-0 group-hover:opacity-100 ${tintClasses('blue').hoverBg} ${tintClasses('blue').hoverText}`
                       }`}
                       onClick={() => openExecution(m)}
                       title="View execution"
@@ -431,8 +432,8 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                     <button
                       className={`rounded p-0.5 transition-all ${
                         executing.has(m.targetAgent)
-                          ? 'animate-pulse text-emerald-400'
-                          : 'text-[var(--theme-text-faint)] opacity-0 hover:bg-emerald-500/15 hover:text-emerald-400 group-hover:opacity-100'
+                          ? `animate-pulse ${tintText('green')}`
+                          : `text-[var(--theme-text-faint)] opacity-0 group-hover:opacity-100 ${tintClasses('green').hoverBg} ${tintClasses('green').hoverText}`
                       }`}
                       onClick={() => handleExecute(m)}
                       disabled={executing.has(m.targetAgent)}
@@ -446,7 +447,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
 
                   {/* Delete button (visible on hover) */}
                   <button
-                    className="rounded p-0.5 text-[var(--theme-text-faint)] opacity-0 transition-all hover:bg-red-500/15 hover:text-red-400 group-hover:opacity-100"
+                    className={`rounded p-0.5 text-[var(--theme-text-faint)] opacity-0 transition-all group-hover:opacity-100 ${tintClasses('red').hoverBg} ${tintClasses('red').hoverText}`}
                     onClick={() => handleDelete(m.id)}
                     title="Delete mention"
                   >
@@ -465,10 +466,10 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                   {/* Startup-failure chip — last server attempt could not start the agent */}
                   {failures[m.id] && (
                     <span
-                      className="inline-flex max-w-[220px] items-center gap-1 truncate rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-medium text-red-400"
+                      className={`inline-flex max-w-[220px] items-center gap-1 truncate rounded-full px-2 py-0.5 text-[10px] font-medium ${tint('red')}`}
                       title={failures[m.id]!.message}
                     >
-                      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
+                      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${tintClasses('red').solid}`} />
                       <span className="truncate">Failed to start</span>
                     </span>
                   )}

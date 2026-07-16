@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { REPO_REFRESH_INTERVALS, REPO_REFRESH_LABELS } from '@fleex/shared';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
+import { tintSolid } from '../../lib/tints';
 
 interface RefreshControlProps {
   refreshing: boolean;
@@ -88,7 +89,7 @@ export function RefreshControl({
 
       {/* Rate limit warning */}
       {rateLimitWarning && rateLimitWarning.remaining < 500 && (
-        <span className="h-2 w-2 rounded-full bg-yellow-500" title={`Rate limit: ${rateLimitWarning.remaining} remaining`} />
+        <span className={cn('h-2 w-2 rounded-full', tintSolid('yellow'))} title={`Rate limit: ${rateLimitWarning.remaining} remaining`} />
       )}
 
       {/* Auto-refresh dropdown */}

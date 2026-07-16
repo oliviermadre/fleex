@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useUIStore } from '../../stores/uiStore';
 import { useAssistantStore, type AssistantSession } from '../../stores/assistantStore';
 import { cn } from '../../lib/cn';
+import { tintSolid, tintText } from '../../lib/tints';
 
 /** "x unit ago" relative time, matching the comment feed's tone. */
 export function relativeTime(iso: string): string {
@@ -23,7 +24,7 @@ export function AssistantStatusDot({ status, size = 8 }: { status: AssistantSess
     <span
       className={cn(
         'inline-block shrink-0 rounded-full',
-        working ? 'animate-pulse bg-amber-400' : 'bg-[var(--theme-text-faint)] opacity-40',
+        working ? cn('animate-pulse', tintSolid('yellow')) : 'bg-[var(--theme-text-faint)] opacity-40',
       )}
       style={{ width: size, height: size }}
       title={status === 'idle' ? 'Inactif' : status === 'awaiting_input' ? 'En attente de confirmation' : 'En train de répondre'}
@@ -115,7 +116,7 @@ export function AssistantSidebar() {
             <p className="mb-2 text-xs text-[var(--theme-text-faint)]">Aucune conversation</p>
             <button
               onClick={() => newSession()}
-              className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]"
+              className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)]"
             >
               Nouvelle conversation
             </button>
@@ -183,7 +184,7 @@ export function AssistantSidebar() {
                 className={cn(
                   'shrink-0 rounded p-1',
                   confirmDeleteId === s.id
-                    ? 'block text-[10px] font-semibold text-red-400'
+                    ? cn('block text-[10px] font-semibold', tintText('red'))
                     : 'hidden text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)] group-hover:block',
                 )}
                 title="Supprimer la conversation"

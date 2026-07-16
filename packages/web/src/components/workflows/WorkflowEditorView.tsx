@@ -203,7 +203,7 @@ function EditorInner({ template, onBack }: Props) {
             style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-primary)' }}>{saving ? 'Saving…' : 'Save Workflow'}</button>
         </div>
       </div>
-      {error && <div className="px-4 py-1 text-xs text-red-400">{error}</div>}
+      {error && <div className="px-4 py-1 text-xs text-[var(--theme-danger)]">{error}</div>}
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">

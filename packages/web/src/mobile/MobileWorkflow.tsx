@@ -3,6 +3,7 @@ import type { StepRun, StepRunStatus, WorkflowRun, WorkflowStep } from '@fleex/s
 import { useWorkflowRunStore, ACTIVE_STATUSES } from '../stores/workflowRunStore';
 import { postTicketComment } from '../services/api';
 import { countCompletedSteps } from '../components/workflows/workflowProgress';
+import { tint, tintText } from '../lib/tints';
 
 /**
  * Mobile workflow run view: the desktop DAG (xyflow) doesn't fit a phone, so
@@ -14,21 +15,21 @@ import { countCompletedSteps } from '../components/workflows/workflowProgress';
 const STEP_STATUS_ICON: Record<StepRunStatus | 'pending', { icon: string; className: string }> = {
   pending: { icon: '○', className: 'text-[var(--theme-text-faint)]' },
   queued: { icon: '◔', className: 'text-[var(--theme-text-muted)]' },
-  running: { icon: '●', className: 'animate-pulse text-amber-400' },
-  completed: { icon: '✓', className: 'text-green-400' },
-  failed: { icon: '✗', className: 'text-red-400' },
-  needs_review: { icon: '✋', className: 'text-purple-400' },
-  cancelled: { icon: '⊘', className: 'text-zinc-400' },
+  running: { icon: '●', className: `animate-pulse ${tintText('yellow')}` },
+  completed: { icon: '✓', className: tintText('green') },
+  failed: { icon: '✗', className: tintText('red') },
+  needs_review: { icon: '✋', className: tintText('purple') },
+  cancelled: { icon: '⊘', className: tintText('gray') },
   skipped: { icon: '↷', className: 'text-[var(--theme-text-faint)]' },
 };
 
 const RUN_STATUS_BADGE: Record<WorkflowRun['status'], string> = {
-  running: 'bg-amber-500/20 text-amber-400',
-  blocked: 'bg-purple-500/20 text-purple-400',
-  needs_review: 'bg-purple-500/20 text-purple-400',
-  completed: 'bg-green-500/20 text-green-400',
-  failed: 'bg-red-500/20 text-red-400',
-  cancelled: 'bg-zinc-500/20 text-zinc-400',
+  running: tint('yellow'),
+  blocked: tint('purple'),
+  needs_review: tint('purple'),
+  completed: tint('green'),
+  failed: tint('red'),
+  cancelled: tint('gray'),
 };
 
 export function MobileWorkflow({ ticketId }: { ticketId: string }) {
@@ -286,7 +287,7 @@ function MobileStepDetail({
                 key={o}
                 disabled={busy}
                 onClick={() => act(() => onResolveGate(stepRun.id, o, notes.trim() || undefined))}
-                className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
               >
                 {o}
               </button>
@@ -308,7 +309,7 @@ function MobileStepDetail({
           <button
             disabled={busy || !notes.trim()}
             onClick={() => act(() => onRespondReview(notes.trim(), stepRun.id))}
-            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             Répondre et relancer
           </button>
@@ -319,21 +320,21 @@ function MobileStepDetail({
       {(stepRun?.status === 'failed' || stepRun?.status === 'cancelled') && (
         <div className="space-y-2">
           {stepRun.status === 'failed' && (
-            <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-400">
+            <p className={`rounded-lg border p-2 text-xs ${tint('red')}`}>
               {(stepRun.output?.schemaFields?.['error'] as string | undefined) ?? 'Étape échouée'}
             </p>
           )}
           <button
             disabled={busy}
             onClick={() => act(() => onRetry(stepRun.id))}
-            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             {stepRun.status === 'failed' ? 'Réessayer' : 'Relancer'}
           </button>
         </div>
       )}
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className={`text-xs ${tintText('red')}`}>{error}</p>}
     </div>
   );
 }

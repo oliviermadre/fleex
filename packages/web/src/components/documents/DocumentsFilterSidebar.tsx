@@ -2,6 +2,7 @@ import type { TicketDeliverable } from '@fleex/shared';
 import { useDocumentsStore } from '../../stores/documentsStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { cn } from '../../lib/cn';
+import { tint, tintClasses } from '../../lib/tints';
 
 interface FacetItem {
   value: string;
@@ -24,8 +25,8 @@ function buildFacets(deliverables: TicketDeliverable[], key: keyof TicketDeliver
 const ACCENT_BADGE = 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)] ring-[var(--theme-accent)]/20';
 
 const STATUS_COLORS: Record<string, string> = {
-  final: 'bg-green-500/10 text-green-400 ring-green-500/20',
-  draft: 'bg-amber-500/10 text-amber-400 ring-amber-500/20',
+  final: `${tintClasses('green').text} ${tintClasses('green').bg} ${tintClasses('green').ring}`,
+  draft: `${tintClasses('yellow').text} ${tintClasses('yellow').bg} ${tintClasses('yellow').ring}`,
 };
 
 function getInitials(name: string): string {
@@ -128,7 +129,7 @@ export function DocumentsFilterSidebar() {
           return (
             <span
               className={cn('whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ring-1', !c && ACCENT_BADGE)}
-              style={c ? { backgroundColor: c.bg, color: c.text, boxShadow: `0 0 0 1px ${c.text}33` } : undefined}
+              style={c ? { backgroundColor: c.bg, color: c.text, boxShadow: `0 0 0 1px ${c.border}` } : undefined}
             >
               {labelForType(f.value)}
             </span>
@@ -142,7 +143,7 @@ export function DocumentsFilterSidebar() {
         onToggle={(v) => toggleFilter('filterAgentNames', v)}
         renderLabel={(f) => (
           <>
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-[9px] font-semibold text-violet-300">
+            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${tintClasses('purple').bg} ${tintClasses('purple').text}`}>
               {getInitials(f.label)}
             </span>
             <span className="truncate">{f.label}</span>
@@ -155,7 +156,7 @@ export function DocumentsFilterSidebar() {
         activeValues={filterStatuses}
         onToggle={(v) => toggleFilter('filterStatuses', v)}
         renderLabel={(f) => {
-          const color = STATUS_COLORS[f.value] ?? 'bg-gray-500/10 text-gray-400 ring-gray-500/20';
+          const color = STATUS_COLORS[f.value] ?? `${tintClasses('gray').text} ${tintClasses('gray').bg} ${tintClasses('gray').ring}`;
           return (
             <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium ring-1', color)}>
               {f.label}

@@ -112,7 +112,7 @@ export function CreateSkillModal({ open, onClose }: CreateSkillModalProps) {
         </div>
 
         {error && (
-          <p className="mt-3 text-xs text-red-400">{error}</p>
+          <p className="mt-3 text-xs text-[var(--theme-danger)]">{error}</p>
         )}
 
         <div className="mt-5 flex justify-end gap-2">
@@ -126,7 +126,7 @@ export function CreateSkillModal({ open, onClose }: CreateSkillModalProps) {
             onClick={handleCreate}
             disabled={creating}
             className={cn(
-              'rounded bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]',
+              'rounded bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)]',
               creating && 'opacity-50',
             )}
           >

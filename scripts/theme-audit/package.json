@@ -1,0 +1,8 @@
+{
+  "name": "fleex-theme-audit",
+  "private": true,
+  "description": "Standalone deps for the theme contrast sweep (not part of the bun workspaces on purpose — playwright is heavy and only needed for `bun run audit:theme`).",
+  "dependencies": {
+    "playwright": "1.61.1"
+  }
+}

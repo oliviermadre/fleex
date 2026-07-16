@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '../../lib/cn';
+import { tint } from '../../lib/tints';
 
 export interface Column<T> {
   key: string;
@@ -159,7 +160,7 @@ export function DataTable<T>({
                 className={cn(
                   'cursor-pointer border-b border-[var(--theme-border-subtle)] transition-colors',
                   selectedIndex === i
-                    ? 'bg-emerald-500/15 text-emerald-300'
+                    ? tint('green')
                     : keyboardNav && highlightedIndex === i
                       ? 'bg-[var(--theme-bg-hover)] ring-1 ring-inset ring-[var(--theme-border-input)]'
                       : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'

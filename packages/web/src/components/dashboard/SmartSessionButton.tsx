@@ -12,6 +12,7 @@ import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { useToastStore } from '../../stores/toastStore';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
 
 interface SmartSessionButtonProps {
   sessions: Session[];
@@ -59,13 +60,19 @@ function statusTheme(status: DisplayStatus): string {
     case 'executing':
     case 'working':
       return [
-        'border-blue-500/40 bg-blue-500/10 text-blue-500',
-        'hover:border-blue-500/60 hover:bg-blue-500/20',
+        tintClasses('blue').borderColor,
+        tintClasses('blue').bg,
+        tintClasses('blue').text,
+        tintClasses('blue').hoverBorderColor,
+        tintClasses('blue').hoverBg,
       ].join(' ');
     case 'needs-approval':
       return [
-        'border-amber-400/40 bg-amber-400/10 text-amber-400',
-        'hover:border-amber-400/60 hover:bg-amber-400/20',
+        tintClasses('yellow').borderColor,
+        tintClasses('yellow').bg,
+        tintClasses('yellow').text,
+        tintClasses('yellow').hoverBorderColor,
+        tintClasses('yellow').hoverBg,
       ].join(' ');
     case 'idle':
     case 'unknown':

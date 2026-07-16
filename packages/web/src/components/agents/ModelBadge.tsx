@@ -1,6 +1,7 @@
 import type { ModelFamily, ModelOption } from '@fleex/shared';
 import { useModels } from '../../hooks/useModels';
 import { cn } from '../../lib/cn';
+import { tint } from '../../lib/tints';
 
 interface ModelBadgeProps {
   /** Raw model id, e.g. 'claude-opus-4-8' */
@@ -22,8 +23,8 @@ function familyOf(id: string): ModelFamily {
 }
 
 /**
- * Family palette. Chosen for legibility on the dark sidebar (Tailwind 400/500
- * range on a translucent tinted background — same hue, never washed out).
+ * Family palette — theme-aware tints (lib/tints.ts), legible in light AND
+ * dark themes by construction (contrast-checked text/bg pairs + outline).
  * - fable  → purple (flagship, Claude 5 gen)
  * - opus   → red    (heavyweight, premium)
  * - sonnet → orange (mid-tier daily driver)
@@ -31,11 +32,11 @@ function familyOf(id: string): ModelFamily {
  * - other  → gray   (unknown / unscored)
  */
 const FAMILY_STYLES: Record<ModelFamily, string> = {
-  fable: 'bg-purple-500/15 text-purple-300',
-  opus: 'bg-red-500/15 text-red-300',
-  sonnet: 'bg-orange-500/15 text-orange-300',
-  haiku: 'bg-green-500/15 text-green-300',
-  other: 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)]',
+  fable: tint('purple'),
+  opus: tint('red'),
+  sonnet: tint('orange'),
+  haiku: tint('green'),
+  other: tint('gray'),
 };
 
 /**

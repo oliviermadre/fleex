@@ -224,7 +224,7 @@ export function GroupedSessions() {
 
               {/* Delete button */}
               <button
-                className="hidden shrink-0 items-center justify-center rounded text-[var(--theme-text-muted)] hover:text-red-400 transition-colors group-hover/grouped:flex cursor-pointer"
+                className={cn('hidden shrink-0 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors group-hover/grouped:flex cursor-pointer', 'hover:text-[var(--tint-red-text)]')}
                 onClick={(e) => handleDelete(e, group.id)}
                 title="Delete group"
               >

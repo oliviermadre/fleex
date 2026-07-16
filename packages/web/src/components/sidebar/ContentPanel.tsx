@@ -25,6 +25,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { aggregateBranchStatus, type DisplayStatus } from '../../lib/deriveStatus';
 import { StatusDot } from '../ui/StatusDot';
 import { cn } from '../../lib/cn';
+import { tintSolid, tintText } from '../../lib/tints';
 
 export function ContentPanel() {
   const activePanel = useUIStore((s) => s.activePanel);
@@ -249,7 +250,7 @@ function CollapsedWorktreeItem({
         </div>
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
           {status === 'needs-approval' && (
-            <span className="absolute -top-0.5 right-0.5 text-[10px] text-amber-400">&#9888;</span>
+            <span className={cn('absolute -top-0.5 right-0.5 text-[10px]', tintText('yellow'))}>&#9888;</span>
           )}
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
             <circle cx="5" cy="3.5" r="1.5" /><circle cx="11" cy="3.5" r="1.5" /><circle cx="8" cy="12.5" r="1.5" />
@@ -501,10 +502,10 @@ function CollapsedRepositoriesPanel() {
 
 const TICKET_STATUS_COLORS: Record<string, string> = {
   backlog: 'bg-[var(--theme-text-faint)]',
-  todo: 'bg-blue-400',
-  doing: 'bg-amber-400',
-  reviewing: 'bg-purple-400',
-  done: 'bg-green-400',
+  todo: tintSolid('orange'),
+  doing: tintSolid('blue'),
+  reviewing: tintSolid('purple'),
+  done: tintSolid('green'),
 };
 
 function CollapsedTicketsPanel() {
@@ -687,7 +688,7 @@ function CollapsedAgentsPanel() {
                 )}>
                   {initials}
                   {isRunning && (
-                    <span className="absolute -right-1 -top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-400" />
+                    <span className={cn('absolute -right-1 -top-1 h-1.5 w-1.5 animate-pulse rounded-full', tintSolid('yellow'))} />
                   )}
                 </span>
               }

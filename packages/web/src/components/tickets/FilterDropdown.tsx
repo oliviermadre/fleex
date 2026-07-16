@@ -66,7 +66,7 @@ export function FilterDropdown() {
           <polygon points="1 1 15 1 9 8 9 13 7 15 7 8 1 1" />
         </svg>
         {activeFilterCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--theme-accent)] text-[9px] font-bold text-white">
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--theme-accent)] text-[9px] font-bold text-[var(--theme-accent-fg)]">
             {activeFilterCount}
           </span>
         )}
@@ -119,7 +119,7 @@ export function FilterDropdown() {
                   className={cn(
                     'rounded px-2 py-1 text-[11px] transition-colors',
                     !filters.priority
-                      ? 'bg-[var(--theme-accent)] text-white'
+                      ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                       : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                   )}
                   onClick={() => setFilters({ priority: null })}
@@ -132,7 +132,7 @@ export function FilterDropdown() {
                     className={cn(
                       'flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors',
                       filters.priority === p
-                        ? 'bg-[var(--theme-accent)] text-white'
+                        ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                         : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                     )}
                     onClick={() => setFilters({ priority: p })}
@@ -152,7 +152,7 @@ export function FilterDropdown() {
                   className={cn(
                     'rounded px-2 py-1 text-[11px] transition-colors',
                     !filters.type
-                      ? 'bg-[var(--theme-accent)] text-white'
+                      ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                       : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                   )}
                   onClick={() => setFilters({ type: null })}
@@ -165,7 +165,7 @@ export function FilterDropdown() {
                     className={cn(
                       'flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors',
                       filters.type === t
-                        ? 'bg-[var(--theme-accent)] text-white'
+                        ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                         : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                     )}
                     onClick={() => setFilters({ type: t as TicketType })}
@@ -191,7 +191,7 @@ export function FilterDropdown() {
                     className={cn(
                       'rounded px-2 py-1 text-[11px] transition-colors',
                       filters.hasSession === opt.value
-                        ? 'bg-[var(--theme-accent)] text-white'
+                        ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                         : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                     )}
                     onClick={() => setFilters({ hasSession: opt.value })}
@@ -215,7 +215,7 @@ export function FilterDropdown() {
                     className={cn(
                       'rounded px-2 py-1 text-[11px] transition-colors',
                       filters.favorite === opt.value
-                        ? 'bg-[var(--theme-accent)] text-white'
+                        ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                         : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                     )}
                     onClick={() => setFilters({ favorite: opt.value })}
@@ -251,7 +251,7 @@ export function FilterDropdown() {
                   'rounded px-2 py-1 text-[11px] transition-colors',
                   filters.hideOldDoneCancelled
                     ? 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)]'
-                    : 'bg-[var(--theme-accent)] text-white',
+                    : 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]',
                 )}
                 onClick={() => setFilters({ hideOldDoneCancelled: !filters.hideOldDoneCancelled })}
               >

@@ -6,15 +6,15 @@ import { InlineCardCreator } from './InlineCardCreator';
 import { useTicketStore } from '../../stores/ticketStore';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
-import { getStatusBadgeClass } from '../../lib/statusColors';
+import { getStatusBadgeClass, STATUS_COLORS } from '../../lib/statusColors';
 
 const COLUMN_TITLE_COLOR: Record<string, string> = {
-  backlog: 'text-[var(--theme-text-muted)]',
-  todo: 'text-orange-400',
-  doing: 'text-blue-400',
-  reviewing: 'text-purple-400',
-  done: 'text-green-400',
-  cancelled: 'text-red-400/70',
+  backlog: STATUS_COLORS.backlog!.text,
+  todo: STATUS_COLORS.todo!.text,
+  doing: STATUS_COLORS.doing!.text,
+  reviewing: STATUS_COLORS.reviewing!.text,
+  done: STATUS_COLORS.done!.text,
+  cancelled: STATUS_COLORS.cancelled!.text,
 };
 
 export function KanbanColumn({

@@ -4,14 +4,15 @@ import type { TicketStatus } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
 import { MobileTicketCard } from './MobileTicketCard';
 import { setMobileOverride } from './useMobileMode';
+import { tintSolid } from '../lib/tints';
 
 const STATUS_DOT: Record<TicketStatus, string> = {
-  backlog: 'bg-zinc-400',
-  todo: 'bg-blue-400',
-  doing: 'bg-amber-400',
-  reviewing: 'bg-purple-400',
-  done: 'bg-green-400',
-  cancelled: 'bg-zinc-600',
+  backlog: tintSolid('gray'),
+  todo: tintSolid('orange'),
+  doing: tintSolid('blue'),
+  reviewing: tintSolid('purple'),
+  done: tintSolid('green'),
+  cancelled: tintSolid('gray'),
 };
 
 const DEFAULT_COLUMN_INDEX = TICKET_STATUSES.indexOf('doing');
@@ -125,7 +126,7 @@ export function MobileBoard() {
               onClick={() => goToColumn(idx)}
               className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 active
-                  ? 'bg-[var(--theme-accent)] text-white'
+                  ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                   : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
               }`}
             >
@@ -175,7 +176,7 @@ export function MobileBoard() {
       {canAdd && !adding && (
         <button
           onClick={() => setAdding(true)}
-          className="fixed bottom-5 right-4 z-30 flex h-13 w-13 items-center justify-center rounded-full bg-[var(--theme-accent)] text-2xl leading-none text-white shadow-lg"
+          className="fixed bottom-5 right-4 z-30 flex h-13 w-13 items-center justify-center rounded-full bg-[var(--theme-accent)] text-2xl leading-none text-[var(--theme-accent-fg)] shadow-lg"
           style={{ width: 52, height: 52, marginBottom: 'env(safe-area-inset-bottom)' }}
           aria-label="Nouveau ticket"
         >
@@ -216,7 +217,7 @@ export function MobileBoard() {
               <button
                 onClick={handleCreate}
                 disabled={!newTitle.trim() || submitting}
-                className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)] disabled:opacity-50"
               >
                 Créer
               </button>

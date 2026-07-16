@@ -5,6 +5,7 @@ import { appWs } from '../services/websocket';
 import { useDeliverableTypesStore } from '../stores/deliverableTypesStore';
 import { useUnreadStore } from '../stores/unreadStore';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
+import { tint, tintText } from '../lib/tints';
 
 /** Deliverables tab: list, read, create and delete — desktop-parity writes. */
 export function MobileDeliverables({ ticketId }: { ticketId: string }) {
@@ -103,8 +104,8 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                         d.status === 'final'
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-amber-500/20 text-amber-400'
+                          ? tint('green')
+                          : tint('yellow')
                       }`}
                     >
                       {d.status}
@@ -114,7 +115,7 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
                     onClick={() => handleDelete(d.id)}
                     className={`shrink-0 rounded-lg px-2.5 py-3 text-xs ${
                       confirmDeleteId === d.id
-                        ? 'font-semibold text-red-400'
+                        ? `font-semibold ${tintText('red')}`
                         : 'text-[var(--theme-text-faint)]'
                     }`}
                     aria-label={`Supprimer ${d.title}`}
@@ -131,7 +132,7 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
       {/* Create */}
       <button
         onClick={() => setCreating(true)}
-        className="absolute bottom-4 right-4 flex items-center justify-center rounded-full bg-[var(--theme-accent)] text-2xl leading-none text-white shadow-lg"
+        className="absolute bottom-4 right-4 flex items-center justify-center rounded-full bg-[var(--theme-accent)] text-2xl leading-none text-[var(--theme-accent-fg)] shadow-lg"
         style={{ width: 52, height: 52 }}
         aria-label="Nouveau deliverable"
       >
@@ -231,7 +232,7 @@ function CreateDeliverableSheet({
                 onClick={() => setStatus(s)}
                 className={`px-3 py-2 text-xs font-medium ${
                   status === s
-                    ? 'bg-[var(--theme-accent)] text-white'
+                    ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                     : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
                 }`}
               >
@@ -254,7 +255,7 @@ function CreateDeliverableSheet({
           <button
             onClick={submit}
             disabled={!title.trim() || saving}
-            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             Créer
           </button>

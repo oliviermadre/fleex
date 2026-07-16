@@ -14,26 +14,29 @@ import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { executeSkill } from '../../services/api';
 import { cn } from '../../lib/cn';
+import { tint, tintText, tintClasses } from '../../lib/tints';
 
 const PRIORITY_BORDER: Record<string, string> = {
   none: 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
-  low: 'border-[var(--theme-border)] hover:border-blue-500/40',
-  medium: 'border-[var(--theme-border)] hover:border-yellow-500/40',
-  high: 'border-[var(--theme-border)] hover:border-red-500/50',
+  low: cn('border-[var(--theme-border)]', tintClasses('blue').hoverBorderColor),
+  medium: cn('border-[var(--theme-border)]', tintClasses('yellow').hoverBorderColor),
+  high: cn('border-[var(--theme-border)]', tintClasses('red').hoverBorderColor),
 };
 
+// Literal class strings: Tailwind's scanner cannot see runtime-built tokens,
+// and only the LEFT border must be overridden (not all sides).
 const PRIORITY_LEFT: Record<string, string> = {
   none: '',
-  low: 'border-l-2 !border-l-blue-500/50',
-  medium: 'border-l-2 !border-l-yellow-500/50',
-  high: 'border-l-2 !border-l-red-500/60',
+  low: 'border-l-2 !border-l-[var(--tint-blue-border)]',
+  medium: 'border-l-2 !border-l-[var(--tint-yellow-border)]',
+  high: 'border-l-2 !border-l-[var(--tint-red-border)]',
 };
 
 const PRIORITY_BG: Record<string, string> = {
   none: 'bg-[var(--theme-bg-surface)] hover:bg-[var(--theme-bg-hover)]',
-  low: 'bg-blue-500/[0.04] hover:bg-blue-500/[0.08]',
-  medium: 'bg-yellow-500/[0.04] hover:bg-yellow-500/[0.08]',
-  high: 'bg-red-500/[0.05] hover:bg-red-500/[0.09]',
+  low: cn(tintClasses('blue').bg, tintClasses('blue').hoverBg),
+  medium: cn(tintClasses('yellow').bg, tintClasses('yellow').hoverBg),
+  high: cn(tintClasses('red').bg, tintClasses('red').hoverBg),
 };
 
 function formatTimeAgo(dateStr: string, fromMs?: number): string {
@@ -152,7 +155,7 @@ export function KanbanCard({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="github-glow-icon flex-shrink-0 cursor-pointer rounded p-0.5 text-[var(--theme-text-faint)] transition-all duration-200 hover:text-white"
+            className="github-glow-icon flex-shrink-0 cursor-pointer rounded p-0.5 text-[var(--theme-text-faint)] transition-all duration-200 hover:text-[var(--theme-text-primary)]"
             title={`GitHub ${issueLinks[0].ref}`}
           >
             <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
@@ -167,7 +170,7 @@ export function KanbanCard({
             className={cn(
               'flex-shrink-0 rounded p-0.5 transition-all',
               ticket.blocked
-                ? 'opacity-100 text-red-500 hover:text-red-400'
+                ? cn('opacity-100', tintClasses('red').solidText)
                 : 'opacity-0 group-hover:opacity-60 text-[var(--theme-text-faint)] hover:opacity-100',
             )}
             onClick={(e) => {
@@ -188,8 +191,8 @@ export function KanbanCard({
           className={cn(
             'flex-shrink-0 rounded p-0.5 transition-all',
             ticket.favorite
-              ? 'opacity-100 text-yellow-400'
-              : 'opacity-0 group-hover:opacity-60 text-[var(--theme-text-faint)] hover:text-yellow-400 hover:opacity-100',
+              ? cn('opacity-100', tintClasses('yellow').solidText)
+              : cn('opacity-0 group-hover:opacity-60 text-[var(--theme-text-faint)] hover:opacity-100', tintClasses('yellow').hoverText),
           )}
           onClick={(e) => {
             e.stopPropagation();
@@ -260,10 +263,10 @@ export function KanbanCard({
             const isMerged = state === 'MERGED';
             const isClosed = state === 'CLOSED';
             const bgClass = isMerged
-              ? 'bg-purple-500/15 text-purple-400'
+              ? tint('purple')
               : isClosed
-                ? 'bg-red-500/15 text-red-400'
-                : 'bg-green-500/15 text-green-400';
+                ? tint('red')
+                : tint('green');
             return (
               <a
                 key={pr.id}
@@ -302,7 +305,7 @@ export function KanbanCard({
             {/* Assignee */}
             {ticket.assignee && (
               ticket.assignee === 'user' ? (
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400" title="Me">
+                <span className={cn('inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium', tint('yellow'))} title="Me">
                   <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
                     <rect x="2" y="3" width="12" height="10" rx="1.5" />
                     <circle cx="8" cy="7" r="1.5" />
@@ -311,7 +314,7 @@ export function KanbanCard({
                   <span className="max-w-[50px] truncate">Me</span>
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-400" title={`Agent: ${ticket.assignee}`}>
+                <span className={cn('inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium', tint('purple'))} title={`Agent: ${ticket.assignee}`}>
                   <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
                     <rect x="3" y="5" width="10" height="8" rx="1.5" />
                     <path d="M5.5 8.5h1M9.5 8.5h1" />
@@ -342,7 +345,7 @@ export function KanbanCard({
         {/* Bottom-left: Comments + Deliverables counts */}
         <span className="flex-1 flex items-center gap-2">
           <button
-            className={cn('inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity', unread.unreadComments > 0 ? 'text-red-400' : 'text-[var(--theme-text-muted)]')}
+            className={cn('inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity', unread.unreadComments > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]')}
             title={unread.unreadComments > 0 ? `${unread.unreadComments} unread / ${unread.totalComments} comments` : `${unread.totalComments} comments`}
             onClick={(e) => { e.stopPropagation(); selectTicket(ticket.id); setTicketTab('comments'); }}
           >
@@ -350,7 +353,7 @@ export function KanbanCard({
             {unread.totalComments}
           </button>
           <button
-            className={cn('inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity', unread.unreadDeliverables > 0 ? 'text-red-400' : 'text-[var(--theme-text-muted)]')}
+            className={cn('inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity', unread.unreadDeliverables > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]')}
             title={unread.unreadDeliverables > 0 ? `${unread.unreadDeliverables} unseen / ${unread.totalDeliverables} deliverables` : `${unread.totalDeliverables} deliverables`}
             onClick={(e) => { e.stopPropagation(); selectTicket(ticket.id); setTicketTab('deliverables'); }}
           >

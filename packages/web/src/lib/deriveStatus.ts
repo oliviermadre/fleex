@@ -1,5 +1,6 @@
 import type { ClaudeActivityStatus, SessionHookStatus, WaitingReason } from '@fleex/shared';
 import type { Session } from '@fleex/shared';
+import { tintSolid, tintText } from './tints';
 
 export type DisplayStatus = 'executing' | 'working' | 'needs-approval' | 'idle' | 'unknown' | 'error';
 
@@ -36,24 +37,24 @@ const STATUS_IDLE: DerivedStatus = {
 const STATUS_WORKING: DerivedStatus = {
   label: 'Working',
   status: 'working',
-  dotColor: 'bg-blue-500',
-  textColor: 'text-blue-500',
+  dotColor: tintSolid('blue'),
+  textColor: tintText('blue'),
   warning: false,
 };
 
 const STATUS_NEEDS_APPROVAL: DerivedStatus = {
   label: 'Approval',
   status: 'needs-approval',
-  dotColor: 'bg-amber-400',
-  textColor: 'text-amber-400',
+  dotColor: tintSolid('yellow'),
+  textColor: tintText('yellow'),
   warning: true,
 };
 
 const STATUS_QUESTION: DerivedStatus = {
   label: 'Question',
   status: 'needs-approval',
-  dotColor: 'bg-amber-400',
-  textColor: 'text-amber-400',
+  dotColor: tintSolid('yellow'),
+  textColor: tintText('yellow'),
   warning: true,
 };
 
@@ -73,16 +74,16 @@ const STATUS_AWAITING: DerivedStatus = {
 const STATUS_COMPLETE: DerivedStatus = {
   label: 'Done',
   status: 'idle',
-  dotColor: 'bg-emerald-500',
-  textColor: 'text-emerald-500',
+  dotColor: tintSolid('green'),
+  textColor: tintText('green'),
   warning: false,
 };
 
 const STATUS_ERROR: DerivedStatus = {
   label: 'Error',
   status: 'error',
-  dotColor: 'bg-rose-500',
-  textColor: 'text-rose-500',
+  dotColor: tintSolid('red'),
+  textColor: tintText('red'),
   warning: true,
 };
 
@@ -134,7 +135,7 @@ export function deriveDisplayStatus(session: Session): DerivedStatus {
   if (session.claudeActivity) {
     const activity = session.claudeActivity;
     if (activity === 'executing') {
-      return { label: 'Executing', status: 'executing', dotColor: 'bg-blue-500', textColor: 'text-blue-500', warning: false };
+      return { label: 'Executing', status: 'executing', dotColor: tintSolid('blue'), textColor: tintText('blue'), warning: false };
     }
     if (activity === 'working') return STATUS_WORKING;
     if (WAITING_STATUSES.includes(activity)) return STATUS_NEEDS_APPROVAL;

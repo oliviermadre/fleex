@@ -1,5 +1,6 @@
 import type { ClaudeActivityStatus } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { tintSolid } from '../../lib/tints';
 
 interface Props {
   status: ClaudeActivityStatus;
@@ -26,8 +27,8 @@ export function ActivityDot({ status }: Props) {
     <span
       className={cn(
         'absolute -bottom-0.5 -right-0.5 block h-2 w-2 rounded-full border border-[var(--theme-bg-surface)]',
-        isActive && 'bg-blue-500 animate-pulse',
-        isWaiting && 'bg-amber-400 animate-blink',
+        isActive && cn(tintSolid('blue'), 'animate-pulse'),
+        isWaiting && cn(tintSolid('yellow'), 'animate-blink'),
         !isActive && !isWaiting && 'bg-[var(--theme-text-muted)]',
       )}
       title={LABELS[status]}

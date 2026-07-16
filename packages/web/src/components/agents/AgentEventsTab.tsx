@@ -5,6 +5,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { AgentEventStream } from '../main-panel/AgentEventStream';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
+import { tintClasses } from '../../lib/tints';
 
 const EMPTY_EXECUTIONS: AgentExecution[] = [];
 
@@ -108,7 +109,7 @@ export function AgentEventsTab() {
                 {new Date(exec.startedAt).toLocaleString(undefined, { hour12: false })}
                 {' · '}{exec.eventCount} events
                 {exec.status === 'running' && (
-                  <> · <span className="text-blue-400">{formatDuration(exec.startedAt)}</span></>
+                  <> · <span className={tintClasses('blue').text}>{formatDuration(exec.startedAt)}</span></>
                 )}
                 {exec.status !== 'running' && exec.completedAt && (
                   <> · {formatDuration(exec.startedAt, exec.completedAt)}</>
@@ -127,7 +128,7 @@ export function AgentEventsTab() {
                 <span
                   role="button"
                   tabIndex={0}
-                  className="px-2 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400 hover:bg-red-500/30 transition-colors cursor-pointer"
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium ${tintClasses('red').bg} ${tintClasses('red').text} ${tintClasses('red').hoverBg} transition-colors cursor-pointer`}
                   onClick={(e) => handleCancel(exec.id, e)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleCancel(exec.id, e as unknown as React.MouseEvent); }}
                 >
@@ -152,11 +153,11 @@ export function AgentEventsTab() {
 
 function StatusBadge({ status }: { status: AgentExecution['status'] }) {
   const statusMap = {
-    running: { bg: 'bg-blue-500/15', text: 'text-blue-400', label: 'Running' },
-    completed: { bg: 'bg-green-500/15', text: 'text-green-400', label: 'Completed' },
-    failed: { bg: 'bg-red-500/15', text: 'text-red-400', label: 'Failed' },
-    interrupted: { bg: 'bg-yellow-500/15', text: 'text-yellow-400', label: 'Interrupted' },
-  } as const;
+    running: { bg: tintClasses('blue').bg, text: tintClasses('blue').text, label: 'Running' },
+    completed: { bg: tintClasses('green').bg, text: tintClasses('green').text, label: 'Completed' },
+    failed: { bg: tintClasses('red').bg, text: tintClasses('red').text, label: 'Failed' },
+    interrupted: { bg: tintClasses('yellow').bg, text: tintClasses('yellow').text, label: 'Interrupted' },
+  };
   const config = statusMap[status as keyof typeof statusMap];
 
   return (

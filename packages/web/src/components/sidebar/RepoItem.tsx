@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
 import { useCallback } from 'react';
 import { GitHubIcon } from './icons';
+import { tintText } from '../../lib/tints';
 
 interface Props {
   summary: RepositorySummary;
@@ -38,7 +39,7 @@ export function RepoItem({ summary }: Props) {
       <div className="flex items-center w-full">
         <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{summary.name}</span>
         {summary.isClonedLocally === false && (
-          <span className="ml-1.5 flex-shrink-0 text-amber-400" title="Not cloned locally">
+          <span className={cn('ml-1.5 flex-shrink-0', tintText('yellow'))} title="Not cloned locally">
             <CloudDownloadIcon />
           </span>
         )}
@@ -71,9 +72,9 @@ export function RepoItem({ summary }: Props) {
         </div>
       ) : (
         <div className="flex gap-2">
-          {/* Issues - amber */}
+          {/* Issues - yellow */}
           <BadgeIcon
-            color="text-amber-400"
+            color={tintText('yellow')}
             dimColor="text-[var(--theme-text-faint)]"
             count={summary.openIssuesCount}
             icon={<CircleDotIcon />}
@@ -89,13 +90,13 @@ export function RepoItem({ summary }: Props) {
           />
           {/* Assigned PRs - blue */}
           <BadgeIcon
-            color="text-blue-400"
+            color={tintText('blue')}
             dimColor="text-[var(--theme-text-faint)]"
             count={summary.assignedPRsCount}
             icon={<UserCheckIcon />}
             title="Assigned to me"
           />
-          {/* All open PRs - zinc */}
+          {/* All open PRs - neutral */}
           <BadgeIcon
             color="text-[var(--theme-text-secondary)]"
             dimColor="text-[var(--theme-text-faint)]"
@@ -103,9 +104,9 @@ export function RepoItem({ summary }: Props) {
             icon={<GitPullRequestIcon />}
             title="Open PRs"
           />
-          {/* Merged 7d - emerald */}
+          {/* Merged 7d - green */}
           <BadgeIcon
-            color="text-emerald-400"
+            color={tintText('green')}
             dimColor="text-[var(--theme-text-faint)]"
             count={summary.recentlyMergedPRsCount}
             icon={<GitMergeIcon />}

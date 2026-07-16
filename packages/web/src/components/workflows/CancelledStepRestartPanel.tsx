@@ -39,7 +39,7 @@ export function CancelledStepRestartPanel({ onRestart }: Props) {
           resume the workflow from here.
         </div>
       </div>
-      {error && <div className="text-xs text-red-400">{error}</div>}
+      {error && <div className="text-xs text-[var(--theme-danger)]">{error}</div>}
       <div className="flex justify-end">
         <Button variant="primary" size="sm" disabled={busy} onClick={restart}>
           {busy ? 'Restarting…' : 'Restart step'}

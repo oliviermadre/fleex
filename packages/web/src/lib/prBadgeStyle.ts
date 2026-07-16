@@ -1,16 +1,22 @@
 import type { PullRequest } from '@fleex/shared';
+import { tint, tintClasses, type TintHue } from './tints';
 
-export function getPrBadgeClasses(pr: Pick<PullRequest, 'state' | 'isDraft'>): string {
-  if (pr.isDraft) {
-    return 'bg-zinc-500/15 text-zinc-400 hover:bg-zinc-500 hover:text-white';
-  }
+function prHue(pr: Pick<PullRequest, 'state' | 'isDraft'>): TintHue {
+  if (pr.isDraft) return 'gray';
   switch (pr.state) {
     case 'merged':
-      return 'bg-purple-500/15 text-purple-400 hover:bg-purple-500 hover:text-white';
+      return 'purple';
     case 'closed':
-      return 'bg-red-500/15 text-red-400 hover:bg-red-500 hover:text-white';
+      return 'red';
     case 'open':
     default:
-      return 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500 hover:text-white';
+      return 'green';
   }
+}
+
+export function getPrBadgeClasses(pr: Pick<PullRequest, 'state' | 'isDraft'>): string {
+  const hue = prHue(pr);
+  // Hover flips to the opaque accent; the paired solid-fg keeps the label
+  // readable on it in both palettes (white on light 600s, near-black on dark 400s).
+  return `${tint(hue)} ${tintClasses(hue).hoverSolid} ${tintClasses(hue).hoverOnSolid}`;
 }

@@ -1,5 +1,6 @@
 import type { AgentExecution } from '@fleex/shared';
 import { cn } from '../../../../lib/cn';
+import { tintText, tintSolid } from '../../../../lib/tints';
 import { AgentExecutionsPanel } from '../../AgentExecutionsPanel';
 import { registerTabKind } from '../registry';
 import type { TabDescriptor, TabIconProps, TabContentProps, TabStatusProps } from '../types';
@@ -8,7 +9,7 @@ import type { TabDescriptor, TabIconProps, TabContentProps, TabStatusProps } fro
 
 function ExecutionIcon(_props: TabIconProps) {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-violet-400">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn('shrink-0', tintText('purple'))}>
       <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
     </svg>
   );
@@ -17,9 +18,9 @@ function ExecutionIcon(_props: TabIconProps) {
 // ——— Status ———
 
 const STATUS_BG: Record<string, string> = {
-  running: 'bg-blue-400',
-  completed: 'bg-green-400',
-  failed: 'bg-red-400',
+  running: tintSolid('blue'),
+  completed: tintSolid('green'),
+  failed: tintSolid('red'),
 };
 
 function ExecutionStatus({ tab }: TabStatusProps) {

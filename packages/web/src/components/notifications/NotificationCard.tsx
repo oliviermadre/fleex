@@ -3,13 +3,13 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { formatAge } from '../../lib/formatAge';
 import { cn } from '../../lib/cn';
 
-/** Left-border accent per severity. */
+/** Left-border accent per severity (theme-aware tint solids, literal for the Tailwind scanner). */
 const levelAccent: Record<PulseLevel, string> = {
-  info: 'border-l-blue-500',
-  success: 'border-l-emerald-500',
-  warning: 'border-l-amber-500',
-  error: 'border-l-red-500',
-  action: 'border-l-violet-500',
+  info: 'border-l-[var(--tint-blue-solid)]',
+  success: 'border-l-[var(--tint-green-solid)]',
+  warning: 'border-l-[var(--tint-yellow-solid)]',
+  error: 'border-l-[var(--tint-red-solid)]',
+  action: 'border-l-[var(--tint-purple-solid)]',
 };
 
 /**

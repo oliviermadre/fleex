@@ -142,7 +142,7 @@ function ColorPicker({
               </button>
               <button
                 type="button"
-                className="rounded bg-[var(--theme-accent)] px-2 py-1 text-[11px] font-medium text-white hover:opacity-90"
+                className="rounded bg-[var(--theme-accent)] px-2 py-1 text-[11px] font-medium text-[var(--theme-accent-fg)] hover:opacity-90"
                 onClick={() => { onApply(pending); setOpen(false); }}
               >
                 Apply

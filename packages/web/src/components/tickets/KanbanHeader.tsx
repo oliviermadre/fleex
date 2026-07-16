@@ -171,7 +171,7 @@ export function KanbanHeader({ board, isAllBoards, onShowArchived, hideActions }
             </div>
           ) : (
             <button
-              className="flex h-8 items-center gap-2 rounded-md bg-[var(--theme-accent)] px-3.5 text-sm font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]"
+              className="flex h-8 items-center gap-2 rounded-md bg-[var(--theme-accent)] px-3.5 text-sm font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)]"
               onClick={() => setShowQuickCreate(true)}
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

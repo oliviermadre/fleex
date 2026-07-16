@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import type { Session, WorktreeSessionGroup, Ticket, PullRequest, TicketStatus } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
+import { tint, tintText } from '../../../lib/tints';
 import { getPrBadgeClasses } from '../../../lib/prBadgeStyle';
 import { useTicketStore } from '../../../stores/ticketStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
@@ -129,7 +130,7 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
         <div className="flex items-center gap-1.5 shrink-0">
           <StatusDot status={status.status} size="sm" />
           <span className={`text-[10px] ${status.textColor}`}>{status.label}</span>
-          {status.warning && <span className="text-[10px] text-amber-400">&#9888;</span>}
+          {status.warning && <span className={cn('text-[10px]', tintText('yellow'))}>&#9888;</span>}
         </div>
       )}
 
@@ -138,7 +139,7 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
 
       {/* Agent assignee badge */}
       {ticket?.assignee && (
-        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-400">
+        <span className={cn('shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium', tint('purple'))}>
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
             <rect x="3" y="5" width="10" height="8" rx="1.5" />
             <path d="M5.5 8.5h1M9.5 8.5h1" />

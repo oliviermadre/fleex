@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Ticket, TicketDeliverable } from '@fleex/shared';
 import * as api from '../../services/api';
 import { useToastStore } from '../../stores/toastStore';
+import { STATUS_COLORS } from '../../lib/statusColors';
 
 interface TicketPickerModalProps {
   open: boolean;
@@ -102,13 +103,7 @@ export function TicketPickerModal({ open, onClose, deliverable, sourceTicketId }
   if (!open) return null;
 
   const statusColor = (status: string) => {
-    switch (status) {
-      case 'backlog': return 'text-[var(--theme-text-faint)]';
-      case 'todo': return 'text-blue-400';
-      case 'doing': return 'text-yellow-400';
-      case 'reviewing': return 'text-purple-400';
-      default: return 'text-[var(--theme-text-faint)]';
-    }
+    return STATUS_COLORS[status]?.text ?? 'text-[var(--theme-text-faint)]';
   };
 
   return createPortal(

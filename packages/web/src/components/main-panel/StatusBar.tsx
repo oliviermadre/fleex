@@ -1,6 +1,7 @@
 import type { Session } from '@fleex/shared';
 import { useTerminalStore } from '../../stores/terminalStore';
 import { cn } from '../../lib/cn';
+import { tintSolid } from '../../lib/tints';
 
 interface Props {
   session: Session;
@@ -15,8 +16,8 @@ export function StatusBar({ session, splitFocused }: Props) {
   const cwdDisplay = session.cwd.replace(/^\/Users\/[^/]+/, '~');
 
   const statusColor = {
-    connecting: 'bg-yellow-500',
-    connected: 'bg-emerald-500',
+    connecting: tintSolid('yellow'),
+    connected: tintSolid('green'),
     disconnected: 'bg-[var(--theme-text-faint)]',
   }[connectionStatus];
 

@@ -4,6 +4,7 @@ import { useAgentEventStore } from '../../stores/agentEventStore';
 import { AgentEventStream } from './AgentEventStream';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
+import { tint, tintText, tintClasses } from '../../lib/tints';
 
 function formatDuration(startedAt: string, completedAt?: string | null): string {
   const start = new Date(startedAt).getTime();
@@ -103,7 +104,7 @@ export function AgentExecutionsPanel({ executions }: Props) {
                   {new Date(exec.startedAt).toLocaleString(undefined, { hour12: false })}
                   {' · '}{exec.eventCount} events
                   {exec.status === 'running' && (
-                    <> · <span className="text-blue-400">{formatDuration(exec.startedAt)}</span></>
+                    <> · <span className={tintText('blue')}>{formatDuration(exec.startedAt)}</span></>
                   )}
                   {exec.status !== 'running' && exec.completedAt && (
                     <> · {formatDuration(exec.startedAt, exec.completedAt)}</>
@@ -115,7 +116,7 @@ export function AgentExecutionsPanel({ executions }: Props) {
                   <span
                     role="button"
                     tabIndex={0}
-                    className="px-2 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400 hover:bg-red-500/30 transition-colors cursor-pointer"
+                    className={cn('px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer', tintClasses('red').bg, tintText('red'), tintClasses('red').hoverBg)}
                     onClick={(e) => handleCancel(exec.id, exec.ticketId, e)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleCancel(exec.id, exec.ticketId, e as unknown as React.MouseEvent); }}
                   >
@@ -141,15 +142,15 @@ export function AgentExecutionsPanel({ executions }: Props) {
 
 function StatusBadge({ status }: { status: AgentExecution['status'] }) {
   const statusMap = {
-    running: { bg: 'bg-blue-500/15', text: 'text-blue-400', label: 'Running' },
-    completed: { bg: 'bg-green-500/15', text: 'text-green-400', label: 'Completed' },
-    failed: { bg: 'bg-red-500/15', text: 'text-red-400', label: 'Failed' },
-    interrupted: { bg: 'bg-yellow-500/15', text: 'text-yellow-400', label: 'Interrupted' },
+    running: { classes: tint('blue'), label: 'Running' },
+    completed: { classes: tint('green'), label: 'Completed' },
+    failed: { classes: tint('red'), label: 'Failed' },
+    interrupted: { classes: tint('yellow'), label: 'Interrupted' },
   } as const;
   const config = statusMap[status as keyof typeof statusMap];
 
   return (
-    <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium', config.bg, config.text)}>
+    <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium', config.classes)}>
       {config.label}
     </span>
   );

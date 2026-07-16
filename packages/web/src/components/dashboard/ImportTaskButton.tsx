@@ -1,5 +1,7 @@
 import type { BoardWithCounts } from '@fleex/shared';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { cn } from '../../lib/cn';
+import { tint, tintText, tintClasses } from '../../lib/tints';
 
 function ImportIcon() {
   return (
@@ -32,7 +34,7 @@ export function ImportTaskButton({
 
   if (importing) {
     return (
-      <div className="flex w-[108px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-500">
+      <div className={cn('flex w-[108px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium', tint('yellow'))}>
         <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
           <circle cx="8" cy="8" r="6" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
           <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -53,7 +55,7 @@ export function ImportTaskButton({
     <>
       <button
         ref={refs.setReference}
-        className="flex w-[108px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-500 transition-all hover:border-amber-500/60 hover:bg-amber-500/20"
+        className={cn('flex w-[108px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-medium transition-all', tint('yellow'), tintClasses('yellow').hoverBg, tintClasses('yellow').hoverBorderColor)}
         {...getReferenceProps({ onClick: handleClick })}
       >
         <ImportIcon />

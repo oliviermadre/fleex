@@ -128,7 +128,7 @@ export function ScratchpadPanel() {
               <button
                 className={`p-1.5 rounded transition-colors ${
                   previewExpanded
-                    ? 'bg-[var(--theme-accent)] text-white'
+                    ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                     : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] hover:bg-white/[0.06]'
                 }`}
                 onClick={togglePreview}

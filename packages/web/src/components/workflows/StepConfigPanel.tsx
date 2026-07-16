@@ -151,7 +151,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
             placeholder="approve, reject, request_changes"
             helperText={
               (step.humanGateOutcomes ?? []).length < 2
-                ? <span className="text-red-400">A human gate needs at least 2 outcomes.</span>
+                ? <span className="text-[var(--theme-danger)]">A human gate needs at least 2 outcomes.</span>
                 : 'Type an outcome, then press Enter, comma or Tab to add it.'
             }
           />
@@ -169,7 +169,7 @@ export function StepConfigPanel({ step, isEntry, onChange, onSetEntry }: Props) 
           placeholder='{"type":"object","properties":{"path":{"type":"string","enum":["a","b"]}},"required":["path"]}'
         />
         {outputSchemaError && (
-          <div className="text-red-400 text-[10px] mt-1">{outputSchemaError}</div>
+          <div className="text-[var(--theme-danger)] text-[10px] mt-1">{outputSchemaError}</div>
         )}
       </label>
 

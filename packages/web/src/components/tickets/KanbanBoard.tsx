@@ -100,7 +100,7 @@ export function KanbanBoard() {
         <div className="text-center">
           <p className="text-sm text-[var(--theme-text-muted)]">No board yet</p>
           <button
-            className="mt-2 rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]"
+            className="mt-2 rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)]"
             onClick={handleCreateBoard}
           >
             Create board

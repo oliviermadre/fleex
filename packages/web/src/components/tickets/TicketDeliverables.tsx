@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
+import { tint, tintText, tintClasses } from '../../lib/tints';
 import { appWs } from '../../services/websocket';
 import { useUIStore } from '../../stores/uiStore';
 import { useUnreadStore } from '../../stores/unreadStore';
@@ -196,7 +197,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                         {d.title}
                       </span>
                       {d.status === 'draft' && (
-                        <span className="flex-shrink-0 rounded-full bg-yellow-500/15 px-1.5 py-px text-[10px] font-medium text-yellow-400">
+                        <span className={`flex-shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${tint('yellow')}`}>
                           draft
                         </span>
                       )}
@@ -207,7 +208,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] text-[var(--theme-text-faint)]">
-                      <span className="text-purple-400">{d.agentName}</span>
+                      <span className={tintText('purple')}>{d.agentName}</span>
                       <span>&middot;</span>
                       <span>{relativeTime(d.createdAt)}</span>
                     </div>
@@ -219,7 +220,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                   ) : isFloating ? (
-                    <svg className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className={`h-3.5 w-3.5 flex-shrink-0 ${tintText('blue')}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
                     </svg>
                   ) : (
@@ -246,7 +247,7 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
 
                 {/* Delete button — visible on hover */}
                 <button
-                  className="mr-2 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded opacity-0 transition-all hover:bg-red-500/15 hover:text-red-400 group-hover/deliv:opacity-100 text-[var(--theme-text-faint)]"
+                  className={`mr-2 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded opacity-0 transition-all group-hover/deliv:opacity-100 text-[var(--theme-text-faint)] ${tintClasses('red').hoverBg} ${tintClasses('red').hoverText}`}
                   title="Delete deliverable"
                   onClick={async (e) => {
                     e.stopPropagation();

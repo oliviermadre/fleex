@@ -6,6 +6,7 @@ import {
   type AssistantChatItem,
   type AssistantToolStatus,
 } from '../stores/assistantStore';
+import { tint, tintText } from '../lib/tints';
 
 /**
  * Mobile client for the Fleex assistant — same companion host as the Chrome
@@ -19,13 +20,13 @@ const EMPTY_ITEMS: AssistantChatItem[] = [];
 function toolStatusBadge(status: AssistantToolStatus): { label: string; className: string } {
   switch (status) {
     case 'running':
-      return { label: '⏳', className: 'text-amber-400' };
+      return { label: '⏳', className: tintText('yellow') };
     case 'ok':
-      return { label: '✓', className: 'text-green-400' };
+      return { label: '✓', className: tintText('green') };
     case 'fail':
-      return { label: '✗', className: 'text-red-400' };
+      return { label: '✗', className: tintText('red') };
     case 'denied':
-      return { label: '⊘ refusé', className: 'text-zinc-400' };
+      return { label: '⊘ refusé', className: tintText('gray') };
   }
 }
 
@@ -120,7 +121,7 @@ export function MobileAssistant() {
         </button>
         <button
           onClick={() => createSession()}
-          className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-2 text-sm font-semibold text-white"
+          className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-2 text-sm font-semibold text-[var(--theme-accent-fg)]"
           aria-label="Nouvelle conversation"
         >
           +
@@ -136,7 +137,7 @@ export function MobileAssistant() {
             </p>
             <button
               onClick={() => createSession()}
-              className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-white"
+              className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)]"
             >
               Nouvelle conversation
             </button>
@@ -179,7 +180,7 @@ export function MobileAssistant() {
           </div>
         )}
         {errorMsg && (
-          <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-400">
+          <p className={`mt-3 rounded-lg border p-2 text-xs ${tint('red')}`}>
             {errorMsg}
           </p>
         )}
@@ -201,7 +202,7 @@ export function MobileAssistant() {
           <button
             onClick={handleSend}
             disabled={!draft.trim() || busy}
-            className="shrink-0 rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="shrink-0 rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             ➤
           </button>
@@ -230,7 +231,7 @@ export function MobileAssistant() {
               </button>
               <button
                 onClick={() => answerConfirm(confirmReq.id, true)}
-                className="flex-1 rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-white"
+                className="flex-1 rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)]"
               >
                 Approuver
               </button>
@@ -254,7 +255,7 @@ export function MobileAssistant() {
               {workspaces.length === 0 ? (
                 <button
                   onClick={() => createSession()}
-                  className="rounded-full bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white"
+                  className="rounded-full bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-[var(--theme-accent-fg)]"
                 >
                   + Workspace par défaut
                 </button>
@@ -292,7 +293,7 @@ export function MobileAssistant() {
                         {s.workspace}
                       </span>
                     )}
-                    {s.status !== 'idle' && <span className="shrink-0 animate-pulse text-[10px] text-amber-400">●</span>}
+                    {s.status !== 'idle' && <span className={`shrink-0 animate-pulse text-[10px] ${tintText('yellow')}`}>●</span>}
                   </button>
                   <button
                     onClick={() => deleteSession(s.id)}

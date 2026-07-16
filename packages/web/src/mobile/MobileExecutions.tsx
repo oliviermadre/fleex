@@ -4,14 +4,15 @@ import { useAgentEventStore } from '../stores/agentEventStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { cancelExecution } from '../services/api';
 import { AgentEventStream } from '../components/main-panel/AgentEventStream';
+import { tint, tintClasses, tintSolid } from '../lib/tints';
 
 const EMPTY_EXECUTIONS: AgentExecution[] = [];
 
 const STATUS_BADGE: Record<AgentExecution['status'], string> = {
-  running: 'bg-amber-500/20 text-amber-400',
-  completed: 'bg-green-500/20 text-green-400',
-  failed: 'bg-red-500/20 text-red-400',
-  interrupted: 'bg-zinc-500/20 text-zinc-400',
+  running: tint('yellow'),
+  completed: tint('green'),
+  failed: tint('red'),
+  interrupted: tint('gray'),
 };
 
 function formatDuration(exec: AgentExecution): string {
@@ -125,7 +126,7 @@ export function MobileExecutions({ ticketId }: { ticketId: string }) {
               <button
                 onClick={handleKill}
                 className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                  confirmKill ? 'bg-red-500 text-white' : 'bg-red-500/15 text-red-400'
+                  confirmKill ? `${tintSolid('red')} ${tintClasses('red').onSolid}` : tint('red')
                 }`}
               >
                 {confirmKill ? 'Confirmer ?' : 'Stopper'}

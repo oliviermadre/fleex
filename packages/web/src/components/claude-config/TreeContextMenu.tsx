@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
 import { useContextMenuPopover, FloatingPortal } from '../../hooks/usePopover';
+import { cn } from '../../lib/cn';
+import { tintText, tintClasses } from '../../lib/tints';
 
 export function TreeContextMenu() {
   const contextMenu = useClaudeConfigStore((s) => s.contextMenu);
@@ -86,11 +88,12 @@ function MenuItem({
 }) {
   return (
     <button
-      className={`flex w-full items-center px-3 py-1.5 text-left text-xs transition-colors ${
+      className={cn(
+        'flex w-full items-center px-3 py-1.5 text-left text-xs transition-colors',
         danger
-          ? 'text-red-400 hover:bg-red-500/10'
-          : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
-      }`}
+          ? cn(tintText('red'), tintClasses('red').hoverBg)
+          : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+      )}
       onClick={onClick}
     >
       {label}

@@ -1,5 +1,7 @@
 import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
 import { Modal } from '../ui/Modal';
+import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
 
 export function DeleteConfirmModal() {
   const deleteConfirm = useClaudeConfigStore((s) => s.deleteConfirm);
@@ -29,7 +31,7 @@ export function DeleteConfirmModal() {
           Cancel
         </button>
         <button
-          className="rounded-md bg-red-600 px-3 py-1.5 text-xs text-white transition-colors hover:bg-red-700"
+          className={cn('rounded-md px-3 py-1.5 text-xs transition-colors', tintClasses('red').onSolid, tintClasses('red').solid, tintClasses('red').hoverSolid)}
           onClick={confirmDelete}
         >
           Delete

@@ -1,4 +1,5 @@
 import type { WorkflowExecutorType } from '@fleex/shared';
+import { tintClasses } from '../../lib/tints';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
 
@@ -63,28 +64,28 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     label: 'Agent',
     description: 'AI agent execution',
     Icon: BotIcon,
-    colorClass: 'text-purple-400 border-purple-400/40',
+    colorClass: `${tintClasses('purple').text} ${tintClasses('purple').borderColor}`,
   },
   {
     type: 'panel',
     label: 'Panel',
     description: 'Multi-agent committee with synthesis',
     Icon: UsersIcon,
-    colorClass: 'text-blue-400 border-blue-400/40',
+    colorClass: `${tintClasses('blue').text} ${tintClasses('blue').borderColor}`,
   },
   {
     type: 'skill',
     label: 'Skill',
     description: 'Deterministic skill instruction file',
     Icon: BookOpenIcon,
-    colorClass: 'text-green-400 border-green-400/40',
+    colorClass: `${tintClasses('green').text} ${tintClasses('green').borderColor}`,
   },
   {
     type: 'human_gate',
     label: 'Human Gate',
     description: 'Manual approval checkpoint',
     Icon: UserCheckIcon,
-    colorClass: 'text-amber-400 border-amber-400/40',
+    colorClass: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor}`,
   },
 ];
 
