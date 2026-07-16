@@ -112,7 +112,7 @@ export function CreateSkillModal({ open, onClose }: CreateSkillModalProps) {
         </div>
 
         {error && (
-          <p className="mt-3 text-xs text-red-400">{error}</p>
+          <p className="mt-3 text-xs text-[var(--theme-danger)]">{error}</p>
         )}
 
         <div className="mt-5 flex justify-end gap-2">

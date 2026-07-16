@@ -6,6 +6,7 @@ import { PullRequestsSection } from './PullRequestsSection';
 import { MergedPRsSection } from './MergedPRsSection';
 import { RepoConfigPanel } from './RepoConfigPanel';
 import { cn } from '../../lib/cn';
+import { tint } from '../../lib/tints';
 
 type Tab = 'pulls' | 'issues' | 'merged' | 'settings';
 
@@ -49,7 +50,7 @@ export function RepositoryDashboard({ repoKey }: Props) {
     <div className="flex flex-1 flex-col overflow-hidden">
       <DashboardHeader org={org} name={name} />
       {data?.isClonedLocally === false && (
-        <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-400">
+        <div className={cn('flex items-center gap-2 border-b px-4 py-2 text-xs', tint('yellow'))}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
             <circle cx="8" cy="8" r="6" />
             <line x1="8" y1="5" x2="8" y2="8.5" />

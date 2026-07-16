@@ -25,6 +25,7 @@ import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { ModelSelect } from '../components/agents/ModelSelect';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
+import { tint, tintClasses } from '../lib/tints';
 
 const MODES: { id: ConversationMode; label: string }[] = [
   { id: 'talk', label: '🗣 Talk' },
@@ -63,12 +64,12 @@ interface MentionOption {
 }
 
 const MENTION_TYPE_BADGE: Record<MentionOption['type'], { letter: string; className: string }> = {
-  agent: { letter: 'A', className: 'bg-purple-500/20 text-purple-400' },
-  panel: { letter: 'P', className: 'bg-blue-500/20 text-blue-400' },
-  skill: { letter: 'S', className: 'bg-emerald-500/20 text-emerald-400' },
-  workflow: { letter: 'W', className: 'bg-orange-500/20 text-orange-400' },
-  ticket: { letter: 'T', className: 'bg-slate-500/20 text-slate-400' },
-  human: { letter: 'H', className: 'bg-amber-500/20 text-amber-400' },
+  agent: { letter: 'A', className: `${tintClasses('purple').bg} ${tintClasses('purple').text}` },
+  panel: { letter: 'P', className: `${tintClasses('blue').bg} ${tintClasses('blue').text}` },
+  skill: { letter: 'S', className: `${tintClasses('green').bg} ${tintClasses('green').text}` },
+  workflow: { letter: 'W', className: `${tintClasses('orange').bg} ${tintClasses('orange').text}` },
+  ticket: { letter: 'T', className: `${tintClasses('gray').bg} ${tintClasses('gray').text}` },
+  human: { letter: 'H', className: `${tintClasses('yellow').bg} ${tintClasses('yellow').text}` },
 };
 
 // Tickets can be numerous — only surface them once a query is typed, capped.
@@ -774,7 +775,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                 onClick={() => patchExecConfig({ fastMode: !ticket.fastMode })}
                 className={`w-full rounded-lg border px-3 py-2.5 text-sm font-medium ${
                   ticket.fastMode
-                    ? 'border-amber-400/40 bg-amber-400/15 text-amber-400'
+                    ? tint('yellow')
                     : 'border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
                 }`}
               >
@@ -815,7 +816,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
               )}
               <button
                 onClick={() => removeMention(mentionSheet)}
-                className="rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400"
+                className={`rounded-lg border px-4 py-3 text-sm font-medium ${tint('red')}`}
               >
                 Supprimer la mention
               </button>

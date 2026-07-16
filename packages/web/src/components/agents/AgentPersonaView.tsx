@@ -6,6 +6,7 @@ import { AgentMarkdownTab } from './AgentMarkdownTab';
 import { AgentEventsTab } from './AgentEventsTab';
 import { ModelBadge } from './ModelBadge';
 import { cn } from '../../lib/cn';
+import { tintClasses, tintSolid } from '../../lib/tints';
 
 const TABS = [
   { key: 'config' as const, label: 'Config' },
@@ -67,8 +68,8 @@ export function AgentPersonaView() {
 
         {isRunning && (
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse" />
-            <span className="text-[10px] text-yellow-400">Running</span>
+            <span className={`h-2 w-2 rounded-full ${tintSolid('yellow')} animate-pulse`} />
+            <span className={`text-[10px] ${tintClasses('yellow').text}`}>Running</span>
           </div>
         )}
 

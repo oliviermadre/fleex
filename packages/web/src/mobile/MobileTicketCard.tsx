@@ -1,11 +1,12 @@
 import { memo } from 'react';
 import type { Ticket, TicketPriority } from '@fleex/shared';
+import { tintSolid, tintText } from '../lib/tints';
 
 const PRIORITY_COLOR: Record<TicketPriority, string> = {
   none: 'bg-transparent',
-  low: 'bg-sky-400',
-  medium: 'bg-amber-400',
-  high: 'bg-red-400',
+  low: tintSolid('blue'),
+  medium: tintSolid('yellow'),
+  high: tintSolid('red'),
 };
 
 export const MobileTicketCard = memo(function MobileTicketCard({
@@ -45,9 +46,9 @@ export const MobileTicketCard = memo(function MobileTicketCard({
               </span>
             )}
             {repo && <span className="truncate">{repo}</span>}
-            {ticket.blocked && <span className="text-red-400">bloqué</span>}
+            {ticket.blocked && <span className={tintText('red')}>bloqué</span>}
             {hasSession && <span className="text-[var(--theme-accent)]">session</span>}
-            {ticket.favorite && <span className="text-amber-400">★</span>}
+            {ticket.favorite && <span className={tintText('yellow')}>★</span>}
             {ticket.tags.slice(0, 3).map((tag) => (
               <span key={tag} className="rounded bg-[var(--theme-bg-hover)] px-1.5 py-0.5">
                 {tag}

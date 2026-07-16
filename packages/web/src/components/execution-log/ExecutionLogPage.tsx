@@ -3,6 +3,7 @@ import { useExecutionLogStore, type ExecutionTypeFilter } from '../../stores/exe
 import { appWs } from '../../services/websocket';
 import { ExecutionRow } from './ExecutionRow';
 import { cn } from '../../lib/cn';
+import { tintText, tintSolid, tintClasses } from '../../lib/tints';
 
 // ── Filter tab icons (SVG, matching sidebar) ──
 
@@ -49,10 +50,10 @@ function WorkflowIcon() {
 
 const TYPE_FILTERS: { key: ExecutionTypeFilter; label: string; icon: React.ReactNode | null; iconColor: string | null }[] = [
   { key: 'all', label: 'ALL', icon: null, iconColor: null },
-  { key: 'agent', label: 'AGENT', icon: <AgentIcon />, iconColor: 'text-indigo-400' },
-  { key: 'panel', label: 'PANEL', icon: <PanelIcon />, iconColor: 'text-violet-400' },
-  { key: 'skill', label: 'SKILL', icon: <SkillIcon />, iconColor: 'text-cyan-400' },
-  { key: 'workflow', label: 'WORKFLOW', icon: <WorkflowIcon />, iconColor: 'text-amber-400' },
+  { key: 'agent', label: 'AGENT', icon: <AgentIcon />, iconColor: tintText('indigo') },
+  { key: 'panel', label: 'PANEL', icon: <PanelIcon />, iconColor: tintText('purple') },
+  { key: 'skill', label: 'SKILL', icon: <SkillIcon />, iconColor: tintText('teal') },
+  { key: 'workflow', label: 'WORKFLOW', icon: <WorkflowIcon />, iconColor: tintText('yellow') },
 ];
 
 export function ExecutionLogPage() {
@@ -111,8 +112,8 @@ export function ExecutionLogPage() {
         {/* Title row */}
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-emerald-400">
+            <div className={cn('flex h-8 w-8 items-center justify-center rounded-lg', tintClasses('green').bg)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className={tintText('green')}>
                 <polygon points="5,3 19,12 5,21" />
               </svg>
             </div>
@@ -125,10 +126,10 @@ export function ExecutionLogPage() {
             {liveCount > 0 && (
               <span className="flex items-center gap-1.5">
                 <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', tintSolid('green'))} />
+                  <span className={cn('relative inline-flex h-2 w-2 rounded-full', tintSolid('green'))} />
                 </span>
-                <span className="font-medium text-emerald-400">{liveCount} live</span>
+                <span className={cn('font-medium', tintText('green'))}>{liveCount} live</span>
               </span>
             )}
             <span className="text-[var(--theme-text-muted)]">·</span>
@@ -205,8 +206,8 @@ export function ExecutionLogPage() {
         <div className="px-6 pt-5">
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', tintSolid('green'))} />
+              <span className={cn('relative inline-flex h-2 w-2 rounded-full', tintSolid('green'))} />
             </span>
             LIVE · {loading ? '…' : liveCount}
           </div>

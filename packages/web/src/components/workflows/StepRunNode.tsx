@@ -1,6 +1,7 @@
 import { Handle, Position } from '@xyflow/react';
 import type { WorkflowStep, StepRunStatus } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
 
 export interface StepRunNodeData {
   step: WorkflowStep;
@@ -128,19 +129,19 @@ const executorIcon = {
 } as const;
 
 const executorColor = {
-  agent: 'text-purple-400 border-purple-400/40',
-  panel: 'text-blue-400 border-blue-400/40',
-  skill: 'text-green-400 border-green-400/40',
-  human_gate: 'text-amber-400 border-amber-400/40 border-dashed',
-} as const;
+  agent: `${tintClasses('purple').text} ${tintClasses('purple').borderColor}`,
+  panel: `${tintClasses('blue').text} ${tintClasses('blue').borderColor}`,
+  skill: `${tintClasses('green').text} ${tintClasses('green').borderColor}`,
+  human_gate: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor} border-dashed`,
+};
 
 function StatusIcon({ status }: { status: StepRunStatus | 'pending' }) {
   switch (status) {
-    case 'completed': return <CheckCircle2Icon className="w-4 h-4 text-cyan-400" />;
-    case 'running': return <Loader2Icon className="w-4 h-4 text-green-400 animate-spin" />;
-    case 'failed': return <XCircleIcon className="w-4 h-4 text-red-400" />;
-    case 'needs_review': return <AlertTriangleIcon className="w-4 h-4 text-amber-400" />;
-    case 'queued': return <ClockIcon className="w-4 h-4 text-blue-400" />;
+    case 'completed': return <CheckCircle2Icon className={`w-4 h-4 ${tintClasses('teal').text}`} />;
+    case 'running': return <Loader2Icon className={`w-4 h-4 ${tintClasses('blue').text} animate-spin`} />;
+    case 'failed': return <XCircleIcon className={`w-4 h-4 ${tintClasses('red').text}`} />;
+    case 'needs_review': return <AlertTriangleIcon className={`w-4 h-4 ${tintClasses('yellow').text}`} />;
+    case 'queued': return <ClockIcon className={`w-4 h-4 ${tintClasses('green').text}`} />;
     case 'cancelled':
     case 'skipped': return <SkipForwardIcon className="w-4 h-4 opacity-40" />;
     default: return <CircleDotIcon className="w-4 h-4 opacity-30" />;
@@ -165,7 +166,7 @@ export function StepRunNode({ data }: { data: StepRunNodeData }) {
         className={cn(
           'w-full h-full rounded-lg border-2 p-3 cursor-pointer transition-all hover:shadow-lg flex flex-col justify-center overflow-hidden',
           executorColor[data.step.executorType],
-          data.isCurrent && 'ring-2 ring-green-400 ring-offset-2 ring-offset-[var(--theme-bg-base)]',
+          data.isCurrent && `ring-2 ${tintClasses('green').ring} ring-offset-2 ring-offset-[var(--theme-bg-base)]`,
         )}
       >
         <div className="flex items-center gap-2 mb-1">

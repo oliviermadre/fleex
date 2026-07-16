@@ -14,6 +14,8 @@ import { EpicProgressBar } from './EpicProgressBar';
 import { NanoRoadmap } from './NanoRoadmap';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
+import { STATUS_COLORS } from '../../lib/statusColors';
 
 export function EpicDetailView() {
   const epicId = useTicketGroupStore((s) => s.selectedEpicDetailId);
@@ -192,7 +194,7 @@ export function EpicDetailView() {
 
                 {/* Delete */}
                 <button
-                  className="w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors hover:bg-red-500/10"
+                  className={cn('w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors', tintClasses('red').hoverBg)}
                   onClick={handleDelete}
                 >
                   Delete Epic
@@ -295,12 +297,12 @@ function formatRelativeTime(iso: string): string {
 // ── Tickets Tab ──
 
 const COLUMN_TITLE_COLOR: Record<string, string> = {
-  backlog: 'text-[var(--theme-text-muted)]',
-  todo: 'text-orange-400',
-  doing: 'text-blue-400',
-  reviewing: 'text-purple-400',
-  done: 'text-green-400',
-  cancelled: 'text-red-400/70',
+  backlog: STATUS_COLORS.backlog!.text,
+  todo: STATUS_COLORS.todo!.text,
+  doing: STATUS_COLORS.doing!.text,
+  reviewing: STATUS_COLORS.reviewing!.text,
+  done: STATUS_COLORS.done!.text,
+  cancelled: STATUS_COLORS.cancelled!.text,
 };
 
 // ── Editable Name / Emoji ──

@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Button } from '../ui/Button';
 import { useDraft } from '../../hooks/useDraft';
+import { tintClasses } from '../../lib/tints';
 
 interface Props {
   runId: string;
@@ -44,9 +45,9 @@ export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }
   };
 
   return (
-    <div className="space-y-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+    <div className={`space-y-3 rounded-md border ${tintClasses('yellow').borderColor} ${tintClasses('yellow').bg} p-3`}>
       <div>
-        <div className="text-xs font-medium uppercase tracking-wide text-amber-400">
+        <div className={`text-xs font-medium uppercase tracking-wide ${tintClasses('yellow').text}`}>
           Waiting for your input
         </div>
         {question && (
@@ -65,7 +66,7 @@ export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }
         disabled={busy}
         className="w-full resize-y rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)] disabled:opacity-50"
       />
-      {error && <div className="text-xs text-red-400">{error}</div>}
+      {error && <div className="text-xs text-[var(--theme-danger)]">{error}</div>}
       <div className="flex justify-end">
         <Button variant="primary" size="sm" disabled={busy || !response.trim()} onClick={submit}>
           {busy ? 'Sending…' : 'Send & retry'}

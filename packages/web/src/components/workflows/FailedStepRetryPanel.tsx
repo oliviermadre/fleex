@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button } from '../ui/Button';
+import { tintClasses } from '../../lib/tints';
 
 interface Props {
   // Error message stored in stepRun.output.schemaFields.error (or null when the
@@ -25,9 +26,9 @@ export function FailedStepRetryPanel({ error, onRetry }: Props) {
   };
 
   return (
-    <div className="space-y-3 rounded-md border border-red-500/40 bg-red-500/5 p-3">
+    <div className={`space-y-3 rounded-md border ${tintClasses('red').borderColor} ${tintClasses('red').bg} p-3`}>
       <div>
-        <div className="text-xs font-medium uppercase tracking-wide text-red-400">
+        <div className={`text-xs font-medium uppercase tracking-wide ${tintClasses('red').text}`}>
           Step failed
         </div>
         {error && (
@@ -36,7 +37,7 @@ export function FailedStepRetryPanel({ error, onRetry }: Props) {
           </pre>
         )}
       </div>
-      {submitError && <div className="text-xs text-red-400">{submitError}</div>}
+      {submitError && <div className={`text-xs ${tintClasses('red').text}`}>{submitError}</div>}
       <div className="flex justify-end">
         <Button variant="primary" size="sm" disabled={busy} onClick={retry}>
           {busy ? 'Retrying…' : 'Retry step'}

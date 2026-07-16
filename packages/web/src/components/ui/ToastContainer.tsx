@@ -1,11 +1,12 @@
 import { useToastStore, type ToastType } from '../../stores/toastStore';
 import { cn } from '../../lib/cn';
+import { tint } from '../../lib/tints';
 
 const typeStyles: Record<ToastType, string> = {
-  error: 'border-red-500/30 bg-red-950 text-red-400',
-  warning: 'border-amber-500/30 bg-amber-950 text-amber-400',
-  success: 'border-emerald-500/30 bg-emerald-950 text-emerald-400',
-  info: 'border-blue-500/30 bg-blue-950 text-blue-400',
+  error: tint('red'),
+  warning: tint('yellow'),
+  success: tint('green'),
+  info: tint('blue'),
 };
 
 export function ToastContainer() {

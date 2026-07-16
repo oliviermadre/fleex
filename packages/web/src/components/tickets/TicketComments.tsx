@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
 import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel, StepRun, WorkflowStep, WorkflowRun } from '@fleex/shared';
 import { EFFORT_LEVELS } from '@fleex/shared';
+import { tint, tintText, tintClasses } from '../../lib/tints';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -34,9 +35,9 @@ import { TicketMentionChip } from '../markdown/TicketMentionChip';
 
 /** Per-mode color for the conversation execution-mode pill. */
 const MODE_PILL_CLASS: Record<ConversationMode, string> = {
-  talk: 'border-sky-400/40 bg-sky-400/15 text-sky-400',
-  plan: 'border-violet-400/40 bg-violet-400/15 text-violet-400',
-  edit: 'border-emerald-400/40 bg-emerald-400/15 text-emerald-400',
+  talk: tint('teal'),
+  plan: tint('purple'),
+  edit: tint('green'),
 };
 
 /**
@@ -119,7 +120,7 @@ function MentionSpan({ text, mentionId, onRemove, className }: {
       {text}
       {mentionId && (
         <button
-          className="ml-0.5 inline-flex h-3 w-3 items-center justify-center rounded-full opacity-0 transition-opacity hover:bg-red-500/30 group-hover/mention:opacity-100"
+          className={`ml-0.5 inline-flex h-3 w-3 items-center justify-center rounded-full opacity-0 transition-opacity group-hover/mention:opacity-100 ${tintClasses('red').hoverBg}`}
           onClick={(e) => { e.stopPropagation(); onRemove(mentionId); }}
           title="Remove mention"
         >
@@ -255,7 +256,7 @@ const CommentMarkdown = memo(function CommentMarkdown({
             text={mentionText}
             mentionId={mId}
             onRemove={onRemoveMention}
-            className="bg-blue-500/15 text-blue-400"
+            className={tint('blue')}
           />
         );
       }
@@ -268,7 +269,7 @@ const CommentMarkdown = memo(function CommentMarkdown({
             text={mentionText}
             mentionId={mId}
             onRemove={onRemoveMention}
-            className="bg-emerald-500/15 text-emerald-400"
+            className={tint('green')}
           />
         );
       }
@@ -282,7 +283,7 @@ const CommentMarkdown = memo(function CommentMarkdown({
               text={mentionText}
               mentionId={mId}
               onRemove={onRemoveMention}
-              className="bg-amber-500/15 text-amber-400"
+              className={tint('yellow')}
             />
           );
         }
@@ -487,7 +488,7 @@ function MentionAutocomplete({
           onMouseDown={(e) => { e.preventDefault(); onSelect(opt); }}
         >
           <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[10px] font-bold ${
-            opt.type === 'agent' ? 'bg-purple-500/20 text-purple-400' : opt.type === 'panel' ? 'bg-blue-500/20 text-blue-400' : opt.type === 'skill' ? 'bg-emerald-500/20 text-emerald-400' : opt.type === 'workflow' ? 'bg-orange-500/20 text-orange-400' : opt.type === 'ticket' ? 'bg-slate-500/20 text-slate-400' : 'bg-amber-500/20 text-amber-400'
+            opt.type === 'agent' ? tint('purple') : opt.type === 'panel' ? tint('blue') : opt.type === 'skill' ? tint('green') : opt.type === 'workflow' ? tint('orange') : opt.type === 'ticket' ? tint('gray') : tint('yellow')
           }`}>
             {opt.type === 'agent' ? 'A' : opt.type === 'panel' ? 'P' : opt.type === 'skill' ? 'S' : opt.type === 'workflow' ? 'W' : opt.type === 'ticket' ? 'T' : 'H'}
           </span>
@@ -1201,9 +1202,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 <div key={c.id}>
                   {showNewLine && (
                     <div className="flex items-center gap-2 px-1 py-2">
-                      <div className="h-px flex-1 bg-red-500/60" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-red-400">New messages</span>
-                      <div className="h-px flex-1 bg-red-500/60" />
+                      <div className={`h-px flex-1 ${tintClasses('red').solid}`} />
+                      <span className={`text-[10px] font-semibold uppercase tracking-wider ${tintClasses('red').text}`}>New messages</span>
+                      <div className={`h-px flex-1 ${tintClasses('red').solid}`} />
                     </div>
                   )}
                   <div className="group relative px-1 py-3 first:pt-0" onClick={(e) => handleCommentClick(e, c)}>
@@ -1211,7 +1212,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 <div className="mb-1.5 flex items-center gap-2">
                   <span
                     className={`text-xs font-semibold ${
-                      c.authorType === 'agent' ? 'text-purple-400' : 'text-blue-400'
+                      c.authorType === 'agent' ? tintText('purple') : tintText('blue')
                     }`}
                   >
                     {c.authorName}
@@ -1244,7 +1245,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 })()}
                 {/* Delete button — all comments */}
                 <button
-                    className="absolute right-2 top-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/20 text-[var(--theme-text-faint)] hover:text-red-400"
+                    className={`absolute right-2 top-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 text-[var(--theme-text-faint)] ${tintClasses('red').hoverBg} ${tintClasses('red').hoverText}`}
                     onClick={() => handleDeleteComment(c.id)}
                     title="Delete comment"
                   >
@@ -1263,9 +1264,9 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 onClick={() => { setModalTitle(`${agent.name} execution`); setModalExecutionId(agent.executionId); }}
               >
                 <span className="flex items-center gap-1">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
+                  <span className={`inline-block h-1.5 w-1.5 rounded-full animate-pulse ${tintClasses('purple').solid}`} />
                 </span>
-                <span className="text-xs text-purple-400">
+                <span className={`text-xs ${tintClasses('purple').text}`}>
                   {agent.name} is working…
                 </span>
                 <svg className="h-3 w-3 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1278,11 +1279,11 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 key={agent.mentionId}
                 className="flex w-full items-center gap-2 px-1 py-3"
               >
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse" />
-                <span className="text-xs text-orange-400">
+                <span className={`inline-block h-1.5 w-1.5 rounded-full animate-pulse ${tintClasses('orange').solid}`} />
+                <span className={`text-xs ${tintClasses('orange').text}`}>
                   {agent.name} is waiting for your reply…
                 </span>
-                <span className="rounded bg-orange-400/15 px-1.5 py-0.5 text-[10px] font-medium text-orange-400">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${tint('orange')}`}>
                   {agent.mode}
                 </span>
               </div>
@@ -1442,7 +1443,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
               title="Fast (low-latency) mode for the next agent run."
               className={`flex items-center gap-1 rounded-md border px-2 py-1 font-medium transition-colors ${
                 fastMode
-                  ? 'border-amber-400/40 bg-amber-400/15 text-amber-400'
+                  ? tint('yellow')
                   : 'border-[var(--theme-border)] bg-[var(--theme-bg-surface)] text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]'
               }`}
             >

@@ -7,6 +7,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
 
 export function TicketsContentPanel() {
   const rawBoards = useTicketStore((s) => s.boards);
@@ -207,7 +208,7 @@ export function TicketsContentPanel() {
                   </button>
                   {boards.length > 1 && (
                     <button
-                      className="rounded px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:bg-red-500/10 hover:text-[var(--theme-danger)]"
+                      className={cn('rounded px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-danger)]', tintClasses('red').hoverBg)}
                       onClick={() => {
                         if (confirm(`Delete board "${selectedBoard.name}"?`)) {
                           deleteBoard(selectedBoard.id);

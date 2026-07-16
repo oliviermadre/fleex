@@ -1,6 +1,7 @@
 import type { AgentActivityState } from '@fleex/shared';
 import { StatusDot } from '../ui/StatusDot';
 import { cn } from '../../lib/cn';
+import { tint } from '../../lib/tints';
 
 interface Props {
   activity: AgentActivityState;
@@ -10,18 +11,18 @@ interface Props {
 
 const CONFIG = {
   waiting: {
-    className: 'bg-amber-500/15 text-amber-400',
+    className: tint('yellow'),
     dot: 'needs-approval' as const,
     label: 'Waiting',
     defaultTitle: 'Waiting for a human response',
   },
   running: {
-    className: 'bg-blue-500/15 text-blue-400',
+    className: tint('blue'),
     dot: 'working' as const,
     label: 'Running',
     defaultTitle: 'An agent is working on this ticket',
   },
-} as const;
+};
 
 /**
  * Persistent, real-time agentic activity indicator on a Kanban card (#381).

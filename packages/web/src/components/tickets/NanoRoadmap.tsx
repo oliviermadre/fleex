@@ -1,5 +1,6 @@
 import type { TicketGroupStatus, TicketGroupTimeframe } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
 
 /**
  * The 5 visual columns of the roadmap, each mapping to a combination of
@@ -26,11 +27,11 @@ const ABBREVS: Record<RoadmapColumn, string> = {
 };
 
 const COLORS: Record<RoadmapColumn, { text: string; bg: string; bar: string; hoverBg: string; hoverText: string }> = {
-  now:       { text: 'text-green-400',              bg: 'bg-green-400/15',              bar: 'bg-green-400',              hoverBg: 'hover:bg-green-400/15',              hoverText: 'group-hover:text-green-400' },
-  next:      { text: 'text-orange-400',             bg: 'bg-orange-400/15',             bar: 'bg-orange-400',             hoverBg: 'hover:bg-orange-400/15',             hoverText: 'group-hover:text-orange-400' },
-  later:     { text: 'text-[var(--theme-text-muted)]', bg: 'bg-[var(--theme-bg-overlay)]', bar: 'bg-[var(--theme-text-muted)]', hoverBg: 'hover:bg-[var(--theme-bg-hover)]', hoverText: 'group-hover:text-gray-300' },
-  done:      { text: 'text-blue-400',               bg: 'bg-blue-400/15',               bar: 'bg-blue-400',               hoverBg: 'hover:bg-blue-400/15',               hoverText: 'group-hover:text-blue-400' },
-  cancelled: { text: 'text-red-400/70',             bg: 'bg-red-400/10',                bar: 'bg-red-400/70',             hoverBg: 'hover:bg-red-400/10',                hoverText: 'group-hover:text-red-400/70' },
+  now:       { text: tintClasses('green').text,  bg: tintClasses('green').bg,  bar: tintClasses('green').solid,  hoverBg: tintClasses('green').hoverBg,  hoverText: tintClasses('green').groupHoverText },
+  next:      { text: tintClasses('orange').text, bg: tintClasses('orange').bg, bar: tintClasses('orange').solid, hoverBg: tintClasses('orange').hoverBg, hoverText: tintClasses('orange').groupHoverText },
+  later:     { text: 'text-[var(--theme-text-muted)]', bg: 'bg-[var(--theme-bg-overlay)]', bar: 'bg-[var(--theme-text-muted)]', hoverBg: 'hover:bg-[var(--theme-bg-hover)]', hoverText: 'group-hover:text-[var(--theme-text-secondary)]' },
+  done:      { text: tintClasses('blue').text,   bg: tintClasses('blue').bg,   bar: tintClasses('blue').solid,   hoverBg: tintClasses('blue').hoverBg,   hoverText: tintClasses('blue').groupHoverText },
+  cancelled: { text: tintClasses('red').text,    bg: tintClasses('red').bg,    bar: tintClasses('red').solid,    hoverBg: tintClasses('red').hoverBg,    hoverText: tintClasses('red').groupHoverText },
 };
 
 function toColumn(groupStatus: TicketGroupStatus, timeframe: TicketGroupTimeframe): RoadmapColumn {
@@ -88,7 +89,7 @@ export function NanoRoadmap({ groupStatus, timeframe, onChange, size = 'md' }: {
                   className={cn(
                     'font-bold leading-none transition-colors',
                     sm ? 'text-[6px]' : 'text-[8px]',
-                    active ? colors.text : cn('text-gray-400', colors.hoverText),
+                    active ? colors.text : cn('text-[var(--theme-text-muted)]', colors.hoverText),
                   )}
                 >
                   {ch}

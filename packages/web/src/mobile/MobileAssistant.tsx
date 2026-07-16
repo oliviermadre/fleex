@@ -6,6 +6,7 @@ import {
   type AssistantChatItem,
   type AssistantToolStatus,
 } from '../stores/assistantStore';
+import { tint, tintText } from '../lib/tints';
 
 /**
  * Mobile client for the Fleex assistant — same companion host as the Chrome
@@ -19,13 +20,13 @@ const EMPTY_ITEMS: AssistantChatItem[] = [];
 function toolStatusBadge(status: AssistantToolStatus): { label: string; className: string } {
   switch (status) {
     case 'running':
-      return { label: '⏳', className: 'text-amber-400' };
+      return { label: '⏳', className: tintText('yellow') };
     case 'ok':
-      return { label: '✓', className: 'text-green-400' };
+      return { label: '✓', className: tintText('green') };
     case 'fail':
-      return { label: '✗', className: 'text-red-400' };
+      return { label: '✗', className: tintText('red') };
     case 'denied':
-      return { label: '⊘ refusé', className: 'text-zinc-400' };
+      return { label: '⊘ refusé', className: tintText('gray') };
   }
 }
 
@@ -179,7 +180,7 @@ export function MobileAssistant() {
           </div>
         )}
         {errorMsg && (
-          <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-400">
+          <p className={`mt-3 rounded-lg border p-2 text-xs ${tint('red')}`}>
             {errorMsg}
           </p>
         )}
@@ -292,7 +293,7 @@ export function MobileAssistant() {
                         {s.workspace}
                       </span>
                     )}
-                    {s.status !== 'idle' && <span className="shrink-0 animate-pulse text-[10px] text-amber-400">●</span>}
+                    {s.status !== 'idle' && <span className={`shrink-0 animate-pulse text-[10px] ${tintText('yellow')}`}>●</span>}
                   </button>
                   <button
                     onClick={() => deleteSession(s.id)}

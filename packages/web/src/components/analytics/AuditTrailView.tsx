@@ -2,17 +2,18 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import type { DomainEventLog } from '@fleex/shared';
 import { useAuditTrailStore } from '../../stores/auditTrailStore';
 import { cn } from '../../lib/cn';
+import { tint } from '../../lib/tints';
 
 const EVENT_DOMAIN_COLORS: Record<string, string> = {
-  ticket: 'bg-blue-500/20 text-blue-400',
-  comment: 'bg-purple-500/20 text-purple-400',
-  mention: 'bg-green-500/20 text-green-400',
-  deliverable: 'bg-yellow-500/20 text-yellow-400',
-  persona: 'bg-orange-500/20 text-orange-400',
-  board: 'bg-cyan-500/20 text-cyan-400',
-  session: 'bg-teal-500/20 text-teal-400',
-  worktree: 'bg-emerald-500/20 text-emerald-400',
-  execution: 'bg-red-500/20 text-red-400',
+  ticket: tint('blue'),
+  comment: tint('purple'),
+  mention: tint('green'),
+  deliverable: tint('yellow'),
+  persona: tint('orange'),
+  board: tint('teal'),
+  session: tint('teal'),
+  worktree: tint('green'),
+  execution: tint('red'),
 };
 
 function getEventDomain(eventType: string): string {

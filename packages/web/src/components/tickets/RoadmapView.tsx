@@ -6,6 +6,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { EpicProgressBar } from './EpicProgressBar';
 import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
 
 interface RoadmapColumnDef {
   id: string;
@@ -16,13 +17,13 @@ interface RoadmapColumnDef {
   collapsible: boolean;
 }
 
-// Match kanban column color pattern (Tailwind classes, not CSS vars)
+// Match kanban column color pattern (tint CSS vars)
 const COLUMNS: RoadmapColumnDef[] = [
-  { id: 'now', label: 'NOW', titleColor: 'text-green-400', badgeColor: 'text-green-400 bg-green-400/10', filter: (g) => g.groupStatus === 'active' && g.timeframe === 'now', collapsible: false },
-  { id: 'next', label: 'NEXT', titleColor: 'text-orange-400', badgeColor: 'text-orange-400 bg-orange-400/10', filter: (g) => g.groupStatus === 'active' && g.timeframe === 'next', collapsible: false },
+  { id: 'now', label: 'NOW', titleColor: tintClasses('green').text, badgeColor: cn(tintClasses('green').text, tintClasses('green').bg), filter: (g) => g.groupStatus === 'active' && g.timeframe === 'now', collapsible: false },
+  { id: 'next', label: 'NEXT', titleColor: tintClasses('orange').text, badgeColor: cn(tintClasses('orange').text, tintClasses('orange').bg), filter: (g) => g.groupStatus === 'active' && g.timeframe === 'next', collapsible: false },
   { id: 'later', label: 'LATER', titleColor: 'text-[var(--theme-text-muted)]', badgeColor: 'text-[var(--theme-text-muted)] bg-[var(--theme-bg-overlay)]', filter: (g) => g.groupStatus === 'active' && g.timeframe === 'later', collapsible: false },
-  { id: 'done', label: 'DONE', titleColor: 'text-blue-400', badgeColor: 'text-blue-400 bg-blue-400/10', filter: (g) => g.groupStatus === 'done', collapsible: true },
-  { id: 'cancelled', label: 'CANCELLED', titleColor: 'text-red-400/70', badgeColor: 'text-red-400/70 bg-red-400/10', filter: (g) => g.groupStatus === 'cancelled', collapsible: true },
+  { id: 'done', label: 'DONE', titleColor: tintClasses('blue').text, badgeColor: cn(tintClasses('blue').text, tintClasses('blue').bg), filter: (g) => g.groupStatus === 'done', collapsible: true },
+  { id: 'cancelled', label: 'CANCELLED', titleColor: tintClasses('red').text, badgeColor: cn(tintClasses('red').text, tintClasses('red').bg), filter: (g) => g.groupStatus === 'cancelled', collapsible: true },
 ];
 
 export function RoadmapView() {

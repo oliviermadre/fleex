@@ -10,6 +10,7 @@ import { ImportTaskButton } from '../dashboard/ImportTaskButton';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { cn } from '../../lib/cn';
 import { importGitHubPR, executeSkill } from '../../services/api';
+import { tintText } from '../../lib/tints';
 
 interface Props {
   org: string;
@@ -90,7 +91,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
       key: 'title',
       header: 'Title',
       render: (row) => (
-        <span className={cn('truncate', isStale(row.updatedAt) && 'text-amber-300/80')}>
+        <span className={cn('truncate', isStale(row.updatedAt) && tintText('yellow'))}>
           {row.title}
         </span>
       ),
@@ -122,7 +123,7 @@ export function PullRequestsSection({ org, name, pullRequests, diffStats, github
       align: 'right',
       render: (row) => (
         <span
-          className={cn('text-[var(--theme-text-muted)]', isStale(row.updatedAt) && 'text-amber-400/60')}
+          className={cn('text-[var(--theme-text-muted)]', isStale(row.updatedAt) && tintText('yellow'))}
           title={new Date(row.updatedAt).toLocaleString(undefined, { hour12: false })}
         >
           {formatRelativeTime(row.updatedAt)}

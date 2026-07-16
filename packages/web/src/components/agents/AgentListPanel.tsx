@@ -12,6 +12,7 @@ import { CreateWorkflowModal } from './CreateWorkflowModal';
 import { ModelBadge } from './ModelBadge';
 import { cn } from '../../lib/cn';
 import { useContextMenuPopover, FloatingPortal } from '../../hooks/usePopover';
+import { tintClasses, tintSolid } from '../../lib/tints';
 
 export function AgentListPanel() {
   const navigate = useNavigate();
@@ -132,9 +133,9 @@ export function AgentListPanel() {
                   className={cn(
                     'h-2 w-2 shrink-0 rounded-full',
                     isRunning
-                      ? 'bg-yellow-400 animate-pulse'
+                      ? `${tintSolid('yellow')} animate-pulse`
                       : hasPending
-                        ? 'bg-blue-400'
+                        ? tintSolid('blue')
                         : 'bg-[var(--theme-text-faint)]',
                   )}
                 />
@@ -202,7 +203,7 @@ export function AgentListPanel() {
                 <span
                   className={cn(
                     'h-2 w-2 shrink-0 rounded-full',
-                    skill.enabled ? 'bg-green-400' : 'bg-[var(--theme-text-faint)]',
+                    skill.enabled ? tintSolid('green') : 'bg-[var(--theme-text-faint)]',
                   )}
                 />
                 <div className="min-w-0 flex-1">
@@ -271,7 +272,7 @@ export function AgentListPanel() {
                 <span
                   className={cn(
                     'h-2 w-2 shrink-0 rounded-full',
-                    panel.enabled ? 'bg-green-400' : 'bg-[var(--theme-text-faint)]',
+                    panel.enabled ? tintSolid('green') : 'bg-[var(--theme-text-faint)]',
                   )}
                 />
                 <div className="min-w-0 flex-1">
@@ -350,7 +351,7 @@ export function AgentListPanel() {
                 <span
                   className={cn(
                     'h-2 w-2 shrink-0 rounded-full',
-                    template.enabled ? 'bg-green-400' : 'bg-[var(--theme-text-faint)]',
+                    template.enabled ? tintSolid('green') : 'bg-[var(--theme-text-faint)]',
                   )}
                 />
               </button>
@@ -369,7 +370,7 @@ export function AgentListPanel() {
             className="z-50 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
           >
             <button
-              className="flex w-full items-center gap-2 px-4 py-1.5 text-xs text-red-400 hover:bg-[var(--theme-bg-hover)]"
+              className={`flex w-full items-center gap-2 px-4 py-1.5 text-xs ${tintClasses('red').text} hover:bg-[var(--theme-bg-hover)]`}
               onClick={() => {
                 if (contextMenu.kind === 'persona') {
                   deletePersona(contextMenu.id);

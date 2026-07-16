@@ -4,6 +4,7 @@ import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { fetchArchivedTickets } from '../../services/api';
 import { useTicketStore } from '../../stores/ticketStore';
 import { PAGE_SIZE_ARCHIVED_TICKETS } from '../../lib/constants';
+import { tint } from '../../lib/tints';
 
 export function ArchivedTicketsModal({
   boardId,
@@ -105,10 +106,10 @@ export function ArchivedTicketsModal({
                   {ticket.priority !== 'none' && (
                     <span className={`flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
                       ticket.priority === 'high'
-                        ? 'bg-red-500/15 text-red-400'
+                        ? tint('red')
                         : ticket.priority === 'medium'
-                          ? 'bg-yellow-500/15 text-yellow-400'
-                          : 'bg-blue-500/15 text-blue-400'
+                          ? tint('yellow')
+                          : tint('blue')
                     }`}>
                       {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
                     </span>
@@ -117,8 +118,8 @@ export function ArchivedTicketsModal({
                   {/* Status badge */}
                   <span className={`flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
                     ticket.status === 'done'
-                      ? 'bg-green-500/15 text-green-400'
-                      : 'bg-red-500/15 text-red-400/70'
+                      ? tint('green')
+                      : tint('red')
                   }`}>
                     {TICKET_STATUS_LABELS[ticket.status]}
                   </span>

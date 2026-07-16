@@ -24,6 +24,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
+import { tintText, tintSolid } from '../../lib/tints';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { getPrBadgeClasses } from '../../lib/prBadgeStyle';
 import { notifyHookStarted } from '../../lib/hookResultToast';
@@ -442,7 +443,7 @@ function DashboardItemRow({
           className={cn(
             'rounded transition-all',
             ticket.blocked
-              ? 'opacity-100 text-red-500 hover:text-red-400'
+              ? cn('opacity-100', tintText('red'))
               : 'opacity-30 text-[var(--theme-text-muted)] hover:opacity-100',
           )}
           onClick={(e) => {
@@ -1193,7 +1194,7 @@ export function DashboardView() {
               {(recentActivity.length > 0 || totalUnread > 0) && (
                 <SectionShell delay={0}>
                   <SectionHeader
-                    icon={<span className="text-purple-400"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" /></svg></span>}
+                    icon={<span className={tintText('purple')}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" /></svg></span>}
                     title="Agent Activity"
                     count={recentActivity.length}
                     subtitle={totalUnread > 0 ? `${totalUnread} unread` : undefined}
@@ -1214,9 +1215,9 @@ export function DashboardView() {
                         >
                           <span className={cn(
                             'h-1.5 w-1.5 flex-shrink-0 rounded-full',
-                            a.status === 'completed' ? 'bg-green-400' : a.status === 'failed' ? 'bg-red-400' : 'bg-yellow-400',
+                            a.status === 'completed' ? tintSolid('green') : a.status === 'failed' ? tintSolid('red') : tintSolid('yellow'),
                           )} />
-                          <span className="font-medium text-purple-400">{a.personaName}</span>
+                          <span className={cn('font-medium', tintText('purple'))}>{a.personaName}</span>
                           <span className="text-[var(--theme-text-muted)]">
                             {a.status === 'completed' ? 'finished' : a.status === 'failed' ? 'failed' : 'interrupted'}
                           </span>

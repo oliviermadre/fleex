@@ -1,4 +1,5 @@
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 type ButtonSize = 'sm' | 'md';
@@ -11,7 +12,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'bg-[var(--theme-accent)] text-white hover:bg-[var(--theme-accent-hover)] active:bg-[var(--theme-accent-active)]',
   secondary: 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-border-input)] active:bg-[var(--theme-bg-overlay)] border border-[var(--theme-border-input)]',
-  danger: 'bg-[var(--theme-danger)] text-white hover:bg-red-500 active:bg-red-700',
+  danger: cn('bg-[var(--theme-danger)] text-white', tintClasses('red').hoverSolid, 'active:bg-[var(--theme-danger)]'),
   ghost: 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)] active:bg-[var(--theme-border-input)]',
 };
 

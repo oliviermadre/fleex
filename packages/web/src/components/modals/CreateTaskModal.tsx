@@ -9,6 +9,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
+import { tint, tintSolid, tintText } from '../../lib/tints';
 
 type TaskMode = 'ticket' | 'my-prs' | 'review' | 'new';
 
@@ -263,8 +264,8 @@ export function CreateTaskModal() {
                   >
                     <span className={cn(
                       'inline-block w-1.5 h-1.5 rounded-full flex-shrink-0',
-                      t.status === 'doing' ? 'bg-blue-400' :
-                      t.status === 'todo' ? 'bg-amber-400' :
+                      t.status === 'doing' ? tintSolid('blue') :
+                      t.status === 'todo' ? tintSolid('orange') :
                       'bg-[var(--theme-text-faint)]',
                     )} />
                     <span className="truncate flex-1">{t.title}</span>
@@ -304,7 +305,7 @@ export function CreateTaskModal() {
                       <span className="truncate flex-1">{pr.title}</span>
                       <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">{pr.org}/{pr.name}</span>
                       {hasTicket && (
-                        <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[9px] font-medium text-green-400 flex-shrink-0">has ticket</span>
+                        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium flex-shrink-0', tint('green'))}>has ticket</span>
                       )}
                       <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">{timeAgo(pr.updatedAt)}</span>
                     </button>
@@ -344,7 +345,7 @@ export function CreateTaskModal() {
                       <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">{pr.author}</span>
                       <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">{pr.org}/{pr.name}</span>
                       {hasTicket && (
-                        <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[9px] font-medium text-green-400 flex-shrink-0">has ticket</span>
+                        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium flex-shrink-0', tint('green'))}>has ticket</span>
                       )}
                       <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">{timeAgo(pr.updatedAt)}</span>
                     </button>
@@ -425,7 +426,7 @@ export function CreateTaskModal() {
 
       {/* Error */}
       {error && (
-        <p className="mt-3 text-xs text-red-400">{error}</p>
+        <p className={`mt-3 text-xs ${tintText('red')}`}>{error}</p>
       )}
 
       {/* Actions */}

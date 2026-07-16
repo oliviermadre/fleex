@@ -3,6 +3,7 @@ import type { AgentEvent } from '@fleex/shared';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { cn } from '../../lib/cn';
+import { tint, tintText, tintClasses } from '../../lib/tints';
 
 const EMPTY_EVENTS: AgentEvent[] = [];
 
@@ -97,7 +98,7 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
     <CollapsibleText
       text={thinking}
       previewLength={120}
-      className="text-xs text-violet-400/70 pl-2 border-l-2 border-violet-500/30"
+      className={cn('text-xs pl-2 border-l-2', tintText('purple'), tintClasses('purple').borderColor)}
       label="thinking"
     />
   );
@@ -141,20 +142,20 @@ function summarizeToolInput(name: string, input: Record<string, unknown>): strin
 }
 
 const TOOL_COLORS: Record<string, string> = {
-  Bash: 'bg-amber-500/20 text-amber-300',
-  Read: 'bg-sky-500/20 text-sky-300',
-  Write: 'bg-emerald-500/20 text-emerald-300',
-  Edit: 'bg-emerald-500/20 text-emerald-300',
-  Grep: 'bg-purple-500/20 text-purple-300',
-  Glob: 'bg-purple-500/20 text-purple-300',
-  Task: 'bg-orange-500/20 text-orange-300',
-  WebFetch: 'bg-cyan-500/20 text-cyan-300',
-  WebSearch: 'bg-cyan-500/20 text-cyan-300',
+  Bash: cn(tintClasses('yellow').bg, tintText('yellow')),
+  Read: cn(tintClasses('blue').bg, tintText('blue')),
+  Write: cn(tintClasses('green').bg, tintText('green')),
+  Edit: cn(tintClasses('green').bg, tintText('green')),
+  Grep: cn(tintClasses('purple').bg, tintText('purple')),
+  Glob: cn(tintClasses('purple').bg, tintText('purple')),
+  Task: cn(tintClasses('orange').bg, tintText('orange')),
+  WebFetch: cn(tintClasses('teal').bg, tintText('teal')),
+  WebSearch: cn(tintClasses('teal').bg, tintText('teal')),
 };
 
 function ToolCallBlock({ name, input }: { name: string; input: Record<string, unknown> }) {
   const summary = summarizeToolInput(name, input);
-  const colorClass = TOOL_COLORS[name] ?? 'bg-zinc-500/20 text-zinc-300';
+  const colorClass = TOOL_COLORS[name] ?? cn(tintClasses('gray').bg, tintText('gray'));
 
   return (
     <div className="flex items-start gap-2 text-xs">
@@ -181,7 +182,7 @@ function ToolResultBlock({ content }: { content: unknown }) {
     <CollapsibleText
       text={text}
       previewLength={200}
-      className="text-xs text-[var(--theme-text-faint)] pl-2 border-l-2 border-zinc-500/30"
+      className={cn('text-xs text-[var(--theme-text-faint)] pl-2 border-l-2', tintClasses('gray').borderColor)}
       label="result"
     />
   );
@@ -237,7 +238,7 @@ function SystemEventBlock({ data }: { data: Record<string, unknown> }) {
 
   return (
     <div className="flex items-center gap-2 text-xs text-[var(--theme-text-faint)]">
-      <span className="text-blue-400">⚙</span>
+      <span className={tintText('blue')}>⚙</span>
       <span className="font-medium">{subtype}</span>
       {description && <span className="opacity-70">— {description}</span>}
     </div>
@@ -329,7 +330,7 @@ function EventBlock({ event }: { event: AgentEvent }) {
         <div className="py-1 space-y-0.5">
           <div className={cn(
             'flex items-center gap-2 font-bold',
-            status === 'completed' ? 'text-green-400' : 'text-red-400'
+            status === 'completed' ? tintText('green') : tintText('red')
           )}>
             {status === 'completed' ? '✓ Execution completed' : '✗ Execution failed'}
             {endModeBadge && <span className="text-xs font-normal text-[var(--theme-text-faint)]">{endModeBadge}</span>}
@@ -358,7 +359,7 @@ function EventBlock({ event }: { event: AgentEvent }) {
       // Errors can carry multi-line CLI stderr — render it preformatted,
       // monospace and scrollable so the real reason is readable, not clipped.
       return (
-        <div className="py-2 px-3 rounded bg-red-500/10 border border-red-500/30 text-red-400">
+        <div className={cn('py-2 px-3 rounded border', tint('red'))}>
           <div className="font-semibold mb-1">Error</div>
           <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-64 overflow-auto m-0">{error}</pre>
         </div>

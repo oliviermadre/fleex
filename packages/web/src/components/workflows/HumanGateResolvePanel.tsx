@@ -41,7 +41,7 @@ export function HumanGateResolvePanel({ runId, stepRunId, outcomes, onResolve }:
         rows={3}
         className="w-full resize-y rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] outline-none focus:border-[var(--theme-accent)] focus:ring-1 focus:ring-[var(--theme-accent)]"
       />
-      {submitError && <div className="text-xs text-red-400">{submitError}</div>}
+      {submitError && <div className="text-xs text-[var(--theme-danger)]">{submitError}</div>}
       <div className="flex flex-wrap gap-2">
         {outcomes.map((o) => (
           <Button key={o} variant="primary" size="sm" disabled={busy} onClick={() => click(o)}>

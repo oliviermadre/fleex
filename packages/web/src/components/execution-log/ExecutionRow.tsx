@@ -6,6 +6,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
 import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
+import { tint, tintText, tintSolid, tintClasses } from '../../lib/tints';
 
 // ── Type icon (SVG) ──
 
@@ -50,10 +51,10 @@ function TypeIcon({ type }: { type: ExecutionLogEntry['type'] }) {
 // Type badge — icon is colored per type, text is uniform
 function TypeBadge({ type }: { type: ExecutionLogEntry['type'] }) {
   const iconColor = {
-    agent: 'text-indigo-400',
-    panel: 'text-violet-400',
-    skill: 'text-cyan-400',
-    workflow: 'text-amber-400',
+    agent: tintText('indigo'),
+    panel: tintText('purple'),
+    skill: tintText('teal'),
+    workflow: tintText('yellow'),
   }[type];
 
   return (
@@ -68,9 +69,9 @@ function TypeBadge({ type }: { type: ExecutionLogEntry['type'] }) {
 
 const PRIORITY_COLORS: Record<string, string> = {
   none: 'text-[var(--theme-text-muted)]',
-  low: 'text-blue-400',
-  medium: 'text-yellow-400',
-  high: 'text-red-400',
+  low: tintText('blue'),
+  medium: tintText('yellow'),
+  high: tintText('red'),
 };
 
 function TicketIcon({ priority }: { priority: string | null }) {
@@ -88,9 +89,9 @@ function TicketIcon({ priority }: { priority: string | null }) {
 function ModeBadge({ mode }: { mode: string | null | undefined }) {
   if (!mode) return null;
   const config: Record<string, { label: string; bg: string; text: string; border: string }> = {
-    edit: { label: 'EDIT', bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
-    plan: { label: 'PLAN', bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
-    talk: { label: 'TALK', bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/20' },
+    edit: { label: 'EDIT', bg: tintClasses('green').bg, text: tintText('green'), border: tintClasses('green').borderColor },
+    plan: { label: 'PLAN', bg: tintClasses('blue').bg, text: tintText('blue'), border: tintClasses('blue').borderColor },
+    talk: { label: 'TALK', bg: tintClasses('gray').bg, text: tintText('gray'), border: tintClasses('gray').borderColor },
   };
   const c = config[mode];
   if (!c) return null;
@@ -137,10 +138,10 @@ function StatusBadge({
   // but the user needs to see the amber "needs your attention" signal.
   if (workflowSubStatus === 'needs_review') {
     return (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400">
+      <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', tint('yellow'))}>
         <span className="relative flex h-1.5 w-1.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
-          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+          <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', tintSolid('yellow'))} />
+          <span className={cn('relative inline-flex h-1.5 w-1.5 rounded-full', tintSolid('yellow'))} />
         </span>
         Needs Review
       </span>
@@ -148,18 +149,18 @@ function StatusBadge({
   }
   if (workflowSubStatus === 'blocked') {
     return (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-orange-500/20 bg-orange-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-orange-400">
-        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-orange-500" />
+      <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', tint('orange'))}>
+        <span className={cn('relative inline-flex h-1.5 w-1.5 rounded-full', tintSolid('orange'))} />
         Blocked
       </span>
     );
   }
 
   const config: Record<string, { label: string; dot: string; text: string; bg: string; border: string; pulse?: boolean }> = {
-    running: { label: 'Running', dot: 'bg-emerald-500', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', pulse: true },
-    completed: { label: 'Completed', dot: 'bg-emerald-500', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-    failed: { label: 'Failed', dot: 'bg-red-500', text: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
-    interrupted: { label: 'Interrupted', dot: 'bg-orange-500', text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+    running: { label: 'Running', dot: tintSolid('green'), text: tintText('green'), bg: tintClasses('green').bg, border: tintClasses('green').borderColor, pulse: true },
+    completed: { label: 'Completed', dot: tintSolid('green'), text: tintText('green'), bg: tintClasses('green').bg, border: tintClasses('green').borderColor },
+    failed: { label: 'Failed', dot: tintSolid('red'), text: tintText('red'), bg: tintClasses('red').bg, border: tintClasses('red').borderColor },
+    interrupted: { label: 'Interrupted', dot: tintSolid('orange'), text: tintText('orange'), bg: tintClasses('orange').bg, border: tintClasses('orange').borderColor },
   };
   const c = config[status] ?? config['completed']!;
 
@@ -179,10 +180,10 @@ function StatusBadge({
 const STEP_DOT_CLASSES: Record<WorkflowStepSummary['status'], string> = {
   pending: 'bg-[var(--theme-bg-surface)] border border-[var(--theme-text-faint)]/50',
   queued: 'bg-[var(--theme-bg-surface)] border border-[var(--theme-text-faint)]/70',
-  running: 'bg-blue-400 border border-blue-300 shadow-[0_0_6px_rgba(96,165,250,0.6)] animate-pulse',
-  completed: 'bg-emerald-400 border border-emerald-300',
-  failed: 'bg-red-400 border border-red-300',
-  needs_review: 'bg-amber-400 border border-amber-300',
+  running: `${tintSolid('blue')} border ${tintClasses('blue').borderColor} shadow-[0_0_6px_rgba(96,165,250,0.6)] animate-pulse`,
+  completed: `${tintSolid('green')} border ${tintClasses('green').borderColor}`,
+  failed: `${tintSolid('red')} border ${tintClasses('red').borderColor}`,
+  needs_review: `${tintSolid('yellow')} border ${tintClasses('yellow').borderColor}`,
   cancelled: 'bg-[var(--theme-text-faint)]/30 border border-[var(--theme-text-faint)]/40',
   skipped: 'bg-[var(--theme-text-faint)]/30 border border-[var(--theme-text-faint)]/40',
 };
@@ -192,10 +193,10 @@ const STEP_DOT_CLASSES: Record<WorkflowStepSummary['status'], string> = {
 const STEP_LINE_CLASSES: Record<WorkflowStepSummary['status'], string> = {
   pending: 'bg-[var(--theme-text-faint)]/25',
   queued: 'bg-[var(--theme-text-faint)]/30',
-  running: 'bg-blue-400/70',
-  completed: 'bg-emerald-400/70',
-  failed: 'bg-red-400/70',
-  needs_review: 'bg-amber-400/70',
+  running: tintSolid('blue'),
+  completed: tintSolid('green'),
+  failed: tintSolid('red'),
+  needs_review: tintSolid('yellow'),
   cancelled: 'bg-[var(--theme-text-faint)]/25',
   skipped: 'bg-[var(--theme-text-faint)]/25',
 };
@@ -222,7 +223,7 @@ function WorkflowStepDots({ progress }: { progress: WorkflowStepSummary[] }) {
             className={cn(
               'h-3 w-3 flex-shrink-0 rounded-full',
               STEP_DOT_CLASSES[s.status],
-              s.isCurrent && 'ring-2 ring-emerald-300/70 ring-offset-1 ring-offset-[var(--theme-bg-base)]',
+              s.isCurrent && `ring-2 ${tintClasses('green').ring} ring-offset-1 ring-offset-[var(--theme-bg-base)]`,
             )}
           />
         </span>
@@ -337,10 +338,10 @@ function ExecutionLogIcon() {
 
 const MEMBER_STATUS_CLASSES: Record<PanelMemberSummary['status'], string> = {
   pending: 'border border-dashed border-[var(--theme-text-faint)] opacity-60',
-  running: 'border-2 border-blue-400 animate-pulse',
-  completed: 'border-2 border-emerald-400',
-  failed: 'border-2 border-red-400',
-  interrupted: 'border-2 border-orange-400',
+  running: `border-2 ${tintClasses('blue').borderColor} animate-pulse`,
+  completed: `border-2 ${tintClasses('green').borderColor}`,
+  failed: `border-2 ${tintClasses('red').borderColor}`,
+  interrupted: `border-2 ${tintClasses('orange').borderColor}`,
 };
 
 const MEMBER_STATUS_LABELS: Record<PanelMemberSummary['status'], string> = {
@@ -381,14 +382,15 @@ function ParticipantStack({
             }}
             title={title}
             className={cn(
-              'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-[10px] font-semibold transition-transform',
+              'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-semibold transition-transform',
+              tintClasses('purple').bg,
               statusClasses,
               isPending
                 ? 'cursor-default'
                 : 'cursor-pointer hover:scale-110',
               m.isOrchestrator
-                ? 'ring-1 ring-amber-400 ring-offset-1 ring-offset-[var(--theme-bg-base)] text-amber-300'
-                : 'text-violet-300',
+                ? `ring-1 ${tintClasses('yellow').ring} ring-offset-1 ring-offset-[var(--theme-bg-base)] ${tintText('yellow')}`
+                : tintText('purple'),
             )}
           >
             {m.initials}
@@ -464,7 +466,7 @@ export const ExecutionRow = memo(function ExecutionRow({
           <div className="mt-0.5 flex items-center gap-1.5 pl-[18px] text-xs text-[var(--theme-text-faint)]">
             {isWorkflow ? (
               <>
-                <span className="flex-shrink-0 font-medium text-amber-300/90">
+                <span className={cn('flex-shrink-0 font-medium', tintText('yellow'))}>
                   {entry.executorName}
                 </span>
                 <span className="text-[var(--theme-text-faint)]">·</span>
@@ -598,9 +600,9 @@ export const ExecutionRow = memo(function ExecutionRow({
               onClick={handleCancel}
               className={cn(
                 'flex h-7 w-[78px] cursor-pointer items-center justify-center rounded-md border text-[10px] font-semibold shadow-sm transition-colors active:translate-y-px',
-                cancelState === 'idle' && 'border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20',
-                cancelState === 'confirming' && 'border-red-500 bg-red-500 text-white',
-                cancelState === 'cancelling' && 'cursor-wait border-red-500/30 bg-red-500/20 text-red-400',
+                cancelState === 'idle' && cn(tintClasses('red').borderColor, tintClasses('red').bg, tintText('red'), tintClasses('red').hoverBg),
+                cancelState === 'confirming' && cn(tintClasses('red').borderColor, tintSolid('red'), 'text-white'),
+                cancelState === 'cancelling' && cn('cursor-wait', tintClasses('red').borderColor, tintClasses('red').bg, tintText('red')),
               )}
               title={cancelState === 'idle' ? 'Cancel this execution' : ''}
             >

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { TICKET_PRIORITIES, TICKET_TYPES } from '@fleex/shared';
 import type { Ticket, TicketPriority, TicketType } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
+import { tint, tintText } from '../lib/tints';
 
 /**
  * Bottom sheet for every ticket-level write the desktop meta sidebar offers:
@@ -111,7 +112,7 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
             onClick={() => patch({ favorite: !ticket.favorite })}
             className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium ${
               ticket.favorite
-                ? 'border-amber-400/40 bg-amber-500/15 text-amber-400'
+                ? tint('yellow')
                 : 'border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
             }`}
           >
@@ -121,7 +122,7 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
             onClick={() => patch({ blocked: !ticket.blocked })}
             className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium ${
               ticket.blocked
-                ? 'border-red-400/40 bg-red-500/15 text-red-400'
+                ? tint('red')
                 : 'border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
             }`}
           >
@@ -175,7 +176,7 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
           <button
             onClick={() => confirmable('archive', () => archiveTicket(ticket.id))}
             className={`flex-1 rounded-lg border border-[var(--theme-border)] px-3 py-2.5 text-sm font-medium ${
-              confirm === 'archive' ? 'bg-amber-500/15 text-amber-400' : 'text-[var(--theme-text-muted)]'
+              confirm === 'archive' ? `${tintText('yellow')} bg-[var(--tint-yellow-bg)]` : 'text-[var(--theme-text-muted)]'
             }`}
           >
             {confirm === 'archive' ? 'Confirmer l’archivage ?' : 'Archiver'}
@@ -184,8 +185,8 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
             onClick={() => confirmable('delete', () => deleteTicket(ticket.id))}
             className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium ${
               confirm === 'delete'
-                ? 'border-red-400/40 bg-red-500/15 text-red-400'
-                : 'border-[var(--theme-border)] text-red-400/80'
+                ? tint('red')
+                : `border-[var(--theme-border)] ${tintText('red')} opacity-80`
             }`}
           >
             {confirm === 'delete' ? 'Confirmer la suppression ?' : 'Supprimer'}

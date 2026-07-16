@@ -1,5 +1,6 @@
 import type { TicketStatus } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { tintText } from '../../lib/tints';
 
 interface DueDateBadgeProps {
   dueDate: string | null;
@@ -56,8 +57,8 @@ export function DueDateBadge({ dueDate, status, size = 'sm' }: DueDateBadgeProps
     : daysRemaining > 7
       ? 'text-[var(--theme-text-faint)] bg-[var(--theme-bg-overlay)]'
       : daysRemaining >= 1
-        ? 'text-amber-400 bg-amber-500/15'
-        : 'text-red-400 bg-red-500/15';
+        ? tintText('yellow') + ' bg-[var(--tint-yellow-bg)]'
+        : tintText('red') + ' bg-[var(--tint-red-bg)]';
 
   const sizeClass = size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5';
 

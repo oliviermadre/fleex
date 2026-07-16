@@ -9,6 +9,7 @@ import { ClaudeIcon, TerminalIcon, getProcessIcon } from './icons';
 import { ActivityDot } from './ActivityDot';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
+import { tintText, tintClasses } from '../../lib/tints';
 
 function GroupBindIndicator() {
   return (
@@ -83,7 +84,7 @@ export function SessionItem({ session }: Props) {
   const iconColor = isRunning
     ? isClaude
       ? 'text-[var(--theme-accent)]'
-      : isHighlighted ? 'text-emerald-400' : 'text-emerald-400/60'
+      : isHighlighted ? tintText('green') : tintClasses('green').solidText
     : isHighlighted ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-faint)]';
 
   const startEditing = useCallback(() => {
@@ -177,7 +178,7 @@ export function SessionItem({ session }: Props) {
           const isClaudeIcon = IconComponent === ClaudeIcon;
           const color = isClaudeIcon
             ? (isRunning ? 'text-[var(--theme-accent)]' : isHighlighted ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-faint)]')
-            : (isRunning ? (isHighlighted ? 'text-emerald-400' : 'text-emerald-400/60') : iconColor);
+            : (isRunning ? (isHighlighted ? tintText('green') : tintClasses('green').solidText) : iconColor);
           return <IconComponent size={14} className={color} />;
         })()}
         {isClaude && isRunning && session.claudeActivity && (
@@ -234,7 +235,7 @@ export function SessionItem({ session }: Props) {
         className={cn(
           'hidden shrink-0 items-center justify-center rounded transition-colors group-hover/session:flex',
           confirmKill
-            ? 'text-red-400 hover:text-red-300'
+            ? cn(tintText('red'), tintClasses('red').hoverText)
             : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]'
         )}
         onClick={handleKill}

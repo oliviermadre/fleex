@@ -16,6 +16,8 @@ import { DueDateBadge } from './DueDateBadge';
 import { DueDatePickerPopover } from './DueDatePickerPopover';
 import { EpicPicker } from './EpicPicker';
 import { cn } from '../../lib/cn';
+import { tintText, tintClasses } from '../../lib/tints';
+import { STATUS_COLORS } from '../../lib/statusColors';
 
 // ── Collapsed sidebar tooltip (portal-based, appears to the LEFT) ──
 
@@ -150,21 +152,21 @@ function TypePickerDropdown({
 
 // ── Status color mapping ──
 
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_DOT_COLORS: Record<string, string> = {
   backlog: 'bg-[var(--theme-text-faint)]',
-  todo: 'bg-blue-400',
-  doing: 'bg-amber-400',
-  reviewing: 'bg-purple-400',
-  done: 'bg-green-400',
+  todo: STATUS_COLORS.todo!.bar,
+  doing: STATUS_COLORS.doing!.bar,
+  reviewing: STATUS_COLORS.reviewing!.bar,
+  done: STATUS_COLORS.done!.bar,
 };
 
 const NANO_KANBAN_COLORS: Record<string, { text: string; bg: string; bar: string; hoverBg: string; hoverText: string }> = {
-  backlog:   { text: 'text-[var(--theme-text-muted)]', bg: 'bg-[var(--theme-bg-overlay)]',  bar: 'bg-[var(--theme-text-muted)]', hoverBg: 'hover:bg-[var(--theme-bg-hover)]',   hoverText: 'group-hover:text-gray-300' },
-  todo:      { text: 'text-orange-400',                bg: 'bg-orange-400/15',               bar: 'bg-orange-400',                hoverBg: 'hover:bg-orange-400/15',              hoverText: 'group-hover:text-orange-400' },
-  doing:     { text: 'text-blue-400',                  bg: 'bg-blue-400/15',                 bar: 'bg-blue-400',                  hoverBg: 'hover:bg-blue-400/15',                hoverText: 'group-hover:text-blue-400' },
-  reviewing: { text: 'text-purple-400',                bg: 'bg-purple-400/15',               bar: 'bg-purple-400',                hoverBg: 'hover:bg-purple-400/15',              hoverText: 'group-hover:text-purple-400' },
-  done:      { text: 'text-green-400',                 bg: 'bg-green-400/15',                bar: 'bg-green-400',                 hoverBg: 'hover:bg-green-400/15',               hoverText: 'group-hover:text-green-400' },
-  cancelled: { text: 'text-red-400/70',                bg: 'bg-red-400/10',                  bar: 'bg-red-400/70',                hoverBg: 'hover:bg-red-400/10',                 hoverText: 'group-hover:text-red-400/70' },
+  backlog:   { text: STATUS_COLORS.backlog!.text, bg: STATUS_COLORS.backlog!.bg,   bar: STATUS_COLORS.backlog!.bar,   hoverBg: STATUS_COLORS.backlog!.hoverBg,   hoverText: STATUS_COLORS.backlog!.hoverText },
+  todo:      { text: STATUS_COLORS.todo!.text,    bg: STATUS_COLORS.todo!.bg,      bar: STATUS_COLORS.todo!.bar,      hoverBg: STATUS_COLORS.todo!.hoverBg,      hoverText: STATUS_COLORS.todo!.hoverText },
+  doing:     { text: STATUS_COLORS.doing!.text,   bg: STATUS_COLORS.doing!.bg,     bar: STATUS_COLORS.doing!.bar,     hoverBg: STATUS_COLORS.doing!.hoverBg,     hoverText: STATUS_COLORS.doing!.hoverText },
+  reviewing: { text: STATUS_COLORS.reviewing!.text, bg: STATUS_COLORS.reviewing!.bg, bar: STATUS_COLORS.reviewing!.bar, hoverBg: STATUS_COLORS.reviewing!.hoverBg, hoverText: STATUS_COLORS.reviewing!.hoverText },
+  done:      { text: STATUS_COLORS.done!.text,    bg: STATUS_COLORS.done!.bg,      bar: STATUS_COLORS.done!.bar,      hoverBg: STATUS_COLORS.done!.hoverBg,      hoverText: STATUS_COLORS.done!.hoverText },
+  cancelled: { text: STATUS_COLORS.cancelled!.text, bg: STATUS_COLORS.cancelled!.bg, bar: STATUS_COLORS.cancelled!.bar, hoverBg: STATUS_COLORS.cancelled!.hoverBg, hoverText: STATUS_COLORS.cancelled!.hoverText },
 };
 
 const NANO_KANBAN_ABBREVS: Record<string, string> = {
@@ -249,7 +251,7 @@ function CollapsedTicketMetaSidebar({
         {/* Status */}
         <CollapsedIndicator
           icon={
-            <span className={cn('h-2.5 w-2.5 rounded-full', STATUS_COLORS[ticket.status] ?? 'bg-[var(--theme-text-faint)]')} />
+            <span className={cn('h-2.5 w-2.5 rounded-full', STATUS_DOT_COLORS[ticket.status] ?? 'bg-[var(--theme-text-faint)]')} />
           }
           onMouseEnter={(e) => showTooltip(e, 'Status', TICKET_STATUS_LABELS[ticket.status] ?? ticket.status)}
           onMouseLeave={hideTooltip}
@@ -321,7 +323,7 @@ function CollapsedTicketMetaSidebar({
         {prLinks.length > 0 && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-green-400">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className={tintText('green')}>
                 <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
               </svg>
             }
@@ -380,7 +382,7 @@ function CollapsedTicketMetaSidebar({
         {/* Blocked */}
         {ticket.blocked && (
           <CollapsedIndicator
-            icon={<span className="h-2.5 w-2.5 rounded-full bg-red-500" />}
+            icon={<span className={`h-2.5 w-2.5 rounded-full ${tintClasses('red').solid}`} />}
             onMouseEnter={(e) => showTooltip(e, 'Blocked', 'Yes')}
             onMouseLeave={hideTooltip}
           />
@@ -390,7 +392,7 @@ function CollapsedTicketMetaSidebar({
         {ticket.favorite && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-yellow-400">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className={tintText('yellow')}>
                 <path d="M8 1.3l2.1 4.2 4.7.7-3.4 3.3.8 4.7L8 11.8l-4.2 2.4.8-4.7L1.2 6.2l4.7-.7L8 1.3z" />
               </svg>
             }
@@ -547,7 +549,7 @@ function ExpandedTicketMetaSidebar({
                       key={i}
                       className={cn(
                         'text-[8px] font-bold leading-none transition-colors',
-                        active ? colors.text : cn('text-gray-400', colors.hoverText),
+                        active ? colors.text : cn('text-[var(--theme-text-muted)]', colors.hoverText),
                       )}
                     >
                       {ch}
@@ -697,7 +699,7 @@ function ExpandedTicketMetaSidebar({
         <button
           className={cn(
             'h-4 w-7 rounded-full transition-colors',
-            ticket.blocked ? 'bg-red-500' : 'bg-[var(--theme-bg-overlay)]',
+            ticket.blocked ? tintClasses('red').solid : 'bg-[var(--theme-bg-overlay)]',
           )}
           onClick={() => updateTicket(ticket.id, { blocked: !ticket.blocked })}
         >
@@ -719,7 +721,7 @@ function ExpandedTicketMetaSidebar({
         <button
           className={cn(
             'h-4 w-7 rounded-full transition-colors',
-            ticket.favorite ? 'bg-yellow-400' : 'bg-[var(--theme-bg-overlay)]',
+            ticket.favorite ? tintClasses('yellow').solid : 'bg-[var(--theme-bg-overlay)]',
           )}
           onClick={() => updateTicket(ticket.id, { favorite: !ticket.favorite })}
         >
@@ -773,7 +775,7 @@ function ExpandedTicketMetaSidebar({
       {/* Actions */}
       <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-[var(--theme-border)]">
         <button
-          className="w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors hover:bg-red-500/10"
+          className={cn('w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors', tintClasses('red').hoverBg)}
           onClick={handleDelete}
         >
           Delete Ticket
@@ -1125,11 +1127,11 @@ function PRLinkPicker({
           const isMerged = state === 'MERGED';
           const isClosed = state === 'CLOSED';
           const colorClass = isMerged
-            ? 'border-purple-500/20 bg-purple-500/[0.06] hover:bg-purple-500/[0.12]'
+            ? cn(tintClasses('purple').borderColor, tintClasses('purple').bg, tintClasses('purple').hoverBg)
             : isClosed
-              ? 'border-red-500/20 bg-red-500/[0.06] hover:bg-red-500/[0.12]'
-              : 'border-green-500/20 bg-green-500/[0.06] hover:bg-green-500/[0.12]';
-          const textClass = isMerged ? 'text-purple-400' : isClosed ? 'text-red-400' : 'text-green-400';
+              ? cn(tintClasses('red').borderColor, tintClasses('red').bg, tintClasses('red').hoverBg)
+              : cn(tintClasses('green').borderColor, tintClasses('green').bg, tintClasses('green').hoverBg);
+          const textClass = isMerged ? tintText('purple') : isClosed ? tintText('red') : tintText('green');
           return (
             <div key={pr.id} className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors ${colorClass}`}>
               <a
@@ -1221,9 +1223,9 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 const STATE_COLORS: Record<string, string> = {
-  OPEN: 'text-green-400',
-  CLOSED: 'text-red-400',
-  MERGED: 'text-purple-400',
+  OPEN: tintText('green'),
+  CLOSED: tintText('red'),
+  MERGED: tintText('purple'),
 };
 
 function GitHubMetadataSection({ metadata }: { metadata: GitHubIssueMetadata }) {

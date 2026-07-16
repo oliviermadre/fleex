@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { tintText } from '../../lib/tints';
 
 interface Props {
   org: string;
@@ -105,7 +106,7 @@ export function RepoConfigPanel({ org, name }: Props) {
         {/* Actions */}
         <div className="flex items-center justify-end gap-2">
           {saved && (
-            <span className="text-xs text-emerald-400">Saved</span>
+            <span className={`text-xs ${tintText('green')}`}>Saved</span>
           )}
           <button
             onClick={handleClear}

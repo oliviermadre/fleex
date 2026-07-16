@@ -1,18 +1,19 @@
 import type { TicketStatus } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { STATUS_COLORS } from '../../lib/statusColors';
 
 interface StatusCubesProps {
   tickets: Array<{ id: string; title: string; status: TicketStatus }>;
 }
 
-// Match kanban column colors exactly
+// Match kanban column colors (tint solids)
 const statusColorClass: Record<TicketStatus, string> = {
   backlog: 'bg-[var(--theme-text-muted)]',
-  todo: 'bg-orange-400',
-  doing: 'bg-blue-400',
-  reviewing: 'bg-purple-400',
-  done: 'bg-green-400',
-  cancelled: 'bg-red-400/70',
+  todo: STATUS_COLORS.todo!.bar,
+  doing: STATUS_COLORS.doing!.bar,
+  reviewing: STATUS_COLORS.reviewing!.bar,
+  done: STATUS_COLORS.done!.bar,
+  cancelled: STATUS_COLORS.cancelled!.bar,
 };
 
 const CUBE_CLASS = 'w-2.5 h-2.5 rounded-[2px]';

@@ -80,7 +80,7 @@ export function EdgeConfigPanel({ edge, onChange, onDelete }: Props) {
 
       <button
         onClick={onDelete}
-        className="text-xs px-3 py-1 rounded border text-red-400"
+        className="text-xs px-3 py-1 rounded border text-[var(--theme-danger)]"
         style={{ borderColor: 'var(--theme-border)' }}
       >
         Delete edge

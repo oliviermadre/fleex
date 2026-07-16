@@ -16,6 +16,7 @@ import {
 } from '../../stores/assistantStore';
 import { AssistantStatusDot } from './AssistantSidebar';
 import { cn } from '../../lib/cn';
+import { tint, tintText, tintClasses, tintSolid } from '../../lib/tints';
 
 const EMPTY_ITEMS: AssistantChatItem[] = [];
 
@@ -28,21 +29,21 @@ interface MentionOption {
 }
 
 const MENTION_BADGE: Record<MentionOption['type'], { letter: string; className: string }> = {
-  agent: { letter: 'A', className: 'bg-purple-500/20 text-purple-400' },
-  panel: { letter: 'P', className: 'bg-blue-500/20 text-blue-400' },
-  skill: { letter: 'S', className: 'bg-emerald-500/20 text-emerald-400' },
-  workflow: { letter: 'W', className: 'bg-orange-500/20 text-orange-400' },
-  ticket: { letter: 'T', className: 'bg-slate-500/20 text-slate-400' },
-  human: { letter: 'H', className: 'bg-amber-500/20 text-amber-400' },
+  agent: { letter: 'A', className: cn(tintClasses('purple').bg, tintText('purple')) },
+  panel: { letter: 'P', className: cn(tintClasses('blue').bg, tintText('blue')) },
+  skill: { letter: 'S', className: cn(tintClasses('green').bg, tintText('green')) },
+  workflow: { letter: 'W', className: cn(tintClasses('orange').bg, tintText('orange')) },
+  ticket: { letter: 'T', className: cn(tintClasses('gray').bg, tintText('gray')) },
+  human: { letter: 'H', className: cn(tintClasses('yellow').bg, tintText('yellow')) },
 };
 
 const MAX_TICKET_SUGGESTIONS = 8;
 
 const TOOL_BADGE: Record<AssistantToolStatus, { label: string; className: string }> = {
-  running: { label: '⏳ running', className: 'text-amber-400' },
-  ok: { label: '✓ ok', className: 'text-green-400' },
-  fail: { label: '✗ failed', className: 'text-red-400' },
-  denied: { label: '⊘ denied', className: 'text-zinc-400' },
+  running: { label: '⏳ running', className: tintText('yellow') },
+  ok: { label: '✓ ok', className: tintText('green') },
+  fail: { label: '✗ failed', className: tintText('red') },
+  denied: { label: '⊘ denied', className: tintText('gray') },
 };
 
 export function AssistantConversation() {
@@ -339,7 +340,7 @@ export function AssistantConversation() {
             </p>
           )}
           {errorMsg && (
-            <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-400">
+            <p className={cn('rounded-lg p-2.5 text-xs', tint('red'))}>
               {errorMsg}
             </p>
           )}
@@ -354,7 +355,7 @@ export function AssistantConversation() {
           <div key={req.id} className="shrink-0 border-t border-[var(--theme-accent)]/40 bg-[var(--theme-bg-surface)] px-6 py-3">
             <div className="mx-auto max-w-3xl">
               <p className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[var(--theme-text-muted)]">
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                <span className={cn('inline-block h-2 w-2 animate-pulse rounded-full', tintSolid('yellow'))} />
                 L'assistant attend ta confirmation
               </p>
               <pre className="mb-3 max-h-32 overflow-auto rounded-lg bg-[var(--theme-bg-overlay)] p-3 font-mono text-xs leading-relaxed text-[var(--theme-text-primary)]">
@@ -382,9 +383,9 @@ export function AssistantConversation() {
       {confirmReqs
         .filter((r) => r.sessionId !== session.id)
         .map((req) => (
-          <div key={req.id} className="shrink-0 border-t border-amber-400/30 bg-amber-400/10 px-6 py-2">
+          <div key={req.id} className={cn('shrink-0 border-t px-6 py-2', tintClasses('yellow').borderColor, tintClasses('yellow').bg)}>
             <div className="mx-auto flex max-w-3xl items-center gap-2 text-xs text-[var(--theme-text-primary)]">
-              <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
+              <span className={cn('inline-block h-2 w-2 shrink-0 animate-pulse rounded-full', tintSolid('yellow'))} />
               <span className="min-w-0 flex-1 truncate">
                 Une commande attend ta confirmation dans «{' '}
                 {sessions.find((s) => s.id === req.sessionId)?.title ?? 'autre conversation'} »

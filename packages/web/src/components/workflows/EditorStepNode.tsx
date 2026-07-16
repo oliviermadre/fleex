@@ -2,6 +2,7 @@ import { Handle, Position, useConnection } from '@xyflow/react';
 import { useState } from 'react';
 import type { WorkflowStep } from '@fleex/shared';
 import { COLOR_ERROR_RED } from '../../lib/constants';
+import { tintClasses } from '../../lib/tints';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
 
@@ -66,11 +67,11 @@ const executorIcon = {
 } as const;
 
 const executorColor = {
-  agent: 'text-purple-400 border-purple-400/40',
-  panel: 'text-blue-400 border-blue-400/40',
-  skill: 'text-green-400 border-green-400/40',
-  human_gate: 'text-amber-400 border-amber-400/40 border-dashed',
-} as const;
+  agent: `${tintClasses('purple').text} ${tintClasses('purple').borderColor}`,
+  panel: `${tintClasses('blue').text} ${tintClasses('blue').borderColor}`,
+  skill: `${tintClasses('green').text} ${tintClasses('green').borderColor}`,
+  human_gate: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor} border-dashed`,
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

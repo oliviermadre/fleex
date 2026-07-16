@@ -6,6 +6,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { ModelBadge } from './ModelBadge';
 import { ModelSelect } from './ModelSelect';
 import { cn } from '../../lib/cn';
+import { tint, tintClasses } from '../../lib/tints';
 
 function PanelEmptyState() {
   return (
@@ -147,7 +148,7 @@ export function PanelDetailView() {
         </span>
 
         {!panel.enabled && (
-          <span className="shrink-0 rounded bg-yellow-400/10 px-1.5 py-0.5 text-[10px] text-yellow-400">
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${tint('yellow')}`}>
             Disabled
           </span>
         )}
@@ -161,7 +162,7 @@ export function PanelDetailView() {
           </button>
           <button
             onClick={handleDelete}
-            className="flex h-6 items-center gap-1.5 rounded px-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-400/10"
+            className={`flex h-6 items-center gap-1.5 rounded px-2 text-xs font-medium ${tintClasses('red').text} transition-colors ${tintClasses('red').hoverBg}`}
           >
             Delete
           </button>
@@ -172,9 +173,9 @@ export function PanelDetailView() {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-5">
           {errors.length > 0 && (
-            <div className="rounded-md border border-red-400/30 bg-red-400/5 px-3 py-2">
+            <div className={`rounded-md border ${tintClasses('red').borderColor} ${tintClasses('red').bg} px-3 py-2`}>
               {errors.map((err, i) => (
-                <p key={i} className="text-xs text-red-400">{err}</p>
+                <p key={i} className={`text-xs ${tintClasses('red').text}`}>{err}</p>
               ))}
             </div>
           )}
@@ -307,7 +308,7 @@ export function PanelDetailView() {
                     ariaLabel="Member model"
                   />
                   <button
-                    className="text-[var(--theme-text-faint)] transition-colors hover:text-red-400"
+                    className={`text-[var(--theme-text-faint)] transition-colors ${tintClasses('red').hoverText}`}
                     onClick={() => removeMember(i)}
                     title="Remove"
                   >

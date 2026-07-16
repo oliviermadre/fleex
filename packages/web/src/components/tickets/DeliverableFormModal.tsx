@@ -4,6 +4,7 @@ import { useFileUpload } from '../../hooks/useFileUpload';
 import * as api from '../../services/api';
 import { useToastStore } from '../../stores/toastStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { tint } from '../../lib/tints';
 
 interface DeliverableFormModalProps {
   open: boolean;
@@ -122,10 +123,10 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
             <button
               type="button"
               onClick={() => setStatus((s) => (s === 'draft' ? 'final' : 'draft'))}
-              className={`rounded-md border px-3 py-2 text-xs font-medium transition-colors ${
+              className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
                 status === 'draft'
-                  ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'
-                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                  ? tint('yellow')
+                  : tint('green')
               }`}
             >
               {status === 'draft' ? 'Draft' : 'Final'}

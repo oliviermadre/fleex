@@ -5,6 +5,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { TreeContextMenu } from './TreeContextMenu';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { cn } from '../../lib/cn';
+import { tintText } from '../../lib/tints';
 
 export function ClaudeConfigTree() {
   const tree = useClaudeConfigStore((s) => s.tree);
@@ -215,7 +216,7 @@ function FileIcon({ name }: { name: string }) {
 
   if (ext === 'json') {
     return (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-yellow-500">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" className={cn('flex-shrink-0', tintText('yellow'))}>
         <path d="M4 3c0-1 1-2 2-2s2 1 2 2v2c0 1-1 2-2 2" />
         <path d="M12 3c0-1-1-2-2-2s-2 1-2 2v2c0 1 1 2 2 2" />
         <path d="M4 13c0 1 1 2 2 2s2-1 2-2v-2c0-1-1-2-2-2" />
@@ -226,7 +227,7 @@ function FileIcon({ name }: { name: string }) {
 
   if (ext === 'md') {
     return (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-blue-400">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" className={cn('flex-shrink-0', tintText('blue'))}>
         <rect x="1.5" y="3" width="13" height="10" rx="1" />
         <polyline points="4,9.5 5.5,7.5 7,9.5" />
         <polyline points="9,9.5 11,7.5" />

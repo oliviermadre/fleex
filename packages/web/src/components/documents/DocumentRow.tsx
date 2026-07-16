@@ -4,6 +4,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { cn } from '../../lib/cn';
+import { tint, tintClasses } from '../../lib/tints';
 
 // Theme-accent fallback used when a type has no configured colour.
 const ACCENT_BADGE = 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]';
@@ -43,8 +44,8 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
   const ticket = tickets.find((t) => t.id === deliverable.ticketId);
   const statusColor =
     deliverable.status === 'final'
-      ? 'bg-green-500/10 text-green-400'
-      : 'bg-amber-500/10 text-amber-400';
+      ? tint('green')
+      : tint('yellow');
 
   const snippet = deliverable.content.split('\n').filter((l) => l.trim()).slice(0, 1).join('');
 
@@ -81,7 +82,7 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
 
       {/* Agent */}
       <div className="flex flex-[1.5] items-center gap-1.5">
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-[9px] font-semibold text-violet-300">
+        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${tintClasses('purple').bg} ${tintClasses('purple').text}`}>
           {getInitials(deliverable.agentName)}
         </span>
         <span className="truncate text-xs text-[var(--theme-text-secondary)]">

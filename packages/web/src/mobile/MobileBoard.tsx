@@ -4,14 +4,15 @@ import type { TicketStatus } from '@fleex/shared';
 import { useTicketStore } from '../stores/ticketStore';
 import { MobileTicketCard } from './MobileTicketCard';
 import { setMobileOverride } from './useMobileMode';
+import { tintSolid } from '../lib/tints';
 
 const STATUS_DOT: Record<TicketStatus, string> = {
-  backlog: 'bg-zinc-400',
-  todo: 'bg-blue-400',
-  doing: 'bg-amber-400',
-  reviewing: 'bg-purple-400',
-  done: 'bg-green-400',
-  cancelled: 'bg-zinc-600',
+  backlog: tintSolid('gray'),
+  todo: tintSolid('orange'),
+  doing: tintSolid('blue'),
+  reviewing: tintSolid('purple'),
+  done: tintSolid('green'),
+  cancelled: tintSolid('gray'),
 };
 
 const DEFAULT_COLUMN_INDEX = TICKET_STATUSES.indexOf('doing');

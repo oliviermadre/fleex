@@ -6,6 +6,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 
 import { cn } from '../../lib/cn';
 import { getPrBadgeClasses } from '../../lib/prBadgeStyle';
+import { tintText } from '../../lib/tints';
 import { usePullRequestStore } from '../../stores/pullRequestStore';
 import { aggregateBranchStatus } from '../../lib/deriveStatus';
 import { StatusDot } from '../ui/StatusDot';
@@ -13,9 +14,9 @@ import { useNavigate } from 'react-router-dom';
 
 const PRIORITY_ICON_COLOR: Record<string, string> = {
   none: 'text-[var(--theme-text-muted)]',
-  low: 'text-blue-400',
-  medium: 'text-yellow-400',
-  high: 'text-red-400',
+  low: tintText('blue'),
+  medium: tintText('yellow'),
+  high: tintText('red'),
 };
 
 function formatTimeAgo(dateStr: string): string {
@@ -129,7 +130,7 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
           {/* Row 1: [icon colored by priority] [ticket name] [time in column : right] — favorite star floats in the left gutter (absolute, no layout shift) */}
           <div className="relative flex items-center gap-1.5">
             {ticket?.favorite && (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" className="absolute right-full top-1/2 mr-1.5 -translate-y-1/2 text-yellow-400" aria-label="Favorite">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" className={cn('absolute right-full top-1/2 mr-1.5 -translate-y-1/2', tintText('yellow'))} aria-label="Favorite">
                 <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
               </svg>
             )}
@@ -170,8 +171,8 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
             <span className="flex-1 text-center">
               {worktree.diffStats && (worktree.diffStats.additions > 0 || worktree.diffStats.deletions > 0) && (
                 <span className="inline-flex gap-1 text-[11px] font-mono">
-                  {worktree.diffStats.additions > 0 && <span className="text-emerald-400">+{worktree.diffStats.additions}</span>}
-                  {worktree.diffStats.deletions > 0 && <span className="text-red-400">-{worktree.diffStats.deletions}</span>}
+                  {worktree.diffStats.additions > 0 && <span className={tintText('green')}>+{worktree.diffStats.additions}</span>}
+                  {worktree.diffStats.deletions > 0 && <span className={tintText('red')}>-{worktree.diffStats.deletions}</span>}
                 </span>
               )}
             </span>
@@ -181,7 +182,7 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
               <StatusDot status={branchStatus.status} />
               <span className={`text-xs ${branchStatus.textColor}`}>{branchStatus.label}</span>
               {branchStatus.warning && (
-                <span className="text-xs text-amber-400" title="Needs approval">&#9888;</span>
+                <span className={cn('text-xs', tintText('yellow'))} title="Needs approval">&#9888;</span>
               )}
             </span>
           </div>

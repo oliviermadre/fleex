@@ -5,6 +5,7 @@ import { appWs } from '../services/websocket';
 import { useDeliverableTypesStore } from '../stores/deliverableTypesStore';
 import { useUnreadStore } from '../stores/unreadStore';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
+import { tint, tintText } from '../lib/tints';
 
 /** Deliverables tab: list, read, create and delete — desktop-parity writes. */
 export function MobileDeliverables({ ticketId }: { ticketId: string }) {
@@ -103,8 +104,8 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                         d.status === 'final'
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-amber-500/20 text-amber-400'
+                          ? tint('green')
+                          : tint('yellow')
                       }`}
                     >
                       {d.status}
@@ -114,7 +115,7 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
                     onClick={() => handleDelete(d.id)}
                     className={`shrink-0 rounded-lg px-2.5 py-3 text-xs ${
                       confirmDeleteId === d.id
-                        ? 'font-semibold text-red-400'
+                        ? `font-semibold ${tintText('red')}`
                         : 'text-[var(--theme-text-faint)]'
                     }`}
                     aria-label={`Supprimer ${d.title}`}

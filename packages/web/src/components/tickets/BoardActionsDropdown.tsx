@@ -3,6 +3,7 @@ import type { BoardWithCounts } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
 
 export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
   const updateBoard = useTicketStore((s) => s.updateBoard);
@@ -95,7 +96,7 @@ export function BoardActionsDropdown({ board }: { board: BoardWithCounts }) {
                 </button>
                 {boards.length > 1 && (
                   <button
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-red-400 transition-colors hover:bg-red-500/10"
+                    className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors', tintClasses('red').text, tintClasses('red').hoverBg)}
                     onClick={handleDelete}
                   >
                     <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
