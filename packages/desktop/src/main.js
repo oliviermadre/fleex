@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell, nativeImage } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -79,6 +79,192 @@ const iconPath = path.join(__dirname, '..', 'assets', 'icon.png');
 
 let mainWindow = null;
 
+// ── Browser-parity: history navigation + find-in-page ─────────────────────────
+// The desktop shell is a BrowserWindow loading the web app, which uses
+// react-router (BrowserRouter). User navigations push real session-history
+// entries, so Chromium's navigation history already mirrors the browser — we
+// just re-expose Back/Forward (menu + shortcuts + trackpad swipe) and a native
+// find-in-page bar that a bare BrowserWindow otherwise hides.
+
+const isMac = process.platform === 'darwin';
+
+// True while the injected find bar is visible; lets us intercept Escape in the
+// main process before it reaches the web app (which would close a split view).
+let findBarOpen = false;
+
+function activeContents() {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null;
+}
+
+function canGoBack(wc) {
+  return wc.navigationHistory ? wc.navigationHistory.canGoBack() : wc.canGoBack();
+}
+function canGoForward(wc) {
+  return wc.navigationHistory ? wc.navigationHistory.canGoForward() : wc.canGoForward();
+}
+
+function goBack() {
+  const wc = activeContents();
+  if (!wc || !canGoBack(wc)) return;
+  if (wc.navigationHistory) wc.navigationHistory.goBack();
+  else wc.goBack();
+}
+function goForward() {
+  const wc = activeContents();
+  if (!wc || !canGoForward(wc)) return;
+  if (wc.navigationHistory) wc.navigationHistory.goForward();
+  else wc.goForward();
+}
+
+function closeFindBar() {
+  findBarOpen = false;
+  const wc = activeContents();
+  if (!wc) return;
+  wc.stopFindInPage('clearSelection');
+  wc.send('fleex:hide-find-bar');
+}
+
+// Reflect history availability in the menu (greyed out at the ends).
+function updateNavMenuState() {
+  const menu = Menu.getApplicationMenu();
+  const wc = activeContents();
+  if (!menu || !wc) return;
+  const back = menu.getMenuItemById('nav-back');
+  const forward = menu.getMenuItemById('nav-forward');
+  if (back) back.enabled = canGoBack(wc);
+  if (forward) forward.enabled = canGoForward(wc);
+}
+
+function sendToRenderer(channel, ...args) {
+  const wc = activeContents();
+  if (wc) wc.send(channel, ...args);
+}
+
+function buildApplicationMenu() {
+  const template = [
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    {
+      label: 'File',
+      submenu: [isMac ? { role: 'close' } : { role: 'quit' }],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac
+          ? [{ role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' }]
+          : [{ role: 'delete' }, { type: 'separator' }, { role: 'selectAll' }]),
+        { type: 'separator' },
+        {
+          label: 'Find',
+          submenu: [
+            { id: 'find', label: 'Find…', accelerator: 'CmdOrCtrl+F', click: () => sendToRenderer('fleex:show-find-bar') },
+            { id: 'find-next', label: 'Find Next', accelerator: 'CmdOrCtrl+G', click: () => sendToRenderer('fleex:find-nav', 'next') },
+            { id: 'find-prev', label: 'Find Previous', accelerator: 'CmdOrCtrl+Shift+G', click: () => sendToRenderer('fleex:find-nav', 'prev') },
+          ],
+        },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'History',
+      submenu: [
+        // Primary accelerators — always navigate (focus-insensitive). The macOS
+        // secondaries Cmd+←/Cmd+→ are handled in the preload so they keep their
+        // edit meaning inside text fields / terminals.
+        { id: 'nav-back', label: 'Back', accelerator: isMac ? 'Cmd+[' : 'Alt+Left', click: goBack },
+        { id: 'nav-forward', label: 'Forward', accelerator: isMac ? 'Cmd+]' : 'Alt+Right', click: goForward },
+      ],
+    },
+    { role: 'windowMenu' },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  updateNavMenuState();
+}
+
+// IPC from the preload (renderer) side. Registered once at module load.
+ipcMain.on('fleex:navigate', (_e, dir) => {
+  if (dir === 'back') goBack();
+  else if (dir === 'forward') goForward();
+});
+ipcMain.on('fleex:find', (_e, text, opts) => {
+  const wc = activeContents();
+  if (!wc) return;
+  const query = typeof text === 'string' ? text : '';
+  // findInPage throws on empty text — fall back to clearing instead.
+  if (query) wc.findInPage(query, opts || {});
+  else wc.stopFindInPage('clearSelection');
+});
+ipcMain.on('fleex:stop-find', (_e, action) => {
+  const wc = activeContents();
+  if (wc) wc.stopFindInPage(action || 'clearSelection');
+});
+ipcMain.on('fleex:find-bar-state', (_e, open) => {
+  findBarOpen = !!open;
+});
+
+// Per-window wiring: find results, Escape capture, navigation state, swipe.
+function wireBrowserParity(win) {
+  const wc = win.webContents;
+
+  wc.on('found-in-page', (_e, result) => {
+    wc.send('fleex:found-in-page', { matches: result.matches, active: result.activeMatchOrdinal });
+  });
+
+  // Escape closes the find bar and is swallowed here, so it never reaches the
+  // web app's other Escape handlers (e.g. closing a split view).
+  wc.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape' && findBarOpen) {
+      event.preventDefault();
+      closeFindBar();
+    }
+  });
+
+  // Full document navigation (workspace switch / reload): the preload re-runs
+  // and rebuilds a fresh, hidden find bar — just reset our flag + menu state.
+  wc.on('did-navigate', () => {
+    findBarOpen = false;
+    updateNavMenuState();
+  });
+
+  // SPA route changes (react-router pushState/replaceState): refresh Back/Forward
+  // availability and re-run any active search against the new content.
+  wc.on('did-navigate-in-page', () => {
+    updateNavMenuState();
+    if (findBarOpen) wc.send('fleex:refresh-find');
+  });
+  wc.on('did-frame-navigate', updateNavMenuState);
+  wc.on('did-finish-load', updateNavMenuState);
+
+  // Trackpad three-finger horizontal swipe → history navigation. Honours the
+  // macOS "Swipe between pages" system setting, exactly like the browser.
+  // Electron reports `left` for a back-gesture and `right` for forward (Cocoa
+  // swipe-delta semantics). If it feels reversed on-device, flip these two.
+  win.on('swipe', (_e, direction) => {
+    if (direction === 'left') goBack();
+    else if (direction === 'right') goForward();
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     icon: iconPath,
@@ -92,10 +278,14 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
   mainWindow.loadURL(serverUrl);
+
+  wireBrowserParity(mainWindow);
 
   mainWindow.webContents.on('did-finish-load', () => {
     // Inject CSS
@@ -518,6 +708,7 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(nativeImage.createFromPath(iconPath));
   }
+  buildApplicationMenu();
   createWindow();
 });
 
