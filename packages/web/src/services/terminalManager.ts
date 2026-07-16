@@ -3,8 +3,8 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { TERMINAL_THEME, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, TERMINAL_SCROLLBACK } from '../lib/constants';
-import type { Theme } from '../lib/themes';
+import { TERMINAL_THEME, TERMINAL_ANSI_LIGHT, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, TERMINAL_SCROLLBACK } from '../lib/constants';
+import { isLightTheme, type Theme } from '../lib/themes';
 import { AsmClipboardProvider } from './clipboardProvider';
 
 interface TerminalInstance {
@@ -37,6 +37,11 @@ class TerminalManager {
       fontWeight: this.currentFontThicken ? '500' : 'normal',
       fontWeightBold: this.currentFontThicken ? '800' : 'bold',
       scrollback: TERMINAL_SCROLLBACK,
+      // Apps emit 256-color/truecolor codes calibrated for dark backgrounds
+      // (Claude Code grays, tmux status bars) that no palette can remap.
+      // xterm adjusts each foreground at render time against the actual cell
+      // background, preserving hue (same default as VS Code).
+      minimumContrastRatio: 4.5,
       cursorBlink: true,
       allowTransparency: true,
       allowProposedApi: true,
@@ -180,6 +185,9 @@ class TerminalManager {
   updateTheme(theme: Theme): void {
     const termTheme = {
       ...TERMINAL_THEME,
+      // The base ANSI palette is dark-calibrated; swap in the light palette
+      // on light themes (custom themes covered via isLightTheme luminance).
+      ...(isLightTheme(theme) ? TERMINAL_ANSI_LIGHT : null),
       background: theme.terminal.background,
       foreground: theme.terminal.foreground,
       cursor: theme.terminal.cursor,
