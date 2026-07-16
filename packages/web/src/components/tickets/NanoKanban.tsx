@@ -2,6 +2,7 @@ import type { TicketStatus } from '@fleex/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { STATUS_COLORS } from '../../lib/statusColors';
+import { tintSolid } from '../../lib/tints';
 
 const ABBREVS: Record<string, string> = {
   backlog: 'BKLG',
@@ -48,7 +49,7 @@ export function NanoKanban({ status, onStatusChange, size = 'md' }: {
                   className={cn(
                     'font-bold leading-none transition-colors',
                     sm ? 'text-[6px]' : 'text-[8px]',
-                    active ? colors.text : cn('text-gray-400', colors.hoverText),
+                    active ? colors.text : cn('text-[var(--theme-text-muted)]', colors.hoverText),
                   )}
                 >
                   {ch}
@@ -65,9 +66,9 @@ export function NanoKanban({ status, onStatusChange, size = 'md' }: {
 /** Status dot color for use in sidebar/compact views */
 export const TICKET_STATUS_DOT_COLOR: Record<string, string> = {
   backlog: 'bg-[var(--theme-text-faint)]',
-  todo: 'bg-orange-400',
-  doing: 'bg-blue-400',
-  reviewing: 'bg-purple-400',
-  done: 'bg-green-400',
-  cancelled: 'bg-red-400/70',
+  todo: tintSolid('orange'),
+  doing: tintSolid('blue'),
+  reviewing: tintSolid('purple'),
+  done: tintSolid('green'),
+  cancelled: tintSolid('red'),
 };

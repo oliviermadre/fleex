@@ -1,6 +1,7 @@
 import type { TicketType } from '@fleex/shared';
 import { TICKET_TYPE_LABELS, TICKET_TYPE_EMOJIS } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { tint, tintText, type TintHue } from '../../lib/tints';
 
 const TYPE_ICONS: Record<TicketType, string> = {
   build: '🔨',
@@ -11,22 +12,35 @@ const TYPE_ICONS: Record<TicketType, string> = {
   think: '💡',
 };
 
+/**
+ * Ticket type → tint hue (emerald→green, amber→yellow, violet→purple;
+ * think takes blue instead of cyan→teal to stay distinguishable from ops).
+ */
+const TYPE_HUES: Record<TicketType, TintHue> = {
+  build: 'green',
+  fix: 'red',
+  review: 'yellow',
+  ops: 'teal',
+  lead: 'purple',
+  think: 'blue',
+};
+
 const TYPE_COLORS: Record<TicketType, string> = {
-  build: 'text-emerald-400',
-  fix: 'text-red-400',
-  review: 'text-amber-400',
-  ops: 'text-teal-400',
-  lead: 'text-violet-400',
-  think: 'text-cyan-400',
+  build: tintText(TYPE_HUES.build),
+  fix: tintText(TYPE_HUES.fix),
+  review: tintText(TYPE_HUES.review),
+  ops: tintText(TYPE_HUES.ops),
+  lead: tintText(TYPE_HUES.lead),
+  think: tintText(TYPE_HUES.think),
 };
 
 const TYPE_BG_COLORS: Record<TicketType, string> = {
-  build: 'bg-emerald-400/15 text-emerald-400',
-  fix: 'bg-red-400/15 text-red-400',
-  review: 'bg-amber-400/15 text-amber-400',
-  ops: 'bg-teal-400/15 text-teal-400',
-  lead: 'bg-violet-400/15 text-violet-400',
-  think: 'bg-cyan-400/15 text-cyan-400',
+  build: tint(TYPE_HUES.build),
+  fix: tint(TYPE_HUES.fix),
+  review: tint(TYPE_HUES.review),
+  ops: tint(TYPE_HUES.ops),
+  lead: tint(TYPE_HUES.lead),
+  think: tint(TYPE_HUES.think),
 };
 
 export function TicketTypeIcon({ type }: { type: TicketType | null }) {

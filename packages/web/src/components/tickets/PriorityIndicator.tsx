@@ -1,5 +1,6 @@
 import type { TicketPriority } from '@fleex/shared';
 import { cn } from '../../lib/cn';
+import { tintText } from '../../lib/tints';
 
 const PRIORITY_LABELS: Record<TicketPriority, string> = {
   none: 'No priority',
@@ -10,9 +11,9 @@ const PRIORITY_LABELS: Record<TicketPriority, string> = {
 
 const PRIORITY_TEXT_COLORS: Record<TicketPriority, string> = {
   none: 'text-[var(--theme-text-secondary)]',
-  low: 'text-blue-400',
-  medium: 'text-yellow-400',
-  high: 'text-red-400',
+  low: tintText('blue'),
+  medium: tintText('yellow'),
+  high: tintText('red'),
 };
 
 function ChevronDown({ size }: { size: number }) {

@@ -1,3 +1,5 @@
+import { DARK_TINTS, LIGHT_TINTS, TINT_HUES } from './tints';
+
 export interface ThemeColors {
   accent: string;
   accentHover: string;
@@ -66,8 +68,8 @@ const ZINC_DARK_NEUTRALS = {
   borderInput: '#3f3f46',
   textPrimary: '#fafafa',
   textSecondary: '#a1a1aa',
-  textMuted: '#71717a',
-  textFaint: '#52525b',
+  textMuted: '#82828b', // ≥ 4.5:1 on bgBase & bgSurface
+  textFaint: '#6e6e78', // ≥ 3:1 on bgBase & bgSurface (decorative only)
   success: '#22c55e',
   warning: '#eab308',
   danger: '#ef4444',
@@ -88,7 +90,7 @@ export const THEME_EMBER: Theme = {
     keyword: '#f97316',     // orange-500 - warm like ember
     string: '#84cc16',      // lime-500
     number: '#fbbf24',      // amber-400
-    comment: '#71717a',     // matches textMuted
+    comment: '#82828b',     // matches textMuted
     operator: '#D77655',    // accent color
     function: '#f59e0b',    // amber-500
     variable: '#fafafa',    // textPrimary
@@ -120,7 +122,7 @@ export const THEME_OCEAN: Theme = {
     keyword: '#60a5fa',     // blue-400 - ocean blue
     string: '#34d399',      // emerald-400
     number: '#fbbf24',      // amber-400
-    comment: '#71717a',     // matches textMuted
+    comment: '#82828b',     // matches textMuted
     operator: '#3b82f6',    // accent color
     function: '#a78bfa',    // violet-400
     variable: '#fafafa',    // textPrimary
@@ -152,7 +154,7 @@ export const THEME_VERDANT: Theme = {
     keyword: '#4ade80',     // green-400 - verdant green
     string: '#84cc16',      // lime-500
     number: '#fbbf24',      // amber-400
-    comment: '#71717a',     // matches textMuted
+    comment: '#82828b',     // matches textMuted
     operator: '#22c55e',    // accent color
     function: '#a3e635',    // lime-400
     variable: '#fafafa',    // textPrimary
@@ -174,9 +176,9 @@ export const THEME_LIGHT: Theme = {
   name: 'Light',
   builtIn: true,
   colors: {
-    accent: '#6366f1',
-    accentHover: '#818cf8',
-    accentActive: '#4f46e5',
+    accent: '#4f46e5', // indigo-600 — ≥ 4.5:1 on white (600-level needed in light)
+    accentHover: '#6366f1',
+    accentActive: '#4338ca',
     accentMuted: 'rgba(99, 102, 241, 0.12)',
     bgBase: '#f4f4f5',
     bgSurface: '#ffffff',
@@ -188,17 +190,17 @@ export const THEME_LIGHT: Theme = {
     borderInput: '#a1a1aa',
     textPrimary: '#18181b',
     textSecondary: '#52525b',
-    textMuted: '#71717a',
-    textFaint: '#a1a1aa',
-    success: '#16a34a',
-    warning: '#ca8a04',
-    danger: '#dc2626',
+    textMuted: '#646469', // ≥ 4.5:1 on bgBase, bgSurface & bgOverlay
+    textFaint: '#828289', // ≥ 3:1 on bgBase, bgSurface & bgOverlay (decorative only)
+    success: '#15803d', // ≥ 4.5:1 as text on light surfaces
+    warning: '#976005', // ≥ 4.5:1 as text on light surfaces
+    danger: '#b91c1c', // ≥ 4.5:1 as text on light surfaces
   },
   syntax: {
     keyword: '#7c3aed',     // violet-600
     string: '#059669',      // emerald-600
     number: '#dc2626',      // red-600
-    comment: '#71717a',     // matches textMuted
+    comment: '#696971',     // matches textMuted
     operator: '#374151',    // gray-700
     function: '#2563eb',    // blue-600
     variable: '#1f2937',    // gray-800
@@ -234,8 +236,8 @@ export const THEME_DARK: Theme = {
     borderInput: '#475569',
     textPrimary: '#f1f5f9',
     textSecondary: '#94a3b8',
-    textMuted: '#64748b',
-    textFaint: '#475569',
+    textMuted: '#8695ad', // ≥ 4.5:1 on bgBase & bgSurface
+    textFaint: '#64748b', // ≥ 3:1 on bgBase & bgSurface (decorative only)
     success: '#22c55e',
     warning: '#eab308',
     danger: '#ef4444',
@@ -244,7 +246,7 @@ export const THEME_DARK: Theme = {
     keyword: '#c4b5fd',     // violet-300
     string: '#86efac',      // green-300
     number: '#fdba74',      // orange-300
-    comment: '#64748b',     // matches textMuted
+    comment: '#8695ad',     // matches textMuted
     operator: '#a78bfa',    // accent color
     function: '#7dd3fc',    // sky-300
     variable: '#f1f5f9',    // textPrimary
@@ -280,8 +282,8 @@ export const THEME_MATRIX: Theme = {
     borderInput: '#1f3d1f',
     textPrimary: '#4ade80',
     textSecondary: '#22c55e',
-    textMuted: '#15803d',
-    textFaint: '#14532d',
+    textMuted: '#16a34a', // ≥ 4.5:1 on bgBase & bgSurface
+    textFaint: '#15803d', // ≥ 3:1 on bgBase & bgSurface (decorative only)
     success: '#4ade80',
     warning: '#fbbf24',
     danger: '#ef4444',
@@ -290,7 +292,7 @@ export const THEME_MATRIX: Theme = {
     keyword: '#4ade80',     // green-400 - matrix green
     string: '#a3e635',      // lime-400
     number: '#22c55e',      // green-500
-    comment: '#15803d',     // matches textMuted
+    comment: '#16a34a',     // matches textMuted
     operator: '#22c55e',    // accent color
     function: '#84cc16',    // lime-500
     variable: '#4ade80',    // textPrimary
@@ -327,10 +329,10 @@ export const THEME_SUMMER: Theme = {
     textPrimary: '#1c1917',
     textSecondary: '#57534e',
     textMuted: '#78716c',
-    textFaint: '#a8a29e',
-    success: '#16a34a',
-    warning: '#ca8a04',
-    danger: '#dc2626',
+    textFaint: '#918a83', // ≥ 3:1 on bgBase & bgSurface (decorative only)
+    success: '#15803d', // ≥ 4.5:1 as text on light surfaces
+    warning: '#976005', // ≥ 4.5:1 as text on light surfaces
+    danger: '#b91c1c', // ≥ 4.5:1 as text on light surfaces
   },
   syntax: {
     keyword: '#0ea5e9',     // sky-500 - summer sky blue
@@ -372,8 +374,8 @@ export const THEME_FALL: Theme = {
     borderInput: '#5c4033',
     textPrimary: '#fef3c7',
     textSecondary: '#d6a87c',
-    textMuted: '#a18072',
-    textFaint: '#6b5347',
+    textMuted: '#aa8878', // ≥ 4.5:1 on bgBase & bgSurface
+    textFaint: '#86695b', // ≥ 3:1 on bgBase & bgSurface (decorative only)
     success: '#22c55e',
     warning: '#fbbf24',
     danger: '#ef4444',
@@ -382,7 +384,7 @@ export const THEME_FALL: Theme = {
     keyword: '#f59e0b',     // amber-500 - fall orange
     string: '#84cc16',      // lime-500
     number: '#fbbf24',      // amber-400
-    comment: '#a18072',     // matches textMuted
+    comment: '#aa8878',     // matches textMuted
     operator: '#d97706',    // accent color
     function: '#fb923c',    // orange-400
     variable: '#fef3c7',    // textPrimary
@@ -418,8 +420,8 @@ export const THEME_LATTE: Theme = {
     borderInput: '#bcc0cc',
     textPrimary: '#4c4f69',
     textSecondary: '#5c5f77',
-    textMuted: '#6c6f85',
-    textFaint: '#8c8fa1',
+    textMuted: '#62657a', // ≥ 4.5:1 on bgBase & bgSurface
+    textFaint: '#7f8298', // ≥ 3:1 on bgBase & bgSurface (decorative only)
     success: '#40a02b',
     warning: '#df8e1d',
     danger: '#d20f39',
@@ -428,7 +430,7 @@ export const THEME_LATTE: Theme = {
     keyword: '#8839ef',     // Catppuccin Latte Mauve
     string: '#40a02b',      // Catppuccin Latte Green
     number: '#fe640b',      // Catppuccin Latte Peach
-    comment: '#6c6f85',     // matches textMuted
+    comment: '#62657a',     // matches textMuted
     operator: '#04a5e5',    // Catppuccin Latte Sapphire
     function: '#1e66f5',    // Catppuccin Latte Blue
     variable: '#4c4f69',    // textPrimary
@@ -536,6 +538,17 @@ export function applyTheme(theme: Theme): void {
     '--theme-glass-overlay',
     hexToRgba(theme.colors.bgOverlay, 0.55),
   );
+
+  // Decorative tint tokens (badges, tags, dots…) — derived from the theme's
+  // luminance so custom themes are covered automatically. See lib/tints.ts.
+  const tints = isLightTheme(theme) ? LIGHT_TINTS : DARK_TINTS;
+  for (const hue of TINT_HUES) {
+    const t = tints[hue];
+    root.style.setProperty(`--tint-${hue}-text`, t.text);
+    root.style.setProperty(`--tint-${hue}-bg`, t.bg);
+    root.style.setProperty(`--tint-${hue}-border`, t.border);
+    root.style.setProperty(`--tint-${hue}-solid`, t.solid);
+  }
 }
 
 export function resolveTheme(themeId: string, customThemes: Theme[]): Theme {

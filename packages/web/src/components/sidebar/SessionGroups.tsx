@@ -293,7 +293,7 @@ export function SessionGroups() {
 
       {/* <GroupedSessions /> — hidden: feature is broken, to be reworked */}
       <button
-        className="relative mx-1.5 mt-3 mb-1 flex w-[calc(100%-12px)] cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white bg-[var(--theme-accent-muted)] transition-all hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)]"
+        className="relative mx-1.5 mt-3 mb-1 flex w-[calc(100%-12px)] cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white bg-[var(--theme-accent)] transition-all hover:bg-[var(--theme-accent-hover)] hover:shadow-[0_0_12px_var(--theme-accent-muted)]"
         onClick={openCreateModal}
       >
         <PlusIcon size={16} />
