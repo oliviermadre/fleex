@@ -408,7 +408,7 @@ export function CreateTaskModal() {
                       <span className={cn(
                         'flex h-4 w-4 items-center justify-center rounded border text-[10px] flex-shrink-0',
                         selected
-                          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white'
+                          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                           : 'border-[var(--theme-border-input)]',
                       )}>
                         {selected && '✓'}

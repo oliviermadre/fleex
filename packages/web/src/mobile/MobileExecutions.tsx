@@ -4,7 +4,7 @@ import { useAgentEventStore } from '../stores/agentEventStore';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 import { cancelExecution } from '../services/api';
 import { AgentEventStream } from '../components/main-panel/AgentEventStream';
-import { tint, tintSolid } from '../lib/tints';
+import { tint, tintClasses, tintSolid } from '../lib/tints';
 
 const EMPTY_EXECUTIONS: AgentExecution[] = [];
 
@@ -126,7 +126,7 @@ export function MobileExecutions({ ticketId }: { ticketId: string }) {
               <button
                 onClick={handleKill}
                 className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                  confirmKill ? `${tintSolid('red')} text-white` : tint('red')
+                  confirmKill ? `${tintSolid('red')} ${tintClasses('red').onSolid}` : tint('red')
                 }`}
               >
                 {confirmKill ? 'Confirmer ?' : 'Stopper'}

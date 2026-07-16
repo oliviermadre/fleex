@@ -1374,7 +1374,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             </svg>
           </button>
           <button
-            className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-white transition-opacity hover:opacity-90 disabled:opacity-30"
+            className="flex h-[36px] w-[36px] flex-shrink-0 items-center justify-center rounded-lg bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-30"
             onClick={handleSubmit}
             disabled={submitting || !body.trim()}
             title="Send (Enter)"

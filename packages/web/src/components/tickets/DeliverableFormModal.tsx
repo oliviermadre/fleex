@@ -183,7 +183,7 @@ export function DeliverableFormModal({ open, onClose, ticketId }: DeliverableFor
           <button
             onClick={handleSubmit}
             disabled={saving || isUploading}
-            className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-medium text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save deliverable'}
           </button>

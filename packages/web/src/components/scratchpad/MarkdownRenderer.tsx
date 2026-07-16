@@ -317,7 +317,7 @@ function MarkdownSection({
           <span
             className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
               isChecked
-                ? 'bg-[var(--theme-accent)] border-[var(--theme-accent)] text-white'
+                ? 'bg-[var(--theme-accent)] border-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                 : 'border-[var(--theme-text-muted)] group-hover:border-[var(--theme-accent)]'
             }`}
           >

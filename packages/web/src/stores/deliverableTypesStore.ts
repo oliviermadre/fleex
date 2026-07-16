@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { DeliverableTypeDef, DeliverableRenderer, DeliverableTypeColor } from '@fleex/shared';
 import { DEFAULT_DELIVERABLE_TYPES, rendererForType, labelForType, colorForType } from '@fleex/shared';
+import { themedTypeColor, type ThemedTypeColor } from '../lib/tints';
 import * as api from '../services/api';
 
 interface DeliverableTypesState {
@@ -19,8 +20,12 @@ interface DeliverableTypesState {
   selectableTypes: () => DeliverableTypeDef[];
   rendererFor: (type: string) => DeliverableRenderer;
   labelFor: (type: string) => string;
-  /** Configured badge colour for a type, or null (caller falls back to theme accent). */
-  colorFor: (type: string) => DeliverableTypeColor | null;
+  /**
+   * Configured badge colour for a type, or null (caller falls back to theme
+   * accent). Preset colours are re-mapped to theme-aware `var(--tint-*)`
+   * values (ticket #395) — persisted config stays untouched.
+   */
+  colorFor: (type: string) => ThemedTypeColor | null;
 }
 
 export const useDeliverableTypesStore = create<DeliverableTypesState>((set, get) => ({
@@ -70,5 +75,5 @@ export const useDeliverableTypesStore = create<DeliverableTypesState>((set, get)
   selectableTypes: () => get().types.filter((t) => !t.system),
   rendererFor: (type) => rendererForType(type, get().types),
   labelFor: (type) => labelForType(type, get().types),
-  colorFor: (type) => colorForType(type, get().types),
+  colorFor: (type) => themedTypeColor(colorForType(type, get().types)),
 }));

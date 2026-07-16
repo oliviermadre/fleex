@@ -287,7 +287,7 @@ function MobileStepDetail({
                 key={o}
                 disabled={busy}
                 onClick={() => act(() => onResolveGate(stepRun.id, o, notes.trim() || undefined))}
-                className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
               >
                 {o}
               </button>
@@ -309,7 +309,7 @@ function MobileStepDetail({
           <button
             disabled={busy || !notes.trim()}
             onClick={() => act(() => onRespondReview(notes.trim(), stepRun.id))}
-            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             Répondre et relancer
           </button>
@@ -327,7 +327,7 @@ function MobileStepDetail({
           <button
             disabled={busy}
             onClick={() => act(() => onRetry(stepRun.id))}
-            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             {stepRun.status === 'failed' ? 'Réessayer' : 'Relancer'}
           </button>

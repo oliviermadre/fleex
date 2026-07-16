@@ -71,7 +71,7 @@ export function AgentMarkdownTab({ persona, field }: AgentMarkdownTabProps) {
           className={cn(
             'rounded px-2 py-1 text-xs transition-colors',
             showPreview
-              ? 'bg-[var(--theme-accent)] text-white'
+              ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
               : 'text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]',
           )}
         >

@@ -601,7 +601,7 @@ export const ExecutionRow = memo(function ExecutionRow({
               className={cn(
                 'flex h-7 w-[78px] cursor-pointer items-center justify-center rounded-md border text-[10px] font-semibold shadow-sm transition-colors active:translate-y-px',
                 cancelState === 'idle' && cn(tintClasses('red').borderColor, tintClasses('red').bg, tintText('red'), tintClasses('red').hoverBg),
-                cancelState === 'confirming' && cn(tintClasses('red').borderColor, tintSolid('red'), 'text-white'),
+                cancelState === 'confirming' && cn(tintClasses('red').borderColor, tintSolid('red'), tintClasses('red').onSolid),
                 cancelState === 'cancelling' && cn('cursor-wait', tintClasses('red').borderColor, tintClasses('red').bg, tintText('red')),
               )}
               title={cancelState === 'idle' ? 'Cancel this execution' : ''}

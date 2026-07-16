@@ -133,7 +133,7 @@ export function CreateWorkflowModal({ open, onClose }: CreateWorkflowModalProps)
             onClick={handleCreate}
             disabled={busy || !name.trim() || !slug.trim()}
             className={cn(
-              'rounded bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]',
+              'rounded bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)]',
               (busy || !name.trim() || !slug.trim()) && 'opacity-50 cursor-not-allowed',
             )}
           >

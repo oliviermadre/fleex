@@ -116,7 +116,7 @@ export function AssistantSidebar() {
             <p className="mb-2 text-xs text-[var(--theme-text-faint)]">Aucune conversation</p>
             <button
               onClick={() => newSession()}
-              className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]"
+              className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)]"
             >
               Nouvelle conversation
             </button>

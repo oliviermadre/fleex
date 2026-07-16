@@ -259,7 +259,7 @@ export function AssistantConversation() {
         </p>
         <button
           onClick={() => newSession()}
-          className="rounded-md bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]"
+          className="rounded-md bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)]"
         >
           Nouvelle conversation
         </button>
@@ -370,7 +370,7 @@ export function AssistantConversation() {
                 </button>
                 <button
                   onClick={() => answerConfirm(req.id, true)}
-                  className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--theme-accent-hover)]"
+                  className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-semibold text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]"
                 >
                   Approuver
                 </button>
@@ -392,7 +392,7 @@ export function AssistantConversation() {
               </span>
               <button
                 onClick={() => openSession(req.sessionId)}
-                className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-1 text-xs font-semibold text-white hover:bg-[var(--theme-accent-hover)]"
+                className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-1 text-xs font-semibold text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]"
               >
                 Ouvrir
               </button>
@@ -466,7 +466,7 @@ export function AssistantConversation() {
             <button
               onClick={handleSend}
               disabled={!draft.trim() || busy || isUploading}
-              className="shrink-0 rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--theme-accent-hover)] disabled:opacity-50"
+              className="shrink-0 rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)] disabled:opacity-50"
             >
               {isUploading ? '…' : '➤'}
             </button>

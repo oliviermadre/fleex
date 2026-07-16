@@ -102,7 +102,7 @@ export function ThemeColorEditor({ theme, onSave, onCancel }: Props) {
             Cancel
           </button>
           <button
-            className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]"
+            className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)]"
             onClick={() => onSave({ colors, name: name.trim() || theme.name })}
           >
             Save

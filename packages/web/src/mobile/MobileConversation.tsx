@@ -590,7 +590,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
               <>
                 <button
                   onClick={() => resolveConflict('answer')}
-                  className="flex-1 rounded-lg bg-[var(--theme-accent)] px-3 py-2 text-xs font-medium text-white"
+                  className="flex-1 rounded-lg bg-[var(--theme-accent)] px-3 py-2 text-xs font-medium text-[var(--theme-accent-fg)]"
                 >
                   Répond à sa question
                 </button>
@@ -605,7 +605,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
               <>
                 <button
                   onClick={() => resolveConflict('queue')}
-                  className="flex-1 rounded-lg bg-[var(--theme-accent)] px-3 py-2 text-xs font-medium text-white"
+                  className="flex-1 rounded-lg bg-[var(--theme-accent)] px-3 py-2 text-xs font-medium text-[var(--theme-accent-fg)]"
                 >
                   Mettre en file
                 </button>
@@ -670,7 +670,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                 onClick={() => setMode(m.id)}
                 className={`px-2.5 py-1 text-[11px] font-medium ${
                   ticket.conversationMode === m.id
-                    ? 'bg-[var(--theme-accent)] text-white'
+                    ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                     : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
                 }`}
               >
@@ -711,7 +711,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
           <button
             onClick={handleSubmit}
             disabled={!body.trim() || submitting}
-            className="shrink-0 rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="shrink-0 rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             {submitting ? '…' : '➤'}
           </button>
@@ -801,7 +801,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
               {mentionSheet.status !== 'resolved' && mentionSheet.targetType === 'agent' && (
                 <button
                   onClick={() => runMention(mentionSheet)}
-                  className="rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-white"
+                  className="rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)]"
                 >
                   ▶ Relancer l'exécution
                 </button>

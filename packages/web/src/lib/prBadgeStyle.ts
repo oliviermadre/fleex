@@ -16,7 +16,7 @@ function prHue(pr: Pick<PullRequest, 'state' | 'isDraft'>): TintHue {
 
 export function getPrBadgeClasses(pr: Pick<PullRequest, 'state' | 'isDraft'>): string {
   const hue = prHue(pr);
-  // Hover flips to the opaque accent — solid tints are contrast-checked for
-  // white text in both light and dark palettes.
-  return `${tint(hue)} ${tintClasses(hue).hoverSolid} hover:text-white`;
+  // Hover flips to the opaque accent; the paired solid-fg keeps the label
+  // readable on it in both palettes (white on light 600s, near-black on dark 400s).
+  return `${tint(hue)} ${tintClasses(hue).hoverSolid} ${tintClasses(hue).hoverOnSolid}`;
 }

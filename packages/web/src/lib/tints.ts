@@ -101,9 +101,17 @@ export interface TintClassSet {
   solid: string;
   /** Opaque accent as text (vivid icons/strokes). */
   solidText: string;
+  /**
+   * Foreground for text sitting ON the solid (`solid`/`hoverSolid`) background.
+   * Computed per theme (white on dark solids, near-black on light ones) —
+   * never hardcode `text-white` on a tint solid.
+   */
+  onSolid: string;
   hoverText: string;
   hoverBg: string;
   hoverSolid: string;
+  /** Pair with `hoverSolid` when the resting text colour differs. */
+  hoverOnSolid: string;
   hoverBorderColor: string;
   groupHoverText: string;
   ring: string;
@@ -121,9 +129,11 @@ export const TINT_CLASSES: Record<TintHue, TintClassSet> = {
     borderColor: 'border-[var(--tint-red-border)]',
     solid: 'bg-[var(--tint-red-solid)]',
     solidText: 'text-[var(--tint-red-solid)]',
+    onSolid: 'text-[var(--tint-red-solid-fg)]',
     hoverText: 'hover:text-[var(--tint-red-text)]',
     hoverBg: 'hover:bg-[var(--tint-red-bg)]',
     hoverSolid: 'hover:bg-[var(--tint-red-solid)]',
+    hoverOnSolid: 'hover:text-[var(--tint-red-solid-fg)]',
     hoverBorderColor: 'hover:border-[var(--tint-red-border)]',
     groupHoverText: 'group-hover:text-[var(--tint-red-text)]',
     ring: 'ring-[var(--tint-red-border)]',
@@ -134,9 +144,11 @@ export const TINT_CLASSES: Record<TintHue, TintClassSet> = {
     borderColor: 'border-[var(--tint-orange-border)]',
     solid: 'bg-[var(--tint-orange-solid)]',
     solidText: 'text-[var(--tint-orange-solid)]',
+    onSolid: 'text-[var(--tint-orange-solid-fg)]',
     hoverText: 'hover:text-[var(--tint-orange-text)]',
     hoverBg: 'hover:bg-[var(--tint-orange-bg)]',
     hoverSolid: 'hover:bg-[var(--tint-orange-solid)]',
+    hoverOnSolid: 'hover:text-[var(--tint-orange-solid-fg)]',
     hoverBorderColor: 'hover:border-[var(--tint-orange-border)]',
     groupHoverText: 'group-hover:text-[var(--tint-orange-text)]',
     ring: 'ring-[var(--tint-orange-border)]',
@@ -147,9 +159,11 @@ export const TINT_CLASSES: Record<TintHue, TintClassSet> = {
     borderColor: 'border-[var(--tint-yellow-border)]',
     solid: 'bg-[var(--tint-yellow-solid)]',
     solidText: 'text-[var(--tint-yellow-solid)]',
+    onSolid: 'text-[var(--tint-yellow-solid-fg)]',
     hoverText: 'hover:text-[var(--tint-yellow-text)]',
     hoverBg: 'hover:bg-[var(--tint-yellow-bg)]',
     hoverSolid: 'hover:bg-[var(--tint-yellow-solid)]',
+    hoverOnSolid: 'hover:text-[var(--tint-yellow-solid-fg)]',
     hoverBorderColor: 'hover:border-[var(--tint-yellow-border)]',
     groupHoverText: 'group-hover:text-[var(--tint-yellow-text)]',
     ring: 'ring-[var(--tint-yellow-border)]',
@@ -160,9 +174,11 @@ export const TINT_CLASSES: Record<TintHue, TintClassSet> = {
     borderColor: 'border-[var(--tint-green-border)]',
     solid: 'bg-[var(--tint-green-solid)]',
     solidText: 'text-[var(--tint-green-solid)]',
+    onSolid: 'text-[var(--tint-green-solid-fg)]',
     hoverText: 'hover:text-[var(--tint-green-text)]',
     hoverBg: 'hover:bg-[var(--tint-green-bg)]',
     hoverSolid: 'hover:bg-[var(--tint-green-solid)]',
+    hoverOnSolid: 'hover:text-[var(--tint-green-solid-fg)]',
     hoverBorderColor: 'hover:border-[var(--tint-green-border)]',
     groupHoverText: 'group-hover:text-[var(--tint-green-text)]',
     ring: 'ring-[var(--tint-green-border)]',
@@ -173,9 +189,11 @@ export const TINT_CLASSES: Record<TintHue, TintClassSet> = {
     borderColor: 'border-[var(--tint-teal-border)]',
     solid: 'bg-[var(--tint-teal-solid)]',
     solidText: 'text-[var(--tint-teal-solid)]',
+    onSolid: 'text-[var(--tint-teal-solid-fg)]',
     hoverText: 'hover:text-[var(--tint-teal-text)]',
     hoverBg: 'hover:bg-[var(--tint-teal-bg)]',
     hoverSolid: 'hover:bg-[var(--tint-teal-solid)]',
+    hoverOnSolid: 'hover:text-[var(--tint-teal-solid-fg)]',
     hoverBorderColor: 'hover:border-[var(--tint-teal-border)]',
     groupHoverText: 'group-hover:text-[var(--tint-teal-text)]',
     ring: 'ring-[var(--tint-teal-border)]',
@@ -186,9 +204,11 @@ export const TINT_CLASSES: Record<TintHue, TintClassSet> = {
     borderColor: 'border-[var(--tint-blue-border)]',
     solid: 'bg-[var(--tint-blue-solid)]',
     solidText: 'text-[var(--tint-blue-solid)]',
+    onSolid: 'text-[var(--tint-blue-solid-fg)]',
     hoverText: 'hover:text-[var(--tint-blue-text)]',
     hoverBg: 'hover:bg-[var(--tint-blue-bg)]',
     hoverSolid: 'hover:bg-[var(--tint-blue-solid)]',
+    hoverOnSolid: 'hover:text-[var(--tint-blue-solid-fg)]',
     hoverBorderColor: 'hover:border-[var(--tint-blue-border)]',
     groupHoverText: 'group-hover:text-[var(--tint-blue-text)]',
     ring: 'ring-[var(--tint-blue-border)]',
@@ -199,9 +219,11 @@ export const TINT_CLASSES: Record<TintHue, TintClassSet> = {
     borderColor: 'border-[var(--tint-indigo-border)]',
     solid: 'bg-[var(--tint-indigo-solid)]',
     solidText: 'text-[var(--tint-indigo-solid)]',
+    onSolid: 'text-[var(--tint-indigo-solid-fg)]',
     hoverText: 'hover:text-[var(--tint-indigo-text)]',
     hoverBg: 'hover:bg-[var(--tint-indigo-bg)]',
     hoverSolid: 'hover:bg-[var(--tint-indigo-solid)]',
+    hoverOnSolid: 'hover:text-[var(--tint-indigo-solid-fg)]',
     hoverBorderColor: 'hover:border-[var(--tint-indigo-border)]',
     groupHoverText: 'group-hover:text-[var(--tint-indigo-text)]',
     ring: 'ring-[var(--tint-indigo-border)]',
@@ -212,9 +234,11 @@ export const TINT_CLASSES: Record<TintHue, TintClassSet> = {
     borderColor: 'border-[var(--tint-purple-border)]',
     solid: 'bg-[var(--tint-purple-solid)]',
     solidText: 'text-[var(--tint-purple-solid)]',
+    onSolid: 'text-[var(--tint-purple-solid-fg)]',
     hoverText: 'hover:text-[var(--tint-purple-text)]',
     hoverBg: 'hover:bg-[var(--tint-purple-bg)]',
     hoverSolid: 'hover:bg-[var(--tint-purple-solid)]',
+    hoverOnSolid: 'hover:text-[var(--tint-purple-solid-fg)]',
     hoverBorderColor: 'hover:border-[var(--tint-purple-border)]',
     groupHoverText: 'group-hover:text-[var(--tint-purple-text)]',
     ring: 'ring-[var(--tint-purple-border)]',
@@ -225,9 +249,11 @@ export const TINT_CLASSES: Record<TintHue, TintClassSet> = {
     borderColor: 'border-[var(--tint-pink-border)]',
     solid: 'bg-[var(--tint-pink-solid)]',
     solidText: 'text-[var(--tint-pink-solid)]',
+    onSolid: 'text-[var(--tint-pink-solid-fg)]',
     hoverText: 'hover:text-[var(--tint-pink-text)]',
     hoverBg: 'hover:bg-[var(--tint-pink-bg)]',
     hoverSolid: 'hover:bg-[var(--tint-pink-solid)]',
+    hoverOnSolid: 'hover:text-[var(--tint-pink-solid-fg)]',
     hoverBorderColor: 'hover:border-[var(--tint-pink-border)]',
     groupHoverText: 'group-hover:text-[var(--tint-pink-text)]',
     ring: 'ring-[var(--tint-pink-border)]',
@@ -238,9 +264,11 @@ export const TINT_CLASSES: Record<TintHue, TintClassSet> = {
     borderColor: 'border-[var(--tint-gray-border)]',
     solid: 'bg-[var(--tint-gray-solid)]',
     solidText: 'text-[var(--tint-gray-solid)]',
+    onSolid: 'text-[var(--tint-gray-solid-fg)]',
     hoverText: 'hover:text-[var(--tint-gray-text)]',
     hoverBg: 'hover:bg-[var(--tint-gray-bg)]',
     hoverSolid: 'hover:bg-[var(--tint-gray-solid)]',
+    hoverOnSolid: 'hover:text-[var(--tint-gray-solid-fg)]',
     hoverBorderColor: 'hover:border-[var(--tint-gray-border)]',
     groupHoverText: 'group-hover:text-[var(--tint-gray-text)]',
     ring: 'ring-[var(--tint-gray-border)]',
@@ -270,4 +298,53 @@ export function tintSolid(hue: TintHue): string {
 /** Full class set for advanced call sites (hover/group-hover/ring variants). */
 export function tintClasses(hue: TintHue): TintClassSet {
   return TINT_CLASSES[hue];
+}
+
+/**
+ * Reverse map from the DELIVERABLE_COLOR_PRESETS text colours (@fleex/shared)
+ * to tint hues. Preset values are persisted verbatim in workspace config, so
+ * they cannot be theme-aware at rest — we re-map them at render time instead.
+ * Non-canonical hues collapse onto the 10 tint hues (rose→red, amber→yellow…).
+ */
+const PRESET_TEXT_TO_HUE: Record<string, TintHue> = {
+  '#9ca3af': 'gray',
+  '#f87171': 'red',
+  '#fb7185': 'red', // rose
+  '#fb923c': 'orange',
+  '#fbbf24': 'yellow', // amber
+  '#facc15': 'yellow',
+  '#a3e635': 'green', // lime
+  '#4ade80': 'green',
+  '#34d399': 'green', // emerald
+  '#2dd4bf': 'teal',
+  '#22d3ee': 'teal', // cyan
+  '#60a5fa': 'blue',
+  '#818cf8': 'indigo',
+  '#a78bfa': 'purple', // violet
+  '#c084fc': 'purple',
+  '#f472b6': 'pink',
+};
+
+export interface ThemedTypeColor {
+  bg: string;
+  text: string;
+  /** Outline (« détourage ») colour, safe in boxShadow/border inline styles. */
+  border: string;
+}
+
+/**
+ * Turn a persisted DeliverableTypeColor into theme-aware inline-style values.
+ * Preset colours become `var(--tint-*)` references (they follow the active
+ * theme automatically); unrecognised custom colours are kept as configured,
+ * with a translucent outline derived from the text colour.
+ */
+export function themedTypeColor(c: { bg: string; text: string } | null): ThemedTypeColor | null {
+  if (!c) return null;
+  const hue = PRESET_TEXT_TO_HUE[c.text.toLowerCase()];
+  if (!hue) return { bg: c.bg, text: c.text, border: `${c.text}55` };
+  return {
+    bg: `var(--tint-${hue}-bg)`,
+    text: `var(--tint-${hue}-text)`,
+    border: `var(--tint-${hue}-border)`,
+  };
 }

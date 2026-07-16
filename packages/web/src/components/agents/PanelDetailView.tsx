@@ -361,7 +361,7 @@ export function PanelDetailView() {
               onClick={handleSave}
               disabled={saving}
               className={cn(
-                'rounded bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--theme-accent-hover)]',
+                'rounded bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-hover)]',
                 saving && 'opacity-50',
               )}
             >

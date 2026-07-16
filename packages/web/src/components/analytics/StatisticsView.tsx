@@ -87,7 +87,7 @@ function Toolbar({
             className={cn(
               'px-3 py-1.5 text-xs font-medium transition-colors',
               preset === p.key
-                ? 'bg-[var(--theme-accent)] text-white'
+                ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                 : 'bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
             )}
             onClick={() => onPreset(p.key)}
@@ -128,7 +128,7 @@ function Toolbar({
             className={cn(
               'px-2.5 py-1.5 text-xs font-medium transition-colors',
               granularity === g.key
-                ? 'bg-[var(--theme-accent)] text-white'
+                ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                 : 'bg-[var(--theme-bg-surface)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
             )}
             onClick={() => onGranularity(g.key)}
@@ -404,7 +404,7 @@ export function StatisticsView() {
                 className={cn(
                   'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
                   focus === f.key
-                    ? 'bg-[var(--theme-accent)] text-white'
+                    ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                     : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                 )}
               >

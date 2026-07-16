@@ -186,7 +186,7 @@ export function ExecutionLogPage() {
                   <span className={cn(
                     'ml-0.5 rounded-full px-1.5 text-[10px] font-semibold',
                     active
-                      ? 'bg-[var(--theme-accent)] text-white'
+                      ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                       : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-faint)]',
                   )}>
                     {count}

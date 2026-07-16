@@ -99,7 +99,7 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
       <div className="flex-[0.8]">
         <span
           className={cn('whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium', !typeColorCfg && ACCENT_BADGE)}
-          style={typeColorCfg ? { backgroundColor: typeColorCfg.bg, color: typeColorCfg.text } : undefined}
+          style={typeColorCfg ? { backgroundColor: typeColorCfg.bg, color: typeColorCfg.text, boxShadow: `0 0 0 1px ${typeColorCfg.border}` } : undefined}
         >
           {typeLabel}
         </span>

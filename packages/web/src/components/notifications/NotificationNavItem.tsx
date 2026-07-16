@@ -98,7 +98,7 @@ export function NotificationNavItem({ collapsed }: { collapsed: boolean }) {
         <span className="relative flex-shrink-0">
           <BellIcon />
           {badge && collapsed && (
-            <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--theme-accent-active)] text-[8px] font-bold text-white">
+            <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--theme-accent-active)] text-[8px] font-bold text-[var(--theme-accent-fg)]">
               {badge}
             </span>
           )}
@@ -116,7 +116,7 @@ export function NotificationNavItem({ collapsed }: { collapsed: boolean }) {
           <>
             <span className="truncate">Notifications</span>
             {badge && (
-              <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--theme-accent-active)] px-1 text-[10px] font-bold leading-none text-white">
+              <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--theme-accent-active)] px-1 text-[10px] font-bold leading-none text-[var(--theme-accent-fg)]">
                 {badge}
               </span>
             )}

@@ -206,7 +206,7 @@ export function MobileTicketDetail({ ticket }: { ticket: Ticket }) {
                 </button>
                 <button
                   onClick={saveDescription}
-                  className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-semibold text-[var(--theme-accent-fg)]"
                 >
                   Enregistrer
                 </button>

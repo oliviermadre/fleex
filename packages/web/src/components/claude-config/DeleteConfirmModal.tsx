@@ -31,7 +31,7 @@ export function DeleteConfirmModal() {
           Cancel
         </button>
         <button
-          className={cn('rounded-md px-3 py-1.5 text-xs text-white transition-colors', tintClasses('red').solid, tintClasses('red').hoverSolid)}
+          className={cn('rounded-md px-3 py-1.5 text-xs transition-colors', tintClasses('red').onSolid, tintClasses('red').solid, tintClasses('red').hoverSolid)}
           onClick={confirmDelete}
         >
           Delete

@@ -132,7 +132,7 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
       {/* Create */}
       <button
         onClick={() => setCreating(true)}
-        className="absolute bottom-4 right-4 flex items-center justify-center rounded-full bg-[var(--theme-accent)] text-2xl leading-none text-white shadow-lg"
+        className="absolute bottom-4 right-4 flex items-center justify-center rounded-full bg-[var(--theme-accent)] text-2xl leading-none text-[var(--theme-accent-fg)] shadow-lg"
         style={{ width: 52, height: 52 }}
         aria-label="Nouveau deliverable"
       >
@@ -232,7 +232,7 @@ function CreateDeliverableSheet({
                 onClick={() => setStatus(s)}
                 className={`px-3 py-2 text-xs font-medium ${
                   status === s
-                    ? 'bg-[var(--theme-accent)] text-white'
+                    ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
                     : 'bg-[var(--theme-bg-secondary)] text-[var(--theme-text-muted)]'
                 }`}
               >
@@ -255,7 +255,7 @@ function CreateDeliverableSheet({
           <button
             onClick={submit}
             disabled={!title.trim() || saving}
-            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             Créer
           </button>

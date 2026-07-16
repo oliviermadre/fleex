@@ -292,7 +292,7 @@ function NavItem({
       <span className="relative flex-shrink-0">
         {icon}
         {badge && collapsed && (
-          <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--theme-accent-active)] text-[8px] font-bold text-white">
+          <span className="absolute -right-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--theme-accent-active)] text-[8px] font-bold text-[var(--theme-accent-fg)]">
             {badge}
           </span>
         )}

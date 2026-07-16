@@ -129,7 +129,7 @@ export function DocumentsFilterSidebar() {
           return (
             <span
               className={cn('whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ring-1', !c && ACCENT_BADGE)}
-              style={c ? { backgroundColor: c.bg, color: c.text, boxShadow: `0 0 0 1px ${c.text}33` } : undefined}
+              style={c ? { backgroundColor: c.bg, color: c.text, boxShadow: `0 0 0 1px ${c.border}` } : undefined}
             >
               {labelForType(f.value)}
             </span>

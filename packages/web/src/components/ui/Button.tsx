@@ -10,9 +10,9 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-[var(--theme-accent)] text-white hover:bg-[var(--theme-accent-hover)] active:bg-[var(--theme-accent-active)]',
+  primary: 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)] active:bg-[var(--theme-accent-active)]',
   secondary: 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-border-input)] active:bg-[var(--theme-bg-overlay)] border border-[var(--theme-border-input)]',
-  danger: cn('bg-[var(--theme-danger)] text-white', tintClasses('red').hoverSolid, 'active:bg-[var(--theme-danger)]'),
+  danger: cn('bg-[var(--theme-danger)] text-[var(--theme-danger-fg)]', tintClasses('red').hoverSolid, tintClasses('red').hoverOnSolid, 'active:bg-[var(--theme-danger)]'),
   ghost: 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-overlay)] active:bg-[var(--theme-border-input)]',
 };
 

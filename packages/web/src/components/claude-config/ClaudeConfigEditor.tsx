@@ -42,7 +42,7 @@ export function ClaudeConfigEditor() {
             </span>
           ))}
           {isDirty && (
-            <span className="ml-2 rounded bg-[var(--theme-accent)] px-1.5 py-0.5 text-[10px] font-medium text-white">
+            <span className="ml-2 rounded bg-[var(--theme-accent)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-accent-fg)]">
               Modified
             </span>
           )}
@@ -53,7 +53,7 @@ export function ClaudeConfigEditor() {
           className={cn(
             'rounded px-3 py-1 text-xs font-medium transition-colors',
             isDirty
-              ? 'bg-[var(--theme-accent)] text-white hover:opacity-90'
+              ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] hover:opacity-90'
               : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)] cursor-default'
           )}
           disabled={!isDirty || fileSaving}

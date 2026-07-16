@@ -1027,7 +1027,7 @@ function GitHubIssuePicker({
           )}
           <div className="flex gap-1">
             <button
-              className="rounded-md bg-[var(--theme-accent)] px-2 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
+              className="rounded-md bg-[var(--theme-accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
               onClick={handleSave}
               disabled={loading}
             >
@@ -1179,7 +1179,7 @@ function PRLinkPicker({
             )}
             <div className="flex gap-1">
               <button
-                className="rounded-md bg-[var(--theme-accent)] px-2 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
+                className="rounded-md bg-[var(--theme-accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
                 onClick={handleSave}
                 disabled={loading}
               >

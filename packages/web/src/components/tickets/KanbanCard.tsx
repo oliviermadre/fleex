@@ -155,7 +155,7 @@ export function KanbanCard({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="github-glow-icon flex-shrink-0 cursor-pointer rounded p-0.5 text-[var(--theme-text-faint)] transition-all duration-200 hover:text-white"
+            className="github-glow-icon flex-shrink-0 cursor-pointer rounded p-0.5 text-[var(--theme-text-faint)] transition-all duration-200 hover:text-[var(--theme-text-primary)]"
             title={`GitHub ${issueLinks[0].ref}`}
           >
             <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">

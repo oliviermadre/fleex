@@ -121,7 +121,7 @@ export function MobileAssistant() {
         </button>
         <button
           onClick={() => createSession()}
-          className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-2 text-sm font-semibold text-white"
+          className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-2 text-sm font-semibold text-[var(--theme-accent-fg)]"
           aria-label="Nouvelle conversation"
         >
           +
@@ -137,7 +137,7 @@ export function MobileAssistant() {
             </p>
             <button
               onClick={() => createSession()}
-              className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-white"
+              className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-[var(--theme-accent-fg)]"
             >
               Nouvelle conversation
             </button>
@@ -202,7 +202,7 @@ export function MobileAssistant() {
           <button
             onClick={handleSend}
             disabled={!draft.trim() || busy}
-            className="shrink-0 rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="shrink-0 rounded-xl bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)] disabled:opacity-50"
           >
             ➤
           </button>
@@ -231,7 +231,7 @@ export function MobileAssistant() {
               </button>
               <button
                 onClick={() => answerConfirm(confirmReq.id, true)}
-                className="flex-1 rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-white"
+                className="flex-1 rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)]"
               >
                 Approuver
               </button>
@@ -255,7 +255,7 @@ export function MobileAssistant() {
               {workspaces.length === 0 ? (
                 <button
                   onClick={() => createSession()}
-                  className="rounded-full bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white"
+                  className="rounded-full bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-[var(--theme-accent-fg)]"
                 >
                   + Workspace par défaut
                 </button>

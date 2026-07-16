@@ -69,7 +69,7 @@ const ZINC_DARK_NEUTRALS = {
   textPrimary: '#fafafa',
   textSecondary: '#a1a1aa',
   textMuted: '#82828b', // ≥ 4.5:1 on bgBase & bgSurface
-  textFaint: '#6e6e78', // ≥ 3:1 on bgBase & bgSurface (decorative only)
+  textFaint: '#75757f', // ≥ 3:1 on bgBase, bgSurface AND bgOverlay (decorative only)
   success: '#22c55e',
   warning: '#eab308',
   danger: '#ef4444',
@@ -548,7 +548,46 @@ export function applyTheme(theme: Theme): void {
     root.style.setProperty(`--tint-${hue}-bg`, t.bg);
     root.style.setProperty(`--tint-${hue}-border`, t.border);
     root.style.setProperty(`--tint-${hue}-solid`, t.solid);
+    // Foreground for text ON the solid (light solids are 600/700 → white text;
+    // dark solids are 400 → near-black text).
+    root.style.setProperty(`--tint-${hue}-solid-fg`, bestForegroundOn(t.solid));
   }
+
+  // Foreground for text sitting on the solid accent (`bg-[var(--theme-accent)]`).
+  // White works on dark/blue accents but fails on bright ones (Verdant's green:
+  // 2.28:1). Computed per theme via WCAG contrast, so custom themes are
+  // readable by construction.
+  root.style.setProperty('--theme-accent-fg', bestForegroundOn(theme.colors.accent));
+  root.style.setProperty('--theme-danger-fg', bestForegroundOn(theme.colors.danger));
+}
+
+/** WCAG relative luminance (gamma-corrected) of an #rrggbb / #rgb color. */
+function wcagLuminance(hex: string): number {
+  const clean = hex.replace('#', '');
+  const full =
+    clean.length === 3
+      ? clean
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : clean;
+  const f = (v: number) => {
+    v /= 255;
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  return (
+    0.2126 * f(parseInt(full.slice(0, 2), 16)) +
+    0.7152 * f(parseInt(full.slice(2, 4), 16)) +
+    0.0722 * f(parseInt(full.slice(4, 6), 16))
+  );
+}
+
+/** White or near-black — whichever has the better WCAG contrast on `bgHex`. */
+function bestForegroundOn(bgHex: string): string {
+  const bg = wcagLuminance(bgHex);
+  const whiteRatio = 1.05 / (bg + 0.05);
+  const darkRatio = (bg + 0.05) / (wcagLuminance('#09090b') + 0.05);
+  return whiteRatio >= darkRatio ? '#ffffff' : '#09090b';
 }
 
 export function resolveTheme(themeId: string, customThemes: Theme[]): Theme {
