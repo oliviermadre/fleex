@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Session } from '@fleex/shared';
 import { StatusDot } from '../ui/StatusDot';
 import { deriveDisplayStatus, aggregateBranchStatus } from '../../lib/deriveStatus';
@@ -172,6 +172,9 @@ function normalize(s: string): string {
 function rowClass(active: boolean): string {
   return cn(
     'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
+    // scrollIntoView margins: keep the row clear of the sticky search (46px) +
+    // sticky group header (~26px) when keyboard navigation scrolls upward.
+    'scroll-mb-1 scroll-mt-[72px]',
     active ? 'bg-[var(--theme-bg-hover)]' : 'hover:bg-[var(--theme-bg-hover)]',
   );
 }
@@ -185,11 +188,12 @@ function GroupHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-function LaunchRow({ item, active, marker, onHover }: { item: LaunchItem; active: boolean; marker?: React.ReactNode; onHover?: () => void }) {
+function LaunchRow({ item, index, active, marker, onHover }: { item: LaunchItem; index: number; active: boolean; marker?: React.ReactNode; onHover?: () => void }) {
   return (
     <button
       role="menuitem"
       aria-selected={active}
+      data-index={index}
       className={rowClass(active)}
       onMouseEnter={onHover}
       onClick={(e) => {
@@ -246,6 +250,9 @@ function LauncherPanel({
 }) {
   // -1 = nothing highlighted (mouse-first); arrow keys opt into navigation.
   const [highlight, setHighlight] = useState(-1);
+  // The floating element is the scroll container — kept in a local ref too so
+  // the highlight-follow effect can reach the active row.
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const nq = normalize(query.trim());
 
   // Groups honour the active chip and the search query.
@@ -278,6 +285,15 @@ function LauncherPanel({
     setHighlight(-1);
   }, [nq, filter]);
 
+  // The panel scrolls internally, so follow the highlight: without this the
+  // arrow keys move the selection below/above the fold and the user "selects"
+  // rows they cannot see (same convention as CommandPalette / Autocomplete).
+  useEffect(() => {
+    if (highlight < 0) return;
+    const el = panelRef.current?.querySelector(`[data-index="${highlight}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [highlight]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -301,7 +317,10 @@ function LauncherPanel({
   return (
     <FloatingPortal>
       <div
-        ref={floatingRef}
+        ref={(node: HTMLDivElement | null) => {
+          panelRef.current = node;
+          floatingRef(node);
+        }}
         style={floatingStyles}
         {...floatingProps}
         className="z-50 w-[380px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] pb-1 shadow-xl"
@@ -385,6 +404,7 @@ function LauncherPanel({
               <LaunchRow
                 key={`freq:${item.key}`}
                 item={item}
+                index={idx}
                 active={highlight === idx}
                 onHover={() => setHighlight(idx)}
                 // The section mixes types, so each row carries the app-wide type
@@ -409,6 +429,7 @@ function LauncherPanel({
                   <LaunchRow
                     key={item.key}
                     item={item}
+                    index={idx}
                     active={highlight === idx}
                     onHover={() => setHighlight(idx)}
                   />

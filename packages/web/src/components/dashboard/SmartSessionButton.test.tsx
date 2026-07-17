@@ -85,6 +85,10 @@ function toastTypeFor(message: string) {
 }
 
 beforeEach(() => {
+  // jsdom has no layout engine and no scrollIntoView — the launcher's
+  // highlight-follow effect calls it on every keyboard move, so stub it
+  // for every test (individual tests may re-stub with their own spy).
+  Element.prototype.scrollIntoView = vi.fn();
   useToastStore.setState({ toasts: [] });
   useSkillStore.setState({ skills: [] });
   // refresh is fired from a useEffect on mount — stub it so no network is hit.
@@ -415,6 +419,34 @@ describe('SmartSessionButton — launcher panel', () => {
     });
 
     expect(onExecuteSkill).toHaveBeenCalledWith('s1');
+  });
+
+  it('keeps the keyboard-highlighted row visible by scrolling it into view', async () => {
+    // NaS: the panel scrolls internally, but pressing ↓ moved the highlight
+    // below the fold while the scroll stayed put — you ended up "selecting"
+    // rows you could not see, making arrow navigation unusable. Every keyboard
+    // move must bring the highlighted row into view (same convention as
+    // CommandPalette / Autocomplete: scrollIntoView block:'nearest').
+    const scrollSpy = vi.fn();
+    // jsdom has no layout engine and no scrollIntoView — stub the prototype.
+    Element.prototype.scrollIntoView = scrollSpy;
+    render(<SmartSessionButton sessions={[]} ticketId="t1" onExecuteSkill={vi.fn()} />);
+    await openDropdown();
+
+    const input = screen.getByPlaceholderText(/Filtrer/);
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+    });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+    });
+
+    expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest' });
+    // The element scrolled into view is the row the keyboard highlighted —
+    // second ↓ lands on the workflow row (skills group comes first).
+    const target = scrollSpy.mock.contexts.at(-1) as HTMLElement;
+    expect(target.getAttribute('aria-selected')).toBe('true');
+    expect(target.textContent).toContain('Deploy');
   });
 
   it('caps chip counters at 2 digits ("99+") so the chip row stays compact', async () => {
