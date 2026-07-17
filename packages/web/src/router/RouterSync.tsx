@@ -2,7 +2,10 @@
  * RouterSync — bidirectional sync between URL and Zustand stores.
  *
  * URL → Store: on location change, parse URL and update stores.
- * Store → URL: on store change, compute expected URL and navigate(replace) if different.
+ * Store → URL: on store change, compute expected URL and navigate() if different.
+ *   Pushes a new history entry when the primary view changes (so Back/Forward
+ *   retain intermediate states) and replaces when only a detail tab / URL
+ *   normalisation changed. See historyActionForNav / navIdentity below.
  *
  * Navigation components should call navigate() for user-initiated actions.
  * RouterSync handles programmatic store changes (e.g. auto-select after session kill).
@@ -365,6 +368,61 @@ export function storeToUrl(
   }
 }
 
+// ─── History push/replace decision ───────────────────────────────────────────
+
+/**
+ * A stable key identifying the *primary* view a URL points at, ignoring the
+ * per-entity detail tab (ticket / epic / persona tab). Two URLs that share an
+ * identity differ only by such a tab and should collapse into a single history
+ * entry (replace); a change of identity is a genuine navigation that deserves
+ * its own entry (push).
+ *
+ * Board id is normalised (undefined ⇒ null) so that `/tickets` and
+ * `/tickets/board/all` — both "the board with no ticket selected" — count as the
+ * same view and don't create a spurious extra entry when the store normalises
+ * the URL. Section tabs that ARE the view (settings / analytics) and distinct
+ * selections (session tab, roadmap vs board) stay in the identity so Back
+ * returns to them.
+ */
+export function navIdentity(parsed: ParsedUrl): string {
+  const boardId = parsed.boardId === undefined ? null : parsed.boardId;
+  return [
+    parsed.panel,
+    parsed.sessionTicketId ?? '',
+    parsed.sessionTabKey ?? '',
+    parsed.agentWorktreeTicketId ?? '',
+    parsed.repoKey ?? '',
+    boardId ?? '',
+    parsed.ticketId ?? '',
+    parsed.ticketsView ?? '',
+    parsed.epicId ?? '',
+    parsed.scratchpadKey ?? '',
+    parsed.personaId ?? '',
+    parsed.skillId ?? '',
+    parsed.panelId ?? '',
+    parsed.workflowId ?? '',
+    parsed.settingsTab ?? '',
+    parsed.analyticsTab ?? '',
+  ].join('|');
+}
+
+/**
+ * Decide whether a store-driven URL change should push a new history entry or
+ * replace the current one. Push when the primary view changes (so Back/Forward
+ * retain intermediate states like a ticket detail); replace when only a detail
+ * tab or URL normalisation changed (so tab-clicking doesn't spam history).
+ */
+export function historyActionForNav(
+  currentPath: string,
+  currentSearch: string,
+  expectedPath: string,
+  expectedSearch: string,
+): 'push' | 'replace' {
+  const current = navIdentity(parseUrl(currentPath, currentSearch));
+  const expected = navIdentity(parseUrl(expectedPath, expectedSearch));
+  return current === expected ? 'replace' : 'push';
+}
+
 // ─── RouterSync component ─────────────────────────────────────────────────────
 
 export function RouterSync() {
@@ -594,9 +652,15 @@ export function RouterSync() {
     const currentSearch = location.search;
 
     if (expected.pathname !== currentPath || expected.search !== currentSearch) {
+      const action = historyActionForNav(
+        currentPath,
+        currentSearch,
+        expected.pathname,
+        expected.search,
+      );
       navigate(
         { pathname: expected.pathname, search: expected.search },
-        { replace: true },
+        { replace: action === 'replace' },
       );
     }
   }, [

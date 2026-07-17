@@ -39,14 +39,60 @@ function isEditableTarget(el) {
   return false;
 }
 
-function runFind(text, opts) {
+function clearDebounce() {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+}
+
+// Fresh search: highlight all matches and select the first one. `findNext:false`
+// tells the native finder this is a NEW request, so it resets the active match.
+function applySearch(text) {
   currentText = text;
   if (!text) {
     ipcRenderer.send('fleex:stop-find', 'clearSelection');
     updateCounter(0, 0);
     return;
   }
-  ipcRenderer.send('fleex:find', text, opts || {});
+  ipcRenderer.send('fleex:find', text, { findNext: false });
+}
+
+// Advance to the next/previous match of the already-applied search.
+// `findNext:true` continues from the current active match instead of resetting.
+function advance(forward) {
+  if (!currentText) return;
+  ipcRenderer.send('fleex:find', currentText, { findNext: true, forward });
+}
+
+// Explicit user action (Enter, arrow buttons, menu Find Next/Prev). Cancel any
+// pending debounce so we act on the latest input immediately: if the text
+// changed since the last applied search, run a fresh search; otherwise step to
+// the next/previous match. This is what makes stepping feel like a real browser
+// even when the user types and hits Enter faster than the debounce fires.
+function submitFind(forward) {
+  clearDebounce();
+  const value = findInput ? findInput.value : '';
+  if (!value) {
+    applySearch('');
+  } else if (value !== currentText) {
+    applySearch(value);
+  } else {
+    advance(forward);
+  }
+}
+
+// Focus + select the input. SPA focus churn can steal focus on the same tick
+// (React re-renders, terminal refocus), so re-assert on the next frame.
+function focusInput() {
+  if (!findInput) return;
+  findInput.focus();
+  findInput.select();
+  requestAnimationFrame(() => {
+    if (findBar && findBar.classList.contains('open') && findInput) {
+      findInput.focus();
+    }
+  });
 }
 
 function updateCounter(matches, active) {
@@ -149,40 +195,48 @@ function buildFindBar() {
 
   findInput.addEventListener('input', () => {
     const value = findInput.value;
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => runFind(value, { findNext: false }), FIND_DEBOUNCE_MS);
+    clearDebounce();
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      applySearch(value);
+    }, FIND_DEBOUNCE_MS);
   });
 
   findInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (currentText) runFind(currentText, { findNext: true, forward: !e.shiftKey });
+      submitFind(!e.shiftKey);
     }
   });
 
   nextBtn.addEventListener('click', () => {
-    if (currentText) runFind(currentText, { findNext: true, forward: true });
-    findInput.focus();
+    submitFind(true);
+    focusInput();
   });
   prevBtn.addEventListener('click', () => {
-    if (currentText) runFind(currentText, { findNext: true, forward: false });
-    findInput.focus();
+    submitFind(false);
+    focusInput();
   });
   closeBtn.addEventListener('click', () => hideFindBar());
 }
 
-function showFindBar() {
+function ensureFindBarVisible() {
   buildFindBar();
   findBar.classList.add('open');
   ipcRenderer.send('fleex:find-bar-state', true);
-  findInput.focus();
-  findInput.select();
-  if (findInput.value) runFind(findInput.value, { findNext: false });
+  focusInput();
+}
+
+function showFindBar() {
+  ensureFindBarVisible();
+  if (findInput.value) applySearch(findInput.value);
 }
 
 function hideFindBar() {
   if (!findBar) return;
   findBar.classList.remove('open');
+  currentText = '';
+  clearDebounce();
   ipcRenderer.send('fleex:stop-find', 'clearSelection');
   ipcRenderer.send('fleex:find-bar-state', false);
 }
@@ -195,22 +249,38 @@ ipcRenderer.on('fleex:show-find-bar', () => showFindBar());
 // already stopped the native find, so just hide the UI without echoing state.
 ipcRenderer.on('fleex:hide-find-bar', () => {
   if (findBar) findBar.classList.remove('open');
+  currentText = '';
+  clearDebounce();
 });
 
 ipcRenderer.on('fleex:found-in-page', (_e, result) => {
   updateCounter(result.matches, result.active);
 });
 
-// Menu-driven Find Next / Find Previous.
+// Menu-driven Find Next / Find Previous. Make the bar visible & focused without
+// re-running the search (which would reset the active match to the first hit);
+// only step when there is already an applied search.
 ipcRenderer.on('fleex:find-nav', (_e, dir) => {
-  showFindBar();
-  if (currentText) runFind(currentText, { findNext: true, forward: dir === 'next' });
+  ensureFindBarVisible();
+  if (currentText) {
+    advance(dir === 'next');
+  } else if (findInput.value) {
+    applySearch(findInput.value);
+  }
 });
 
-// Content changed under an open find bar: refresh highlights against new DOM.
+// Content changed under an open find bar: refresh highlights against the new DOM,
+// but only while the user is still in the find field. Refreshing after they've
+// clicked into the page would reset the active match under them (a fresh search
+// always re-selects the first hit).
 ipcRenderer.on('fleex:refresh-find', () => {
-  if (findBar && findBar.classList.contains('open') && currentText) {
-    runFind(currentText, { findNext: false });
+  if (
+    findBar &&
+    findBar.classList.contains('open') &&
+    currentText &&
+    document.activeElement === findInput
+  ) {
+    applySearch(currentText);
   }
 });
 
