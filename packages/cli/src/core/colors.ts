@@ -89,14 +89,22 @@ export function statusColor(status: string): (s: string) => string {
 }
 
 /**
+ * Strip ANSI SGR escape sequences from a string. Equivalent to strip-ansi
+ * for SGR sequences. Used for column padding and for the plain-text `notes`
+ * export in `fleex documentation`.
+ */
+export function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\x1B\[[0-9;]*m/g, '');
+}
+
+/**
  * Visible (printable) length of a string ignoring ANSI escape sequences.
  * Used for manual column padding because chalk-wrapped strings break %-Ns
  * printf padding.
  */
 export function visibleLength(s: string): number {
-  // strip ANSI escape sequences. Equivalent to strip-ansi for SGR sequences.
-  // eslint-disable-next-line no-control-regex
-  return s.replace(/\x1B\[[0-9;]*m/g, '').length;
+  return stripAnsi(s).length;
 }
 
 export function padEndVisible(s: string, width: number): string {

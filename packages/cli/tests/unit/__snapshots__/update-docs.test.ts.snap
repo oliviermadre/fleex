@@ -1,0 +1,364 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`documentation JSON snapshot (normative wording) > fleex 'agent' update 1`] = `
+{
+  "aliases": [],
+  "arguments": [
+    {
+      "description": "Persona to update: exact name (e.g. "catalyst") or UUID, as shown by 'fleex agent list'",
+      "name": "agent",
+      "required": true,
+      "variadic": false,
+    },
+  ],
+  "description": "Update an agent persona. PATCH semantics: ONLY the fields whose flags you pass are changed — every omitted flag leaves its field untouched. Text fields (soul/identity/memory) are REPLACED in full unless you use --memory-append.",
+  "name": "update",
+  "notes": "Examples:
+  $ fleex agent update catalyst --model claude-opus-4-6
+  $ fleex agent update catalyst --soul-file /tmp/soul.md --dry-run
+  $ cat notes.md | fleex agent update catalyst --memory-append-file -
+  $ fleex agent update catalyst --human-mention none
+
+Notes:
+  At most ONE flag may read from stdin ("-") per invocation.
+  Recommended agent workflow: 'fleex agent show <agent> --json' first (backup), then update.",
+  "options": [
+    {
+      "defaultValue": undefined,
+      "description": "Set the display name (human-facing label shown in the UI)",
+      "flags": "--display-name <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Rename the persona's machine name, used in @agent:<name> mentions. Existing mentions are NOT rewritten and will stop resolving — a warning is printed.",
+      "flags": "--name <name>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Set the model id (e.g. claude-sonnet-4-5). Passed through as-is; the CLI does not validate model ids.",
+      "flags": "--model <model>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Set the execution mode. Allowed values: claude_code | message. Any other value fails before any API call.",
+      "flags": "--execution-mode <mode>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Set the human mention name. Pass the literal word "none" to clear it (stores null).",
+      "flags": "--human-mention <name|none>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "REPLACE the ENTIRE soul (SOUL.md) with this inline text. For long content prefer --soul-file. Mutually exclusive with --soul-file.",
+      "flags": "--soul <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "REPLACE the ENTIRE soul (SOUL.md) with the contents of a file. Use "-" to read from stdin. Mutually exclusive with --soul.",
+      "flags": "--soul-file <path|->",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "REPLACE the ENTIRE identity (IDENTITY.md) with this inline text. Mutually exclusive with --identity-file.",
+      "flags": "--identity <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "REPLACE the ENTIRE identity (IDENTITY.md) with the contents of a file. Use "-" for stdin. Mutually exclusive with --identity.",
+      "flags": "--identity-file <path|->",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "REPLACE the ENTIRE memory (MEMORY.md), erasing existing content. To add WITHOUT erasing, use --memory-append instead. Mutually exclusive with --memory-file, --memory-append and --memory-append-file.",
+      "flags": "--memory <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "REPLACE the ENTIRE memory with the contents of a file ("-" for stdin). Erases existing content — to add without erasing use --memory-append-file. Mutually exclusive with --memory and both --memory-append flags.",
+      "flags": "--memory-file <path|->",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "APPEND this text to the existing memory (adds a blank line then the text at the end; never erases anything). Mutually exclusive with --memory, --memory-file and --memory-append-file.",
+      "flags": "--memory-append <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "APPEND the contents of a file to the existing memory ("-" for stdin). Never erases. Mutually exclusive with --memory, --memory-file and --memory-append.",
+      "flags": "--memory-append-file <path|->",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Print the exact PATCH payload as JSON and exit WITHOUT writing anything. Use it to verify a change before applying it.",
+      "flags": "--dry-run",
+      "mandatory": false,
+      "required": false,
+    },
+  ],
+  "path": "fleex agent update",
+  "subcommands": [],
+  "usage": "[options] <agent>",
+}
+`;
+
+exports[`documentation JSON snapshot (normative wording) > fleex 'panel' update 1`] = `
+{
+  "aliases": [],
+  "arguments": [
+    {
+      "description": "Panel to update: exact name or UUID, as shown by 'fleex panel list'",
+      "name": "panel",
+      "required": true,
+      "variadic": false,
+    },
+  ],
+  "description": "Update a panel. PATCH semantics: ONLY the fields whose flags you pass are changed. Member edits are incremental (--add-member/--rm-member/--set-member-model) — you never resend the full member list except with --member-order.",
+  "name": "update",
+  "notes": "Examples:
+  $ fleex panel update design-crew --add-member catalyst:claude-opus-4-6
+  $ fleex panel update design-crew --rm-member reviewer --add-member builder
+  $ fleex panel update design-crew --set-member-model catalyst:inherited
+  $ fleex panel update design-crew --member-order builder,catalyst,reviewer
+  $ fleex panel update design-crew --orchestrator-persona none
+
+Notes:
+  At most ONE flag may read from stdin ("-") per invocation.
+  Recommended agent workflow: 'fleex panel show <panel> --json' first (backup), then update.",
+  "options": [
+    {
+      "defaultValue": undefined,
+      "description": "Set the display name (human-facing label shown in the UI)",
+      "flags": "--display-name <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Rename the panel's machine name. Existing references to the old name are NOT rewritten — a warning is printed.",
+      "flags": "--name <name>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Set the panel description. Pass "" (empty string) to clear it.",
+      "flags": "--description <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Set the execution mode. Allowed values: claude_code | message. Any other value fails before any API call.",
+      "flags": "--execution-mode <mode>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": [],
+      "description": "Add a member to the panel: persona name or UUID, optionally followed by ":<model>" to set a model override (e.g. "catalyst:claude-opus-4-6"). Repeatable; new members are appended in the order given. Fails if the persona is already a member — use --set-member-model to change an existing member's model.",
+      "flags": "--add-member <persona[:model]>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": [],
+      "description": "Remove a member (persona name or UUID). Repeatable. Refuses to remove the LAST remaining member — add a replacement first.",
+      "flags": "--rm-member <persona>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": [],
+      "description": "Change the model override of an EXISTING member. Format "<persona>:<model>". Use "<persona>:inherited" to remove the override so the member inherits the panel's default member model. Repeatable. Fails if the persona is not a member.",
+      "flags": "--set-member-model <persona:model|persona:inherited>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Reorder members: comma-separated persona names/UUIDs that MUST contain every current member exactly once (no additions or omissions).",
+      "flags": "--member-order <p1,p2,...>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "REPLACE the ENTIRE orchestrator prompt with this inline text. Mutually exclusive with --orchestrator-prompt-file.",
+      "flags": "--orchestrator-prompt <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "REPLACE the ENTIRE orchestrator prompt with the contents of a file ("-" for stdin). Mutually exclusive with --orchestrator-prompt.",
+      "flags": "--orchestrator-prompt-file <path|->",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Set the orchestrator's model id. Passed through as-is (not validated by the CLI).",
+      "flags": "--orchestrator-model <model>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Set which persona embodies the orchestrator (name or UUID). Pass the literal word "none" to detach it (prompt-only orchestrator, stores null).",
+      "flags": "--orchestrator-persona <name|id|none>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Set the default model inherited by members that have no per-member override.",
+      "flags": "--default-member-model <model>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Enable the panel. Mutually exclusive with --disable.",
+      "flags": "--enable",
+      "mandatory": false,
+      "required": false,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Disable the panel. Mutually exclusive with --enable.",
+      "flags": "--disable",
+      "mandatory": false,
+      "required": false,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Print the exact PATCH payload as JSON and exit WITHOUT writing anything.",
+      "flags": "--dry-run",
+      "mandatory": false,
+      "required": false,
+    },
+  ],
+  "path": "fleex panel update",
+  "subcommands": [],
+  "usage": "[options] <panel>",
+}
+`;
+
+exports[`documentation JSON snapshot (normative wording) > fleex 'skill' update 1`] = `
+{
+  "aliases": [],
+  "arguments": [
+    {
+      "description": "Skill to update: command name (e.g. "review") or UUID, as shown by 'fleex skill list'",
+      "name": "skill",
+      "required": true,
+      "variadic": false,
+    },
+  ],
+  "description": "Update a skill. PATCH semantics: ONLY the fields whose flags you pass are changed; omitted flags leave fields untouched. The skill prompt (--prompt/--prompt-file) is REPLACED in full, never merged.",
+  "name": "update",
+  "notes": "Examples:
+  $ fleex skill update review --prompt-file /tmp/prompt.md
+  $ fleex skill update review --persona builder
+  $ fleex skill update review --disable --dry-run
+
+Notes:
+  At most ONE flag may read from stdin ("-") per invocation.
+  Recommended agent workflow: 'fleex skill show <skill> --json' first (backup), then update.",
+  "options": [
+    {
+      "defaultValue": undefined,
+      "description": "Reassign the skill to another persona, by persona name or UUID (resolved before the API call). A skill always requires a persona: "none" is NOT accepted here.",
+      "flags": "--persona <name|id>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "REPLACE the ENTIRE skill prompt (markdown body) with this inline text. For long content prefer --prompt-file. Mutually exclusive with --prompt-file.",
+      "flags": "--prompt <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "REPLACE the ENTIRE skill prompt (markdown body) with the contents of a file. Use "-" to read from stdin. Mutually exclusive with --prompt.",
+      "flags": "--prompt-file <path|->",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Rename the slash command (invoked as /<command-name>). Existing references to the old name are NOT rewritten — a warning is printed.",
+      "flags": "--command-name <name>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Set the internal skill name",
+      "flags": "--name <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Set the display name (human-facing label shown in the UI)",
+      "flags": "--display-name <text>",
+      "mandatory": false,
+      "required": true,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Enable the skill. Mutually exclusive with --disable.",
+      "flags": "--enable",
+      "mandatory": false,
+      "required": false,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Disable the skill (it stops being offered to agents). Mutually exclusive with --enable.",
+      "flags": "--disable",
+      "mandatory": false,
+      "required": false,
+    },
+    {
+      "defaultValue": undefined,
+      "description": "Print the exact PATCH payload as JSON and exit WITHOUT writing anything.",
+      "flags": "--dry-run",
+      "mandatory": false,
+      "required": false,
+    },
+  ],
+  "path": "fleex skill update",
+  "subcommands": [],
+  "usage": "[options] <skill>",
+}
+`;

@@ -37,6 +37,21 @@ export function getRootProgram(): Command {
   return rootProgram;
 }
 
+// ── extraHelp capture ────────────────────────────────────────────────────────
+// `CommandDef.extraHelp` is rendered through Commander's `addHelpText`, which
+// offers no way to read the text back. `fleex documentation` must expose it
+// (as a `notes` field) so LLM agents discovering the CLI see the Examples and
+// Notes too — the bootstrap registers the resolved text here at attach time.
+const extraHelpByCommand = new WeakMap<Command, string>();
+
+export function recordExtraHelp(cmd: Command, text: string): void {
+  extraHelpByCommand.set(cmd, text);
+}
+
+export function getExtraHelp(cmd: Command): string | undefined {
+  return extraHelpByCommand.get(cmd);
+}
+
 /**
  * Recursively configure every command in the tree to use the pretty help
  * formatter. Safe to call multiple times.

@@ -9,7 +9,7 @@
 import path from 'node:path';
 import { Command } from 'commander';
 import type { CommandDef } from './types.ts';
-import { applyPrettyHelp, setRootProgram } from './help.ts';
+import { applyPrettyHelp, recordExtraHelp, setRootProgram } from './help.ts';
 import { activateWorkspace } from './workspaces.ts';
 import { isJsonMode, setJsonMode } from './colors.ts';
 
@@ -72,7 +72,11 @@ function attachCommand(parent: Command, def: CommandDef): void {
   }
   if (def.extraHelp !== undefined) {
     const text = typeof def.extraHelp === 'function' ? def.extraHelp() : def.extraHelp;
-    if (text && text.trim().length > 0) cmd.addHelpText('after', text);
+    if (text && text.trim().length > 0) {
+      cmd.addHelpText('after', text);
+      // Keep the text retrievable for `fleex documentation` (notes field).
+      recordExtraHelp(cmd, text);
+    }
   }
   cmd.action(async (...args: unknown[]) => {
     try {

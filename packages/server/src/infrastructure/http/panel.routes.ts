@@ -56,6 +56,7 @@ export function panelRoutes(container: Container) {
         members?: PanelMember[];
         orchestratorPrompt?: string;
         orchestratorModel?: string;
+        orchestratorPersonaId?: string | null;
         defaultMemberModel?: string;
         enabled?: boolean;
       };

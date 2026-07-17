@@ -60,6 +60,8 @@ export interface Panel {
   members: PanelMember[];
   orchestratorModel?: string;
   orchestratorPrompt?: string;
+  orchestratorPersonaId?: string | null;
+  defaultMemberModel?: string;
   enabled: boolean;
 }
 

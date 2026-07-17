@@ -22,6 +22,7 @@ export class UpdatePanelUseCase {
       members?: PanelMember[];
       orchestratorPrompt?: string;
       orchestratorModel?: string;
+      orchestratorPersonaId?: string | null;
       defaultMemberModel?: string;
       enabled?: boolean;
     },
@@ -36,6 +37,14 @@ export class UpdatePanelUseCase {
       const existing = await this.panelStore.getByName(changes.name);
       if (existing) {
         throw new PanelNameConflictError(changes.name);
+      }
+    }
+
+    // Validate orchestrator persona if set to a non-null value (null detaches it)
+    if (changes.orchestratorPersonaId) {
+      const persona = await this.personaStore.getById(changes.orchestratorPersonaId);
+      if (!persona) {
+        throw new AgentPersonaNotFoundError(changes.orchestratorPersonaId);
       }
     }
 
