@@ -19,7 +19,7 @@ import {
 } from '../../stores/listFocusStore';
 import { appWs } from '../../services/websocket';
 import { fetchBulkPRStates } from '../../services/api';
-import { buildListFocusGroups, type ListFocusGroup } from './grouping';
+import { buildListFocusGroups, shouldRefreezeForStatusChange, type ListFocusGroup } from './grouping';
 import { ListFocusRow, LIST_FOCUS_COL } from './ListFocusRow';
 import { ListFocusGroupHeader } from './ListFocusGroupHeader';
 import { ListFocusInspector } from './ListFocusInspector';
@@ -236,6 +236,23 @@ export function ListFocusView() {
   const selectedTicket = selectedTicketId ? ticketById.get(selectedTicketId) ?? null : null;
   const selectedIndex = selectedTicketId ? flatFrozen.indexOf(selectedTicketId) : -1;
   const positionLabel = selectedIndex >= 0 ? `${selectedIndex + 1} / ${flatFrozen.length}` : '';
+
+  // Changing the inspected ticket's status is user intent: re-snapshot the
+  // frozen order so its row moves to the new status group live (bug: it only
+  // moved after a reload, because the freeze — which protects ↑/↓ from ambient
+  // reordering — never refroze on a status change). Scoped to the selected
+  // ticket via shouldRefreezeForStatusChange, so navigation and every other
+  // row stay frozen. snapshot() is fresh here: the status change came from a
+  // `tickets` update that already recomputed liveGroups this render.
+  const selectedStatus = selectedTicket?.status ?? null;
+  const prevSelectionRef = useRef<{ id: string | null; status: TicketStatus | null }>({ id: null, status: null });
+  useEffect(() => {
+    const next = { id: selectedTicketId, status: selectedStatus };
+    if (shouldRefreezeForStatusChange(prevSelectionRef.current, next)) {
+      refreeze(snapshot());
+    }
+    prevSelectionRef.current = next;
+  }, [selectedTicketId, selectedStatus, refreeze, snapshot]);
 
   const toggleStatusScope = useCallback(
     (status: TicketStatus) => {
@@ -455,6 +472,10 @@ export function ListFocusView() {
             onOpenFull={() =>
               navigate(`/tickets/board/${selectedTicket.boardId}/ticket/${selectedTicket.id}`)
             }
+            onPrev={() => selectRelative(-1)}
+            onNext={() => selectRelative(1)}
+            canPrev={selectedIndex > 0}
+            canNext={selectedIndex >= 0 && selectedIndex < flatFrozen.length - 1}
           />
         )}
       </div>

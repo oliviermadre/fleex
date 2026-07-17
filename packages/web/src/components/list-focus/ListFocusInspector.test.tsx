@@ -80,6 +80,10 @@ function renderInspector(props: Partial<Parameters<typeof ListFocusInspector>[0]
       onClose={() => {}}
       onStatusChange={() => {}}
       onOpenFull={() => {}}
+      onPrev={() => {}}
+      onNext={() => {}}
+      canPrev
+      canNext
       {...props}
     />,
   );
@@ -152,16 +156,25 @@ describe('ListFocusInspector header (cockpit usability redesign, #407)', () => {
   });
   afterEach(cleanup);
 
-  it('leads with the ticket title + id, before the board/meta line', () => {
-    // WHY: NaS — the first thing the sidebar shows must be the TITLE (+ its id),
-    // not the board. Pre-redesign the board/id line came FIRST and the title sat
-    // underneath, which "made no sense".
-    const { container } = renderInspector({ board });
+  it('leads visually with the ticket title + id as the primary heading', () => {
+    // WHY: NaS — the TITLE (+ its id) is the sidebar's primary element and owns
+    // the <h2>. The board is now quiet metadata that lives in the faint top meta
+    // bar (round 4), so it must NOT be part of the title heading.
+    renderInspector({ board });
     const heading = screen.getByRole('heading', { level: 2 });
     expect(heading.textContent).toContain('Fix auth loop');
     expect(heading.textContent).toContain('#412');
+    expect(heading.textContent).not.toContain('Fleex Core');
+  });
+
+  it('puts the board in the top meta bar, ahead of the title (round 4)', () => {
+    // WHY: round 4 — the board is demoted to quiet metadata that rides in the top
+    // meta bar next to the list position, so it stops competing with the status
+    // control below. Only its DOM position moved up; the title stays the primary
+    // <h2>. This is the deliberate reversal of the round-1 "title-before-board".
+    const { container } = renderInspector({ board });
     const text = container.textContent ?? '';
-    expect(text.indexOf('Fix auth loop')).toBeLessThan(text.indexOf('Fleex Core'));
+    expect(text.indexOf('Fleex Core')).toBeLessThan(text.indexOf('Fix auth loop'));
   });
 
   it('keeps the board and position visible as secondary info', () => {
@@ -179,14 +192,16 @@ describe('ListFocusInspector header (cockpit usability redesign, #407)', () => {
     expect(screen.getByText('Start')).toBeTruthy();
   });
 
-  it('uses the NanoKanban micro-kanban for status and changes it on click', () => {
-    // WHY: NaS — reuse the same micro-kanban as the worktree sidebar instead of
-    // the plain status chip, for a consistent one-click status change.
+  it('uses a colored status dropdown and changes status on select (round 5)', () => {
+    // WHY: NaS round 5 — the prototype swaps the micro-kanban for a status-tinted
+    // dropdown ("un dropdown pour le statut avec la coloration qui va bien"). The
+    // trigger shows the current status; opening it and picking another calls back.
     const onStatusChange = vi.fn();
-    renderInspector({ board, onStatusChange });
-    const reviewing = document.querySelector(`[title="${TICKET_STATUS_LABELS['reviewing']}"]`);
-    expect(reviewing).not.toBeNull();
-    fireEvent.click(reviewing!);
+    renderInspector({ board, onStatusChange }); // ticket status defaults to 'doing'
+    const trigger = screen.getByText(TICKET_STATUS_LABELS['doing']!);
+    fireEvent.click(trigger);
+    const reviewingOption = screen.getByText(TICKET_STATUS_LABELS['reviewing']!);
+    fireEvent.click(reviewingOption);
     expect(onStatusChange).toHaveBeenCalledWith('reviewing');
   });
 
@@ -200,68 +215,57 @@ describe('ListFocusInspector header (cockpit usability redesign, #407)', () => {
     expect(text.indexOf('10 / 12')).toBeLessThan(text.indexOf('Fix auth loop'));
   });
 
-  it('pairs "Open full ticket" with the close button in the top-right (round 2)', () => {
-    // WHY: NaS — move open-full up next to the ✕ so the header actions cluster
-    // in the corner rather than sitting mid-line. Same parent = same cluster.
+  it('pairs "Open full" with the close button in the top-right (round 5 label)', () => {
+    // WHY: NaS — the action shortened to "Open full ↗" (round 5) and stays paired
+    // with the ✕ so the header actions cluster in the corner. Same parent =
+    // same cluster.
     const onOpenFull = vi.fn();
     renderInspector({ board, onOpenFull });
-    const openFull = screen.getByRole('button', { name: /open full ticket/i });
+    const openFull = screen.getByRole('button', { name: /open full/i });
     const close = screen.getByRole('button', { name: /close/i });
     expect(openFull.parentElement).toBe(close.parentElement);
     fireEvent.click(openFull);
     expect(onOpenFull).toHaveBeenCalled();
   });
 
-  it('constrains the status kanban to a fixed dropdown width, not the sidebar (round 2)', () => {
-    // WHY: NaS — NanoKanban lays columns out with flex-1, so an unconstrained
-    // parent lets it grow "énorme" as the sidebar widens. It must sit in a
-    // fixed-width wrapper (w-[100px], the worktree-sidebar convention) so it
-    // stays dropdown-sized. We assert the kanban has a fixed arbitrary-width
-    // ancestor rather than a specific px, to stay robust to fine-tuning.
+  it('places the status dropdown BEFORE the Smart Session launcher on line 3 (round 5)', () => {
+    // WHY: NaS round 5 — the prototype puts the status control on the left of the
+    // last header line and the launcher on its right, so status must DOM-precede
+    // the launcher.
     renderInspector({ board });
-    const statusBtn = document.querySelector(`[title="${TICKET_STATUS_LABELS['doing']}"]`);
-    expect(statusBtn).not.toBeNull();
-    expect(statusBtn!.closest('[class*="w-["]')).not.toBeNull();
-  });
-
-  it('places the status kanban BEFORE the Smart Session launcher in the DOM (round 3)', () => {
-    // WHY: NaS round 3 — "on intervertit le SmartSessionButton et le NanoKanban".
-    // The kanban rejoins the board/meta row while the launcher drops to its own
-    // line below, so the kanban must now DOM-precede the launcher.
-    renderInspector({ board });
-    const statusBtn = document.querySelector(`[title="${TICKET_STATUS_LABELS['doing']}"]`)!;
+    const status = screen.getByText(TICKET_STATUS_LABELS['doing']!);
     const launcher = screen.getByText('Start');
     expect(
-      statusBtn.compareDocumentPosition(launcher) & Node.DOCUMENT_POSITION_FOLLOWING,
+      status.compareDocumentPosition(launcher) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
-  it('sizes the status kanban to a prominent 250×50 — not the launcher (round 3 fix)', () => {
-    // WHY: NaS — "c'est le nanokanban qui doit faire 250x50". The featured
-    // fixed control is the STATUS kanban; my first pass wrongly blew up the
-    // launcher instead ("il est gigantesque"). The kanban sits in a 250×50 box.
-    renderInspector({ board });
-    const statusBtn = document.querySelector(`[title="${TICKET_STATUS_LABELS['doing']}"]`)!;
-    expect(statusBtn.closest('[class*="w-[250px]"]')).not.toBeNull();
-    expect(statusBtn.closest('[class*="h-[50px]"]')).not.toBeNull();
-  });
-
-  it('keeps the Smart Session launcher at its usual compact size (round 3 fix)', () => {
-    // WHY: NaS — the launcher must be the normal dashboard size, never the
-    // 250×50 footprint; that belongs to the kanban.
+  it('keeps the Smart Session launcher at its usual compact size (round 5)', () => {
+    // WHY: NaS round 5 — the launcher shares line 3 with the status dropdown at
+    // its normal dashboard size (not the full-width / 250×50 experiments).
     renderInspector({ board });
     const trigger = screen.getByText('Start').closest('button')!;
+    expect(trigger.className).not.toContain('w-full');
     expect(trigger.className).not.toContain('w-[250px]');
-    expect(trigger.className).not.toContain('h-[50px]');
   });
 
-  it('centers the launcher on its own line (round 3)', () => {
-    // WHY: NaS round 3 — "on le centre sur sa ligne". The launcher sits alone
-    // on a row wrapped in a justify-center container. We look ABOVE the button
-    // (parentElement) so the button's own inline-flex justify-center can't
-    // satisfy the assertion — the centering must come from the row wrapper.
-    renderInspector({ board });
-    const trigger = screen.getByText('Start').closest('button')!;
-    expect(trigger.parentElement!.closest('[class*="justify-center"]')).not.toBeNull();
+  it('steps to the previous/next ticket via the < > chevrons (round 5)', () => {
+    // WHY: NaS round 5 — the position sits in a [< n/total >] stepper; the
+    // chevrons move the cursor in the frozen list (same as ↑/↓).
+    const onPrev = vi.fn();
+    const onNext = vi.fn();
+    renderInspector({ board, onPrev, onNext });
+    fireEvent.click(screen.getByRole('button', { name: /previous/i }));
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    expect(onPrev).toHaveBeenCalled();
+    expect(onNext).toHaveBeenCalled();
+  });
+
+  it('disables the chevrons at the list bounds (round 5)', () => {
+    // WHY: at the first/last ticket there is nowhere to step, so the matching
+    // chevron must be disabled rather than silently no-op.
+    renderInspector({ board, canPrev: false, canNext: true });
+    expect((screen.getByRole('button', { name: /previous/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: /next/i }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

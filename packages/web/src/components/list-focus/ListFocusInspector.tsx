@@ -8,7 +8,7 @@ import { executeSkill } from '../../services/api';
 import type { InspectorFocus } from '../../stores/listFocusStore';
 import { TicketDeliverables } from '../tickets/TicketDeliverables';
 import { TicketComments } from '../tickets/TicketComments';
-import { NanoKanban } from '../tickets/NanoKanban';
+import { StatusChipDropdown } from './StatusChipDropdown';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { SidebarWidthHandle } from '../main-panel/right-sidebar/SidebarWidthHandle';
@@ -27,6 +27,12 @@ interface Props {
   onClose: () => void;
   onStatusChange: (status: TicketStatus) => void;
   onOpenFull: () => void;
+  /** Move the cursor to the previous/next ticket in the frozen list (the < > chevrons). */
+  onPrev: () => void;
+  onNext: () => void;
+  /** Whether a previous/next ticket exists — disables the chevron at the bounds. */
+  canPrev: boolean;
+  canNext: boolean;
 }
 
 /**
@@ -48,6 +54,10 @@ export function ListFocusInspector({
   onClose,
   onStatusChange,
   onOpenFull,
+  onPrev,
+  onNext,
+  canPrev,
+  canNext,
 }: Props) {
   const width = useUIStore((s) => s.rightSidebarWidth);
   // Comment-first (review remark 2): the cockpit's primary action is reading /
@@ -102,25 +112,58 @@ export function ListFocusInspector({
         style={{ width }}
         className="flex h-full flex-col border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)]"
       >
-        {/* Header (NaS redesign, round 3). A thin meta bar leads: the list
-            position sits top-left — it's your cursor in the frozen list (↑/↓
-            moves it), so it reads as an index, not buried mid-line — while
-            "open full ticket" + the ✕ close button pair up top-right. The
-            ticket title + id own the next line (primary). Board + the fixed
-            250×50 NanoKanban (the featured one-click status control, NaS round
-            3) form the secondary row, then the compact Smart Session launcher
-            sits centered on its own line. */}
-        <div className="flex flex-col gap-2 border-b border-[var(--theme-border-subtle)] px-4 py-3">
-          {/* Line 1 — meta bar: list position (top-left) · open-full + ✕ (top-right). */}
-          <div className="flex items-center gap-2 text-[10px] text-[var(--theme-text-faint)]">
-            {positionLabel && <span className="shrink-0 tabular-nums font-medium">{positionLabel}</span>}
+        {/* Header (NaS redesign, round 5 — matches the approved prototype).
+            Three lines, each with a single job:
+              1. meta bar — a [< n/total >] pill (prev/next stepper into the
+                 frozen list) + the board (quiet), with "Open full ↗" + ✕ paired
+                 top-right.
+              2. the ticket title, given strong emphasis (xl/bold), with a faint
+                 #id trailing it.
+              3. the status dropdown (tinted to the current status) on the left
+                 and the Smart Session launcher on the right. */}
+        <div className="flex flex-col gap-3 border-b border-[var(--theme-border-subtle)] px-4 py-3">
+          {/* Line 1 — meta bar. */}
+          <div className="flex items-center gap-2 text-[11px] text-[var(--theme-text-faint)]">
+            {/* Position stepper: < n/total >. The chevrons move the selection in
+                the frozen list (same as ↑/↓); disabled at the list bounds. */}
+            <div className="flex shrink-0 items-center gap-0.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-1 py-0.5">
+              <button
+                type="button"
+                onClick={onPrev}
+                disabled={!canPrev}
+                title="Previous (↑)"
+                className="flex h-4 w-4 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)] disabled:pointer-events-none disabled:opacity-30"
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="10,4 6,8 10,12" />
+                </svg>
+              </button>
+              {positionLabel && <span className="tabular-nums font-medium text-[var(--theme-text-muted)]">{positionLabel}</span>}
+              <button
+                type="button"
+                onClick={onNext}
+                disabled={!canNext}
+                title="Next (↓)"
+                className="flex h-4 w-4 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)] disabled:pointer-events-none disabled:opacity-30"
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6,4 10,8 6,12" />
+                </svg>
+              </button>
+            </div>
+            {board && (
+              <span className="flex min-w-0 items-center gap-1 truncate font-medium text-[var(--theme-text-muted)]">
+                <span className="shrink-0">{board.emoji}</span>
+                <span className="truncate">{board.name}</span>
+              </span>
+            )}
             <div className="ml-auto flex shrink-0 items-center gap-1">
               <button
                 type="button"
                 onClick={onOpenFull}
                 className="whitespace-nowrap text-[var(--theme-text-muted)] underline-offset-2 transition-colors hover:text-[var(--theme-accent)] hover:underline"
               >
-                Open full ticket ↗
+                Open full ↗
               </button>
               <button
                 type="button"
@@ -136,42 +179,26 @@ export function ListFocusInspector({
             </div>
           </div>
 
-          {/* Line 2 — title + id (primary). */}
-          <h2 className="text-sm font-semibold leading-snug text-[var(--theme-text-primary)]">
+          {/* Line 2 — title (primary, strongly emphasised) + faint #id. */}
+          <h2 className="text-xl font-bold leading-tight text-[var(--theme-text-primary)]">
             {ticket.title}
-            <span className="ml-1.5 font-mono text-[11px] font-normal text-[var(--theme-text-faint)]">
+            <span className="ml-2 align-middle font-mono text-sm font-normal text-[var(--theme-text-faint)]">
               #{ticket.displayId}
             </span>
           </h2>
 
-          {/* Line 3 — board (secondary) · the featured 250×50 micro-kanban
-              (right). It's a fixed footprint (never stretches with the sidebar,
-              NaS round 2); at 250×50 its columns stretch to fill and stay
-              one-click-legible (NaS round 3 — "c'est le nanokanban qui doit
-              faire 250x50"). max-w-full lets it shrink on a narrow sidebar. */}
-          <div className="flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2 text-[10px] text-[var(--theme-text-faint)]">
-              {board && (
-                <span className="truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 font-medium text-[var(--theme-text-muted)]">
-                  {board.emoji} {board.name}
-                </span>
-              )}
+          {/* Line 3 — status dropdown (left) · Smart Session launcher (right).
+              stopPropagation on the launcher wrapper: opening its menu must never
+              bubble up to the aside / row-selection handlers. */}
+          <div className="flex items-center justify-between gap-2">
+            <StatusChipDropdown status={ticket.status} onChange={onStatusChange} size="md" />
+            <div onClick={(e) => e.stopPropagation()}>
+              <SmartSessionButton
+                sessions={ticketSessions}
+                ticketId={ticket.id}
+                onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
+              />
             </div>
-            <div className="h-[50px] w-[250px] max-w-full shrink-0">
-              <NanoKanban status={ticket.status} onStatusChange={onStatusChange} size="sm" className="h-full w-full" />
-            </div>
-          </div>
-
-          {/* Line 4 — compact Smart Session launcher, centered on its own line
-              (NaS round 3: usual size, not the giant override). stopPropagation:
-              opening the launcher menu must never bubble up to the aside /
-              row-selection handlers. */}
-          <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
-            <SmartSessionButton
-              sessions={ticketSessions}
-              ticketId={ticket.id}
-              onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
-            />
           </div>
         </div>
 

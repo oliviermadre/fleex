@@ -13,22 +13,21 @@ const ABBREVS: Record<string, string> = {
   cancelled: 'CNCL',
 };
 
-/** Inline kanban status picker. `size="sm"` scales down for tight header areas. */
-export function NanoKanban({ status, onStatusChange, size = 'md', className }: {
+/**
+ * Inline kanban status picker. `size="sm"` scales down for tight header areas.
+ * It renders at its NATURAL height so each column's colored band sits flush at
+ * the top; callers give it a width by wrapping it (e.g. `w-[100px]` /
+ * `w-[250px]`), never a height — forcing a tall box would center the columns and
+ * leave a gap above the band.
+ */
+export function NanoKanban({ status, onStatusChange, size = 'md' }: {
   status: TicketStatus;
   onStatusChange: (status: TicketStatus) => void;
   size?: 'sm' | 'md';
-  /**
-   * Extra classes merged onto the root. Lets a caller give the kanban an
-   * explicit footprint (e.g. `h-[50px] w-full`); the columns stretch to fill it
-   * and `justify-center` keeps the labels vertically centered. At the natural
-   * (content) height this is a no-op, so existing compact usages are unchanged.
-   */
-  className?: string;
 }) {
   const sm = size === 'sm';
   return (
-    <div className={cn('flex overflow-hidden rounded-md border border-[var(--theme-border)]', className)}>
+    <div className="flex overflow-hidden rounded-md border border-[var(--theme-border)]">
       {(TICKET_STATUSES as readonly TicketStatus[]).map((s) => {
         const active = status === s;
         const colors = STATUS_COLORS[s] ?? STATUS_COLORS.backlog!;
@@ -37,7 +36,7 @@ export function NanoKanban({ status, onStatusChange, size = 'md', className }: {
             key={s}
             title={TICKET_STATUS_LABELS[s]}
             className={cn(
-              'group relative flex flex-1 flex-col items-center justify-center pt-0 transition-colors',
+              'group relative flex flex-1 flex-col items-center pt-0 transition-colors',
               sm ? 'gap-px pb-0.5' : 'gap-1 pb-1.5',
               active ? colors.bg : colors.hoverBg,
             )}

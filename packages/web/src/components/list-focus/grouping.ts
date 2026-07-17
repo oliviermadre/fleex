@@ -61,6 +61,25 @@ function orderBy(activityByTicket: Record<string, AgentActivityState>) {
   };
 }
 
+/**
+ * Decide whether an open inspector should re-snapshot ("refreeze") its frozen
+ * group order in response to the selected ticket's status.
+ *
+ * The list order is frozen while the inspector is open so ↑/↓ navigation never
+ * reshuffles the rows under the cursor. Changing the INSPECTED ticket's status,
+ * though, is explicit user intent: its row must move to the new status group
+ * live (otherwise it only moves after a reload). Returns true only when the
+ * SAME ticket's status changed — never on open (`prev.id` null), close
+ * (`next.id` null), or navigation to another ticket (id changed) — so every
+ * other row stays protected by the freeze.
+ */
+export function shouldRefreezeForStatusChange(
+  prev: { id: string | null; status: TicketStatus | null },
+  next: { id: string | null; status: TicketStatus | null },
+): boolean {
+  return next.id !== null && prev.id === next.id && prev.status !== next.status;
+}
+
 export function buildListFocusGroups(
   tickets: Ticket[],
   activityByTicket: Record<string, AgentActivityState>,
