@@ -360,12 +360,13 @@ export function ListFocusView() {
       <div ref={parentRef} className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* Column header — id · pictos · type · title · activity · board · PR
-              (pass 4, remarks 2 + 5). */}
-          <div className="flex items-center gap-3 border-b border-[var(--theme-border-subtle)] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">
+              · badges · session (pass 7). gap-2 mirrors the rows so the labels
+              stay aligned with the fixed-width columns. */}
+          <div className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">
             <div className={LIST_FOCUS_COL.id}>ID</div>
-            {/* ★ + priority pictos column — no label needed, kept for alignment. */}
+            {/* blocked + ★ + priority pictos column — no label, kept for alignment. */}
             <div className={LIST_FOCUS_COL.pictos}>
-              <span className="sr-only">Favorite / priority</span>
+              <span className="sr-only">Blocked / favorite / priority</span>
             </div>
             <div className={LIST_FOCUS_COL.type}>Type</div>
             <div className={LIST_FOCUS_COL.main}>Ticket</div>
@@ -379,6 +380,10 @@ export function ListFocusView() {
             <div className={cn(LIST_FOCUS_COL.badge, 'flex justify-center')} title="Deliverables">
               <DeliverableIcon />
               <span className="sr-only">Deliverables</span>
+            </div>
+            {/* SmartSessionButton column (pass 7) — no label, kept for alignment. */}
+            <div className={LIST_FOCUS_COL.session}>
+              <span className="sr-only">Session</span>
             </div>
           </div>
 
@@ -446,6 +451,7 @@ export function ListFocusView() {
                           selected={ticket.id === selectedTicketId}
                           onOpen={(focus) => handleOpen(ticket.id, focus)}
                           onToggleFavorite={() => void updateTicket(ticket.id, { favorite: !ticket.favorite })}
+                          onToggleBlocked={() => void updateTicket(ticket.id, { blocked: !ticket.blocked })}
                         />
                       ))}
                   </section>

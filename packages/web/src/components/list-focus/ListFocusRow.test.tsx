@@ -1,8 +1,9 @@
-import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, beforeEach, vi } from 'vitest';
 import { render, cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Board, Ticket, TicketUnreadCounts } from '@fleex/shared';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { ListFocusRow } from './ListFocusRow';
 
 // floating-ui popovers (priority/type pickers) need observers jsdom lacks.
@@ -17,9 +18,18 @@ beforeAll(() => {
 });
 
 const originalUpdateTicket = useTicketStore.getState().updateTicket;
+const originalOpenSession = useTicketStore.getState().openSessionFromTicket;
+beforeEach(() => {
+  // SmartSessionButton fires workflowTemplateStore.refresh() on mount — stub it
+  // so no network is hit (same setup as SmartSessionButton.test.tsx).
+  useWorkflowTemplateStore.setState({ templates: [], refresh: vi.fn().mockResolvedValue(undefined) });
+});
 afterEach(() => {
   cleanup();
-  useTicketStore.setState({ updateTicket: originalUpdateTicket });
+  useTicketStore.setState({
+    updateTicket: originalUpdateTicket,
+    openSessionFromTicket: originalOpenSession,
+  });
 });
 
 /**
@@ -88,6 +98,7 @@ function renderRow(props: Partial<Parameters<typeof ListFocusRow>[0]> = {}) {
       selected={false}
       onOpen={() => {}}
       onToggleFavorite={() => {}}
+      onToggleBlocked={() => {}}
       {...props}
     />,
   );
@@ -208,6 +219,62 @@ describe('ListFocusRow', () => {
     fireEvent.click(container.querySelector('[title="Remove from favorites"]')!);
     expect(onToggleFavorite).toHaveBeenCalledTimes(1);
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('renders the SmartSessionButton as the last column (pass 7: quick action)', () => {
+    // WHY: NaS — "C'est le bouton d'action rapide !" The cockpit must offer the
+    // same session/skill/workflow launcher as the kanban card, at line end.
+    const { container } = renderRow();
+    const row = container.querySelector('[role="button"]')!;
+    // With zero sessions and no skills the button renders its "Start" state.
+    expect(row.lastElementChild?.textContent).toContain('Start');
+  });
+
+  it('clicking the session button never opens the inspector (pass 7)', () => {
+    const onOpen = vi.fn();
+    useTicketStore.setState({
+      openSessionFromTicket: vi.fn().mockResolvedValue({ sessionId: 's1' }),
+    });
+    renderRow({ onOpen });
+    fireEvent.click(screen.getByText('Start'));
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('always shows the favorite star, even unfavorited (pass 7)', () => {
+    // WHY: the hover-reveal pattern hid the state; NaS wants the star visible
+    // "en permanence (avec le bon état)".
+    const { container } = renderRow();
+    const star = container.querySelector('[title="Add to favorites"]');
+    expect(star).not.toBeNull();
+    expect(star!.className).not.toContain('opacity-0');
+  });
+
+  it('always shows the blocked icon with its state and toggles it (pass 7)', () => {
+    const onToggleBlocked = vi.fn();
+    const onOpen = vi.fn();
+    const { container } = renderRow({ onToggleBlocked, onOpen });
+    const lock = container.querySelector('[title="Mark as blocked"]');
+    expect(lock).not.toBeNull();
+    expect(lock!.className).not.toContain('opacity-0');
+    fireEvent.click(lock!);
+    expect(onToggleBlocked).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+    cleanup();
+    const blocked = renderRow({ ticket: makeTicket({ blocked: true }) });
+    expect(blocked.container.querySelector('[title="Unblock ticket"]')).not.toBeNull();
+  });
+
+  it('tightens the leading columns: w-10 id, gap-2 row, pictos blocked · star · priority (pass 7)', () => {
+    // WHY: NaS — shrink the id column and the margins between the first columns
+    // to free the width the SmartSessionButton needs at line end.
+    const { container } = renderRow();
+    const row = container.querySelector('[role="button"]')!;
+    expect(row.className).toContain('gap-2');
+    expect(row.firstElementChild?.className).toContain('w-10');
+    const pictoButtons = row.children[1]!.querySelectorAll('button');
+    expect(pictoButtons[0]?.getAttribute('title')).toMatch(/blocked/i);
+    expect(pictoButtons[1]?.getAttribute('title')).toMatch(/favorites/i);
+    expect(pictoButtons[2]?.getAttribute('title')).toMatch(/^Priority/);
   });
 
   it('strips the org from the PR badge label but keeps it in the tooltip (review remark 5)', () => {
