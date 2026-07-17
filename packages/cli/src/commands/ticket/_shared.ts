@@ -29,6 +29,42 @@ export function accumulate(val: string, prev: string[] = []): string[] {
 }
 
 /**
+ * Cumulative agentic cost tiers (#404), mirroring the Kanban card badge in
+ * `packages/web/src/lib/cost.ts`: green ≤ $5, yellow ≤ $10, red ≤ $50, critical
+ * (bold red) > $50. Bounds are INCLUSIVE. Kept in sync by hand — the web tiers
+ * carry theme-aware tints the terminal can't use, so the thresholds are
+ * duplicated here rather than shared. Recalibrate both places together.
+ */
+export type CostTierName = 'green' | 'yellow' | 'red' | 'critical';
+
+export function costTier(usd: number): CostTierName {
+  if (usd <= 5) return 'green';
+  if (usd <= 10) return 'yellow';
+  if (usd <= 50) return 'red';
+  return 'critical';
+}
+
+/** Two decimals, `$` prefix — matches the web `formatTicketCost`: `12.8 → "$12.80"`. */
+export function formatCostUsd(usd: number): string {
+  return `$${usd.toFixed(2)}`;
+}
+
+/** Colour a formatted cost by its tier for terminal output. */
+export function colorizeCost(usd: number): string {
+  const label = formatCostUsd(usd);
+  switch (costTier(usd)) {
+    case 'green':
+      return c.green(label);
+    case 'yellow':
+      return c.yellow(label);
+    case 'red':
+      return c.red(label);
+    case 'critical':
+      return c.bold(c.red(label));
+  }
+}
+
+/**
  * Parse and validate a GitHub PR/issue reference in the form `org/name#123`.
  * Exits with a helpful message on malformed input. Returns the canonical ref
  * plus its parts and a GitHub URL (`/pull/` or `/issues/` per `kind`).
