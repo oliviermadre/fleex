@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, cleanup, act, fireEvent, screen } from '@testing-library/react';
+import { render, cleanup, act, fireEvent, screen, waitFor } from '@testing-library/react';
 import type { Skill, WorkflowTemplate, Panel, AgentPersona } from '@fleex/shared';
 import { SmartSessionButton } from './SmartSessionButton';
 import * as api from '../../services/api';
@@ -374,6 +374,54 @@ describe('SmartSessionButton — launcher panel', () => {
     });
 
     expect(onExecuteSkill).toHaveBeenCalledWith('s1');
+  });
+
+  it('caps chip counters at 2 digits ("99+") so the chip row stays compact', async () => {
+    // 120 personas: the "Personas" chip and the "Tous" sum must both cap at 99+
+    // instead of growing to 3-digit counters that would wrap the chip row.
+    useAgentPersonaStore.setState({
+      personas: Array.from({ length: 120 }, (_, i) => ({
+        ...persona,
+        id: `ap${i}`,
+        name: `p${i}`,
+        displayName: `Persona ${i}`,
+      })),
+      loaded: true,
+      loadPersonas: vi.fn().mockResolvedValue(undefined),
+    });
+    render(<SmartSessionButton sessions={[]} ticketId="t1" onExecuteSkill={vi.fn()} />);
+    await openDropdown();
+
+    expect(screen.getByRole('button', { name: 'Personas 99+' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Tous 99+' })).toBeTruthy();
+    // Small counts stay exact.
+    expect(screen.getByRole('button', { name: 'Skills 1' })).toBeTruthy();
+  });
+
+  it('caps the popup height at 350px even when more viewport space is available', async () => {
+    // Floating UI measures the viewport via documentElement.clientHeight (0 in
+    // jsdom) — simulate a tall window so an uncapped popover would grow ~760px.
+    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(768);
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1024);
+    render(<SmartSessionButton sessions={[]} ticketId="t1" onExecuteSkill={vi.fn()} />);
+    await openDropdown();
+
+    const menu = screen.getByRole('menu');
+    await waitFor(() => expect(menu.style.maxHeight).toBe('350px'));
+  });
+
+  it('shrinks below 350px when the viewport offers less space (small window)', async () => {
+    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(240);
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(1024);
+    render(<SmartSessionButton sessions={[]} ticketId="t1" onExecuteSkill={vi.fn()} />);
+    await openDropdown();
+
+    const menu = screen.getByRole('menu');
+    await waitFor(() => {
+      const h = parseInt(menu.style.maxHeight, 10);
+      expect(h).toBeGreaterThan(0);
+      expect(h).toBeLessThan(350);
+    });
   });
 
   it('does not render chips or asset lists without a ticketId', async () => {

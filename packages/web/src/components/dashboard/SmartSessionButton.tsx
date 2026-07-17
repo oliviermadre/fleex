@@ -55,6 +55,10 @@ function ChevronDownIcon() {
 // Min width keeps compact states stable; whitespace-nowrap prevents long labels from wrapping.
 const BUTTON_WIDTH = 'w-[108px]';
 
+// The launcher popover never grows past this, even on tall windows; on small
+// windows the popover shrinks further to the available viewport space.
+const LAUNCHER_MAX_HEIGHT = 350;
+
 /**
  * Map a DisplayStatus to border / background / text / hover classes
  * so the entire button shell reflects the session state.
@@ -288,7 +292,7 @@ function LauncherPanel({
         ref={floatingRef}
         style={floatingStyles}
         {...floatingProps}
-        className="z-50 w-[340px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] pb-1 shadow-xl"
+        className="z-50 w-[380px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] pb-1 shadow-xl"
       >
         {/* Search — sticky at the very top of the scroll container */}
         <div className="sticky top-0 z-[2] h-[46px] border-b border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-2">
@@ -419,7 +423,8 @@ function FilterChip({ label, count, active, onClick }: { label: string; count: n
       )}
     >
       <span>{label}</span>
-      <span className="opacity-70">{count}</span>
+      {/* 2 digits max so the five chips keep fitting on a single row. */}
+      <span className="opacity-70">{count > 99 ? '99+' : count}</span>
     </button>
   );
 }
@@ -429,7 +434,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const skills = useSkillStore((s) => s.skills);
   const addToast = useToastStore((s) => s.addToast);
-  const { open: dropdownOpen, setOpen: setDropdownOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover();
+  const { open: dropdownOpen, setOpen: setDropdownOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ maxHeight: LAUNCHER_MAX_HEIGHT });
   const [internalCreating, setInternalCreating] = useState(false);
   // Transient acknowledgement while a workflow/skill/panel/persona launch is in flight.
   const [launching, setLaunching] = useState(false);
