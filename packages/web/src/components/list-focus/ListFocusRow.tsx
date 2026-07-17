@@ -20,14 +20,18 @@ import { tint, tintClasses } from '../../lib/tints';
  * Pass 7 column order: id · blocked+★+priority pictos · type · title ·
  * activity badge (waiting/running/idle since) · board · PR · count badges ·
  * SmartSessionButton. Leading columns are deliberately tight (narrow id,
- * gap-2 row) to free the width the session button needs at line end.
+ * gap-1.5 row) to free the width the session button needs at line end; type,
+ * activity, board and PR are centered in their cells (pass 8).
  */
 export const LIST_FOCUS_COL = {
-  // w-10: fits a 4-digit "#1234" in 11px mono — pass 7 shrank it from w-14.
-  id: 'w-10 shrink-0',
+  // w-9: fits "#1234" in 11px mono — pass 8 shrank it one more notch (from w-10)
+  // to close the gap NaS flagged between the id and the first (blocked) picto.
+  id: 'w-9 shrink-0',
   // Three always-visible fixed-size pictos: blocked · ★ · priority (pass 7).
   pictos: 'w-14 shrink-0',
-  type: 'w-16 shrink-0',
+  // w-14 (was w-16): the type badge is centered (pass 8) so a tighter slot both
+  // densifies the type↔title spacing and keeps the badge visually centered.
+  type: 'w-14 shrink-0',
   main: 'min-w-0 flex-1',
   // w-32: fits "Waiting for 59s" on one line — a wrapped badge is forbidden
   // (pass 6); the pill itself is also whitespace-nowrap.
@@ -64,6 +68,9 @@ function CountBadge({
   onClick: () => void;
 }) {
   const title = unread > 0 ? `${total} ${label}, ${unread} unread` : `${total} ${label}`;
+  // Clamp the visible count to "99+" so the badge stays mono-line in its narrow
+  // column (pass 8) — the true total lives on in the tooltip.
+  const display = total > 99 ? '99+' : String(total);
   return (
     <button
       type="button"
@@ -73,12 +80,12 @@ function CountBadge({
         onClick();
       }}
       className={cn(
-        'relative inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] tabular-nums transition-colors hover:bg-[var(--theme-bg-hover)]',
+        'relative inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-[11px] tabular-nums transition-colors hover:bg-[var(--theme-bg-hover)]',
         unread > 0 ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]',
       )}
     >
       {icon}
-      <span>{total}</span>
+      <span>{display}</span>
       {unread > 0 && (
         <span className="absolute right-0 top-0.5 h-1.5 w-1.5 rounded-full bg-[var(--theme-accent-active)]" />
       )}
@@ -139,9 +146,9 @@ export function ListFocusRow({
         }
       }}
       className={cn(
-        // gap-2 (was gap-3): tighter columns free the width the session button
-        // needs at line end (pass 7).
-        'group flex cursor-pointer items-center gap-2 border-l-2 px-3 py-2 text-left transition-colors',
+        // gap-1.5 (pass 8, was gap-2): one more notch of densification across
+        // the leading columns — NaS "on peut encore gagner quelques px".
+        'group flex cursor-pointer items-center gap-1.5 border-l-2 px-3 py-2 text-left transition-colors',
         selected
           ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
           : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
@@ -202,8 +209,9 @@ export function ListFocusRow({
       </div>
 
       {/* Type in its own column between priority and title (pass 3, remark 3),
-          clickable to change it — same picker as the kanban card (remark 5). */}
-      <div className={LIST_FOCUS_COL.type}>
+          clickable to change it — same picker as the kanban card (remark 5).
+          Centered in its cell (pass 8). */}
+      <div className={cn(LIST_FOCUS_COL.type, 'flex justify-center')}>
         <TypePickerPopover ticket={ticket} />
       </div>
 
@@ -216,8 +224,9 @@ export function ListFocusRow({
       </div>
 
       {/* Activity badge column, right after the title (pass 4, remark 5):
-          Waiting/Running/idle, each with its live duration (pass 5). */}
-      <div className={LIST_FOCUS_COL.activity}>
+          Waiting/Running/idle, each with its live duration (pass 5). Centered
+          in its cell (pass 8). */}
+      <div className={cn(LIST_FOCUS_COL.activity, 'flex justify-center')}>
         <ActivityBadge
           activity={activity}
           detail={detail}
@@ -226,8 +235,9 @@ export function ListFocusRow({
         />
       </div>
 
-      {/* Board — between the title block and the PR column (pass 4, remark 2). */}
-      <div className={LIST_FOCUS_COL.board}>
+      {/* Board — between the title block and the PR column (pass 4, remark 2).
+          Centered in its cell (pass 8). */}
+      <div className={cn(LIST_FOCUS_COL.board, 'flex justify-center')}>
         {board && (
           <span className="inline-block max-w-full truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
             {board.emoji} {board.name}
@@ -235,8 +245,8 @@ export function ListFocusRow({
         )}
       </div>
 
-      {/* PR (v1 = PR state only) */}
-      <div className={cn(LIST_FOCUS_COL.pr, 'flex items-center gap-1')}>
+      {/* PR (v1 = PR state only) — centered in its cell (pass 8). */}
+      <div className={cn(LIST_FOCUS_COL.pr, 'flex items-center justify-center gap-1')}>
         {prLinks.map((pr: TicketLink) => {
           const state = prStates[pr.ref];
           const hue = state === 'MERGED' ? 'purple' : state === 'CLOSED' ? 'red' : 'green';

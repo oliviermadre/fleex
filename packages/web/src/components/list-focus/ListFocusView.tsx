@@ -19,15 +19,15 @@ import {
 } from '../../stores/listFocusStore';
 import { appWs } from '../../services/websocket';
 import { fetchBulkPRStates } from '../../services/api';
-import { buildListFocusGroups, groupHue, type ListFocusGroup } from './grouping';
+import { buildListFocusGroups, type ListFocusGroup } from './grouping';
 import { ListFocusRow, LIST_FOCUS_COL } from './ListFocusRow';
+import { ListFocusGroupHeader } from './ListFocusGroupHeader';
 import { ListFocusInspector } from './ListFocusInspector';
 import { CommentIcon, DeliverableIcon } from './icons';
 import { STATUS_COLOR } from './StatusChipDropdown';
 import { ToolbarMultiSelect } from './ToolbarSelect';
 import { PriorityIndicator, PRIORITY_LABELS } from '../tickets/PriorityIndicator';
 import { TYPE_ICONS } from '../tickets/TicketTypeBadge';
-import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
 const EMPTY_UNREAD = {
@@ -360,19 +360,20 @@ export function ListFocusView() {
       <div ref={parentRef} className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* Column header — id · pictos · type · title · activity · board · PR
-              · badges · session (pass 7). gap-2 mirrors the rows so the labels
-              stay aligned with the fixed-width columns. */}
-          <div className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">
+              · badges · session (pass 7). gap-1.5 mirrors the rows so the labels
+              stay aligned with the fixed-width columns; type/activity/board/PR
+              headers are centered to match their centered cells (pass 8). */}
+          <div className="flex items-center gap-1.5 border-b border-[var(--theme-border-subtle)] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">
             <div className={LIST_FOCUS_COL.id}>ID</div>
             {/* blocked + ★ + priority pictos column — no label, kept for alignment. */}
             <div className={LIST_FOCUS_COL.pictos}>
               <span className="sr-only">Blocked / favorite / priority</span>
             </div>
-            <div className={LIST_FOCUS_COL.type}>Type</div>
+            <div className={cn(LIST_FOCUS_COL.type, 'text-center')}>Type</div>
             <div className={LIST_FOCUS_COL.main}>Ticket</div>
-            <div className={LIST_FOCUS_COL.activity}>Activity</div>
-            <div className={LIST_FOCUS_COL.board}>Board</div>
-            <div className={LIST_FOCUS_COL.pr}>PR</div>
+            <div className={cn(LIST_FOCUS_COL.activity, 'text-center')}>Activity</div>
+            <div className={cn(LIST_FOCUS_COL.board, 'text-center')}>Board</div>
+            <div className={cn(LIST_FOCUS_COL.pr, 'text-center')}>PR</div>
             <div className={cn(LIST_FOCUS_COL.badge, 'flex justify-center')} title="Comments">
               <CommentIcon />
               <span className="sr-only">Comments</span>
@@ -396,45 +397,17 @@ export function ListFocusView() {
             ) : (
               displayGroups.map((group) => {
                 const collapsed = collapsedGroups.has(group.key);
-                // Kanban status colors on section titles (review remark 6).
-                const hue = groupHue(group.key);
                 return (
                   <section key={group.key}>
-                    <button
-                      type="button"
-                      onClick={() => toggleGroup(group.key)}
-                      className="sticky top-0 z-10 flex w-full items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] px-3 py-1.5 text-left transition-colors hover:bg-[var(--theme-bg-hover)]"
-                    >
-                      <svg
-                        width="10"
-                        height="10"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className={cn(
-                          'text-[var(--theme-text-muted)] transition-transform',
-                          collapsed ? '' : 'rotate-90',
-                        )}
-                      >
-                        <polyline points="6,4 10,8 6,12" />
-                      </svg>
-                      <span
-                        className={cn(
-                          'text-xs font-semibold',
-                          hue
-                            ? cn('rounded px-1.5 py-0.5', tint(hue))
-                            : 'text-[var(--theme-text-secondary)]',
-                        )}
-                      >
-                        {group.label}
-                      </span>
-                      <span className="text-[10px] tabular-nums text-[var(--theme-text-faint)]">
-                        {group.tickets.length}
-                      </span>
-                    </button>
+                    {/* Pass 8: the whole band takes the status colour (bi-tone
+                        bg/label), replacing the old inline pill. */}
+                    <ListFocusGroupHeader
+                      groupKey={group.key}
+                      label={group.label}
+                      count={group.tickets.length}
+                      collapsed={collapsed}
+                      onToggle={() => toggleGroup(group.key)}
+                    />
 
                     {!collapsed &&
                       group.tickets.map((ticket) => (

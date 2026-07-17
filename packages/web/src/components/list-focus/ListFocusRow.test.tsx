@@ -264,17 +264,53 @@ describe('ListFocusRow', () => {
     expect(blocked.container.querySelector('[title="Unblock ticket"]')).not.toBeNull();
   });
 
-  it('tightens the leading columns: w-10 id, gap-2 row, pictos blocked · star · priority (pass 7)', () => {
+  it('tightens the leading columns: w-9 id, gap-1.5 row, pictos blocked · star · priority (pass 7+8)', () => {
     // WHY: NaS — shrink the id column and the margins between the first columns
-    // to free the width the SmartSessionButton needs at line end.
+    // to free width for the SmartSessionButton (pass 7); pass 8 densified them
+    // one more notch (gap-2→gap-1.5, w-10→w-9 id) — "un peu trop de place entre
+    // l'id du ticket et la 1ere icone cadenas".
     const { container } = renderRow();
     const row = container.querySelector('[role="button"]')!;
-    expect(row.className).toContain('gap-2');
-    expect(row.firstElementChild?.className).toContain('w-10');
+    expect(row.className).toContain('gap-1.5');
+    expect(row.firstElementChild?.className).toContain('w-9');
     const pictoButtons = row.children[1]!.querySelectorAll('button');
     expect(pictoButtons[0]?.getAttribute('title')).toMatch(/blocked/i);
     expect(pictoButtons[1]?.getAttribute('title')).toMatch(/favorites/i);
     expect(pictoButtons[2]?.getAttribute('title')).toMatch(/^Priority/);
+  });
+
+  it('centers the type, activity, board and PR columns in their cells (pass 8)', () => {
+    // WHY: NaS — "Les colonnes (et titres de colonnes) suivantes doivent être
+    // centrées dans leur cellule: type, activity, board, PR".
+    const { container } = renderRow({
+      ticket: makeTicket({ type: 'fix' }),
+      board,
+      activity: 'running',
+    });
+    const cols = container.querySelector('[role="button"]')!.children;
+    expect(cols[2]?.className).toContain('justify-center'); // type
+    expect(cols[4]?.className).toContain('justify-center'); // activity
+    expect(cols[5]?.className).toContain('justify-center'); // board
+    expect(cols[6]?.className).toContain('justify-center'); // PR
+  });
+
+  it('clamps the badge count to "99+" while keeping the true total in the tooltip (pass 8)', () => {
+    // WHY: NaS — the comment/deliverable columns must stay mono-line and reach
+    // "99+" as the max displayed value ("il faut qu'on puisse arriver à '99+'").
+    const { container } = renderRow({
+      unread: {
+        ticketId: 't1',
+        totalComments: 150,
+        totalDeliverables: 8,
+        unreadComments: 0,
+        unreadDeliverables: 0,
+      },
+    });
+    const badge = container.querySelector('[title="150 comments"]')!;
+    expect(badge).not.toBeNull();
+    expect(badge.textContent).toContain('99+');
+    expect(badge.textContent).not.toContain('150');
+    expect(badge.className).toContain('whitespace-nowrap');
   });
 
   it('strips the org from the PR badge label but keeps it in the tooltip (review remark 5)', () => {
