@@ -116,6 +116,25 @@ export function NavSidebar() {
           onClick={() => navigate('/tickets')}
         />
 
+        {/* Cockpit (cross-board list/focus monitoring) */}
+        <NavItem
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none" />
+              <circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none" />
+              <circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none" />
+            </svg>
+          }
+          label="Cockpit"
+          shortLabel="Cockpit"
+          active={activePanel === 'list-focus'}
+          collapsed={navCollapsed}
+          onClick={() => navigate('/list-focus')}
+        />
+
         {/* Repositories */}
         <NavItem
           icon={<RepositoriesIcon size={20} />}

@@ -19,7 +19,7 @@ import { useSkillStore } from '../stores/skillStore';
 import { usePanelStore } from '../stores/panelStore';
 import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant';
+type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant';
 
 const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 
@@ -86,6 +86,11 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   // Assistant (companion-backed LLM chat)
   if (pathname === '/assistant') {
     return { ...base, panel: 'assistant' };
+  }
+
+  // List/Focus cockpit (cross-board monitoring, view #400)
+  if (pathname === '/list-focus') {
+    return { ...base, panel: 'list-focus' };
   }
 
   // Agent worktree within sessions panel
@@ -343,6 +348,8 @@ export function storeToUrl(
       return { pathname: '/documents', search: '' };
     case 'assistant':
       return { pathname: '/assistant', search: '' };
+    case 'list-focus':
+      return { pathname: '/list-focus', search: '' };
     case 'execution-log':
       return { pathname: '/execution-log', search: '' };
     case 'cluster':

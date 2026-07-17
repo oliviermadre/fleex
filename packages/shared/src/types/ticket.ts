@@ -472,6 +472,18 @@ export interface TicketAgentActivity {
   readonly activity: AgentActivityState;
   /** Optional human-readable detail for the card tooltip. */
   readonly detail?: string;
+  /**
+   * Timestamp of the last SDK activity on the ticket (cockpit "idle since",
+   * #400). Absent/null when the ticket never had an SDK session.
+   */
+  readonly lastActivityAt?: string | null;
+  /**
+   * When the CURRENT state began (#400, pass 5 — "Running for 5m",
+   * "Waiting for 2h", "idle for 3h"): running → earliest still-running start,
+   * waiting → the moment the human gate opened, idle → last SDK activity.
+   * Absent when unknown.
+   */
+  readonly since?: string | null;
 }
 
 // ── Summaries ──

@@ -22,6 +22,18 @@ interface TicketActivityState {
   activityByTicket: Record<string, AgentActivityState>;
   /** Optional tooltip detail per ticket. */
   detailByTicket: Record<string, string>;
+  /**
+   * Last SDK activity per ticket — kept for idle tickets too (that is exactly
+   * the state the cockpit's "idle since {{age}}" column needs, #400 pass 4).
+   * Absence ⇒ the ticket never had an SDK session.
+   */
+  lastActivityAtByTicket: Record<string, string>;
+  /**
+   * Start of the CURRENT non-idle state per ticket — drives "Running for 5m" /
+   * "Waiting for 2h" (#400, pass 5). Only kept for non-idle tickets; idle
+   * durations come from lastActivityAtByTicket instead.
+   */
+  sinceByTicket: Record<string, string>;
   /** The currently-visible tickets; only these are tracked / reconciled. */
   trackedIds: string[];
 
@@ -38,11 +50,19 @@ interface TicketActivityState {
 export const useTicketActivityStore = create<TicketActivityState>((set, get) => ({
   activityByTicket: {},
   detailByTicket: {},
+  lastActivityAtByTicket: {},
+  sinceByTicket: {},
   trackedIds: [],
 
   loadActivity: async (ticketIds) => {
     if (!ticketIds.length) {
-      set({ trackedIds: [], activityByTicket: {}, detailByTicket: {} });
+      set({
+        trackedIds: [],
+        activityByTicket: {},
+        detailByTicket: {},
+        lastActivityAtByTicket: {},
+        sinceByTicket: {},
+      });
       return;
     }
     set({ trackedIds: ticketIds });
@@ -56,12 +76,20 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
     // dropped back to idle simply won't appear and its stale pill is cleared.
     const activityByTicket: Record<string, AgentActivityState> = {};
     const detailByTicket: Record<string, string> = {};
+    const lastActivityAtByTicket: Record<string, string> = {};
+    const sinceByTicket: Record<string, string> = {};
     for (const it of items) {
+      // lastActivityAt is kept for EVERY entry — idle included, since "idle
+      // for {{age}}" is precisely about tickets with no current activity.
+      if (it.lastActivityAt) lastActivityAtByTicket[it.ticketId] = it.lastActivityAt;
       if (it.activity === 'idle') continue;
       activityByTicket[it.ticketId] = it.activity;
       if (it.detail) detailByTicket[it.ticketId] = it.detail;
+      // since only matters for the CURRENT non-idle state ("Running for 5m");
+      // a ticket that dropped back to idle loses its stale since here.
+      if (it.since) sinceByTicket[it.ticketId] = it.since;
     }
-    set({ activityByTicket, detailByTicket });
+    set({ activityByTicket, detailByTicket, lastActivityAtByTicket, sinceByTicket });
   },
 
   getActivity: (ticketId) => get().activityByTicket[ticketId] ?? 'idle',
@@ -69,12 +97,15 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
   noteActivity: (ticketId, activity, detail) => {
     if (!get().trackedIds.includes(ticketId)) return; // only visible tickets
     const current = get().activityByTicket[ticketId] ?? 'idle';
-    if (RANK[activity] <= RANK[current]) return; // upgrade-only
+    if (RANK[activity] <= RANK[current]) return; // upgrade-only (since included)
     set((state) => ({
       activityByTicket: { ...state.activityByTicket, [ticketId]: activity },
       detailByTicket: detail
         ? { ...state.detailByTicket, [ticketId]: detail }
         : state.detailByTicket,
+      // Optimistic stamp: the WS event means the state flipped "just now", so
+      // now IS the state start until the reconcile lands the exact one.
+      sinceByTicket: { ...state.sinceByTicket, [ticketId]: new Date().toISOString() },
     }));
   },
 
