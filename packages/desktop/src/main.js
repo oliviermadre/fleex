@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell, nativeImage } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -79,6 +79,132 @@ const iconPath = path.join(__dirname, '..', 'assets', 'icon.png');
 
 let mainWindow = null;
 
+// ── Browser-parity: history navigation ────────────────────────────────────────
+// The desktop shell is a BrowserWindow loading the web app, which uses
+// react-router (BrowserRouter). User navigations push real session-history
+// entries, so Chromium's navigation history already mirrors the browser — we
+// just re-expose Back/Forward (menu + shortcuts + trackpad swipe) that a bare
+// BrowserWindow otherwise hides.
+//
+// Find-in-page (Cmd+F) was intentionally removed: the native findInPage bar
+// behaved poorly inside the SPA and wasn't worth maintaining here.
+
+const isMac = process.platform === 'darwin';
+
+function activeContents() {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null;
+}
+
+function canGoBack(wc) {
+  return wc.navigationHistory ? wc.navigationHistory.canGoBack() : wc.canGoBack();
+}
+function canGoForward(wc) {
+  return wc.navigationHistory ? wc.navigationHistory.canGoForward() : wc.canGoForward();
+}
+
+function goBack() {
+  const wc = activeContents();
+  if (!wc || !canGoBack(wc)) return;
+  if (wc.navigationHistory) wc.navigationHistory.goBack();
+  else wc.goBack();
+}
+function goForward() {
+  const wc = activeContents();
+  if (!wc || !canGoForward(wc)) return;
+  if (wc.navigationHistory) wc.navigationHistory.goForward();
+  else wc.goForward();
+}
+
+// Reflect history availability in the menu (greyed out at the ends).
+function updateNavMenuState() {
+  const menu = Menu.getApplicationMenu();
+  const wc = activeContents();
+  if (!menu || !wc) return;
+  const back = menu.getMenuItemById('nav-back');
+  const forward = menu.getMenuItemById('nav-forward');
+  if (back) back.enabled = canGoBack(wc);
+  if (forward) forward.enabled = canGoForward(wc);
+}
+
+function buildApplicationMenu() {
+  const template = [
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    {
+      label: 'File',
+      submenu: [isMac ? { role: 'close' } : { role: 'quit' }],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac
+          ? [{ role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' }]
+          : [{ role: 'delete' }, { type: 'separator' }, { role: 'selectAll' }]),
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'History',
+      submenu: [
+        // Primary accelerators — always navigate (focus-insensitive). The macOS
+        // secondaries Cmd+←/Cmd+→ are handled in the preload so they keep their
+        // edit meaning inside text fields / terminals.
+        { id: 'nav-back', label: 'Back', accelerator: isMac ? 'Cmd+[' : 'Alt+Left', click: goBack },
+        { id: 'nav-forward', label: 'Forward', accelerator: isMac ? 'Cmd+]' : 'Alt+Right', click: goForward },
+      ],
+    },
+    { role: 'windowMenu' },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  updateNavMenuState();
+}
+
+// IPC from the preload (renderer) side. Registered once at module load.
+ipcMain.on('fleex:navigate', (_e, dir) => {
+  if (dir === 'back') goBack();
+  else if (dir === 'forward') goForward();
+});
+
+// Per-window wiring: keep Back/Forward menu state in sync, plus trackpad swipe.
+function wireBrowserParity(win) {
+  const wc = win.webContents;
+
+  // Full document navigation (workspace switch / reload).
+  wc.on('did-navigate', updateNavMenuState);
+  // SPA route changes (react-router pushState/replaceState).
+  wc.on('did-navigate-in-page', updateNavMenuState);
+  wc.on('did-frame-navigate', updateNavMenuState);
+  wc.on('did-finish-load', updateNavMenuState);
+
+  // Trackpad three-finger horizontal swipe → history navigation. Honours the
+  // macOS "Swipe between pages" system setting, exactly like the browser.
+  // Electron reports `left` for a back-gesture and `right` for forward (Cocoa
+  // swipe-delta semantics). If it feels reversed on-device, flip these two.
+  win.on('swipe', (_e, direction) => {
+    if (direction === 'left') goBack();
+    else if (direction === 'right') goForward();
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     icon: iconPath,
@@ -92,10 +218,14 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
   mainWindow.loadURL(serverUrl);
+
+  wireBrowserParity(mainWindow);
 
   mainWindow.webContents.on('did-finish-load', () => {
     // Inject CSS
@@ -518,6 +648,7 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(nativeImage.createFromPath(iconPath));
   }
+  buildApplicationMenu();
   createWindow();
 });
 

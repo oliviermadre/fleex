@@ -2,7 +2,10 @@
  * RouterSync — bidirectional sync between URL and Zustand stores.
  *
  * URL → Store: on location change, parse URL and update stores.
- * Store → URL: on store change, compute expected URL and navigate(replace) if different.
+ * Store → URL: on store change, compute expected URL and navigate() if different.
+ *   Pushes a new history entry when the view changes — panel, selection, or a
+ *   detail tab / section — so Back/Forward retain every intermediate state, and
+ *   replaces only on pure URL normalisation. See historyActionForNav / navIdentity.
  *
  * Navigation components should call navigate() for user-initiated actions.
  * RouterSync handles programmatic store changes (e.g. auto-select after session kill).
@@ -372,6 +375,67 @@ export function storeToUrl(
   }
 }
 
+// ─── History push/replace decision ───────────────────────────────────────────
+
+/**
+ * A stable key identifying the view a URL points at, INCLUDING the per-entity
+ * detail tab / section (ticket / epic / persona tab, settings / analytics
+ * section). Switching such a tab is a real navigation, so it is part of the
+ * identity: Back must return to the previous tab, not skip past it. Two URLs
+ * with the same identity differ only by pure URL normalisation and collapse
+ * into a single history entry (replace); any change of identity is a genuine
+ * navigation that deserves its own entry (push).
+ *
+ * Defaults are normalised so that a store-driven URL and its shorthand equal
+ * each other and don't create a spurious extra entry when the store rewrites
+ * the URL:
+ *   - board id: undefined ⇒ null (`/tickets` == `/tickets/board/all`)
+ *   - ticket / epic detail tab: null ⇒ 'description' (the default tab, which
+ *     storeToUrl omits from the path)
+ *   - settings section: null ⇒ 'general' (bare `/settings` == `/settings/general`)
+ */
+export function navIdentity(parsed: ParsedUrl): string {
+  const boardId = parsed.boardId === undefined ? null : parsed.boardId;
+  return [
+    parsed.panel,
+    parsed.sessionTicketId ?? '',
+    parsed.sessionTabKey ?? '',
+    parsed.agentWorktreeTicketId ?? '',
+    parsed.repoKey ?? '',
+    boardId ?? '',
+    parsed.ticketId ?? '',
+    parsed.ticketTab ?? 'description',
+    parsed.ticketsView ?? '',
+    parsed.epicId ?? '',
+    parsed.epicDetailTab ?? 'description',
+    parsed.scratchpadKey ?? '',
+    parsed.personaId ?? '',
+    parsed.personaTab ?? '',
+    parsed.skillId ?? '',
+    parsed.panelId ?? '',
+    parsed.workflowId ?? '',
+    parsed.settingsTab ?? 'general',
+    parsed.analyticsTab ?? '',
+  ].join('|');
+}
+
+/**
+ * Decide whether a store-driven URL change should push a new history entry or
+ * replace the current one. Push when the view changes — including a detail-tab
+ * or section switch — so Back/Forward retain every intermediate state; replace
+ * only when the change is pure URL normalisation.
+ */
+export function historyActionForNav(
+  currentPath: string,
+  currentSearch: string,
+  expectedPath: string,
+  expectedSearch: string,
+): 'push' | 'replace' {
+  const current = navIdentity(parseUrl(currentPath, currentSearch));
+  const expected = navIdentity(parseUrl(expectedPath, expectedSearch));
+  return current === expected ? 'replace' : 'push';
+}
+
 // ─── RouterSync component ─────────────────────────────────────────────────────
 
 export function RouterSync() {
@@ -481,8 +545,15 @@ export function RouterSync() {
       if (parsed.ticketId !== selectedTicketId) {
         selectTicket(parsed.ticketId);
       }
-      if (parsed.ticketTab && parsed.ticketTab !== ticketTab) {
-        setTicketTab(parsed.ticketTab);
+      // The default tab ('description') is omitted from the URL, so sync it back
+      // explicitly when a ticket is selected. Otherwise navigating Back onto the
+      // tab-less ticket URL would leave the previous tab (e.g. 'comments')
+      // selected and the "description" history entry would be silently skipped.
+      if (parsed.ticketId) {
+        const nextTicketTab = parsed.ticketTab ?? 'description';
+        if (nextTicketTab !== ticketTab) {
+          setTicketTab(nextTicketTab);
+        }
       }
       // Roadmap / board view
       const newView = parsed.ticketsView ?? (parsed.epicId ? activeView : 'board');
@@ -494,8 +565,13 @@ export function RouterSync() {
       if (newEpicId !== epicDetailId) {
         setSelectedEpicDetail(newEpicId);
       }
-      if (parsed.epicDetailTab && parsed.epicDetailTab !== epicDetailTab) {
-        setEpicDetailTab(parsed.epicDetailTab);
+      // Same as ticketTab: default epic detail tab is omitted from the URL, so
+      // reset it to 'description' when Back lands on the tab-less epic URL.
+      if (parsed.epicId) {
+        const nextEpicTab = parsed.epicDetailTab ?? 'description';
+        if (nextEpicTab !== epicDetailTab) {
+          setEpicDetailTab(nextEpicTab);
+        }
       }
     }
 
@@ -601,9 +677,15 @@ export function RouterSync() {
     const currentSearch = location.search;
 
     if (expected.pathname !== currentPath || expected.search !== currentSearch) {
+      const action = historyActionForNav(
+        currentPath,
+        currentSearch,
+        expected.pathname,
+        expected.search,
+      );
       navigate(
         { pathname: expected.pathname, search: expected.search },
-        { replace: true },
+        { replace: action === 'replace' },
       );
     }
   }, [

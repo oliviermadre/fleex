@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseUrl, storeToUrl } from './RouterSync';
+import { parseUrl, storeToUrl, historyActionForNav } from './RouterSync';
 
 describe('parseUrl', () => {
   it('redirects / to /dashboard', () => {
@@ -263,5 +263,99 @@ describe('storeToUrl', () => {
   it('prefers ticket over agent worktree when both set', () => {
     const url = storeToUrl('sessions', null, null, null, null, null, null, null, null, 'config', 'general', 'ticket-123', undefined, undefined, undefined, 'ticket-abc', null);
     expect(url.pathname).toBe('/sessions/ticket-abc');
+  });
+});
+
+// The whole point of these: Back/Forward must retain intermediate views. A
+// store-driven URL change should PUSH a new entry when the primary view changes
+// (panel, selected ticket/epic/persona/repo, roadmap toggle, session/settings
+// section) and REPLACE only when it's a detail-tab switch or URL normalisation —
+// otherwise clicking around tabs of one ticket spams history, and the previous
+// unconditional `replace` erased intermediate views entirely.
+describe('historyActionForNav', () => {
+  const action = (from: string, to: string) => historyActionForNav(from, '', to, '');
+
+  it('pushes when selecting a ticket from the board (the reported bug)', () => {
+    // Kanban → ticket detail must leave the kanban entry reachable via Back.
+    expect(action('/tickets/board/all', '/tickets/board/all/ticket/t1')).toBe('push');
+  });
+
+  it('replaces when the store normalises /tickets to /tickets/board/all', () => {
+    // Same view (board, nothing selected) — must not create a spurious entry.
+    expect(action('/tickets', '/tickets/board/all')).toBe('replace');
+  });
+
+  it('pushes when switching tabs within the same ticket detail', () => {
+    // Switching a detail tab is a real navigation: Back must return to the
+    // previous tab, not skip past the whole ticket to the board.
+    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe('push');
+  });
+
+  it('replaces when the store normalises the default (description) ticket tab', () => {
+    // storeToUrl omits the default tab, so the shorthand and the explicit
+    // /description form are the same view — no spurious entry.
+    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/description')).toBe('replace');
+  });
+
+  it('pushes when switching tabs within the same epic detail', () => {
+    expect(action('/tickets/board/all/epic/e1', '/tickets/board/all/epic/e1/deliverables')).toBe('push');
+  });
+
+  it('pushes when switching tabs within the same persona', () => {
+    expect(action('/agents/p1', '/agents/p1/soul')).toBe('push');
+  });
+
+  it('replaces when the store normalises the default (config) persona tab', () => {
+    // Bare /agents/p1 parses as the config tab, same as the explicit form.
+    expect(action('/agents/p1', '/agents/p1/config')).toBe('replace');
+  });
+
+  it('replays the reported tab scenario: comments → deliverables keeps comments', () => {
+    // NaS: on a ticket detail, going comments → deliverables then Back must
+    // land on comments, not jump straight to the board.
+    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe('push');
+    expect(action('/tickets/board/all/ticket/t1/comments', '/tickets/board/all/ticket/t1/deliverables')).toBe('push');
+  });
+
+  it('replaces when the store normalises bare /settings to /settings/general', () => {
+    // Bare /settings resolves to the general section — same view, no entry.
+    expect(action('/settings', '/settings/general')).toBe('replace');
+  });
+
+  it('pushes when toggling between board and roadmap view', () => {
+    expect(action('/tickets/board/all', '/tickets/board/all/roadmap')).toBe('push');
+  });
+
+  it('pushes when selecting an epic from the board', () => {
+    expect(action('/tickets/board/all', '/tickets/board/all/epic/e1')).toBe('push');
+  });
+
+  it('pushes when switching top-level panels', () => {
+    expect(action('/sessions', '/tickets/board/all')).toBe('push');
+    expect(action('/tickets/board/all/ticket/t1', '/repositories')).toBe('push');
+  });
+
+  it('pushes when selecting a repository', () => {
+    expect(action('/repositories', '/repositories/myorg/myrepo')).toBe('push');
+  });
+
+  it('pushes when selecting a persona', () => {
+    expect(action('/agents', '/agents/p1')).toBe('push');
+  });
+
+  it('pushes when changing settings section', () => {
+    expect(action('/settings/general', '/settings/appearance')).toBe('push');
+  });
+
+  it('pushes when switching between session terminals', () => {
+    expect(action('/sessions/ticket-abc/s%3Aone', '/sessions/ticket-abc/s%3Atwo')).toBe('push');
+  });
+
+  it('replays the reported scenario: sessions → kanban → ticket → repos keeps every step', () => {
+    // Each hop is the URL the store lands on; assert the history action so that
+    // Back walks repos → ticket → kanban → sessions (ticket detail retained).
+    expect(action('/sessions', '/tickets/board/all')).toBe('push'); // sessions → kanban
+    expect(action('/tickets/board/all', '/tickets/board/all/ticket/t1')).toBe('push'); // kanban → ticket
+    expect(action('/tickets/board/all/ticket/t1', '/repositories')).toBe('push'); // ticket → repos
   });
 });
