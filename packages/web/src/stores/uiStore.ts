@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { TicketDeliverable } from '@fleex/shared';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant';
+type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant';
 export type SettingsTab = 'general' | 'appearance' | 'repositories' | 'pinned-icons' | 'workspace-actions' | 'agent-tokens' | 'deliverable-types';
 export type AnalyticsTab = 'audit-trail' | 'statistics';
 

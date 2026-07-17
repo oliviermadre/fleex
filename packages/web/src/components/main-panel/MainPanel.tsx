@@ -24,6 +24,7 @@ import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useNavigate } from 'react-router-dom';
 import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
 import { DashboardView } from '../dashboard/DashboardView';
+import { ListFocusView } from '../list-focus/ListFocusView';
 import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
 import { DocumentsPage } from '../documents/DocumentsPage';
 import { AssistantConversation } from '../assistant/AssistantConversation';
@@ -84,6 +85,10 @@ export function MainPanel() {
 
   if (activePanel === 'dashboard') {
     return <DashboardView />;
+  }
+
+  if (activePanel === 'list-focus') {
+    return <ListFocusView />;
   }
 
   if (activePanel === 'assistant') {
