@@ -15,6 +15,7 @@ describe('ticketActivityStore', () => {
       detailByTicket: {},
       lastActivityAtByTicket: {},
       sinceByTicket: {},
+      costByTicket: {},
       trackedIds: [],
     });
     vi.clearAllMocks();
@@ -22,9 +23,9 @@ describe('ticketActivityStore', () => {
 
   it('loadActivity keeps only non-idle tickets so absence reads as idle (no pill)', async () => {
     vi.mocked(api.fetchTicketAgentActivity).mockResolvedValue([
-      { ticketId: 'a', activity: 'running', detail: 'working' },
-      { ticketId: 'b', activity: 'idle' },
-      { ticketId: 'c', activity: 'waiting', detail: 'ask' },
+      { ticketId: 'a', activity: 'running', detail: 'working', cumulativeCostUsd: 0 },
+      { ticketId: 'b', activity: 'idle', cumulativeCostUsd: 0 },
+      { ticketId: 'c', activity: 'waiting', detail: 'ask', cumulativeCostUsd: 0 },
     ] satisfies TicketAgentActivity[]);
 
     await useTicketActivityStore.getState().loadActivity(['a', 'b', 'c']);
@@ -39,7 +40,7 @@ describe('ticketActivityStore', () => {
     // WHY: the pill must vanish the moment work finishes. Since the response omits idle
     // tickets, a rebuild-from-scratch is what clears a previously-active ticket.
     vi.mocked(api.fetchTicketAgentActivity)
-      .mockResolvedValueOnce([{ ticketId: 'a', activity: 'running' }])
+      .mockResolvedValueOnce([{ ticketId: 'a', activity: 'running', cumulativeCostUsd: 0 }])
       .mockResolvedValueOnce([]); // reconcile: 'a' finished, nothing active
 
     await useTicketActivityStore.getState().loadActivity(['a']);
@@ -73,9 +74,9 @@ describe('ticketActivityStore', () => {
     // activity, so it must survive even though idle entries are dropped from
     // activityByTicket.
     vi.mocked(api.fetchTicketAgentActivity).mockResolvedValue([
-      { ticketId: 'a', activity: 'running', detail: 'working', lastActivityAt: '2026-07-17T10:00:00.000Z' },
-      { ticketId: 'b', activity: 'idle', lastActivityAt: '2026-07-16T08:00:00.000Z' },
-      { ticketId: 'c', activity: 'idle' }, // never had an SDK session
+      { ticketId: 'a', activity: 'running', detail: 'working', lastActivityAt: '2026-07-17T10:00:00.000Z', cumulativeCostUsd: 0 },
+      { ticketId: 'b', activity: 'idle', lastActivityAt: '2026-07-16T08:00:00.000Z', cumulativeCostUsd: 0 },
+      { ticketId: 'c', activity: 'idle', cumulativeCostUsd: 0 }, // never had an SDK session
     ] satisfies TicketAgentActivity[]);
 
     await useTicketActivityStore.getState().loadActivity(['a', 'b', 'c']);
@@ -93,10 +94,10 @@ describe('ticketActivityStore', () => {
     // (idle durations come from lastActivityAt instead).
     vi.mocked(api.fetchTicketAgentActivity)
       .mockResolvedValueOnce([
-        { ticketId: 'a', activity: 'running', since: '2026-07-17T11:00:00.000Z' },
-        { ticketId: 'b', activity: 'idle', lastActivityAt: '2026-07-16T08:00:00.000Z', since: '2026-07-16T08:00:00.000Z' },
+        { ticketId: 'a', activity: 'running', since: '2026-07-17T11:00:00.000Z', cumulativeCostUsd: 0 },
+        { ticketId: 'b', activity: 'idle', lastActivityAt: '2026-07-16T08:00:00.000Z', since: '2026-07-16T08:00:00.000Z', cumulativeCostUsd: 0 },
       ] satisfies TicketAgentActivity[])
-      .mockResolvedValueOnce([{ ticketId: 'a', activity: 'idle' }]);
+      .mockResolvedValueOnce([{ ticketId: 'a', activity: 'idle', cumulativeCostUsd: 0 }]);
 
     await useTicketActivityStore.getState().loadActivity(['a', 'b']);
     let s = useTicketActivityStore.getState();
@@ -127,6 +128,29 @@ describe('ticketActivityStore', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('loadActivity records cumulative cost for EVERY entry, idle included, dropping zeros (#404)', async () => {
+    // WHY: the cost badge must show on finished/idle cards too (a done ticket's
+    // total cost is exactly what the board surfaces), and a zero-cost ticket
+    // must leave no entry so no badge renders.
+    vi.mocked(api.fetchTicketAgentActivity).mockResolvedValue([
+      { ticketId: 'a', activity: 'running', cumulativeCostUsd: 3.47 },
+      { ticketId: 'b', activity: 'idle', cumulativeCostUsd: 23.5 }, // finished but costly
+      { ticketId: 'c', activity: 'idle', cumulativeCostUsd: 0 }, // no cost → no badge
+    ] satisfies TicketAgentActivity[]);
+
+    await useTicketActivityStore.getState().loadActivity(['a', 'b', 'c']);
+    const s = useTicketActivityStore.getState();
+    expect(s.costByTicket.a).toBe(3.47);
+    expect(s.costByTicket.b).toBe(23.5); // idle/done still carries its cost
+    expect(s.costByTicket.c).toBeUndefined(); // zero is dropped (sparse map ⇒ no badge)
+  });
+
+  it('loadActivity clears costByTicket when the tracked set becomes empty', async () => {
+    useTicketActivityStore.setState({ costByTicket: { a: 12 } });
+    await useTicketActivityStore.getState().loadActivity([]);
+    expect(useTicketActivityStore.getState().costByTicket).toEqual({});
   });
 
   it('noteActivity ignores tickets not in view (board-scoped)', () => {

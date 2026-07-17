@@ -1523,6 +1523,16 @@ export function ticketRoutes(container: Container) {
         if (!prev || ts > prev) lastSdkActivityAtByTicket.set(e.ticketId, ts);
       }
 
+      // Cumulative agentic cost per ticket (#404): sum every execution's costUsd,
+      // ALL origins (sdk + cli) and ALL statuses, treating null as 0 — same
+      // accumulation get-statistics uses for totalCostUsd. "Cumulé" = every
+      // dollar an agent spent on the ticket.
+      const costByTicket = new Map<string, number>();
+      for (const e of executions) {
+        if (!requested.has(e.ticketId)) continue;
+        costByTicket.set(e.ticketId, (costByTicket.get(e.ticketId) ?? 0) + (e.costUsd ?? 0));
+      }
+
       return deriveTicketAgentActivity(requestedIds, {
         runningExecutionTicketIds: runningExecutions.map((e) => e.ticketId),
         runningWorkflowTicketIds: scopedRunningRuns.map((r) => r.ticketId),
@@ -1531,6 +1541,7 @@ export function ticketRoutes(container: Container) {
         lastSdkActivityAtByTicket,
         runningSinceByTicket,
         waitingSinceByTicket,
+        costByTicket,
       });
     });
   };

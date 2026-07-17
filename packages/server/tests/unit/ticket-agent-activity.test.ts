@@ -153,6 +153,40 @@ describe('deriveTicketAgentActivity', () => {
     const [idle] = deriveTicketAgentActivity(['T2'], EMPTY);
     expect(idle?.since).toBeUndefined();
   });
+
+  // ── cumulativeCostUsd — the ticket's total agentic spend (#404) ──
+  // WHY: the Kanban card shows a coloured cost badge. The cost must ride along
+  // with the activity entry for EVERY state, since a finished (idle) ticket is
+  // exactly the one whose accumulated cost matters most.
+
+  it('carries the cumulative cost from the cost map, for running and idle alike (#404)', () => {
+    const costByTicket = new Map([
+      ['T1', 3.47],
+      ['T2', 23.5],
+    ]);
+    const result = deriveTicketAgentActivity(['T1', 'T2'], {
+      ...EMPTY,
+      runningExecutionTicketIds: ['T1'],
+      costByTicket,
+    });
+    expect(result.find((r) => r.ticketId === 'T1')?.cumulativeCostUsd).toBe(3.47);
+    const idle = result.find((r) => r.ticketId === 'T2');
+    expect(idle?.activity).toBe('idle');
+    expect(idle?.cumulativeCostUsd).toBe(23.5); // idle ticket still reports its cost
+  });
+
+  it('reports cumulativeCostUsd = 0 when a ticket has no cost / no map (never omitted)', () => {
+    // WHY: the field is always present (0 ⇒ no badge). A missing map or a ticket
+    // absent from it must read as 0, not undefined.
+    const [withMap] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      costByTicket: new Map([['T2', 5]]),
+    });
+    expect(withMap?.cumulativeCostUsd).toBe(0);
+
+    const [withoutMap] = deriveTicketAgentActivity(['T1'], EMPTY);
+    expect(withoutMap?.cumulativeCostUsd).toBe(0);
+  });
 });
 
 describe('deriveActivitySince', () => {

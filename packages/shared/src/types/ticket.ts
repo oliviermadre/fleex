@@ -484,6 +484,13 @@ export interface TicketAgentActivity {
    * Absent when unknown.
    */
   readonly since?: string | null;
+  /**
+   * Cumulative agentic cost of the ticket (#404): Σ `costUsd` over every
+   * `AgentExecution` of the ticket (all origins sdk+cli, `null` counted as 0).
+   * Always present; `0` when the ticket has no execution / no computed cost.
+   * Drives the Kanban card's coloured cost badge.
+   */
+  readonly cumulativeCostUsd: number;
 }
 
 // ── Summaries ──

@@ -5,6 +5,7 @@ import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { TypePickerPopover } from './TypePickerPopover';
 import { DueDateBadge } from './DueDateBadge';
 import { ActivityPill } from './ActivityPill';
+import { CostBadge } from './CostBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -74,6 +75,8 @@ export function KanbanCard({
   // the cards whose activity actually changed.
   const activity = useTicketActivityStore((s) => s.activityByTicket[ticket.id] ?? 'idle');
   const activityDetail = useTicketActivityStore((s) => s.detailByTicket[ticket.id]);
+  // Cumulative agentic cost for the header badge (#404). 0 ⇒ no badge.
+  const cumulativeCost = useTicketActivityStore((s) => s.costByTicket[ticket.id] ?? 0);
   const groups = useTicketGroupStore((s) => s.groups);
   const ticketGroupIds = useTicketGroupStore((s) => s.ticketGroupIds);
 
@@ -145,7 +148,11 @@ export function KanbanCard({
           </span>
         )}
 
-        {/* Spacer */}
+        {/* Cumulative agentic cost, centred in the header's free zone (#404).
+            Twin spacers keep the left/right clusters put whether or not the
+            badge renders (CostBadge is null at $0). */}
+        <div className="flex-1" />
+        <CostBadge costUsd={cumulativeCost} />
         <div className="flex-1" />
 
         {/* GitHub issue link */}
