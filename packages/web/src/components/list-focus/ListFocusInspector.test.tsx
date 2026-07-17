@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
-import type { Ticket } from '@fleex/shared';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import type { Board, Ticket } from '@fleex/shared';
+import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { appWs } from '../../services/websocket';
 import { ListFocusInspector } from './ListFocusInspector';
 
@@ -21,6 +23,20 @@ vi.mock('../tickets/TicketDeliverables', () => ({
 vi.mock('../../services/websocket', () => ({
   appWs: { onChannel: vi.fn(() => () => {}) },
 }));
+
+// floating-ui popovers (the header's SmartSessionButton dropdown) need
+// observers jsdom lacks (same stub as ListFocusRow.test).
+beforeAll(() => {
+  class Obs {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  vi.stubGlobal('ResizeObserver', Obs);
+  vi.stubGlobal('IntersectionObserver', Obs);
+});
+
+const board: Board = { id: 'b1', name: 'Fleex Core', emoji: '🧭' } as Board;
 
 function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
   return {
@@ -74,6 +90,9 @@ describe('ListFocusInspector', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // SmartSessionButton (now in the header) refreshes templates on mount —
+    // stub it so the inspector never reaches the network.
+    useWorkflowTemplateStore.setState({ templates: [], refresh: vi.fn().mockResolvedValue(undefined) });
     loadForTicket = vi.fn().mockResolvedValue(undefined);
     useWorkflowRunStore.setState({ runsByTicket: {}, detail: {}, loadForTicket });
   });
@@ -123,5 +142,51 @@ describe('ListFocusInspector', () => {
     loadForTicket.mockClear();
     handler!({ type: 'workflow:step:completed', data: { ticketId: 'other' } });
     expect(loadForTicket).not.toHaveBeenCalled();
+  });
+});
+
+describe('ListFocusInspector header (cockpit usability redesign, #407)', () => {
+  beforeEach(() => {
+    useWorkflowTemplateStore.setState({ templates: [], refresh: vi.fn().mockResolvedValue(undefined) });
+    useWorkflowRunStore.setState({ loadForTicket: vi.fn().mockResolvedValue(undefined) });
+  });
+  afterEach(cleanup);
+
+  it('leads with the ticket title + id, before the board/meta line', () => {
+    // WHY: NaS — the first thing the sidebar shows must be the TITLE (+ its id),
+    // not the board. Pre-redesign the board/id line came FIRST and the title sat
+    // underneath, which "made no sense".
+    const { container } = renderInspector({ board });
+    const heading = screen.getByRole('heading', { level: 2 });
+    expect(heading.textContent).toContain('Fix auth loop');
+    expect(heading.textContent).toContain('#412');
+    const text = container.textContent ?? '';
+    expect(text.indexOf('Fix auth loop')).toBeLessThan(text.indexOf('Fleex Core'));
+  });
+
+  it('keeps the board and position visible as secondary info', () => {
+    // The board renders as "{emoji} {name}" in one node, so match a substring.
+    renderInspector({ board });
+    expect(screen.getByText(/Fleex Core/)).toBeTruthy();
+    expect(screen.getByText('1 / 3')).toBeTruthy();
+  });
+
+  it('exposes the Smart Session launcher in the header (mouse-only skill start)', () => {
+    // WHY: NaS — the launcher must be reachable from the sidebar itself, not
+    // only via the main-panel button hidden behind the sidebar. With zero
+    // sessions and no skills it renders its "Start" state.
+    renderInspector({ board });
+    expect(screen.getByText('Start')).toBeTruthy();
+  });
+
+  it('uses the NanoKanban micro-kanban for status and changes it on click', () => {
+    // WHY: NaS — reuse the same micro-kanban as the worktree sidebar instead of
+    // the plain status chip, for a consistent one-click status change.
+    const onStatusChange = vi.fn();
+    renderInspector({ board, onStatusChange });
+    const reviewing = document.querySelector(`[title="${TICKET_STATUS_LABELS['reviewing']}"]`);
+    expect(reviewing).not.toBeNull();
+    fireEvent.click(reviewing!);
+    expect(onStatusChange).toHaveBeenCalledWith('reviewing');
   });
 });

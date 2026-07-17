@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Board, Ticket, TicketStatus } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
+import { useSessionStore } from '../../stores/sessionStore';
 import { useWorkflowRunStore } from '../../stores/workflowRunStore';
 import { appWs } from '../../services/websocket';
+import { executeSkill } from '../../services/api';
 import type { InspectorFocus } from '../../stores/listFocusStore';
 import { TicketDeliverables } from '../tickets/TicketDeliverables';
 import { TicketComments } from '../tickets/TicketComments';
+import { NanoKanban } from '../tickets/NanoKanban';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { SidebarWidthHandle } from '../main-panel/right-sidebar/SidebarWidthHandle';
-import { StatusChipDropdown } from './StatusChipDropdown';
 import { CommentIcon, DeliverableIcon } from './icons';
 import { cn } from '../../lib/cn';
 
@@ -50,6 +54,14 @@ export function ListFocusInspector({
   // answering the thread; deliverables only take over on a badge click.
   const [tab, setTab] = useState<InspectorTab>(focus === 'deliverables' ? 'deliverables' : 'comment');
 
+  // Resolve the ticket's sessions exactly like the cockpit rows and the kanban
+  // card, so the header's Smart Session launcher shows the same state.
+  const sessionGroups = useSessionStore((s) => s.sessionGroups);
+  const ticketSessions = useMemo(
+    () => findSessionsForTicketId(ticket.id, sessionGroups),
+    [ticket.id, sessionGroups],
+  );
+
   // Re-emphasise the requested section when the selection or the badge-driven
   // focus changes (e.g. clicking a deliverables badge on another row).
   useEffect(() => {
@@ -90,43 +102,65 @@ export function ListFocusInspector({
         style={{ width }}
         className="flex h-full flex-col border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)]"
       >
-        {/* Header */}
-        <div className="flex items-start gap-2 border-b border-[var(--theme-border-subtle)] px-4 py-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <div className="flex items-center gap-2 text-[10px] text-[var(--theme-text-faint)]">
-              <span className="tabular-nums">{positionLabel}</span>
+        {/* Header (NaS redesign). Title-first: the ticket title + id lead the
+            block; the board + position sit on a quieter second line with the
+            Smart Session launcher pinned to the top-right corner — so a
+            skill/workflow can be started by mouse without scrolling into the
+            main-panel button hidden behind the sidebar. The status micro-kanban
+            (same NanoKanban as the worktree sidebar) closes the header for
+            one-click status changes. */}
+        <div className="flex flex-col gap-2 border-b border-[var(--theme-border-subtle)] px-4 py-3">
+          {/* Line 1 — title + id (primary) · close button in the corner. */}
+          <div className="flex items-start gap-2">
+            <h2 className="min-w-0 flex-1 text-sm font-semibold leading-snug text-[var(--theme-text-primary)]">
+              {ticket.title}
+              <span className="ml-1.5 font-mono text-[11px] font-normal text-[var(--theme-text-faint)]">
+                #{ticket.displayId}
+              </span>
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              title="Close (Esc)"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="4" x2="12" y2="12" />
+                <line x1="12" y1="4" x2="4" y2="12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Line 2 — board + position (secondary) · Smart Session launcher. */}
+          <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2 text-[10px] text-[var(--theme-text-faint)]">
               {board && (
                 <span className="truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 font-medium text-[var(--theme-text-muted)]">
                   {board.emoji} {board.name}
                 </span>
               )}
-              <span>#{ticket.displayId}</span>
-            </div>
-            <h2 className="text-sm font-semibold leading-snug text-[var(--theme-text-primary)]">
-              {ticket.title}
-            </h2>
-            <div className="flex items-center gap-2">
-              <StatusChipDropdown status={ticket.status} onChange={onStatusChange} size="md" />
+              {positionLabel && <span className="shrink-0 tabular-nums">{positionLabel}</span>}
               <button
                 type="button"
                 onClick={onOpenFull}
-                className="text-[10px] text-[var(--theme-text-muted)] underline-offset-2 transition-colors hover:text-[var(--theme-accent)] hover:underline"
+                className="shrink-0 whitespace-nowrap text-[var(--theme-text-muted)] underline-offset-2 transition-colors hover:text-[var(--theme-accent)] hover:underline"
               >
                 Open full ticket ↗
               </button>
             </div>
+            {/* stopPropagation: opening the launcher menu must never bubble up
+                to the aside / row-selection handlers. */}
+            <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+              <SmartSessionButton
+                sessions={ticketSessions}
+                ticketId={ticket.id}
+                onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
+              />
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            title="Close (Esc)"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="4" y1="4" x2="12" y2="12" />
-              <line x1="12" y1="4" x2="4" y2="12" />
-            </svg>
-          </button>
+
+          {/* Status — same micro-kanban as the worktree sidebar (ergonomics). */}
+          <NanoKanban status={ticket.status} onStatusChange={onStatusChange} />
         </div>
 
         {/* Tabs */}

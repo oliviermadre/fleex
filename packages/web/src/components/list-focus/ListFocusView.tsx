@@ -389,13 +389,21 @@ export function ListFocusView() {
           </div>
 
           {/* Rows */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-auto">
             {totalRows === 0 ? (
               <div className="flex h-full items-center justify-center px-4 text-center text-xs text-[var(--theme-text-faint)]">
                 No tickets in scope. Adjust the board or status filters above.
               </div>
             ) : (
-              displayGroups.map((group) => {
+              // overflow-auto + this min-w wrapper let the status bands AND the
+              // row backgrounds span the FULL horizontal-scroll width. Without
+              // it, the w-full bands only cover the visible viewport and get cut
+              // mid-content when the list is narrow enough to scroll sideways
+              // (NaS: "les bandeaux ne vont pas jusqu'au bout"). 780px ≈ a row's
+              // min-content (fixed columns + gaps + padding), so w-full children
+              // stretch to the widest row instead of stopping at the viewport.
+              <div className="min-w-[780px]">
+                {displayGroups.map((group) => {
                 const collapsed = collapsedGroups.has(group.key);
                 return (
                   <section key={group.key}>
@@ -429,7 +437,8 @@ export function ListFocusView() {
                       ))}
                   </section>
                 );
-              })
+                })}
+              </div>
             )}
           </div>
         </div>
