@@ -52,7 +52,7 @@ describe('buildFrequentItems', () => {
     expect(items.map((i) => i.type)).toEqual(['workflow', 'skill', 'panel', 'skill']);
   });
 
-  it('builds the display token per type', () => {
+  it('builds the real @mention invocation token per type (what a comment would contain)', () => {
     const items = buildFrequentItems(
       {
         skillLeaderboard: [skillEntry('sk1', 3)],
@@ -62,9 +62,11 @@ describe('buildFrequentItems', () => {
       source,
     );
     const byId = Object.fromEntries(items.map((i) => [i.id, i]));
-    expect(byId['sk1']!.token).toBe('/prepare');
+    // Tokens mirror the server-side mention syntax (ticket-comment.entity.ts):
+    // @skill:commandName / @workflow:slug / @panel:name — NOT slash commands.
+    expect(byId['sk1']!.token).toBe('@skill:prepare');
     expect(byId['sk1']!.displayName).toBe('Prepare');
-    expect(byId['wf1']!.token).toBe('/pr-review');
+    expect(byId['wf1']!.token).toBe('@workflow:pr-review');
     expect(byId['pn1']!.token).toBe('@panel:archi-committee');
   });
 

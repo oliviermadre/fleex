@@ -14,6 +14,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useFrequentLaunchStore, buildFrequentItems } from '../../stores/frequentLaunchStore';
 import { useToastStore } from '../../stores/toastStore';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { MentionTypeBadge, type MentionTargetType } from '../ui/MentionTypeBadge';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import * as api from '../../services/api';
@@ -116,7 +117,10 @@ interface LaunchItem {
   readonly key: string;
   readonly kind: LaunchKind;
   readonly displayName: string;
-  /** Faint mono token shown on the right (e.g. "/prepare", "@panel:archi"). */
+  /**
+   * Faint mono token shown on the right — the real @mention invocation syntax
+   * a ticket comment understands (e.g. "@skill:prepare", "@panel:archi").
+   */
   readonly token: string;
   readonly icon: React.ReactNode;
   /** Lowercased, accent-stripped haystack for search. */
@@ -151,6 +155,14 @@ const KIND_ICON: Record<LaunchKind, React.ReactNode> = {
   workflow: <span className="w-3.5 shrink-0 text-center">🚦</span>,
   panel: <span className="w-3.5 shrink-0 text-center">🏛️</span>,
   persona: <span className="w-3.5 shrink-0 text-center">🧠</span>,
+};
+
+/** Launch kinds map onto the app-wide mention badge types (persona ⇒ agent). */
+const KIND_TO_MENTION_TYPE: Record<LaunchKind, MentionTargetType> = {
+  skill: 'skill',
+  workflow: 'workflow',
+  panel: 'panel',
+  persona: 'agent',
 };
 
 function normalize(s: string): string {
@@ -375,7 +387,9 @@ function LauncherPanel({
                 item={item}
                 active={highlight === idx}
                 onHover={() => setHighlight(idx)}
-                marker={<span className="w-3.5 shrink-0 text-center text-[var(--theme-accent)]">⚡</span>}
+                // The section mixes types, so each row carries the app-wide type
+                // letter badge (S/W/P) — a uniform marker would hide WHAT it is.
+                marker={<MentionTypeBadge type={KIND_TO_MENTION_TYPE[item.kind]} size="sm" />}
               />
             ))}
           </>
@@ -591,7 +605,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
         key: `skill:${s.id}`,
         kind: 'skill' as const,
         displayName: s.displayName,
-        token: `/${s.commandName}`,
+        token: `@skill:${s.commandName}`,
         icon: KIND_ICON.skill,
         search: normalize(`${s.displayName} ${s.name} ${s.commandName}`),
         onLaunch: () => void handleExecuteSkill(s.id),
@@ -603,7 +617,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
         key: `workflow:${t.id}`,
         kind: 'workflow' as const,
         displayName: t.name,
-        token: `/${t.slug}`,
+        token: `@workflow:${t.slug}`,
         icon: <span className="w-3.5 shrink-0 text-center">{t.emoji}</span>,
         search: normalize(`${t.name} ${t.slug}`),
         onLaunch: () => void handleStartWorkflow(t.id),

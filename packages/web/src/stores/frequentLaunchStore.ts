@@ -36,7 +36,10 @@ export interface FrequentItem {
   /** Id used to launch the underlying asset. */
   readonly id: string;
   readonly displayName: string;
-  /** Faint mono token shown on the right (e.g. "/prepare", "@panel:archi"). */
+  /**
+   * Faint mono token shown on the right — the real @mention invocation syntax
+   * a ticket comment understands (e.g. "@skill:prepare", "@panel:archi").
+   */
   readonly token: string;
   readonly executionCount: number;
 }
@@ -67,7 +70,7 @@ export function buildFrequentItems(
       type: 'skill',
       id: skill.id,
       displayName: skill.displayName,
-      token: `/${skill.commandName}`,
+      token: `@skill:${skill.commandName}`,
       executionCount: entry.executionCount,
     });
   }
@@ -81,7 +84,7 @@ export function buildFrequentItems(
       type: 'workflow',
       id: template.id,
       displayName: template.name,
-      token: `/${template.slug}`,
+      token: `@workflow:${template.slug}`,
       executionCount: entry.executionCount,
     });
   }

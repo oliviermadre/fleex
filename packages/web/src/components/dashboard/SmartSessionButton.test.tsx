@@ -331,6 +331,47 @@ describe('SmartSessionButton — launcher panel', () => {
     expect(screen.getByText('Fréquents')).toBeTruthy();
   });
 
+  it('marks each Fréquents row with its type letter badge (S/W/P), not a uniform marker', async () => {
+    // NaS: the uniform ⚡ hides WHAT each favourite is. Each row must carry the
+    // same per-type letter badge used by the mention autocompletes everywhere
+    // else in Fleex (S=skill green, W=workflow orange, P=panel blue).
+    useFrequentLaunchStore.setState({
+      stats: {
+        skillLeaderboard: [{ skillId: 's1', skillName: 'prepare', skillDisplayName: 'Prepare', executionCount: 7, completedCount: 7, failedCount: 0 }],
+        workflowLeaderboard: [{ workflowId: 'w1', workflowName: 'deploy', workflowDisplayName: 'Deploy', executionCount: 12, completedCount: 12, failedCount: 0, avgDurationMs: null }],
+        panelLeaderboard: [{ panelId: 'pn1', panelName: 'archi-committee', panelDisplayName: 'Archi Committee', executionCount: 3, completedCount: 3, failedCount: 0, avgDurationMs: null, avgRespondedMembers: null }],
+      },
+      loadedAt: Date.now(),
+      loading: false,
+      load: vi.fn().mockResolvedValue(undefined),
+    });
+    render(<SmartSessionButton sessions={[]} ticketId="t1" onExecuteSkill={vi.fn()} />);
+    await openDropdown();
+
+    expect(screen.getByText('Fréquents')).toBeTruthy();
+    // One badge per frequent row; getByTitle throws if the badge leaked into
+    // the grouped rows below (which have their own icons + section headers).
+    expect(screen.getByTitle('skill').textContent).toBe('S');
+    expect(screen.getByTitle('workflow').textContent).toBe('W');
+    expect(screen.getByTitle('panel').textContent).toBe('P');
+    // The type-blind marker is gone.
+    expect(screen.queryByText('⚡')).toBeNull();
+  });
+
+  it('shows the real @mention invocation token on the right of each row', async () => {
+    // NaS: a comment invokes via @{{type}}:{{name}} (like personas) — the old
+    // "/name" tokens taught users a syntax that does not exist in comments.
+    render(<SmartSessionButton sessions={[]} ticketId="t1" onExecuteSkill={vi.fn()} />);
+    await openDropdown();
+
+    expect(screen.getByText('@skill:prepare')).toBeTruthy();
+    expect(screen.getByText('@workflow:deploy')).toBeTruthy();
+    expect(screen.getByText('@panel:archi-committee')).toBeTruthy();
+    expect(screen.getByText('@agent:catalyst')).toBeTruthy();
+    expect(screen.queryByText('/prepare')).toBeNull();
+    expect(screen.queryByText('/deploy')).toBeNull();
+  });
+
   it('hides the Fréquents section once a search query is typed', async () => {
     useFrequentLaunchStore.setState({
       stats: {
