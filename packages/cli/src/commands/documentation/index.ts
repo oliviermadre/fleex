@@ -17,11 +17,12 @@
  */
 import { Command, type Option, type Argument } from 'commander';
 import type { CommandDef } from '../../core/types.ts';
-import { walkCommands, getRootProgram } from '../../core/help.ts';
+import { walkCommands, getRootProgram, getExtraHelp } from '../../core/help.ts';
+import { stripAnsi } from '../../core/colors.ts';
 
 type Format = 'markdown' | 'json' | 'text';
 
-interface CommandDoc {
+export interface CommandDoc {
   path: string;            // "fleex ticket list"
   name: string;
   aliases: string[];
@@ -30,6 +31,8 @@ interface CommandDoc {
   arguments: Array<{ name: string; description: string; required: boolean; variadic: boolean }>;
   options: Array<{ flags: string; description: string; defaultValue?: unknown; required: boolean; mandatory: boolean }>;
   subcommands: string[];   // names of direct children (excluding "help")
+  /** ANSI-stripped `CommandDef.extraHelp` (Examples, notes) when the command declares one. */
+  notes?: string;
 }
 
 const def: CommandDef = {
@@ -49,7 +52,7 @@ const def: CommandDef = {
     const docs = walkCommands(root)
       // Skip the implicit root itself — the doc reads better starting at level 1.
       .filter(({ cmd }) => cmd !== root)
-      .map(({ cmd, path }) => describe(cmd, path));
+      .map(({ cmd, path }) => describeCommand(cmd, path));
 
     if (format === 'json') {
       process.stdout.write(JSON.stringify({
@@ -68,9 +71,11 @@ const def: CommandDef = {
 
 export default def;
 
-function describe(cmd: Command, breadcrumb: string[]): CommandDoc {
+export function describeCommand(cmd: Command, breadcrumb: string[]): CommandDoc {
   const args = (cmd as unknown as { registeredArguments?: Argument[]; _args?: Argument[] });
   const argList: Argument[] = (args.registeredArguments ?? args._args ?? []) as Argument[];
+  const rawNotes = getExtraHelp(cmd);
+  const notes = rawNotes ? stripAnsi(rawNotes).trim() : undefined;
   return {
     path: breadcrumb.join(' '),
     name: cmd.name(),
@@ -91,6 +96,7 @@ function describe(cmd: Command, breadcrumb: string[]): CommandDoc {
       mandatory: o.mandatory,
     })),
     subcommands: cmd.commands.filter((c) => c.name() !== 'help').map((c) => c.name()),
+    ...(notes ? { notes } : {}),
   };
 }
 
@@ -129,6 +135,9 @@ function renderMarkdown(root: Command, docs: CommandDoc[]): string {
         lines.push(`- \`${o.flags}\`${req} — ${o.description || '(no description)'}${dflt}`);
       }
     }
+    if (d.notes) {
+      lines.push('', '**Notes:**', '', '```', d.notes, '```');
+    }
     if (d.subcommands.length) {
       lines.push('', `**Subcommands:** ${d.subcommands.map((s) => `\`${s}\``).join(', ')}`);
     }
@@ -152,6 +161,10 @@ function renderText(root: Command, docs: CommandDoc[]): string {
     }
     for (const o of d.options) {
       lines.push(`  opt ${o.flags}${o.mandatory ? ' (required)' : ''} — ${o.description || ''}`);
+    }
+    if (d.notes) {
+      lines.push('  notes:');
+      for (const ln of d.notes.split('\n')) lines.push(`    ${ln}`);
     }
     if (d.subcommands.length) lines.push(`  subcommands: ${d.subcommands.join(', ')}`);
     lines.push('');
