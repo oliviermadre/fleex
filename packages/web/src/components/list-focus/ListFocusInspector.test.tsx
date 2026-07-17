@@ -223,4 +223,34 @@ describe('ListFocusInspector header (cockpit usability redesign, #407)', () => {
     expect(statusBtn).not.toBeNull();
     expect(statusBtn!.closest('[class*="w-["]')).not.toBeNull();
   });
+
+  it('places the status kanban BEFORE the Smart Session launcher in the DOM (round 3)', () => {
+    // WHY: NaS round 3 — "on intervertit le SmartSessionButton et le NanoKanban".
+    // The kanban rejoins the board/meta row while the launcher drops to its own
+    // line below, so the kanban must now DOM-precede the launcher.
+    renderInspector({ board });
+    const statusBtn = document.querySelector(`[title="${TICKET_STATUS_LABELS['doing']}"]`)!;
+    const launcher = screen.getByText('Start');
+    expect(
+      statusBtn.compareDocumentPosition(launcher) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('renders the launcher at a prominent fixed 250×50 size (round 3)', () => {
+    // WHY: NaS round 3 — "250px x 50px". The cockpit launcher is the primary
+    // action, so it gets an explicit large trigger rather than the compact
+    // dashboard default (w-[108px]).
+    renderInspector({ board });
+    const trigger = screen.getByText('Start').closest('button')!;
+    expect(trigger.className).toContain('w-[250px]');
+    expect(trigger.className).toContain('h-[50px]');
+  });
+
+  it('centers the launcher on its own line (round 3)', () => {
+    // WHY: NaS round 3 — "on le centre sur sa ligne". The launcher sits alone
+    // on a row wrapped in a justify-center container.
+    renderInspector({ board });
+    const trigger = screen.getByText('Start').closest('button')!;
+    expect(trigger.closest('[class*="justify-center"]')).not.toBeNull();
+  });
 });
