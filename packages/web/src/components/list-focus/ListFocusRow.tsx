@@ -22,7 +22,9 @@ export const LIST_FOCUS_COL = {
   pictos: 'w-12 shrink-0',
   type: 'w-16 shrink-0',
   main: 'min-w-0 flex-1',
-  activity: 'w-24 shrink-0',
+  // w-32: fits "Waiting for 59s" on one line — a wrapped badge is forbidden
+  // (pass 6); the pill itself is also whitespace-nowrap.
+  activity: 'w-32 shrink-0',
   board: 'w-[120px] shrink-0',
   pr: 'w-[92px] shrink-0',
   badge: 'w-11 shrink-0',

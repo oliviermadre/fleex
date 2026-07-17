@@ -44,7 +44,9 @@ export function ActivityPill({ activity, detail, duration }: Props) {
       role="status"
       title={detail || cfg.defaultTitle}
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+        // whitespace-nowrap: a badge on two lines is forbidden (#400, pass 6) —
+        // the duration ("Waiting for 11h") must never wrap inside the pill.
+        'inline-flex items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-medium',
         cfg.className,
       )}
     >

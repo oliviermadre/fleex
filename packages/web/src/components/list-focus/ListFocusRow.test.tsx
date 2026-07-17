@@ -156,6 +156,15 @@ describe('ListFocusRow', () => {
     expect(container.textContent).toContain('Waiting for 5m');
   });
 
+  it('gives the activity column room for "Waiting for 59s" on ONE line (pass 6)', () => {
+    // WHY: pass 5 durations outgrew the w-24 column and "Waiting for 11h"
+    // wrapped onto two lines inside the pill — forbidden per NaS.
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { container } = renderRow({ activity: 'waiting', since: fiveMinAgo });
+    const cols = container.querySelector('[role="button"]')!.children;
+    expect(cols[4]?.className).toContain('w-32'); // was w-24 (too narrow)
+  });
+
   it('shows priority + favorite pictos and type + due-date badges (review remark 3)', () => {
     const { container } = renderRow({
       ticket: makeTicket({ priority: 'high', favorite: true, type: 'fix', dueDate: '2099-01-01' }),
