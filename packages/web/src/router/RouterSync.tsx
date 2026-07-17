@@ -538,8 +538,15 @@ export function RouterSync() {
       if (parsed.ticketId !== selectedTicketId) {
         selectTicket(parsed.ticketId);
       }
-      if (parsed.ticketTab && parsed.ticketTab !== ticketTab) {
-        setTicketTab(parsed.ticketTab);
+      // The default tab ('description') is omitted from the URL, so sync it back
+      // explicitly when a ticket is selected. Otherwise navigating Back onto the
+      // tab-less ticket URL would leave the previous tab (e.g. 'comments')
+      // selected and the "description" history entry would be silently skipped.
+      if (parsed.ticketId) {
+        const nextTicketTab = parsed.ticketTab ?? 'description';
+        if (nextTicketTab !== ticketTab) {
+          setTicketTab(nextTicketTab);
+        }
       }
       // Roadmap / board view
       const newView = parsed.ticketsView ?? (parsed.epicId ? activeView : 'board');
@@ -551,8 +558,13 @@ export function RouterSync() {
       if (newEpicId !== epicDetailId) {
         setSelectedEpicDetail(newEpicId);
       }
-      if (parsed.epicDetailTab && parsed.epicDetailTab !== epicDetailTab) {
-        setEpicDetailTab(parsed.epicDetailTab);
+      // Same as ticketTab: default epic detail tab is omitted from the URL, so
+      // reset it to 'description' when Back lands on the tab-less epic URL.
+      if (parsed.epicId) {
+        const nextEpicTab = parsed.epicDetailTab ?? 'description';
+        if (nextEpicTab !== epicDetailTab) {
+          setEpicDetailTab(nextEpicTab);
+        }
       }
     }
 
