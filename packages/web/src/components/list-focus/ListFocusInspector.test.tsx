@@ -236,21 +236,32 @@ describe('ListFocusInspector header (cockpit usability redesign, #407)', () => {
     ).toBeTruthy();
   });
 
-  it('renders the launcher at a prominent fixed 250×50 size (round 3)', () => {
-    // WHY: NaS round 3 — "250px x 50px". The cockpit launcher is the primary
-    // action, so it gets an explicit large trigger rather than the compact
-    // dashboard default (w-[108px]).
+  it('sizes the status kanban to a prominent 250×50 — not the launcher (round 3 fix)', () => {
+    // WHY: NaS — "c'est le nanokanban qui doit faire 250x50". The featured
+    // fixed control is the STATUS kanban; my first pass wrongly blew up the
+    // launcher instead ("il est gigantesque"). The kanban sits in a 250×50 box.
+    renderInspector({ board });
+    const statusBtn = document.querySelector(`[title="${TICKET_STATUS_LABELS['doing']}"]`)!;
+    expect(statusBtn.closest('[class*="w-[250px]"]')).not.toBeNull();
+    expect(statusBtn.closest('[class*="h-[50px]"]')).not.toBeNull();
+  });
+
+  it('keeps the Smart Session launcher at its usual compact size (round 3 fix)', () => {
+    // WHY: NaS — the launcher must be the normal dashboard size, never the
+    // 250×50 footprint; that belongs to the kanban.
     renderInspector({ board });
     const trigger = screen.getByText('Start').closest('button')!;
-    expect(trigger.className).toContain('w-[250px]');
-    expect(trigger.className).toContain('h-[50px]');
+    expect(trigger.className).not.toContain('w-[250px]');
+    expect(trigger.className).not.toContain('h-[50px]');
   });
 
   it('centers the launcher on its own line (round 3)', () => {
     // WHY: NaS round 3 — "on le centre sur sa ligne". The launcher sits alone
-    // on a row wrapped in a justify-center container.
+    // on a row wrapped in a justify-center container. We look ABOVE the button
+    // (parentElement) so the button's own inline-flex justify-center can't
+    // satisfy the assertion — the centering must come from the row wrapper.
     renderInspector({ board });
     const trigger = screen.getByText('Start').closest('button')!;
-    expect(trigger.closest('[class*="justify-center"]')).not.toBeNull();
+    expect(trigger.parentElement!.closest('[class*="justify-center"]')).not.toBeNull();
   });
 });

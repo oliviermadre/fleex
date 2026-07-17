@@ -34,14 +34,6 @@ interface SmartSessionButtonProps {
   onExecuteSkill?: (skillId: string) => void | Promise<unknown>;
   /** Always show the dropdown menu on click, even with 0-1 sessions and no skills. */
   alwaysShowMenu?: boolean;
-  /**
-   * Override the trigger's size classes (width / height / padding). When set it
-   * REPLACES the compact defaults — our `cn` is a plain join and can't dedupe
-   * conflicting Tailwind width utilities, so appending `w-[250px]` next to
-   * `w-[108px]` would be order-dependent. The cockpit inspector uses this to
-   * render a prominent, centered 250×50 launcher.
-   */
-  triggerClassName?: string;
 }
 
 function FleexIcon() {
@@ -472,7 +464,7 @@ function FilterChip({ label, count, active, onClick }: { label: string; count: n
   );
 }
 
-export function SmartSessionButton({ sessions, creating: externalCreating, onCreateSession: externalOnCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill, alwaysShowMenu, triggerClassName }: SmartSessionButtonProps) {
+export function SmartSessionButton({ sessions, creating: externalCreating, onCreateSession: externalOnCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill, alwaysShowMenu }: SmartSessionButtonProps) {
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const skills = useSkillStore((s) => s.skills);
@@ -716,12 +708,9 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   // Shape shared by every state — colors come from the theme param
   const shell = (theme: string) =>
     cn(
-      'inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-md font-semibold transition-all duration-150',
+      'inline-flex flex-shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition-all duration-150',
       textSize,
-      // triggerClassName REPLACES the compact size (padding + width): `cn` is a
-      // plain join with no tailwind-merge, so appending would leave both
-      // conflicting width utilities in the class list (order-dependent).
-      triggerClassName ?? cn('px-2.5 py-1', BUTTON_WIDTH),
+      BUTTON_WIDTH,
       'border',
       theme,
       'active:scale-[0.97]',

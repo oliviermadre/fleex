@@ -106,10 +106,10 @@ export function ListFocusInspector({
             position sits top-left — it's your cursor in the frozen list (↑/↓
             moves it), so it reads as an index, not buried mid-line — while
             "open full ticket" + the ✕ close button pair up top-right. The
-            ticket title + id own the next line (primary). Board + a fixed-width
-            NanoKanban (same as the worktree sidebar) form the secondary row,
-            then the Smart Session launcher sits centered on its own line as the
-            prominent primary action (250×50, NaS round 3). */}
+            ticket title + id own the next line (primary). Board + the fixed
+            250×50 NanoKanban (the featured one-click status control, NaS round
+            3) form the secondary row, then the compact Smart Session launcher
+            sits centered on its own line. */}
         <div className="flex flex-col gap-2 border-b border-[var(--theme-border-subtle)] px-4 py-3">
           {/* Line 1 — meta bar: list position (top-left) · open-full + ✕ (top-right). */}
           <div className="flex items-center gap-2 text-[10px] text-[var(--theme-text-faint)]">
@@ -144,11 +144,11 @@ export function ListFocusInspector({
             </span>
           </h2>
 
-          {/* Line 3 — board (secondary) · fixed-width micro-kanban (right).
-              NanoKanban lays its columns out with flex-1, so without a fixed
-              wrapper it stretches "énorme" with the sidebar width (NaS); the
-              w-[100px] wrapper (same as the worktree sidebar) keeps it
-              dropdown-sized with every status still visible. */}
+          {/* Line 3 — board (secondary) · the featured 250×50 micro-kanban
+              (right). It's a fixed footprint (never stretches with the sidebar,
+              NaS round 2); at 250×50 its columns stretch to fill and stay
+              one-click-legible (NaS round 3 — "c'est le nanokanban qui doit
+              faire 250x50"). max-w-full lets it shrink on a narrow sidebar. */}
           <div className="flex items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2 text-[10px] text-[var(--theme-text-faint)]">
               {board && (
@@ -157,13 +157,13 @@ export function ListFocusInspector({
                 </span>
               )}
             </div>
-            <div className="w-[100px] shrink-0">
-              <NanoKanban status={ticket.status} onStatusChange={onStatusChange} size="sm" />
+            <div className="h-[50px] w-[250px] max-w-full shrink-0">
+              <NanoKanban status={ticket.status} onStatusChange={onStatusChange} size="sm" className="h-full w-full" />
             </div>
           </div>
 
-          {/* Line 4 — Smart Session launcher, centered on its own line as the
-              prominent primary action (250×50, NaS round 3). stopPropagation:
+          {/* Line 4 — compact Smart Session launcher, centered on its own line
+              (NaS round 3: usual size, not the giant override). stopPropagation:
               opening the launcher menu must never bubble up to the aside /
               row-selection handlers. */}
           <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
@@ -171,7 +171,6 @@ export function ListFocusInspector({
               sessions={ticketSessions}
               ticketId={ticket.id}
               onExecuteSkill={(skillId) => executeSkill(skillId, ticket.id)}
-              triggerClassName="h-[50px] w-[250px] max-w-full"
             />
           </div>
         </div>
