@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import type { TicketStatus } from '@fleex/shared';
+import type { Ticket, TicketStatus } from '@fleex/shared';
 import { isSlackMessageUrl } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useTicketGroupStore } from '../../stores/ticketGroupStore';
+import { computeInheritedAttributes, toCreateFields, toUpdateFields } from './filterInheritance';
 
 const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;
 
@@ -13,8 +15,12 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const submittingRef = useRef(false);
   const createTicket = useTicketStore((s) => s.createTicket);
+  const updateTicket = useTicketStore((s) => s.updateTicket);
   const importGitHubIssue = useTicketStore((s) => s.importGitHubIssue);
   const importSlackMessage = useTicketStore((s) => s.importSlackMessage);
+  const filters = useTicketStore((s) => s.filters);
+  const selectedEpicIds = useTicketGroupStore((s) => s.selectedEpicIds);
+  const addTicketToGroup = useTicketGroupStore((s) => s.addTicketToGroup);
 
   useEffect(() => {
     if (active && inputRef.current) {
@@ -34,16 +40,34 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
     submittingRef.current = true;
     setError(null);
 
+    // Inherit any active board filters so the new ticket keeps matching the
+    // current filter instead of vanishing (epic membership + priority/type/tag/favorite).
+    const inherited = computeInheritedAttributes(filters, selectedEpicIds);
+
     try {
       // Detect GitHub issue URL or Slack message link
+      let ticket: Ticket;
       if (GITHUB_ISSUE_RE.test(trimmed)) {
         setImporting(true);
-        await importGitHubIssue(trimmed, boardId, status);
+        ticket = await importGitHubIssue(trimmed, boardId, status);
+        // Importers create the ticket without inherited fields — apply them via PATCH.
+        const updateFields = toUpdateFields(inherited);
+        if (Object.keys(updateFields).length > 0) await updateTicket(ticket.id, updateFields);
       } else if (isSlackMessageUrl(trimmed)) {
         setImporting(true);
-        await importSlackMessage(trimmed, boardId, status);
+        ticket = await importSlackMessage(trimmed, boardId, status);
+        const updateFields = toUpdateFields(inherited);
+        if (Object.keys(updateFields).length > 0) await updateTicket(ticket.id, updateFields);
       } else {
-        await createTicket({ boardId, title: trimmed, status });
+        // priority/type/tags are applied atomically at creation (no flash);
+        // favorite is absent from CreateTicketRequest so it needs a follow-up PATCH.
+        ticket = await createTicket({ boardId, title: trimmed, status, ...toCreateFields(inherited) });
+        if (inherited.favorite !== undefined) await updateTicket(ticket.id, { favorite: inherited.favorite });
+      }
+
+      // Join every active epic so the ticket stays visible under the epic filter.
+      for (const epicId of inherited.epicIds) {
+        await addTicketToGroup(epicId, ticket.id);
       }
 
       setTitle('');
