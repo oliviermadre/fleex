@@ -19,6 +19,7 @@ import {
 } from './grouping';
 import { ListFocusRow, LIST_FOCUS_COL } from './ListFocusRow';
 import { ListFocusInspector } from './ListFocusInspector';
+import { CommentIcon, DeliverableIcon } from './icons';
 import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
@@ -225,7 +226,11 @@ export function ListFocusView() {
   const totalRows = displayGroups.reduce((n, g) => n + g.tickets.length, 0);
 
   return (
-    <div className="flex h-full flex-col bg-[var(--theme-bg-base)]">
+    // w-full + overflow-hidden: as a flex item of AppLayout's main area this
+    // root must NOT size to its content's intrinsic width, otherwise wide rows
+    // push the inspector off-screen (review bug: sidebar hidden until groups
+    // were collapsed). Same convention as ExecutionLogPage.
+    <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--theme-border)] px-4 py-2.5">
         <h1 className="mr-2 text-sm font-semibold text-[var(--theme-text-primary)]">Cockpit</h1>
@@ -286,13 +291,18 @@ export function ListFocusView() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* Column header */}
           <div className="flex items-center gap-3 border-b border-[var(--theme-border-subtle)] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">
+            <div className={LIST_FOCUS_COL.id}>ID</div>
             <div className={LIST_FOCUS_COL.activity}>Activity</div>
             <div className={LIST_FOCUS_COL.main}>Ticket</div>
-            <div className={LIST_FOCUS_COL.waiting}>En attente de</div>
-            <div className={LIST_FOCUS_COL.pr}>PR / CI</div>
-            <div className={cn(LIST_FOCUS_COL.badge, 'text-center')}>💬</div>
-            <div className={cn(LIST_FOCUS_COL.badge, 'text-center')}>📦</div>
-            <div className={LIST_FOCUS_COL.status}>Status</div>
+            <div className={LIST_FOCUS_COL.pr}>PR</div>
+            <div className={cn(LIST_FOCUS_COL.badge, 'flex justify-center')} title="Comments">
+              <CommentIcon />
+              <span className="sr-only">Comments</span>
+            </div>
+            <div className={cn(LIST_FOCUS_COL.badge, 'flex justify-center')} title="Deliverables">
+              <DeliverableIcon />
+              <span className="sr-only">Deliverables</span>
+            </div>
           </div>
 
           {/* Rows */}
@@ -336,7 +346,6 @@ export function ListFocusView() {
                             : 'text-[var(--theme-text-secondary)]',
                         )}
                       >
-                        {isWaiting && <span aria-hidden>⏳ </span>}
                         {group.label}
                       </span>
                       <span className="text-[10px] tabular-nums text-[var(--theme-text-faint)]">
@@ -355,6 +364,7 @@ export function ListFocusView() {
                           unread={unreadByTicket[ticket.id] ?? { ...EMPTY_UNREAD, ticketId: ticket.id }}
                           prStates={prStates}
                           selected={ticket.id === selectedTicketId}
+                          showStatus={isWaiting}
                           onOpen={(focus) => handleOpen(ticket.id, focus)}
                           onStatusChange={(status) => handleStatusChange(ticket.id, status)}
                         />

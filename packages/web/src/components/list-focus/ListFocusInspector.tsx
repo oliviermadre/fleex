@@ -6,6 +6,7 @@ import { TicketDeliverables } from '../tickets/TicketDeliverables';
 import { SidebarWidthHandle } from '../main-panel/right-sidebar/SidebarWidthHandle';
 import { StatusChipDropdown } from './StatusChipDropdown';
 import { CommentComposer } from './CommentComposer';
+import { CommentIcon, DeliverableIcon } from './icons';
 import { cn } from '../../lib/cn';
 
 type InspectorTab = 'deliverables' | 'comment';
@@ -51,7 +52,9 @@ export function ListFocusInspector({
   }, [focus, ticket.id]);
 
   return (
-    <div className="flex h-full">
+    // shrink-0: the inspector holds its width; the list (flex-1) is the side
+    // that shrinks, so the panel can never be squeezed off-screen by wide rows.
+    <div className="flex h-full shrink-0">
       <SidebarWidthHandle parentRef={parentRef} />
       <aside
         style={{ width }}
@@ -99,20 +102,21 @@ export function ListFocusInspector({
         {/* Tabs */}
         <div className="flex gap-1 border-b border-[var(--theme-border-subtle)] px-3 pt-2">
           {([
-            { key: 'deliverables' as const, label: '📦 Deliverables' },
-            { key: 'comment' as const, label: '💬 Comment' },
+            { key: 'deliverables' as const, label: 'Deliverables', icon: <DeliverableIcon /> },
+            { key: 'comment' as const, label: 'Comment', icon: <CommentIcon /> },
           ]).map((t) => (
             <button
               key={t.key}
               type="button"
               onClick={() => setTab(t.key)}
               className={cn(
-                'rounded-t-md px-3 py-1.5 text-xs font-medium transition-colors',
+                'inline-flex items-center gap-1.5 rounded-t-md px-3 py-1.5 text-xs font-medium transition-colors',
                 tab === t.key
                   ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-text-primary)]'
                   : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
               )}
             >
+              {t.icon}
               {t.label}
             </button>
           ))}

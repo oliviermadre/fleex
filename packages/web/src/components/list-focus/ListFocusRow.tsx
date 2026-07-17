@@ -1,6 +1,7 @@
 import type { AgentActivityState, Board, Ticket, TicketLink, TicketStatus, TicketUnreadCounts } from '@fleex/shared';
 import { ActivityPill } from '../tickets/ActivityPill';
 import { StatusChipDropdown } from './StatusChipDropdown';
+import { CommentIcon, DeliverableIcon } from './icons';
 import type { InspectorFocus } from '../../stores/listFocusStore';
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
@@ -8,25 +9,31 @@ import { tint } from '../../lib/tints';
 /**
  * Shared column widths so the header labels line up with each row. Kept in one
  * place because the header (in ListFocusView) and every row must agree.
+ *
+ * Review feedback (#400): one single line per ticket, id first; no dedicated
+ * "En attente de" column (waiting is the virtual top group + activity cell) and
+ * no status column (the grouping already says it — the chip only shows inline
+ * on waiting-group rows whose statuses differ).
  */
 export const LIST_FOCUS_COL = {
+  id: 'w-14 shrink-0',
   activity: 'w-[92px] shrink-0',
   main: 'min-w-0 flex-1',
-  waiting: 'w-[150px] shrink-0',
   pr: 'w-[92px] shrink-0',
   badge: 'w-11 shrink-0',
-  status: 'w-[112px] shrink-0',
 } as const;
 
-/** Running → pill; idle → subtle dot+label. Waiting lives in its own column. */
+/** Running/waiting → pill (with detail tooltip); idle → subtle dot+label. */
 function ActivityCell({ activity, detail }: { activity: AgentActivityState; detail?: string }) {
-  if (activity === 'running') return <ActivityPill activity="running" detail={detail} />;
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-[var(--theme-text-faint)]">
-      <span className="h-1.5 w-1.5 rounded-full bg-[var(--theme-text-muted)] opacity-50" />
-      Idle
-    </span>
-  );
+  if (activity === 'idle') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-[var(--theme-text-faint)]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--theme-text-muted)] opacity-50" />
+        Idle
+      </span>
+    );
+  }
+  return <ActivityPill activity={activity} detail={detail} />;
 }
 
 function CountBadge({
@@ -36,7 +43,7 @@ function CountBadge({
   label,
   onClick,
 }: {
-  icon: string;
+  icon: React.ReactNode;
   total: number;
   unread: number;
   label: string;
@@ -56,7 +63,7 @@ function CountBadge({
         unread > 0 ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-muted)]',
       )}
     >
-      <span aria-hidden>{icon}</span>
+      {icon}
       <span>{total}</span>
       {unread > 0 && (
         <span className="absolute right-0 top-0.5 h-1.5 w-1.5 rounded-full bg-[var(--theme-accent-active)]" />
@@ -73,6 +80,8 @@ interface Props {
   unread: TicketUnreadCounts;
   prStates: Record<string, string>;
   selected: boolean;
+  /** True for rows of the virtual waiting group, whose statuses differ per row. */
+  showStatus: boolean;
   onOpen: (focus?: InspectorFocus) => void;
   onStatusChange: (status: TicketStatus) => void;
 }
@@ -85,6 +94,7 @@ export function ListFocusRow({
   unread,
   prStates,
   selected,
+  showStatus,
   onOpen,
   onStatusChange,
 }: Props) {
@@ -109,32 +119,32 @@ export function ListFocusRow({
           : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
       )}
     >
+      {/* Id */}
+      <div className={cn(LIST_FOCUS_COL.id, 'font-mono text-[11px] tabular-nums text-[var(--theme-text-muted)]')}>
+        #{ticket.displayId}
+      </div>
+
       {/* Activity */}
       <div className={LIST_FOCUS_COL.activity}>
         <ActivityCell activity={activity} detail={detail} />
       </div>
 
-      {/* Title + board */}
-      <div className={cn(LIST_FOCUS_COL.main, 'flex flex-col gap-0.5')}>
+      {/* Title + board (+ status chip on waiting-group rows only) */}
+      <div className={cn(LIST_FOCUS_COL.main, 'flex items-center gap-2')}>
         <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">
           {ticket.title}
         </span>
-        <div className="flex items-center gap-2 text-[10px] text-[var(--theme-text-faint)]">
-          {board && (
-            <span className="truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 font-medium text-[var(--theme-text-muted)]">
-              {board.emoji} {board.name}
-            </span>
-          )}
-          <span className="shrink-0">#{ticket.displayId}</span>
-        </div>
+        {board && (
+          <span className="max-w-[140px] shrink-0 truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
+            {board.emoji} {board.name}
+          </span>
+        )}
+        {showStatus && (
+          <StatusChipDropdown status={ticket.status} onChange={onStatusChange} />
+        )}
       </div>
 
-      {/* En attente de */}
-      <div className={LIST_FOCUS_COL.waiting}>
-        {activity === 'waiting' && <ActivityPill activity="waiting" detail={detail} />}
-      </div>
-
-      {/* PR / CI (v1 = PR state only) */}
+      {/* PR (v1 = PR state only) */}
       <div className={cn(LIST_FOCUS_COL.pr, 'flex items-center gap-1')}>
         {prLinks.map((pr: TicketLink) => {
           const state = prStates[pr.ref];
@@ -164,7 +174,7 @@ export function ListFocusRow({
       {/* Comments badge */}
       <div className={cn(LIST_FOCUS_COL.badge, 'flex justify-center')}>
         <CountBadge
-          icon="💬"
+          icon={<CommentIcon />}
           total={unread.totalComments}
           unread={unread.unreadComments}
           label="comments"
@@ -175,17 +185,12 @@ export function ListFocusRow({
       {/* Deliverables badge */}
       <div className={cn(LIST_FOCUS_COL.badge, 'flex justify-center')}>
         <CountBadge
-          icon="📦"
+          icon={<DeliverableIcon />}
           total={unread.totalDeliverables}
           unread={unread.unreadDeliverables}
           label="deliverables"
           onClick={() => onOpen('deliverables')}
         />
-      </div>
-
-      {/* Inline status */}
-      <div className={cn(LIST_FOCUS_COL.status, 'flex justify-start')}>
-        <StatusChipDropdown status={ticket.status} onChange={onStatusChange} />
       </div>
     </div>
   );
