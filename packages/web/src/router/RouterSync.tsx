@@ -3,9 +3,9 @@
  *
  * URL → Store: on location change, parse URL and update stores.
  * Store → URL: on store change, compute expected URL and navigate() if different.
- *   Pushes a new history entry when the primary view changes (so Back/Forward
- *   retain intermediate states) and replaces when only a detail tab / URL
- *   normalisation changed. See historyActionForNav / navIdentity below.
+ *   Pushes a new history entry when the view changes — panel, selection, or a
+ *   detail tab / section — so Back/Forward retain every intermediate state, and
+ *   replaces only on pure URL normalisation. See historyActionForNav / navIdentity.
  *
  * Navigation components should call navigate() for user-initiated actions.
  * RouterSync handles programmatic store changes (e.g. auto-select after session kill).
@@ -371,18 +371,21 @@ export function storeToUrl(
 // ─── History push/replace decision ───────────────────────────────────────────
 
 /**
- * A stable key identifying the *primary* view a URL points at, ignoring the
- * per-entity detail tab (ticket / epic / persona tab). Two URLs that share an
- * identity differ only by such a tab and should collapse into a single history
- * entry (replace); a change of identity is a genuine navigation that deserves
- * its own entry (push).
+ * A stable key identifying the view a URL points at, INCLUDING the per-entity
+ * detail tab / section (ticket / epic / persona tab, settings / analytics
+ * section). Switching such a tab is a real navigation, so it is part of the
+ * identity: Back must return to the previous tab, not skip past it. Two URLs
+ * with the same identity differ only by pure URL normalisation and collapse
+ * into a single history entry (replace); any change of identity is a genuine
+ * navigation that deserves its own entry (push).
  *
- * Board id is normalised (undefined ⇒ null) so that `/tickets` and
- * `/tickets/board/all` — both "the board with no ticket selected" — count as the
- * same view and don't create a spurious extra entry when the store normalises
- * the URL. Section tabs that ARE the view (settings / analytics) and distinct
- * selections (session tab, roadmap vs board) stay in the identity so Back
- * returns to them.
+ * Defaults are normalised so that a store-driven URL and its shorthand equal
+ * each other and don't create a spurious extra entry when the store rewrites
+ * the URL:
+ *   - board id: undefined ⇒ null (`/tickets` == `/tickets/board/all`)
+ *   - ticket / epic detail tab: null ⇒ 'description' (the default tab, which
+ *     storeToUrl omits from the path)
+ *   - settings section: null ⇒ 'general' (bare `/settings` == `/settings/general`)
  */
 export function navIdentity(parsed: ParsedUrl): string {
   const boardId = parsed.boardId === undefined ? null : parsed.boardId;
@@ -394,23 +397,26 @@ export function navIdentity(parsed: ParsedUrl): string {
     parsed.repoKey ?? '',
     boardId ?? '',
     parsed.ticketId ?? '',
+    parsed.ticketTab ?? 'description',
     parsed.ticketsView ?? '',
     parsed.epicId ?? '',
+    parsed.epicDetailTab ?? 'description',
     parsed.scratchpadKey ?? '',
     parsed.personaId ?? '',
+    parsed.personaTab ?? '',
     parsed.skillId ?? '',
     parsed.panelId ?? '',
     parsed.workflowId ?? '',
-    parsed.settingsTab ?? '',
+    parsed.settingsTab ?? 'general',
     parsed.analyticsTab ?? '',
   ].join('|');
 }
 
 /**
  * Decide whether a store-driven URL change should push a new history entry or
- * replace the current one. Push when the primary view changes (so Back/Forward
- * retain intermediate states like a ticket detail); replace when only a detail
- * tab or URL normalisation changed (so tab-clicking doesn't spam history).
+ * replace the current one. Push when the view changes — including a detail-tab
+ * or section switch — so Back/Forward retain every intermediate state; replace
+ * only when the change is pure URL normalisation.
  */
 export function historyActionForNav(
   currentPath: string,

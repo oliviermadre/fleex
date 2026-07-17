@@ -79,18 +79,17 @@ const iconPath = path.join(__dirname, '..', 'assets', 'icon.png');
 
 let mainWindow = null;
 
-// ── Browser-parity: history navigation + find-in-page ─────────────────────────
+// ── Browser-parity: history navigation ────────────────────────────────────────
 // The desktop shell is a BrowserWindow loading the web app, which uses
 // react-router (BrowserRouter). User navigations push real session-history
 // entries, so Chromium's navigation history already mirrors the browser — we
-// just re-expose Back/Forward (menu + shortcuts + trackpad swipe) and a native
-// find-in-page bar that a bare BrowserWindow otherwise hides.
+// just re-expose Back/Forward (menu + shortcuts + trackpad swipe) that a bare
+// BrowserWindow otherwise hides.
+//
+// Find-in-page (Cmd+F) was intentionally removed: the native findInPage bar
+// behaved poorly inside the SPA and wasn't worth maintaining here.
 
 const isMac = process.platform === 'darwin';
-
-// True while the injected find bar is visible; lets us intercept Escape in the
-// main process before it reaches the web app (which would close a split view).
-let findBarOpen = false;
 
 function activeContents() {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null;
@@ -116,14 +115,6 @@ function goForward() {
   else wc.goForward();
 }
 
-function closeFindBar() {
-  findBarOpen = false;
-  const wc = activeContents();
-  if (!wc) return;
-  wc.stopFindInPage('clearSelection');
-  wc.send('fleex:hide-find-bar');
-}
-
 // Reflect history availability in the menu (greyed out at the ends).
 function updateNavMenuState() {
   const menu = Menu.getApplicationMenu();
@@ -133,11 +124,6 @@ function updateNavMenuState() {
   const forward = menu.getMenuItemById('nav-forward');
   if (back) back.enabled = canGoBack(wc);
   if (forward) forward.enabled = canGoForward(wc);
-}
-
-function sendToRenderer(channel, ...args) {
-  const wc = activeContents();
-  if (wc) wc.send(channel, ...args);
 }
 
 function buildApplicationMenu() {
@@ -159,15 +145,6 @@ function buildApplicationMenu() {
         ...(isMac
           ? [{ role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' }]
           : [{ role: 'delete' }, { type: 'separator' }, { role: 'selectAll' }]),
-        { type: 'separator' },
-        {
-          label: 'Find',
-          submenu: [
-            { id: 'find', label: 'Find…', accelerator: 'CmdOrCtrl+F', click: () => sendToRenderer('fleex:show-find-bar') },
-            { id: 'find-next', label: 'Find Next', accelerator: 'CmdOrCtrl+G', click: () => sendToRenderer('fleex:find-nav', 'next') },
-            { id: 'find-prev', label: 'Find Previous', accelerator: 'CmdOrCtrl+Shift+G', click: () => sendToRenderer('fleex:find-nav', 'prev') },
-          ],
-        },
       ],
     },
     {
@@ -206,52 +183,15 @@ ipcMain.on('fleex:navigate', (_e, dir) => {
   if (dir === 'back') goBack();
   else if (dir === 'forward') goForward();
 });
-ipcMain.on('fleex:find', (_e, text, opts) => {
-  const wc = activeContents();
-  if (!wc) return;
-  const query = typeof text === 'string' ? text : '';
-  // findInPage throws on empty text — fall back to clearing instead.
-  if (query) wc.findInPage(query, opts || {});
-  else wc.stopFindInPage('clearSelection');
-});
-ipcMain.on('fleex:stop-find', (_e, action) => {
-  const wc = activeContents();
-  if (wc) wc.stopFindInPage(action || 'clearSelection');
-});
-ipcMain.on('fleex:find-bar-state', (_e, open) => {
-  findBarOpen = !!open;
-});
 
-// Per-window wiring: find results, Escape capture, navigation state, swipe.
+// Per-window wiring: keep Back/Forward menu state in sync, plus trackpad swipe.
 function wireBrowserParity(win) {
   const wc = win.webContents;
 
-  wc.on('found-in-page', (_e, result) => {
-    wc.send('fleex:found-in-page', { matches: result.matches, active: result.activeMatchOrdinal });
-  });
-
-  // Escape closes the find bar and is swallowed here, so it never reaches the
-  // web app's other Escape handlers (e.g. closing a split view).
-  wc.on('before-input-event', (event, input) => {
-    if (input.type === 'keyDown' && input.key === 'Escape' && findBarOpen) {
-      event.preventDefault();
-      closeFindBar();
-    }
-  });
-
-  // Full document navigation (workspace switch / reload): the preload re-runs
-  // and rebuilds a fresh, hidden find bar — just reset our flag + menu state.
-  wc.on('did-navigate', () => {
-    findBarOpen = false;
-    updateNavMenuState();
-  });
-
-  // SPA route changes (react-router pushState/replaceState): refresh Back/Forward
-  // availability and re-run any active search against the new content.
-  wc.on('did-navigate-in-page', () => {
-    updateNavMenuState();
-    if (findBarOpen) wc.send('fleex:refresh-find');
-  });
+  // Full document navigation (workspace switch / reload).
+  wc.on('did-navigate', updateNavMenuState);
+  // SPA route changes (react-router pushState/replaceState).
+  wc.on('did-navigate-in-page', updateNavMenuState);
   wc.on('did-frame-navigate', updateNavMenuState);
   wc.on('did-finish-load', updateNavMenuState);
 

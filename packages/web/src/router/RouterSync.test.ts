@@ -285,16 +285,41 @@ describe('historyActionForNav', () => {
     expect(action('/tickets', '/tickets/board/all')).toBe('replace');
   });
 
-  it('replaces when switching tabs within the same ticket detail', () => {
-    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe('replace');
+  it('pushes when switching tabs within the same ticket detail', () => {
+    // Switching a detail tab is a real navigation: Back must return to the
+    // previous tab, not skip past the whole ticket to the board.
+    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe('push');
   });
 
-  it('replaces when switching tabs within the same epic detail', () => {
-    expect(action('/tickets/board/all/epic/e1', '/tickets/board/all/epic/e1/roadmap-tab')).toBe('replace');
+  it('replaces when the store normalises the default (description) ticket tab', () => {
+    // storeToUrl omits the default tab, so the shorthand and the explicit
+    // /description form are the same view — no spurious entry.
+    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/description')).toBe('replace');
   });
 
-  it('replaces when switching tabs within the same persona', () => {
-    expect(action('/agents/p1', '/agents/p1/soul')).toBe('replace');
+  it('pushes when switching tabs within the same epic detail', () => {
+    expect(action('/tickets/board/all/epic/e1', '/tickets/board/all/epic/e1/deliverables')).toBe('push');
+  });
+
+  it('pushes when switching tabs within the same persona', () => {
+    expect(action('/agents/p1', '/agents/p1/soul')).toBe('push');
+  });
+
+  it('replaces when the store normalises the default (config) persona tab', () => {
+    // Bare /agents/p1 parses as the config tab, same as the explicit form.
+    expect(action('/agents/p1', '/agents/p1/config')).toBe('replace');
+  });
+
+  it('replays the reported tab scenario: comments → deliverables keeps comments', () => {
+    // NaS: on a ticket detail, going comments → deliverables then Back must
+    // land on comments, not jump straight to the board.
+    expect(action('/tickets/board/all/ticket/t1', '/tickets/board/all/ticket/t1/comments')).toBe('push');
+    expect(action('/tickets/board/all/ticket/t1/comments', '/tickets/board/all/ticket/t1/deliverables')).toBe('push');
+  });
+
+  it('replaces when the store normalises bare /settings to /settings/general', () => {
+    // Bare /settings resolves to the general section — same view, no entry.
+    expect(action('/settings', '/settings/general')).toBe('replace');
   });
 
   it('pushes when toggling between board and roadmap view', () => {
