@@ -7,23 +7,20 @@ import type { TintHue } from '../../lib/tints';
 /**
  * Pure grouping for the List/Focus cockpit (spec §7).
  *
- * A ticket's *status* (doing/reviewing/…) and its *agent activity*
- * (idle/running/waiting) are orthogonal: a `doing` ticket whose agent is
- * blocked on a mention is both `doing` and `waiting`. Decision D2 says the
- * human must never miss a blocked agent behind a status filter, so every
- * `waiting` ticket is pulled into a single virtual group at the very top —
- * across statuses — and removed from its status group to avoid double-listing.
+ * Pass 4 (remark 3) removed D2's virtual "En attente" group: NaS prefers a
+ * waiting badge on the row over a grouping, so tickets always stay in their
+ * status group and the activity column carries the waiting/running/idle
+ * signal. Waiting tickets still float to the top of their group
+ * (waiting > running > idle, then most-recently-moved) so blocked agents
+ * remain easy to spot.
  *
- * The remaining status groups render in canonical column order, restricted to
- * the scoped statuses (default doing+reviewing, D5), each sorted so the most
- * "alive" work floats up: running before idle, then most-recently-moved first.
+ * Status groups render in canonical column order, restricted to the scoped
+ * statuses (default doing+reviewing, D5). All other filters are multi-select
+ * with "empty = all" semantics (pass 4, remark 1).
  */
 
-export const WAITING_GROUP_KEY = '__waiting__';
-export const WAITING_GROUP_LABEL = 'En attente';
-
 export interface ListFocusGroup {
-  /** Stable key (status id, or the virtual waiting key) used for collapse state. */
+  /** Stable key (the status id) used for collapse state. */
   key: string;
   label: string;
   tickets: Ticket[];
@@ -32,20 +29,21 @@ export interface ListFocusGroup {
 const ACTIVITY_RANK: Record<AgentActivityState, number> = { waiting: 2, running: 1, idle: 0 };
 
 function passesScope(t: Ticket, filters: ListFocusFilters): boolean {
-  if (filters.boardId && t.boardId !== filters.boardId) return false;
+  if (filters.boardIds.length > 0 && !filters.boardIds.includes(t.boardId)) return false;
   if (filters.favoritesOnly && !t.favorite) return false;
-  if (filters.type && t.type !== filters.type) return false;
-  if (filters.priority && t.priority !== filters.priority) return false;
+  if (filters.types.length > 0 && (!t.type || !filters.types.includes(t.type))) return false;
+  if (filters.priorities.length > 0 && !filters.priorities.includes(t.priority)) return false;
+  const query = filters.titleQuery.trim().toLowerCase();
+  if (query && !t.title.toLowerCase().includes(query)) return false;
   return true;
 }
 
 /**
- * Tint hue for a group header: status groups reuse the kanban status colors
- * (doing=blue, reviewing=purple — review remark 6) so the cockpit reads as the
- * same status system; the virtual waiting group keeps its alert yellow.
+ * Tint hue for a group header: reuse the kanban status colors (doing=blue,
+ * reviewing=purple — review remark 6) so the cockpit reads as the same
+ * status system.
  */
 export function groupHue(key: string): TintHue | null {
-  if (key === WAITING_GROUP_KEY) return 'yellow';
   return STATUS_HUES[key] ?? null;
 }
 
@@ -53,7 +51,7 @@ function recency(t: Ticket): number {
   return new Date(t.statusChangedAt).getTime();
 }
 
-/** Running/waiting before idle, then most recently moved first. */
+/** Waiting before running before idle, then most recently moved first. */
 function orderBy(activityByTicket: Record<string, AgentActivityState>) {
   return (a: Ticket, b: Ticket): number => {
     const ra = ACTIVITY_RANK[activityByTicket[a.id] ?? 'idle'];
@@ -71,25 +69,13 @@ export function buildListFocusGroups(
   const inScope = tickets.filter((t) => passesScope(t, filters));
   const order = orderBy(activityByTicket);
 
-  // Virtual "En attente" group — every waiting ticket regardless of status (D2).
-  const waiting = inScope
-    .filter((t) => (activityByTicket[t.id] ?? 'idle') === 'waiting')
-    .sort(order);
-  const waitingIds = new Set(waiting.map((t) => t.id));
-
-  const groups: ListFocusGroup[] = [];
-  if (waiting.length) {
-    groups.push({ key: WAITING_GROUP_KEY, label: WAITING_GROUP_LABEL, tickets: waiting });
-  }
-
   // Scoped status groups in canonical column order (D5). Empty scoped groups are
   // still rendered so the header/scope stays stable as work drains out of them.
   const scoped = new Set(filters.statuses);
+  const groups: ListFocusGroup[] = [];
   for (const status of TICKET_STATUSES as readonly TicketStatus[]) {
     if (!scoped.has(status)) continue;
-    const rows = inScope
-      .filter((t) => t.status === status && !waitingIds.has(t.id))
-      .sort(order);
+    const rows = inScope.filter((t) => t.status === status).sort(order);
     groups.push({ key: status, label: TICKET_STATUS_LABELS[status] ?? status, tickets: rows });
   }
 

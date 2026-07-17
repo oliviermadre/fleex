@@ -2,7 +2,15 @@ import { describe, it, expect } from 'vitest';
 import type { AgentActivityState, Ticket, TicketStatus } from '@fleex/shared';
 import type { ListFocusFilters } from '../../stores/listFocusStore';
 import { DEFAULT_LIST_FOCUS_STATUSES } from '../../stores/listFocusStore';
-import { buildListFocusGroups, groupHue, WAITING_GROUP_KEY } from './grouping';
+import { buildListFocusGroups, groupHue } from './grouping';
+
+/**
+ * Cockpit grouping (#400). Pass 4 (remark 3) REMOVED the virtual "En attente"
+ * group of D2: NaS prefers a waiting badge on the row over a grouping, so
+ * tickets now stay in their status group and the activity column carries the
+ * waiting/running/idle signal. Waiting tickets still float to the top of their
+ * group (waiting > running > idle) so blocked agents remain easy to spot.
+ */
 
 /** Minimal Ticket factory — only the fields grouping.ts actually reads matter. */
 function mkTicket(partial: Partial<Ticket> & { id: string }): Ticket {
@@ -38,11 +46,12 @@ function mkTicket(partial: Partial<Ticket> & { id: string }): Ticket {
 
 function filters(partial: Partial<ListFocusFilters> = {}): ListFocusFilters {
   return {
-    boardId: null,
+    boardIds: [],
     statuses: DEFAULT_LIST_FOCUS_STATUSES,
     favoritesOnly: false,
-    type: null,
-    priority: null,
+    types: [],
+    priorities: [],
+    titleQuery: '',
     ...partial,
   };
 }
@@ -52,10 +61,9 @@ const idsOf = (groups: { key: string; tickets: Ticket[] }[], key: string) =>
   groups.find((g) => g.key === key)?.tickets.map((t) => t.id) ?? [];
 
 describe('buildListFocusGroups', () => {
-  it('pulls EVERY waiting ticket into one top group, across statuses, and out of its status group (D2)', () => {
-    // WHY: decision D2 — a blocked agent must never be hidden behind a status
-    // filter. A waiting ticket is surfaced at the top regardless of its status,
-    // and must not also appear in its own status group (no double-listing).
+  it('keeps waiting tickets inside their status group — badge, not grouping (pass 4, remark 3)', () => {
+    // WHY: NaS explicitly preferred a waiting badge on the row over a virtual
+    // group; a waiting `doing` ticket must render in the Doing group.
     const tickets = [
       mkTicket({ id: 'doing-run', status: 'doing' }),
       mkTicket({ id: 'doing-wait', status: 'doing' }),
@@ -69,86 +77,84 @@ describe('buildListFocusGroups', () => {
 
     const groups = buildListFocusGroups(tickets, activity, filters());
 
-    // Waiting group is first and holds both waiting tickets regardless of status.
-    expect(keys(groups)[0]).toBe(WAITING_GROUP_KEY);
-    expect(idsOf(groups, WAITING_GROUP_KEY).sort()).toEqual(['doing-wait', 'review-wait']);
-
-    // The waiting tickets are removed from their status groups…
-    expect(idsOf(groups, 'doing')).toEqual(['doing-run']);
-    expect(idsOf(groups, 'reviewing')).toEqual([]); // review-wait moved up, so empty
+    expect(keys(groups)).toEqual(['doing', 'reviewing']); // no virtual group
+    expect(idsOf(groups, 'doing')).toContain('doing-wait');
+    expect(idsOf(groups, 'reviewing')).toEqual(['review-wait']);
   });
 
-  it('surfaces a waiting ticket even when its status is out of scope (D2 crosses the filter)', () => {
-    // WHY: the whole point of the virtual group — a `backlog` ticket is not in
-    // the default doing+reviewing scope, but if its agent is blocked it must
-    // still appear so the human can unblock it.
-    const tickets = [mkTicket({ id: 'backlog-wait', status: 'backlog' })];
-    const groups = buildListFocusGroups(tickets, { 'backlog-wait': 'waiting' }, filters());
+  it('floats waiting above running above idle inside a group', () => {
+    // WHY: without the virtual group, the intra-group order is what keeps a
+    // blocked agent visible at the top of its status section.
+    const tickets = [
+      mkTicket({ id: 'idle1', status: 'doing', statusChangedAt: '2026-01-05T00:00:00.000Z' }),
+      mkTicket({ id: 'wait1', status: 'doing', statusChangedAt: '2026-01-01T00:00:00.000Z' }),
+      mkTicket({ id: 'run1', status: 'doing', statusChangedAt: '2026-01-03T00:00:00.000Z' }),
+    ];
+    const activity: Record<string, AgentActivityState> = { wait1: 'waiting', run1: 'running' };
 
-    expect(idsOf(groups, WAITING_GROUP_KEY)).toEqual(['backlog-wait']);
-    // backlog is not a scoped status → no backlog group is rendered.
-    expect(keys(groups)).not.toContain('backlog');
+    const groups = buildListFocusGroups(tickets, activity, filters());
+    expect(idsOf(groups, 'doing')).toEqual(['wait1', 'run1', 'idle1']);
   });
 
-  it('omits the waiting group entirely when nothing is waiting, but keeps empty scoped status groups', () => {
-    // WHY: stable headers — scoped status columns stay visible as work drains,
-    // but the virtual waiting group only exists when it has something to show.
+  it('keeps empty scoped status groups so headers stay stable', () => {
     const tickets = [mkTicket({ id: 'a', status: 'doing' })];
     const groups = buildListFocusGroups(tickets, { a: 'running' }, filters());
 
-    expect(keys(groups)).not.toContain(WAITING_GROUP_KEY);
     expect(keys(groups)).toEqual(['doing', 'reviewing']); // both scoped, reviewing empty
     expect(idsOf(groups, 'reviewing')).toEqual([]);
   });
 
-  it('scopes by board and favorites', () => {
+  it('filters by several boards at once (multi-select, empty = all)', () => {
     const tickets = [
-      mkTicket({ id: 'b1', boardId: 'board-1', favorite: true }),
-      mkTicket({ id: 'b2', boardId: 'board-2', favorite: false }),
-      mkTicket({ id: 'b1-nofav', boardId: 'board-1', favorite: false }),
+      mkTicket({ id: 'b1', boardId: 'board-1' }),
+      mkTicket({ id: 'b2', boardId: 'board-2' }),
+      mkTicket({ id: 'b3', boardId: 'board-3' }),
     ];
 
-    const byBoard = buildListFocusGroups(tickets, {}, filters({ boardId: 'board-2' }));
-    expect(idsOf(byBoard, 'doing')).toEqual(['b2']);
+    const two = buildListFocusGroups(tickets, {}, filters({ boardIds: ['board-1', 'board-3'] }));
+    expect(idsOf(two, 'doing').sort()).toEqual(['b1', 'b3']);
 
-    const byFav = buildListFocusGroups(tickets, {}, filters({ favoritesOnly: true }));
-    expect(idsOf(byFav, 'doing')).toEqual(['b1']);
+    const all = buildListFocusGroups(tickets, {}, filters({ boardIds: [] }));
+    expect(idsOf(all, 'doing')).toHaveLength(3);
   });
 
-  it('scopes by ticket type and priority (review remark 4)', () => {
+  it('filters by several types and priorities at once (multi-select, empty = all)', () => {
     const tickets = [
       mkTicket({ id: 'fix-high', type: 'fix', priority: 'high' }),
       mkTicket({ id: 'build-low', type: 'build', priority: 'low' }),
       mkTicket({ id: 'untyped', type: null, priority: 'none' }),
     ];
 
-    const byType = buildListFocusGroups(tickets, {}, filters({ type: 'fix' }));
-    expect(idsOf(byType, 'doing')).toEqual(['fix-high']);
+    const byTypes = buildListFocusGroups(tickets, {}, filters({ types: ['fix', 'build'] }));
+    expect(idsOf(byTypes, 'doing').sort()).toEqual(['build-low', 'fix-high']);
 
-    const byPriority = buildListFocusGroups(tickets, {}, filters({ priority: 'low' }));
-    expect(idsOf(byPriority, 'doing')).toEqual(['build-low']);
+    const byPriorities = buildListFocusGroups(tickets, {}, filters({ priorities: ['low', 'none'] }));
+    expect(idsOf(byPriorities, 'doing').sort()).toEqual(['build-low', 'untyped']);
 
-    // null = no filtering — untyped/none tickets stay visible.
     const all = buildListFocusGroups(tickets, {}, filters());
     expect(idsOf(all, 'doing')).toHaveLength(3);
   });
 
-  it('orders each group: running before idle, then most-recently-moved first', () => {
-    // WHY: the most "alive" work should float to the top of a group so the human
-    // scans it first — active agents before idle ones, newest movement before old.
+  it('filters by title substring, case-insensitively (pass 4, remark 1)', () => {
     const tickets = [
-      mkTicket({ id: 'idle-old', status: 'doing', statusChangedAt: '2026-01-01T00:00:00.000Z' }),
-      mkTicket({ id: 'idle-new', status: 'doing', statusChangedAt: '2026-01-03T00:00:00.000Z' }),
-      mkTicket({ id: 'run-old', status: 'doing', statusChangedAt: '2026-01-02T00:00:00.000Z' }),
+      mkTicket({ id: 'auth', title: 'Fix Auth loop' }),
+      mkTicket({ id: 'csv', title: 'Export CSV' }),
     ];
-    const activity: Record<string, AgentActivityState> = {
-      'run-old': 'running',
-      // the two idle ones are absent → idle
-    };
 
-    const groups = buildListFocusGroups(tickets, activity, filters());
-    // running first, then idle sorted by recency (new before old).
-    expect(idsOf(groups, 'doing')).toEqual(['run-old', 'idle-new', 'idle-old']);
+    const hit = buildListFocusGroups(tickets, {}, filters({ titleQuery: 'auth' }));
+    expect(idsOf(hit, 'doing')).toEqual(['auth']);
+
+    const blank = buildListFocusGroups(tickets, {}, filters({ titleQuery: '   ' }));
+    expect(idsOf(blank, 'doing')).toHaveLength(2); // whitespace-only = no filter
+  });
+
+  it('scopes by favorites', () => {
+    const tickets = [
+      mkTicket({ id: 'fav', favorite: true }),
+      mkTicket({ id: 'nofav', favorite: false }),
+    ];
+    const byFav = buildListFocusGroups(tickets, {}, filters({ favoritesOnly: true }));
+    expect(idsOf(byFav, 'doing')).toEqual(['fav']);
   });
 
   it('renders scoped status groups in canonical column order', () => {
@@ -171,8 +177,7 @@ describe('groupHue', () => {
     expect(groupHue('reviewing')).toBe('purple');
   });
 
-  it('keeps yellow for the virtual waiting group and none for unknown keys', () => {
-    expect(groupHue(WAITING_GROUP_KEY)).toBe('yellow');
+  it('returns none for unknown keys', () => {
     expect(groupHue('not-a-status')).toBeNull();
   });
 });

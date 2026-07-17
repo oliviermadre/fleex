@@ -3,10 +3,12 @@ import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 
 /**
- * Cockpit toolbar dropdowns (#400, review pass 3, remark 1). Same popover
- * recipe as the kanban dropdowns (BoardSelectorDropdown / FilterDropdown):
- * usePopover + FloatingPortal, rounded-lg surface menu, icon + label rows,
- * accent highlight on the active entry — replacing the native <select>s.
+ * Cockpit toolbar dropdown (#400, review passes 3–4). Same popover recipe as
+ * the kanban dropdowns (BoardSelectorDropdown / FilterDropdown): usePopover +
+ * FloatingPortal, rounded-lg surface menu, icon + label rows. Pass 4
+ * (remark 1) made every filter a multi-select, so only the multi variant
+ * remains; filters where an empty selection means "no filtering" show a
+ * `zeroLabel` ("All") instead of a count of 0.
  */
 
 export interface ToolbarOption<V extends string> {
@@ -43,113 +45,23 @@ const MENU_CLASS =
 const ITEM_CLASS =
   'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]';
 
-interface ToolbarSelectProps<V extends string> {
-  /** Trigger + first menu entry when no value is selected, e.g. "All boards". */
-  allLabel: string;
-  value: V | null;
-  options: ToolbarOption<V>[];
-  onChange: (value: V | null) => void;
-}
-
-/** Single-select filter: one value or "All" (null). */
-export function ToolbarSelect<V extends string>({
-  allLabel,
-  value,
-  options,
-  onChange,
-}: ToolbarSelectProps<V>) {
-  const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({
-    placement: 'bottom-start',
-  });
-  const selected = value ? options.find((o) => o.value === value) ?? null : null;
-
-  return (
-    <>
-      <button
-        ref={refs.setReference}
-        type="button"
-        className={cn(
-          TRIGGER_CLASS,
-          selected ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-muted)]',
-          open && 'bg-[var(--theme-bg-hover)]',
-        )}
-        {...getReferenceProps()}
-      >
-        {selected ? (
-          <>
-            {selected.icon}
-            <span className="font-medium">{selected.label}</span>
-          </>
-        ) : (
-          <span>{allLabel}</span>
-        )}
-        <Chevron />
-      </button>
-
-      {open && (
-        <FloatingPortal>
-          <div
-            ref={refs.setFloating}
-            style={floatingStyles}
-            {...getFloatingProps()}
-            className={MENU_CLASS}
-          >
-            <button
-              type="button"
-              className={cn(
-                ITEM_CLASS,
-                value === null
-                  ? 'bg-[var(--theme-accent)]/10 font-medium text-[var(--theme-accent)]'
-                  : 'text-[var(--theme-text-secondary)]',
-              )}
-              onClick={() => {
-                onChange(null);
-                setOpen(false);
-              }}
-            >
-              {allLabel}
-            </button>
-            <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
-            {options.map((o) => (
-              <button
-                key={o.value}
-                type="button"
-                className={cn(
-                  ITEM_CLASS,
-                  o.value === value
-                    ? 'bg-[var(--theme-accent)]/10 font-medium text-[var(--theme-accent)]'
-                    : 'text-[var(--theme-text-secondary)]',
-                )}
-                onClick={() => {
-                  onChange(o.value);
-                  setOpen(false);
-                }}
-              >
-                {o.icon && <span className="flex w-4 shrink-0 items-center justify-center">{o.icon}</span>}
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </FloatingPortal>
-      )}
-    </>
-  );
-}
-
 interface ToolbarMultiSelectProps<V extends string> {
   /** Trigger label, e.g. "Status" — the count of selected values sits next to it. */
   label: string;
+  /** Shown instead of "0" when nothing is selected (empty = all, pass 4). */
+  zeroLabel?: string;
   values: readonly V[];
   options: ToolbarOption<V>[];
   onToggle: (value: V) => void;
 }
 
 /**
- * Multi-select filter (status scope, remark 1): the menu stays open across
- * toggles so several statuses can be picked without reopening.
+ * Multi-select filter (remark 1): the menu stays open across toggles so
+ * several values can be picked without reopening.
  */
 export function ToolbarMultiSelect<V extends string>({
   label,
+  zeroLabel,
   values,
   options,
   onToggle,
@@ -172,7 +84,7 @@ export function ToolbarMultiSelect<V extends string>({
       >
         <span className="font-medium">{label}</span>
         <span className="rounded-full bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--theme-text-muted)]">
-          {values.length}
+          {values.length === 0 && zeroLabel ? zeroLabel : values.length}
         </span>
         <Chevron />
       </button>

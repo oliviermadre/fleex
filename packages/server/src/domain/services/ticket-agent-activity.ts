@@ -14,6 +14,11 @@ export interface AgentActivitySources {
   readonly waitingMentionTicketIds: Iterable<string>;
   /** Ticket ids with a WorkflowRun sitting at a human gate (`needs_review` / `blocked`). */
   readonly waitingWorkflowTicketIds: Iterable<string>;
+  /**
+   * Last SDK activity timestamp per ticket (cockpit "idle since", #400).
+   * Optional: callers that don't render ages can omit it entirely.
+   */
+  readonly lastSdkActivityAtByTicket?: ReadonlyMap<string, string>;
 }
 
 /** Human-readable tooltip copy per non-idle state. */
@@ -44,12 +49,13 @@ export function deriveTicketAgentActivity(
   for (const id of sources.runningWorkflowTicketIds) running.add(id);
 
   return requestedIds.map((ticketId) => {
+    const lastActivityAt = sources.lastSdkActivityAtByTicket?.get(ticketId);
     if (waiting.has(ticketId)) {
-      return { ticketId, activity: 'waiting', detail: DETAIL.waiting };
+      return { ticketId, activity: 'waiting', detail: DETAIL.waiting, lastActivityAt };
     }
     if (running.has(ticketId)) {
-      return { ticketId, activity: 'running', detail: DETAIL.running };
+      return { ticketId, activity: 'running', detail: DETAIL.running, lastActivityAt };
     }
-    return { ticketId, activity: 'idle' };
+    return { ticketId, activity: 'idle', lastActivityAt };
   });
 }

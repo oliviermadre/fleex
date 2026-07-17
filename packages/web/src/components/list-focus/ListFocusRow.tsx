@@ -1,9 +1,8 @@
-import type { AgentActivityState, Board, Ticket, TicketLink, TicketStatus, TicketUnreadCounts } from '@fleex/shared';
-import { ActivityPill } from '../tickets/ActivityPill';
+import type { Board, AgentActivityState, Ticket, TicketLink, TicketUnreadCounts } from '@fleex/shared';
+import { ActivityBadge } from './ActivityBadge';
 import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
 import { TypePickerPopover } from '../tickets/TypePickerPopover';
 import { DueDateBadge } from '../tickets/DueDateBadge';
-import { StatusChipDropdown } from './StatusChipDropdown';
 import { CommentIcon, DeliverableIcon } from './icons';
 import type { InspectorFocus } from '../../stores/listFocusStore';
 import { cn } from '../../lib/cn';
@@ -13,18 +12,18 @@ import { tint, tintClasses } from '../../lib/tints';
  * Shared column widths so the header labels line up with each row. Kept in one
  * place because the header (in ListFocusView) and every row must agree.
  *
- * Review feedback (#400, pass 2): no dedicated activity column (most rows are
- * idle → a column of "Idle" was noise; running shows as an inline pill), and
- * the board gets its own column instead of a chip squeezed after the title.
- * Pass 3: ★+priority pictos and the type get fixed columns before the title so
- * every title starts at the same x (remark 3).
+ * Pass 4 column order (remarks 2 + 5): id · ★+priority pictos · type · title ·
+ * activity badge (waiting/running/idle since) · board · PR · count badges.
+ * The activity column sits right after the title and the board between the
+ * title block and the PR column, per NaS's review.
  */
 export const LIST_FOCUS_COL = {
   id: 'w-14 shrink-0',
-  board: 'w-[120px] shrink-0',
   pictos: 'w-12 shrink-0',
   type: 'w-16 shrink-0',
   main: 'min-w-0 flex-1',
+  activity: 'w-24 shrink-0',
+  board: 'w-[120px] shrink-0',
   pr: 'w-[92px] shrink-0',
   badge: 'w-11 shrink-0',
 } as const;
@@ -81,17 +80,12 @@ interface Props {
   board?: Board;
   activity: AgentActivityState;
   detail?: string;
+  /** Last SDK activity for the "idle since {{age}}" badge (pass 4, remark 5). */
+  lastActivityAt?: string | null;
   unread: TicketUnreadCounts;
   prStates: Record<string, string>;
   selected: boolean;
-  /**
-   * True for rows of the virtual "En attente" group: their statuses differ per
-   * row (→ show the status chip) and their Waiting pill is redundant (→ hide
-   * it, pass 3 remark 2 — the group header already says it).
-   */
-  inWaitingGroup: boolean;
   onOpen: (focus?: InspectorFocus) => void;
-  onStatusChange: (status: TicketStatus) => void;
   onToggleFavorite: () => void;
 }
 
@@ -100,12 +94,11 @@ export function ListFocusRow({
   board,
   activity,
   detail,
+  lastActivityAt,
   unread,
   prStates,
   selected,
-  inWaitingGroup,
   onOpen,
-  onStatusChange,
   onToggleFavorite,
 }: Props) {
   const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
@@ -132,15 +125,6 @@ export function ListFocusRow({
       {/* Id */}
       <div className={cn(LIST_FOCUS_COL.id, 'font-mono text-[11px] tabular-nums text-[var(--theme-text-muted)]')}>
         #{ticket.displayId}
-      </div>
-
-      {/* Board (dedicated column, review remark 3) */}
-      <div className={LIST_FOCUS_COL.board}>
-        {board && (
-          <span className="inline-block max-w-full truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
-            {board.emoji} {board.name}
-          </span>
-        )}
       </div>
 
       {/* Favorite ★ + priority pictos in a fixed column (pass 3, remark 3).
@@ -178,20 +162,26 @@ export function ListFocusRow({
         <TypePickerPopover ticket={ticket} />
       </div>
 
-      {/* Title + due date / running pill / status chip metadata. */}
+      {/* Title + due date. */}
       <div className={cn(LIST_FOCUS_COL.main, 'flex items-center gap-2')}>
         <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">
           {ticket.title}
         </span>
         <DueDateBadge dueDate={ticket.dueDate} status={ticket.status} />
-        {/* The Waiting pill is noise inside the waiting group (remark 2); it
-            only remains for the frozen-order edge where a ticket turns waiting
-            while pinned in its status group (D3). */}
-        {(activity === 'running' || (activity === 'waiting' && !inWaitingGroup)) && (
-          <ActivityPill activity={activity} detail={detail} />
-        )}
-        {inWaitingGroup && (
-          <StatusChipDropdown status={ticket.status} onChange={onStatusChange} />
+      </div>
+
+      {/* Activity badge column, right after the title (pass 4, remark 5):
+          Waiting (yellow) / Running (blue) / idle since {{age}} (gray). */}
+      <div className={LIST_FOCUS_COL.activity}>
+        <ActivityBadge activity={activity} detail={detail} lastActivityAt={lastActivityAt} />
+      </div>
+
+      {/* Board — between the title block and the PR column (pass 4, remark 2). */}
+      <div className={LIST_FOCUS_COL.board}>
+        {board && (
+          <span className="inline-block max-w-full truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
+            {board.emoji} {board.name}
+          </span>
         )}
       </div>
 

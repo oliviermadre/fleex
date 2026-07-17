@@ -14,21 +14,17 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import {
   useListFocusStore,
   type InspectorFocus,
+  type ListFocusFilters,
   type ListFocusGroupSnapshot,
 } from '../../stores/listFocusStore';
 import { appWs } from '../../services/websocket';
 import { fetchBulkPRStates } from '../../services/api';
-import {
-  buildListFocusGroups,
-  groupHue,
-  WAITING_GROUP_KEY,
-  type ListFocusGroup,
-} from './grouping';
+import { buildListFocusGroups, groupHue, type ListFocusGroup } from './grouping';
 import { ListFocusRow, LIST_FOCUS_COL } from './ListFocusRow';
 import { ListFocusInspector } from './ListFocusInspector';
 import { CommentIcon, DeliverableIcon } from './icons';
 import { STATUS_COLOR } from './StatusChipDropdown';
-import { ToolbarSelect, ToolbarMultiSelect } from './ToolbarSelect';
+import { ToolbarMultiSelect } from './ToolbarSelect';
 import { PriorityIndicator, PRIORITY_LABELS } from '../tickets/PriorityIndicator';
 import { TYPE_ICONS } from '../tickets/TicketTypeBadge';
 import { tint } from '../../lib/tints';
@@ -56,8 +52,9 @@ function affectsUnread(type: string): boolean {
 
 /**
  * List/Focus cockpit (view #400) — a cross-board monitoring surface. Rows (not
- * kanban columns) grouped by status, a virtual "En attente" group at the top for
- * every blocked agent (D2), and a resizable right inspector exposing the three
+ * kanban columns) grouped by status, an activity badge column per row
+ * (waiting/running/idle since — pass 4 replaced D2's virtual "En attente"
+ * group with this badge), and a resizable right inspector exposing the three
  * triage actions: change status, read deliverables, relaunch via comment.
  *
  * Ticket data, agent activity, unread badges and PR states all come from their
@@ -74,6 +71,7 @@ export function ListFocusView() {
 
   const activityByTicket = useTicketActivityStore((s) => s.activityByTicket);
   const detailByTicket = useTicketActivityStore((s) => s.detailByTicket);
+  const lastActivityAtByTicket = useTicketActivityStore((s) => s.lastActivityAtByTicket);
   const loadActivity = useTicketActivityStore((s) => s.loadActivity);
 
   const unreadByTicket = useUnreadStore((s) => s.unreadByTicket);
@@ -103,8 +101,8 @@ export function ListFocusView() {
   const ticketIds = useMemo(() => tickets.map((t) => t.id), [tickets]);
 
   // ── Data loading ────────────────────────────────────────────────────────────
-  // Track ALL tickets (not just the scoped statuses) so the virtual "waiting"
-  // group can surface a blocked agent even when its status is filtered out (D2).
+  // Track ALL tickets (not just the scoped statuses) so the activity badges and
+  // "idle since" ages stay warm as the user widens the status scope.
   useEffect(() => {
     loadActivity(ticketIds);
   }, [ticketIds, loadActivity]);
@@ -248,6 +246,19 @@ export function ListFocusView() {
     [filters.statuses, setFilters],
   );
 
+  /** Toggle a value in/out of a multi-select filter array (pass 4, remark 1). */
+  const toggleIn = useCallback(
+    <K extends 'boardIds' | 'types' | 'priorities'>(key: K, value: ListFocusFilters[K][number]) => {
+      const current = filters[key] as string[];
+      setFilters({
+        [key]: current.includes(value)
+          ? current.filter((v) => v !== value)
+          : [...current, value],
+      } as Partial<ListFocusFilters>);
+    },
+    [filters, setFilters],
+  );
+
   const totalRows = displayGroups.reduce((n, g) => n + g.tickets.length, 0);
 
   return (
@@ -256,92 +267,109 @@ export function ListFocusView() {
     // push the inspector off-screen (review bug: sidebar hidden until groups
     // were collapsed). Same convention as ExecutionLogPage.
     <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--theme-bg-base)]">
-      {/* Toolbar */}
+      {/* Toolbar — all filters sit on the RIGHT behind a "Filters :" label
+          (pass 4, remark 1), every one multi-select (empty = all, "All" badge)
+          except the favorites flag, plus a free-text title filter. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--theme-border)] px-4 py-2.5">
         <h1 className="mr-2 text-sm font-semibold text-[var(--theme-text-primary)]">Cockpit</h1>
 
-        {/* Pretty popover dropdowns matching the kanban toolbar (pass 3,
-            remark 1) — replacing the native <select>s and the always-expanded
-            status chip row. Every option carries its icon: board emoji, status
-            dot, type emoji, priority picto. */}
-        <ToolbarSelect
-          allLabel="All boards"
-          value={filters.boardId}
-          options={boards.map((b) => ({
-            value: b.id,
-            label: b.name,
-            icon: <span>{b.emoji}</span>,
-          }))}
-          onChange={(boardId) => setFilters({ boardId })}
-        />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">
+            Filters :
+          </span>
 
-        <ToolbarMultiSelect
-          label="Status"
-          values={filters.statuses}
-          options={(TICKET_STATUSES as readonly TicketStatus[]).map((s) => ({
-            value: s,
-            label: TICKET_STATUS_LABELS[s] ?? s,
-            icon: (
-              <span
-                className="inline-block h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: STATUS_COLOR[s] }}
-              />
-            ),
-          }))}
-          onToggle={toggleStatusScope}
-        />
+          <input
+            type="search"
+            value={filters.titleQuery}
+            onChange={(e) => setFilters({ titleQuery: e.target.value })}
+            placeholder="Filter by title…"
+            className="w-44 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-faint)] focus:border-[var(--theme-accent)] focus:outline-none"
+          />
 
-        <ToolbarSelect
-          allLabel="All types"
-          value={filters.type}
-          options={TICKET_TYPES.map((t: TicketType) => ({
-            value: t,
-            label: TICKET_TYPE_LABELS[t] ?? t,
-            icon: <span>{TYPE_ICONS[t]}</span>,
-          }))}
-          onChange={(type) => setFilters({ type })}
-        />
+          <ToolbarMultiSelect
+            label="Boards"
+            zeroLabel="All"
+            values={filters.boardIds}
+            options={boards.map((b) => ({
+              value: b.id,
+              label: b.name,
+              icon: <span>{b.emoji}</span>,
+            }))}
+            onToggle={(id) => toggleIn('boardIds', id)}
+          />
 
-        <ToolbarSelect
-          allLabel="All priorities"
-          value={filters.priority}
-          options={TICKET_PRIORITIES.map((p: TicketPriority) => ({
-            value: p,
-            label: PRIORITY_LABELS[p] ?? p,
-            icon: <PriorityIndicator priority={p} />,
-          }))}
-          onChange={(priority) => setFilters({ priority })}
-        />
+          <ToolbarMultiSelect
+            label="Status"
+            values={filters.statuses}
+            options={(TICKET_STATUSES as readonly TicketStatus[]).map((s) => ({
+              value: s,
+              label: TICKET_STATUS_LABELS[s] ?? s,
+              icon: (
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: STATUS_COLOR[s] }}
+                />
+              ),
+            }))}
+            onToggle={toggleStatusScope}
+          />
 
-        <button
-          type="button"
-          onClick={() => setFilters({ favoritesOnly: !filters.favoritesOnly })}
-          aria-pressed={filters.favoritesOnly}
-          title="Only favorites"
-          className={cn(
-            'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
-            filters.favoritesOnly
-              ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
-              : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
-          )}
-        >
-          ★ Favorites
-        </button>
+          <ToolbarMultiSelect
+            label="Types"
+            zeroLabel="All"
+            values={filters.types}
+            options={TICKET_TYPES.map((t: TicketType) => ({
+              value: t,
+              label: TICKET_TYPE_LABELS[t] ?? t,
+              icon: <span>{TYPE_ICONS[t]}</span>,
+            }))}
+            onToggle={(t) => toggleIn('types', t)}
+          />
+
+          <ToolbarMultiSelect
+            label="Priorities"
+            zeroLabel="All"
+            values={filters.priorities}
+            options={TICKET_PRIORITIES.map((p: TicketPriority) => ({
+              value: p,
+              label: PRIORITY_LABELS[p] ?? p,
+              icon: <PriorityIndicator priority={p} />,
+            }))}
+            onToggle={(p) => toggleIn('priorities', p)}
+          />
+
+          <button
+            type="button"
+            onClick={() => setFilters({ favoritesOnly: !filters.favoritesOnly })}
+            aria-pressed={filters.favoritesOnly}
+            title="Only favorites"
+            className={cn(
+              'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+              filters.favoritesOnly
+                ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
+                : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
+            )}
+          >
+            ★ Favorites
+          </button>
+        </div>
       </div>
 
       {/* List + inspector */}
       <div ref={parentRef} className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* Column header */}
+          {/* Column header — id · pictos · type · title · activity · board · PR
+              (pass 4, remarks 2 + 5). */}
           <div className="flex items-center gap-3 border-b border-[var(--theme-border-subtle)] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">
             <div className={LIST_FOCUS_COL.id}>ID</div>
-            <div className={LIST_FOCUS_COL.board}>Board</div>
             {/* ★ + priority pictos column — no label needed, kept for alignment. */}
             <div className={LIST_FOCUS_COL.pictos}>
               <span className="sr-only">Favorite / priority</span>
             </div>
             <div className={LIST_FOCUS_COL.type}>Type</div>
             <div className={LIST_FOCUS_COL.main}>Ticket</div>
+            <div className={LIST_FOCUS_COL.activity}>Activity</div>
+            <div className={LIST_FOCUS_COL.board}>Board</div>
             <div className={LIST_FOCUS_COL.pr}>PR</div>
             <div className={cn(LIST_FOCUS_COL.badge, 'flex justify-center')} title="Comments">
               <CommentIcon />
@@ -362,9 +390,7 @@ export function ListFocusView() {
             ) : (
               displayGroups.map((group) => {
                 const collapsed = collapsedGroups.has(group.key);
-                const isWaiting = group.key === WAITING_GROUP_KEY;
-                // Kanban status colors on section titles (review remark 6);
-                // the virtual waiting group keeps its alert yellow.
+                // Kanban status colors on section titles (review remark 6).
                 const hue = groupHue(group.key);
                 return (
                   <section key={group.key}>
@@ -412,12 +438,11 @@ export function ListFocusView() {
                           board={boardById.get(ticket.boardId)}
                           activity={activityByTicket[ticket.id] ?? 'idle'}
                           detail={detailByTicket[ticket.id]}
+                          lastActivityAt={lastActivityAtByTicket[ticket.id] ?? null}
                           unread={unreadByTicket[ticket.id] ?? { ...EMPTY_UNREAD, ticketId: ticket.id }}
                           prStates={prStates}
                           selected={ticket.id === selectedTicketId}
-                          inWaitingGroup={isWaiting}
                           onOpen={(focus) => handleOpen(ticket.id, focus)}
-                          onStatusChange={(status) => handleStatusChange(ticket.id, status)}
                           onToggleFavorite={() => void updateTicket(ticket.id, { favorite: !ticket.favorite })}
                         />
                       ))}

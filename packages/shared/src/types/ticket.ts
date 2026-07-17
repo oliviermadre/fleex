@@ -472,6 +472,11 @@ export interface TicketAgentActivity {
   readonly activity: AgentActivityState;
   /** Optional human-readable detail for the card tooltip. */
   readonly detail?: string;
+  /**
+   * Timestamp of the last SDK activity on the ticket (cockpit "idle since",
+   * #400). Absent/null when the ticket never had an SDK session.
+   */
+  readonly lastActivityAt?: string | null;
 }
 
 // ── Summaries ──

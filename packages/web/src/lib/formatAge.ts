@@ -15,5 +15,8 @@ export function formatAge(dateString: string): string {
   if (hours < 24) return `${hours}h`;
 
   const days = Math.floor(hours / 24);
-  return `${days}d`;
+  if (days < 7) return `${days}d`;
+
+  const weeks = Math.floor(days / 7);
+  return `${weeks}w`;
 }

@@ -23,11 +23,12 @@ afterEach(() => {
 });
 
 /**
- * Cockpit row layout (#400, review feedback):
- * - the ticket id must be readable as the FIRST column (scan anchor),
- * - badges use SVG icons, never emojis (professional look),
- * - the status chip is redundant inside a status group and only appears for
- *   rows of the virtual "En attente" group whose statuses are heterogeneous.
+ * Cockpit row layout (#400, pass 4):
+ * - column order is id · pictos · type · title · activity · board · PR · badges
+ *   (remark 2: board sits between the title and the PR column; remark 5: the
+ *   activity badge column sits right after the title, before the board),
+ * - the activity column always says something: Waiting / Running / idle since,
+ * - the status chip is gone from rows — the group header carries the status.
  */
 
 function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
@@ -81,12 +82,11 @@ function renderRow(props: Partial<Parameters<typeof ListFocusRow>[0]> = {}) {
     <ListFocusRow
       ticket={makeTicket()}
       activity="idle"
+      lastActivityAt={null}
       unread={unread}
       prStates={{}}
       selected={false}
-      inWaitingGroup={false}
       onOpen={() => {}}
-      onStatusChange={() => {}}
       onToggleFavorite={() => {}}
       {...props}
     />,
@@ -110,50 +110,44 @@ describe('ListFocusRow', () => {
     expect(container.textContent).toContain('3'); // comment count still visible
   });
 
-  it('hides the status chip inside a status group (grouping already says it)', () => {
-    const { container } = renderRow({ inWaitingGroup: false });
+  it('orders columns id · pictos · type · title · activity · board · PR (pass 4, remarks 2+5)', () => {
+    // WHY: NaS asked for the activity badge "juste après le titre, avant le
+    // board" and the board "entre le titre du ticket et la colonne de PR".
+    const { container } = renderRow({
+      ticket: makeTicket({ type: 'fix', priority: 'high' }),
+      board,
+      activity: 'running',
+    });
+    const cols = container.querySelector('[role="button"]')!.children;
+    expect(cols[1]?.querySelector('[title^="Priority"]')).not.toBeNull();
+    expect(cols[2]?.textContent).toContain(TICKET_TYPE_LABELS['fix']);
+    expect(cols[3]?.textContent).toContain('Fix auth loop');
+    expect(cols[4]?.textContent).toContain('Running'); // activity column
+    expect(cols[5]?.textContent).toContain('Fleex Core'); // board after activity
+    expect(cols[6]?.className).toContain('w-[92px]'); // then PR
+  });
+
+  it('never renders a status chip on the row (grouping header already says it)', () => {
+    const { container } = renderRow({ activity: 'waiting' });
     expect(container.textContent).not.toContain('Doing');
   });
 
-  it('shows the status chip only for waiting-group rows (heterogeneous statuses)', () => {
-    const { container } = renderRow({ inWaitingGroup: true, activity: 'waiting' });
-    expect(container.textContent).toContain('Doing');
-  });
-
-  it('hides the redundant "Waiting" pill inside the waiting group (pass 3, remark 2)', () => {
-    // WHY: every waiting ticket is pulled into the "En attente" group (D2) —
-    // repeating a Waiting badge on each of its rows says nothing new.
-    const { container } = renderRow({
-      activity: 'waiting',
-      inWaitingGroup: true,
-      detail: 'mention non résolue',
-    });
-    expect(container.textContent).not.toContain('Waiting');
-  });
-
-  it('still shows the waiting pill OUTSIDE the waiting group (frozen-order edge)', () => {
-    // A ticket can turn waiting while the inspector's D3 freeze keeps it inside
-    // its status group — there the pill is the only "blocked" signal.
-    const { container } = renderRow({
-      activity: 'waiting',
-      inWaitingGroup: false,
-      detail: 'mention non résolue',
-    });
+  it('shows the Waiting badge in the activity column (pass 4, remark 3: badge, not grouping)', () => {
+    const { container } = renderRow({ activity: 'waiting', detail: 'mention non résolue' });
     expect(container.textContent).toContain('Waiting');
     expect(container.querySelector('[title="mention non résolue"]')).not.toBeNull();
   });
 
-  it('drops the dedicated activity column: idle rows show no "Idle" label (review remark 3)', () => {
-    // WHY: most rows are idle, so a whole column repeating "Idle" was noise.
-    // Activity is now an inline pill shown only when something IS happening.
-    const { container } = renderRow({ activity: 'idle' });
-    expect(container.textContent).not.toContain('Idle');
+  it('shows "idle since {{age}}" for idle rows with a past SDK session (pass 4, remark 5)', () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+    const { container } = renderRow({ activity: 'idle', lastActivityAt: twoHoursAgo });
+    expect(container.textContent).toContain('idle since 2h');
   });
 
-  it('renders the board in its own column, right after the id (review remark 3)', () => {
-    const { container } = renderRow({ board });
-    const row = container.querySelector('[role="button"]');
-    expect(row?.children[1]?.textContent).toContain('Fleex Core');
+  it('shows plain "idle" when the ticket never had an SDK session (pass 4, remark 5)', () => {
+    const { container } = renderRow({ activity: 'idle', lastActivityAt: null });
+    expect(container.textContent).toContain('idle');
+    expect(container.textContent).not.toContain('idle since');
   });
 
   it('shows priority + favorite pictos and type + due-date badges (review remark 3)', () => {
@@ -164,17 +158,6 @@ describe('ListFocusRow', () => {
     expect(container.querySelector('[title="Remove from favorites"]')).not.toBeNull();
     expect(container.textContent).toContain(TICKET_TYPE_LABELS['fix']);
     expect(container.textContent).toMatch(/J-\d+/);
-  });
-
-  it('renders the type in a dedicated column between the priority pictos and the title (pass 3, remark 3)', () => {
-    // WHY: a dedicated fixed-width column makes every title start at the same
-    // x, so the eye scans types then titles vertically.
-    const { container } = renderRow({ ticket: makeTicket({ type: 'fix', priority: 'high' }) });
-    const cols = container.querySelector('[role="button"]')!.children;
-    // 0 id · 1 board · 2 pictos (★ + priority) · 3 type · 4 main (title…)
-    expect(cols[2]?.querySelector('[title^="Priority"]')).not.toBeNull();
-    expect(cols[3]?.textContent).toContain(TICKET_TYPE_LABELS['fix']);
-    expect(cols[4]?.textContent).toContain('Fix auth loop');
   });
 
   it('clicking the priority picto opens a picker that updates the ticket (pass 3, remark 5)', () => {

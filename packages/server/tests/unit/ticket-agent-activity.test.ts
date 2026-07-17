@@ -74,4 +74,34 @@ describe('deriveTicketAgentActivity', () => {
     expect(running?.detail).toBeTruthy();
     expect(waiting?.detail).toBeTruthy();
   });
+
+  it('carries lastActivityAt from the SDK-activity map for every state (#400, pass 4)', () => {
+    // WHY: the cockpit shows "idle since {{age}}" per row — the timestamp of
+    // the last SDK execution must ride along with the activity entry, idle
+    // included (that is exactly the state that needs it).
+    const lastSdkActivityAtByTicket = new Map([
+      ['T1', '2026-07-17T10:00:00.000Z'],
+      ['T2', '2026-07-16T08:00:00.000Z'],
+    ]);
+    const result = deriveTicketAgentActivity(['T1', 'T2'], {
+      ...EMPTY,
+      runningExecutionTicketIds: ['T1'],
+      lastSdkActivityAtByTicket,
+    });
+    expect(result.find((r) => r.ticketId === 'T1')?.lastActivityAt).toBe('2026-07-17T10:00:00.000Z');
+    const idle = result.find((r) => r.ticketId === 'T2');
+    expect(idle?.activity).toBe('idle');
+    expect(idle?.lastActivityAt).toBe('2026-07-16T08:00:00.000Z');
+  });
+
+  it('omits lastActivityAt when a ticket never had an SDK session (renders plain "idle")', () => {
+    const [withMap] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      lastSdkActivityAtByTicket: new Map(),
+    });
+    expect(withMap?.lastActivityAt).toBeUndefined();
+
+    const [withoutMap] = deriveTicketAgentActivity(['T1'], EMPTY);
+    expect(withoutMap?.lastActivityAt).toBeUndefined();
+  });
 });

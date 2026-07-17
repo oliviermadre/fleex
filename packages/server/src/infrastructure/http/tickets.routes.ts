@@ -1482,11 +1482,24 @@ export function ticketRoutes(container: Container) {
         .filter((r) => requested.has(r.ticketId))
         .map((r) => r.ticketId);
 
+      // Last SDK activity per ticket → the cockpit's "idle since {{age}}" (#400).
+      // CLI sessions are excluded (NaS spec'd "dernière exécution du sdk"); a
+      // NULL source reads as sdk. Freshest signal wins: completedAt, else the
+      // last streamed event, else the start.
+      const lastSdkActivityAtByTicket = new Map<string, string>();
+      for (const e of executions) {
+        if (e.source === 'cli' || !requested.has(e.ticketId)) continue;
+        const ts = e.completedAt ?? e.lastEventAt ?? e.startedAt;
+        const prev = lastSdkActivityAtByTicket.get(e.ticketId);
+        if (!prev || ts > prev) lastSdkActivityAtByTicket.set(e.ticketId, ts);
+      }
+
       return deriveTicketAgentActivity(requestedIds, {
         runningExecutionTicketIds,
         runningWorkflowTicketIds,
         waitingMentionTicketIds,
         waitingWorkflowTicketIds,
+        lastSdkActivityAtByTicket,
       });
     });
   };

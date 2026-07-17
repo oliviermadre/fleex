@@ -22,6 +22,12 @@ interface TicketActivityState {
   activityByTicket: Record<string, AgentActivityState>;
   /** Optional tooltip detail per ticket. */
   detailByTicket: Record<string, string>;
+  /**
+   * Last SDK activity per ticket — kept for idle tickets too (that is exactly
+   * the state the cockpit's "idle since {{age}}" column needs, #400 pass 4).
+   * Absence ⇒ the ticket never had an SDK session.
+   */
+  lastActivityAtByTicket: Record<string, string>;
   /** The currently-visible tickets; only these are tracked / reconciled. */
   trackedIds: string[];
 
@@ -38,11 +44,12 @@ interface TicketActivityState {
 export const useTicketActivityStore = create<TicketActivityState>((set, get) => ({
   activityByTicket: {},
   detailByTicket: {},
+  lastActivityAtByTicket: {},
   trackedIds: [],
 
   loadActivity: async (ticketIds) => {
     if (!ticketIds.length) {
-      set({ trackedIds: [], activityByTicket: {}, detailByTicket: {} });
+      set({ trackedIds: [], activityByTicket: {}, detailByTicket: {}, lastActivityAtByTicket: {} });
       return;
     }
     set({ trackedIds: ticketIds });
@@ -56,12 +63,16 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
     // dropped back to idle simply won't appear and its stale pill is cleared.
     const activityByTicket: Record<string, AgentActivityState> = {};
     const detailByTicket: Record<string, string> = {};
+    const lastActivityAtByTicket: Record<string, string> = {};
     for (const it of items) {
+      // lastActivityAt is kept for EVERY entry — idle included, since "idle
+      // since {{age}}" is precisely about tickets with no current activity.
+      if (it.lastActivityAt) lastActivityAtByTicket[it.ticketId] = it.lastActivityAt;
       if (it.activity === 'idle') continue;
       activityByTicket[it.ticketId] = it.activity;
       if (it.detail) detailByTicket[it.ticketId] = it.detail;
     }
-    set({ activityByTicket, detailByTicket });
+    set({ activityByTicket, detailByTicket, lastActivityAtByTicket });
   },
 
   getActivity: (ticketId) => get().activityByTicket[ticketId] ?? 'idle',

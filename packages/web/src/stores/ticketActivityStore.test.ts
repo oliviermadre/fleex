@@ -10,7 +10,12 @@ import { useTicketActivityStore } from './ticketActivityStore';
 
 describe('ticketActivityStore', () => {
   beforeEach(() => {
-    useTicketActivityStore.setState({ activityByTicket: {}, detailByTicket: {}, trackedIds: [] });
+    useTicketActivityStore.setState({
+      activityByTicket: {},
+      detailByTicket: {},
+      lastActivityAtByTicket: {},
+      trackedIds: [],
+    });
     vi.clearAllMocks();
   });
 
@@ -59,6 +64,25 @@ describe('ticketActivityStore', () => {
     store.noteActivity('a', 'running');
     expect(useTicketActivityStore.getState().getActivity('a')).toBe('waiting');
     expect(useTicketActivityStore.getState().detailByTicket.a).toBe('needs review');
+  });
+
+  it('loadActivity records lastActivityAt for ALL entries, including idle ones (#400, pass 4)', async () => {
+    // WHY: the cockpit's activity column shows "idle since {{age}}" — the last
+    // SDK activity timestamp matters precisely for tickets with NO current
+    // activity, so it must survive even though idle entries are dropped from
+    // activityByTicket.
+    vi.mocked(api.fetchTicketAgentActivity).mockResolvedValue([
+      { ticketId: 'a', activity: 'running', detail: 'working', lastActivityAt: '2026-07-17T10:00:00.000Z' },
+      { ticketId: 'b', activity: 'idle', lastActivityAt: '2026-07-16T08:00:00.000Z' },
+      { ticketId: 'c', activity: 'idle' }, // never had an SDK session
+    ] satisfies TicketAgentActivity[]);
+
+    await useTicketActivityStore.getState().loadActivity(['a', 'b', 'c']);
+    const s = useTicketActivityStore.getState();
+    expect(s.lastActivityAtByTicket.a).toBe('2026-07-17T10:00:00.000Z');
+    expect(s.lastActivityAtByTicket.b).toBe('2026-07-16T08:00:00.000Z');
+    expect(s.lastActivityAtByTicket.c).toBeUndefined();
+    expect(s.getActivity('b')).toBe('idle'); // idle still reads idle
   });
 
   it('noteActivity ignores tickets not in view (board-scoped)', () => {

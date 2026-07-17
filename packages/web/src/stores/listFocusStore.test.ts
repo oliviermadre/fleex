@@ -19,11 +19,12 @@ describe('listFocusStore.refreeze', () => {
       inspectorFocus: null,
       frozenGroups: null,
       filters: {
-        boardId: null,
+        boardIds: [],
         statuses: DEFAULT_LIST_FOCUS_STATUSES,
         favoritesOnly: false,
-        type: null,
-        priority: null,
+        types: [],
+        priorities: [],
+        titleQuery: '',
       },
     });
   });

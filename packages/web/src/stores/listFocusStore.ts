@@ -20,16 +20,23 @@ export interface ListFocusGroupSnapshot {
   ticketIds: string[];
 }
 
+/**
+ * Every filter is multi-select with "empty = all" semantics — except
+ * `statuses` (empty = nothing: it *scopes* which groups render) and the
+ * `favoritesOnly` flag (pass 4, remark 1).
+ */
 export interface ListFocusFilters {
-  /** null = all boards. */
-  boardId: string | null;
-  /** Status groups to render (the virtual "waiting" group is always shown). */
+  /** Empty = all boards. */
+  boardIds: string[];
+  /** Status groups to render. */
   statuses: TicketStatus[];
   favoritesOnly: boolean;
-  /** null = all types. */
-  type: TicketType | null;
-  /** null = all priorities. */
-  priority: TicketPriority | null;
+  /** Empty = all types. */
+  types: TicketType[];
+  /** Empty = all priorities. */
+  priorities: TicketPriority[];
+  /** Case-insensitive substring match on the title; blank = no filter. */
+  titleQuery: string;
 }
 
 /** Constat: 10 doing + 6 reviewing → default scope (spec D5). */
@@ -96,11 +103,12 @@ export const useListFocusStore = create<ListFocusState>((set, get) => ({
   frozenGroups: null,
   collapsedGroups: loadCollapsed(),
   filters: {
-    boardId: null,
+    boardIds: [],
     statuses: DEFAULT_LIST_FOCUS_STATUSES,
     favoritesOnly: false,
-    type: null,
-    priority: null,
+    types: [],
+    priorities: [],
+    titleQuery: '',
   },
 
   open: (ticketId, groups, focus = null) => {
