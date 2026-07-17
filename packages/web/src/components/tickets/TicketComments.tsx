@@ -24,6 +24,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { MentionTypeBadge } from '../ui/MentionTypeBadge';
 import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
@@ -189,7 +190,7 @@ function DeliverableChip({ deliverable, onOpen }: {
 const commentRehypePlugins: any[] = [[rehypeHighlight, { detect: true }]];
 const commentRemarkPlugins = [remarkGfm];
 
-const CommentMarkdown = memo(function CommentMarkdown({
+export const CommentMarkdown = memo(function CommentMarkdown({
   body,
   commentId,
   mentionLookup,
@@ -270,6 +271,19 @@ const CommentMarkdown = memo(function CommentMarkdown({
             mentionId={mId}
             onRemove={onRemoveMention}
             className={tint('green')}
+          />
+        );
+      }
+      if (href?.startsWith('#fleex-workflow:')) {
+        const name = href.slice('#fleex-workflow:'.length);
+        const mentionText = `@${name}`;
+        const mId = commentMentions?.get(mentionText);
+        return (
+          <MentionSpan
+            text={mentionText}
+            mentionId={mId}
+            onRemove={onRemoveMention}
+            className={tint('orange')}
           />
         );
       }
@@ -487,11 +501,7 @@ function MentionAutocomplete({
           }`}
           onMouseDown={(e) => { e.preventDefault(); onSelect(opt); }}
         >
-          <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[10px] font-bold ${
-            opt.type === 'agent' ? tint('purple') : opt.type === 'panel' ? tint('blue') : opt.type === 'skill' ? tint('green') : opt.type === 'workflow' ? tint('orange') : opt.type === 'ticket' ? tint('gray') : tint('yellow')
-          }`}>
-            {opt.type === 'agent' ? 'A' : opt.type === 'panel' ? 'P' : opt.type === 'skill' ? 'S' : opt.type === 'workflow' ? 'W' : opt.type === 'ticket' ? 'T' : 'H'}
-          </span>
+          <MentionTypeBadge type={opt.type} />
           <span className="flex-1 truncate font-medium">{opt.label}</span>
           <span className="text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
         </button>

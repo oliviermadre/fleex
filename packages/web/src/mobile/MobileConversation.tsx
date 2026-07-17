@@ -25,7 +25,8 @@ import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { ModelSelect } from '../components/agents/ModelSelect';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
-import { tint, tintClasses } from '../lib/tints';
+import { MentionTypeBadge } from '../components/ui/MentionTypeBadge';
+import { tint } from '../lib/tints';
 
 const MODES: { id: ConversationMode; label: string }[] = [
   { id: 'talk', label: '🗣 Talk' },
@@ -62,15 +63,6 @@ interface MentionOption {
   label: string;
   type: 'agent' | 'human' | 'panel' | 'skill' | 'workflow' | 'ticket';
 }
-
-const MENTION_TYPE_BADGE: Record<MentionOption['type'], { letter: string; className: string }> = {
-  agent: { letter: 'A', className: `${tintClasses('purple').bg} ${tintClasses('purple').text}` },
-  panel: { letter: 'P', className: `${tintClasses('blue').bg} ${tintClasses('blue').text}` },
-  skill: { letter: 'S', className: `${tintClasses('green').bg} ${tintClasses('green').text}` },
-  workflow: { letter: 'W', className: `${tintClasses('orange').bg} ${tintClasses('orange').text}` },
-  ticket: { letter: 'T', className: `${tintClasses('gray').bg} ${tintClasses('gray').text}` },
-  human: { letter: 'H', className: `${tintClasses('yellow').bg} ${tintClasses('yellow').text}` },
-};
 
 // Tickets can be numerous — only surface them once a query is typed, capped.
 const MAX_TICKET_SUGGESTIONS = 8;
@@ -631,7 +623,6 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
       {acOpen && filteredOptions.length > 0 && (
         <div className="max-h-52 shrink-0 overflow-y-auto border-t border-[var(--theme-border)] bg-[var(--theme-bg-secondary)]">
           {filteredOptions.map((opt) => {
-            const badge = MENTION_TYPE_BADGE[opt.type];
             return (
               <button
                 key={opt.insertText}
@@ -641,11 +632,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                 }}
                 className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left active:bg-[var(--theme-bg-hover)]"
               >
-                <span
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded text-[11px] font-bold ${badge.className}`}
-                >
-                  {badge.letter}
-                </span>
+                <MentionTypeBadge type={opt.type} size="lg" />
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--theme-text-primary)]">
                   {opt.label}
                 </span>

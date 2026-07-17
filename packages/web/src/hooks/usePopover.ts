@@ -63,6 +63,12 @@ interface PopoverOptions {
   enableClick?: boolean;
   /** Close on outside-click / Escape. Default true. */
   enableDismiss?: boolean;
+  /**
+   * Explicit height cap in px. The popover is always bounded by the available
+   * viewport space; pass this to additionally clamp it (effective max-height is
+   * `min(maxHeight, available space)`), so it never sprawls on tall windows.
+   */
+  maxHeight?: number;
 }
 
 /**
@@ -87,6 +93,7 @@ export function usePopover({
   onOpenChange,
   enableClick = true,
   enableDismiss = true,
+  maxHeight,
 }: PopoverOptions = {}): PopoverReturn {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
@@ -107,14 +114,15 @@ export function usePopover({
       size({
         padding: VIEWPORT_PADDING,
         apply({ availableHeight, elements }) {
+          const capped = maxHeight != null ? Math.min(availableHeight, maxHeight) : availableHeight;
           Object.assign(elements.floating.style, {
-            maxHeight: `${Math.max(0, availableHeight)}px`,
+            maxHeight: `${Math.max(0, capped)}px`,
             overflowY: 'auto',
           });
         },
       }),
     ],
-    [gap],
+    [gap, maxHeight],
   );
 
   const { refs, floatingStyles, context } = useFloating({
