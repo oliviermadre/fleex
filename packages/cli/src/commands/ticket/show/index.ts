@@ -1,7 +1,7 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { c, statusColor, isJsonMode } from '../../../core/colors.ts';
-import { apiBase, apiGet } from '../../../core/api.ts';
-import { resolveTicketId } from '../_shared.ts';
+import { apiBase, apiGet, apiCall } from '../../../core/api.ts';
+import { resolveTicketId, colorizeCost } from '../_shared.ts';
 
 interface ShowOptions {
   board?: string;
@@ -31,6 +31,7 @@ interface Ticket {
 interface Epic { id: string; name?: string; emoji?: string }
 interface Comment { authorType: string; authorName: string; createdAt: string; body: string }
 interface Deliverable { title: string; type: string; agentName: string; status: string; version: number | string; content: string }
+interface AgentActivity { ticketId: string; cumulativeCostUsd: number }
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -47,10 +48,16 @@ const def: CommandDef = {
   action: async (idArg: string, opts: ShowOptions) => {
     const uuid = await resolveTicketId(idArg, opts.board);
     const base = apiBase();
-    const [ticket, ticketEpics] = await Promise.all([
+    const [ticket, ticketEpics, activity] = await Promise.all([
       apiGet<Ticket>(`${base}/api/tickets/${uuid}`),
       apiGet<Epic[]>(`${base}/api/tickets/${uuid}/epics`),
+      // Cumulative agentic cost (#404) rides on the same endpoint the Kanban
+      // board uses. It's a secondary detail — a failure here must not sink the
+      // whole `show`, so recover to null and render it as "-".
+      apiCall<AgentActivity[]>('GET', `${base}/api/tickets/agent-activity?ticketIds=${encodeURIComponent(uuid)}`)
+        .catch(() => null),
     ]);
+    const cumulativeCostUsd = activity?.[0]?.cumulativeCostUsd ?? null;
 
     const epicLabel = ticketEpics.length === 0
       ? '-'
@@ -70,6 +77,7 @@ const def: CommandDef = {
         ...ticket,
         uuid,
         epics: ticketEpics,
+        cumulativeCostUsd,
         ...(comments ? { comments } : {}),
         ...(deliverables ? { deliverables } : {}),
       };
@@ -83,6 +91,7 @@ const def: CommandDef = {
     process.stdout.write(`  ─────────────────────────────────────────────────────────\n`);
     process.stdout.write(`  ${c.bold('Title:')}       ${ticket.title}\n`);
     process.stdout.write(`  ${c.bold('Type:')}        ${ticket.type ?? '-'}\n`);
+    process.stdout.write(`  ${c.bold('Cost:')}        ${cumulativeCostUsd === null ? '-' : colorizeCost(cumulativeCostUsd)}\n`);
     process.stdout.write(`  ${c.bold('Assignee:')}    ${ticket.assignee ?? '-'}\n`);
     process.stdout.write(`  ${c.bold('Tags:')}        ${ticket.tags?.length ? ticket.tags.join(', ') : '-'}\n`);
     process.stdout.write(`  ${c.bold('Epic:')}        ${epicLabel}\n`);
