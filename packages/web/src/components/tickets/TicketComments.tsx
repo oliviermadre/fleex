@@ -190,7 +190,7 @@ function DeliverableChip({ deliverable, onOpen }: {
 const commentRehypePlugins: any[] = [[rehypeHighlight, { detect: true }]];
 const commentRemarkPlugins = [remarkGfm];
 
-const CommentMarkdown = memo(function CommentMarkdown({
+export const CommentMarkdown = memo(function CommentMarkdown({
   body,
   commentId,
   mentionLookup,
@@ -271,6 +271,19 @@ const CommentMarkdown = memo(function CommentMarkdown({
             mentionId={mId}
             onRemove={onRemoveMention}
             className={tint('green')}
+          />
+        );
+      }
+      if (href?.startsWith('#fleex-workflow:')) {
+        const name = href.slice('#fleex-workflow:'.length);
+        const mentionText = `@${name}`;
+        const mId = commentMentions?.get(mentionText);
+        return (
+          <MentionSpan
+            text={mentionText}
+            mentionId={mId}
+            onRemove={onRemoveMention}
+            className={tint('orange')}
           />
         );
       }

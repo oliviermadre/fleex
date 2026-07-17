@@ -15,6 +15,7 @@ import {
   type AssistantToolStatus,
 } from '../../stores/assistantStore';
 import { AssistantStatusDot } from './AssistantSidebar';
+import { MentionTypeBadge } from '../ui/MentionTypeBadge';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses, tintSolid } from '../../lib/tints';
 
@@ -27,15 +28,6 @@ interface MentionOption {
   label: string;
   type: 'agent' | 'human' | 'panel' | 'skill' | 'workflow' | 'ticket';
 }
-
-const MENTION_BADGE: Record<MentionOption['type'], { letter: string; className: string }> = {
-  agent: { letter: 'A', className: cn(tintClasses('purple').bg, tintText('purple')) },
-  panel: { letter: 'P', className: cn(tintClasses('blue').bg, tintText('blue')) },
-  skill: { letter: 'S', className: cn(tintClasses('green').bg, tintText('green')) },
-  workflow: { letter: 'W', className: cn(tintClasses('orange').bg, tintText('orange')) },
-  ticket: { letter: 'T', className: cn(tintClasses('gray').bg, tintText('gray')) },
-  human: { letter: 'H', className: cn(tintClasses('yellow').bg, tintText('yellow')) },
-};
 
 const MAX_TICKET_SUGGESTIONS = 8;
 
@@ -406,30 +398,25 @@ export function AssistantConversation() {
           {/* Autocomplete dropdown */}
           {acOpen && filteredOptions.length > 0 && (
             <div className="absolute bottom-full left-0 z-30 mb-1 max-h-56 min-w-[280px] overflow-y-auto rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-xl">
-              {filteredOptions.map((opt, i) => {
-                const badge = MENTION_BADGE[opt.type];
-                return (
-                  <button
-                    key={opt.insertText}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      acceptMention(opt);
-                    }}
-                    className={cn(
-                      'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors',
-                      i === acIndex
-                        ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-text-primary)]'
-                        : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
-                    )}
-                  >
-                    <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold', badge.className)}>
-                      {badge.letter}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate font-medium">{opt.label}</span>
-                    <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
-                  </button>
-                );
-              })}
+              {filteredOptions.map((opt, i) => (
+                <button
+                  key={opt.insertText}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    acceptMention(opt);
+                  }}
+                  className={cn(
+                    'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors',
+                    i === acIndex
+                      ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-text-primary)]'
+                      : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                  )}
+                >
+                  <MentionTypeBadge type={opt.type} />
+                  <span className="min-w-0 flex-1 truncate font-medium">{opt.label}</span>
+                  <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
+                </button>
+              ))}
             </div>
           )}
           <div

@@ -65,6 +65,21 @@ describe('preprocessMentions (comments — every mention type incl. tickets)', (
     expect(preprocessMentions('@skill:review')).toBe('[@skill:review](#fleex-skill:skill:review)');
   });
 
+  // The launcher/autocompletes teach `@workflow:slug` as the invocation syntax
+  // and the server executes it (extractWorkflowMentions) — the comment renderer
+  // must chip it like every other actionable mention type, not leave it as text.
+  it('rewrites workflow mentions', () => {
+    expect(preprocessMentions('@workflow:deploy')).toBe(
+      '[@workflow:deploy](#fleex-workflow:workflow:deploy)',
+    );
+  });
+
+  it('handles struck workflow mentions', () => {
+    expect(preprocessMentions('~~@workflow:deploy~~')).toBe(
+      '[@workflow:deploy](#fleex-struck:workflow:deploy)',
+    );
+  });
+
   it('still rewrites human mentions via the fallback', () => {
     expect(preprocessMentions('hi @olivier')).toBe('hi [@olivier](#fleex-human:olivier)');
   });

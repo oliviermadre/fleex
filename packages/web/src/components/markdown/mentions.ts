@@ -56,6 +56,7 @@ export function preprocessTicketMentions(body: string): string {
  *   @agent:name        →  [@agent:name](#fleex-agent:name)
  *   @panel:name        →  [@panel:name](#fleex-panel:name)
  *   @skill:name        →  [@skill:name](#fleex-skill:name)
+ *   @workflow:slug     →  [@workflow:slug](#fleex-workflow:slug)
  *   @ticket:<id>       →  [@ticket:<id>](#fleex-ticket:<id>)
  *   @username          →  [@username](#fleex-human:username)
  *   ~~@…~~ (any type)  →  [@…](#fleex-struck:…)
@@ -67,16 +68,18 @@ export function preprocessTicketMentions(body: string): string {
 const ALL_MENTIONS = new RegExp(
   // 1 codeSpan
   '(```[\\s\\S]*?```|`[^`]*`)' +
-    // struck variants — 2 agent · 3 panel · 4 skill · 5 ticket · 6 human
+    // struck variants — 2 agent · 3 panel · 4 skill · 5 workflow · 6 ticket · 7 human
     '|~~(@agent:[a-zA-Z0-9_-]+)~~' +
     '|~~(@panel:[a-zA-Z0-9_-]+)~~' +
     '|~~(@skill:[a-zA-Z0-9_-]+)~~' +
+    '|~~(@workflow:[a-zA-Z0-9_-]+)~~' +
     `|~~(@ticket:(?:${TICKET_ID}))~~` +
     '|~~(@[a-zA-Z0-9_-]+)~~' +
-    // active variants — 7 agent · 8 panel · 9 skill · 10 ticket · 11 human
+    // active variants — 8 agent · 9 panel · 10 skill · 11 workflow · 12 ticket · 13 human
     '|(@agent:[a-zA-Z0-9_-]+)' +
     '|(@panel:[a-zA-Z0-9_-]+)' +
     '|(@skill:[a-zA-Z0-9_-]+)' +
+    '|(@workflow:[a-zA-Z0-9_-]+)' +
     `|(@ticket:(?:${TICKET_ID}))` +
     '|(@[a-zA-Z0-9_-]+)',
   'g',
@@ -91,11 +94,13 @@ export function preprocessMentions(body: string): string {
       struckAgent: string | undefined,
       struckPanel: string | undefined,
       struckSkill: string | undefined,
+      struckWorkflow: string | undefined,
       struckTicket: string | undefined,
       struckHuman: string | undefined,
       activeAgent: string | undefined,
       activePanel: string | undefined,
       activeSkill: string | undefined,
+      activeWorkflow: string | undefined,
       activeTicket: string | undefined,
       activeHuman: string | undefined,
     ) => {
@@ -103,11 +108,13 @@ export function preprocessMentions(body: string): string {
       if (struckAgent !== undefined) return `[${struckAgent}](#fleex-struck:${struckAgent.slice(1)})`;
       if (struckPanel !== undefined) return `[${struckPanel}](#fleex-struck:${struckPanel.slice(1)})`;
       if (struckSkill !== undefined) return `[${struckSkill}](#fleex-struck:${struckSkill.slice(1)})`;
+      if (struckWorkflow !== undefined) return `[${struckWorkflow}](#fleex-struck:${struckWorkflow.slice(1)})`;
       if (struckTicket !== undefined) return `[${struckTicket}](#fleex-struck:${struckTicket.slice(1)})`;
       if (struckHuman !== undefined) return `[${struckHuman}](#fleex-struck:${struckHuman.slice(1)})`;
       if (activeAgent !== undefined) return `[${activeAgent}](#fleex-agent:${activeAgent.slice(1)})`;
       if (activePanel !== undefined) return `[${activePanel}](#fleex-panel:${activePanel.slice(1)})`;
       if (activeSkill !== undefined) return `[${activeSkill}](#fleex-skill:${activeSkill.slice(1)})`;
+      if (activeWorkflow !== undefined) return `[${activeWorkflow}](#fleex-workflow:${activeWorkflow.slice(1)})`;
       if (activeTicket !== undefined)
         return `[${activeTicket}](${TICKET_MENTION_HREF_PREFIX}${activeTicket.slice('@ticket:'.length)})`;
       if (activeHuman !== undefined) return `[${activeHuman}](#fleex-human:${activeHuman.slice(1)})`;
