@@ -1,39 +1,34 @@
 import type { AgentActivityState, Board, Ticket, TicketLink, TicketStatus, TicketUnreadCounts } from '@fleex/shared';
 import { ActivityPill } from '../tickets/ActivityPill';
+import { PriorityIndicator } from '../tickets/PriorityIndicator';
+import { TicketTypeBadge } from '../tickets/TicketTypeBadge';
+import { DueDateBadge } from '../tickets/DueDateBadge';
 import { StatusChipDropdown } from './StatusChipDropdown';
 import { CommentIcon, DeliverableIcon } from './icons';
 import type { InspectorFocus } from '../../stores/listFocusStore';
 import { cn } from '../../lib/cn';
-import { tint } from '../../lib/tints';
+import { tint, tintClasses } from '../../lib/tints';
 
 /**
  * Shared column widths so the header labels line up with each row. Kept in one
  * place because the header (in ListFocusView) and every row must agree.
  *
- * Review feedback (#400): one single line per ticket, id first; no dedicated
- * "En attente de" column (waiting is the virtual top group + activity cell) and
- * no status column (the grouping already says it — the chip only shows inline
- * on waiting-group rows whose statuses differ).
+ * Review feedback (#400, pass 2): no dedicated activity column (most rows are
+ * idle → a column of "Idle" was noise; running/waiting show as an inline pill),
+ * and the board gets its own column instead of a chip squeezed after the title.
  */
 export const LIST_FOCUS_COL = {
   id: 'w-14 shrink-0',
-  activity: 'w-[92px] shrink-0',
+  board: 'w-[120px] shrink-0',
   main: 'min-w-0 flex-1',
   pr: 'w-[92px] shrink-0',
   badge: 'w-11 shrink-0',
 } as const;
 
-/** Running/waiting → pill (with detail tooltip); idle → subtle dot+label. */
-function ActivityCell({ activity, detail }: { activity: AgentActivityState; detail?: string }) {
-  if (activity === 'idle') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] text-[var(--theme-text-faint)]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[var(--theme-text-muted)] opacity-50" />
-        Idle
-      </span>
-    );
-  }
-  return <ActivityPill activity={activity} detail={detail} />;
+/** "org/repo#123" → "repo#123": the org prefix ate the narrow PR column. */
+function stripOrg(label: string): string {
+  const slash = label.indexOf('/');
+  return slash === -1 ? label : label.slice(slash + 1);
 }
 
 function CountBadge({
@@ -84,6 +79,7 @@ interface Props {
   showStatus: boolean;
   onOpen: (focus?: InspectorFocus) => void;
   onStatusChange: (status: TicketStatus) => void;
+  onToggleFavorite: () => void;
 }
 
 export function ListFocusRow({
@@ -97,6 +93,7 @@ export function ListFocusRow({
   showStatus,
   onOpen,
   onStatusChange,
+  onToggleFavorite,
 }: Props) {
   const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
 
@@ -113,7 +110,7 @@ export function ListFocusRow({
         }
       }}
       className={cn(
-        'flex cursor-pointer items-center gap-3 border-l-2 px-3 py-2 text-left transition-colors',
+        'group flex cursor-pointer items-center gap-3 border-l-2 px-3 py-2 text-left transition-colors',
         selected
           ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
           : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
@@ -124,21 +121,47 @@ export function ListFocusRow({
         #{ticket.displayId}
       </div>
 
-      {/* Activity */}
-      <div className={LIST_FOCUS_COL.activity}>
-        <ActivityCell activity={activity} detail={detail} />
-      </div>
-
-      {/* Title + board (+ status chip on waiting-group rows only) */}
-      <div className={cn(LIST_FOCUS_COL.main, 'flex items-center gap-2')}>
-        <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">
-          {ticket.title}
-        </span>
+      {/* Board (dedicated column, review remark 3) */}
+      <div className={LIST_FOCUS_COL.board}>
         {board && (
-          <span className="max-w-[140px] shrink-0 truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
+          <span className="inline-block max-w-full truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-text-muted)]">
             {board.emoji} {board.name}
           </span>
         )}
+      </div>
+
+      {/* Favorite ★ + priority pictos, title, then type / due-date / activity
+          metadata (review remark 3). Same star affordance as the kanban card:
+          visible when favorited, revealed on row hover otherwise. */}
+      <div className={cn(LIST_FOCUS_COL.main, 'flex items-center gap-2')}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite();
+          }}
+          title={ticket.favorite ? 'Remove from favorites' : 'Add to favorites'}
+          className={cn(
+            'shrink-0 rounded p-0.5 transition-all',
+            ticket.favorite
+              ? cn('opacity-100', tintClasses('yellow').solidText)
+              : cn(
+                  'opacity-0 text-[var(--theme-text-faint)] group-hover:opacity-60 hover:opacity-100',
+                  tintClasses('yellow').hoverText,
+                ),
+          )}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill={ticket.favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+            <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
+          </svg>
+        </button>
+        {ticket.priority !== 'none' && <PriorityIndicator priority={ticket.priority} />}
+        <span className="truncate text-sm font-medium text-[var(--theme-text-primary)]">
+          {ticket.title}
+        </span>
+        <TicketTypeBadge type={ticket.type} />
+        <DueDateBadge dueDate={ticket.dueDate} status={ticket.status} />
+        {activity !== 'idle' && <ActivityPill activity={activity} detail={detail} />}
         {showStatus && (
           <StatusChipDropdown status={ticket.status} onChange={onStatusChange} />
         )}
@@ -156,7 +179,7 @@ export function ListFocusRow({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              title={state ? `PR ${state.toLowerCase()}` : 'Pull request'}
+              title={state ? `${pr.label} — ${state.toLowerCase()}` : pr.label}
               className={cn(
                 'inline-flex items-center gap-0.5 truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors',
                 tint(hue),
@@ -165,7 +188,7 @@ export function ListFocusRow({
               <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
                 <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
               </svg>
-              <span className="truncate">{pr.label}</span>
+              <span className="truncate">{stripOrg(pr.label)}</span>
             </a>
           );
         })}

@@ -1,6 +1,8 @@
 import type { Ticket, TicketStatus, AgentActivityState } from '@fleex/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { ListFocusFilters } from '../../stores/listFocusStore';
+import { STATUS_HUES } from '../../lib/statusColors';
+import type { TintHue } from '../../lib/tints';
 
 /**
  * Pure grouping for the List/Focus cockpit (spec §7).
@@ -32,7 +34,19 @@ const ACTIVITY_RANK: Record<AgentActivityState, number> = { waiting: 2, running:
 function passesScope(t: Ticket, filters: ListFocusFilters): boolean {
   if (filters.boardId && t.boardId !== filters.boardId) return false;
   if (filters.favoritesOnly && !t.favorite) return false;
+  if (filters.type && t.type !== filters.type) return false;
+  if (filters.priority && t.priority !== filters.priority) return false;
   return true;
+}
+
+/**
+ * Tint hue for a group header: status groups reuse the kanban status colors
+ * (doing=blue, reviewing=purple — review remark 6) so the cockpit reads as the
+ * same status system; the virtual waiting group keeps its alert yellow.
+ */
+export function groupHue(key: string): TintHue | null {
+  if (key === WAITING_GROUP_KEY) return 'yellow';
+  return STATUS_HUES[key] ?? null;
 }
 
 function recency(t: Ticket): number {

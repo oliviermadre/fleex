@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Board, Ticket, TicketStatus } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { appWs } from '../../services/websocket';
 import type { InspectorFocus } from '../../stores/listFocusStore';
 import { TicketDeliverables } from '../tickets/TicketDeliverables';
 import { TicketComments } from '../tickets/TicketComments';
@@ -44,13 +46,40 @@ export function ListFocusInspector({
   onOpenFull,
 }: Props) {
   const width = useUIStore((s) => s.rightSidebarWidth);
-  const [tab, setTab] = useState<InspectorTab>(focus === 'comments' ? 'comment' : 'deliverables');
+  // Comment-first (review remark 2): the cockpit's primary action is reading /
+  // answering the thread; deliverables only take over on a badge click.
+  const [tab, setTab] = useState<InspectorTab>(focus === 'deliverables' ? 'deliverables' : 'comment');
 
   // Re-emphasise the requested section when the selection or the badge-driven
-  // focus changes (e.g. clicking a comments badge on another row).
+  // focus changes (e.g. clicking a deliverables badge on another row).
   useEffect(() => {
-    setTab(focus === 'comments' ? 'comment' : 'deliverables');
+    setTab(focus === 'deliverables' ? 'deliverables' : 'comment');
   }, [focus, ticket.id]);
+
+  // The human-gate card inside TicketComments reads workflowRunStore but relies
+  // on its PARENT to load the runs (TicketDetail does the same). Without this,
+  // the validation encart only appeared after visiting the full ticket once
+  // (review remark 1). Same load + workflow:* WS wiring as TicketDetail.
+  useEffect(() => {
+    void useWorkflowRunStore.getState().loadForTicket(ticket.id);
+  }, [ticket.id]);
+  useEffect(() => {
+    const unsub = appWs.onChannel('tickets', (raw) => {
+      try {
+        if (!raw.type.startsWith('workflow:')) return;
+        const { ticketId: tid } = raw.data as { ticketId: string };
+        if (tid !== ticket.id) return;
+        useWorkflowRunStore.getState().applyEvent({
+          type: raw.type,
+          ticketId: tid,
+          payload: raw.data as Record<string, unknown>,
+        });
+      } catch {
+        /* ignore malformed events */
+      }
+    });
+    return unsub;
+  }, [ticket.id]);
 
   return (
     // shrink-0: the inspector holds its width; the list (flex-1) is the side
@@ -103,8 +132,8 @@ export function ListFocusInspector({
         {/* Tabs */}
         <div className="flex gap-1 border-b border-[var(--theme-border-subtle)] px-3 pt-2">
           {([
-            { key: 'deliverables' as const, label: 'Deliverables', icon: <DeliverableIcon /> },
             { key: 'comment' as const, label: 'Comment', icon: <CommentIcon /> },
+            { key: 'deliverables' as const, label: 'Deliverables', icon: <DeliverableIcon /> },
           ]).map((t) => (
             <button
               key={t.key}

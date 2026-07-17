@@ -2,7 +2,7 @@ import type { TicketPriority } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { tintText } from '../../lib/tints';
 
-const PRIORITY_LABELS: Record<TicketPriority, string> = {
+export const PRIORITY_LABELS: Record<TicketPriority, string> = {
   none: 'No priority',
   low: 'Low',
   medium: 'Medium',

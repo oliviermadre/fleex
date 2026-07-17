@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { TicketStatus } from '@fleex/shared';
+import type { TicketPriority, TicketStatus, TicketType } from '@fleex/shared';
 
 /**
  * List/Focus cockpit UI state (view #400).
@@ -26,6 +26,10 @@ export interface ListFocusFilters {
   /** Status groups to render (the virtual "waiting" group is always shown). */
   statuses: TicketStatus[];
   favoritesOnly: boolean;
+  /** null = all types. */
+  type: TicketType | null;
+  /** null = all priorities. */
+  priority: TicketPriority | null;
 }
 
 /** Constat: 10 doing + 6 reviewing → default scope (spec D5). */
@@ -74,6 +78,12 @@ interface ListFocusState {
   select: (ticketId: string, focus?: InspectorFocus) => void;
   /** Close the inspector and release the frozen order. */
   close: () => void;
+  /**
+   * Replace the frozen snapshot while the inspector is open. D3's freeze only
+   * shields against AMBIENT reordering (activity/recency churn); an explicit
+   * filter change is user intent and must apply immediately (review remark 4).
+   */
+  refreeze: (groups: ListFocusGroupSnapshot[]) => void;
   /** Move the selection ↑/↓ within the frozen order. */
   selectRelative: (delta: 1 | -1) => void;
   toggleGroup: (key: string) => void;
@@ -85,7 +95,13 @@ export const useListFocusStore = create<ListFocusState>((set, get) => ({
   inspectorFocus: null,
   frozenGroups: null,
   collapsedGroups: loadCollapsed(),
-  filters: { boardId: null, statuses: DEFAULT_LIST_FOCUS_STATUSES, favoritesOnly: false },
+  filters: {
+    boardId: null,
+    statuses: DEFAULT_LIST_FOCUS_STATUSES,
+    favoritesOnly: false,
+    type: null,
+    priority: null,
+  },
 
   open: (ticketId, groups, focus = null) => {
     // Snapshot the order only when opening from a closed state: clicking another
@@ -101,6 +117,8 @@ export const useListFocusStore = create<ListFocusState>((set, get) => ({
   select: (ticketId, focus = null) => set({ selectedTicketId: ticketId, inspectorFocus: focus }),
 
   close: () => set({ selectedTicketId: null, inspectorFocus: null, frozenGroups: null }),
+
+  refreeze: (groups) => set((s) => (s.selectedTicketId ? { frozenGroups: groups } : {})),
 
   selectRelative: (delta) => {
     const { frozenGroups, selectedTicketId } = get();

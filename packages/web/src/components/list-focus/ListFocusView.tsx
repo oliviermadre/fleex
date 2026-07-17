@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Ticket, TicketStatus } from '@fleex/shared';
-import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
+import type { Ticket, TicketPriority, TicketStatus, TicketType } from '@fleex/shared';
+import {
+  TICKET_PRIORITIES,
+  TICKET_STATUSES,
+  TICKET_STATUS_LABELS,
+  TICKET_TYPES,
+  TICKET_TYPE_LABELS,
+} from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { useUnreadStore } from '../../stores/unreadStore';
@@ -14,12 +20,14 @@ import { appWs } from '../../services/websocket';
 import { fetchBulkPRStates } from '../../services/api';
 import {
   buildListFocusGroups,
+  groupHue,
   WAITING_GROUP_KEY,
   type ListFocusGroup,
 } from './grouping';
 import { ListFocusRow, LIST_FOCUS_COL } from './ListFocusRow';
 import { ListFocusInspector } from './ListFocusInspector';
 import { CommentIcon, DeliverableIcon } from './icons';
+import { PRIORITY_LABELS } from '../tickets/PriorityIndicator';
 import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
@@ -59,6 +67,7 @@ export function ListFocusView() {
   const tickets = useTicketStore((s) => s.tickets);
   const rawBoards = useTicketStore((s) => s.boards);
   const moveTicket = useTicketStore((s) => s.moveTicket);
+  const updateTicket = useTicketStore((s) => s.updateTicket);
 
   const activityByTicket = useTicketActivityStore((s) => s.activityByTicket);
   const detailByTicket = useTicketActivityStore((s) => s.detailByTicket);
@@ -74,6 +83,7 @@ export function ListFocusView() {
   const filters = useListFocusStore((s) => s.filters);
   const open = useListFocusStore((s) => s.open);
   const close = useListFocusStore((s) => s.close);
+  const refreeze = useListFocusStore((s) => s.refreeze);
   const selectRelative = useListFocusStore((s) => s.selectRelative);
   const toggleGroup = useListFocusStore((s) => s.toggleGroup);
   const setFilters = useListFocusStore((s) => s.setFilters);
@@ -167,6 +177,18 @@ export function ListFocusView() {
     },
     [open, snapshot],
   );
+
+  // Filter clicks are user intent: re-snapshot the frozen order from the
+  // freshly-filtered live groups so filters apply even while the inspector is
+  // open (review remark 4). D3's freeze keeps protecting against ambient
+  // reordering only. Keyed on the store's `filters` identity (stable across
+  // remounts), so returning to the view never reshuffles an open inspector.
+  const prevFiltersRef = useRef(filters);
+  useEffect(() => {
+    if (prevFiltersRef.current === filters) return;
+    prevFiltersRef.current = filters;
+    refreeze(snapshot());
+  }, [filters, refreeze, snapshot]);
 
   const handleStatusChange = useCallback(
     (ticketId: string, status: TicketStatus) => {
@@ -270,6 +292,32 @@ export function ListFocusView() {
           })}
         </div>
 
+        <select
+          value={filters.type ?? ''}
+          onChange={(e) => setFilters({ type: (e.target.value || null) as TicketType | null })}
+          className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:outline-none"
+        >
+          <option value="">All types</option>
+          {TICKET_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {TICKET_TYPE_LABELS[t] ?? t}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filters.priority ?? ''}
+          onChange={(e) => setFilters({ priority: (e.target.value || null) as TicketPriority | null })}
+          className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:outline-none"
+        >
+          <option value="">All priorities</option>
+          {TICKET_PRIORITIES.map((p) => (
+            <option key={p} value={p}>
+              {PRIORITY_LABELS[p] ?? p}
+            </option>
+          ))}
+        </select>
+
         <button
           type="button"
           onClick={() => setFilters({ favoritesOnly: !filters.favoritesOnly })}
@@ -292,7 +340,7 @@ export function ListFocusView() {
           {/* Column header */}
           <div className="flex items-center gap-3 border-b border-[var(--theme-border-subtle)] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">
             <div className={LIST_FOCUS_COL.id}>ID</div>
-            <div className={LIST_FOCUS_COL.activity}>Activity</div>
+            <div className={LIST_FOCUS_COL.board}>Board</div>
             <div className={LIST_FOCUS_COL.main}>Ticket</div>
             <div className={LIST_FOCUS_COL.pr}>PR</div>
             <div className={cn(LIST_FOCUS_COL.badge, 'flex justify-center')} title="Comments">
@@ -315,6 +363,9 @@ export function ListFocusView() {
               displayGroups.map((group) => {
                 const collapsed = collapsedGroups.has(group.key);
                 const isWaiting = group.key === WAITING_GROUP_KEY;
+                // Kanban status colors on section titles (review remark 6);
+                // the virtual waiting group keeps its alert yellow.
+                const hue = groupHue(group.key);
                 return (
                   <section key={group.key}>
                     <button
@@ -341,8 +392,8 @@ export function ListFocusView() {
                       <span
                         className={cn(
                           'text-xs font-semibold',
-                          isWaiting
-                            ? cn('rounded px-1.5 py-0.5', tint('yellow'))
+                          hue
+                            ? cn('rounded px-1.5 py-0.5', tint(hue))
                             : 'text-[var(--theme-text-secondary)]',
                         )}
                       >
@@ -367,6 +418,7 @@ export function ListFocusView() {
                           showStatus={isWaiting}
                           onOpen={(focus) => handleOpen(ticket.id, focus)}
                           onStatusChange={(status) => handleStatusChange(ticket.id, status)}
+                          onToggleFavorite={() => void updateTicket(ticket.id, { favorite: !ticket.favorite })}
                         />
                       ))}
                   </section>

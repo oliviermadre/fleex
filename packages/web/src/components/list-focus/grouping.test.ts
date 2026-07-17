@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { AgentActivityState, Ticket, TicketStatus } from '@fleex/shared';
 import type { ListFocusFilters } from '../../stores/listFocusStore';
 import { DEFAULT_LIST_FOCUS_STATUSES } from '../../stores/listFocusStore';
-import { buildListFocusGroups, WAITING_GROUP_KEY } from './grouping';
+import { buildListFocusGroups, groupHue, WAITING_GROUP_KEY } from './grouping';
 
 /** Minimal Ticket factory — only the fields grouping.ts actually reads matter. */
 function mkTicket(partial: Partial<Ticket> & { id: string }): Ticket {
@@ -37,7 +37,14 @@ function mkTicket(partial: Partial<Ticket> & { id: string }): Ticket {
 }
 
 function filters(partial: Partial<ListFocusFilters> = {}): ListFocusFilters {
-  return { boardId: null, statuses: DEFAULT_LIST_FOCUS_STATUSES, favoritesOnly: false, ...partial };
+  return {
+    boardId: null,
+    statuses: DEFAULT_LIST_FOCUS_STATUSES,
+    favoritesOnly: false,
+    type: null,
+    priority: null,
+    ...partial,
+  };
 }
 
 const keys = (groups: { key: string }[]) => groups.map((g) => g.key);
@@ -108,6 +115,24 @@ describe('buildListFocusGroups', () => {
     expect(idsOf(byFav, 'doing')).toEqual(['b1']);
   });
 
+  it('scopes by ticket type and priority (review remark 4)', () => {
+    const tickets = [
+      mkTicket({ id: 'fix-high', type: 'fix', priority: 'high' }),
+      mkTicket({ id: 'build-low', type: 'build', priority: 'low' }),
+      mkTicket({ id: 'untyped', type: null, priority: 'none' }),
+    ];
+
+    const byType = buildListFocusGroups(tickets, {}, filters({ type: 'fix' }));
+    expect(idsOf(byType, 'doing')).toEqual(['fix-high']);
+
+    const byPriority = buildListFocusGroups(tickets, {}, filters({ priority: 'low' }));
+    expect(idsOf(byPriority, 'doing')).toEqual(['build-low']);
+
+    // null = no filtering — untyped/none tickets stay visible.
+    const all = buildListFocusGroups(tickets, {}, filters());
+    expect(idsOf(all, 'doing')).toHaveLength(3);
+  });
+
   it('orders each group: running before idle, then most-recently-moved first', () => {
     // WHY: the most "alive" work should float to the top of a group so the human
     // scans it first — active agents before idle ones, newest movement before old.
@@ -135,5 +160,19 @@ describe('buildListFocusGroups', () => {
     const groups = buildListFocusGroups(tickets, {}, filters({ statuses }));
     // Canonical TICKET_STATUSES order (doing before reviewing), not filter order.
     expect(keys(groups)).toEqual(['doing', 'reviewing']);
+  });
+});
+
+describe('groupHue', () => {
+  it('reuses the kanban status hues for status group headers (review remark 6)', () => {
+    // WHY: "Doing"/"Reviewing" section titles must look like the kanban column
+    // labels (blue / purple) so the cockpit reads as the same status system.
+    expect(groupHue('doing')).toBe('blue');
+    expect(groupHue('reviewing')).toBe('purple');
+  });
+
+  it('keeps yellow for the virtual waiting group and none for unknown keys', () => {
+    expect(groupHue(WAITING_GROUP_KEY)).toBe('yellow');
+    expect(groupHue('not-a-status')).toBeNull();
   });
 });
