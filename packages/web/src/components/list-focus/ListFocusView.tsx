@@ -27,7 +27,10 @@ import {
 import { ListFocusRow, LIST_FOCUS_COL } from './ListFocusRow';
 import { ListFocusInspector } from './ListFocusInspector';
 import { CommentIcon, DeliverableIcon } from './icons';
-import { PRIORITY_LABELS } from '../tickets/PriorityIndicator';
+import { STATUS_COLOR } from './StatusChipDropdown';
+import { ToolbarSelect, ToolbarMultiSelect } from './ToolbarSelect';
+import { PriorityIndicator, PRIORITY_LABELS } from '../tickets/PriorityIndicator';
+import { TYPE_ICONS } from '../tickets/TicketTypeBadge';
 import { tint } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
@@ -257,66 +260,58 @@ export function ListFocusView() {
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--theme-border)] px-4 py-2.5">
         <h1 className="mr-2 text-sm font-semibold text-[var(--theme-text-primary)]">Cockpit</h1>
 
-        <select
-          value={filters.boardId ?? ''}
-          onChange={(e) => setFilters({ boardId: e.target.value || null })}
-          className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:outline-none"
-        >
-          <option value="">All boards</option>
-          {boards.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.emoji} {b.name}
-            </option>
-          ))}
-        </select>
+        {/* Pretty popover dropdowns matching the kanban toolbar (pass 3,
+            remark 1) — replacing the native <select>s and the always-expanded
+            status chip row. Every option carries its icon: board emoji, status
+            dot, type emoji, priority picto. */}
+        <ToolbarSelect
+          allLabel="All boards"
+          value={filters.boardId}
+          options={boards.map((b) => ({
+            value: b.id,
+            label: b.name,
+            icon: <span>{b.emoji}</span>,
+          }))}
+          onChange={(boardId) => setFilters({ boardId })}
+        />
 
-        <div className="flex items-center gap-1">
-          {(TICKET_STATUSES as readonly TicketStatus[]).map((s) => {
-            const on = filters.statuses.includes(s);
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() => toggleStatusScope(s)}
-                aria-pressed={on}
-                className={cn(
-                  'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
-                  on
-                    ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
-                    : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
-                )}
-              >
-                {TICKET_STATUS_LABELS[s] ?? s}
-              </button>
-            );
-          })}
-        </div>
+        <ToolbarMultiSelect
+          label="Status"
+          values={filters.statuses}
+          options={(TICKET_STATUSES as readonly TicketStatus[]).map((s) => ({
+            value: s,
+            label: TICKET_STATUS_LABELS[s] ?? s,
+            icon: (
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: STATUS_COLOR[s] }}
+              />
+            ),
+          }))}
+          onToggle={toggleStatusScope}
+        />
 
-        <select
-          value={filters.type ?? ''}
-          onChange={(e) => setFilters({ type: (e.target.value || null) as TicketType | null })}
-          className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:outline-none"
-        >
-          <option value="">All types</option>
-          {TICKET_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {TICKET_TYPE_LABELS[t] ?? t}
-            </option>
-          ))}
-        </select>
+        <ToolbarSelect
+          allLabel="All types"
+          value={filters.type}
+          options={TICKET_TYPES.map((t: TicketType) => ({
+            value: t,
+            label: TICKET_TYPE_LABELS[t] ?? t,
+            icon: <span>{TYPE_ICONS[t]}</span>,
+          }))}
+          onChange={(type) => setFilters({ type })}
+        />
 
-        <select
-          value={filters.priority ?? ''}
-          onChange={(e) => setFilters({ priority: (e.target.value || null) as TicketPriority | null })}
-          className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-secondary)] focus:border-[var(--theme-accent)] focus:outline-none"
-        >
-          <option value="">All priorities</option>
-          {TICKET_PRIORITIES.map((p) => (
-            <option key={p} value={p}>
-              {PRIORITY_LABELS[p] ?? p}
-            </option>
-          ))}
-        </select>
+        <ToolbarSelect
+          allLabel="All priorities"
+          value={filters.priority}
+          options={TICKET_PRIORITIES.map((p: TicketPriority) => ({
+            value: p,
+            label: PRIORITY_LABELS[p] ?? p,
+            icon: <PriorityIndicator priority={p} />,
+          }))}
+          onChange={(priority) => setFilters({ priority })}
+        />
 
         <button
           type="button"
@@ -341,6 +336,11 @@ export function ListFocusView() {
           <div className="flex items-center gap-3 border-b border-[var(--theme-border-subtle)] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">
             <div className={LIST_FOCUS_COL.id}>ID</div>
             <div className={LIST_FOCUS_COL.board}>Board</div>
+            {/* ★ + priority pictos column — no label needed, kept for alignment. */}
+            <div className={LIST_FOCUS_COL.pictos}>
+              <span className="sr-only">Favorite / priority</span>
+            </div>
+            <div className={LIST_FOCUS_COL.type}>Type</div>
             <div className={LIST_FOCUS_COL.main}>Ticket</div>
             <div className={LIST_FOCUS_COL.pr}>PR</div>
             <div className={cn(LIST_FOCUS_COL.badge, 'flex justify-center')} title="Comments">
@@ -415,7 +415,7 @@ export function ListFocusView() {
                           unread={unreadByTicket[ticket.id] ?? { ...EMPTY_UNREAD, ticketId: ticket.id }}
                           prStates={prStates}
                           selected={ticket.id === selectedTicketId}
-                          showStatus={isWaiting}
+                          inWaitingGroup={isWaiting}
                           onOpen={(focus) => handleOpen(ticket.id, focus)}
                           onStatusChange={(status) => handleStatusChange(ticket.id, status)}
                           onToggleFavorite={() => void updateTicket(ticket.id, { favorite: !ticket.favorite })}

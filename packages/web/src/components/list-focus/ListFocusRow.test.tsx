@@ -1,10 +1,26 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, cleanup, fireEvent } from '@testing-library/react';
+import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
+import { render, cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Board, Ticket, TicketUnreadCounts } from '@fleex/shared';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
+import { useTicketStore } from '../../stores/ticketStore';
 import { ListFocusRow } from './ListFocusRow';
 
-afterEach(cleanup);
+// floating-ui popovers (priority/type pickers) need observers jsdom lacks.
+beforeAll(() => {
+  class Obs {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  vi.stubGlobal('ResizeObserver', Obs);
+  vi.stubGlobal('IntersectionObserver', Obs);
+});
+
+const originalUpdateTicket = useTicketStore.getState().updateTicket;
+afterEach(() => {
+  cleanup();
+  useTicketStore.setState({ updateTicket: originalUpdateTicket });
+});
 
 /**
  * Cockpit row layout (#400, review feedback):
@@ -68,7 +84,7 @@ function renderRow(props: Partial<Parameters<typeof ListFocusRow>[0]> = {}) {
       unread={unread}
       prStates={{}}
       selected={false}
-      showStatus={false}
+      inWaitingGroup={false}
       onOpen={() => {}}
       onStatusChange={() => {}}
       onToggleFavorite={() => {}}
@@ -95,19 +111,35 @@ describe('ListFocusRow', () => {
   });
 
   it('hides the status chip inside a status group (grouping already says it)', () => {
-    const { container } = renderRow({ showStatus: false });
+    const { container } = renderRow({ inWaitingGroup: false });
     expect(container.textContent).not.toContain('Doing');
   });
 
   it('shows the status chip only for waiting-group rows (heterogeneous statuses)', () => {
-    const { container } = renderRow({ showStatus: true, activity: 'waiting' });
+    const { container } = renderRow({ inWaitingGroup: true, activity: 'waiting' });
     expect(container.textContent).toContain('Doing');
   });
 
-  it('surfaces "waiting" in the activity cell now that the dedicated column is gone', () => {
-    const { container } = renderRow({ activity: 'waiting', detail: 'mention non résolue' });
+  it('hides the redundant "Waiting" pill inside the waiting group (pass 3, remark 2)', () => {
+    // WHY: every waiting ticket is pulled into the "En attente" group (D2) —
+    // repeating a Waiting badge on each of its rows says nothing new.
+    const { container } = renderRow({
+      activity: 'waiting',
+      inWaitingGroup: true,
+      detail: 'mention non résolue',
+    });
+    expect(container.textContent).not.toContain('Waiting');
+  });
+
+  it('still shows the waiting pill OUTSIDE the waiting group (frozen-order edge)', () => {
+    // A ticket can turn waiting while the inspector's D3 freeze keeps it inside
+    // its status group — there the pill is the only "blocked" signal.
+    const { container } = renderRow({
+      activity: 'waiting',
+      inWaitingGroup: false,
+      detail: 'mention non résolue',
+    });
     expect(container.textContent).toContain('Waiting');
-    expect(container.textContent).not.toContain('Idle');
     expect(container.querySelector('[title="mention non résolue"]')).not.toBeNull();
   });
 
@@ -128,10 +160,43 @@ describe('ListFocusRow', () => {
     const { container } = renderRow({
       ticket: makeTicket({ priority: 'high', favorite: true, type: 'fix', dueDate: '2099-01-01' }),
     });
-    expect(container.querySelector('[title="High"]')).not.toBeNull();
+    expect(container.querySelector('[title^="Priority: High"]')).not.toBeNull();
     expect(container.querySelector('[title="Remove from favorites"]')).not.toBeNull();
     expect(container.textContent).toContain(TICKET_TYPE_LABELS['fix']);
     expect(container.textContent).toMatch(/J-\d+/);
+  });
+
+  it('renders the type in a dedicated column between the priority pictos and the title (pass 3, remark 3)', () => {
+    // WHY: a dedicated fixed-width column makes every title start at the same
+    // x, so the eye scans types then titles vertically.
+    const { container } = renderRow({ ticket: makeTicket({ type: 'fix', priority: 'high' }) });
+    const cols = container.querySelector('[role="button"]')!.children;
+    // 0 id · 1 board · 2 pictos (★ + priority) · 3 type · 4 main (title…)
+    expect(cols[2]?.querySelector('[title^="Priority"]')).not.toBeNull();
+    expect(cols[3]?.textContent).toContain(TICKET_TYPE_LABELS['fix']);
+    expect(cols[4]?.textContent).toContain('Fix auth loop');
+  });
+
+  it('clicking the priority picto opens a picker that updates the ticket (pass 3, remark 5)', () => {
+    const updateTicket = vi.fn();
+    useTicketStore.setState({ updateTicket });
+    const onOpen = vi.fn();
+    const { container } = renderRow({ ticket: makeTicket({ priority: 'none' }), onOpen });
+    fireEvent.click(container.querySelector('[title^="Priority"]')!);
+    fireEvent.click(screen.getByText('High'));
+    expect(updateTicket).toHaveBeenCalledWith('t1', { priority: 'high' });
+    expect(onOpen).not.toHaveBeenCalled(); // picker never steals the row click
+  });
+
+  it('clicking the type badge opens a picker that updates the ticket (pass 3, remark 5)', () => {
+    const updateTicket = vi.fn();
+    useTicketStore.setState({ updateTicket });
+    const onOpen = vi.fn();
+    const { container } = renderRow({ ticket: makeTicket({ type: null }), onOpen });
+    fireEvent.click(container.querySelector('[title="Click to change type"]')!);
+    fireEvent.click(screen.getByText(TICKET_TYPE_LABELS['fix']!));
+    expect(updateTicket).toHaveBeenCalledWith('t1', { type: 'fix' });
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   it('toggles the favorite without opening the inspector (star is a real action)', () => {
@@ -167,5 +232,26 @@ describe('ListFocusRow', () => {
     const badge = container.querySelector('a');
     expect(badge?.textContent).toBe('fleex#209');
     expect(badge?.getAttribute('title')).toContain('oliviermadre/fleex#209');
+  });
+
+  it('always shows the repo name, even when the link label is just "PR #209" (pass 3, remark 4)', () => {
+    // WHY: some links are created with label "PR #209" (detect-merge) — but the
+    // ref is always canonical "org/repo#number", so derive the display from it.
+    const { container } = renderRow({
+      ticket: makeTicket({
+        links: [
+          {
+            id: 'l1',
+            type: 'github_pr',
+            ref: 'oliviermadre/fleex#209',
+            label: 'PR #209',
+            url: 'https://github.com/oliviermadre/fleex/pull/209',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    });
+    const badge = container.querySelector('a');
+    expect(badge?.textContent).toBe('fleex#209');
   });
 });

@@ -9,7 +9,7 @@ import { cn } from '../../lib/cn';
  * raw Tailwind palette classes) are used as inline `backgroundColor`, which is
  * allowed by `check-raw-palette.mjs` and follows the DashboardView precedent.
  */
-const STATUS_COLOR: Record<string, string> = {
+export const STATUS_COLOR: Record<string, string> = {
   backlog: 'var(--theme-text-faint)',
   todo: '#fb923c',
   doing: '#60a5fa',
