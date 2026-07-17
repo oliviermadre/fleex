@@ -1,5 +1,5 @@
 import { useVersionCheck } from '../../hooks/useVersionCheck';
-import { tint, tintText, tintClasses } from '../../lib/tints';
+import { tintClasses } from '../../lib/tints';
 import { cn } from '../../lib/cn';
 
 export function VersionBanner() {
@@ -8,7 +8,17 @@ export function VersionBanner() {
   if (!showBanner || !versionInfo) return null;
 
   return (
-    <div className={cn('fixed bottom-4 right-4 z-[9998] max-w-sm rounded-md px-3 py-2 text-xs shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200 flex items-start gap-2', tint('blue'))}>
+    <div
+      className={cn(
+        'fixed bottom-4 right-4 z-[9998] max-w-sm flex items-start gap-2',
+        // Opaque surface so page content never bleeds through (readable at 100%);
+        // the informational (blue) type is conveyed by the left-border accent,
+        // mirroring ToastContainer / NotificationCard — not a translucent tint bg.
+        'rounded-md border border-[var(--theme-border)] border-l-2 border-l-[var(--tint-blue-solid)]',
+        'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]',
+        'px-3 py-2 text-xs shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200',
+      )}
+    >
       <span className="flex-1">
         Fleex is {versionInfo.behindBy} commit{versionInfo.behindBy > 1 ? 's' : ''} behind{' '}
         <span className={cn('font-mono', tintClasses('blue').solidText)}>origin/main</span>.
