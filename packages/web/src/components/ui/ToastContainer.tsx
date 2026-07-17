@@ -1,12 +1,18 @@
 import { useToastStore, type ToastType } from '../../stores/toastStore';
 import { cn } from '../../lib/cn';
-import { tint } from '../../lib/tints';
 
-const typeStyles: Record<ToastType, string> = {
-  error: tint('red'),
-  warning: tint('yellow'),
-  success: tint('green'),
-  info: tint('blue'),
+/**
+ * Left-border accent per type (theme-aware tint solids, literal for the
+ * Tailwind scanner). The surface itself stays fully opaque
+ * (`--theme-bg-overlay`) so the toast message is always 100% readable over the
+ * page content — the type is conveyed by the coloured accent, not a translucent
+ * tinted background. Mirrors `NotificationCard.levelAccent`.
+ */
+const typeAccent: Record<ToastType, string> = {
+  error: 'border-l-[var(--tint-red-solid)]',
+  warning: 'border-l-[var(--tint-yellow-solid)]',
+  success: 'border-l-[var(--tint-green-solid)]',
+  info: 'border-l-[var(--tint-blue-solid)]',
 };
 
 export function ToastContainer() {
@@ -25,8 +31,10 @@ export function ToastContainer() {
         <div
           key={toast.id}
           className={cn(
-            'flex items-start gap-2 rounded-md border px-3 py-2 text-xs shadow-lg animate-in fade-in slide-in-from-top-2 duration-200',
-            typeStyles[toast.type],
+            'flex items-start gap-2 rounded-md border border-[var(--theme-border)] border-l-2',
+            'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-primary)]',
+            'px-3 py-2 text-xs shadow-lg animate-in fade-in slide-in-from-top-2 duration-200',
+            typeAccent[toast.type],
           )}
         >
           <span className="flex-1 break-words">{toast.message}</span>
