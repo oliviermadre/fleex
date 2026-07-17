@@ -49,6 +49,12 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
   totalUnread: 0,
 
   loadUnreadCounts: async (ticketIds?: string[]) => {
+    // An explicitly-empty list means "nothing visible yet" (views fire before
+    // the ticket store loads): skip entirely. Falling through would degrade to
+    // the no-param request, whose server-side scope is "tracked tickets only" —
+    // that smaller response can resolve AFTER a full-ids one and replace the
+    // map, zeroing badges for every never-read ticket (cockpit bug, #400).
+    if (ticketIds && ticketIds.length === 0) return;
     try {
       const counts = await api.fetchUnreadCounts(ticketIds);
       const map: Record<string, TicketUnreadCounts> = {};

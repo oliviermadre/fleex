@@ -47,12 +47,26 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
 
   async getByTicketIds(ticketIds: string[]): Promise<TicketDeliverableEntity[]> {
     if (ticketIds.length === 0) return [];
-    const { data, error } = await this.conn.client
-      .from('deliverables')
-      .select('*')
-      .in('ticket_id', ticketIds);
-    if (error) throw new Error(`SupabaseDeliverableStore.getByTicketIds failed: ${error.message}`);
-    return (data as DeliverableRow[]).map(rowToEntity);
+    // PostgREST silently caps responses at max-rows (Supabase default: 1000).
+    // Bulk callers (unread-counts for the cockpit view) can match far more, so
+    // paginate explicitly — otherwise counts silently truncate (bug #400).
+    // Ordering (created_at, id) is required for stable, non-overlapping pages.
+    const PAGE = 1000;
+    const rows: DeliverableRow[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await this.conn.client
+        .from('deliverables')
+        .select('*')
+        .in('ticket_id', ticketIds)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`SupabaseDeliverableStore.getByTicketIds failed: ${error.message}`);
+      const page = data as DeliverableRow[];
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    return rows.map(rowToEntity);
   }
 
   async getById(id: string): Promise<TicketDeliverableEntity | null> {

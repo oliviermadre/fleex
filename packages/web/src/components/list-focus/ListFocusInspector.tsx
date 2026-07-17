@@ -3,9 +3,9 @@ import type { Board, Ticket, TicketStatus } from '@fleex/shared';
 import { useUIStore } from '../../stores/uiStore';
 import type { InspectorFocus } from '../../stores/listFocusStore';
 import { TicketDeliverables } from '../tickets/TicketDeliverables';
+import { TicketComments } from '../tickets/TicketComments';
 import { SidebarWidthHandle } from '../main-panel/right-sidebar/SidebarWidthHandle';
 import { StatusChipDropdown } from './StatusChipDropdown';
-import { CommentComposer } from './CommentComposer';
 import { CommentIcon, DeliverableIcon } from './icons';
 import { cn } from '../../lib/cn';
 
@@ -27,7 +27,8 @@ interface Props {
  * Right-side inspector (view #400). Non-fullscreen and resizable via the shared
  * SidebarWidthHandle + uiStore.rightSidebarWidth (same primitive as the ticket
  * panel's sidebar). Surfaces exactly the three cockpit actions: change status
- * (header chip), view deliverables, and write a comment to relaunch an agent.
+ * (header chip), view deliverables, and read/write comments (full thread —
+ * same TicketComments as the ticket panel) to relaunch an agent.
  *
  * ↑/↓ navigation and Escape are owned by ListFocusView (a single window-level
  * handler) so they work regardless of focus within the inspector.
@@ -122,14 +123,19 @@ export function ListFocusInspector({
           ))}
         </div>
 
-        {/* Content */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
-          {tab === 'deliverables' ? (
+        {/* Content. The comment tab hosts the full TicketComments thread —
+            same component as the ticket panel, so comments actually display
+            here (read + compose + mark-read) — and it owns its own scroller,
+            so overflow-y-auto only applies to the deliverables tab. */}
+        {tab === 'deliverables' ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
             <TicketDeliverables ticketId={ticket.id} />
-          ) : (
-            <CommentComposer ticketId={ticket.id} autoFocus />
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+            <TicketComments ticketId={ticket.id} />
+          </div>
+        )}
       </aside>
     </div>
   );
