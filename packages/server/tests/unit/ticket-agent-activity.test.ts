@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { deriveTicketAgentActivity } from '../../src/domain/services/ticket-agent-activity.js';
+import {
+  deriveTicketAgentActivity,
+  deriveActivitySince,
+} from '../../src/domain/services/ticket-agent-activity.js';
 
 const EMPTY = {
   runningExecutionTicketIds: [],
@@ -103,5 +106,109 @@ describe('deriveTicketAgentActivity', () => {
 
     const [withoutMap] = deriveTicketAgentActivity(['T1'], EMPTY);
     expect(withoutMap?.lastActivityAt).toBeUndefined();
+  });
+
+  // ── `since` — when the CURRENT state began (#400, pass 5) ──
+  // WHY: NaS wants the duration on EVERY badge — "Running for 5m" and
+  // "Waiting for 2h" matter as much as "idle for 3h". The entry must carry the
+  // start of the current state, per state.
+
+  it('carries since for a running ticket from the running-since map (pass 5)', () => {
+    const [t] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      runningExecutionTicketIds: ['T1'],
+      runningSinceByTicket: new Map([['T1', '2026-07-17T11:00:00.000Z']]),
+    });
+    expect(t?.activity).toBe('running');
+    expect(t?.since).toBe('2026-07-17T11:00:00.000Z');
+  });
+
+  it('carries since for a waiting ticket from the waiting-since map — not the running one', () => {
+    // WHY: waiting wins the precedence, so its duration must too. Showing the
+    // running start under a Waiting pill would misstate how long the human has
+    // been blocking.
+    const [t] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      runningExecutionTicketIds: ['T1'],
+      waitingMentionTicketIds: ['T1'],
+      runningSinceByTicket: new Map([['T1', '2026-07-17T09:00:00.000Z']]),
+      waitingSinceByTicket: new Map([['T1', '2026-07-17T11:30:00.000Z']]),
+    });
+    expect(t?.activity).toBe('waiting');
+    expect(t?.since).toBe('2026-07-17T11:30:00.000Z');
+  });
+
+  it('for idle tickets, since IS the last SDK activity ("idle for {{age}}")', () => {
+    const [t] = deriveTicketAgentActivity(['T1'], {
+      ...EMPTY,
+      lastSdkActivityAtByTicket: new Map([['T1', '2026-07-17T08:00:00.000Z']]),
+    });
+    expect(t?.activity).toBe('idle');
+    expect(t?.since).toBe('2026-07-17T08:00:00.000Z');
+  });
+
+  it('omits since when the state start is unknown (no maps provided)', () => {
+    const [running] = deriveTicketAgentActivity(['T1'], { ...EMPTY, runningExecutionTicketIds: ['T1'] });
+    expect(running?.since).toBeUndefined();
+    const [idle] = deriveTicketAgentActivity(['T2'], EMPTY);
+    expect(idle?.since).toBeUndefined();
+  });
+});
+
+describe('deriveActivitySince', () => {
+  const EMPTY_INPUTS = {
+    runningExecutions: [],
+    runningWorkflowRuns: [],
+    waitingMentions: [],
+    executionCompletedAtByMentionId: new Map<string, string>(),
+    gateWorkflowRuns: [],
+  };
+
+  it('running since = earliest start among in-flight executions and workflow runs', () => {
+    // WHY: "Running for X" is the duration of the ongoing burst of work — with
+    // overlapping runs, the oldest still-running start is when the state began.
+    const { runningSinceByTicket } = deriveActivitySince({
+      ...EMPTY_INPUTS,
+      runningExecutions: [
+        { ticketId: 'T1', startedAt: '2026-07-17T10:30:00.000Z' },
+        { ticketId: 'T1', startedAt: '2026-07-17T10:00:00.000Z' },
+      ],
+      runningWorkflowRuns: [{ ticketId: 'T1', startedAt: '2026-07-17T11:00:00.000Z' }],
+    });
+    expect(runningSinceByTicket.get('T1')).toBe('2026-07-17T10:00:00.000Z');
+  });
+
+  it('waiting since for a mention = completedAt of the execution that asked (the moment the question was posed)', () => {
+    const { waitingSinceByTicket } = deriveActivitySince({
+      ...EMPTY_INPUTS,
+      waitingMentions: [{ ticketId: 'T1', id: 'M1', createdAt: '2026-07-17T09:00:00.000Z' }],
+      executionCompletedAtByMentionId: new Map([['M1', '2026-07-17T09:45:00.000Z']]),
+    });
+    expect(waitingSinceByTicket.get('T1')).toBe('2026-07-17T09:45:00.000Z');
+  });
+
+  it('waiting since falls back to the mention createdAt when no execution carried it', () => {
+    // WHY: a mention flipped to waiting_for_info via the API has no linked
+    // execution — better a slightly-early timestamp than no duration at all.
+    const { waitingSinceByTicket } = deriveActivitySince({
+      ...EMPTY_INPUTS,
+      waitingMentions: [{ ticketId: 'T1', id: 'M1', createdAt: '2026-07-17T09:00:00.000Z' }],
+    });
+    expect(waitingSinceByTicket.get('T1')).toBe('2026-07-17T09:00:00.000Z');
+  });
+
+  it('waiting since for a human gate = the workflow run updatedAt, earliest source wins per ticket', () => {
+    const { waitingSinceByTicket } = deriveActivitySince({
+      ...EMPTY_INPUTS,
+      waitingMentions: [{ ticketId: 'T1', id: 'M1', createdAt: '2026-07-17T10:00:00.000Z' }],
+      gateWorkflowRuns: [{ ticketId: 'T1', updatedAt: '2026-07-17T08:00:00.000Z' }],
+    });
+    expect(waitingSinceByTicket.get('T1')).toBe('2026-07-17T08:00:00.000Z');
+  });
+
+  it('returns empty maps for empty inputs', () => {
+    const { runningSinceByTicket, waitingSinceByTicket } = deriveActivitySince(EMPTY_INPUTS);
+    expect(runningSinceByTicket.size).toBe(0);
+    expect(waitingSinceByTicket.size).toBe(0);
   });
 });

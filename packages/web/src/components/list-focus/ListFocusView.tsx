@@ -72,6 +72,7 @@ export function ListFocusView() {
   const activityByTicket = useTicketActivityStore((s) => s.activityByTicket);
   const detailByTicket = useTicketActivityStore((s) => s.detailByTicket);
   const lastActivityAtByTicket = useTicketActivityStore((s) => s.lastActivityAtByTicket);
+  const sinceByTicket = useTicketActivityStore((s) => s.sinceByTicket);
   const loadActivity = useTicketActivityStore((s) => s.loadActivity);
 
   const unreadByTicket = useUnreadStore((s) => s.unreadByTicket);
@@ -439,6 +440,7 @@ export function ListFocusView() {
                           activity={activityByTicket[ticket.id] ?? 'idle'}
                           detail={detailByTicket[ticket.id]}
                           lastActivityAt={lastActivityAtByTicket[ticket.id] ?? null}
+                          since={sinceByTicket[ticket.id] ?? null}
                           unread={unreadByTicket[ticket.id] ?? { ...EMPTY_UNREAD, ticketId: ticket.id }}
                           prStates={prStates}
                           selected={ticket.id === selectedTicketId}

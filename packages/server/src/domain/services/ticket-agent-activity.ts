@@ -19,6 +19,13 @@ export interface AgentActivitySources {
    * Optional: callers that don't render ages can omit it entirely.
    */
   readonly lastSdkActivityAtByTicket?: ReadonlyMap<string, string>;
+  /**
+   * When the current running state began, per ticket (pass 5 "Running for
+   * {{age}}"). Optional; typically built with `deriveActivitySince`.
+   */
+  readonly runningSinceByTicket?: ReadonlyMap<string, string>;
+  /** When the current waiting state began, per ticket ("Waiting for {{age}}"). */
+  readonly waitingSinceByTicket?: ReadonlyMap<string, string>;
 }
 
 /** Human-readable tooltip copy per non-idle state. */
@@ -33,6 +40,10 @@ const DETAIL: Record<Exclude<AgentActivityState, 'idle'>, string> = {
  * Precedence is `waiting` > `running` > `idle`: the "waiting" (human-gate) state
  * is the actionable one, so it must win when a ticket is simultaneously running
  * something and blocked on a human — the two pills must never both show (spec AC3).
+ *
+ * `since` follows the winning state (pass 5): a Waiting pill carries the waiting
+ * start, never the running one — the duration shown must be the duration of the
+ * state the badge names. Idle's since IS the last SDK activity ("idle for X").
  *
  * Only `requestedIds` are returned, one entry each (including `idle`), so the
  * client can treat the response as authoritative and self-clean stale entries.
@@ -51,11 +62,68 @@ export function deriveTicketAgentActivity(
   return requestedIds.map((ticketId) => {
     const lastActivityAt = sources.lastSdkActivityAtByTicket?.get(ticketId);
     if (waiting.has(ticketId)) {
-      return { ticketId, activity: 'waiting', detail: DETAIL.waiting, lastActivityAt };
+      const since = sources.waitingSinceByTicket?.get(ticketId);
+      return { ticketId, activity: 'waiting', detail: DETAIL.waiting, lastActivityAt, since };
     }
     if (running.has(ticketId)) {
-      return { ticketId, activity: 'running', detail: DETAIL.running, lastActivityAt };
+      const since = sources.runningSinceByTicket?.get(ticketId);
+      return { ticketId, activity: 'running', detail: DETAIL.running, lastActivityAt, since };
     }
-    return { ticketId, activity: 'idle', lastActivityAt };
+    return { ticketId, activity: 'idle', lastActivityAt, since: lastActivityAt };
   });
+}
+
+/**
+ * Inputs for `deriveActivitySince` — structural subsets of the store entities so
+ * the HTTP layer can pass them as-is, and tests can build minimal literals.
+ */
+export interface ActivitySinceInputs {
+  /** Currently-running agent executions (`status === 'running'`). */
+  readonly runningExecutions: Iterable<{ ticketId: string; startedAt: string }>;
+  /** Currently-running workflow runs. */
+  readonly runningWorkflowRuns: Iterable<{ ticketId: string; startedAt: string }>;
+  /** Mentions in `waiting_for_info`. */
+  readonly waitingMentions: Iterable<{ ticketId: string; id: string; createdAt: string }>;
+  /**
+   * completedAt of the execution that carried each mention (mentionId → ISO).
+   * That completion is precisely when the agent posed its question — i.e. when
+   * the waiting state began.
+   */
+  readonly executionCompletedAtByMentionId: ReadonlyMap<string, string>;
+  /** Workflow runs sitting at a human gate (`needs_review` / `blocked`). */
+  readonly gateWorkflowRuns: Iterable<{ ticketId: string; updatedAt: string }>;
+}
+
+/** Keep the earliest ISO timestamp per ticket (lexicographic compare is safe on ISO 8601). */
+function keepMin(map: Map<string, string>, ticketId: string, ts: string): void {
+  const prev = map.get(ticketId);
+  if (!prev || ts < prev) map.set(ticketId, ts);
+}
+
+/**
+ * Pure derivation of the per-ticket state-start maps for `since` (pass 5).
+ *
+ * - running since = earliest start among still-in-flight executions and workflow
+ *   runs (the ongoing burst of work began with the oldest one).
+ * - waiting since = earliest of: the linked execution's completedAt (the moment
+ *   the agent asked; falls back to the mention's createdAt when nothing carried
+ *   it — e.g. flipped via the API) and gate runs' updatedAt (the transition into
+ *   `needs_review`/`blocked` is the run's last update while it sits there).
+ */
+export function deriveActivitySince(inputs: ActivitySinceInputs): {
+  runningSinceByTicket: Map<string, string>;
+  waitingSinceByTicket: Map<string, string>;
+} {
+  const runningSinceByTicket = new Map<string, string>();
+  for (const e of inputs.runningExecutions) keepMin(runningSinceByTicket, e.ticketId, e.startedAt);
+  for (const r of inputs.runningWorkflowRuns) keepMin(runningSinceByTicket, r.ticketId, r.startedAt);
+
+  const waitingSinceByTicket = new Map<string, string>();
+  for (const m of inputs.waitingMentions) {
+    const ts = inputs.executionCompletedAtByMentionId.get(m.id) ?? m.createdAt;
+    keepMin(waitingSinceByTicket, m.ticketId, ts);
+  }
+  for (const r of inputs.gateWorkflowRuns) keepMin(waitingSinceByTicket, r.ticketId, r.updatedAt);
+
+  return { runningSinceByTicket, waitingSinceByTicket };
 }

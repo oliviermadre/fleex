@@ -80,8 +80,10 @@ interface Props {
   board?: Board;
   activity: AgentActivityState;
   detail?: string;
-  /** Last SDK activity for the "idle since {{age}}" badge (pass 4, remark 5). */
+  /** Last SDK activity for the "idle for {{age}}" badge (pass 4, remark 5). */
   lastActivityAt?: string | null;
+  /** Start of the current waiting/running state ("Waiting for 2h", pass 5). */
+  since?: string | null;
   unread: TicketUnreadCounts;
   prStates: Record<string, string>;
   selected: boolean;
@@ -95,6 +97,7 @@ export function ListFocusRow({
   activity,
   detail,
   lastActivityAt,
+  since,
   unread,
   prStates,
   selected,
@@ -171,9 +174,14 @@ export function ListFocusRow({
       </div>
 
       {/* Activity badge column, right after the title (pass 4, remark 5):
-          Waiting (yellow) / Running (blue) / idle since {{age}} (gray). */}
+          Waiting/Running/idle, each with its live duration (pass 5). */}
       <div className={LIST_FOCUS_COL.activity}>
-        <ActivityBadge activity={activity} detail={detail} lastActivityAt={lastActivityAt} />
+        <ActivityBadge
+          activity={activity}
+          detail={detail}
+          lastActivityAt={lastActivityAt}
+          since={since}
+        />
       </div>
 
       {/* Board — between the title block and the PR column (pass 4, remark 2). */}

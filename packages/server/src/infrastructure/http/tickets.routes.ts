@@ -10,7 +10,7 @@ import { TicketActivityEntity } from '../../domain/entities/ticket-activity.enti
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
 import { deriveTicketUpdateEvents } from '../../domain/services/ticket-audit-events.js';
-import { deriveTicketAgentActivity } from '../../domain/services/ticket-agent-activity.js';
+import { deriveTicketAgentActivity, deriveActivitySince } from '../../domain/services/ticket-agent-activity.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
 import type { Container } from '../container.js';
@@ -1469,18 +1469,47 @@ export function ticketRoutes(container: Container) {
         container.workflowRunStore?.getByStatus('blocked') ?? Promise.resolve([]),
       ]);
 
-      const runningExecutionTicketIds = executions
-        .filter((e) => e.status === 'running' && requested.has(e.ticketId))
-        .map((e) => e.ticketId);
-      const waitingMentionTicketIds = mentions
-        .filter((m) => m.status === 'waiting_for_info' && requested.has(m.ticketId))
-        .map((m) => m.ticketId);
-      const runningWorkflowTicketIds = runningRuns
-        .filter((r) => requested.has(r.ticketId))
-        .map((r) => r.ticketId);
-      const waitingWorkflowTicketIds = [...needsReviewRuns, ...blockedRuns]
-        .filter((r) => requested.has(r.ticketId))
-        .map((r) => r.ticketId);
+      const runningExecutions = executions.filter(
+        (e) => e.status === 'running' && requested.has(e.ticketId),
+      );
+      const waitingMentions = mentions.filter(
+        (m) => m.status === 'waiting_for_info' && requested.has(m.ticketId),
+      );
+      const scopedRunningRuns = runningRuns.filter((r) => requested.has(r.ticketId));
+      const gateRuns = [...needsReviewRuns, ...blockedRuns].filter((r) =>
+        requested.has(r.ticketId),
+      );
+
+      // When each waiting mention's question was posed = the completion of the
+      // execution that carried it (pass 5 "Waiting for {{age}}"). Latest wins
+      // if a mention somehow ran twice.
+      const executionCompletedAtByMentionId = new Map<string, string>();
+      for (const e of executions) {
+        if (!e.mentionId || !e.completedAt) continue;
+        const prev = executionCompletedAtByMentionId.get(e.mentionId);
+        if (!prev || e.completedAt > prev) {
+          executionCompletedAtByMentionId.set(e.mentionId, e.completedAt);
+        }
+      }
+      // Workflow-run / mention entities carry Date fields; the derivation
+      // compares ISO strings (like executions do), so normalize here.
+      const { runningSinceByTicket, waitingSinceByTicket } = deriveActivitySince({
+        runningExecutions,
+        runningWorkflowRuns: scopedRunningRuns.map((r) => ({
+          ticketId: r.ticketId,
+          startedAt: r.startedAt.toISOString(),
+        })),
+        waitingMentions: waitingMentions.map((m) => ({
+          ticketId: m.ticketId,
+          id: m.id,
+          createdAt: m.createdAt.toISOString(),
+        })),
+        executionCompletedAtByMentionId,
+        gateWorkflowRuns: gateRuns.map((r) => ({
+          ticketId: r.ticketId,
+          updatedAt: r.updatedAt.toISOString(),
+        })),
+      });
 
       // Last SDK activity per ticket → the cockpit's "idle since {{age}}" (#400).
       // CLI sessions are excluded (NaS spec'd "dernière exécution du sdk"); a
@@ -1495,11 +1524,13 @@ export function ticketRoutes(container: Container) {
       }
 
       return deriveTicketAgentActivity(requestedIds, {
-        runningExecutionTicketIds,
-        runningWorkflowTicketIds,
-        waitingMentionTicketIds,
-        waitingWorkflowTicketIds,
+        runningExecutionTicketIds: runningExecutions.map((e) => e.ticketId),
+        runningWorkflowTicketIds: scopedRunningRuns.map((r) => r.ticketId),
+        waitingMentionTicketIds: waitingMentions.map((m) => m.ticketId),
+        waitingWorkflowTicketIds: gateRuns.map((r) => r.ticketId),
         lastSdkActivityAtByTicket,
+        runningSinceByTicket,
+        waitingSinceByTicket,
       });
     });
   };

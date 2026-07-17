@@ -38,4 +38,14 @@ describe('formatAge', () => {
   it('clamps future dates to 0s', () => {
     expect(formatAge(ago(-5 * SEC))).toBe('0s');
   });
+
+  it('accepts an explicit now so a live ticker can drive it (pass 5)', () => {
+    // WHY: the cockpit badge re-renders every second off a shared clock; the
+    // formatter must compute against THAT clock, not its own Date.now() call,
+    // so a tick and its label can never disagree.
+    const t0 = NOW.getTime();
+    expect(formatAge(ago(5 * SEC), t0 + 1 * SEC)).toBe('6s');
+    // Unit rollover: 59s + 2s must read "1m", never "61s".
+    expect(formatAge(ago(59 * SEC), t0 + 2 * SEC)).toBe('1m');
+  });
 });

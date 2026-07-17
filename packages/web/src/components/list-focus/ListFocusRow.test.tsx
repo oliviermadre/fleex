@@ -138,16 +138,22 @@ describe('ListFocusRow', () => {
     expect(container.querySelector('[title="mention non résolue"]')).not.toBeNull();
   });
 
-  it('shows "idle since {{age}}" for idle rows with a past SDK session (pass 4, remark 5)', () => {
+  it('shows "idle for {{age}}" for idle rows with a past SDK session (pass 5 wording)', () => {
     const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
     const { container } = renderRow({ activity: 'idle', lastActivityAt: twoHoursAgo });
-    expect(container.textContent).toContain('idle since 2h');
+    expect(container.textContent).toContain('idle for 2h');
   });
 
   it('shows plain "idle" when the ticket never had an SDK session (pass 4, remark 5)', () => {
     const { container } = renderRow({ activity: 'idle', lastActivityAt: null });
     expect(container.textContent).toContain('idle');
-    expect(container.textContent).not.toContain('idle since');
+    expect(container.textContent).not.toContain('idle for');
+  });
+
+  it('carries the state duration on the activity pill ("Waiting for {{age}}", pass 5)', () => {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { container } = renderRow({ activity: 'waiting', since: fiveMinAgo });
+    expect(container.textContent).toContain('Waiting for 5m');
   });
 
   it('shows priority + favorite pictos and type + due-date badges (review remark 3)', () => {

@@ -7,6 +7,11 @@ interface Props {
   activity: AgentActivityState;
   /** Tooltip detail (falls back to a per-state default). */
   detail?: string;
+  /**
+   * Compact state duration ("5m", "2h") — renders "Waiting for 5m" (#400,
+   * pass 5). Omitted on kanban cards, which keep the plain label.
+   */
+  duration?: string;
 }
 
 const CONFIG = {
@@ -31,7 +36,7 @@ const CONFIG = {
  * text label so the state is legible to color-blind users and screen readers
  * (spec AC9). The dot's pulse respects `prefers-reduced-motion` via StatusDot.
  */
-export function ActivityPill({ activity, detail }: Props) {
+export function ActivityPill({ activity, detail, duration }: Props) {
   if (activity === 'idle') return null;
   const cfg = CONFIG[activity];
   return (
@@ -44,7 +49,7 @@ export function ActivityPill({ activity, detail }: Props) {
       )}
     >
       <StatusDot status={cfg.dot} size="sm" />
-      {cfg.label}
+      {duration ? `${cfg.label} for ${duration}` : cfg.label}
     </span>
   );
 }

@@ -1,48 +1,85 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, act } from '@testing-library/react';
 import { ActivityBadge } from './ActivityBadge';
 
 /**
- * Cockpit activity column badge (#400, pass 4, remarks 3–5). NaS replaced the
- * virtual "En attente" grouping with a per-row badge column: "waiting"
- * (yellow), "running" (blue), "idle since {{time}}" (gray) — and when a ticket
- * never had an SDK session, just "idle".
+ * Cockpit activity column badge (#400). Pass 5 (NaS):
+ * - EVERY badge carries its duration — "Waiting for 2h", "Running for 5m",
+ *   "idle for 3h" — knowing how long a state has lasted matters for all three;
+ * - the wording is "for", not "since" ("idle since 5s" was an English mistake);
+ * - the age ticks live every second, with smart unit rollover (59s → 1m, never
+ *   61s), without any page refresh.
  */
 
 const NOW = new Date('2026-07-17T12:00:00.000Z');
+const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
+const SEC = 1000;
+const MIN = 60 * SEC;
+const HOUR = 60 * MIN;
 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
 });
 afterEach(() => {
-  vi.useRealTimers();
   cleanup();
+  vi.useRealTimers();
 });
 
 describe('ActivityBadge', () => {
-  it('renders the yellow Waiting pill when waiting (same pill as the kanban card)', () => {
-    const { container } = render(<ActivityBadge activity="waiting" detail="mention en attente" />);
-    expect(container.textContent).toContain('Waiting');
-    expect(container.innerHTML).toContain('tint-yellow'); // yellow per remark 5
+  it('shows the duration on the yellow Waiting pill ("Waiting for {{age}}")', () => {
+    const { container } = render(
+      <ActivityBadge activity="waiting" detail="mention en attente" since={ago(2 * HOUR)} />,
+    );
+    expect(container.textContent).toContain('Waiting for 2h');
+    expect(container.innerHTML).toContain('tint-yellow');
     expect(container.querySelector('[title="mention en attente"]')).not.toBeNull();
   });
 
-  it('renders the blue Running pill when an SDK session is running (remark 4)', () => {
+  it('shows the duration on the blue Running pill ("Running for {{age}}")', () => {
+    const { container } = render(<ActivityBadge activity="running" since={ago(5 * MIN)} />);
+    expect(container.textContent).toContain('Running for 5m');
+    expect(container.innerHTML).toContain('tint-blue');
+  });
+
+  it('falls back to the plain pill label when the state start is unknown', () => {
     const { container } = render(<ActivityBadge activity="running" />);
-    expect(container.textContent).toContain('Running');
-    expect(container.innerHTML).toContain('tint-blue'); // blue per remark 5
+    expect(container.textContent).toBe('Running');
   });
 
-  it('shows gray "idle since {{age}}" from the last SDK activity (remark 5)', () => {
-    const twoHoursAgo = new Date(NOW.getTime() - 2 * 3600 * 1000).toISOString();
-    const { container } = render(<ActivityBadge activity="idle" lastActivityAt={twoHoursAgo} />);
-    expect(container.textContent).toBe('idle since 2h');
-    expect(container.innerHTML).toContain('gray'); // gray per remark 5
+  it('says "idle for {{age}}" — "for", not "since" (pass 5 wording fix)', () => {
+    const { container } = render(<ActivityBadge activity="idle" lastActivityAt={ago(2 * HOUR)} />);
+    expect(container.textContent).toBe('idle for 2h');
+    expect(container.innerHTML).toContain('gray');
   });
 
-  it('shows just "idle" when the ticket never had an SDK session (remark 5)', () => {
+  it('shows just "idle" when the ticket never had an SDK session', () => {
     const { container } = render(<ActivityBadge activity="idle" lastActivityAt={null} />);
     expect(container.textContent).toBe('idle');
+  });
+
+  it('ticks the idle age every second without any refresh', () => {
+    // WHY: NaS watched "idle since 0s" stay frozen until a page reload. The
+    // whole point of the duration is to be alive.
+    const { container } = render(<ActivityBadge activity="idle" lastActivityAt={ago(5 * SEC)} />);
+    expect(container.textContent).toBe('idle for 5s');
+    act(() => vi.advanceTimersByTime(1 * SEC));
+    expect(container.textContent).toBe('idle for 6s');
+    act(() => vi.advanceTimersByTime(1 * SEC));
+    expect(container.textContent).toBe('idle for 7s');
+  });
+
+  it('rolls the unit over live: 59s ticks into 1m, never 60s+ (pass 5)', () => {
+    const { container } = render(<ActivityBadge activity="idle" lastActivityAt={ago(59 * SEC)} />);
+    expect(container.textContent).toBe('idle for 59s');
+    act(() => vi.advanceTimersByTime(2 * SEC));
+    expect(container.textContent).toBe('idle for 1m');
+  });
+
+  it('ticks the pill durations too (waiting/running are just as alive)', () => {
+    const { container } = render(<ActivityBadge activity="waiting" since={ago(58 * SEC)} />);
+    expect(container.textContent).toContain('Waiting for 58s');
+    act(() => vi.advanceTimersByTime(3 * SEC));
+    expect(container.textContent).toContain('Waiting for 1m');
   });
 });

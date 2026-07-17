@@ -1,5 +1,10 @@
-export function formatAge(dateString: string): string {
-  const now = Date.now();
+/**
+ * Compact age ("5s", "3m", "2h", "4d", "1w") with floor semantics.
+ *
+ * `now` is injectable so a live ticker (useNow, #400 pass 5) drives the label
+ * off ITS clock — a tick and its rendered age can never disagree.
+ */
+export function formatAge(dateString: string, now: number = Date.now()): string {
   const then = new Date(dateString).getTime();
   const diffMs = now - then;
 
