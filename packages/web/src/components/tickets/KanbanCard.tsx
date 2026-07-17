@@ -5,6 +5,7 @@ import { PriorityPickerPopover } from './PriorityPickerPopover';
 import { TypePickerPopover } from './TypePickerPopover';
 import { DueDateBadge } from './DueDateBadge';
 import { ActivityPill } from './ActivityPill';
+import { CostBadge } from './CostBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { useTicketStore } from '../../stores/ticketStore';
@@ -74,6 +75,8 @@ export function KanbanCard({
   // the cards whose activity actually changed.
   const activity = useTicketActivityStore((s) => s.activityByTicket[ticket.id] ?? 'idle');
   const activityDetail = useTicketActivityStore((s) => s.detailByTicket[ticket.id]);
+  // Cumulative agentic cost for the header badge (#404). 0 ⇒ no badge.
+  const cumulativeCost = useTicketActivityStore((s) => s.costByTicket[ticket.id] ?? 0);
   const groups = useTicketGroupStore((s) => s.groups);
   const ticketGroupIds = useTicketGroupStore((s) => s.ticketGroupIds);
 
@@ -126,84 +129,95 @@ export function KanbanCard({
       onClick={() => selectTicket(ticket.id)}
       className={`group relative cursor-pointer rounded-lg border transition-colors ${PRIORITY_BORDER[ticket.priority]} ${PRIORITY_LEFT[ticket.priority]} ${PRIORITY_BG[ticket.priority]}`}
     >
-      {/* ── HEADER BAR ── priority dot + type emoji (left) | board? | blocked/fav (right) */}
+      {/* ── HEADER BAR ── priority dot + type emoji (left) | cost badge (centre) | github/blocked/fav (right)
+          Strict centring via the 3-column flex trick (same as the footer's #ID): equal-weight
+          flex-1 side clusters push the flex-shrink-0 badge to the card's true centre, regardless
+          of how wide each side is. */}
       <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
-        {/* Priority dot — top left */}
-        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-          <PriorityPickerPopover ticket={ticket} />
+        {/* LEFT cluster — priority, type, optional board badge */}
+        <div className="flex flex-1 min-w-0 items-center gap-1.5">
+          {/* Priority dot — top left */}
+          <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            <PriorityPickerPopover ticket={ticket} />
+          </div>
+
+          {/* Type picker */}
+          <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            <TypePickerPopover ticket={ticket} />
+          </div>
+
+          {/* Board badge (shown in "All boards" view) */}
+          {board && (
+            <span className="truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
+              {board.emoji} {board.name}
+            </span>
+          )}
         </div>
 
-        {/* Type picker */}
-        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-          <TypePickerPopover ticket={ticket} />
-        </div>
+        {/* Cumulative agentic cost, strictly centred in the header (#404).
+            CostBadge is null at $0, in which case the two flex-1 clusters simply
+            meet in the middle — layout stays intact. */}
+        <CostBadge costUsd={cumulativeCost} />
 
-        {/* Board badge (shown in "All boards" view) */}
-        {board && (
-          <span className="truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
-            {board.emoji} {board.name}
-          </span>
-        )}
+        {/* RIGHT cluster — github, blocked, favorite */}
+        <div className="flex flex-1 min-w-0 items-center justify-end gap-1.5">
+          {/* GitHub issue link */}
+          {issueLinks.length > 0 && issueLinks[0]?.url && (
+            <a
+              href={issueLinks[0].url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="github-glow-icon flex-shrink-0 cursor-pointer rounded p-0.5 text-[var(--theme-text-faint)] transition-all duration-200 hover:text-[var(--theme-text-primary)]"
+              title={`GitHub ${issueLinks[0].ref}`}
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+              </svg>
+            </a>
+          )}
 
-        {/* Spacer */}
-        <div className="flex-1" />
+          {/* Blocked */}
+          {!isCompleted && (
+            <button
+              className={cn(
+                'flex-shrink-0 rounded p-0.5 transition-all',
+                ticket.blocked
+                  ? cn('opacity-100', tintClasses('red').solidText)
+                  : 'opacity-0 group-hover:opacity-60 text-[var(--theme-text-faint)] hover:opacity-100',
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                updateTicket(ticket.id, { blocked: !ticket.blocked });
+              }}
+              title={ticket.blocked ? 'Unblock ticket' : 'Mark as blocked'}
+            >
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
+                <rect x="3" y="7" width="10" height="8" rx="1.5" />
+                <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+              </svg>
+            </button>
+          )}
 
-        {/* GitHub issue link */}
-        {issueLinks.length > 0 && issueLinks[0]?.url && (
-          <a
-            href={issueLinks[0].url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="github-glow-icon flex-shrink-0 cursor-pointer rounded p-0.5 text-[var(--theme-text-faint)] transition-all duration-200 hover:text-[var(--theme-text-primary)]"
-            title={`GitHub ${issueLinks[0].ref}`}
-          >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-            </svg>
-          </a>
-        )}
-
-        {/* Blocked */}
-        {!isCompleted && (
+          {/* Favorite */}
           <button
             className={cn(
               'flex-shrink-0 rounded p-0.5 transition-all',
-              ticket.blocked
-                ? cn('opacity-100', tintClasses('red').solidText)
-                : 'opacity-0 group-hover:opacity-60 text-[var(--theme-text-faint)] hover:opacity-100',
+              ticket.favorite
+                ? cn('opacity-100', tintClasses('yellow').solidText)
+                : cn('opacity-0 group-hover:opacity-60 text-[var(--theme-text-faint)] hover:opacity-100', tintClasses('yellow').hoverText),
             )}
             onClick={(e) => {
               e.stopPropagation();
-              updateTicket(ticket.id, { blocked: !ticket.blocked });
+              updateTicket(ticket.id, { favorite: !ticket.favorite });
             }}
-            title={ticket.blocked ? 'Unblock ticket' : 'Mark as blocked'}
+            title={ticket.favorite ? 'Remove from favorites' : 'Add to favorites'}
           >
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
-              <rect x="3" y="7" width="10" height="8" rx="1.5" />
-              <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+            <svg width="11" height="11" viewBox="0 0 24 24" fill={ticket.favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+              <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
             </svg>
           </button>
-        )}
-
-        {/* Favorite */}
-        <button
-          className={cn(
-            'flex-shrink-0 rounded p-0.5 transition-all',
-            ticket.favorite
-              ? cn('opacity-100', tintClasses('yellow').solidText)
-              : cn('opacity-0 group-hover:opacity-60 text-[var(--theme-text-faint)] hover:opacity-100', tintClasses('yellow').hoverText),
-          )}
-          onClick={(e) => {
-            e.stopPropagation();
-            updateTicket(ticket.id, { favorite: !ticket.favorite });
-          }}
-          title={ticket.favorite ? 'Remove from favorites' : 'Add to favorites'}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill={ticket.favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-            <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
-          </svg>
-        </button>
+        </div>
 
       </div>
 

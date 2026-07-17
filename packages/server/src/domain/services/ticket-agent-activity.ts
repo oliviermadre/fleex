@@ -26,6 +26,12 @@ export interface AgentActivitySources {
   readonly runningSinceByTicket?: ReadonlyMap<string, string>;
   /** When the current waiting state began, per ticket ("Waiting for {{age}}"). */
   readonly waitingSinceByTicket?: ReadonlyMap<string, string>;
+  /**
+   * Cumulative agentic cost per ticket (#404): Σ `costUsd` over the ticket's
+   * executions (all origins, `null`→0). Optional: callers that don't render the
+   * cost badge can omit it — the entry then reports `cumulativeCostUsd: 0`.
+   */
+  readonly costByTicket?: ReadonlyMap<string, number>;
 }
 
 /** Human-readable tooltip copy per non-idle state. */
@@ -61,15 +67,18 @@ export function deriveTicketAgentActivity(
 
   return requestedIds.map((ticketId) => {
     const lastActivityAt = sources.lastSdkActivityAtByTicket?.get(ticketId);
+    // Cost rides along with every entry (idle included): a `done` ticket is idle
+    // yet its cumulative cost is exactly what the board wants to surface (#404).
+    const cumulativeCostUsd = sources.costByTicket?.get(ticketId) ?? 0;
     if (waiting.has(ticketId)) {
       const since = sources.waitingSinceByTicket?.get(ticketId);
-      return { ticketId, activity: 'waiting', detail: DETAIL.waiting, lastActivityAt, since };
+      return { ticketId, activity: 'waiting', detail: DETAIL.waiting, lastActivityAt, since, cumulativeCostUsd };
     }
     if (running.has(ticketId)) {
       const since = sources.runningSinceByTicket?.get(ticketId);
-      return { ticketId, activity: 'running', detail: DETAIL.running, lastActivityAt, since };
+      return { ticketId, activity: 'running', detail: DETAIL.running, lastActivityAt, since, cumulativeCostUsd };
     }
-    return { ticketId, activity: 'idle', lastActivityAt, since: lastActivityAt };
+    return { ticketId, activity: 'idle', lastActivityAt, since: lastActivityAt, cumulativeCostUsd };
   });
 }
 

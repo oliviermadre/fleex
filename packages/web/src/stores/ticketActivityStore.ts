@@ -34,6 +34,12 @@ interface TicketActivityState {
    * durations come from lastActivityAtByTicket instead.
    */
   sinceByTicket: Record<string, string>;
+  /**
+   * Cumulative agentic cost per ticket (#404), in USD. Kept for EVERY tracked
+   * ticket (idle/done included — a finished ticket's total cost is precisely
+   * what the card badge surfaces). Absence ⇒ 0 (no badge).
+   */
+  costByTicket: Record<string, number>;
   /** The currently-visible tickets; only these are tracked / reconciled. */
   trackedIds: string[];
 
@@ -52,6 +58,7 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
   detailByTicket: {},
   lastActivityAtByTicket: {},
   sinceByTicket: {},
+  costByTicket: {},
   trackedIds: [],
 
   loadActivity: async (ticketIds) => {
@@ -62,6 +69,7 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
         detailByTicket: {},
         lastActivityAtByTicket: {},
         sinceByTicket: {},
+        costByTicket: {},
       });
       return;
     }
@@ -78,7 +86,12 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
     const detailByTicket: Record<string, string> = {};
     const lastActivityAtByTicket: Record<string, string> = {};
     const sinceByTicket: Record<string, string> = {};
+    const costByTicket: Record<string, number> = {};
     for (const it of items) {
+      // Cost is kept for EVERY entry — idle/done included — since the badge must
+      // stay visible on finished cards (#404). Only store non-zero to keep the
+      // map sparse (absence reads as 0 → no badge).
+      if (it.cumulativeCostUsd > 0) costByTicket[it.ticketId] = it.cumulativeCostUsd;
       // lastActivityAt is kept for EVERY entry — idle included, since "idle
       // for {{age}}" is precisely about tickets with no current activity.
       if (it.lastActivityAt) lastActivityAtByTicket[it.ticketId] = it.lastActivityAt;
@@ -89,7 +102,7 @@ export const useTicketActivityStore = create<TicketActivityState>((set, get) => 
       // a ticket that dropped back to idle loses its stale since here.
       if (it.since) sinceByTicket[it.ticketId] = it.since;
     }
-    set({ activityByTicket, detailByTicket, lastActivityAtByTicket, sinceByTicket });
+    set({ activityByTicket, detailByTicket, lastActivityAtByTicket, sinceByTicket, costByTicket });
   },
 
   getActivity: (ticketId) => get().activityByTicket[ticketId] ?? 'idle',
