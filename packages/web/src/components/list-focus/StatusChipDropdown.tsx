@@ -2,6 +2,7 @@ import type { TicketStatus } from '@fleex/shared';
 import { TICKET_STATUS_LABELS, TICKET_STATUSES } from '@fleex/shared';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
+import { STATUS_COLORS } from '../../lib/statusColors';
 
 /**
  * Status dot palette, mirrored from the kanban/dashboard NanoKanban swatches so
@@ -25,17 +26,27 @@ interface Props {
   size?: 'sm' | 'md';
 }
 
+function ChevronDownIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
+      <polyline points="4,6 8,10 12,6" />
+    </svg>
+  );
+}
+
 /**
  * Inline status chip with a click-to-change dropdown. One of the cockpit's
- * three inspector actions (change status), also used per-row in the list.
- * Stops click propagation so opening the menu never opens/steals the row's
- * inspector selection.
+ * three inspector actions (change status). The trigger is a status-tinted pill
+ * (bg / border / text from the shared STATUS_COLORS tint map) with a colored dot
+ * and a chevron — so it reads as "the current status, click to change" at a
+ * glance. Stops click propagation so opening the menu never opens/steals the
+ * row's inspector selection.
  */
 export function StatusChipDropdown({ status, onChange, size = 'sm' }: Props) {
   const { open, setOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({
     placement: 'bottom-start',
   });
-  const color = STATUS_COLOR[status] ?? 'var(--theme-text-muted)';
+  const tint = STATUS_COLORS[status] ?? STATUS_COLORS.backlog!;
 
   return (
     <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -44,13 +55,18 @@ export function StatusChipDropdown({ status, onChange, size = 'sm' }: Props) {
         role="button"
         tabIndex={0}
         className={cn(
-          'inline-flex cursor-pointer items-center gap-1 rounded-full bg-[var(--theme-bg-overlay)] font-medium text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]',
-          size === 'md' ? 'px-2 py-1 text-xs' : 'px-1.5 py-0.5 text-[10px]',
+          'inline-flex cursor-pointer items-center gap-1.5 rounded-md border font-medium transition-colors',
+          tint.bg,
+          tint.border,
+          tint.text,
+          tint.hoverBg,
+          size === 'md' ? 'px-2.5 py-1 text-xs' : 'px-1.5 py-0.5 text-[10px]',
         )}
         {...getReferenceProps()}
       >
-        <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+        <span className={cn('inline-block h-1.5 w-1.5 shrink-0 rounded-full', tint.bar)} />
         {TICKET_STATUS_LABELS[status] ?? status}
+        <ChevronDownIcon />
       </span>
       {open && (
         <FloatingPortal>

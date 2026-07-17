@@ -13,7 +13,13 @@ const ABBREVS: Record<string, string> = {
   cancelled: 'CNCL',
 };
 
-/** Inline kanban status picker. `size="sm"` scales down for tight header areas. */
+/**
+ * Inline kanban status picker. `size="sm"` scales down for tight header areas.
+ * It renders at its NATURAL height so each column's colored band sits flush at
+ * the top; callers give it a width by wrapping it (e.g. `w-[100px]` /
+ * `w-[250px]`), never a height — forcing a tall box would center the columns and
+ * leave a gap above the band.
+ */
 export function NanoKanban({ status, onStatusChange, size = 'md' }: {
   status: TicketStatus;
   onStatusChange: (status: TicketStatus) => void;

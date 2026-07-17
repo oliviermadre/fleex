@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { AgentActivityState, Ticket, TicketStatus } from '@fleex/shared';
 import type { ListFocusFilters } from '../../stores/listFocusStore';
 import { DEFAULT_LIST_FOCUS_STATUSES } from '../../stores/listFocusStore';
-import { buildListFocusGroups, groupHue } from './grouping';
+import { buildListFocusGroups, groupHue, shouldRefreezeForStatusChange } from './grouping';
 
 /**
  * Cockpit grouping (#400). Pass 4 (remark 3) REMOVED the virtual "En attente"
@@ -179,5 +179,33 @@ describe('groupHue', () => {
 
   it('returns none for unknown keys', () => {
     expect(groupHue('not-a-status')).toBeNull();
+  });
+});
+
+describe('shouldRefreezeForStatusChange', () => {
+  // WHY: while the inspector is open the list order is FROZEN so ↑/↓ never
+  // reshuffles under the cursor. But changing the inspected ticket's status is
+  // explicit user intent: its row must move to the new status group live (bug —
+  // it only moved after a reload). This helper decides exactly when to
+  // re-snapshot, scoped to the inspected ticket so every other row stays frozen.
+  it('refreezes when the SAME inspected ticket changes status', () => {
+    expect(
+      shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: 't1', status: 'reviewing' }),
+    ).toBe(true);
+  });
+
+  it('does NOT refreeze on navigation to a different ticket (even a different status)', () => {
+    expect(
+      shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: 't2', status: 'reviewing' }),
+    ).toBe(false);
+    expect(
+      shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: 't2', status: 'doing' }),
+    ).toBe(false);
+  });
+
+  it('does NOT refreeze on open, close, or an unchanged status', () => {
+    expect(shouldRefreezeForStatusChange({ id: null, status: null }, { id: 't1', status: 'doing' })).toBe(false); // open
+    expect(shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: null, status: null })).toBe(false); // close
+    expect(shouldRefreezeForStatusChange({ id: 't1', status: 'doing' }, { id: 't1', status: 'doing' })).toBe(false); // no change
   });
 });
