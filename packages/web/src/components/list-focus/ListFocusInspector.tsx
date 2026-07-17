@@ -102,36 +102,48 @@ export function ListFocusInspector({
         style={{ width }}
         className="flex h-full flex-col border-l border-[var(--theme-border)] bg-[var(--theme-bg-surface)]"
       >
-        {/* Header (NaS redesign). Title-first: the ticket title + id lead the
-            block; the board + position sit on a quieter second line with the
-            Smart Session launcher pinned to the top-right corner — so a
-            skill/workflow can be started by mouse without scrolling into the
-            main-panel button hidden behind the sidebar. The status micro-kanban
-            (same NanoKanban as the worktree sidebar) closes the header for
-            one-click status changes. */}
+        {/* Header (NaS redesign, round 2). A thin meta bar leads: the list
+            position sits top-left — it's your cursor in the frozen list (↑/↓
+            moves it), so it reads as an index, not buried mid-line — while
+            "open full ticket" + the ✕ close button pair up top-right. The
+            ticket title + id own the next line (primary). Board + the Smart
+            Session launcher form the secondary row, and a fixed-width
+            NanoKanban (same as the worktree sidebar) closes the header. */}
         <div className="flex flex-col gap-2 border-b border-[var(--theme-border-subtle)] px-4 py-3">
-          {/* Line 1 — title + id (primary) · close button in the corner. */}
-          <div className="flex items-start gap-2">
-            <h2 className="min-w-0 flex-1 text-sm font-semibold leading-snug text-[var(--theme-text-primary)]">
-              {ticket.title}
-              <span className="ml-1.5 font-mono text-[11px] font-normal text-[var(--theme-text-faint)]">
-                #{ticket.displayId}
-              </span>
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              title="Close (Esc)"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="4" y1="4" x2="12" y2="12" />
-                <line x1="12" y1="4" x2="4" y2="12" />
-              </svg>
-            </button>
+          {/* Line 1 — meta bar: list position (top-left) · open-full + ✕ (top-right). */}
+          <div className="flex items-center gap-2 text-[10px] text-[var(--theme-text-faint)]">
+            {positionLabel && <span className="shrink-0 tabular-nums font-medium">{positionLabel}</span>}
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={onOpenFull}
+                className="whitespace-nowrap text-[var(--theme-text-muted)] underline-offset-2 transition-colors hover:text-[var(--theme-accent)] hover:underline"
+              >
+                Open full ticket ↗
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                title="Close (Esc)"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="4" x2="12" y2="12" />
+                  <line x1="12" y1="4" x2="4" y2="12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
-          {/* Line 2 — board + position (secondary) · Smart Session launcher. */}
+          {/* Line 2 — title + id (primary). */}
+          <h2 className="text-sm font-semibold leading-snug text-[var(--theme-text-primary)]">
+            {ticket.title}
+            <span className="ml-1.5 font-mono text-[11px] font-normal text-[var(--theme-text-faint)]">
+              #{ticket.displayId}
+            </span>
+          </h2>
+
+          {/* Line 3 — board (secondary) · Smart Session launcher (top-right). */}
           <div className="flex items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2 text-[10px] text-[var(--theme-text-faint)]">
               {board && (
@@ -139,14 +151,6 @@ export function ListFocusInspector({
                   {board.emoji} {board.name}
                 </span>
               )}
-              {positionLabel && <span className="shrink-0 tabular-nums">{positionLabel}</span>}
-              <button
-                type="button"
-                onClick={onOpenFull}
-                className="shrink-0 whitespace-nowrap text-[var(--theme-text-muted)] underline-offset-2 transition-colors hover:text-[var(--theme-accent)] hover:underline"
-              >
-                Open full ticket ↗
-              </button>
             </div>
             {/* stopPropagation: opening the launcher menu must never bubble up
                 to the aside / row-selection handlers. */}
@@ -159,8 +163,13 @@ export function ListFocusInspector({
             </div>
           </div>
 
-          {/* Status — same micro-kanban as the worktree sidebar (ergonomics). */}
-          <NanoKanban status={ticket.status} onStatusChange={onStatusChange} />
+          {/* Status — fixed-width micro-kanban (w-[100px], same as the worktree
+              sidebar). NanoKanban lays its columns out with flex-1, so without a
+              fixed wrapper it stretches "énorme" with the sidebar width (NaS);
+              the wrapper keeps it dropdown-sized with every status still visible. */}
+          <div className="w-[100px] shrink-0">
+            <NanoKanban status={ticket.status} onStatusChange={onStatusChange} size="sm" />
+          </div>
         </div>
 
         {/* Tabs */}

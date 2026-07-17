@@ -189,4 +189,38 @@ describe('ListFocusInspector header (cockpit usability redesign, #407)', () => {
     fireEvent.click(reviewing!);
     expect(onStatusChange).toHaveBeenCalledWith('reviewing');
   });
+
+  it('shows the list position at the very top-left, ahead of the title (round 2)', () => {
+    // WHY: NaS — the "n / total" is the cursor into the frozen list (↑/↓ moves
+    // it), so it belongs top-left as an index. Buried mid-line next to the board
+    // it "ne veut rien dire". It must therefore precede the title in the DOM.
+    const { container } = renderInspector({ board, positionLabel: '10 / 12' });
+    const text = container.textContent ?? '';
+    expect(text.indexOf('10 / 12')).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf('10 / 12')).toBeLessThan(text.indexOf('Fix auth loop'));
+  });
+
+  it('pairs "Open full ticket" with the close button in the top-right (round 2)', () => {
+    // WHY: NaS — move open-full up next to the ✕ so the header actions cluster
+    // in the corner rather than sitting mid-line. Same parent = same cluster.
+    const onOpenFull = vi.fn();
+    renderInspector({ board, onOpenFull });
+    const openFull = screen.getByRole('button', { name: /open full ticket/i });
+    const close = screen.getByRole('button', { name: /close/i });
+    expect(openFull.parentElement).toBe(close.parentElement);
+    fireEvent.click(openFull);
+    expect(onOpenFull).toHaveBeenCalled();
+  });
+
+  it('constrains the status kanban to a fixed dropdown width, not the sidebar (round 2)', () => {
+    // WHY: NaS — NanoKanban lays columns out with flex-1, so an unconstrained
+    // parent lets it grow "énorme" as the sidebar widens. It must sit in a
+    // fixed-width wrapper (w-[100px], the worktree-sidebar convention) so it
+    // stays dropdown-sized. We assert the kanban has a fixed arbitrary-width
+    // ancestor rather than a specific px, to stay robust to fine-tuning.
+    renderInspector({ board });
+    const statusBtn = document.querySelector(`[title="${TICKET_STATUS_LABELS['doing']}"]`);
+    expect(statusBtn).not.toBeNull();
+    expect(statusBtn!.closest('[class*="w-["]')).not.toBeNull();
+  });
 });
