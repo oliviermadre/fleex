@@ -1,4 +1,5 @@
 import { cn } from '../../lib/cn';
+import { tintClasses } from '../../lib/tints';
 import { useConfirmStore } from '../../stores/confirmStore';
 import { Modal } from './Modal';
 
@@ -37,10 +38,10 @@ export function ConfirmModalHost() {
         </button>
         <button
           className={cn(
-            'rounded-md px-3 py-1.5 text-xs text-white transition-colors',
+            'rounded-md px-3 py-1.5 text-xs transition-colors',
             danger
-              ? 'bg-red-600 hover:bg-red-700'
-              : 'bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)]',
+              ? cn(tintClasses('red').onSolid, tintClasses('red').solid, tintClasses('red').hoverSolid)
+              : 'text-white bg-[var(--theme-accent)] hover:bg-[var(--theme-accent-hover)]',
           )}
           onClick={handleConfirm}
         >
