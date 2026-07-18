@@ -470,7 +470,7 @@ export function ListFocusView() {
             onClose={close}
             onStatusChange={(status) => handleStatusChange(selectedTicket.id, status)}
             onOpenFull={() =>
-              navigate(`/tickets/board/${selectedTicket.boardId}/ticket/${selectedTicket.id}`)
+              navigate(`/tickets/board/${selectedTicket.boardId}/ticket/${selectedTicket.id}/comments`)
             }
             onPrev={() => selectRelative(-1)}
             onNext={() => selectRelative(1)}
