@@ -2,7 +2,11 @@ import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardSto
 import { useUIStore } from '../../stores/uiStore';
 import { RefreshControl } from '../ui/RefreshControl';
 
-export function RepositoriesSidebarHeader() {
+interface Props {
+  onAdd: () => void;
+}
+
+export function RepositoriesSidebarHeader({ onAdd }: Props) {
   const toggleContentPanel = useUIStore((s) => s.toggleContentPanel);
   const refreshing = useRepositoryDashboardStore((s) => s.refreshing);
   const requestRefresh = useRepositoryDashboardStore((s) => s.requestRefresh);
@@ -22,6 +26,13 @@ export function RepositoriesSidebarHeader() {
         </span>
       </div>
       <div className="flex items-center gap-1">
+        <button
+          onClick={onAdd}
+          title="Add repositories"
+          className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--theme-accent)] text-[var(--theme-accent-fg)] hover:opacity-90"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 3v10M3 8h10" /></svg>
+        </button>
         <RefreshControl
           refreshing={refreshing}
           onRefresh={() => requestRefresh('all')}

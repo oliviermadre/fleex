@@ -8,15 +8,16 @@ import { tintText } from '../../lib/tints';
 
 interface Props {
   summary: RepositorySummary;
+  wtCount: number;
+  onRemove: (key: string) => void;
 }
 
-export function RepoItem({ summary }: Props) {
+export function RepoItem({ summary, wtCount, onRemove }: Props) {
   const navigate = useNavigate();
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const openScratchpadForRepo = useUIStore((s) => s.openScratchpadForRepo);
   const key = `${summary.org}/${summary.name}`;
   const isSelected = selectedRepoKey === key;
-  const loading = summary.lastFetchedAt === null;
 
   const handleScratchpadClick = useCallback(
     (e: React.MouseEvent) => {
@@ -24,6 +25,14 @@ export function RepoItem({ summary }: Props) {
       openScratchpadForRepo(key);
     },
     [openScratchpadForRepo, key],
+  );
+
+  const handleRemoveClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onRemove(key);
+    },
+    [onRemove, key],
   );
 
   return (
@@ -37,159 +46,76 @@ export function RepoItem({ summary }: Props) {
       onClick={() => navigate(`/repositories/${key}`, { replace: true })}
     >
       <div className="flex items-center w-full">
-        <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{summary.name}</span>
-        {summary.isClonedLocally === false && (
-          <span className={cn('ml-1.5 flex-shrink-0', tintText('yellow'))} title="Not cloned locally">
-            <CloudDownloadIcon />
-          </span>
-        )}
-        <a
-          href={`https://github.com/${key}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/[0.08]"
-          onClick={(e) => e.stopPropagation()}
-          title="Open on GitHub"
-        >
-          <GitHubIcon size={12} />
-        </a>
-        <span
-          role="button"
-          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/[0.08] ml-0.5"
-          onClick={handleScratchpadClick}
-          title="Open scratchpad"
-        >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" />
-          </svg>
+        <span className={cn('flex-shrink-0', isSelected ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-muted)]')}>
+          <GitBranchIcon />
         </span>
+        <span className="ml-1.5 truncate text-sm font-semibold text-[var(--theme-text-primary)]">{summary.name}</span>
+        <div className="ml-auto flex flex-shrink-0 items-center gap-1">
+          {wtCount > 0 && (
+            <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--theme-text-muted)]">
+              {wtCount} wt
+            </span>
+          )}
+          {summary.isClonedLocally === false && (
+            <span className={cn('flex-shrink-0', tintText('yellow'))} title="Not cloned locally">
+              <CloudDownloadIcon />
+            </span>
+          )}
+          <a
+            href={`https://github.com/${key}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/[0.08]"
+            onClick={(e) => e.stopPropagation()}
+            title="Open on GitHub"
+          >
+            <GitHubIcon size={12} />
+          </a>
+          <span
+            role="button"
+            className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/[0.08]"
+            onClick={handleScratchpadClick}
+            title="Open scratchpad"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" />
+            </svg>
+          </span>
+          <span
+            role="button"
+            className={cn('ml-1 flex-shrink-0 rounded p-0.5 opacity-25 transition-opacity group-hover:opacity-100', tintText('red'), 'hover:bg-[var(--tint-red-bg)]')}
+            title="Stop tracking this repo"
+            onClick={handleRemoveClick}
+          >
+            <TrashIcon />
+          </span>
+        </div>
       </div>
-      {loading ? (
-        <div className="flex gap-2">
-          {Array.from({ length: 5 }, (_, i) => (
-            <span key={i} className="h-3 w-6 animate-pulse rounded bg-[var(--theme-bg-hover)]" />
-          ))}
-        </div>
-      ) : (
-        <div className="flex gap-2">
-          {/* Issues - yellow */}
-          <BadgeIcon
-            color={tintText('yellow')}
-            dimColor="text-[var(--theme-text-faint)]"
-            count={summary.openIssuesCount}
-            icon={<CircleDotIcon />}
-            title="Open issues"
-          />
-          {/* My PRs - coral */}
-          <BadgeIcon
-            color="text-[var(--theme-accent)]"
-            dimColor="text-[var(--theme-text-faint)]"
-            count={summary.myPRsCount}
-            icon={<GitPullRequestArrowIcon />}
-            title="My PRs"
-          />
-          {/* Assigned PRs - blue */}
-          <BadgeIcon
-            color={tintText('blue')}
-            dimColor="text-[var(--theme-text-faint)]"
-            count={summary.assignedPRsCount}
-            icon={<UserCheckIcon />}
-            title="Assigned to me"
-          />
-          {/* All open PRs - neutral */}
-          <BadgeIcon
-            color="text-[var(--theme-text-secondary)]"
-            dimColor="text-[var(--theme-text-faint)]"
-            count={summary.openPRsCount}
-            icon={<GitPullRequestIcon />}
-            title="Open PRs"
-          />
-          {/* Merged 7d - green */}
-          <BadgeIcon
-            color={tintText('green')}
-            dimColor="text-[var(--theme-text-faint)]"
-            count={summary.recentlyMergedPRsCount}
-            icon={<GitMergeIcon />}
-            title="Merged (7d)"
-          />
-        </div>
-      )}
+      <span className="truncate font-mono text-[11px] text-[var(--theme-text-muted)]">{key}</span>
     </button>
   );
 }
 
-function BadgeIcon({
-  color,
-  dimColor,
-  count,
-  icon,
-  title,
-}: {
-  color: string;
-  dimColor: string;
-  count: number;
-  icon: React.ReactNode;
-  title: string;
-}) {
-  const isDim = count === 0;
+function GitBranchIcon() {
   return (
-    <span className={cn('flex items-center gap-0.5', isDim ? dimColor : color)} title={title}>
-      {icon}
-      <span className="text-[10px]">{count}</span>
-    </span>
-  );
-}
-
-function CircleDotIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="8" cy="8" r="6" />
-      <circle cx="8" cy="8" r="2" fill="currentColor" />
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="4" cy="4" r="1.5" />
+      <circle cx="4" cy="12" r="1.5" />
+      <circle cx="12" cy="8" r="1.5" />
+      <line x1="4" y1="5.5" x2="4" y2="10.5" />
+      <path d="M4 5.5a4 4 0 004 4h2.5" />
     </svg>
   );
 }
 
-function GitPullRequestArrowIcon() {
+function TrashIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="5" cy="3.5" r="1.5" />
-      <circle cx="11" cy="12.5" r="1.5" />
-      <line x1="5" y1="5" x2="5" y2="14" />
-      <line x1="11" y1="11" x2="11" y2="6" />
-      <polyline points="8.5,8 11,5.5 13.5,8" />
-    </svg>
-  );
-}
-
-function UserCheckIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="6" cy="5" r="2.5" />
-      <path d="M2 14c0-2.5 2-4 4-4s4 1.5 4 4" />
-      <polyline points="11,8 12.5,9.5 15,7" />
-    </svg>
-  );
-}
-
-function GitPullRequestIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="5" cy="3.5" r="1.5" />
-      <circle cx="5" cy="12.5" r="1.5" />
-      <circle cx="11" cy="12.5" r="1.5" />
-      <line x1="5" y1="5" x2="5" y2="11" />
-      <line x1="11" y1="5" x2="11" y2="11" />
-    </svg>
-  );
-}
-
-function GitMergeIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="5" cy="3.5" r="1.5" />
-      <circle cx="5" cy="12.5" r="1.5" />
-      <line x1="5" y1="5" x2="5" y2="11" />
-      <path d="M5 7c2 0 4 1 6 4" />
+      <path d="M3 4.5h10" />
+      <path d="M6 4.5V3a1 1 0 011-1h2a1 1 0 011 1v1.5" />
+      <path d="M4.5 4.5l.6 8.4A1.5 1.5 0 006.6 14.4h2.8a1.5 1.5 0 001.5-1.5l.6-8.4" />
+      <line x1="6.5" y1="7" x2="6.5" y2="11.5" />
+      <line x1="9.5" y1="7" x2="9.5" y2="11.5" />
     </svg>
   );
 }

@@ -7,13 +7,17 @@ import { cn } from '../../lib/cn';
 interface Props {
   org: string;
   repos: RepositorySummary[];
+  wtCounts: Record<string, number>;
+  onRemove: (key: string) => void;
 }
 
-export function OrgGroup({ org, repos }: Props) {
+export function OrgGroup({ org, repos, wtCounts, onRemove }: Props) {
   const groupId = `org:${org}`;
   const collapsedGroups = useUIStore((s) => s.collapsedGroups);
   const toggleGroup = useUIStore((s) => s.toggleGroup);
+  const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const collapsed = collapsedGroups.has(groupId);
+  const isSelectedOrg = selectedRepoKey?.startsWith(`${org}/`) ?? false;
 
   return (
     <div className="my-1.5">
@@ -33,7 +37,14 @@ export function OrgGroup({ org, repos }: Props) {
         >
           <path d="M3 1l5 4-5 4V1z" />
         </svg>
-        <span className="truncate text-[11px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">{org}</span>
+        <span
+          className={cn(
+            'truncate text-[11px] font-bold uppercase tracking-wider',
+            isSelectedOrg ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-muted)]',
+          )}
+        >
+          {org}
+        </span>
         <a
           href={`https://github.com/${org}`}
           target="_blank"
@@ -45,7 +56,12 @@ export function OrgGroup({ org, repos }: Props) {
         </a>
       </button>
       {!collapsed && repos.map((repo) => (
-        <RepoItem key={`${repo.org}/${repo.name}`} summary={repo} />
+        <RepoItem
+          key={`${repo.org}/${repo.name}`}
+          summary={repo}
+          wtCount={wtCounts[`${repo.org}/${repo.name}`] ?? 0}
+          onRemove={onRemove}
+        />
       ))}
     </div>
   );
