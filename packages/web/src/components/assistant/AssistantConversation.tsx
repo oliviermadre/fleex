@@ -15,7 +15,7 @@ import {
   type AssistantToolStatus,
 } from '../../stores/assistantStore';
 import { AssistantStatusDot } from './AssistantSidebar';
-import { MentionTypeBadge } from '../ui/MentionTypeBadge';
+import { MentionTypeIcon } from '../../lib/primitives';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses, tintSolid } from '../../lib/tints';
 
@@ -412,7 +412,7 @@ export function AssistantConversation() {
                       : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                   )}
                 >
-                  <MentionTypeBadge type={opt.type} />
+                  <MentionTypeIcon type={opt.type} />
                   <span className="min-w-0 flex-1 truncate font-medium">{opt.label}</span>
                   <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
                 </button>
