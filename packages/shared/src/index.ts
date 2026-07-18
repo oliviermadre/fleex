@@ -53,6 +53,7 @@ export type {
   CreateWorktreeResponse,
   PullRequest,
   DiffStats,
+  GitHubLabel,
   GitHubIssue,
   GitHubIssueDetail,
 } from './types/repository.js';

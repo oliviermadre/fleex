@@ -66,13 +66,22 @@ export interface DiffStats {
   readonly deletions: number;
 }
 
+export interface GitHubLabel {
+  readonly name: string;
+  readonly color: string;
+}
+
 export interface GitHubIssue {
   readonly number: number;
   readonly title: string;
+  readonly state: 'open' | 'closed';
   readonly author: string;
   readonly assignees: string[];
+  readonly labels: GitHubLabel[];
+  readonly commentsCount: number;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly closedAt?: string;
 }
 
 export interface GitHubIssueDetail {

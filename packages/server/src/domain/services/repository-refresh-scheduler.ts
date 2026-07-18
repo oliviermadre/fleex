@@ -106,6 +106,7 @@ export class RepositoryRefreshScheduler {
         // Cache individual data
         this.cache.set(`pulls:${key}`, result.pulls, RepositoryCache.TTL_PULLS);
         this.cache.set(`issues:${key}`, result.issues, RepositoryCache.TTL_ISSUES);
+        this.cache.set(`closedIssues:${key}`, result.closedIssues, RepositoryCache.TTL_ISSUES);
         this.cache.set(`merged:${key}`, result.mergedPRs, RepositoryCache.TTL_MERGED);
 
         const summary = this.buildSummary(org, name, result, githubUser, now);

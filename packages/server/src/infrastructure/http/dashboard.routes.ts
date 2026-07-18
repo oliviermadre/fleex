@@ -191,8 +191,13 @@ export function dashboardRoutes(container: Container) {
           return {
             number: raw.number,
             title: raw.title,
+            // Both search calls below are filtered to `--state open`.
+            state: 'open',
             author: raw.author.login,
             assignees: raw.assignees.map((a) => a.login),
+            // Not requested from `gh search issues` (issueJsonFields) — not needed for this dashboard view.
+            labels: [],
+            commentsCount: 0,
             createdAt: raw.createdAt,
             updatedAt: raw.updatedAt,
             org: repo.org,

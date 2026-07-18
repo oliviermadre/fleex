@@ -218,26 +218,33 @@ export function repositoryRoutes(container: Container) {
           const { stdout } = await container.execFn('gh', [
             'issue', 'list',
             '--repo', `${org}/${name}`,
-            '--assignee', '@me',
-            '--json', 'number,title,author,assignees,createdAt,updatedAt',
+            '--json', 'number,title,state,author,assignees,labels,comments,createdAt,updatedAt,closedAt',
             '--state', 'open',
             '--limit', '50',
           ], { timeout: 15_000 });
           const raw = JSON.parse(stdout) as {
             number: number;
             title: string;
+            state: string;
             author: { login: string };
             assignees: { login: string }[];
+            labels: { name: string; color: string }[];
+            comments: unknown[];
             createdAt: string;
             updatedAt: string;
+            closedAt: string | null;
           }[];
           return raw.map((issue): GitHubIssue => ({
             number: issue.number,
             title: issue.title,
+            state: issue.state?.toLowerCase() === 'closed' ? 'closed' : 'open',
             author: issue.author.login,
             assignees: issue.assignees.map((a) => a.login),
+            labels: (issue.labels ?? []).map((l) => ({ name: l.name, color: l.color })),
+            commentsCount: Array.isArray(issue.comments) ? issue.comments.length : 0,
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
+            ...(issue.closedAt ? { closedAt: issue.closedAt } : {}),
           }));
         } catch (err) {
           container.logger.warn('Failed to list issues via gh CLI', { org, name, error: String(err) });
@@ -358,26 +365,31 @@ export function repositoryRoutes(container: Container) {
         // Try cache first
         const cachedPulls = container.repositoryCache.get<PullRequest[]>(`pulls:${key}`);
         const cachedIssues = container.repositoryCache.get<GitHubIssue[]>(`issues:${key}`);
+        const cachedClosedIssues = container.repositoryCache.get<GitHubIssue[]>(`closedIssues:${key}`);
         const cachedMerged = container.repositoryCache.get<PullRequest[]>(`merged:${key}`);
 
         let pulls = cachedPulls?.data;
         let issues = cachedIssues?.data;
+        let closedIssues = cachedClosedIssues?.data;
         let mergedPRs = cachedMerged?.data;
 
         // If any data is missing, fetch fresh
-        if (!pulls || !issues || !mergedPRs) {
+        if (!pulls || !issues || !closedIssues || !mergedPRs) {
           const results = await container.githubGraphql.fetchRepoBatch([{ org, name }]);
           const result = results.get(key);
           if (result) {
             pulls = result.pulls;
             issues = result.issues;
+            closedIssues = result.closedIssues;
             mergedPRs = result.mergedPRs;
             container.repositoryCache.set(`pulls:${key}`, pulls, RepositoryCache.TTL_PULLS);
             container.repositoryCache.set(`issues:${key}`, issues, RepositoryCache.TTL_ISSUES);
+            container.repositoryCache.set(`closedIssues:${key}`, closedIssues, RepositoryCache.TTL_ISSUES);
             container.repositoryCache.set(`merged:${key}`, mergedPRs, RepositoryCache.TTL_MERGED);
           } else {
             pulls = pulls ?? [];
             issues = issues ?? [];
+            closedIssues = closedIssues ?? [];
             mergedPRs = mergedPRs ?? [];
           }
         }
@@ -415,6 +427,7 @@ export function repositoryRoutes(container: Container) {
           org,
           name,
           openIssues: issues,
+          recentlyClosedIssues: closedIssues,
           openPullRequests: pulls,
           recentlyMergedPullRequests: mergedPRs,
           worktrees,

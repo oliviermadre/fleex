@@ -16,6 +16,7 @@ export interface RepositoryDashboardData {
   readonly org: string;
   readonly name: string;
   readonly openIssues: GitHubIssue[];
+  readonly recentlyClosedIssues: GitHubIssue[];
   readonly openPullRequests: PullRequest[];
   readonly recentlyMergedPullRequests: PullRequest[];
   readonly worktrees: Worktree[];
