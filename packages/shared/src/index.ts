@@ -59,6 +59,8 @@ export type {
   DiscoveredRepo,
   RepoDiscoveryOwner,
   RepoDiscovery,
+  RepoDailyCost,
+  RepositoryStats,
 } from './types/repository.js';
 
 export type {

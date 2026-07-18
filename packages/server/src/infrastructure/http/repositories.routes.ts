@@ -2,9 +2,12 @@ import type { FastifyInstance } from 'fastify';
 import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepoDiscovery, RepositorySummary, Worktree } from '@fleex/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
 import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
+import { GetRepositoryStatsUseCase } from '../../application/use-cases/get-repository-stats.js';
 import type { Container } from '../container.js';
 
 export function repositoryRoutes(container: Container) {
+  const getRepositoryStats = new GetRepositoryStatsUseCase(container.ticketStore, container.agentEventStore);
+
   return async function (app: FastifyInstance) {
     app.get('/api/repositories', async () => {
       return container.listRepositories.execute();
@@ -435,6 +438,16 @@ export function repositoryRoutes(container: Container) {
           githubUser,
           isClonedLocally: repoExists,
         };
+      },
+    );
+
+    app.get<{ Params: { org: string; name: string }; Querystring: { days?: string } }>(
+      '/api/repositories/:org/:name/stats',
+      async (request) => {
+        const { org, name } = request.params;
+        const parsed = Number(request.query.days);
+        const days = Number.isFinite(parsed) && parsed > 0 && parsed <= 365 ? Math.floor(parsed) : 30;
+        return getRepositoryStats.execute(org, name, days);
       },
     );
 

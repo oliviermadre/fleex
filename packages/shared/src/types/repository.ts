@@ -112,3 +112,17 @@ export interface RepoDiscovery {
   readonly owners: RepoDiscoveryOwner[];
   readonly totalRepos: number;
 }
+
+export interface RepoDailyCost {
+  readonly date: string; // YYYY-MM-DD
+  readonly costUsd: number;
+}
+
+export interface RepositoryStats {
+  readonly totalCostUsd: number; // window [now-days, now]
+  readonly previousTotalCostUsd: number; // window [now-2*days, now-days]
+  readonly costPerTicketUsd: number; // total / #tickets with cost in window
+  readonly ticketsWithCostCount: number;
+  readonly days: number;
+  readonly dailyCosts: RepoDailyCost[]; // one entry per day, oldest first, zero-filled
+}
