@@ -15,6 +15,8 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunStore';
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
+import { NeedsReviewRespondPanel } from '../workflows/NeedsReviewRespondPanel';
+import { selectWaitingInputCards } from '../workflows/waitingInputCards';
 import { ModelSelect } from '../agents/ModelSelect';
 import { useTicketStore } from '../../stores/ticketStore';
 import { isMissingRepo, mentionsPrimitive } from '../../lib/repoStatus';
@@ -773,6 +775,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const workflowDetail = useWorkflowRunStore((s) => s.detail);
   const loadWorkflowDetail = useWorkflowRunStore((s) => s.loadDetail);
   const resolveGate = useWorkflowRunStore((s) => s.resolveGate);
+  const retryStep = useWorkflowRunStore((s) => s.retry);
 
   // Ensure the step-run detail is loaded for every active run on this ticket.
   // Detection (like WorkflowRunView) reads step-run status, which lives in the
@@ -842,6 +845,19 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     }
     return cards;
   }, [workflowRuns, workflowDetail, executionsByTicket, ticketId, deliverables]);
+
+  // ── Inline "waiting for your input" card ────────────────────────────────────
+  // Parity with gateCards, for the OTHER half of `needs_review`: non-gate steps
+  // (agent/panel/skill) that paused to ask the human a question. Human Gate steps
+  // are handled above; here we surface the question + a reply field directly in
+  // the thread so answering no longer requires a detour to the Workflow tab.
+  // A paused step creates NO mention (persistStepArtifacts emits createdMentions:[]),
+  // so the `waitingAgents` banner never fires for it — this card is the missing
+  // signal. Detection lives in a pure helper (mirrors gateCards; see its doc).
+  const waitingInputCards = useMemo(
+    () => selectWaitingInputCards(workflowRuns, workflowDetail),
+    [workflowRuns, workflowDetail],
+  );
 
   // Read cursor for "new messages" line
   const loadCursors = useUnreadStore((s) => s.loadCursors);
@@ -1363,6 +1379,40 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                     No outcomes configured — resolve this gate from the Workflow tab.
                   </div>
                 )}
+              </div>
+            ))}
+            {/* Inline "waiting for your input" card(s) — reply + retry a paused,
+                non-gate workflow step without leaving Comments. The header line
+                mirrors the `waitingAgents` banner (orange pulse) to provide the
+                "is waiting for your reply" signal a paused step otherwise lacks. */}
+            {waitingInputCards.map(({ run, step, stepRun }) => (
+              <div
+                key={stepRun.id}
+                className={`my-3 rounded-lg border ${tintClasses('orange').borderColor} ${tintClasses('orange').bg} p-3`}
+              >
+                <div className="mb-3 flex items-center gap-2">
+                  <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full animate-pulse ${tintClasses('orange').solid}`} />
+                  <div className="text-xs font-semibold text-[var(--theme-text-primary)]">
+                    {run.templateSnapshot.emoji} {run.templateSnapshot.name}
+                    <span className="font-normal text-[var(--theme-text-muted)]"> › {step.name}</span>
+                    <span className={`ml-1 font-normal ${tintClasses('orange').text}`}>is waiting for your reply…</span>
+                  </div>
+                </div>
+                <NeedsReviewRespondPanel
+                  runId={run.id}
+                  stepRunId={stepRun.id}
+                  question={stepRun.output?.comment}
+                  onSubmit={async (response) => {
+                    // Same sequence as the Workflow tab's respond panel: post the
+                    // reply as a normal ticket comment (so the step re-reads it from
+                    // ticket context), then retry the step. Both surfaces share the
+                    // workflowRuns store, so the card here and the panel there stay
+                    // in sync and this card disappears once the step leaves
+                    // needs_review.
+                    await api.postTicketComment(run.ticketId, response);
+                    await retryStep(run.id, stepRun.id);
+                  }}
+                />
               </div>
             ))}
             <div ref={listEndRef} />
