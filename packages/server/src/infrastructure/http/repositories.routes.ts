@@ -446,7 +446,8 @@ export function repositoryRoutes(container: Container) {
       async (request) => {
         const { org, name } = request.params;
         const parsed = Number(request.query.days);
-        const days = Number.isFinite(parsed) && parsed > 0 && parsed <= 365 ? Math.floor(parsed) : 30;
+        const floored = Math.floor(parsed);
+        const days = Number.isFinite(parsed) && floored >= 1 && floored <= 365 ? floored : 30;
         return getRepositoryStats.execute(org, name, days);
       },
     );
