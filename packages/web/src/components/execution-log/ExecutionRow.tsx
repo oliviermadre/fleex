@@ -7,59 +7,24 @@ import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
 import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
 import { tint, tintText, tintSolid, tintClasses } from '../../lib/tints';
+import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
 
-// ── Type icon (SVG) ──
+// ── Type badge ──
 
-function TypeIcon({ type }: { type: ExecutionLogEntry['type'] }) {
-  if (type === 'agent') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 8V4H8" />
-        <rect width="16" height="12" x="4" y="8" rx="2" />
-        <path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
-      </svg>
-    );
-  }
-  if (type === 'panel') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
-        <path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
-    );
-  }
-  if (type === 'workflow') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="6" height="5" rx="1" />
-        <rect x="15" y="3" width="6" height="5" rx="1" />
-        <rect x="9" y="16" width="6" height="5" rx="1" />
-        <path d="M9 5.5h6" />
-        <path d="M6 8v4a2 2 0 0 0 2 2h1" />
-        <path d="M18 8v4a2 2 0 0 1-2 2h-1" />
-      </svg>
-    );
-  }
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" />
-      <path d="M7 8l3 3-3 3" /><path d="M13 14h3" />
-    </svg>
-  );
-}
+// An execution's `type` maps onto a primitive kind ('agent' is the log-side
+// name for a persona run). Both the glyph and its hue come from the
+// `primitives.tsx` referential, so the Logs stay coherent with the sidebar.
+const EXEC_TYPE_TO_KIND: Record<ExecutionLogEntry['type'], PrimitiveKind> = {
+  agent: 'persona',
+  panel: 'panel',
+  skill: 'skill',
+  workflow: 'workflow',
+};
 
-// Type badge — icon is colored per type, text is uniform
 function TypeBadge({ type }: { type: ExecutionLogEntry['type'] }) {
-  const iconColor = {
-    agent: tintText('indigo'),
-    panel: tintText('purple'),
-    skill: tintText('teal'),
-    workflow: tintText('yellow'),
-  }[type];
-
   return (
     <div className="flex w-[80px] flex-shrink-0 items-center gap-1.5">
-      <span className={iconColor}><TypeIcon type={type} /></span>
+      <PrimitiveIcon kind={EXEC_TYPE_TO_KIND[type]} size={14} />
       <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-text-secondary)]">{type}</span>
     </div>
   );
@@ -466,7 +431,7 @@ export const ExecutionRow = memo(function ExecutionRow({
           <div className="mt-0.5 flex items-center gap-1.5 pl-[18px] text-xs text-[var(--theme-text-faint)]">
             {isWorkflow ? (
               <>
-                <span className={cn('flex-shrink-0 font-medium', tintText('yellow'))}>
+                <span className={cn('flex-shrink-0 font-medium', tintText('orange'))}>
                   {entry.executorName}
                 </span>
                 <span className="text-[var(--theme-text-faint)]">·</span>

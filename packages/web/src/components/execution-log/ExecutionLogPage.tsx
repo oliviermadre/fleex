@@ -4,56 +4,16 @@ import { appWs } from '../../services/websocket';
 import { ExecutionRow } from './ExecutionRow';
 import { cn } from '../../lib/cn';
 import { tintText, tintSolid, tintClasses } from '../../lib/tints';
+import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
 
-// ── Filter tab icons (SVG, matching sidebar) ──
-
-function AgentIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" />
-      <path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
-    </svg>
-  );
-}
-
-function PanelIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-
-function SkillIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" />
-      <path d="M7 8l3 3-3 3" /><path d="M13 14h3" />
-    </svg>
-  );
-}
-
-function WorkflowIcon() {
-  // Three stacked nodes connected by lines — read as "DAG / pipeline".
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="6" height="5" rx="1" />
-      <rect x="15" y="3" width="6" height="5" rx="1" />
-      <rect x="9" y="16" width="6" height="5" rx="1" />
-      <path d="M9 5.5h6" />
-      <path d="M6 8v4a2 2 0 0 0 2 2h1" />
-      <path d="M18 8v4a2 2 0 0 1-2 2h-1" />
-    </svg>
-  );
-}
-
-const TYPE_FILTERS: { key: ExecutionTypeFilter; label: string; icon: React.ReactNode | null; iconColor: string | null }[] = [
-  { key: 'all', label: 'ALL', icon: null, iconColor: null },
-  { key: 'agent', label: 'AGENT', icon: <AgentIcon />, iconColor: tintText('indigo') },
-  { key: 'panel', label: 'PANEL', icon: <PanelIcon />, iconColor: tintText('purple') },
-  { key: 'skill', label: 'SKILL', icon: <SkillIcon />, iconColor: tintText('teal') },
-  { key: 'workflow', label: 'WORKFLOW', icon: <WorkflowIcon />, iconColor: tintText('yellow') },
+// Filter tabs reuse the primitives referential for glyph + hue ('agent' is the
+// log-side name for a persona run), so they stay coherent with the sidebar.
+const TYPE_FILTERS: { key: ExecutionTypeFilter; label: string; kind: PrimitiveKind | null }[] = [
+  { key: 'all', label: 'ALL', kind: null },
+  { key: 'agent', label: 'AGENT', kind: 'persona' },
+  { key: 'panel', label: 'PANEL', kind: 'panel' },
+  { key: 'skill', label: 'SKILL', kind: 'skill' },
+  { key: 'workflow', label: 'WORKFLOW', kind: 'workflow' },
 ];
 
 export function ExecutionLogPage() {
@@ -167,7 +127,7 @@ export function ExecutionLogPage() {
 
           {/* Type filter tabs */}
           <div className="flex items-center gap-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-0.5">
-            {TYPE_FILTERS.map(({ key, label, icon, iconColor }) => {
+            {TYPE_FILTERS.map(({ key, label, kind }) => {
               const count = typeCounts[key] ?? 0;
               const active = typeFilter === key;
               return (
@@ -181,7 +141,7 @@ export function ExecutionLogPage() {
                       : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
                   )}
                 >
-                  {icon && <span className={iconColor ?? ''}>{icon}</span>}
+                  {kind && <PrimitiveIcon kind={kind} size={14} />}
                   <span>{label}</span>
                   <span className={cn(
                     'ml-0.5 rounded-full px-1.5 text-[10px] font-semibold',

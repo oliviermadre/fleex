@@ -5,13 +5,12 @@ import { tintClasses } from '../../lib/tints';
 
 interface IconProps { className?: string }
 
-function BotIcon({ className }: IconProps) {
+// Persona — single person (canonical persona glyph, see lib/primitives.tsx).
+function PersonIcon({ className }: IconProps) {
   return (
     <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M12 2v9" />
-      <circle cx="12" cy="2" r="1" />
-      <path d="M7 16h.01M17 16h.01" />
+      <circle cx="12" cy="7" r="4" />
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
     </svg>
   );
 }
@@ -27,11 +26,11 @@ function UsersIcon({ className }: IconProps) {
   );
 }
 
-function BookOpenIcon({ className }: IconProps) {
+// Skill — lightning bolt (canonical skill glyph, see lib/primitives.tsx).
+function ZapIcon({ className }: IconProps) {
   return (
     <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+      <path d="M13 2 3 14h9l-1 8 10-12h-9z" />
     </svg>
   );
 }
@@ -63,7 +62,7 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     type: 'agent',
     label: 'Agent',
     description: 'AI agent execution',
-    Icon: BotIcon,
+    Icon: PersonIcon,
     colorClass: `${tintClasses('purple').text} ${tintClasses('purple').borderColor}`,
   },
   {
@@ -77,7 +76,7 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     type: 'skill',
     label: 'Skill',
     description: 'Deterministic skill instruction file',
-    Icon: BookOpenIcon,
+    Icon: ZapIcon,
     colorClass: `${tintClasses('green').text} ${tintClasses('green').borderColor}`,
   },
   {

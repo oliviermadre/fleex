@@ -15,7 +15,9 @@ import { useFrequentLaunchStore, buildFrequentItems } from '../../stores/frequen
 import { useToastStore } from '../../stores/toastStore';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { MentionTypeBadge, type MentionTargetType } from '../ui/MentionTypeBadge';
+import { PrimitiveIcon } from '../../lib/primitives';
 import { cn } from '../../lib/cn';
+import { foldAccents } from '../../lib/normalize';
 import { tintClasses } from '../../lib/tints';
 import * as api from '../../services/api';
 
@@ -99,14 +101,6 @@ const OPEN_THEME = [
   'hover:border-[var(--theme-accent)]/60 hover:bg-[var(--theme-accent)]/20',
 ].join(' ');
 
-function SkillWrenchIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-text-muted)]">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  );
-}
-
 // ── Launcher types ──
 
 type LaunchKind = 'skill' | 'workflow' | 'panel' | 'persona';
@@ -150,11 +144,13 @@ const CHIP_ORDER: { kind: LaunchKind; label: string }[] = [
   { kind: 'panel', label: 'Panels' },
 ];
 
+// Row icons come from the shared primitives referential so the launcher stays
+// coherent with the sidebar, logs and mention badges (glyph + canonical hue).
 const KIND_ICON: Record<LaunchKind, React.ReactNode> = {
-  skill: <SkillWrenchIcon />,
-  workflow: <span className="w-3.5 shrink-0 text-center">🚦</span>,
-  panel: <span className="w-3.5 shrink-0 text-center">🏛️</span>,
-  persona: <span className="w-3.5 shrink-0 text-center">🧠</span>,
+  skill: <PrimitiveIcon kind="skill" size={14} className="shrink-0" />,
+  workflow: <PrimitiveIcon kind="workflow" size={14} className="shrink-0" />,
+  panel: <PrimitiveIcon kind="panel" size={14} className="shrink-0" />,
+  persona: <PrimitiveIcon kind="persona" size={14} className="shrink-0" />,
 };
 
 /** Launch kinds map onto the app-wide mention badge types (persona ⇒ agent). */
@@ -165,9 +161,8 @@ const KIND_TO_MENTION_TYPE: Record<LaunchKind, MentionTargetType> = {
   persona: 'agent',
 };
 
-function normalize(s: string): string {
-  return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
-}
+// Accent-insensitive search folding shared with the Primitives sidebar.
+const normalize = foldAccents;
 
 function rowClass(active: boolean): string {
   return cn(
@@ -639,7 +634,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
         kind: 'workflow' as const,
         displayName: t.name,
         token: `@workflow:${t.slug}`,
-        icon: <span className="w-3.5 shrink-0 text-center">{t.emoji}</span>,
+        icon: KIND_ICON.workflow,
         search: normalize(`${t.name} ${t.slug}`),
         onLaunch: () => void handleStartWorkflow(t.id),
       }))
