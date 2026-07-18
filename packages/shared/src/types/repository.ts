@@ -119,8 +119,8 @@ export interface RepoDailyCost {
 }
 
 export interface RepositoryStats {
-  readonly totalCostUsd: number; // window [now-days, now]
-  readonly previousTotalCostUsd: number; // window [now-2*days, now-days]
+  readonly totalCostUsd: number; // window [start of day (now-(days-1)d) UTC, now]
+  readonly previousTotalCostUsd: number; // the `days` UTC days before that window
   readonly costPerTicketUsd: number; // total / #tickets with cost in window
   readonly ticketsWithCostCount: number;
   readonly days: number;

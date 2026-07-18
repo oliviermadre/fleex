@@ -56,12 +56,16 @@ describe('GetRepositoryStatsUseCase', () => {
   it('counts an execution on the first bucket calendar day in both totalCostUsd and dailyCosts[0]', async () => {
     const stats = await makeUseCase(
       { 'acme/app': [ticket('t1', 'acme/app')] },
-      { t1: [exec(3, '2026-06-20T06:00:00Z')] },
+      { t1: [exec(7, '2026-06-19T18:00:00Z'), exec(3, '2026-06-20T06:00:00Z')] },
     ).execute('acme', 'app', 30, NOW);
 
+    // 2026-06-19T18:00:00Z is before windowStartDay (2026-06-20T00:00:00Z), so it goes into previousTotalCostUsd
+    expect(stats.previousTotalCostUsd).toBeCloseTo(7);
+    // 2026-06-20T06:00:00Z is in the window, goes into totalCostUsd and dailyCosts[0]
     expect(stats.totalCostUsd).toBeCloseTo(3);
     expect(stats.dailyCosts[0]!.date).toBe('2026-06-20');
     expect(stats.dailyCosts[0]!.costUsd).toBeCloseTo(3);
+    // Ensure sum of dailyCosts buckets matches totalCostUsd (not including previousTotalCostUsd)
     const sumOfBuckets = stats.dailyCosts.reduce((acc, d) => acc + d.costUsd, 0);
     expect(sumOfBuckets).toBeCloseTo(stats.totalCostUsd);
   });
