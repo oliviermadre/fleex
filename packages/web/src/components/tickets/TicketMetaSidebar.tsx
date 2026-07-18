@@ -18,6 +18,7 @@ import { EpicPicker } from './EpicPicker';
 import { cn } from '../../lib/cn';
 import { tintText, tintClasses } from '../../lib/tints';
 import { STATUS_COLORS } from '../../lib/statusColors';
+import { topReposForBoard } from '../../lib/repoStatus';
 
 // ── Collapsed sidebar tooltip (portal-based, appears to the LEFT) ──
 
@@ -646,6 +647,7 @@ function ExpandedTicketMetaSidebar({
 
       {/* Repository & Worktree */}
       <RepoWorktreePicker
+        boardId={ticket.boardId}
         repoLinks={ticket.links.filter((l: TicketLink) => l.type === 'repository')}
         onAddLink={(link) => addLink(ticket.id, link)}
         onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
@@ -790,15 +792,18 @@ function ExpandedTicketMetaSidebar({
 // Multi-repo picker — manages repository links on the ticket.
 
 function RepoWorktreePicker({
+  boardId,
   repoLinks,
   onAddLink,
   onRemoveLink,
 }: {
+  boardId: string;
   repoLinks: Ticket['links'][number][];
   onAddLink: (link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
   onRemoveLink: (linkId: string) => Promise<void>;
 }) {
   const resolvedRepositories = useSettingsStore((s) => s.settings.resolvedRepositories);
+  const tickets = useTicketStore((s) => s.tickets);
 
   const repos = useMemo(() => {
     return resolvedRepositories
@@ -818,6 +823,13 @@ function RepoWorktreePicker({
   const availableRepos = useMemo(
     () => repos.filter((r) => !linkedRepoKeys.has(r.key)),
     [repos, linkedRepoKeys],
+  );
+
+  // 1-click suggestions: the repos most used on this board (excluding those
+  // already linked here). Speeds up the common case of "the usual repo".
+  const suggestions = useMemo(
+    () => topReposForBoard(tickets, boardId, { exclude: [...linkedRepoKeys], limit: 3 }),
+    [tickets, boardId, linkedRepoKeys],
   );
 
   return (
@@ -847,6 +859,21 @@ function RepoWorktreePicker({
                 </svg>
               </button>
             </div>
+          ))}
+        </div>
+      )}
+      {/* Frequently-used on this board — 1-click add */}
+      {suggestions.length > 0 && (
+        <div className="mb-1.5 flex flex-wrap gap-1">
+          {suggestions.map((ref) => (
+            <button
+              key={ref}
+              className="rounded-full border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
+              onClick={() => onAddLink({ type: 'repository', ref, label: ref })}
+              title={`Lier ${ref}`}
+            >
+              + {ref}
+            </button>
           ))}
         </div>
       )}

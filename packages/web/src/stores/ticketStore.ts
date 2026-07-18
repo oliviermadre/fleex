@@ -3,6 +3,7 @@ import type { Board, BoardWithCounts, Ticket, TicketLink, TicketStatus, TicketPr
 import { TICKET_STATUSES } from '@fleex/shared';
 import * as api from '../services/api';
 import { useSessionStore } from './sessionStore';
+import { isMissingRepo } from '../lib/repoStatus';
 
 export type TicketTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity' | 'workflow';
 export const VALID_TICKET_TABS: TicketTab[] = ['description', 'comments', 'mentions', 'deliverables', 'activity', 'workflow'];
@@ -14,6 +15,7 @@ interface TicketFilters {
   hasSession: boolean | null;  // true=with session, false=without, null=any
   tag: string | null;
   favorite: boolean | null;
+  noRepo: boolean;             // true = only tickets missing a repository (forgotten case)
   hideOldDoneCancelled: boolean;
 }
 
@@ -95,7 +97,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   ticketTab: 'description',
   statusFilter: 'all',
   searchQuery: '',
-  filters: { repo: null, priority: null, type: null, hasSession: null, tag: null, favorite: null, hideOldDoneCancelled: true },
+  filters: { repo: null, priority: null, type: null, hasSession: null, tag: null, favorite: null, noRepo: false, hideOldDoneCancelled: true },
 
   fetchBoards: async () => {
     const boards = await api.fetchBoards();
@@ -281,7 +283,7 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   setStatusFilter: (filter) => set({ statusFilter: filter }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setFilters: (partial) => set((s) => ({ filters: { ...s.filters, ...partial } })),
-  clearFilters: () => set({ filters: { repo: null, priority: null, type: null, hasSession: null, tag: null, favorite: null, hideOldDoneCancelled: true } }),
+  clearFilters: () => set({ filters: { repo: null, priority: null, type: null, hasSession: null, tag: null, favorite: null, noRepo: false, hideOldDoneCancelled: true } }),
 
   ticketsByColumn: (boardId) => {
     const { tickets, searchQuery, filters } = get();
@@ -348,6 +350,12 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     // Favorite filter
     if (filters.favorite !== null) {
       filtered = filtered.filter((t) => t.favorite === filters.favorite);
+    }
+
+    // "Sans repo" filter — surface only the forgotten case (missing repo, not
+    // deliberately flagged no-code), so it can be triaged and fixed.
+    if (filters.noRepo) {
+      filtered = filtered.filter((t) => isMissingRepo(t));
     }
 
     // Auto-hide done/cancelled tickets older than 7 days

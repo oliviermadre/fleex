@@ -10,6 +10,7 @@ import { TicketActivityTimeline } from './TicketActivityTimeline';
 import { TicketComments } from './TicketComments';
 import { TicketDeliverables } from './TicketDeliverables';
 import { TicketMentions } from './TicketMentions';
+import { MissingRepoBanner } from './MissingRepoBanner';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import * as api from '../../services/api';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
@@ -257,6 +258,9 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
               />
             </div>
           )}
+
+          {/* Missing-repo guard-rail — link a repo (or flag no-code) before a run */}
+          <MissingRepoBanner ticket={ticket} />
 
           {/* Main tabs */}
           <div className="mt-3 flex flex-shrink-0 items-center gap-1 border-b border-[var(--theme-border)]">

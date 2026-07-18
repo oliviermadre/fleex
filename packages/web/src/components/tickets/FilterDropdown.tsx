@@ -27,6 +27,7 @@ export function FilterDropdown() {
     (filters.hasSession !== null ? 1 : 0) +
     (filters.tag ? 1 : 0) +
     (filters.favorite !== null ? 1 : 0) +
+    (filters.noRepo ? 1 : 0) +
     (!filters.hideOldDoneCancelled ? 1 : 0);
 
   const { repos, tags } = useMemo(() => {
@@ -224,6 +225,22 @@ export function FilterDropdown() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Sans repo — surface tickets that should have a repository but don't */}
+            <div>
+              <label className="mb-1 block text-[11px] text-[var(--theme-text-muted)]">Repository status</label>
+              <button
+                className={cn(
+                  'rounded px-2 py-1 text-[11px] transition-colors',
+                  filters.noRepo
+                    ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
+                    : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
+                )}
+                onClick={() => setFilters({ noRepo: !filters.noRepo })}
+              >
+                Sans repo
+              </button>
             </div>
 
             {/* Tags */}

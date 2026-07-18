@@ -16,6 +16,7 @@ import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { executeSkill } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses } from '../../lib/tints';
+import { isMissingRepo } from '../../lib/repoStatus';
 
 const PRIORITY_BORDER: Record<string, string> = {
   none: 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
@@ -98,6 +99,10 @@ export function KanbanCard({
 
   const timeInColumn = formatTimeAgo(ticket.statusChangedAt);
   const isCompleted = ticket.status === TICKET_STATUS.DONE || ticket.status === TICKET_STATUS.CANCELLED;
+  // "Forgotten repo" warning: a ticket that should carry a repository link but
+  // doesn't (and isn't flagged intentionally code-less). We stay silent on
+  // completed tickets — a missing repo no longer matters once work is closed.
+  const missingRepo = !isCompleted && isMissingRepo(ticket);
 
   // Async Slack-import lifecycle (carried as reserved tags so it survives reload).
   const isSlackImportPending = ticket.tags.includes(SLACK_IMPORT_PENDING_TAG);
@@ -159,8 +164,23 @@ export function KanbanCard({
             meet in the middle — layout stays intact. */}
         <CostBadge costUsd={cumulativeCost} />
 
-        {/* RIGHT cluster — github, blocked, favorite */}
+        {/* RIGHT cluster — missing-repo, github, blocked, favorite */}
         <div className="flex flex-1 min-w-0 items-center justify-end gap-1.5">
+          {/* Missing-repo warning — a ticket that will run "with no codebase" if launched */}
+          {missingRepo && (
+            <span
+              className={cn('flex-shrink-0 inline-flex items-center rounded p-0.5', tintText('orange'))}
+              title="Aucun repository lié"
+              aria-label="Aucun repository lié"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+                <path d="M7 16V9a2 2 0 0 1 2-2h2" />
+                <line x1="3" y1="3" x2="21" y2="21" />
+              </svg>
+            </span>
+          )}
+
           {/* GitHub issue link */}
           {issueLinks.length > 0 && issueLinks[0]?.url && (
             <a

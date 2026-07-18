@@ -17,6 +17,7 @@ import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunSt
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
 import { ModelSelect } from '../agents/ModelSelect';
 import { useTicketStore } from '../../stores/ticketStore';
+import { isMissingRepo, mentionsPrimitive } from '../../lib/repoStatus';
 import { useModels } from '../../hooks/useModels';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { FloatingExecutionPanel } from './ExecutionModal';
@@ -529,6 +530,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     | { kind: 'waiting'; agents: Array<{ agent: string; displayName: string }> }
     | null
   >(null);
+  // Missing-repo guard: when a comment mentions a primitive (@agent/@skill/…)
+  // but the ticket has no repository linked, the resulting run would build no
+  // worktree and execute "with no codebase". We hold the send and confirm.
+  const [repoGuardOpen, setRepoGuardOpen] = useState(false);
   const listEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1034,10 +1039,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     }
   }, [body, ticketId, markCommentsRead, clearDraft]);
 
-  const handleSubmit = useCallback(async () => {
-    const trimmed = body.trim();
-    if (!trimmed || submitting) return;
-
+  // The mention-conflict check + post pipeline. Shared by the normal path and
+  // by the "send anyway" branch of the missing-repo guard, so both funnel
+  // through the exact same disambiguation logic.
+  const proceedSubmit = useCallback(async (trimmed: string) => {
     // Detect re-mentions of an agent that already has an unresolved mention, and
     // disambiguate. A WAITING agent is ambiguous (answer vs new subject) → ask.
     // A pending/acknowledged agent (queued/in-flight run) → supersede vs queue.
@@ -1071,7 +1076,28 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     }
 
     await doPost([]);
-  }, [body, submitting, mentions, personas, doPost]);
+  }, [mentions, personas, doPost]);
+
+  const handleSubmit = useCallback(async () => {
+    const trimmed = body.trim();
+    if (!trimmed || submitting) return;
+
+    // Missing-repo guard-rail: a primitive mention (@agent/@skill/@workflow/@panel)
+    // spins up a run that needs a worktree. If the ticket has no repository
+    // linked, that run executes "with no codebase" — a degraded, silent failure.
+    // Hold the send and confirm rather than launch a doomed run.
+    if (ticket && isMissingRepo(ticket) && mentionsPrimitive(trimmed)) {
+      setRepoGuardOpen(true);
+      return;
+    }
+
+    await proceedSubmit(trimmed);
+  }, [body, submitting, ticket, proceedSubmit]);
+
+  const confirmRepoGuardAndSend = useCallback(async () => {
+    setRepoGuardOpen(false);
+    await proceedSubmit(body.trim());
+  }, [body, proceedSubmit]);
 
   const confirmConflict = useCallback(async (action: api.MentionConflictAction) => {
     if (!conflictModal) return;
@@ -1521,6 +1547,29 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
               Laisser finir, puis enchaîner avec ce message
             </Button>
             <Button variant="ghost" onClick={() => setConflictModal(null)}>
+              Annuler
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Missing-repo guard: a primitive mention without a linked repository */}
+      {repoGuardOpen && (
+        <Modal open onClose={() => setRepoGuardOpen(false)} maxWidth="max-w-md">
+          <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">
+            Aucun repository lié à ce ticket
+          </h3>
+          <p className="mt-2 text-xs leading-relaxed text-[var(--theme-text-secondary)]">
+            Tu mentionnes un agent&nbsp;/&nbsp;skill&nbsp;/&nbsp;workflow, mais ce ticket n'a
+            pas de repository lié. La run démarrera <strong>sans codebase</strong> (pas de
+            worktree) — elle ne pourra pas modifier de code. Lie un repo (via la bannière en
+            haut du ticket) ou envoie quand même si c'est volontaire.
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button variant="secondary" onClick={() => void confirmRepoGuardAndSend()}>
+              Envoyer quand même
+            </Button>
+            <Button variant="ghost" onClick={() => setRepoGuardOpen(false)}>
               Annuler
             </Button>
           </div>
