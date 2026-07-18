@@ -1,0 +1,66 @@
+# electron-builder configuration for the Fleex macOS bundle (.dmg).
+#
+# Phase 1 · Chantier G — packaging / signing / notarization foundation.
+# This produces a double-clickable `.dmg` for Apple Silicon (arm64). It wraps
+# the existing thin Electron shell (src/main.js), which loads the local Fleex
+# web UI. Embedding the runtimes (Bun + tmux) and the pre-built monorepo so the
+# app is self-sufficient is a *later* increment (chantiers A/B/D) — it will slot
+# into `extraResources` / `files` below without changing this signing pipeline.
+#
+# Decisions honoured (see ticket .dmg — PRD §8, Review Q4/Q5):
+#   D5 — macOS first, `.dmg` format.
+#   D8 — Apple Developer account available → signing + notarization wired.
+#   Q4 — notarize from the first release (no Gatekeeper friction).
+#   Q5 — Apple Silicon only (arm64), not universal.
+#
+# Code signing and notarization are driven entirely by environment variables so
+# local builds stay unsigned (fast, no secrets) and CI produces a signed +
+# notarized artifact:
+#   CSC_LINK / CSC_KEY_PASSWORD          → Developer ID Application certificate
+#   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID → notarization
+# When those are absent, electron-builder skips signing/notarization.
+
+appId: dev.fleex.desktop
+productName: Fleex
+copyright: Copyright © Fleex
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the shell's own files are packaged for now. The shell has no runtime
+# npm dependencies (pure Electron + Node built-ins), so the bundle stays small.
+files:
+  - src/**/*
+  - assets/**/*
+  - package.json
+
+mac:
+  category: public.app-category.developer-tools
+  icon: assets/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  # Notarization requires the hardened runtime. The entitlements below keep the
+  # shell able to spawn child processes (Bun, tmux) and run local servers once
+  # runtime embedding lands.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # teamId comes from the environment; when APPLE_TEAM_ID is unset (local dev)
+  # the app is not signed, so electron-builder skips notarization automatically.
+  notarize:
+    teamId: ${env.APPLE_TEAM_ID}
+
+dmg:
+  title: ${productName} ${version}
+  artifactName: ${productName}-${version}-${arch}.dmg
+  contents:
+    - x: 140
+      y: 200
+    - x: 400
+      y: 200
+      type: link
+      path: /Applications
