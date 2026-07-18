@@ -25,6 +25,27 @@ function isExternalUrl(url) {
 
 const TITLEBAR_HEIGHT = 38;
 
+// ── macOS traffic-light geometry ──────────────────────────────────────────────
+// The native traffic-light buttons are window chrome: they do NOT scale with the
+// page zoom, while the web titlebar (height AND the left inset before the logo)
+// is CSS px that scales as × zoom. So both X and Y are recomputed on every zoom
+// change (see recenterWindowButtons + the preload zoom watcher):
+//   • Y keeps the buttons vertically centered in the taller/shorter bar,
+//   • X keeps their left margin proportional so they track the shifted content
+//     instead of staying glued to the corner.
+// At zoom 1 this yields { x: 12, y: 10 } — the position validated in prod.
+const TRAFFIC_LIGHT_X = 12;
+const TRAFFIC_BUTTON_H = 12; // approximate native button height, in points
+const TRAFFIC_Y_NUDGE = 3; // sit slightly above the geometric middle
+
+function trafficLightX(zoom) {
+  return Math.round(TRAFFIC_LIGHT_X * zoom);
+}
+
+function trafficLightY(zoom) {
+  return Math.round((TITLEBAR_HEIGHT * zoom - TRAFFIC_BUTTON_H) / 2 - TRAFFIC_Y_NUDGE);
+}
+
 const FLEEX_HOME = process.env['FLEEX_HOME'] || path.join(os.homedir(), '.fleex');
 
 /**
@@ -184,6 +205,19 @@ ipcMain.on('fleex:navigate', (_e, dir) => {
   else if (dir === 'forward') goForward();
 });
 
+// The preload fires this on every zoom / device-pixel-ratio change so we can
+// keep the native traffic lights centered in the zoom-scaled titlebar.
+ipcMain.on('fleex:zoom-changed', () => recenterWindowButtons());
+
+// Recompute the native traffic-light position for the current page zoom. macOS
+// only; a no-op elsewhere or before the API exists.
+function recenterWindowButtons() {
+  if (!isMac || !mainWindow || mainWindow.isDestroyed()) return;
+  if (typeof mainWindow.setWindowButtonPosition !== 'function') return;
+  const zoom = mainWindow.webContents.getZoomFactor();
+  mainWindow.setWindowButtonPosition({ x: trafficLightX(zoom), y: trafficLightY(zoom) });
+}
+
 // Per-window wiring: keep Back/Forward menu state in sync, plus trackpad swipe.
 function wireBrowserParity(win) {
   const wc = win.webContents;
@@ -214,7 +248,7 @@ function createWindow() {
     minHeight: 600,
     title: 'Fleex',
     titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 12, y: 10 },
+    trafficLightPosition: { x: trafficLightX(1), y: trafficLightY(1) },
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -228,6 +262,10 @@ function createWindow() {
   wireBrowserParity(mainWindow);
 
   mainWindow.webContents.on('did-finish-load', () => {
+    // Native traffic lights don't scale with page zoom — recenter for the
+    // current (possibly restored) zoom level on every load.
+    recenterWindowButtons();
+
     // Inject CSS
     mainWindow.webContents.insertCSS(`
       /* ── Desktop titlebar ── */
