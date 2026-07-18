@@ -11,6 +11,7 @@ import { StatusDot } from '../../ui/StatusDot';
 import { NanoKanban } from '../../tickets/NanoKanban';
 import { renderIcon } from '../../sidebar/PinnedIcons';
 import { buildWorkspaceContext } from '../../../lib/templateUtils';
+import { OverlaySyncButton } from '../../overlay-sync/OverlaySyncButton';
 
 interface Props {
   worktree: WorktreeSessionGroup | null;
@@ -159,6 +160,12 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
       )}
 
       <div className="ml-auto flex items-center gap-2">
+        {/* Sync overlay — capture gitignored files into the per-repo overlay */}
+        <OverlaySyncButton ticket={ticket} worktree={worktree} repoOrg={repoOrg} repoName={repoName} />
+        {(pinnedIcons.length > 0 || (workspaceContext && workspaceActions && workspaceActions.length > 0)) && (
+          <div className="h-4 w-px bg-[var(--theme-border)]" />
+        )}
+
         {/* Pinned actions + workspace actions */}
         {(pinnedIcons.length > 0 || (workspaceContext && workspaceActions && workspaceActions.length > 0)) && (
           <div className="flex items-center gap-1">

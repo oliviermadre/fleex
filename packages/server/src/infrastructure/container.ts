@@ -206,7 +206,7 @@ export async function createContainer() {
   // Bare clone infrastructure
   const resolver = new RepoPathResolver(config.get().basePath);
   const groupingService = new SessionGroupingService(resolver, ticketStore_);
-  const overlayManager = new OverlayManager(hostFs, resolver, execFn, config, logger);
+  const overlayManager = new OverlayManager(hostFs, resolver, execFn, config, logger, git);
   const bareCloneManager = new BareCloneManager(git, hostFs, resolver, execFn, logger, overlayManager);
 
   const createSession = new CreateSessionUseCase(tmux, sessionStore_, namingService, git, config, logger);
