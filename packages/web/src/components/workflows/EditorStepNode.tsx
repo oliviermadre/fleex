@@ -1,43 +1,13 @@
 import { Handle, Position, useConnection } from '@xyflow/react';
 import { useState } from 'react';
-import type { WorkflowStep } from '@fleex/shared';
+import type { WorkflowStep, WorkflowExecutorType } from '@fleex/shared';
 import { COLOR_ERROR_RED } from '../../lib/constants';
 import { tintClasses } from '../../lib/tints';
+import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
 
 interface IconProps { className?: string }
-
-function BotIcon({ className }: IconProps) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M12 2v9" />
-      <circle cx="12" cy="2" r="1" />
-      <path d="M7 16h.01M17 16h.01" />
-    </svg>
-  );
-}
-
-function UsersIcon({ className }: IconProps) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-
-function BookOpenIcon({ className }: IconProps) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-    </svg>
-  );
-}
 
 function UserCheckIcon({ className }: IconProps) {
   return (
@@ -59,12 +29,22 @@ function XIcon({ className }: IconProps) {
 
 // ── Color / icon maps ─────────────────────────────────────────────────────────
 
-const executorIcon = {
-  agent: BotIcon,
-  panel: UsersIcon,
-  skill: BookOpenIcon,
-  human_gate: UserCheckIcon,
-} as const;
+// Executor types map onto the canonical primitive glyphs (lib/primitives.tsx),
+// so a step node on the canvas shows the SAME icon as the sidebar and the
+// palette. `human_gate` is not a primitive, so it keeps its dedicated glyph.
+const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate'>, PrimitiveKind> = {
+  agent: 'persona',
+  panel: 'panel',
+  skill: 'skill',
+};
+
+function StepIcon({ type, className }: { type: WorkflowExecutorType; className?: string }) {
+  if (type === 'human_gate') return <UserCheckIcon className={className} />;
+  // tinted={false}: the icon inherits the node's executor-type colour (border +
+  // icon share one hue) instead of re-applying the tint, keeping each node
+  // chromatically coherent.
+  return <PrimitiveIcon kind={EXECUTOR_TO_PRIMITIVE[type]} size={16} className={className} tinted={false} />;
+}
 
 const executorColor = {
   agent: `${tintClasses('purple').text} ${tintClasses('purple').borderColor}`,
@@ -109,7 +89,6 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   }
 
   const { step, isSelected, isEntry, onSelect, onDelete } = data;
-  const Icon = executorIcon[step.executorType];
   const showUnconfigured = !step.executorRef && step.executorType !== 'human_gate';
   const borderColor = BORDER_HEX[step.executorType];
   const handleStyle = {
@@ -172,7 +151,7 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <Icon className="w-4 h-4" />
+          <StepIcon type={step.executorType} className="w-4 h-4" />
           <span style={{ fontSize: 12, fontWeight: 500, flex: 1, color: 'var(--theme-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {step.name || 'Unnamed'}
           </span>
