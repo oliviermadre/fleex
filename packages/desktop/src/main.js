@@ -509,13 +509,13 @@ function createWindow() {
           const fillHeight = remaining / 100;
           const fillColor = getFillColor(remaining);
           return '<div style="display:flex;align-items:center;gap:2px;">'
-            + '<span style="font-size:8px;font-weight:500;line-height:1;color:var(--theme-text-muted,#a1a1aa);">' + label + '</span>'
-            + '<svg width="10" height="16" viewBox="0 0 10 16" fill="none">'
+            + '<span style="font-size:9px;font-weight:500;line-height:1;color:var(--theme-text-muted,#a1a1aa);">' + label + '</span>'
+            + '<svg width="11" height="18" viewBox="0 0 10 16" fill="none">'
             + '<rect x="1" y="2" width="8" height="12" rx="1" stroke="var(--theme-border-input,#3f3f46)" stroke-width="0.8" fill="none"/>'
             + '<line x1="0" y1="2" x2="10" y2="2" stroke="var(--theme-border-input,#3f3f46)" stroke-width="0.8"/>'
             + '<rect x="1.4" y="' + (2.4 + 11.2 * (1 - fillHeight)) + '" width="7.2" height="' + (11.2 * fillHeight) + '" rx="0.5" fill="' + fillColor + '" opacity="0.8"/>'
             + '</svg>'
-            + '<span style="font-size:9px;line-height:1;color:var(--theme-text-secondary,#d4d4d8);">' + remaining + '%</span>'
+            + '<span style="font-size:10px;line-height:1;color:var(--theme-text-secondary,#d4d4d8);">' + remaining + '%</span>'
             + '</div>';
         }
 
