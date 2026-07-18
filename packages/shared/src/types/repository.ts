@@ -96,3 +96,19 @@ export interface GitHubIssueDetail {
   readonly milestone: string | null;
   readonly comments: Array<{ author: string; body: string; createdAt: string }>;
 }
+
+export interface DiscoveredRepo {
+  readonly nameWithOwner: string;
+  readonly visibility: string;
+  readonly updatedAt: string;
+}
+
+export interface RepoDiscoveryOwner {
+  readonly login: string;
+  readonly repos: DiscoveredRepo[];
+}
+
+export interface RepoDiscovery {
+  readonly owners: RepoDiscoveryOwner[];
+  readonly totalRepos: number;
+}

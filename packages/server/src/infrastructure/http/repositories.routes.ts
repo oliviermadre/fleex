@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary, Worktree } from '@fleex/shared';
+import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepoDiscovery, RepositorySummary, Worktree } from '@fleex/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
 import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
 import type { Container } from '../container.js';
@@ -504,6 +504,27 @@ export function repositoryRoutes(container: Container) {
       const login = await container.githubGraphql.getCurrentUser();
       container.repositoryCache.set('github:user', login, RepositoryCache.TTL_USER);
       return { login };
+    });
+
+    app.get('/api/github/discovery', async (_request, reply) => {
+      const cached = container.repositoryCache.get<RepoDiscovery>('github:discovery');
+      if (cached) return cached.data;
+      try {
+        const discovery = await container.githubDiscovery.discover();
+        container.repositoryCache.set('github:discovery', discovery, RepositoryCache.TTL_DISCOVERY);
+        return discovery;
+      } catch (err) {
+        container.logger.warn('GitHub discovery failed', { error: String(err) });
+        return reply.code(502).send({ error: 'GitHub CLI not authenticated or unavailable' });
+      }
+    });
+
+    app.get<{ Querystring: { repo?: string } }>('/api/github/verify-repo', async (request, reply) => {
+      const repo = request.query.repo?.trim().toLowerCase() ?? '';
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+        return reply.code(400).send({ error: 'repo must be owner/repo' });
+      }
+      return container.githubDiscovery.verifyRepo(repo);
     });
 
     // ---- Clone endpoints ----

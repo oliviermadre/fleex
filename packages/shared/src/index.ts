@@ -56,6 +56,9 @@ export type {
   GitHubLabel,
   GitHubIssue,
   GitHubIssueDetail,
+  DiscoveredRepo,
+  RepoDiscoveryOwner,
+  RepoDiscovery,
 } from './types/repository.js';
 
 export type {

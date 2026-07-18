@@ -6,6 +6,7 @@ import { SessionGroupingService } from '../domain/services/session-grouping.js';
 import { RepositoryCache } from '../domain/services/repository-cache.js';
 import { RepositoryRefreshScheduler } from '../domain/services/repository-refresh-scheduler.js';
 import { RepositoryResolver } from '../domain/services/repository-resolver.js';
+import { GithubDiscovery } from '../domain/services/github-discovery.js';
 import { RepoPathResolver } from '../domain/services/repo-path-resolver.js';
 import { BareCloneManager } from '../application/services/bare-clone-manager.js';
 import { SdkConcurrencyLimiter, DEFAULT_AGENT_MAX_CONCURRENCY } from '../application/services/sdk-concurrency-limiter.js';
@@ -202,6 +203,7 @@ export async function createContainer() {
   const githubGraphql = new GitHubGraphQLAdapter(execFn, logger);
   const repositoryRefreshScheduler = new RepositoryRefreshScheduler(githubGraphql, repositoryCache, logger);
   const repositoryResolver = new RepositoryResolver(execFn, logger);
+  const githubDiscovery = new GithubDiscovery(execFn, logger);
 
   // Bare clone infrastructure
   const resolver = new RepoPathResolver(config.get().basePath);
@@ -479,6 +481,7 @@ export async function createContainer() {
     repositoryCache,
     githubGraphql,
     repositoryResolver,
+    githubDiscovery,
     repositoryRefreshScheduler,
     resolver,
     bareCloneManager,
