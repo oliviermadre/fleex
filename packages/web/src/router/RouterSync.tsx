@@ -76,9 +76,9 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
 
   const base = { sessionId: null, splitId: null, sessionTicketId: null as string | null, sessionTabKey: null as string | null, repoKey: null, boardId: undefined as string | null | undefined, ticketId: null, ticketTab: null as TicketTab | null, ticketsView: null as 'board' | 'roadmap' | null, epicId: null as string | null, epicDetailTab: null as EpicDetailTab | null, scratchpadKey: null, personaId: null, personaTab: null as PersonaTab | null, skillId: null as string | null, panelId: null as string | null, workflowId: null as string | null, settingsTab: null as SettingsTab | null, analyticsTab: null as AnalyticsTab | null, agentWorktreeTicketId: null as string | null };
 
-  // Root: redirect to /dashboard
+  // Root: redirect to /tickets (Kanban is the default view)
   if (pathname === '/') {
-    return { ...base, panel: 'dashboard' as ActivePanel, redirect: '/dashboard' };
+    return { ...base, panel: 'tickets' as ActivePanel, redirect: '/tickets' };
   }
 
   // Dashboard
@@ -252,8 +252,9 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
     return { ...base, panel: 'settings', redirect: '/settings' };
   }
 
-  // Unknown route → redirect to /dashboard
-  return { ...base, panel: 'dashboard', redirect: '/dashboard' };
+  // Unknown route → redirect to /tickets (Kanban is the default view, and the
+  // Dashboard is hidden from the navbar so we never land users on it)
+  return { ...base, panel: 'tickets', redirect: '/tickets' };
 }
 
 // ─── Store state → URL ───────────────────────────────────────────────────────
