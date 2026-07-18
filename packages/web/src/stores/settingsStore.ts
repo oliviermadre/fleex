@@ -83,6 +83,8 @@ interface SettingsState {
   bindLayoutGroupCell: (groupId: string, cellIndex: number, sessionId: string | null) => void;
   getRepoConfig: (org: string, name: string) => RepoConfig;
   setRepoConfig: (org: string, name: string, config: RepoConfig) => void;
+  addRepositories: (repos: string[]) => Promise<void>;
+  removeRepository: (repo: string) => Promise<void>;
 }
 
 const defaultSettings: AppSettings = {
@@ -363,5 +365,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
     }).catch(() => { /* ignore */ });
+  },
+
+  addRepositories: async (repos) => {
+    const current = get().settings.repositories;
+    const merged = [...new Set([...current.map((r) => r.toLowerCase()), ...repos.map((r) => r.toLowerCase())])].sort();
+    await get().saveSettings({ repositories: merged });
+  },
+
+  removeRepository: async (repo) => {
+    const target = repo.toLowerCase();
+    const filtered = get().settings.repositories.filter((r) => r.toLowerCase() !== target);
+    await get().saveSettings({ repositories: filtered });
   },
 }));

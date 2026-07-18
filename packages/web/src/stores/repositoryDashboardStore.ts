@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { RepositorySummary, RepositoryDashboardData, RepositoryWsMessage } from '@fleex/shared';
+import type { RepositorySummary, RepositoryDashboardData, RepositoryWsMessage, RepositoryStats } from '@fleex/shared';
 import * as api from '../services/api';
 
 interface RepositoryDashboardState {
@@ -11,6 +11,7 @@ interface RepositoryDashboardState {
   refreshIntervalMs: number;
   lastRefreshedAt: string | null;
   rateLimitWarning: { remaining: number; resetAt: string } | null;
+  repoStats: Record<string, RepositoryStats>;
 
   fetchSummaries: () => Promise<void>;
   fetchDashboard: (org: string, name: string) => Promise<void>;
@@ -18,6 +19,7 @@ interface RepositoryDashboardState {
   setRefreshInterval: (ms: number) => void;
   handleWsMessage: (msg: RepositoryWsMessage) => void;
   setGithubUser: (user: string) => void;
+  fetchRepoStats: (org: string, name: string) => Promise<void>;
 }
 
 export const useRepositoryDashboardStore = create<RepositoryDashboardState>((set, get) => ({
@@ -29,6 +31,7 @@ export const useRepositoryDashboardStore = create<RepositoryDashboardState>((set
   refreshIntervalMs: 0,
   lastRefreshedAt: null,
   rateLimitWarning: null,
+  repoStats: {},
 
   fetchSummaries: async () => {
     try {
@@ -103,4 +106,13 @@ export const useRepositoryDashboardStore = create<RepositoryDashboardState>((set
   },
 
   setGithubUser: (user) => set({ githubUser: user }),
+
+  fetchRepoStats: async (org, name) => {
+    try {
+      const stats = await api.fetchRepositoryStats(org, name);
+      set((s) => ({ repoStats: { ...s.repoStats, [`${org}/${name}`]: stats } }));
+    } catch {
+      // ignore — the cost card renders $0 without stats
+    }
+  },
 }));
