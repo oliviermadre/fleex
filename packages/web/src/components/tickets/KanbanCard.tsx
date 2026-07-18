@@ -17,6 +17,7 @@ import { executeSkill } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses } from '../../lib/tints';
 import { isMissingRepo } from '../../lib/repoStatus';
+import { MissingRepoIcon } from '../sidebar/icons';
 
 const PRIORITY_BORDER: Record<string, string> = {
   none: 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
@@ -173,11 +174,7 @@ export function KanbanCard({
               title="Aucun repository lié"
               aria-label="Aucun repository lié"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 3v16a2 2 0 0 0 2 2h16" />
-                <path d="M7 16V9a2 2 0 0 1 2-2h2" />
-                <line x1="3" y1="3" x2="21" y2="21" />
-              </svg>
+              <MissingRepoIcon size={15} />
             </span>
           )}
 

@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { isMissingRepo, NO_REPO_TAG, topReposForBoard } from '../../lib/repoStatus';
 import { cn } from '../../lib/cn';
 import { tint, tintText } from '../../lib/tints';
+import { MissingRepoIcon } from '../sidebar/icons';
 
 /**
  * Detail-view guard-rail (ticket #401). When a ticket has no `repository` link
@@ -58,11 +59,7 @@ export function MissingRepoBanner({ ticket }: { ticket: Ticket }) {
   return (
     <div className={cn('mt-3 flex flex-shrink-0 flex-col gap-2 rounded-md border p-3 text-xs', tint('orange'))}>
       <div className="flex items-center gap-2">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn('flex-shrink-0', tintText('orange'))}>
-          <path d="M3 3v16a2 2 0 0 0 2 2h16" />
-          <path d="M7 16V9a2 2 0 0 1 2-2h2" />
-          <line x1="3" y1="3" x2="21" y2="21" />
-        </svg>
+        <MissingRepoIcon size={16} className={cn('flex-shrink-0', tintText('orange'))} />
         <span className="font-medium text-[var(--theme-text-primary)]">Aucun repository lié</span>
         <span className="text-[var(--theme-text-muted)]">— sans repo, un agent tournera sans codebase.</span>
       </div>
