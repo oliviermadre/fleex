@@ -335,10 +335,12 @@ describe('SmartSessionButton — launcher panel', () => {
     expect(screen.getByText('Fréquents')).toBeTruthy();
   });
 
-  it('marks each Fréquents row with its type letter badge (S/W/P), not a uniform marker', async () => {
-    // NaS: the uniform ⚡ hides WHAT each favourite is. Each row must carry the
-    // same per-type letter badge used by the mention autocompletes everywhere
-    // else in Fleex (S=skill green, W=workflow orange, P=panel blue).
+  it('marks each Fréquents row with its canonical primitive glyph, coherent with the list', async () => {
+    // NaS (QA round 2): the Fréquents rows must show the SAME glyph as the
+    // grouped list below (person/zap/group/graph, each in its own hue) — not the
+    // S/W/P letter badge, which broke the graphic coherence the refonte is about.
+    // The glyph carries a `title` (Persona/Skill/Panel/Workflow) so the mixed
+    // section still tells you WHAT each favourite is on hover.
     useFrequentLaunchStore.setState({
       stats: {
         skillLeaderboard: [{ skillId: 's1', skillName: 'prepare', skillDisplayName: 'Prepare', executionCount: 7, completedCount: 7, failedCount: 0 }],
@@ -353,12 +355,15 @@ describe('SmartSessionButton — launcher panel', () => {
     await openDropdown();
 
     expect(screen.getByText('Fréquents')).toBeTruthy();
-    // One badge per frequent row; getByTitle throws if the badge leaked into
-    // the grouped rows below (which have their own icons + section headers).
-    expect(screen.getByTitle('skill').textContent).toBe('S');
-    expect(screen.getByTitle('workflow').textContent).toBe('W');
-    expect(screen.getByTitle('panel').textContent).toBe('P');
-    // The type-blind marker is gone.
+    // One titled glyph per frequent row; getByTitle throws if it were duplicated
+    // (the grouped rows below use the untitled icon under their section header).
+    expect(screen.getByTitle('Skill')).toBeTruthy();
+    expect(screen.getByTitle('Workflow')).toBeTruthy();
+    expect(screen.getByTitle('Panel')).toBeTruthy();
+    // The per-type letter badges (S/W/P) must no longer appear.
+    expect(screen.queryByTitle('skill')).toBeNull();
+    expect(screen.queryByTitle('workflow')).toBeNull();
+    expect(screen.queryByTitle('panel')).toBeNull();
     expect(screen.queryByText('⚡')).toBeNull();
   });
 

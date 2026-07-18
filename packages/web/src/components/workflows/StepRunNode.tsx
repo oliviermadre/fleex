@@ -1,7 +1,8 @@
 import { Handle, Position } from '@xyflow/react';
-import type { WorkflowStep, StepRunStatus } from '@fleex/shared';
+import type { WorkflowStep, StepRunStatus, WorkflowExecutorType } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
+import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
 
 export interface StepRunNodeData {
   step: WorkflowStep;
@@ -14,37 +15,6 @@ export interface StepRunNodeData {
 // ── Inline SVG icons ──────────────────────────────────────────────────────────
 
 interface IconProps { className?: string }
-
-function BotIcon({ className }: IconProps) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M12 2v9" />
-      <circle cx="12" cy="2" r="1" />
-      <path d="M7 16h.01M17 16h.01" />
-    </svg>
-  );
-}
-
-function UsersIcon({ className }: IconProps) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-
-function BookOpenIcon({ className }: IconProps) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-    </svg>
-  );
-}
 
 function UserCheckIcon({ className }: IconProps) {
   return (
@@ -121,12 +91,22 @@ function SkipForwardIcon({ className }: IconProps) {
 
 // ── Color maps ────────────────────────────────────────────────────────────────
 
-const executorIcon = {
-  agent: BotIcon,
-  panel: UsersIcon,
-  skill: BookOpenIcon,
-  human_gate: UserCheckIcon,
-} as const;
+// Executor types map onto the canonical primitive glyphs (lib/primitives.tsx),
+// so a step node on the canvas shows the SAME icon as the sidebar and the
+// palette. `human_gate` is not a primitive, so it keeps its dedicated glyph.
+const EXECUTOR_TO_PRIMITIVE: Record<Exclude<WorkflowExecutorType, 'human_gate'>, PrimitiveKind> = {
+  agent: 'persona',
+  panel: 'panel',
+  skill: 'skill',
+};
+
+function StepIcon({ type, className }: { type: WorkflowExecutorType; className?: string }) {
+  if (type === 'human_gate') return <UserCheckIcon className={className} />;
+  // tinted={false}: the icon inherits the node's executor-type colour (border +
+  // icon share one hue) instead of re-applying the tint, keeping each node
+  // chromatically coherent.
+  return <PrimitiveIcon kind={EXECUTOR_TO_PRIMITIVE[type]} size={16} className={className} tinted={false} />;
+}
 
 const executorColor = {
   agent: `${tintClasses('purple').text} ${tintClasses('purple').borderColor}`,
@@ -151,7 +131,6 @@ function StatusIcon({ status }: { status: StepRunStatus | 'pending' }) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function StepRunNode({ data }: { data: StepRunNodeData }) {
-  const Icon = executorIcon[data.step.executorType];
   return (
     // Explicit 180x80 matches the Node config + static handles y:40 — keeps the
     // JSX Handles' top:50% aligned with where React Flow positions the edges.
@@ -170,7 +149,7 @@ export function StepRunNode({ data }: { data: StepRunNodeData }) {
         )}
       >
         <div className="flex items-center gap-2 mb-1">
-          <Icon className="w-4 h-4 shrink-0" />
+          <StepIcon type={data.step.executorType} className="w-4 h-4 shrink-0" />
           <span className="text-xs font-medium truncate flex-1 text-[var(--theme-text-primary)]">{data.step.name}</span>
           <StatusIcon status={data.status} />
         </div>
