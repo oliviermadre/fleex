@@ -74,6 +74,28 @@ export type {
 export type { ClaudeConfigTreeEntry } from './types/claude-config.js';
 
 export type {
+  OverlayFileStatus,
+  OverlaySyncFileNode,
+  OverlaySyncDirNode,
+  OverlaySyncNode,
+  OverlayContentEntry,
+  OverlaySyncRepoTarget,
+  OverlaySyncRepoScan,
+  OverlaySyncScanRequest,
+  OverlaySyncScanResponse,
+  OverlaySyncFilePreview,
+  OverlaySyncPreviewRequest,
+  OverlaySyncPreviewResponse,
+  OverlaySyncApplyItem,
+  OverlaySyncApplyRequest,
+  OverlaySyncCopiedEntry,
+  OverlaySyncFailedEntry,
+  OverlaySyncApplyResponse,
+  OverlaySyncRemoveRequest,
+  OverlaySyncRemoveResponse,
+} from './types/overlay-sync.js';
+
+export type {
   TicketGroupTimeframe,
   TicketGroupStatus,
   TicketGroup,

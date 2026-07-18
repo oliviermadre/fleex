@@ -28,6 +28,16 @@ import type {
   WorkflowRun,
   StepRun,
   ModelsResponse,
+  OverlaySyncRepoTarget,
+  OverlaySyncScanRequest,
+  OverlaySyncScanResponse,
+  OverlaySyncPreviewRequest,
+  OverlaySyncPreviewResponse,
+  OverlaySyncApplyItem,
+  OverlaySyncApplyRequest,
+  OverlaySyncApplyResponse,
+  OverlaySyncRemoveRequest,
+  OverlaySyncRemoveResponse,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -975,4 +985,42 @@ export async function retryWorkflowStep(runId: string, stepRunId: string): Promi
     `/workflows/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepRunId)}/retry`,
     { method: 'POST' },
   );
+}
+
+// ── Overlay sync ────────────────────────────────────────────────────────────
+
+export async function overlaySyncScan(
+  repos: OverlaySyncRepoTarget[],
+): Promise<OverlaySyncScanResponse> {
+  return request<OverlaySyncScanResponse>('/overlay-sync/scan', {
+    method: 'POST',
+    body: JSON.stringify({ repos } satisfies OverlaySyncScanRequest),
+  });
+}
+
+export async function overlaySyncPreview(
+  req: OverlaySyncPreviewRequest,
+): Promise<OverlaySyncPreviewResponse> {
+  return request<OverlaySyncPreviewResponse>('/overlay-sync/preview', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
+export async function overlaySyncApply(
+  items: OverlaySyncApplyItem[],
+): Promise<OverlaySyncApplyResponse> {
+  return request<OverlaySyncApplyResponse>('/overlay-sync/apply', {
+    method: 'POST',
+    body: JSON.stringify({ items } satisfies OverlaySyncApplyRequest),
+  });
+}
+
+export async function overlaySyncRemove(
+  req: OverlaySyncRemoveRequest,
+): Promise<OverlaySyncRemoveResponse> {
+  return request<OverlaySyncRemoveResponse>('/overlay-sync/remove', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
 }

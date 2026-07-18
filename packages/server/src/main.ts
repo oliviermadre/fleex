@@ -47,6 +47,7 @@ import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
 import { modelsRoutes } from './infrastructure/http/models.routes.js';
+import { overlaySyncRoutes } from './infrastructure/http/overlay-sync.routes.js';
 import { ModelService } from './application/services/model.service.js';
 
 async function main() {
@@ -107,6 +108,7 @@ async function main() {
   await app.register(githubImageProxyRoutes(container));
   await app.register(fileRoutes(container));
   await app.register(ticketGroupRoutes(container));
+  await app.register(overlaySyncRoutes(container));
 
   // Anthropic model discovery (cached server-side)
   const modelService = new ModelService(container.logger);

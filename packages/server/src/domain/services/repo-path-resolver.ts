@@ -1,8 +1,19 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 export class RepoPathResolver {
   constructor(private readonly basePath: string) {}
+
+  /**
+   * True when an absolute path resolves inside the managed base directory.
+   * Trust boundary for host filesystem operations driven by client-supplied
+   * paths (e.g. overlay sync) — rejects `../` traversal outside the base.
+   */
+  isManagedPath(candidate: string): boolean {
+    const base = resolve(this.basePath);
+    const target = resolve(candidate);
+    return target === base || target.startsWith(base + sep);
+  }
 
   /** Bare clone location: .bare/org/name.git */
   barePath(org: string, name: string): string {
