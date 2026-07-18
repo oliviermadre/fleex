@@ -1,6 +1,6 @@
 import { cn } from './cn';
 import { tintText, type TintHue } from './tints';
-import { MENTION_TYPE_META, type MentionTargetType } from '../components/ui/MentionTypeBadge';
+import { MENTION_TYPE_META, MentionTypeBadge, type MentionTargetType } from '../components/ui/MentionTypeBadge';
 
 /**
  * A "primitive" is one of the four launchable building blocks the product is
@@ -155,5 +155,52 @@ export function PrimitiveIcon({
       size={size}
       className={cn(tinted && tintText(meta.hue), className)}
     />
+  );
+}
+
+/**
+ * Mention target types that resolve to a launchable primitive, so an @mention
+ * can show the SAME canonical glyph the sidebar / palette / workflow steps use.
+ * `human` and `ticket` are not primitives — they fall back to the lettered
+ * `MentionTypeBadge`.
+ */
+const MENTION_TYPE_TO_PRIMITIVE: Partial<Record<MentionTargetType, PrimitiveKind>> = {
+  agent: 'persona',
+  skill: 'skill',
+  panel: 'panel',
+  workflow: 'workflow',
+};
+
+/** Box dimensions + glyph size per autocomplete density (mirrors the badge's
+ *  own `sm | md | lg` scale so rows stay aligned when both are mixed). */
+const MENTION_ICON_SIZE = {
+  sm: { box: 'h-4 w-4', glyph: 14 },
+  md: { box: 'h-5 w-5', glyph: 16 },
+  lg: { box: 'h-6 w-6', glyph: 18 },
+} as const;
+
+/**
+ * Per-mention-type icon for autocompletes: renders the canonical primitive glyph
+ * (persona/skill/panel/workflow) tinted with its hue, so an @mention suggestion
+ * shows the SAME iconography as everywhere else. `human` / `ticket` mentions are
+ * not primitives, so they keep the lettered `MentionTypeBadge`. Sizing mirrors
+ * the badge's `sm | md | lg` scale so a mixed list stays visually aligned.
+ */
+export function MentionTypeIcon({
+  type,
+  size = 'md',
+  className,
+}: {
+  type: MentionTargetType;
+  size?: keyof typeof MENTION_ICON_SIZE;
+  className?: string;
+}) {
+  const kind = MENTION_TYPE_TO_PRIMITIVE[type];
+  if (!kind) return <MentionTypeBadge type={type} size={size} className={className} />;
+  const { box, glyph } = MENTION_ICON_SIZE[size];
+  return (
+    <span title={type} className={cn('flex shrink-0 items-center justify-center', box, className)}>
+      <PrimitiveIcon kind={kind} size={glyph} />
+    </span>
   );
 }

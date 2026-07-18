@@ -27,7 +27,7 @@ import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { MentionTypeBadge } from '../ui/MentionTypeBadge';
+import { MentionTypeIcon } from '../../lib/primitives';
 import * as api from '../../services/api';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
@@ -504,7 +504,7 @@ function MentionAutocomplete({
           }`}
           onMouseDown={(e) => { e.preventDefault(); onSelect(opt); }}
         >
-          <MentionTypeBadge type={opt.type} />
+          <MentionTypeIcon type={opt.type} />
           <span className="flex-1 truncate font-medium">{opt.label}</span>
           <span className="text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
         </button>

@@ -25,7 +25,7 @@ import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { ModelSelect } from '../components/agents/ModelSelect';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
-import { MentionTypeBadge } from '../components/ui/MentionTypeBadge';
+import { MentionTypeIcon } from '../lib/primitives';
 import { tint } from '../lib/tints';
 
 const MODES: { id: ConversationMode; label: string }[] = [
@@ -632,7 +632,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                 }}
                 className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left active:bg-[var(--theme-bg-hover)]"
               >
-                <MentionTypeBadge type={opt.type} size="lg" />
+                <MentionTypeIcon type={opt.type} size="lg" />
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--theme-text-primary)]">
                   {opt.label}
                 </span>
