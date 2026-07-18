@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { parseUrl, storeToUrl, historyActionForNav } from './RouterSync';
 
 describe('parseUrl', () => {
-  it('redirects / to /dashboard', () => {
+  it('redirects / to /tickets (Kanban is the default view)', () => {
     const result = parseUrl('/', '');
-    expect(result.redirect).toBe('/dashboard');
-    expect(result.panel).toBe('dashboard');
+    expect(result.redirect).toBe('/tickets');
+    expect(result.panel).toBe('tickets');
   });
 
   it('parses /sessions', () => {
@@ -161,10 +161,10 @@ describe('parseUrl', () => {
     expect(result.sessionId).toBeNull();
   });
 
-  it('redirects unknown routes to /dashboard', () => {
+  it('redirects unknown routes to /tickets (never to the hidden Dashboard)', () => {
     const result = parseUrl('/unknown-route', '');
-    expect(result.redirect).toBe('/dashboard');
-    expect(result.panel).toBe('dashboard');
+    expect(result.redirect).toBe('/tickets');
+    expect(result.panel).toBe('tickets');
   });
 });
 

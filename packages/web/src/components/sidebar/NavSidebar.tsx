@@ -42,22 +42,7 @@ export function NavSidebar() {
         <NotificationNavItem collapsed={navCollapsed} />
         <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
 
-        {/* === Operational === */}
-        {/* Dashboard */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-            </svg>
-          }
-          label="Dashboard"
-          shortLabel="Dash"
-          active={activePanel === 'dashboard'}
-          collapsed={navCollapsed}
-          onClick={() => navigate('/dashboard')}
-        />
-
+        {/* === Assistant === */}
         {/* Assistant (companion-backed LLM chat) */}
         <NavItem
           icon={
@@ -73,23 +58,8 @@ export function NavSidebar() {
           onClick={() => navigate('/assistant')}
         />
 
-        {/* Sessions (live agent runs) */}
-        <NavItem
-          icon={
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="5" cy="3.5" r="1.5" />
-              <circle cx="5" cy="12.5" r="1.5" />
-              <circle cx="12" cy="7" r="1.5" />
-              <path d="M5 5v6M5 7.5c0-1.5 1-3 4.5-3" />
-            </svg>
-          }
-          label="Sessions"
-          shortLabel="Sessions"
-          active={activePanel === 'sessions'}
-          collapsed={navCollapsed}
-          badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
-          onClick={() => navigate('/sessions')}
-        />
+        {/* === Operational === */}
+        <div className="my-1 border-t border-[var(--theme-border-subtle)]" />
 
         {/* Kanban (was Backlog / Tickets) */}
         <NavItem
@@ -135,14 +105,22 @@ export function NavSidebar() {
           onClick={() => navigate('/list-focus')}
         />
 
-        {/* Repositories */}
+        {/* Sessions (live agent runs) */}
         <NavItem
-          icon={<RepositoriesIcon size={20} />}
-          label="Repositories"
-          shortLabel="Repos"
-          active={activePanel === 'repositories'}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="5" cy="3.5" r="1.5" />
+              <circle cx="5" cy="12.5" r="1.5" />
+              <circle cx="12" cy="7" r="1.5" />
+              <path d="M5 5v6M5 7.5c0-1.5 1-3 4.5-3" />
+            </svg>
+          }
+          label="Sessions"
+          shortLabel="Sessions"
+          active={activePanel === 'sessions'}
           collapsed={navCollapsed}
-          onClick={() => navigate('/repositories')}
+          badge={sessions.length > 0 ? (sessions.length > 9 ? '9+' : String(sessions.length)) : undefined}
+          onClick={() => navigate('/sessions')}
         />
 
         {/* Execution Log */}
@@ -234,6 +212,15 @@ export function NavSidebar() {
           active={activePanel === 'analytics'}
           collapsed={navCollapsed}
           onClick={() => navigate('/analytics')}
+        />
+        {/* Repositories */}
+        <NavItem
+          icon={<RepositoriesIcon size={20} />}
+          label="Repositories"
+          shortLabel="Repos"
+          active={activePanel === 'repositories'}
+          collapsed={navCollapsed}
+          onClick={() => navigate('/repositories')}
         />
         <NavItem
           icon={

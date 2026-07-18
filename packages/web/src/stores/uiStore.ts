@@ -169,7 +169,7 @@ export function clampRightSidebarWidth(width: number, availableWidth: number): n
 export const useUIStore = create<UIState>((set) => ({
   navCollapsed: true,
   contentPanelWidth: 320,
-  activePanel: 'dashboard',
+  activePanel: 'tickets',
   settingsTab: 'general',
   analyticsTab: 'audit-trail',
   altHeld: false,
