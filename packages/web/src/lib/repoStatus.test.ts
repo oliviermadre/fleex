@@ -125,9 +125,13 @@ describe('mentionsPrimitive', () => {
 });
 
 describe('topReposForBoard', () => {
-  // WHY: the suggestion must rank by how often a repo is actually used on THIS
-  // board so the 1-click default is the likely-right one; ties break
-  // alphabetically so the order is deterministic (no flicker between renders).
+  // WHY: the suggestion must rank by RECENCY-WEIGHTED usage on THIS board so the
+  // 1-click default is the repo you've been working with lately — not the one
+  // you used most long ago. Ties break alphabetically so the order is
+  // deterministic (no flicker between renders).
+  //
+  // These first cases share one link date, so decay is uniform and ranking
+  // reduces to raw count — the classic frequency behaviour, still guaranteed.
   const tickets: Ticket[] = [
     makeTicket({ id: '1', boardId: 'b1', links: [link({ type: 'repository', ref: 'org/a' })] }),
     makeTicket({ id: '2', boardId: 'b1', links: [link({ type: 'repository', ref: 'org/a' })] }),
@@ -156,5 +160,57 @@ describe('topReposForBoard', () => {
 
   it('returns an empty list when the board has no repository links', () => {
     expect(topReposForBoard([makeTicket({ boardId: 'b1', links: [] })], 'b1')).toEqual([]);
+  });
+
+  // ── Recency weighting (#401 follow-up) ──
+  const DAY = 24 * 60 * 60 * 1000;
+  const NOW = Date.parse('2026-07-18T00:00:00.000Z');
+  const daysAgo = (n: number) => new Date(NOW - n * DAY).toISOString();
+  const repoLinkedAt = (ref: string, iso: string) =>
+    makeTicket({ id: `${ref}@${iso}`, boardId: 'b1', links: [link({ type: 'repository', ref, createdAt: iso })] });
+
+  it('ranks a more recently linked repo above an older one at equal count', () => {
+    // WHY: the whole point of the change — recency must reorder repos that would
+    // otherwise tie on raw count, so the repo used yesterday beats the one used
+    // months ago.
+    const recentVsOld = [repoLinkedAt('org/recent', daysAgo(1)), repoLinkedAt('org/old', daysAgo(120))];
+    expect(topReposForBoard(recentVsOld, 'b1', { now: NOW })).toEqual(['org/recent', 'org/old']);
+  });
+
+  it('lets recency overcome a higher raw count', () => {
+    // WHY: one fresh link (weight ~1) must be able to outrank two stale links
+    // (2 × ~0.125 at three half-lives ≈ 0.25). Recency genuinely reweights
+    // frequency rather than just breaking ties.
+    const freshVsStale = [
+      repoLinkedAt('org/fresh', daysAgo(0)),
+      repoLinkedAt('org/stale', daysAgo(180)),
+      repoLinkedAt('org/stale', daysAgo(180)),
+    ];
+    expect(topReposForBoard(freshVsStale, 'b1', { now: NOW })).toEqual(['org/fresh', 'org/stale']);
+  });
+
+  it('preserves relative ranking on a long-dormant board (no cutoff)', () => {
+    // WHY: this is the property NaS asked for — a quiet quarter (or year) must
+    // not wipe the ranking. All weights shrink by the same factor as `now`
+    // advances, so the order is invariant regardless of how stale everything is.
+    const dormant = [
+      repoLinkedAt('org/top', daysAgo(200)),
+      repoLinkedAt('org/top', daysAgo(230)),
+      repoLinkedAt('org/mid', daysAgo(210)),
+      repoLinkedAt('org/low', daysAgo(400)),
+    ];
+    const atNow = topReposForBoard(dormant, 'b1', { now: NOW });
+    const aYearLater = topReposForBoard(dormant, 'b1', { now: NOW + 365 * DAY });
+    expect(atNow).toEqual(['org/top', 'org/mid', 'org/low']);
+    expect(aYearLater).toEqual(atNow);
+  });
+
+  it('treats a missing/invalid link date as fresh rather than dropping the repo', () => {
+    // WHY: a data glitch (unparseable createdAt) must never silently bury an
+    // otherwise-relevant repo — it is weighted as "just now" and still ranked.
+    const withBadDate = [repoLinkedAt('org/valid', daysAgo(90)), repoLinkedAt('org/glitch', 'not-a-date')];
+    const ranked = topReposForBoard(withBadDate, 'b1', { now: NOW });
+    expect(ranked).toContain('org/glitch');
+    expect(ranked[0]).toBe('org/glitch'); // full weight (age 0) beats the 90-day-old one
   });
 });
