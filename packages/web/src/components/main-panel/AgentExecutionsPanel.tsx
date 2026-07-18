@@ -5,6 +5,7 @@ import { AgentEventStream } from './AgentEventStream';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
 import { tint, tintText, tintClasses } from '../../lib/tints';
+import { useConfirm } from '../ui/useConfirm';
 
 function formatDuration(startedAt: string, completedAt?: string | null): string {
   const start = new Date(startedAt).getTime();
@@ -66,16 +67,18 @@ export function AgentExecutionsPanel({ executions }: Props) {
 
   const loadExecutions = useAgentEventStore((s) => s.loadExecutionsForTicket);
 
+  const confirm = useConfirm();
+
   const handleCancel = useCallback(async (executionId: string, ticketId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Cancel this execution? The agent will be interrupted and the mention reset to pending.')) return;
+    if (!(await confirm({ title: 'Cancel execution', message: 'Cancel this execution? The agent will be interrupted and the mention reset to pending.', confirmLabel: 'Cancel execution', cancelLabel: 'Keep running', danger: true }))) return;
     try {
       await api.cancelExecution(executionId);
       loadExecutions(ticketId);
     } catch (err) {
       console.error('Failed to cancel execution:', err);
     }
-  }, [loadExecutions]);
+  }, [loadExecutions, confirm]);
 
   if (sorted.length === 0) {
     return (

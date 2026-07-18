@@ -5,6 +5,7 @@ import { FloatingExecutionPanel } from '../tickets/ExecutionModal';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
+import { formatRelativeTime as relativeTime } from '../../lib/relativeTime';
 import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
 import { tint, tintText, tintSolid, tintClasses } from '../../lib/tints';
 
@@ -268,18 +269,6 @@ function LiveDuration({ startedAt }: { startedAt: string }) {
 }
 
 // ── Relative time ("X ago") ──
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const sec = Math.floor(diff / 1000);
-  if (sec < 60) return 'just now';
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const days = Math.floor(hr / 24);
-  return `${days}d ago`;
-}
 
 function formatFullDatetime(iso: string): string {
   return new Date(iso).toLocaleString();

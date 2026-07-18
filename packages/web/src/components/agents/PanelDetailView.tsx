@@ -7,6 +7,7 @@ import { ModelBadge } from './ModelBadge';
 import { ModelSelect } from './ModelSelect';
 import { cn } from '../../lib/cn';
 import { tint, tintClasses } from '../../lib/tints';
+import { useConfirm } from '../ui/useConfirm';
 
 function PanelEmptyState() {
   return (
@@ -31,6 +32,7 @@ export function PanelDetailView() {
   const updatePanel = usePanelStore((s) => s.updatePanel);
   const deletePanel = usePanelStore((s) => s.deletePanel);
   const personas = useAgentPersonaStore((s) => s.personas);
+  const confirm = useConfirm();
 
   const panel = panels.find((p) => p.id === selectedPanelId);
 
@@ -105,7 +107,7 @@ export function PanelDetailView() {
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Delete panel "${panel.displayName}"? This cannot be undone.`)) return;
+    if (!(await confirm({ title: 'Delete panel', message: `Delete panel "${panel.displayName}"? This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return;
     await deletePanel(panel.id);
     navigate('/agents', { replace: true });
   };

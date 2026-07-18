@@ -5,6 +5,7 @@ import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useToastStore } from '../../stores/toastStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { useConfirm } from '../ui/useConfirm';
 
 const inputCls =
   'rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-input)] px-2 py-1 text-sm text-[var(--theme-text-primary)] outline-none transition-colors focus:border-[var(--theme-accent)]';
@@ -209,8 +210,10 @@ export function DeliverableTypesTab() {
     } catch { /* toast handled by api.ts */ }
   };
 
+  const confirm = useConfirm();
+
   const handleDelete = async (id: string) => {
-    if (!window.confirm(`Delete type "${id}"? This cannot be undone.`)) return;
+    if (!(await confirm({ title: 'Delete type', message: `Delete type "${id}"? This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return;
     try {
       await remove(id);
       addToast('success', 'Type deleted');

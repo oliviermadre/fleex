@@ -6,7 +6,7 @@ import { inferModelCapabilities } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
@@ -38,6 +38,22 @@ import { resolveFileReferences, promptHasImageAttachment, type PromptContentBloc
 import { STANDARD_OUTPUT_SCHEMA as OUTPUT_FORMAT_SCHEMA, buildStandardOutputSchema } from '../utils/merge-output-schemas.js';
 import { normalizeDeliverableTypes } from '@fleex/shared';
 import type { DeliverableTypeDef } from '@fleex/shared';
+
+/**
+ * Sentinel sequence numbers that force terminal events to sort last in the
+ * event log. When a failure emits an `error` immediately followed by an
+ * `execution_end`, the error takes the penultimate slot so the `execution_end`
+ * closes out the log as the very last event; standalone terminal events use
+ * whichever slot preserves their historical ordering.
+ */
+const SEQ_TERMINAL_PENULTIMATE = 999_998;
+const SEQ_TERMINAL_LAST = 999_999;
+
+/** Delay before evicting a settled (completed/failed) execution from the in-memory registry. */
+const EXECUTION_CLEANUP_DELAY_MS = 30_000;
+
+/** Default per-execution timeout applied when the workspace config sets none (30 minutes). */
+const DEFAULT_AGENT_EXECUTION_TIMEOUT_MS = 30 * 60 * 1000;
 
 interface ActiveExecution {
   mentionId: string;
@@ -407,7 +423,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         executionId,
         eventType: 'execution_end',
         data: { status: 'interrupted', reason: 'cancelled', ticketId: found.exec.ticketId },
-        sequence: 999998,
+        sequence: SEQ_TERMINAL_PENULTIMATE,
       });
       await this.agentEventStore.appendEvent(cancelEvent);
       this.onEvent?.(cancelEvent);
@@ -490,7 +506,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     setTimeout(() => {
       const e = this.activeExecutions.get(executionId);
       if (e && e.status !== 'running') this.activeExecutions.delete(executionId);
-    }, 30000);
+    }, EXECUTION_CLEANUP_DELAY_MS);
   }
 
   /**
@@ -811,7 +827,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }));
 
       // 9. Setup execution timeout
-      const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
+      const timeoutMs = this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MS;
       const timeoutHandle = setTimeout(() => {
         this.logger.warn('Agent execution timed out', { executionId, persona: persona.name, timeoutMs });
         abortController.abort(new Error('timeout'));
@@ -1219,7 +1235,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           executionId,
           eventType: 'error',
           data: { error: err instanceof Error ? err.message : String(err), ticketId: mention.ticketId },
-          sequence: 999998,
+          sequence: SEQ_TERMINAL_PENULTIMATE,
         });
         await this.agentEventStore.appendEvent(errorEvent);
         this.onEvent?.(errorEvent);
@@ -1227,7 +1243,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           executionId,
           eventType: 'execution_end',
           data: { status: 'failed', reason: 'startup_error', ticketId: mention.ticketId },
-          sequence: 999999,
+          sequence: SEQ_TERMINAL_LAST,
         });
         await this.agentEventStore.appendEvent(endEvent);
         this.onEvent?.(endEvent);
@@ -1255,7 +1271,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         if (exec && exec.status !== 'running') {
           this.activeExecutions.delete(mention.id);
         }
-      }, 30000);
+      }, EXECUTION_CLEANUP_DELAY_MS);
     }
   }
 
@@ -1427,7 +1443,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const releaseSdkSlot = await this.sdkLimiter.acquire();
 
     // 7. Setup timeout + abort
-    const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
+    const timeoutMs = this.config.get().agentExecutionTimeout ?? DEFAULT_AGENT_EXECUTION_TIMEOUT_MS;
     const timeoutHandle = setTimeout(() => {
       this.logger.warn('Skill execution timed out', { executionId, persona: persona.name, timeoutMs });
       abortController.abort(new Error('timeout'));
@@ -1680,7 +1696,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           executionId,
           eventType: 'error',
           data: { error: err instanceof Error ? err.message : String(err) },
-          sequence: 999999,
+          sequence: SEQ_TERMINAL_LAST,
         });
         await this.agentEventStore.appendEvent(errorEvent);
         this.onEvent?.(errorEvent);
@@ -1729,7 +1745,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         if (exec && exec.status !== 'running') {
           this.activeExecutions.delete(skillMentionKey);
         }
-      }, 30000);
+      }, EXECUTION_CLEANUP_DELAY_MS);
     }
   }
 

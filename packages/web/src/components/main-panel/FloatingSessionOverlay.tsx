@@ -14,6 +14,8 @@ const MIN_WIDTH = 480;
 const MIN_HEIGHT = 300;
 const DEFAULT_WIDTH = 800;
 const DEFAULT_HEIGHT = 500;
+// Wait for the terminal instance to finish mounting before focusing it.
+const TERMINAL_FOCUS_DELAY_MS = 100;
 
 // Position registry for spatial keyboard navigation between floating overlays
 export const floatingPositionRegistry = new Map<string, { x: number; y: number; width: number; height: number }>();
@@ -94,7 +96,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     terminalManager.setFloatingMode(sessionId, true);
     const inst = terminalManager.get(sessionId);
     if (inst) {
-      setTimeout(() => inst.terminal.focus(), 100);
+      setTimeout(() => inst.terminal.focus(), TERMINAL_FOCUS_DELAY_MS);
     }
     return () => {
       terminalManager.setFloatingMode(sessionId, false);

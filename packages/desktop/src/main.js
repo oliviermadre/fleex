@@ -577,9 +577,10 @@ function createWindow() {
           } catch {}
         }
 
-        // Fetch immediately, then every 30s
+        // Fetch immediately, then on a fixed interval
+        const USAGE_SYNC_INTERVAL_MS = 30000;
         syncUsage();
-        setInterval(syncUsage, 30000);
+        setInterval(syncUsage, USAGE_SYNC_INTERVAL_MS);
 
         // Intercept ALL link clicks so external URLs open in the OS browser
         document.addEventListener('click', function(e) {

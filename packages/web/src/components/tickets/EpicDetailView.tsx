@@ -6,6 +6,7 @@ import type { DomainEventLog } from '@fleex/shared';
 import type { BoardWithCounts } from '@fleex/shared';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
+import { useConfirm } from '../ui/useConfirm';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { fetchEvents } from '../../services/api';
@@ -16,6 +17,7 @@ import { PriorityIndicator } from './PriorityIndicator';
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
 import { STATUS_COLORS } from '../../lib/statusColors';
+import { formatRelativeTime } from '../../lib/relativeTime';
 
 export function EpicDetailView() {
   const epicId = useTicketGroupStore((s) => s.selectedEpicDetailId);
@@ -58,8 +60,10 @@ export function EpicDetailView() {
     await updateGroup(group.id, { groupStatus: newStatus, timeframe: newTimeframe });
   };
 
+  const confirm = useConfirm();
+
   const handleDelete = async () => {
-    if (!confirm(`Delete epic "${group.name}"? Tickets will not be deleted.`)) return;
+    if (!(await confirm({ title: 'Delete epic', message: `Delete epic "${group.name}"? Tickets will not be deleted.`, confirmLabel: 'Delete', danger: true }))) return;
     await deleteGroup(group.id);
     setSelectedEpicDetail(null);
   };
@@ -281,17 +285,6 @@ function EpicActivityLog({ groupId }: { groupId: string }) {
       ))}
     </div>
   );
-}
-
-function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 // ── Tickets Tab ──
