@@ -183,17 +183,20 @@ export function NavSidebar() {
 
       {/* Config & meta - bottom of sidebar */}
       <div className="flex flex-col gap-1 border-t border-[var(--theme-border-subtle)] pt-1">
-        {/* Primitives (Personas / Skills / Panels / Workflows) */}
+        {/* Agentic catalog (Personas / Skills / Panels / Workflows) — four
+            geometric shapes (square, circle, triangle, diamond), one per
+            primitive family. */}
         <NavItem
           icon={
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <circle cx="17.5" cy="17.5" r="3.5" />
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <circle cx="17.5" cy="6.5" r="3.5" />
+              <path d="M6.5 14 10 21 3 21 Z" />
+              <path d="M17.5 14 21 17.5 17.5 21 14 17.5 Z" />
             </svg>
           }
-          label="Primitives"
-          shortLabel="Primitives"
+          label="Agentic"
+          shortLabel="Agentic"
           active={activePanel === 'agents'}
           collapsed={navCollapsed}
           onClick={() => navigate('/agents')}

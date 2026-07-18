@@ -14,8 +14,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useFrequentLaunchStore, buildFrequentItems } from '../../stores/frequentLaunchStore';
 import { useToastStore } from '../../stores/toastStore';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
-import { MentionTypeBadge, type MentionTargetType } from '../ui/MentionTypeBadge';
-import { PrimitiveIcon } from '../../lib/primitives';
+import { PrimitiveIcon, PRIMITIVE_META } from '../../lib/primitives';
 import { cn } from '../../lib/cn';
 import { foldAccents } from '../../lib/normalize';
 import { tintClasses } from '../../lib/tints';
@@ -151,14 +150,6 @@ const KIND_ICON: Record<LaunchKind, React.ReactNode> = {
   workflow: <PrimitiveIcon kind="workflow" size={14} className="shrink-0" />,
   panel: <PrimitiveIcon kind="panel" size={14} className="shrink-0" />,
   persona: <PrimitiveIcon kind="persona" size={14} className="shrink-0" />,
-};
-
-/** Launch kinds map onto the app-wide mention badge types (persona ⇒ agent). */
-const KIND_TO_MENTION_TYPE: Record<LaunchKind, MentionTargetType> = {
-  skill: 'skill',
-  workflow: 'workflow',
-  panel: 'panel',
-  persona: 'agent',
 };
 
 // Accent-insensitive search folding shared with the Primitives sidebar.
@@ -402,9 +393,16 @@ function LauncherPanel({
                 index={idx}
                 active={highlight === idx}
                 onHover={() => setHighlight(idx)}
-                // The section mixes types, so each row carries the app-wide type
-                // letter badge (S/W/P) — a uniform marker would hide WHAT it is.
-                marker={<MentionTypeBadge type={KIND_TO_MENTION_TYPE[item.kind]} size="sm" />}
+                // The section mixes types, so each row carries its canonical
+                // primitive glyph (person/zap/group/graph, each in its own hue) —
+                // the SAME marker as the grouped list below, for graphic
+                // coherence. The wrapping title reveals the type on hover, since
+                // this section has no per-type header to disambiguate.
+                marker={
+                  <span title={PRIMITIVE_META[item.kind].label} className="flex shrink-0">
+                    {item.icon}
+                  </span>
+                }
               />
             ))}
           </>

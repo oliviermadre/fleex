@@ -15,6 +15,7 @@ import { CreateSkillModal } from './CreateSkillModal';
 import { CreatePanelModal } from './CreatePanelModal';
 import { CreateWorkflowModal } from './CreateWorkflowModal';
 import { ModelBadge } from './ModelBadge';
+import { Modal } from '../ui/Modal';
 import { cn } from '../../lib/cn';
 import { foldAccents } from '../../lib/normalize';
 import { PrimitiveIcon, PRIMITIVE_META, PRIMITIVE_KINDS, type PrimitiveKind } from '../../lib/primitives';
@@ -65,6 +66,17 @@ export function AgentListPanel() {
   const [panelModalOpen, setPanelModalOpen] = useState(false);
   const [workflowModalOpen, setWorkflowModalOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ id: string; kind: PrimitiveKind } | null>(null);
+  // Per-group collapse state (point 7 — each group can be folded away).
+  const [collapsed, setCollapsed] = useState<Record<PrimitiveKind, boolean>>({
+    persona: false,
+    skill: false,
+    panel: false,
+    workflow: false,
+  });
+  const toggleCollapsed = (kind: PrimitiveKind) =>
+    setCollapsed((c) => ({ ...c, [kind]: !c[kind] }));
+  // Delete is irreversible, so it is always funnelled through a confirm dialog.
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; kind: PrimitiveKind; name: string } | null>(null);
 
   const {
     open: menuOpen,
@@ -196,6 +208,29 @@ export function AgentListPanel() {
 
   const sectionVisible = (kind: PrimitiveKind) => filter === 'all' || filter === kind;
 
+  const nameFor = (kind: PrimitiveKind, id: string): string => {
+    switch (kind) {
+      case 'persona':
+        return personas.find((p) => p.id === id)?.displayName ?? 'this persona';
+      case 'skill':
+        return skills.find((s) => s.id === id)?.displayName ?? 'this skill';
+      case 'panel':
+        return panels.find((p) => p.id === id)?.displayName ?? 'this panel';
+      case 'workflow':
+        return templates.find((t) => t.id === id)?.name ?? 'this workflow';
+    }
+  };
+
+  const performDelete = () => {
+    if (!deleteTarget) return;
+    const { id, kind } = deleteTarget;
+    if (kind === 'persona') deletePersona(id);
+    else if (kind === 'skill') deleteSkill(id);
+    else if (kind === 'panel') deletePanelAction(id);
+    else removeWorkflow(id);
+    setDeleteTarget(null);
+  };
+
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -205,7 +240,7 @@ export function AgentListPanel() {
       >
         <div className="flex items-baseline gap-2">
           <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
-            Primitives
+            Agentic Catalog
           </span>
           <span className="text-[10px] font-medium text-[var(--theme-text-faint)]">{totalCount}</span>
         </div>
@@ -344,25 +379,29 @@ export function AgentListPanel() {
 
         {/* Personas */}
         {sectionVisible('persona') && (
-          <Section kind="persona" count={counts.persona}>
+          <Section
+            kind="persona"
+            count={counts.persona}
+            collapsed={!isSearching && collapsed.persona}
+            onToggle={() => toggleCollapsed('persona')}
+          >
             {matchedPersonas.length === 0
               ? !isSearching && <EmptySection kind="persona" onCreate={() => setModalOpen(true)} />
               : matchedPersonas.map((persona) => {
                   const status = executionStatuses[persona.id];
                   const running = status?.running ?? false;
-                  const pending = (status?.pendingMentions ?? 0) > 0;
                   return (
                     <PrimitiveRow
                       key={persona.id}
                       kind="persona"
                       selected={selectedPersonaId === persona.id}
                       running={running}
-                      pending={pending}
                       title={persona.displayName}
                       subtitle={`@agent:${persona.name}`}
                       right={<ModelBadge modelId={persona.model} size="compact" />}
                       onClick={() => selectPrimitive('persona', persona.id)}
                       onContextMenu={(e) => openContextMenu(e, persona.id, 'persona')}
+                      onDelete={() => setDeleteTarget({ id: persona.id, kind: 'persona', name: persona.displayName })}
                     />
                   );
                 })}
@@ -371,7 +410,12 @@ export function AgentListPanel() {
 
         {/* Skills */}
         {sectionVisible('skill') && (
-          <Section kind="skill" count={counts.skill}>
+          <Section
+            kind="skill"
+            count={counts.skill}
+            collapsed={!isSearching && collapsed.skill}
+            onToggle={() => toggleCollapsed('skill')}
+          >
             {matchedSkills.length === 0
               ? !isSearching && <EmptySection kind="skill" onCreate={() => setSkillModalOpen(true)} />
               : matchedSkills.map((skill) => (
@@ -384,6 +428,7 @@ export function AgentListPanel() {
                     subtitle={`/${skill.commandName}`}
                     onClick={() => selectPrimitive('skill', skill.id)}
                     onContextMenu={(e) => openContextMenu(e, skill.id, 'skill')}
+                    onDelete={() => setDeleteTarget({ id: skill.id, kind: 'skill', name: skill.displayName })}
                   />
                 ))}
           </Section>
@@ -391,7 +436,12 @@ export function AgentListPanel() {
 
         {/* Panels */}
         {sectionVisible('panel') && (
-          <Section kind="panel" count={counts.panel}>
+          <Section
+            kind="panel"
+            count={counts.panel}
+            collapsed={!isSearching && collapsed.panel}
+            onToggle={() => toggleCollapsed('panel')}
+          >
             {matchedPanels.length === 0
               ? !isSearching && <EmptySection kind="panel" onCreate={() => setPanelModalOpen(true)} />
               : matchedPanels.map((panel) => (
@@ -405,6 +455,7 @@ export function AgentListPanel() {
                     right={<ModelBadge modelId={panel.orchestratorModel} size="compact" />}
                     onClick={() => selectPrimitive('panel', panel.id)}
                     onContextMenu={(e) => openContextMenu(e, panel.id, 'panel')}
+                    onDelete={() => setDeleteTarget({ id: panel.id, kind: 'panel', name: panel.displayName })}
                   />
                 ))}
           </Section>
@@ -412,7 +463,12 @@ export function AgentListPanel() {
 
         {/* Workflows */}
         {sectionVisible('workflow') && (
-          <Section kind="workflow" count={counts.workflow}>
+          <Section
+            kind="workflow"
+            count={counts.workflow}
+            collapsed={!isSearching && collapsed.workflow}
+            onToggle={() => toggleCollapsed('workflow')}
+          >
             {matchedWorkflows.length === 0
               ? !isSearching && <EmptySection kind="workflow" onCreate={() => setWorkflowModalOpen(true)} />
               : matchedWorkflows.map((template) => (
@@ -430,6 +486,7 @@ export function AgentListPanel() {
                     }
                     onClick={() => selectPrimitive('workflow', template.id)}
                     onContextMenu={(e) => openContextMenu(e, template.id, 'workflow')}
+                    onDelete={() => setDeleteTarget({ id: template.id, kind: 'workflow', name: template.name })}
                   />
                 ))}
           </Section>
@@ -448,15 +505,11 @@ export function AgentListPanel() {
             <button
               className={`flex w-full items-center gap-2 px-4 py-1.5 text-xs ${tintClasses('red').text} hover:bg-[var(--theme-bg-hover)]`}
               onClick={() => {
-                if (contextMenu.kind === 'persona') {
-                  deletePersona(contextMenu.id);
-                } else if (contextMenu.kind === 'skill') {
-                  deleteSkill(contextMenu.id);
-                } else if (contextMenu.kind === 'workflow') {
-                  removeWorkflow(contextMenu.id);
-                } else {
-                  deletePanelAction(contextMenu.id);
-                }
+                setDeleteTarget({
+                  id: contextMenu.id,
+                  kind: contextMenu.kind,
+                  name: nameFor(contextMenu.kind, contextMenu.id),
+                });
                 closeMenu();
                 setContextMenu(null);
               }}
@@ -471,6 +524,44 @@ export function AgentListPanel() {
       <CreateSkillModal open={skillModalOpen} onClose={() => setSkillModalOpen(false)} />
       <CreatePanelModal open={panelModalOpen} onClose={() => setPanelModalOpen(false)} />
       <CreateWorkflowModal open={workflowModalOpen} onClose={() => setWorkflowModalOpen(false)} />
+
+      {/* Delete confirmation — deleting a primitive is irreversible. */}
+      <Modal open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} maxWidth="max-w-sm">
+        {deleteTarget && (
+          <>
+            <div className="flex items-center gap-2">
+              <PrimitiveIcon kind={deleteTarget.kind} size={18} />
+              <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">
+                Delete {PRIMITIVE_META[deleteTarget.kind].label.toLowerCase()}
+              </h3>
+            </div>
+            <p className="mt-2 text-xs text-[var(--theme-text-secondary)]">
+              Are you sure you want to delete{' '}
+              <span className="font-medium text-[var(--theme-text-primary)]">{deleteTarget.name}</span>? This
+              action is irreversible.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className={cn(
+                  'rounded-md px-3 py-1.5 text-xs transition-colors',
+                  tintClasses('red').onSolid,
+                  tintClasses('red').solid,
+                  tintClasses('red').hoverSolid,
+                )}
+                onClick={performDelete}
+              >
+                Delete
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -503,25 +594,50 @@ function FilterChip({
   );
 }
 
-/** Section header + body wrapper, sharing the plural label + hue from the referential. */
+/**
+ * Section header + body wrapper, sharing the plural label from the referential.
+ * The header is a toggle that collapses/expands the group's listing.
+ */
 function Section({
   kind,
   count,
+  collapsed,
+  onToggle,
   children,
 }: {
   kind: PrimitiveKind;
   count: number;
+  collapsed: boolean;
+  onToggle: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <div className="flex items-center justify-between px-4 pt-4 pb-1">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">
+      <button
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        title={collapsed ? 'Expand group' : 'Collapse group'}
+        className="flex w-full items-center justify-between px-4 pt-4 pb-1 text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-text-muted)]"
+      >
+        <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={cn('transition-transform', collapsed && '-rotate-90')}
+          >
+            <polyline points="4,6 8,10 12,6" />
+          </svg>
           {PRIMITIVE_META[kind].pluralLabel}
         </span>
-        <span className="text-[10px] tabular-nums text-[var(--theme-text-faint)]">{count}</span>
-      </div>
-      {children}
+        <span className="text-[10px] tabular-nums">{count}</span>
+      </button>
+      {!collapsed && children}
     </div>
   );
 }
@@ -532,28 +648,28 @@ function PrimitiveRow({
   selected,
   disabled = false,
   running = false,
-  pending = false,
   title,
   subtitle,
   right,
   onClick,
   onContextMenu,
+  onDelete,
 }: {
   kind: PrimitiveKind;
   selected: boolean;
   disabled?: boolean;
   running?: boolean;
-  pending?: boolean;
   title: string;
   subtitle: string;
   right?: React.ReactNode;
   onClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onDelete: () => void;
 }) {
   return (
     <button
       className={cn(
-        'flex min-w-0 w-full items-center gap-3 py-2.5 pl-4 pr-3 text-left transition-colors border-l-2',
+        'group flex min-w-0 w-full items-center gap-3 py-2.5 pl-4 pr-3 text-left transition-colors border-l-2',
         selected
           ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
           : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
@@ -564,12 +680,10 @@ function PrimitiveRow({
     >
       <span className="relative shrink-0">
         <PrimitiveIcon kind={kind} size={18} />
-        {(running || pending) && (
+        {/* Only a running persona pulses (yellow). No pending/blue dot. */}
+        {running && (
           <span
-            className={cn(
-              'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full',
-              running ? `${tintSolid('yellow')} animate-pulse` : tintSolid('blue'),
-            )}
+            className={cn('absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full animate-pulse', tintSolid('yellow'))}
           />
         )}
       </span>
@@ -578,6 +692,30 @@ function PrimitiveRow({
         <div className="truncate text-xs text-[var(--theme-text-muted)]">{subtitle}</div>
       </div>
       {right}
+      {/* Delete affordance — hidden until the row is hovered, pinned far right;
+          opens a confirm dialog (delete is irreversible). Nested-interactive
+          span pattern (role="button") mirrors SessionItem's hover actions. */}
+      <span
+        role="button"
+        tabIndex={-1}
+        title="Delete"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+        className={cn(
+          'hidden shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors group-hover:flex',
+          tintClasses('red').hoverText,
+        )}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 6h18" />
+          <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+          <line x1="10" y1="11" x2="10" y2="17" />
+          <line x1="14" y1="11" x2="14" y2="17" />
+        </svg>
+      </span>
     </button>
   );
 }

@@ -23,8 +23,10 @@ const EXEC_TYPE_TO_KIND: Record<ExecutionLogEntry['type'], PrimitiveKind> = {
 
 function TypeBadge({ type }: { type: ExecutionLogEntry['type'] }) {
   return (
-    <div className="flex w-[80px] flex-shrink-0 items-center gap-1.5">
-      <PrimitiveIcon kind={EXEC_TYPE_TO_KIND[type]} size={14} />
+    <div className="flex w-[92px] flex-shrink-0 items-center gap-1.5">
+      {/* `shrink-0` is required: without it the flex row squeezes the SVG for the
+          widest label ("WORKFLOW"), which is why that glyph rendered tiny. */}
+      <PrimitiveIcon kind={EXEC_TYPE_TO_KIND[type]} size={14} className="shrink-0" />
       <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-text-secondary)]">{type}</span>
     </div>
   );
