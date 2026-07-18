@@ -39,3 +39,20 @@ if (isMac) {
     true,
   );
 }
+
+// ── Keep the macOS traffic lights centered as the user zooms ───────────────────
+// The native buttons don't scale with page zoom, but the web titlebar does — so
+// the main process needs to reposition them on every zoom change. Page zoom is
+// reflected in `devicePixelRatio`, and a `matchMedia('(resolution: …)')` listener
+// fires whenever it changes (zoom in/out, or moving to a different-DPI display).
+// We re-arm the one-shot listener after each change and just poke main, which
+// reads the authoritative zoom factor and recomputes the position.
+if (isMac) {
+  const notifyZoom = () => {
+    ipcRenderer.send('fleex:zoom-changed');
+    window
+      .matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+      .addEventListener('change', notifyZoom, { once: true });
+  };
+  notifyZoom();
+}
