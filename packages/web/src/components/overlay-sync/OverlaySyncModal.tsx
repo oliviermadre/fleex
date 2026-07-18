@@ -4,7 +4,6 @@ import type {
   OverlaySyncApplyResponse,
   OverlaySyncPreviewResponse,
   OverlaySyncRepoScan,
-  OverlaySyncRepoTarget,
 } from '@fleex/shared';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -18,7 +17,8 @@ import { collectFiles, defaultSelection, itemKey } from './overlaySyncModel';
 export interface OverlaySyncModalProps {
   open: boolean;
   onClose: () => void;
-  repos: OverlaySyncRepoTarget[];
+  /** Ticket workspace root (or a single repo checkout) the server walks for worktrees. */
+  rootPath: string;
 }
 
 interface PreviewSel {
@@ -28,7 +28,7 @@ interface PreviewSel {
   key: string;
 }
 
-export function OverlaySyncModal({ open, onClose, repos }: OverlaySyncModalProps) {
+export function OverlaySyncModal({ open, onClose, rootPath }: OverlaySyncModalProps) {
   const [groups, setGroups] = useState<OverlaySyncRepoScan[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -58,7 +58,7 @@ export function OverlaySyncModal({ open, onClose, repos }: OverlaySyncModalProps
     let cancelled = false;
     setScanning(true);
     setApplyResult(null);
-    overlaySyncScan(repos)
+    overlaySyncScan(rootPath)
       .then((res) => {
         if (cancelled) return;
         setGroups(res.groups);
@@ -73,7 +73,7 @@ export function OverlaySyncModal({ open, onClose, repos }: OverlaySyncModalProps
     return () => {
       cancelled = true;
     };
-  }, [open, repos]);
+  }, [open, rootPath]);
 
   const onToggle = useCallback((org: string, name: string, relPaths: string[], checked: boolean) => {
     setSelected((prev) => {

@@ -28,7 +28,6 @@ import type {
   WorkflowRun,
   StepRun,
   ModelsResponse,
-  OverlaySyncRepoTarget,
   OverlaySyncScanRequest,
   OverlaySyncScanResponse,
   OverlaySyncPreviewRequest,
@@ -990,11 +989,11 @@ export async function retryWorkflowStep(runId: string, stepRunId: string): Promi
 // ── Overlay sync ────────────────────────────────────────────────────────────
 
 export async function overlaySyncScan(
-  repos: OverlaySyncRepoTarget[],
+  rootPath: string,
 ): Promise<OverlaySyncScanResponse> {
   return request<OverlaySyncScanResponse>('/overlay-sync/scan', {
     method: 'POST',
-    body: JSON.stringify({ repos } satisfies OverlaySyncScanRequest),
+    body: JSON.stringify({ rootPath } satisfies OverlaySyncScanRequest),
   });
 }
 

@@ -1,6 +1,7 @@
 import { dirname, join } from 'node:path';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
+import type { GitPort } from '../ports/git.port.js';
 import type { HostFs, ExecFn } from '../../infrastructure/host/types.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type {
@@ -43,6 +44,7 @@ export class OverlayManager {
     private readonly execFn: ExecFn,
     private readonly config: ConfigPort,
     private readonly logger: LoggerPort,
+    private readonly git: GitPort,
   ) {}
 
   /**
@@ -198,22 +200,87 @@ export class OverlayManager {
   // ── Overlay sync (capture worktree ignored files → overlay) ───────────────
 
   /**
-   * Scan a repo's worktree for gitignored files and compare them to the
-   * per-repo overlay. Returns a checkbox-ready tree plus the overlay's current
-   * contents (with orphan flags) for the cleanup panel.
+   * Discover every git worktree under a ticket's workspace root and scan each
+   * for gitignored files. `rootPath` is the ticket's Current Working Directory:
+   * its subdirectories are the individual repo worktrees. When `rootPath` is
+   * itself a repo checkout (the standalone-worktree case) it is scanned directly.
+   *
+   * Discovery is filesystem-driven — we do not rely on live sessions — so a
+   * worktree that exists on disk but has no running session is still found.
+   * Each worktree's org/name is resolved from its own git remote so the scan
+   * targets the correct `overlays/<org>/<name>` directory.
    */
-  async scanForSync(org: string, name: string, worktreePath: string): Promise<OverlaySyncRepoScan> {
-    const overlayFilesDir = this.resolver.overlayFilesDir(org, name);
-    const base = { org, name, worktreePath, overlayFilesDir };
+  async scanWorkspace(rootPath: string): Promise<OverlaySyncRepoScan[]> {
+    const repoDirs = await this.discoverWorktrees(rootPath);
+    const scans: OverlaySyncRepoScan[] = [];
+    for (const repoPath of repoDirs) {
+      let org: string;
+      let name: string;
+      try {
+        ({ org, name } = await this.git.getInfo(repoPath));
+      } catch (err) {
+        // No resolvable origin remote → not an overlay-managed repo. Skip it
+        // rather than surfacing a bogus target.
+        this.logger.debug('Skipping worktree without a resolvable git remote', {
+          repoPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
+      // `_global` is a pseudo-repo with no overlay of its own; `unknown` means
+      // the remote URL could not be parsed. Neither is a real sync target.
+      if (!org || org.startsWith('_') || org === 'unknown') continue;
+      scans.push(await this.scanForSync(org, name, repoPath));
+    }
+    return scans;
+  }
 
-    if (!(await this.hostFs.exists(worktreePath))) {
+  /**
+   * List the git-worktree directories to scan for a given root.
+   * - If the root is itself a repo checkout (`<root>/.git` exists — a directory
+   *   for clones, a file for linked worktrees), it is the sole target.
+   * - Otherwise the root is treated as a ticket workspace: every immediate
+   *   subdirectory that carries a `.git` entry is a worktree target.
+   */
+  private async discoverWorktrees(rootPath: string): Promise<string[]> {
+    if (!rootPath) return [];
+    if (await this.hostFs.exists(join(rootPath, '.git'))) return [rootPath];
+
+    let entries: { name: string; isFile: boolean; isDirectory: boolean }[];
+    try {
+      entries = await this.hostFs.readdir(rootPath);
+    } catch {
+      return [];
+    }
+
+    const dirs: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory) continue;
+      const dir = join(rootPath, entry.name);
+      if (await this.hostFs.exists(join(dir, '.git'))) dirs.push(dir);
+    }
+    return dirs.sort();
+  }
+
+  /**
+   * Scan a single repo worktree for gitignored files and compare them to the
+   * per-repo overlay. Returns a checkbox-ready tree plus the overlay's current
+   * contents (with orphan flags) for the cleanup panel. `repoPath` is expected
+   * to be a real repo checkout (as produced by {@link discoverWorktrees}); the
+   * response echoes it so preview/apply target the same directory.
+   */
+  async scanForSync(org: string, name: string, repoPath: string): Promise<OverlaySyncRepoScan> {
+    const overlayFilesDir = this.resolver.overlayFilesDir(org, name);
+    const base = { org, name, worktreePath: repoPath, overlayFilesDir };
+
+    if (!(await this.hostFs.exists(repoPath))) {
       return { ...base, available: false, message: 'Worktree unavailable locally', tree: [], overlayContents: [] };
     }
 
     let porcelain: string;
     try {
       const { stdout } = await this.execFn('git', ['status', '--ignored', '--porcelain', '-z'], {
-        cwd: worktreePath,
+        cwd: repoPath,
       });
       porcelain = stdout;
     } catch (err) {
@@ -230,7 +297,7 @@ export class OverlayManager {
         collapsedDirs.push({ relPath: dir, denylisted: true });
         continue;
       }
-      const { files: expanded, truncated } = await this.expandDir(worktreePath, dir);
+      const { files: expanded, truncated } = await this.expandDir(repoPath, dir);
       if (truncated) collapsedDirs.push({ relPath: dir, truncated: true });
       flatFiles.push(...expanded);
     }
@@ -238,7 +305,7 @@ export class OverlayManager {
     const fileNodes: OverlaySyncFileNode[] = [];
     for (const rel of flatFiles) {
       if (!isSafeRelPath(rel)) continue;
-      fileNodes.push(await this.buildFileNode(worktreePath, overlayFilesDir, rel));
+      fileNodes.push(await this.buildFileNode(repoPath, overlayFilesDir, rel));
     }
 
     const tree = buildTree(fileNodes, collapsedDirs);

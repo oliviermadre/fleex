@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import type { OverlaySyncRepoTarget, Ticket, WorktreeSessionGroup } from '@fleex/shared';
-import { useSessionStore } from '../../stores/sessionStore';
+import type { Ticket, WorktreeSessionGroup } from '@fleex/shared';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { buildWorkspaceContext } from '../../lib/templateUtils';
 import { OverlaySyncModal } from './OverlaySyncModal';
 
 interface Props {
   ticket: Ticket | null;
-  /** Current worktree — fallback target when no ticket/workspace context. */
+  /** Current worktree — fallback target when there is no ticket/workspace context. */
   worktree: WorktreeSessionGroup | null;
   repoOrg: string;
   repoName: string;
@@ -26,36 +27,21 @@ function OverlayIcon() {
   );
 }
 
-export function OverlaySyncButton({ ticket, worktree, repoOrg, repoName }: Props) {
+export function OverlaySyncButton({ ticket, worktree, repoOrg }: Props) {
   const [open, setOpen] = useState(false);
-  const sessionGroups = useSessionStore((s) => s.sessionGroups);
+  const basePath = useSettingsStore((s) => s.settings.basePath);
 
-  // Enumerate every real repo of the workspace: when a ticket is present, take
-  // all worktrees bound to it across repos; otherwise fall back to the single
-  // current worktree.
-  const repos = useMemo<OverlaySyncRepoTarget[]>(() => {
-    if (ticket) {
-      const out: OverlaySyncRepoTarget[] = [];
-      const seen = new Set<string>();
-      for (const group of sessionGroups) {
-        if (!isRealRepo(group.repositoryOrg)) continue;
-        for (const wt of group.worktrees) {
-          if (wt.ticketId !== ticket.id) continue;
-          const key = `${group.repositoryOrg}/${group.repositoryName}:${wt.path}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          out.push({ org: group.repositoryOrg, name: group.repositoryName, worktreePath: wt.path });
-        }
-      }
-      if (out.length > 0) return out;
-    }
-    if (worktree && isRealRepo(repoOrg)) {
-      return [{ org: repoOrg, name: repoName, worktreePath: worktree.path }];
-    }
-    return [];
-  }, [ticket, sessionGroups, worktree, repoOrg, repoName]);
+  // The directory the server walks to discover worktrees. In a ticket context
+  // that is the ticket's workspace root (its Current Working Directory), whose
+  // subdirectories are the repo worktrees — deterministic and independent of any
+  // live session. Without a ticket we fall back to the current worktree checkout.
+  const rootPath = useMemo<string>(() => {
+    if (ticket) return buildWorkspaceContext(ticket, basePath).workspace_path;
+    if (worktree && isRealRepo(repoOrg)) return worktree.path;
+    return '';
+  }, [ticket, basePath, worktree, repoOrg]);
 
-  if (repos.length === 0) return null;
+  if (!rootPath) return null;
 
   return (
     <>
@@ -68,7 +54,7 @@ export function OverlaySyncButton({ ticket, worktree, repoOrg, repoName }: Props
         <OverlayIcon />
         Sync overlay
       </button>
-      <OverlaySyncModal open={open} onClose={() => setOpen(false)} repos={repos} />
+      <OverlaySyncModal open={open} onClose={() => setOpen(false)} rootPath={rootPath} />
     </>
   );
 }

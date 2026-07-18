@@ -2,7 +2,8 @@
  * Types for the "Sync overlay" feature: capturing gitignored files from a
  * worktree and pushing them into the per-repo overlay (`overlays/<org>/<name>/files`).
  *
- * Flow: the web asks the server to scan every repo of a workspace
+ * Flow: the web hands the server a ticket's workspace root; the server walks its
+ * subdirectories, keeps the ones that are git worktrees, scans each
  * (`git status --ignored`), compares each ignored file to what already lives in
  * the overlay, then copies the user-selected subset. Semantics are additive:
  * unchecked files are never removed — cleanup is a separate, explicit gesture
@@ -72,7 +73,15 @@ export interface OverlaySyncRepoScan {
 }
 
 export interface OverlaySyncScanRequest {
-  readonly repos: OverlaySyncRepoTarget[];
+  /**
+   * Directory to discover git worktrees in. This is a ticket's Current Working
+   * Directory — its workspace root (`workspaces/<id>`) — whose subdirectories are
+   * the ticket's repo worktrees. It may also be a single repo checkout (the
+   * standalone-worktree case). The server walks it, resolves each worktree's
+   * org/name from its git remote, and scans each for gitignored files. Discovery
+   * is filesystem-driven, so worktrees without a live session are still found.
+   */
+  readonly rootPath: string;
 }
 
 export interface OverlaySyncScanResponse {

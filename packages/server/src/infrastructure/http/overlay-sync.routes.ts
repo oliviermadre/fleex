@@ -25,26 +25,15 @@ export function overlaySyncRoutes(container: Container) {
       }
     };
 
-    // Scan every requested repo of a workspace.
+    // Discover every git worktree under a ticket's workspace root and scan each.
     app.post<{ Body: OverlaySyncScanRequest }>('/api/overlay-sync/scan', async (request) => {
-      const repos = request.body?.repos ?? [];
-      const groups = await Promise.all(
-        repos.map(async (repo) => {
-          if (!repo.worktreePath || !resolver.isManagedPath(repo.worktreePath)) {
-            return {
-              org: repo.org,
-              name: repo.name,
-              worktreePath: repo.worktreePath,
-              overlayFilesDir: '',
-              available: false,
-              message: 'Worktree path is outside the managed workspace root',
-              tree: [],
-              overlayContents: [],
-            };
-          }
-          return overlayManager.scanForSync(repo.org, repo.name, repo.worktreePath);
-        }),
-      );
+      const rootPath = request.body?.rootPath ?? '';
+      // Trust boundary: only walk paths inside the managed base. An out-of-base
+      // or empty path yields nothing to sync rather than a hard error.
+      if (!rootPath || !resolver.isManagedPath(rootPath)) {
+        return { groups: [] } satisfies OverlaySyncScanResponse;
+      }
+      const groups = await overlayManager.scanWorkspace(rootPath);
       return { groups } satisfies OverlaySyncScanResponse;
     });
 

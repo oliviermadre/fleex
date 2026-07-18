@@ -192,11 +192,18 @@ export class FakeLoggerPort implements LoggerPort {
 
 export class FakeHostFs implements HostFs {
   private existingPaths = new Set<string>();
+  private dirEntries = new Map<string, { name: string; isFile: boolean; isDirectory: boolean }[]>();
   writtenFiles = new Map<string, string>();
   createdDirs = new Set<string>();
 
   addExistingPath(path: string): void {
     this.existingPaths.add(path);
+  }
+
+  /** Register the entries returned by readdir(path); marks the path as existing. */
+  addDirEntries(path: string, entries: { name: string; isFile: boolean; isDirectory: boolean }[]): void {
+    this.existingPaths.add(path);
+    this.dirEntries.set(path, entries);
   }
 
   async exists(path: string): Promise<boolean> {
@@ -218,7 +225,11 @@ export class FakeHostFs implements HostFs {
     this.writtenFiles.set(path, content);
   }
 
-  async readdir(): Promise<{ name: string; isFile: boolean; isDirectory: boolean }[]> {
+  async readdir(path: string): Promise<{ name: string; isFile: boolean; isDirectory: boolean }[]> {
+    const entries = this.dirEntries.get(path);
+    if (entries) return entries;
+    // Mirror node:fs — reading a directory that does not exist throws ENOENT.
+    if (!this.existingPaths.has(path)) throw new Error(`ENOENT: no such directory: ${path}`);
     return [];
   }
 
