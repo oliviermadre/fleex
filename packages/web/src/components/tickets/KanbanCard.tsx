@@ -16,6 +16,8 @@ import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { executeSkill } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses } from '../../lib/tints';
+import { isMissingRepo, isRepoOptional } from '../../lib/repoStatus';
+import { MissingRepoIcon, RepositoriesIcon } from '../sidebar/icons';
 
 const PRIORITY_BORDER: Record<string, string> = {
   none: 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
@@ -98,6 +100,21 @@ export function KanbanCard({
 
   const timeInColumn = formatTimeAgo(ticket.statusChangedAt);
   const isCompleted = ticket.status === TICKET_STATUS.DONE || ticket.status === TICKET_STATUS.CANCELLED;
+  // "Forgotten repo" warning: a ticket that should carry a repository link but
+  // doesn't (and isn't flagged intentionally code-less). We stay silent on
+  // completed tickets — a missing repo no longer matters once work is closed.
+  const missingRepo = !isCompleted && isMissingRepo(ticket);
+
+  // Linked repositories, surfaced as a footer counter next to comments/deliverables.
+  // 0 → barred icon (no number); ≥1 → repo icon + count. Hover lists the repos.
+  const repoLinks = ticket.links.filter((l: TicketLink) => l.type === 'repository');
+  const repoCount = repoLinks.length;
+  const repoTooltip =
+    repoCount > 0
+      ? `${repoCount === 1 ? '1 repository lié' : `${repoCount} repositories liés`} :\n${repoLinks.map((l) => l.ref).join('\n')}`
+      : isRepoOptional(ticket)
+        ? 'Sans code (volontaire)'
+        : 'Aucun repository lié';
 
   // Async Slack-import lifecycle (carried as reserved tags so it survives reload).
   const isSlackImportPending = ticket.tags.includes(SLACK_IMPORT_PENDING_TAG);
@@ -374,6 +391,17 @@ export function KanbanCard({
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="1.5" width="10" height="13" rx="1.5" /><path d="M5.5 5h5M5.5 8h5M5.5 11h3" /></svg>
             {unread.totalDeliverables}
           </button>
+          {/* Linked repositories — mirrors the comment/deliverable counters.
+              0 → barred icon, no number (orange when the repo was forgotten,
+              muted when intentionally code-less or the ticket is closed);
+              ≥1 → repo icon + count. Hover lists the repos. */}
+          <span
+            className={cn('inline-flex items-center gap-0.5', repoCount === 0 && missingRepo ? tintText('orange') : 'text-[var(--theme-text-muted)]')}
+            title={repoTooltip}
+          >
+            {repoCount > 0 ? <RepositoriesIcon size={12} /> : <MissingRepoIcon size={12} />}
+            {repoCount > 0 && repoCount}
+          </span>
         </span>
 
         {/* Center: Display ID */}

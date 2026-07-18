@@ -8,6 +8,10 @@ import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useToastStore } from '../../stores/toastStore';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { useTicketStore } from '../../stores/ticketStore';
+import { isMissingRepo } from '../../lib/repoStatus';
+import { Modal } from '../ui/Modal';
+import { Button } from '../ui/Button';
 import * as api from '../../services/api';
 
 function relativeTime(dateStr: string): string {
@@ -155,6 +159,11 @@ function MentionModeToggle({
 export function TicketMentions({ ticketId }: { ticketId: string }) {
   const [mentions, setMentions] = useState<TicketMention[]>([]);
   const [filter, setFilter] = useState<FilterStatus>('all');
+  // The parent ticket drives the missing-repo guard: executing a mention spins
+  // up a run that needs a worktree, which a repo-less ticket can't provide.
+  const ticket = useTicketStore((s) => s.tickets.find((t) => t.id === ticketId));
+  // Mention held by the guard until the user confirms running with no codebase.
+  const [repoGuardMention, setRepoGuardMention] = useState<TicketMention | null>(null);
   const humanMentionName = useSettingsStore(
     (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
   );
@@ -258,7 +267,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     setModalExecutionId(exec.id);
   }, [executionByMention]);
 
-  const handleExecute = useCallback(async (mention: TicketMention) => {
+  const runMentionNow = useCallback(async (mention: TicketMention) => {
     const agentName = mention.targetAgent;
     setExecuting((prev) => new Set(prev).add(agentName));
     // Clear any stale failure chip for this mention — a fresh ▶ is a fresh
@@ -285,6 +294,22 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
       });
     }
   }, []);
+
+  const handleExecute = useCallback(async (mention: TicketMention) => {
+    // Missing-repo guard-rail: running a mention builds a worktree to work in.
+    // With no repository linked, the run has no codebase — hold and confirm.
+    if (ticket && isMissingRepo(ticket)) {
+      setRepoGuardMention(mention);
+      return;
+    }
+    await runMentionNow(mention);
+  }, [ticket, runMentionNow]);
+
+  const confirmRepoGuardAndRun = useCallback(async () => {
+    const mention = repoGuardMention;
+    setRepoGuardMention(null);
+    if (mention) await runMentionNow(mention);
+  }, [repoGuardMention, runMentionNow]);
 
   const handleStatusChange = async (mentionId: string, newStatus: MentionStatus) => {
     try {
@@ -510,6 +535,29 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
           title={modalTitle}
           onClose={() => setModalExecutionId(null)}
         />
+      )}
+
+      {/* Missing-repo guard: about to run a mention on a repo-less ticket */}
+      {repoGuardMention && (
+        <Modal open onClose={() => setRepoGuardMention(null)} maxWidth="max-w-md">
+          <h3 className="text-sm font-semibold text-[var(--theme-text-primary)]">
+            Aucun repository lié à ce ticket
+          </h3>
+          <p className="mt-2 text-xs leading-relaxed text-[var(--theme-text-secondary)]">
+            Exécuter <strong>{repoGuardMention.targetAgent}</strong> démarrera une run{' '}
+            <strong>sans codebase</strong> (pas de worktree) — elle ne pourra pas modifier de
+            code. Lie un repo (via la bannière en haut du ticket) ou exécute quand même si
+            c'est volontaire.
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button variant="secondary" onClick={() => void confirmRepoGuardAndRun()}>
+              Exécuter quand même
+            </Button>
+            <Button variant="ghost" onClick={() => setRepoGuardMention(null)}>
+              Annuler
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   );
