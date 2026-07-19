@@ -125,6 +125,12 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
         </div>
       ) : (
         <>
+          {filter === 'all' && visibleActive.length > 0 && (
+            <div className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-overlay)] px-5 py-1.5">
+              <span className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Active</span>
+              <span className="text-[10.5px] text-[var(--theme-text-faint)]">{rows.active.length}</span>
+            </div>
+          )}
           {visibleActive.map((row) => {
             const ticket = row.ticket;
             if (!ticket) return null;
