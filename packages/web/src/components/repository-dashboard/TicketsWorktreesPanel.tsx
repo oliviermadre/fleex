@@ -80,7 +80,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
   const isEmpty = rows.active.length === 0 && rows.orphaned.length === 0;
 
   return (
-    <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
+    <div id="tickets-worktrees-panel" className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
       <div className="px-5 py-3 text-sm font-semibold border-b border-[var(--theme-border)]">Tickets & worktrees</div>
 
       {isEmpty ? (

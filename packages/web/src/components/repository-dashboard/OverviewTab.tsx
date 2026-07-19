@@ -129,7 +129,7 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
             {data.openPullRequests.length} <span className="text-sm font-normal text-[var(--theme-text-secondary)]">open PRs</span>
           </div>
           <div className="text-[11px] text-[var(--theme-text-muted)]">
-            {data.openIssues.length} issues · {data.recentlyMergedPullRequests.length} merged (30 d)
+            {data.openIssues.length} issues · {data.recentlyMergedPullRequests.length} merged (7 d)
           </div>
         </div>
 
@@ -145,7 +145,7 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
               <button
                 type="button"
                 className={cn('hover:underline', tintText('red'))}
-                onClick={() => document.getElementById('orphaned-worktrees')?.scrollIntoView({ behavior: 'smooth' })}
+                onClick={() => (document.getElementById('orphaned-worktrees') ?? document.getElementById('tickets-worktrees-panel'))?.scrollIntoView({ behavior: 'smooth' })}
               >
                 Clean up now →
               </button>

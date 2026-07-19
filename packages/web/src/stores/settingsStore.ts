@@ -322,14 +322,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   addRepositories: async (repos) => {
-    const current = get().settings.repositories;
-    const merged = [...new Set([...current.map((r) => r.toLowerCase()), ...repos.map((r) => r.toLowerCase())])].sort();
-    await get().saveSettings({ repositories: merged });
+    const current = get().settings;
+    const merged = [...new Set([...current.repositories.map((r) => r.toLowerCase()), ...repos.map((r) => r.toLowerCase())])].sort();
+    await api.updateConfig({ repositories: merged });
+    const updated = { ...current, repositories: merged };
+    set({ settings: updated });
+    saveToStorage(updated);
   },
 
   removeRepository: async (repo) => {
     const target = repo.toLowerCase();
-    const filtered = get().settings.repositories.filter((r) => r.toLowerCase() !== target);
-    await get().saveSettings({ repositories: filtered });
+    const current = get().settings;
+    const filtered = current.repositories.filter((r) => r.toLowerCase() !== target);
+    await api.updateConfig({ repositories: filtered });
+    const updated = { ...current, repositories: filtered };
+    set({ settings: updated });
+    saveToStorage(updated);
   },
 }));

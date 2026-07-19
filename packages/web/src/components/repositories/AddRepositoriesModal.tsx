@@ -3,6 +3,7 @@ import type { RepoDiscovery } from '@fleex/shared';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import * as api from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tintClasses, tintText } from '../../lib/tints';
@@ -141,6 +142,7 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
     setSubmitting(true);
     try {
       await addRepositories([...selection]);
+      useRepositoryDashboardStore.getState().fetchSummaries();
       setSelection(new Set());
       onClose();
     } finally {

@@ -168,6 +168,7 @@ export function RepositoriesContent() {
           setRemoving(true);
           try {
             await removeRepository(pendingRemove);
+            useRepositoryDashboardStore.getState().fetchSummaries();
           } finally {
             setRemoving(false);
             setPendingRemove(null);
