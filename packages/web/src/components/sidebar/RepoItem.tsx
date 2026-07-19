@@ -9,11 +9,10 @@ import { tintText, tintClasses } from '../../lib/tints';
 
 interface Props {
   summary: RepositorySummary;
-  wtCount: number;
   onRemove: (key: string) => void;
 }
 
-export function RepoItem({ summary, wtCount, onRemove }: Props) {
+export function RepoItem({ summary, onRemove }: Props) {
   const navigate = useNavigate();
   const selectedRepoKey = useUIStore((s) => s.selectedRepoKey);
   const openScratchpadForRepo = useUIStore((s) => s.openScratchpadForRepo);
@@ -54,11 +53,6 @@ export function RepoItem({ summary, wtCount, onRemove }: Props) {
         <span className="truncate font-mono text-[11px] text-[var(--theme-text-muted)]">{key}</span>
       </div>
       <div className="ml-auto flex flex-shrink-0 items-center gap-1 pl-2">
-          {wtCount > 0 && (
-            <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--theme-text-muted)]">
-              {wtCount} wt
-            </span>
-          )}
           {summary.isClonedLocally === false && (
             <span className={cn('flex-shrink-0', tintText('yellow'))} title="Not cloned locally">
               <CloudDownloadIcon />

@@ -7,11 +7,10 @@ import { cn } from '../../lib/cn';
 interface Props {
   org: string;
   repos: RepositorySummary[];
-  wtCounts: Record<string, number>;
   onRemove: (key: string) => void;
 }
 
-export function OrgGroup({ org, repos, wtCounts, onRemove }: Props) {
+export function OrgGroup({ org, repos, onRemove }: Props) {
   const groupId = `org:${org}`;
   const collapsedGroups = useUIStore((s) => s.collapsedGroups);
   const toggleGroup = useUIStore((s) => s.toggleGroup);
@@ -59,7 +58,6 @@ export function OrgGroup({ org, repos, wtCounts, onRemove }: Props) {
         <RepoItem
           key={`${repo.org}/${repo.name}`}
           summary={repo}
-          wtCount={wtCounts[`${repo.org}/${repo.name}`] ?? 0}
           onRemove={onRemove}
         />
       ))}

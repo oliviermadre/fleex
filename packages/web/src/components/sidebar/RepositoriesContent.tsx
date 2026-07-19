@@ -25,14 +25,6 @@ export function RepositoriesContent() {
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
 
-  const wtCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const g of sessionGroups) {
-      counts[`${g.repositoryOrg}/${g.repositoryName}`] = g.worktrees.length;
-    }
-    return counts;
-  }, [sessionGroups]);
-
   const activeKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const g of sessionGroups) {
@@ -144,14 +136,13 @@ export function RepositoriesContent() {
                   <RepoItem
                     key={`active-${repo.org}/${repo.name}`}
                     summary={repo}
-                    wtCount={wtCounts[`${repo.org}/${repo.name}`] ?? 0}
                     onRemove={handleRemove}
                   />
                 ))}
               </>
             )}
             {orgGroups.map(([org, repos]) => (
-              <OrgGroup key={org} org={org} repos={repos} wtCounts={wtCounts} onRemove={handleRemove} />
+              <OrgGroup key={org} org={org} repos={repos} onRemove={handleRemove} />
             ))}
           </>
         )}
