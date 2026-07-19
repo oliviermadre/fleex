@@ -129,7 +129,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                     title="Delete worktree"
                     onClick={() => setPendingDelete(row)}
                   >
-                    <TrashIcon size={12} />
+                    <TrashIcon />
                   </button>
                 </div>
               </div>

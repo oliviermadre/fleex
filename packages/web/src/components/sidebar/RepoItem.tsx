@@ -91,7 +91,7 @@ export function RepoItem({ summary, wtCount, onRemove }: Props) {
             title="Stop tracking this repo"
             onClick={handleRemoveClick}
           >
-            <TrashIcon size={12} />
+            <TrashIcon />
           </span>
         </div>
       </div>
