@@ -81,12 +81,12 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
     : null;
 
   const previewPulls = useMemo(
-    () => [...pulls].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3),
+    () => [...pulls].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5),
     [pulls],
   );
   const allIssues = useMemo(() => [...data.openIssues, ...data.recentlyClosedIssues], [data]);
   const previewIssues = useMemo(
-    () => [...allIssues].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3),
+    () => [...allIssues].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5),
     [allIssues],
   );
 
@@ -167,7 +167,7 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
               onClick={() => onNavigate('pulls')}
               className="text-xs text-[var(--theme-accent)] hover:underline"
             >
-              {pulls.length} →
+              {data.openPullRequests.length} →
             </button>
           </div>
           {previewPulls.length === 0 ? (
@@ -199,7 +199,7 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
               onClick={() => onNavigate('issues')}
               className="text-xs text-[var(--theme-accent)] hover:underline"
             >
-              {allIssues.length} →
+              {data.openIssues.length} →
             </button>
           </div>
           {previewIssues.length === 0 ? (
