@@ -106,7 +106,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
         <>
           {showBands && visibleActive.length > 0 && (
             <div className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-overlay)] px-5 py-1.5">
-              <span className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Active</span>
+              <span className={cn('text-[10.5px] font-bold uppercase tracking-wider', tintText('green'))}>Active</span>
               <span className="text-[10.5px] text-[var(--theme-text-faint)]">{rows.active.length}</span>
             </div>
           )}
@@ -118,7 +118,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
             const behind = row.diff?.commitsBehind ?? 0;
 
             return (
-              <div key={row.worktree.path} className="group flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0">
+              <div key={row.worktree.path} className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0">
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
@@ -146,26 +146,15 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
                   </div>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
-                  <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', getStatusBadgeClass(ticket.status))}>
-                    {ticket.status}
-                  </span>
                   {cost !== undefined && (
                     <span className={cn('rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tintClasses('pink').bg, tintClasses('pink').text)}>
                       ${cost.toFixed(2)}
                     </span>
                   )}
+                  <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', getStatusBadgeClass(ticket.status))}>
+                    {ticket.status}
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  className={cn(
-                    'hidden flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors group-hover:flex',
-                    tintClasses('red').hoverText,
-                  )}
-                  title="Delete worktree"
-                  onClick={() => setPendingDelete(row)}
-                >
-                  <TrashIcon />
-                </button>
               </div>
             );
           })}
@@ -174,12 +163,13 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
             <div id="orphaned-worktrees">
               {showBands && (
                 <div className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-overlay)] px-5 py-1.5">
-                  <span className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Stale</span>
+                  <span className={cn('text-[10.5px] font-bold uppercase tracking-wider', tintText('red'))}>Stale</span>
                   <span className="text-[10.5px] text-[var(--theme-text-faint)]">{rows.orphaned.length}</span>
                 </div>
               )}
               {visibleStale.map((row) => {
                 const ticket = row.ticket;
+                const cost = ticket ? costByTicket[ticket.id] : undefined;
                 const behind = row.diff?.commitsBehind ?? 0;
                 return (
                   <div key={row.worktree.path} className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0">
@@ -211,6 +201,11 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
                     </div>
                     {ticket && (
                       <div className="flex flex-shrink-0 items-center gap-2">
+                        {cost !== undefined && (
+                          <span className={cn('rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tintClasses('pink').bg, tintClasses('pink').text)}>
+                            ${cost.toFixed(2)}
+                          </span>
+                        )}
                         <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', getStatusBadgeClass(ticket.status))}>
                           {ticket.status}
                         </span>
