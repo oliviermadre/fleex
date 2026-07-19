@@ -3,12 +3,13 @@ import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardSto
 import { DashboardHeader } from './DashboardHeader';
 import { IssuesSection } from './IssuesSection';
 import { OverviewTab } from './OverviewTab';
+import { WorktreesTab } from './WorktreesTab';
 import { PullRequestsSection } from './PullRequestsSection';
 import { RepoConfigPanel } from './RepoConfigPanel';
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
 
-type Tab = 'overview' | 'pulls' | 'issues' | 'config';
+type Tab = 'overview' | 'worktrees' | 'pulls' | 'issues' | 'config';
 
 interface Props {
   repoKey: string;
@@ -46,6 +47,7 @@ export function RepositoryDashboard({ repoKey }: Props) {
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'overview', label: 'Overview' },
+    { key: 'worktrees', label: 'Worktrees', count: worktreeCount },
     { key: 'pulls', label: 'Pull Requests', count: openPRs.length },
     { key: 'issues', label: 'Issues', count: issues.length },
     { key: 'config', label: 'Config' },
@@ -115,6 +117,9 @@ export function RepositoryDashboard({ repoKey }: Props) {
               <div className="h-40 animate-pulse rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]" />
             </div>
           )
+        )}
+        {activeTab === 'worktrees' && data && (
+          <WorktreesTab org={org} name={name} data={data} />
         )}
         {activeTab === 'pulls' && (
           <PullRequestsSection

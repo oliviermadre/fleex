@@ -17,6 +17,10 @@ interface Props {
   name: string;
   rows: { active: WorktreeRow[]; orphaned: WorktreeRow[] };
   onDeleted: () => void;
+  /** When set, cap each group to this many rows and show a "N →" link instead of the filter toggle (Overview preview mode). */
+  limit?: number;
+  /** Called when the "N →" link is clicked (navigate to the full Worktrees tab). */
+  onSeeAll?: () => void;
 }
 
 type WorktreeFilter = 'all' | 'active' | 'stale';
@@ -58,7 +62,7 @@ function PrBadge({ repoName, pr }: { repoName: string; pr: PullRequest }) {
   );
 }
 
-export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
+export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSeeAll }: Props) {
   const navigate = useNavigate();
   const costByTicket = useTicketActivityStore((s) => s.costByTicket);
   const [pendingDelete, setPendingDelete] = useState<WorktreeRow | null>(null);
@@ -77,10 +81,15 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
     }
   }, [pendingDelete, org, name, onDeleted]);
 
+  const limited = limit !== undefined;
+  const effectiveFilter: WorktreeFilter = limited ? 'all' : filter;
   const total = rows.active.length + rows.orphaned.length;
-  const visibleActive = filter === 'stale' ? [] : rows.active;
-  const visibleStale = filter === 'active' ? [] : rows.orphaned;
+  const activeGroup = effectiveFilter === 'stale' ? [] : rows.active;
+  const staleGroup = effectiveFilter === 'active' ? [] : rows.orphaned;
+  const visibleActive = limited ? activeGroup.slice(0, limit) : activeGroup;
+  const visibleStale = limited ? staleGroup.slice(0, limit) : staleGroup;
   const nothingVisible = visibleActive.length === 0 && visibleStale.length === 0;
+  const showBands = effectiveFilter === 'all';
 
   const SEGMENTS: { key: WorktreeFilter; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: total },
@@ -91,8 +100,12 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
   return (
     <div id="tickets-worktrees-panel" className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
       <div className="flex items-center justify-between gap-3 border-b border-[var(--theme-border)] px-5 py-3">
-        <span className="text-sm font-semibold">Tickets & worktrees</span>
-        {total > 0 && (
+        <span className="text-sm font-semibold">Worktrees</span>
+        {total > 0 && (limited ? (
+          <button type="button" onClick={onSeeAll} className="text-xs text-[var(--theme-accent)] hover:underline">
+            {total} →
+          </button>
+        ) : (
           <div className="flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-0.5">
             {SEGMENTS.map((s) => (
               <button
@@ -109,16 +122,16 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
               </button>
             ))}
           </div>
-        )}
+        ))}
       </div>
 
       {nothingVisible ? (
         <div className="py-10 text-center text-sm text-[var(--theme-text-muted)]">
-          {filter === 'stale' ? 'No stale worktrees' : 'No active worktrees'}
+          {effectiveFilter === 'stale' ? 'No stale worktrees' : 'No active worktrees'}
         </div>
       ) : (
         <>
-          {filter === 'all' && visibleActive.length > 0 && (
+          {showBands && visibleActive.length > 0 && (
             <div className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-overlay)] px-5 py-1.5">
               <span className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Active</span>
               <span className="text-[10.5px] text-[var(--theme-text-faint)]">{rows.active.length}</span>
@@ -186,7 +199,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
 
           {visibleStale.length > 0 && (
             <div id="orphaned-worktrees">
-              {filter === 'all' && (
+              {showBands && (
                 <div className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-overlay)] px-5 py-1.5">
                   <span className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Stale</span>
                   <span className="text-[10.5px] text-[var(--theme-text-faint)]">{rows.orphaned.length}</span>

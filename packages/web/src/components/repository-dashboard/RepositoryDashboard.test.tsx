@@ -21,12 +21,20 @@ describe('RepositoryDashboard tabs', () => {
   });
   afterEach(cleanup);
 
-  it('renders the four tabs with Overview as default', () => {
+  it('renders the tabs with Overview as default', () => {
     render(<MemoryRouter><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
     for (const label of ['Overview', 'Pull Requests', 'Issues', 'Config']) {
       expect(screen.getByText(label)).toBeTruthy();
     }
-    expect(screen.getByText('Tickets & worktrees')).toBeTruthy(); // Overview content visible by default
+    expect(screen.getAllByText('Worktrees').length).toBeGreaterThan(0); // Worktrees tab + Overview panel/card
+    expect(screen.getByText('Recent issues')).toBeTruthy(); // Overview content visible by default
+  });
+
+  it('switches to the Worktrees tab', () => {
+    render(<MemoryRouter><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
+    const tab = screen.getAllByText('Worktrees').find((el) => el.closest('button'));
+    fireEvent.click(tab!);
+    expect(screen.getByText('No active worktrees')).toBeTruthy(); // full panel empty state
   });
 
   it('switches tabs', () => {

@@ -8,14 +8,14 @@ import { cn } from '../../lib/cn';
 import { tint, tintText, tintSolid, tintClasses, type TintHue } from '../../lib/tints';
 import { Sparkline } from './Sparkline';
 import { TicketsWorktreesPanel } from './TicketsWorktreesPanel';
-import { buildWorktreeRows } from './overview-helpers';
+import { useWorktreeRows } from './useWorktreeRows';
 
 interface Props {
   org: string;
   name: string;
   data: RepositoryDashboardData;
   stats: RepositoryStats | null;
-  onNavigate: (tab: 'pulls' | 'issues') => void;
+  onNavigate: (tab: 'pulls' | 'issues' | 'worktrees') => void;
 }
 
 const CARD_SHELL = 'rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-5';
@@ -60,10 +60,7 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
     [tickets, key],
   );
   const pulls = useMemo(() => [...data.openPullRequests, ...data.recentlyMergedPullRequests], [data]);
-  const rows = useMemo(
-    () => buildWorktreeRows(data.worktrees, data.worktreeTickets, data.diffStats, sessionGroup, tickets, pulls),
-    [data, sessionGroup, tickets, pulls],
-  );
+  const rows = useWorktreeRows(org, name, data);
 
   const staleCount = useMemo(
     () => [...rows.active, ...rows.orphaned].filter((r) => isRemovableVerdict(r.verdict)).length,
@@ -156,7 +153,7 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
         </div>
       </div>
 
-      <TicketsWorktreesPanel org={org} name={name} rows={rows} onDeleted={() => fetchDashboard(org, name)} />
+      <TicketsWorktreesPanel org={org} name={name} rows={rows} onDeleted={() => fetchDashboard(org, name)} limit={5} onSeeAll={() => onNavigate('worktrees')} />
 
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
