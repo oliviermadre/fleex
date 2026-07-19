@@ -13,13 +13,15 @@ interface Props {
   org: string;
   name: string;
   pr: { number: number; state: 'open' | 'merged' | 'closed'; isDraft?: boolean; title?: string };
+  /** Explicit link target; defaults to the reconstructed github.com/<org>/<name>/pull/<number>. */
+  href?: string;
   className?: string;
 }
 
-export function PrBadge({ org, name, pr, className }: Props) {
+export function PrBadge({ org, name, pr, href, className }: Props) {
   return (
     <a
-      href={`https://github.com/${org}/${name}/pull/${pr.number}`}
+      href={href ?? `https://github.com/${org}/${name}/pull/${pr.number}`}
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}

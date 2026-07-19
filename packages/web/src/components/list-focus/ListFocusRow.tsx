@@ -11,7 +11,9 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { executeSkill } from '../../services/api';
 import type { InspectorFocus } from '../../stores/listFocusStore';
 import { cn } from '../../lib/cn';
-import { tint, tintClasses } from '../../lib/tints';
+import { tintClasses } from '../../lib/tints';
+import { PrBadge } from '../ui/PrBadge';
+import { parseGithubPrRef } from '../../lib/prRef';
 
 /**
  * Shared column widths so the header labels line up with each row. Kept in one
@@ -42,17 +44,6 @@ export const LIST_FOCUS_COL = {
   // Matches SmartSessionButton's fixed BUTTON_WIDTH (w-[108px]).
   session: 'w-[108px] shrink-0',
 } as const;
-
-/**
- * Badge text for a PR link. Derived from the canonical `ref` ("org/repo#123"),
- * NOT the label: labels are sometimes just "PR #209" (detect-merge) and the
- * repo must always be visible (pass 3, remark 4), while the org prefix ate the
- * narrow column (pass 2, remark 5) → show "repo#123".
- */
-function prDisplay(pr: TicketLink): string {
-  const slash = pr.ref.indexOf('/');
-  return slash === -1 ? pr.label : pr.ref.slice(slash + 1);
-}
 
 function CountBadge({
   icon,
@@ -248,26 +239,17 @@ export function ListFocusRow({
       {/* PR (v1 = PR state only) — centered in its cell (pass 8). */}
       <div className={cn(LIST_FOCUS_COL.pr, 'flex items-center justify-center gap-1')}>
         {prLinks.map((pr: TicketLink) => {
-          const state = prStates[pr.ref];
-          const hue = state === 'MERGED' ? 'purple' : state === 'CLOSED' ? 'red' : 'green';
+          const parsed = parseGithubPrRef(pr.ref);
+          if (!parsed) return null;
+          const state = (prStates[pr.ref]?.toLowerCase() ?? 'open') as 'open' | 'merged' | 'closed';
           return (
-            <a
+            <PrBadge
               key={pr.id}
+              org={parsed.org}
+              name={parsed.name}
+              pr={{ number: parsed.number, state, title: pr.ref }}
               href={pr.url ?? undefined}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title={state ? `${pr.ref} — ${state.toLowerCase()}` : pr.ref}
-              className={cn(
-                'inline-flex items-center gap-0.5 truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors',
-                tint(hue),
-              )}
-            >
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
-                <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
-              </svg>
-              <span className="truncate">{prDisplay(pr)}</span>
-            </a>
+            />
           );
         })}
       </div>
