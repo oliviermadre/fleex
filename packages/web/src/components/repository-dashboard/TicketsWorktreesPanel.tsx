@@ -114,15 +114,6 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                     >
                       {ticket.title}
                     </span>
-                    <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]', tint(STATUS_HUE[ticket.status]))}>
-                      {ticket.status}
-                    </span>
-                    {cost !== undefined && (
-                      <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tintClasses('pink').bg, tintClasses('pink').text)}>
-                        ${cost.toFixed(2)}
-                      </span>
-                    )}
-                    {row.pr && <PrBadge repoName={name} pr={row.pr} />}
                   </div>
                   <div className="mt-1 flex items-center gap-2">
                     <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">└ {row.worktree.branch}</span>
@@ -132,6 +123,17 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                       {VERDICT_META[row.verdict].label}
                     </span>
                   </div>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', tint(STATUS_HUE[ticket.status]))}>
+                    {ticket.status}
+                  </span>
+                  {cost !== undefined && (
+                    <span className={cn('rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tintClasses('pink').bg, tintClasses('pink').text)}>
+                      ${cost.toFixed(2)}
+                    </span>
+                  )}
+                  {row.pr && <PrBadge repoName={name} pr={row.pr} />}
                 </div>
                 <button
                   type="button"
@@ -173,10 +175,6 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                           >
                             {ticket.title}
                           </span>
-                          <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]', tint(STATUS_HUE[ticket.status]))}>
-                            {ticket.status}
-                          </span>
-                          {row.pr && <PrBadge repoName={name} pr={row.pr} />}
                         </div>
                       )}
                       <div className={cn('flex items-center gap-2', ticket && 'mt-1')}>
@@ -184,9 +182,18 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                           {ticket ? '└ ' : ''}{row.worktree.branch}
                         </span>
                         {behind > 0 && <span className={cn('font-mono text-[11px]', tintText('red'))}>↓{behind}</span>}
-                        {!ticket && row.pr && <PrBadge repoName={name} pr={row.pr} />}
                       </div>
                     </div>
+                    {(ticket || row.pr) && (
+                      <div className="flex flex-shrink-0 items-center gap-2">
+                        {ticket && (
+                          <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', tint(STATUS_HUE[ticket.status]))}>
+                            {ticket.status}
+                          </span>
+                        )}
+                        {row.pr && <PrBadge repoName={name} pr={row.pr} />}
+                      </div>
+                    )}
                     <button
                       type="button"
                       className={cn(
