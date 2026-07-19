@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { DashboardHeader } from './DashboardHeader';
-import { IssuesBanner } from './IssuesBanner';
+import { IssuesSection } from './IssuesSection';
 import { PullRequestsSection } from './PullRequestsSection';
 import { RepoConfigPanel } from './RepoConfigPanel';
 import { cn } from '../../lib/cn';
@@ -102,10 +102,11 @@ export function RepositoryDashboard({ repoKey }: Props) {
           />
         )}
         {activeTab === 'issues' && (
-          <IssuesBanner
+          <IssuesSection
             org={org}
             name={name}
-            issues={issues}
+            openIssues={issues}
+            closedIssues={data?.recentlyClosedIssues ?? []}
             loading={isLoading}
           />
         )}
