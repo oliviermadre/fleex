@@ -39,19 +39,21 @@ export function RepoItem({ summary, wtCount, onRemove }: Props) {
   return (
     <button
       className={cn(
-        'group flex min-w-0 w-full flex-col gap-0.5 py-2.5 pl-6 pr-3 text-left transition-colors border-l-2',
+        'group flex min-w-0 w-full items-center py-2.5 pl-6 pr-3 text-left transition-colors border-l-2',
         isSelected
           ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
           : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
       )}
       onClick={() => navigate(`/repositories/${key}`, { replace: true })}
     >
-      <div className="flex items-center w-full">
-        <span className={cn('flex-shrink-0', isSelected ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-muted)]')}>
-          <GitBranchIcon />
-        </span>
-        <span className="ml-1.5 truncate text-sm font-semibold text-[var(--theme-text-primary)]">{summary.name}</span>
-        <div className="ml-auto flex flex-shrink-0 items-center gap-1">
+      <span className={cn('flex-shrink-0', isSelected ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-muted)]')}>
+        <GitBranchIcon />
+      </span>
+      <div className="ml-1.5 flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{summary.name}</span>
+        <span className="truncate font-mono text-[11px] text-[var(--theme-text-muted)]">{key}</span>
+      </div>
+      <div className="ml-auto flex flex-shrink-0 items-center gap-1 pl-2">
           {wtCount > 0 && (
             <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--theme-text-muted)]">
               {wtCount} wt
@@ -93,9 +95,7 @@ export function RepoItem({ summary, wtCount, onRemove }: Props) {
           >
             <TrashIcon />
           </span>
-        </div>
       </div>
-      <span className="truncate font-mono text-[11px] text-[var(--theme-text-muted)]">{key}</span>
     </button>
   );
 }
