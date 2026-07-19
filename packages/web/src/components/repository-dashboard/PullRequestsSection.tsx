@@ -8,6 +8,7 @@ import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { DiffStatsBadge } from '../ui/DiffStatsBadge';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { Button } from '../ui/Button';
+import { PrBadge } from '../ui/PrBadge';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { ImportTaskButton } from '../dashboard/ImportTaskButton';
 import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
@@ -204,7 +205,7 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
                     className="flex min-w-0 cursor-pointer items-center gap-2"
                     onClick={() => window.open(prUrl, '_blank')}
                   >
-                    <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{row.number}</span>
+                    <PrBadge org={org} name={name} pr={row} />
                     <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{row.title}</span>
                   </div>
                   {isOpen ? (

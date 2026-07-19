@@ -26,7 +26,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
 import { tintText, tintSolid } from '../../lib/tints';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
-import { getPrBadgeClasses } from '../../lib/prBadgeStyle';
+import { PrBadge } from '../ui/PrBadge';
 import { notifyHookStarted } from '../../lib/hookResultToast';
 import { SmartSessionButton } from './SmartSessionButton';
 import { ImportTaskButton } from './ImportTaskButton';
@@ -532,22 +532,7 @@ function DashboardItemRow({
               {branchName}
             </span>
           )}
-{ticketPR && (
-            <a
-              href={`https://github.com/${ticketPR.org}/${ticketPR.name}/pull/${ticketPR.number}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                'shrink-0 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-medium',
-                getPrBadgeClasses(ticketPR)
-              )}
-              onClick={(e) => e.stopPropagation()}
-              title={ticketPR.title}
-            >
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z" /></svg>
-              #{ticketPR.number}
-            </a>
-          )}
+          {ticketPR && <PrBadge org={ticketPR.org} name={ticketPR.name} pr={ticketPR} />}
           <a
             href={ghUrl}
             target="_blank"

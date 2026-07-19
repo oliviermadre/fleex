@@ -7,6 +7,7 @@ import { isRemovableVerdict } from '../../lib/worktreeVerdict';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintSolid, tintClasses, type TintHue } from '../../lib/tints';
 import { Sparkline } from './Sparkline';
+import { PrBadge } from '../ui/PrBadge';
 import { TicketsWorktreesPanel } from './TicketsWorktreesPanel';
 import { useWorktreeRows } from './useWorktreeRows';
 
@@ -177,7 +178,7 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
                 onClick={() => window.open(`https://github.com/${org}/${name}/pull/${pr.number}`, '_blank')}
               >
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{pr.number}</span>
+                  <PrBadge org={org} name={name} pr={pr} />
                   <span className="truncate text-[13.5px] font-semibold text-[var(--theme-text-primary)]">{pr.title}</span>
                 </div>
                 <div className="font-mono text-[11px] text-[var(--theme-text-muted)]">
