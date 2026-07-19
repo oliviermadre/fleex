@@ -53,13 +53,20 @@ export type {
   CreateWorktreeResponse,
   PullRequest,
   DiffStats,
+  GitHubLabel,
   GitHubIssue,
   GitHubIssueDetail,
+  DiscoveredRepo,
+  RepoDiscoveryOwner,
+  RepoDiscovery,
+  RepoDailyCost,
+  RepositoryStats,
 } from './types/repository.js';
 
 export type {
   RepositorySummary,
   RepositoryDashboardData,
+  WorktreeTicketRef,
   RefreshInterval,
   RepositoryWsMessage,
   RepositoryWsMessageType,

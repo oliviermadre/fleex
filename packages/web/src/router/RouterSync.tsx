@@ -29,7 +29,6 @@ const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['audit-trail', 'statistics'];
 const VALID_SETTINGS_TABS: SettingsTab[] = [
   'general',
   'appearance',
-  'repositories',
   'pinned-icons',
   'workspace-actions',
   'agent-tokens',
@@ -245,6 +244,10 @@ export function parseUrl(pathname: string, search: string): ParsedUrl {
   }
   const settingsMatch = pathname.match(/^\/settings\/([^/]+)$/);
   if (settingsMatch) {
+    if ((settingsMatch[1] as string) === 'repositories') {
+      // Legacy Settings → Repositories screen: config now lives in the Repos view.
+      return { ...base, panel: 'repositories' };
+    }
     const rawTab = settingsMatch[1] as SettingsTab;
     if (VALID_SETTINGS_TABS.includes(rawTab)) {
       return { ...base, panel: 'settings', settingsTab: rawTab };

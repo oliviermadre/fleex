@@ -1,10 +1,62 @@
 import type { FastifyInstance } from 'fastify';
-import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepositorySummary, Worktree } from '@fleex/shared';
+import type { DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepoDiscovery, RepositorySummary, Worktree, WorktreeTicketRef } from '@fleex/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
-import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
+import { parseTicketBranch } from '../../domain/services/worktree-ticket-resolver.js';
+import { GetRepositoryStatsUseCase } from '../../application/use-cases/get-repository-stats.js';
+import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { Container } from '../container.js';
 
 export function repositoryRoutes(container: Container) {
+  const getRepositoryStats = new GetRepositoryStatsUseCase(container.ticketStore, container.agentEventStore);
+
+  /**
+   * Resolve each non-bare/non-main worktree to its Fleex ticket. Authoritative
+   * source is the worktree's `.fleex.json` manifest; falls back to the
+   * branch-name convention (ticket/<hex> or agent/<displayId>). Both id lookups
+   * span archived tickets, so done/cancelled worktrees still resolve after the
+   * session ends. Worktrees with no resolvable ticket are simply omitted.
+   */
+  async function resolveWorktreeTickets(worktrees: Worktree[]): Promise<WorktreeTicketRef[]> {
+    const targets = worktrees.filter((wt) => !wt.isBare && !wt.isMain);
+    if (targets.length === 0) return [];
+
+    let allTickets: TicketEntity[] | null = null;
+    const getAll = async () => (allTickets ??= await container.ticketStore.getAllTickets());
+
+    const resolveOne = async (wt: Worktree): Promise<TicketEntity | null> => {
+      const manifest = container.resolver.resolveManifest(wt.path);
+      if (manifest?.ticketId) {
+        const byId = await container.ticketStore.getTicketById(manifest.ticketId);
+        if (byId) return byId;
+      }
+      const parsed = parseTicketBranch(wt.branch);
+      if (parsed && 'displayId' in parsed) {
+        const byDisplay = await container.ticketStore.getTicketByDisplayId(parsed.displayId);
+        if (byDisplay) return byDisplay;
+      }
+      if (parsed && 'idPrefix' in parsed) {
+        const all = await getAll();
+        const match = all.find((t) => t.id.toLowerCase().startsWith(parsed.idPrefix));
+        if (match) return match;
+      }
+      return null;
+    };
+
+    const resolved = await Promise.all(targets.map(async (wt) => ({ wt, ticket: await resolveOne(wt) })));
+    return resolved
+      .filter((r): r is { wt: Worktree; ticket: TicketEntity } => r.ticket !== null)
+      .map(({ wt, ticket }) => ({
+        worktreePath: wt.path,
+        id: ticket.id,
+        displayId: ticket.displayId,
+        title: ticket.title,
+        status: ticket.status,
+        type: ticket.type,
+        priority: ticket.priority,
+        boardId: ticket.boardId,
+      }));
+  }
+
   return async function (app: FastifyInstance) {
     app.get('/api/repositories', async () => {
       return container.listRepositories.execute();
@@ -37,28 +89,6 @@ export function repositoryRoutes(container: Container) {
       },
     );
 
-    app.post<{ Params: { org: string; name: string }; Body: CreateWorktreeRequest }>(
-      '/api/repositories/:org/:name/worktrees',
-      async (request, reply) => {
-        const { org, name } = request.params;
-        const sanitized = sanitizeBranchForPath(request.body.branch);
-        const { prNumber, issueNumber } = request.body;
-        let dirName: string;
-        if (prNumber) {
-          dirName = `${name}.pr-${prNumber}-${sanitized}`;
-        } else if (issueNumber) {
-          dirName = `${name}.issue-${issueNumber}-${sanitized}`;
-        } else {
-          dirName = `${name}.${sanitized}`;
-        }
-        const wtPath = container.resolver.worktreeDir(org, dirName);
-        const result = await container.createWorktree.executeWithHook(org, name, wtPath, request.body);
-        return reply.code(201).send({
-          path: result.existingPath ?? wtPath,
-          hookStarted: result.hookStarted,
-        });
-      },
-    );
 
     app.delete<{ Params: { org: string; name: string }; Body: { path: string } }>(
       '/api/repositories/:org/:name/worktrees',
@@ -101,7 +131,11 @@ export function repositoryRoutes(container: Container) {
       '/api/repositories/:org/:name/pulls',
       async (request, reply) => {
         const { org, name } = request.params;
-        const cacheKey = `pulls:${org}/${name}`;
+        // Dedicated cache key: this route serves the sidebar with a MIXED list
+        // (open+merged+closed) indexed by branch. It must NOT share `pulls:${key}`,
+        // which the dashboard reads as open-only — sharing it leaked merged/closed
+        // PRs into the dashboard's openPullRequests (duplicate rows).
+        const cacheKey = `pulls-all:${org}/${name}`;
         if (request.query.force === 'true') {
           container.repositoryCache.invalidate(cacheKey);
         }
@@ -218,26 +252,33 @@ export function repositoryRoutes(container: Container) {
           const { stdout } = await container.execFn('gh', [
             'issue', 'list',
             '--repo', `${org}/${name}`,
-            '--assignee', '@me',
-            '--json', 'number,title,author,assignees,createdAt,updatedAt',
+            '--json', 'number,title,state,author,assignees,labels,comments,createdAt,updatedAt,closedAt',
             '--state', 'open',
             '--limit', '50',
           ], { timeout: 15_000 });
           const raw = JSON.parse(stdout) as {
             number: number;
             title: string;
+            state: string;
             author: { login: string };
             assignees: { login: string }[];
+            labels: { name: string; color: string }[];
+            comments: unknown[];
             createdAt: string;
             updatedAt: string;
+            closedAt: string | null;
           }[];
           return raw.map((issue): GitHubIssue => ({
             number: issue.number,
             title: issue.title,
+            state: issue.state?.toLowerCase() === 'closed' ? 'closed' : 'open',
             author: issue.author.login,
             assignees: issue.assignees.map((a) => a.login),
+            labels: (issue.labels ?? []).map((l) => ({ name: l.name, color: l.color })),
+            commentsCount: Array.isArray(issue.comments) ? issue.comments.length : 0,
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
+            ...(issue.closedAt ? { closedAt: issue.closedAt } : {}),
           }));
         } catch (err) {
           container.logger.warn('Failed to list issues via gh CLI', { org, name, error: String(err) });
@@ -358,26 +399,31 @@ export function repositoryRoutes(container: Container) {
         // Try cache first
         const cachedPulls = container.repositoryCache.get<PullRequest[]>(`pulls:${key}`);
         const cachedIssues = container.repositoryCache.get<GitHubIssue[]>(`issues:${key}`);
+        const cachedClosedIssues = container.repositoryCache.get<GitHubIssue[]>(`closedIssues:${key}`);
         const cachedMerged = container.repositoryCache.get<PullRequest[]>(`merged:${key}`);
 
         let pulls = cachedPulls?.data;
         let issues = cachedIssues?.data;
+        let closedIssues = cachedClosedIssues?.data;
         let mergedPRs = cachedMerged?.data;
 
         // If any data is missing, fetch fresh
-        if (!pulls || !issues || !mergedPRs) {
+        if (!pulls || !issues || !closedIssues || !mergedPRs) {
           const results = await container.githubGraphql.fetchRepoBatch([{ org, name }]);
           const result = results.get(key);
           if (result) {
             pulls = result.pulls;
             issues = result.issues;
+            closedIssues = result.closedIssues;
             mergedPRs = result.mergedPRs;
             container.repositoryCache.set(`pulls:${key}`, pulls, RepositoryCache.TTL_PULLS);
             container.repositoryCache.set(`issues:${key}`, issues, RepositoryCache.TTL_ISSUES);
+            container.repositoryCache.set(`closedIssues:${key}`, closedIssues, RepositoryCache.TTL_ISSUES);
             container.repositoryCache.set(`merged:${key}`, mergedPRs, RepositoryCache.TTL_MERGED);
           } else {
             pulls = pulls ?? [];
             issues = issues ?? [];
+            closedIssues = closedIssues ?? [];
             mergedPRs = mergedPRs ?? [];
           }
         }
@@ -411,17 +457,32 @@ export function repositoryRoutes(container: Container) {
 
         const githubUser = await container.githubGraphql.getCurrentUser();
 
+        const worktreeTickets = await resolveWorktreeTickets(worktrees);
+
         return {
           org,
           name,
           openIssues: issues,
+          recentlyClosedIssues: closedIssues,
           openPullRequests: pulls,
           recentlyMergedPullRequests: mergedPRs,
           worktrees,
+          worktreeTickets,
           diffStats,
           githubUser,
           isClonedLocally: repoExists,
         };
+      },
+    );
+
+    app.get<{ Params: { org: string; name: string }; Querystring: { days?: string } }>(
+      '/api/repositories/:org/:name/stats',
+      async (request) => {
+        const { org, name } = request.params;
+        const parsed = Number(request.query.days);
+        const floored = Math.floor(parsed);
+        const days = Number.isFinite(parsed) && floored >= 1 && floored <= 365 ? floored : 30;
+        return getRepositoryStats.execute(org, name, days);
       },
     );
 
@@ -491,6 +552,27 @@ export function repositoryRoutes(container: Container) {
       const login = await container.githubGraphql.getCurrentUser();
       container.repositoryCache.set('github:user', login, RepositoryCache.TTL_USER);
       return { login };
+    });
+
+    app.get('/api/github/discovery', async (_request, reply) => {
+      const cached = container.repositoryCache.get<RepoDiscovery>('github:discovery');
+      if (cached) return cached.data;
+      try {
+        const discovery = await container.githubDiscovery.discover();
+        container.repositoryCache.set('github:discovery', discovery, RepositoryCache.TTL_DISCOVERY);
+        return discovery;
+      } catch (err) {
+        container.logger.warn('GitHub discovery failed', { error: String(err) });
+        return reply.code(502).send({ error: 'GitHub CLI not authenticated or unavailable' });
+      }
+    });
+
+    app.get<{ Querystring: { repo?: string } }>('/api/github/verify-repo', async (request, reply) => {
+      const repo = request.query.repo?.trim().toLowerCase() ?? '';
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+        return reply.code(400).send({ error: 'repo must be owner/repo' });
+      }
+      return container.githubDiscovery.verifyRepo(repo);
     });
 
     // ---- Clone endpoints ----

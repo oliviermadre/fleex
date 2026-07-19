@@ -3,7 +3,6 @@ import { useSettingsStore, type AppSettings, type PinnedIcon, type WorkspaceActi
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { TagInput } from '../ui/TagInput';
 import { AppearanceTab } from './AppearanceTab';
 import { DeliverableTypesTab } from './DeliverableTypesTab';
 import { cn } from '../../lib/cn';
@@ -13,7 +12,6 @@ import * as api from '../../services/api';
 const tabLabels: Record<SettingsTab, string> = {
   general: 'General',
   appearance: 'Appearance',
-  repositories: 'Repositories',
   'pinned-icons': 'Pinned Icons',
   'workspace-actions': 'Workspace Actions',
   'agent-tokens': 'Agent Tokens',
@@ -23,16 +21,12 @@ const tabLabels: Record<SettingsTab, string> = {
 export function SettingsPanel() {
   const settings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.saveSettings);
-  const resolveRepositories = useSettingsStore((s) => s.resolveRepositories);
-  const resolving = useSettingsStore((s) => s.resolving);
   const settingsTab = useUIStore((s) => s.settingsTab);
 
   const [basePath, setBasePath] = useState('');
   const [humanDisplayName, setHumanDisplayName] = useState('');
   const [humanMentionName, setHumanMentionName] = useState('');
   const [agentMaxConcurrency, setAgentMaxConcurrency] = useState(1);
-  const [repoPatterns, setRepoPatterns] = useState<string[]>([]);
-  const resolveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [pinnedIcons, setPinnedIcons] = useState<PinnedIcon[]>([]);
   const [workspaceActions, setWorkspaceActions] = useState<WorkspaceAction[]>([]);
 
@@ -41,7 +35,6 @@ export function SettingsPanel() {
     setHumanDisplayName((settings as unknown as Record<string, unknown>)['humanDisplayName'] as string ?? '');
     setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
-    setRepoPatterns(settings.repositories);
     setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
     setWorkspaceActions((settings.workspaceActions ?? []).map((a) => ({ ...a })));
   }, [settings]);
@@ -49,7 +42,6 @@ export function SettingsPanel() {
   const handleSave = async () => {
     await saveSettings({
       basePath,
-      repositories: repoPatterns,
       pinnedIcons,
       workspaceActions,
       ...(humanDisplayName.trim() ? { humanDisplayName: humanDisplayName.trim() } : { humanDisplayName: undefined }),
@@ -57,14 +49,6 @@ export function SettingsPanel() {
       agentMaxConcurrency,
     } as Partial<AppSettings> & Record<string, unknown>);
   };
-
-  const handleTagsChange = useCallback((newTags: string[]) => {
-    setRepoPatterns(newTags);
-    clearTimeout(resolveTimerRef.current);
-    resolveTimerRef.current = setTimeout(() => {
-      saveSettings({ repositories: newTags }).then(() => resolveRepositories());
-    }, 600);
-  }, [saveSettings, resolveRepositories]);
 
   const addPinnedIcon = () => {
     setPinnedIcons([
@@ -139,13 +123,6 @@ export function SettingsPanel() {
             />
           )}
           {settingsTab === 'appearance' && <AppearanceTab />}
-          {settingsTab === 'repositories' && (
-            <RepositoriesTab
-              tags={repoPatterns}
-              onTagsChange={handleTagsChange}
-              resolving={resolving}
-            />
-          )}
           {settingsTab === 'pinned-icons' && (
             <PinnedIconsTab
               pinnedIcons={pinnedIcons}
@@ -266,34 +243,6 @@ function GeneralTab({
           Maximum number of agents that can run simultaneously. Additional mentions are queued.
         </p>
       </div>
-    </div>
-  );
-}
-
-function RepositoriesTab({
-  tags,
-  onTagsChange,
-  resolving,
-}: {
-  tags: string[];
-  onTagsChange: (tags: string[]) => void;
-  resolving: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-5">
-      <TagInput
-        label="Repository Patterns"
-        tags={tags}
-        onChange={onTagsChange}
-        placeholder="org/* or owner/repo"
-        helperText={
-          <p>
-            Use <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">org/*</code> to
-            include all repos from an organization.{' '}
-            {resolving && <span className="text-[var(--theme-accent)]">Resolving…</span>}
-          </p>
-        }
-      />
     </div>
   );
 }

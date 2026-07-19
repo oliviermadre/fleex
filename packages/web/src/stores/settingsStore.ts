@@ -67,7 +67,6 @@ export interface AppSettings {
 interface SettingsState {
   settings: AppSettings;
   loaded: boolean;
-  resolving: boolean;
   loadSettings: () => Promise<void>;
   saveSettings: (partial: Partial<AppSettings>) => Promise<void>;
   setSessionDisplayName: (sessionId: string, name: string) => void;
@@ -75,7 +74,6 @@ interface SettingsState {
   setRepoOrder: (order: string[]) => void;
   setWorktreeOrder: (repoGroupId: string, order: string[]) => void;
   setSessionOrder: (worktreeGroupId: string, order: string[]) => void;
-  resolveRepositories: () => Promise<void>;
   executePinnedAction: (icon: PinnedIcon) => void;
   executeWorkspaceAction: (action: WorkspaceAction, context: WorkspaceContext) => void;
   addLayoutGroup: (type: SessionLayoutType) => string;
@@ -83,6 +81,8 @@ interface SettingsState {
   bindLayoutGroupCell: (groupId: string, cellIndex: number, sessionId: string | null) => void;
   getRepoConfig: (org: string, name: string) => RepoConfig;
   setRepoConfig: (org: string, name: string, config: RepoConfig) => void;
+  addRepositories: (repos: string[]) => Promise<void>;
+  removeRepository: (repo: string) => Promise<void>;
 }
 
 const defaultSettings: AppSettings = {
@@ -125,7 +125,6 @@ function saveToStorage(settings: AppSettings) {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: loadFromStorage(),
   loaded: false,
-  resolving: false,
 
   loadSettings: async () => {
     try {
@@ -224,49 +223,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }).catch(() => { /* ignore */ });
   },
 
-  resolveRepositories: async () => {
-    const { settings } = get();
-    if (settings.repositories.length === 0) return;
-
-    set({ resolving: true });
-    const resolved: string[] = [];
-
-    for (const pattern of settings.repositories) {
-      if (pattern.includes('*')) {
-        // Wildcard pattern: org/* -> resolve via API
-        const org = pattern.replace('/*', '').replace('*', '');
-        try {
-          const res = await fetch(`${API_URL}/repositories/resolve?org=${encodeURIComponent(org)}`);
-          if (res.ok) {
-            const repos: string[] = await res.json();
-            resolved.push(...repos);
-          } else {
-            resolved.push(pattern);
-          }
-        } catch {
-          resolved.push(pattern);
-        }
-      } else {
-        resolved.push(pattern);
-      }
-    }
-
-    const updated = {
-      ...settings,
-      resolvedRepositories: [...new Set(resolved)],
-      resolvedAt: new Date().toISOString(),
-    };
-    set({ settings: updated, resolving: false });
-    saveToStorage(updated);
-    try {
-      await fetch(`${API_URL}/config`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      });
-    } catch { /* ignore */ }
-  },
-
   executePinnedAction: (icon: PinnedIcon) => {
     if (icon.actionType === 'url') {
       window.open(icon.actionValue, '_blank');
@@ -363,5 +319,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
     }).catch(() => { /* ignore */ });
+  },
+
+  addRepositories: async (repos) => {
+    const current = get().settings;
+    const merged = [...new Set([...current.repositories.map((r) => r.toLowerCase()), ...repos.map((r) => r.toLowerCase())])].sort();
+    await api.updateConfig({ repositories: merged });
+    const updated = { ...current, repositories: merged };
+    set({ settings: updated });
+    saveToStorage(updated);
+  },
+
+  removeRepository: async (repo) => {
+    const target = repo.toLowerCase();
+    const current = get().settings;
+    const filtered = current.repositories.filter((r) => r.toLowerCase() !== target);
+    await api.updateConfig({ repositories: filtered });
+    const updated = { ...current, repositories: filtered };
+    set({ settings: updated });
+    saveToStorage(updated);
   },
 }));

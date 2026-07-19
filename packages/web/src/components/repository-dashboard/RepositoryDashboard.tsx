@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { DashboardHeader } from './DashboardHeader';
-import { IssuesBanner } from './IssuesBanner';
+import { IssuesSection } from './IssuesSection';
+import { OverviewTab } from './OverviewTab';
+import { WorktreesTab } from './WorktreesTab';
 import { PullRequestsSection } from './PullRequestsSection';
-import { MergedPRsSection } from './MergedPRsSection';
 import { RepoConfigPanel } from './RepoConfigPanel';
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
 
-type Tab = 'pulls' | 'issues' | 'merged' | 'settings';
+type Tab = 'overview' | 'worktrees' | 'pulls' | 'issues' | 'config';
 
 interface Props {
   repoKey: string;
@@ -17,17 +18,21 @@ interface Props {
 export function RepositoryDashboard({ repoKey }: Props) {
   const [org, name] = repoKey.split('/');
   const fetchDashboard = useRepositoryDashboardStore((s) => s.fetchDashboard);
+  const fetchRepoStats = useRepositoryDashboardStore((s) => s.fetchRepoStats);
   const dashboardData = useRepositoryDashboardStore((s) => s.dashboardData);
   const githubUser = useRepositoryDashboardStore((s) => s.githubUser);
+  const repoStats = useRepositoryDashboardStore((s) => s.repoStats);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('pulls');
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
 
   useEffect(() => {
     if (!org || !name) return;
 
+    setActiveTab('overview');
     setLoading(true);
     fetchDashboard(org, name).finally(() => setLoading(false));
-  }, [org, name, fetchDashboard]);
+    fetchRepoStats(org, name);
+  }, [org, name, fetchDashboard, fetchRepoStats]);
 
   const isCurrentRepo = dashboardData?.org === org && dashboardData?.name === name;
   const data = isCurrentRepo ? dashboardData : null;
@@ -36,19 +41,21 @@ export function RepositoryDashboard({ repoKey }: Props) {
   const openPRs = data?.openPullRequests ?? [];
   const issues = data?.openIssues ?? [];
   const mergedPRs = data?.recentlyMergedPullRequests ?? [];
+  const worktreeCount = data?.worktrees.filter((w) => !w.isBare && !w.isMain).length ?? 0;
 
   if (!org || !name) return null;
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'worktrees', label: 'Worktrees', count: worktreeCount },
     { key: 'pulls', label: 'Pull Requests', count: openPRs.length },
     { key: 'issues', label: 'Issues', count: issues.length },
-    { key: 'merged', label: 'Merged', count: mergedPRs.length },
-    { key: 'settings', label: 'Settings' },
+    { key: 'config', label: 'Config' },
   ];
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <DashboardHeader org={org} name={name} />
+      <DashboardHeader org={org} name={name} worktreeCount={worktreeCount} isCloned={data?.isClonedLocally !== false} />
       {data?.isClonedLocally === false && (
         <div className={cn('flex items-center gap-2 border-b px-4 py-2 text-xs', tint('yellow'))}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
@@ -91,33 +98,51 @@ export function RepositoryDashboard({ repoKey }: Props) {
         ))}
       </div>
       <div className="flex-1 overflow-y-auto p-6">
+        {activeTab === 'overview' && (
+          data ? (
+            <OverviewTab
+              org={org}
+              name={name}
+              data={data}
+              stats={repoStats[repoKey] ?? null}
+              onNavigate={(t) => setActiveTab(t)}
+            />
+          ) : (
+            <div className="flex flex-col gap-5">
+              <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-[104px] animate-pulse rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]" />
+                ))}
+              </div>
+              <div className="h-40 animate-pulse rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]" />
+            </div>
+          )
+        )}
+        {activeTab === 'worktrees' && data && (
+          <WorktreesTab org={org} name={name} data={data} />
+        )}
         {activeTab === 'pulls' && (
           <PullRequestsSection
             org={org}
             name={name}
-            pullRequests={openPRs}
+            openPRs={openPRs}
+            mergedPRs={mergedPRs}
+            worktrees={data?.worktrees ?? []}
             diffStats={data?.diffStats ?? {}}
             githubUser={githubUser}
             loading={isLoading}
           />
         )}
         {activeTab === 'issues' && (
-          <IssuesBanner
+          <IssuesSection
             org={org}
             name={name}
-            issues={issues}
+            openIssues={issues}
+            closedIssues={data?.recentlyClosedIssues ?? []}
             loading={isLoading}
           />
         )}
-        {activeTab === 'merged' && (
-          <MergedPRsSection
-            org={org}
-            name={name}
-            mergedPRs={mergedPRs}
-            loading={isLoading}
-          />
-        )}
-        {activeTab === 'settings' && (
+        {activeTab === 'config' && (
           <RepoConfigPanel org={org} name={name} />
         )}
       </div>

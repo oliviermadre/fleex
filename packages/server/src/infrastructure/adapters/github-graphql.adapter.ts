@@ -18,8 +18,12 @@ interface GraphQLPRNode {
 interface GraphQLIssueNode {
   number: number;
   title: string;
+  state: string;
+  closedAt: string | null;
   author: { login: string } | null;
   assignees?: { nodes: { login: string }[] };
+  labels?: { nodes: { name: string; color: string }[] };
+  comments?: { totalCount: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -28,14 +32,60 @@ interface GraphQLRepoResult {
   pullRequests: { totalCount: number; nodes: GraphQLPRNode[] };
   mergedPRs: { nodes: GraphQLPRNode[] };
   issues: { totalCount: number; nodes: GraphQLIssueNode[] };
+  closedIssues: { nodes: GraphQLIssueNode[] };
 }
 
 export interface RepoBatchResult {
   pulls: PullRequest[];
   issues: GitHubIssue[];
+  closedIssues: GitHubIssue[];
   mergedPRs: PullRequest[];
   openPRsCount: number;
   openIssuesCount: number;
+}
+
+function mapIssueNode(issue: GraphQLIssueNode): GitHubIssue {
+  return {
+    number: issue.number,
+    title: issue.title,
+    state: issue.state?.toLowerCase() === 'closed' ? 'closed' : 'open',
+    author: issue.author?.login ?? 'unknown',
+    assignees: (issue.assignees?.nodes ?? []).map((a) => a.login),
+    labels: (issue.labels?.nodes ?? []).map((l) => ({ name: l.name, color: l.color })),
+    commentsCount: issue.comments?.totalCount ?? 0,
+    createdAt: issue.createdAt,
+    updatedAt: issue.updatedAt,
+    ...(issue.closedAt ? { closedAt: issue.closedAt } : {}),
+  };
+}
+
+// Raw shape returned by `gh issue list --json ...` (flat arrays, unlike the GraphQL node shape above).
+interface CliIssue {
+  number: number;
+  title: string;
+  state: string;
+  closedAt: string | null;
+  author: { login: string };
+  assignees: { login: string }[];
+  labels: { name: string; color: string }[];
+  comments: unknown[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapCliIssue(issue: CliIssue): GitHubIssue {
+  return {
+    number: issue.number,
+    title: issue.title,
+    state: issue.state?.toLowerCase() === 'closed' ? 'closed' : 'open',
+    author: issue.author?.login ?? 'unknown',
+    assignees: (issue.assignees ?? []).map((a) => a.login),
+    labels: (issue.labels ?? []).map((l) => ({ name: l.name, color: l.color })),
+    commentsCount: Array.isArray(issue.comments) ? issue.comments.length : 0,
+    createdAt: issue.createdAt,
+    updatedAt: issue.updatedAt,
+    ...(issue.closedAt ? { closedAt: issue.closedAt } : {}),
+  };
 }
 
 export interface RateLimitInfo {
@@ -229,12 +279,22 @@ export class GitHubGraphQLAdapter {
       issues(first: 50, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
         totalCount
         nodes {
-          number
-          title
+          number title state closedAt
           author { login }
           assignees(first: 10) { nodes { login } }
-          createdAt
-          updatedAt
+          labels(first: 10) { nodes { name color } }
+          comments { totalCount }
+          createdAt updatedAt
+        }
+      }
+      closedIssues: issues(first: 20, states: CLOSED, orderBy: {field: UPDATED_AT, direction: DESC}) {
+        nodes {
+          number title state closedAt
+          author { login }
+          assignees(first: 10) { nodes { login } }
+          labels(first: 10) { nodes { name color } }
+          comments { totalCount }
+          createdAt updatedAt
         }
       }
     }`;
@@ -287,18 +347,17 @@ export class GitHubGraphQLAdapter {
             mergedAt: pr.mergedAt!,
           }));
 
-        const issues: GitHubIssue[] = repoData.issues.nodes.map((issue) => ({
-          number: issue.number,
-          title: issue.title,
-          author: issue.author?.login ?? 'unknown',
-          assignees: (issue.assignees?.nodes ?? []).map((a: { login: string }) => a.login),
-          createdAt: issue.createdAt,
-          updatedAt: issue.updatedAt,
-        }));
+        const issues: GitHubIssue[] = repoData.issues.nodes.map(mapIssueNode);
+
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+        const closedIssues: GitHubIssue[] = repoData.closedIssues.nodes
+          .map(mapIssueNode)
+          .filter((i) => i.closedAt && i.closedAt >= thirtyDaysAgo);
 
         results.set(key, {
           pulls,
           issues,
+          closedIssues,
           mergedPRs,
           openPRsCount: repoData.pullRequests.totalCount,
           openIssuesCount: repoData.issues.totalCount,
@@ -381,31 +440,33 @@ export class GitHubGraphQLAdapter {
       mergedAt: pr.mergedAt,
     }));
 
-    // Fetch issues
+    // Fetch open issues
+    const issueJsonFields = 'number,title,state,author,assignees,labels,comments,createdAt,updatedAt,closedAt';
     const { stdout: issueOut } = await this.execFn('gh', [
       'issue', 'list', '--repo', repoSlug,
-      '--json', 'number,title,author,assignees,createdAt,updatedAt',
+      '--json', issueJsonFields,
       '--state', 'open', '--limit', '50',
     ], { timeout: 15_000 });
 
-    const rawIssues = JSON.parse(issueOut) as {
-      number: number; title: string;
-      author: { login: string }; assignees: { login: string }[];
-      createdAt: string; updatedAt: string;
-    }[];
+    const rawIssues = JSON.parse(issueOut) as CliIssue[];
+    const issues: GitHubIssue[] = rawIssues.map(mapCliIssue);
 
-    const issues: GitHubIssue[] = rawIssues.map((issue) => ({
-      number: issue.number,
-      title: issue.title,
-      author: issue.author.login,
-      assignees: (issue.assignees ?? []).map((a) => a.login),
-      createdAt: issue.createdAt,
-      updatedAt: issue.updatedAt,
-    }));
+    // Fetch recently closed issues (last 30 days), symmetric with the batch/GraphQL path.
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const closedDateStr = thirtyDaysAgo.toISOString().split('T')[0];
+    const { stdout: closedIssueOut } = await this.execFn('gh', [
+      'issue', 'list', '--repo', repoSlug,
+      '--json', issueJsonFields,
+      '--state', 'closed', '--limit', '20', '--search', `closed:>${closedDateStr}`,
+    ], { timeout: 15_000 });
+
+    const rawClosedIssues = JSON.parse(closedIssueOut) as CliIssue[];
+    const closedIssues: GitHubIssue[] = rawClosedIssues.map(mapCliIssue);
 
     return {
       pulls,
       issues,
+      closedIssues,
       mergedPRs,
       openPRsCount: pulls.length,
       openIssuesCount: issues.length,

@@ -66,13 +66,22 @@ export interface DiffStats {
   readonly deletions: number;
 }
 
+export interface GitHubLabel {
+  readonly name: string;
+  readonly color: string;
+}
+
 export interface GitHubIssue {
   readonly number: number;
   readonly title: string;
+  readonly state: 'open' | 'closed';
   readonly author: string;
   readonly assignees: string[];
+  readonly labels: GitHubLabel[];
+  readonly commentsCount: number;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly closedAt?: string;
 }
 
 export interface GitHubIssueDetail {
@@ -86,4 +95,34 @@ export interface GitHubIssueDetail {
   readonly labels: string[];
   readonly milestone: string | null;
   readonly comments: Array<{ author: string; body: string; createdAt: string }>;
+}
+
+export interface DiscoveredRepo {
+  readonly nameWithOwner: string;
+  readonly visibility: string;
+  readonly updatedAt: string;
+}
+
+export interface RepoDiscoveryOwner {
+  readonly login: string;
+  readonly repos: DiscoveredRepo[];
+}
+
+export interface RepoDiscovery {
+  readonly owners: RepoDiscoveryOwner[];
+  readonly totalRepos: number;
+}
+
+export interface RepoDailyCost {
+  readonly date: string; // YYYY-MM-DD
+  readonly costUsd: number;
+}
+
+export interface RepositoryStats {
+  readonly totalCostUsd: number; // window [start of day (now-(days-1)d) UTC, now]
+  readonly previousTotalCostUsd: number; // the `days` UTC days before that window
+  readonly costPerTicketUsd: number; // total / #tickets with cost in window
+  readonly ticketsWithCostCount: number;
+  readonly days: number;
+  readonly dailyCosts: RepoDailyCost[]; // one entry per day, oldest first, zero-filled
 }

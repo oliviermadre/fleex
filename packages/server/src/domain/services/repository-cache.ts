@@ -15,6 +15,7 @@ export class RepositoryCache {
   static readonly TTL_REPO_LIST = 30 * 60 * 1000;
   static readonly TTL_USER = 60 * 60 * 1000;
   static readonly TTL_SUMMARY = 2 * 60 * 1000;
+  static readonly TTL_DISCOVERY = 5 * 60 * 1000;
 
   // Stale window = TTL * 2 (serve stale data while revalidating)
   private staleMultiplier = 2;

@@ -60,16 +60,6 @@ export class RepoPathResolver {
     return join(this.basePath, 'overlays', '_global', 'hooks');
   }
 
-  /** Standalone worktree: worktrees/org/dirName */
-  worktreeDir(org: string, dirName: string): string {
-    return join(this.basePath, 'worktrees', org, dirName);
-  }
-
-  /** Parent directory for an org's worktrees */
-  worktreeOrgDir(org: string): string {
-    return join(this.basePath, 'worktrees', org);
-  }
-
   /** Workspace root for a ticket: workspaces/workspaceId */
   workspacePath(workspaceId: string): string {
     return join(this.basePath, 'workspaces', workspaceId);

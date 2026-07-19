@@ -289,7 +289,7 @@ export function ListFocusView() {
           (pass 4, remark 1), every one multi-select (empty = all, "All" badge)
           except the favorites flag, plus a free-text title filter. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--theme-border)] px-4 py-2.5">
-        <h1 className="mr-2 text-sm font-semibold text-[var(--theme-text-primary)]">Cockpit</h1>
+        <h1 className="mr-2 text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Cockpit</h1>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--theme-text-faint)]">

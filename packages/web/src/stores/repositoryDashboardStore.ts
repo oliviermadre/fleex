@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { RepositorySummary, RepositoryDashboardData, RepositoryWsMessage } from '@fleex/shared';
+import type { RepositorySummary, RepositoryDashboardData, RepositoryWsMessage, RepositoryStats } from '@fleex/shared';
 import * as api from '../services/api';
 
 interface RepositoryDashboardState {
@@ -11,6 +11,7 @@ interface RepositoryDashboardState {
   refreshIntervalMs: number;
   lastRefreshedAt: string | null;
   rateLimitWarning: { remaining: number; resetAt: string } | null;
+  repoStats: Record<string, RepositoryStats>;
 
   fetchSummaries: () => Promise<void>;
   fetchDashboard: (org: string, name: string) => Promise<void>;
@@ -18,6 +19,7 @@ interface RepositoryDashboardState {
   setRefreshInterval: (ms: number) => void;
   handleWsMessage: (msg: RepositoryWsMessage) => void;
   setGithubUser: (user: string) => void;
+  fetchRepoStats: (org: string, name: string) => Promise<void>;
 }
 
 export const useRepositoryDashboardStore = create<RepositoryDashboardState>((set, get) => ({
@@ -29,6 +31,7 @@ export const useRepositoryDashboardStore = create<RepositoryDashboardState>((set
   refreshIntervalMs: 0,
   lastRefreshedAt: null,
   rateLimitWarning: null,
+  repoStats: {},
 
   fetchSummaries: async () => {
     try {
@@ -78,6 +81,26 @@ export const useRepositoryDashboardStore = create<RepositoryDashboardState>((set
           summaries[`${s.org}/${s.name}`] = s;
         }
         set({ summaries, lastRefreshedAt: new Date().toISOString() });
+        // A collection refresh also refreshed the open dashboard's cache — pull
+        // its detailed data (issues/PRs) so the main panel stays reactive.
+        const open = get().dashboardData;
+        if (open) get().fetchDashboard(open.org, open.name);
+        break;
+      }
+      case 'repo:summary-updated': {
+        // Item refresh: merge the single repo into the list, leaving every other
+        // repo untouched. Never replace the whole map here.
+        const s = msg.data as RepositorySummary;
+        set((state) => ({
+          summaries: { ...state.summaries, [`${s.org}/${s.name}`]: s },
+          lastRefreshedAt: new Date().toISOString(),
+        }));
+        // If the refreshed repo is the one open in the main panel, reload its
+        // detailed data so a just-created issue/PR appears without a tab switch.
+        const current = get().dashboardData;
+        if (current && current.org === s.org && current.name === s.name) {
+          get().fetchDashboard(s.org, s.name);
+        }
         break;
       }
       case 'repo:dashboard-updated': {
@@ -103,4 +126,13 @@ export const useRepositoryDashboardStore = create<RepositoryDashboardState>((set
   },
 
   setGithubUser: (user) => set({ githubUser: user }),
+
+  fetchRepoStats: async (org, name) => {
+    try {
+      const stats = await api.fetchRepositoryStats(org, name);
+      set((s) => ({ repoStats: { ...s.repoStats, [`${org}/${name}`]: stats } }));
+    } catch {
+      // ignore — the cost card renders $0 without stats
+    }
+  },
 }));

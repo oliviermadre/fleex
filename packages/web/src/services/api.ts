@@ -4,14 +4,14 @@ import type {
   CreateSessionRequest,
   Repository,
   Worktree,
-  CreateWorktreeRequest,
-  CreateWorktreeResponse,
   PullRequest,
   GitHubIssue,
   GitHubIssueDetail,
   DiffStats,
   RepositorySummary,
   RepositoryDashboardData,
+  RepoDiscovery,
+  RepositoryStats,
   ClaudeConfigTreeEntry,
   ClaudeUsage,
   AgentExecution,
@@ -109,17 +109,6 @@ export async function fetchBranches(org: string, name: string): Promise<string[]
 
 export async function fetchWorktrees(org: string, name: string): Promise<Worktree[]> {
   return request<Worktree[]>(`/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`);
-}
-
-export async function createWorktree(
-  org: string,
-  name: string,
-  req: CreateWorktreeRequest
-): Promise<CreateWorktreeResponse> {
-  return request<CreateWorktreeResponse>(
-    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`,
-    { method: 'POST', body: JSON.stringify(req) }
-  );
 }
 
 export async function fetchPullRequests(org: string, name: string, force = false): Promise<PullRequest[]> {
@@ -234,6 +223,18 @@ export async function requestRepositoryRefresh(
 
 export async function fetchGitHubUser(): Promise<{ login: string }> {
   return request<{ login: string }>('/github/user');
+}
+
+export async function fetchGithubDiscovery(): Promise<RepoDiscovery> {
+  return request('/github/discovery');
+}
+
+export async function verifyGithubRepo(repo: string): Promise<{ exists: boolean; nameWithOwner?: string }> {
+  return request(`/github/verify-repo?repo=${encodeURIComponent(repo)}`);
+}
+
+export async function fetchRepositoryStats(org: string, name: string, days = 30): Promise<RepositoryStats> {
+  return request(`/repositories/${org}/${name}/stats?days=${days}`);
 }
 
 // Claude Config API

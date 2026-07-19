@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { PanelNotFoundError, AgentPersonaNotFoundError } from '../../domain/errors.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
 import type { PanelEntity } from '../../domain/entities/panel.entity.js';
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { PanelStorePort } from '../ports/panel-store.port.js';

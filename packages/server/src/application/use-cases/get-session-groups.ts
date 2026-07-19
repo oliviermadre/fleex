@@ -1,6 +1,7 @@
 import type { Session, SessionGroup, WorktreeSessionGroup, AgentWorktreeInfo } from '@fleex/shared';
 import type { SessionEntity } from '../../domain/entities.js';
 import { SessionGroupingService } from '../../domain/services/session-grouping.js';
+import { buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
 import type { SessionNamingService } from '../../domain/services/session-naming.js';
 import type { TmuxPort } from '../ports/tmux.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
@@ -225,6 +226,18 @@ export class GetSessionGroupsUseCase {
 
       const branch = wtLink?.label ?? ticket.title;
 
+      // PR number (from the github_pr link, format "org/name#number") lets
+      // reconciliation fetch refs/pull/<n>/head — required for fork PRs whose
+      // branch is not on origin.
+      const prLink = ticket.links.find((l) => l.type === 'github_pr');
+      let prNumber: number | undefined;
+      if (prLink) {
+        const hashIdx = prLink.ref.indexOf('#');
+        if (hashIdx > 0) {
+          prNumber = parseInt(prLink.ref.substring(hashIdx + 1), 10) || undefined;
+        }
+      }
+
       const agentInfo: AgentWorktreeInfo = {
         ticketId: ticket.id,
         ticketDisplayId: ticket.displayId,
@@ -235,6 +248,7 @@ export class GetSessionGroupsUseCase {
         agentDisplayName: persona?.displayName ?? '',
         executionStatus,
         latestExecutionId,
+        ...(prNumber ? { prNumber } : {}),
       };
 
       // Find matching worktree group by ticketId (set by the grouping service for
@@ -438,11 +452,15 @@ export class GetSessionGroupsUseCase {
           return;
         }
 
-        // Path doesn't exist — reconcile
+        // Path doesn't exist — reconcile into the ticket's workspace
+        // (workspaces/{workspaceId}/{repo}), the single homogeneous convention.
+        const agent = ref.wt.agentWorktree!;
+        const workspaceId = buildTicketWorkspaceId(agent.ticketTitle, agent.ticketId);
         const result = await this.reconcileWorktree!.execute(
           ref.org,
           ref.name,
           ref.wt.branch,
+          { workspaceId, ticketId: agent.ticketId, prNumber: agent.prNumber },
         );
 
         const mutableWt = ref.wt as {

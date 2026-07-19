@@ -16,6 +16,8 @@ import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { executeSkill } from '../../services/api';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses } from '../../lib/tints';
+import { PrBadge } from '../ui/PrBadge';
+import { parseGithubPrRef } from '../../lib/prRef';
 import { isMissingRepo, isRepoOptional } from '../../lib/repoStatus';
 import { MissingRepoIcon, RepositoriesIcon } from '../sidebar/icons';
 
@@ -290,28 +292,17 @@ export function KanbanCard({
 
           {/* PRs */}
           {prLinks.map((pr: TicketLink) => {
-            const state = prStates?.[pr.ref];
-            const isMerged = state === 'MERGED';
-            const isClosed = state === 'CLOSED';
-            const bgClass = isMerged
-              ? tint('purple')
-              : isClosed
-                ? tint('red')
-                : tint('green');
+            const parsed = parseGithubPrRef(pr.ref);
+            if (!parsed) return null;
+            const state = (prStates?.[pr.ref]?.toLowerCase() ?? 'open') as 'open' | 'merged' | 'closed';
             return (
-              <a
+              <PrBadge
                 key={pr.id}
+                org={parsed.org}
+                name={parsed.name}
+                pr={{ number: parsed.number, state, title: pr.ref }}
                 href={pr.url ?? undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className={cn('inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors', bgClass)}
-              >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
-                  <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
-                </svg>
-                {pr.label}
-              </a>
+              />
             );
           })}
 

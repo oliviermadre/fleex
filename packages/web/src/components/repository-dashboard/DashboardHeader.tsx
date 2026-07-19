@@ -1,13 +1,17 @@
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 import { RefreshControl } from '../ui/RefreshControl';
 import { GitHubIcon } from '../sidebar/icons';
+import { cn } from '../../lib/cn';
+import { tint } from '../../lib/tints';
 
 interface Props {
   org: string;
   name: string;
+  worktreeCount: number;
+  isCloned: boolean;
 }
 
-export function DashboardHeader({ org, name }: Props) {
+export function DashboardHeader({ org, name, worktreeCount, isCloned }: Props) {
   const refreshing = useRepositoryDashboardStore((s) => s.refreshing);
   const requestRefresh = useRepositoryDashboardStore((s) => s.requestRefresh);
   const refreshIntervalMs = useRepositoryDashboardStore((s) => s.refreshIntervalMs);
@@ -29,6 +33,15 @@ export function DashboardHeader({ org, name }: Props) {
         >
           <GitHubIcon size={14} />
         </a>
+        {isCloned ? (
+          <span className={cn('rounded-full px-2 py-0.5 text-[10.5px]', tint('green'))}>
+            cloned · {worktreeCount} worktrees
+          </span>
+        ) : (
+          <span className={cn('rounded-full px-2 py-0.5 text-[10.5px]', tint('yellow'))}>
+            not cloned
+          </span>
+        )}
       </div>
       <RefreshControl
         refreshing={refreshing}

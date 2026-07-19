@@ -7,6 +7,7 @@ import multipart from '@fastify/multipart';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { createContainer } from './infrastructure/container.js';
+import { migrateRepositoryPatterns } from './domain/services/repository-pattern-migration.js';
 import { sessionRoutes } from './infrastructure/http/sessions.routes.js';
 import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
 import { healthRoutes } from './infrastructure/http/health.routes.js';
@@ -52,6 +53,9 @@ import { ModelService } from './application/services/model.service.js';
 
 async function main() {
   const container = await createContainer();
+
+  migrateRepositoryPatterns(container.config, container.repositoryResolver, container.logger)
+    .catch((err) => container.logger.warn('Repository pattern migration failed', { error: String(err) }));
 
   process.on('uncaughtException', (err) => {
     if ((err as NodeJS.ErrnoException).code === 'EPIPE') {
