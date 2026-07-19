@@ -3,12 +3,11 @@ import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardSto
 import { DashboardHeader } from './DashboardHeader';
 import { IssuesBanner } from './IssuesBanner';
 import { PullRequestsSection } from './PullRequestsSection';
-import { MergedPRsSection } from './MergedPRsSection';
 import { RepoConfigPanel } from './RepoConfigPanel';
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
 
-type Tab = 'pulls' | 'issues' | 'merged' | 'settings';
+type Tab = 'pulls' | 'issues' | 'settings';
 
 interface Props {
   repoKey: string;
@@ -42,7 +41,6 @@ export function RepositoryDashboard({ repoKey }: Props) {
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'pulls', label: 'Pull Requests', count: openPRs.length },
     { key: 'issues', label: 'Issues', count: issues.length },
-    { key: 'merged', label: 'Merged', count: mergedPRs.length },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -95,7 +93,9 @@ export function RepositoryDashboard({ repoKey }: Props) {
           <PullRequestsSection
             org={org}
             name={name}
-            pullRequests={openPRs}
+            openPRs={openPRs}
+            mergedPRs={mergedPRs}
+            worktrees={data?.worktrees ?? []}
             diffStats={data?.diffStats ?? {}}
             githubUser={githubUser}
             loading={isLoading}
@@ -106,14 +106,6 @@ export function RepositoryDashboard({ repoKey }: Props) {
             org={org}
             name={name}
             issues={issues}
-            loading={isLoading}
-          />
-        )}
-        {activeTab === 'merged' && (
-          <MergedPRsSection
-            org={org}
-            name={name}
-            mergedPRs={mergedPRs}
             loading={isLoading}
           />
         )}
