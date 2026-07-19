@@ -7,7 +7,7 @@ import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardSto
 const data = {
   org: 'acme', name: 'app',
   openIssues: [], recentlyClosedIssues: [], openPullRequests: [], recentlyMergedPullRequests: [],
-  worktrees: [], diffStats: {}, githubUser: 'me', isClonedLocally: true,
+  worktrees: [], worktreeTickets: [], diffStats: {}, githubUser: 'me', isClonedLocally: true,
 };
 
 describe('RepositoryDashboard tabs', () => {

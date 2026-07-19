@@ -66,6 +66,7 @@ export type {
 export type {
   RepositorySummary,
   RepositoryDashboardData,
+  WorktreeTicketRef,
   RefreshInterval,
   RepositoryWsMessage,
   RepositoryWsMessageType,

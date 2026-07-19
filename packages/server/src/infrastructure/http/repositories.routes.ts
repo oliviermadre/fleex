@@ -1,12 +1,61 @@
 import type { FastifyInstance } from 'fastify';
-import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepoDiscovery, RepositorySummary, Worktree } from '@fleex/shared';
+import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepoDiscovery, RepositorySummary, Worktree, WorktreeTicketRef } from '@fleex/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
 import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
+import { parseTicketBranch } from '../../domain/services/worktree-ticket-resolver.js';
 import { GetRepositoryStatsUseCase } from '../../application/use-cases/get-repository-stats.js';
+import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { Container } from '../container.js';
 
 export function repositoryRoutes(container: Container) {
   const getRepositoryStats = new GetRepositoryStatsUseCase(container.ticketStore, container.agentEventStore);
+
+  /**
+   * Resolve each non-bare/non-main worktree to its Fleex ticket. Authoritative
+   * source is the worktree's `.fleex.json` manifest; falls back to the
+   * branch-name convention (ticket/<hex> or agent/<displayId>). Both id lookups
+   * span archived tickets, so done/cancelled worktrees still resolve after the
+   * session ends. Worktrees with no resolvable ticket are simply omitted.
+   */
+  async function resolveWorktreeTickets(worktrees: Worktree[]): Promise<WorktreeTicketRef[]> {
+    const targets = worktrees.filter((wt) => !wt.isBare && !wt.isMain);
+    if (targets.length === 0) return [];
+
+    let allTickets: TicketEntity[] | null = null;
+    const getAll = async () => (allTickets ??= await container.ticketStore.getAllTickets());
+
+    const resolveOne = async (wt: Worktree): Promise<TicketEntity | null> => {
+      const manifest = container.resolver.resolveManifest(wt.path);
+      if (manifest?.ticketId) {
+        const byId = await container.ticketStore.getTicketById(manifest.ticketId);
+        if (byId) return byId;
+      }
+      const parsed = parseTicketBranch(wt.branch);
+      if (parsed && 'displayId' in parsed) {
+        const byDisplay = await container.ticketStore.getTicketByDisplayId(parsed.displayId);
+        if (byDisplay) return byDisplay;
+      }
+      if (parsed && 'idPrefix' in parsed) {
+        const all = await getAll();
+        const match = all.find((t) => t.id.toLowerCase().startsWith(parsed.idPrefix));
+        if (match) return match;
+      }
+      return null;
+    };
+
+    const resolved = await Promise.all(targets.map(async (wt) => ({ wt, ticket: await resolveOne(wt) })));
+    return resolved
+      .filter((r): r is { wt: Worktree; ticket: TicketEntity } => r.ticket !== null)
+      .map(({ wt, ticket }) => ({
+        worktreePath: wt.path,
+        id: ticket.id,
+        displayId: ticket.displayId,
+        title: ticket.title,
+        status: ticket.status,
+        type: ticket.type,
+        boardId: ticket.boardId,
+      }));
+  }
 
   return async function (app: FastifyInstance) {
     app.get('/api/repositories', async () => {
@@ -426,6 +475,8 @@ export function repositoryRoutes(container: Container) {
 
         const githubUser = await container.githubGraphql.getCurrentUser();
 
+        const worktreeTickets = await resolveWorktreeTickets(worktrees);
+
         return {
           org,
           name,
@@ -434,6 +485,7 @@ export function repositoryRoutes(container: Container) {
           openPullRequests: pulls,
           recentlyMergedPullRequests: mergedPRs,
           worktrees,
+          worktreeTickets,
           diffStats,
           githubUser,
           isClonedLocally: repoExists,

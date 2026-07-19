@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { TicketStatus, TicketType } from '@fleex/shared';
+import type { PullRequest, TicketStatus, TicketType } from '@fleex/shared';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { TrashIcon } from '../ui/TrashIcon';
@@ -35,6 +35,12 @@ const STATUS_HUE: Record<TicketStatus, TintHue> = {
   cancelled: 'red',
 };
 
+const PR_STATE_HUE: Record<PullRequest['state'], TintHue> = {
+  open: 'green',
+  merged: 'purple',
+  closed: 'red',
+};
+
 function BranchIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -44,6 +50,16 @@ function BranchIcon() {
       <line x1="4" y1="5.5" x2="4" y2="10.5" />
       <path d="M4 5.5a4 4 0 004 4h2.5" />
     </svg>
+  );
+}
+
+function PrBadge({ repoName, pr }: { repoName: string; pr: PullRequest }) {
+  return (
+    <span className={cn('flex flex-shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tint(PR_STATE_HUE[pr.state]))}>
+      <BranchIcon />
+      {repoName}#{pr.number}
+      {pr.state !== 'open' && <span className="opacity-80">· {pr.state}</span>}
+    </span>
   );
 }
 
@@ -106,12 +122,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                         ${cost.toFixed(2)}
                       </span>
                     )}
-                    {row.pr && (
-                      <span className={cn('flex flex-shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tint('green'))}>
-                        <BranchIcon />
-                        {name}#{row.pr.number}
-                      </span>
-                    )}
+                    {row.pr && <PrBadge repoName={name} pr={row.pr} />}
                   </div>
                   <div className="mt-1 flex items-center gap-2">
                     <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">└ {row.worktree.branch}</span>
@@ -143,15 +154,43 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                 Orphaned worktrees
               </div>
               {rows.orphaned.map((row) => {
+                const ticket = row.ticket;
                 const behind = row.diff?.commitsBehind ?? 0;
                 return (
-                  <div key={row.worktree.path} className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-2 last:border-0">
-                    <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">{row.worktree.branch}</span>
-                    {behind > 0 && <span className={cn('font-mono text-[11px]', tintText('red'))}>↓{behind}</span>}
+                  <div key={row.worktree.path} className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0">
+                    <div className="min-w-0 flex-1">
+                      {ticket && (
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
+                          {ticket.type && (
+                            <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]', tint(TYPE_HUE[ticket.type]))}>
+                              {ticket.type}
+                            </span>
+                          )}
+                          <span
+                            className="min-w-0 flex-1 cursor-pointer truncate text-[13.5px] font-semibold text-[var(--theme-text-secondary)] hover:underline"
+                            onClick={() => navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)}
+                          >
+                            {ticket.title}
+                          </span>
+                          <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]', tint(STATUS_HUE[ticket.status]))}>
+                            {ticket.status}
+                          </span>
+                          {row.pr && <PrBadge repoName={name} pr={row.pr} />}
+                        </div>
+                      )}
+                      <div className={cn('flex items-center gap-2', ticket && 'mt-1')}>
+                        <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">
+                          {ticket ? '└ ' : ''}{row.worktree.branch}
+                        </span>
+                        {behind > 0 && <span className={cn('font-mono text-[11px]', tintText('red'))}>↓{behind}</span>}
+                        {!ticket && row.pr && <PrBadge repoName={name} pr={row.pr} />}
+                      </div>
+                    </div>
                     <button
                       type="button"
                       className={cn(
-                        'ml-auto flex flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors',
+                        'flex flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors',
                         tintClasses('red').hoverText,
                       )}
                       title="Delete worktree"

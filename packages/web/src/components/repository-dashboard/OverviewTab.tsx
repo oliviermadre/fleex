@@ -61,7 +61,7 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
   );
   const pulls = useMemo(() => [...data.openPullRequests, ...data.recentlyMergedPullRequests], [data]);
   const rows = useMemo(
-    () => buildWorktreeRows(data.worktrees, data.diffStats, sessionGroup, tickets, pulls),
+    () => buildWorktreeRows(data.worktrees, data.worktreeTickets, data.diffStats, sessionGroup, tickets, pulls),
     [data, sessionGroup, tickets, pulls],
   );
 

@@ -1,18 +1,31 @@
-import type { Worktree, DiffStats, Ticket, PullRequest, SessionGroup } from '@fleex/shared';
+import type { Worktree, DiffStats, Ticket, PullRequest, SessionGroup, WorktreeTicketRef } from '@fleex/shared';
 import { deriveWorktreeVerdict, type WorktreeVerdict } from '../../lib/worktreeVerdict';
 
 export interface WorktreeRow {
   worktree: Worktree;
   diff?: DiffStats;
-  ticket: Ticket | null;
+  ticket: WorktreeTicketRef | null;
   pr: PullRequest | null;
   verdict: WorktreeVerdict;
 }
 
 const CLOSED = new Set(['done', 'cancelled']);
 
+function toRef(worktreePath: string, ticket: Ticket): WorktreeTicketRef {
+  return {
+    worktreePath,
+    id: ticket.id,
+    displayId: ticket.displayId,
+    title: ticket.title,
+    status: ticket.status,
+    type: ticket.type ?? null,
+    boardId: ticket.boardId,
+  };
+}
+
 export function buildWorktreeRows(
   worktrees: Worktree[],
+  worktreeTickets: WorktreeTicketRef[],
   diffStats: Record<string, DiffStats>,
   sessionGroup: SessionGroup | undefined,
   tickets: Ticket[],
@@ -20,15 +33,23 @@ export function buildWorktreeRows(
 ): { active: WorktreeRow[]; orphaned: WorktreeRow[] } {
   const active: WorktreeRow[] = [];
   const orphaned: WorktreeRow[] = [];
+  const refByPath = new Map(worktreeTickets.map((r) => [r.worktreePath, r]));
 
   for (const worktree of worktrees) {
     if (worktree.isBare || worktree.isMain) continue;
 
+    // Server-resolved ticket (authoritative: reads .fleex.json, survives closed
+    // sessions and archived tickets). Fall back to the live session group / a
+    // worktree link only when the server could not resolve one.
+    const serverRef = refByPath.get(worktree.path);
     const grouped = sessionGroup?.worktrees.find((w) => w.path === worktree.path);
-    const ticket =
-      (grouped?.ticketId ? tickets.find((t) => t.id === grouped.ticketId) : undefined) ??
-      tickets.find((t) => t.links.some((l) => l.type === 'worktree' && (l.ref === worktree.path || l.ref.endsWith(`/${worktree.branch}`)))) ??
-      null;
+    const clientTicket = serverRef
+      ? null
+      : (grouped?.ticketId ? tickets.find((t) => t.id === grouped.ticketId) : undefined) ??
+        tickets.find((t) => t.links.some((l) => l.type === 'worktree' && (l.ref === worktree.path || l.ref.endsWith(`/${worktree.branch}`)))) ??
+        null;
+    const ticket = serverRef ?? (clientTicket ? toRef(worktree.path, clientTicket) : null);
+
     const pr = pulls.find((p) => p.headRefName === worktree.branch) ?? null;
     const diff = diffStats[worktree.branch];
 
