@@ -73,7 +73,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
   return (
     <div id="tickets-worktrees-panel" className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
       <div className="flex items-center justify-between gap-3 border-b border-[var(--theme-border)] px-5 py-3">
-        <span className="text-sm font-semibold uppercase tracking-wide text-[var(--theme-text-primary)]">Worktrees</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Worktrees</span>
         {total > 0 && (limited ? (
           <button type="button" onClick={onSeeAll} className="text-xs text-[var(--theme-accent)] hover:underline">
             {total} →
