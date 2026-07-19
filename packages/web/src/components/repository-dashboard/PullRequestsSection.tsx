@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { PullRequest, DiffStats, Ticket, Worktree } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
@@ -65,7 +64,6 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
   const boards = useTicketStore((s) => s.boards);
   const fetchDashboard = useRepositoryDashboardStore((s) => s.fetchDashboard);
   const costByTicket = useTicketActivityStore((s) => s.costByTicket);
-  const navigate = useNavigate();
 
   const ticketByPR = useMemo(() => {
     const map = new Map<string, Ticket>();
@@ -221,16 +219,6 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
                 </div>
 
                 {isOpen && <DiffStatsBadge stats={diffStats[row.headRefName]} />}
-
-                {ticket && (
-                  <button
-                    onClick={() => navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)}
-                    className={cn('flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[10.5px]', tintClasses('purple').solid, tintClasses('purple').onSolid)}
-                  >
-                    ticket #{ticket.displayId}
-                    <span className="rounded bg-white/20 px-1 text-[9.5px]">{ticket.status}</span>
-                  </button>
-                )}
 
                 {!isOpen && ticket && cost !== undefined && (
                   <span className={cn('rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tintClasses('pink').bg, tintClasses('pink').text)}>
