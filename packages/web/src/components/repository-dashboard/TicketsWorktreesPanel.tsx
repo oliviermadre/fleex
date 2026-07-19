@@ -4,6 +4,7 @@ import type { TicketStatus, TicketType } from '@fleex/shared';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { Button } from '../ui/Button';
+import { TrashIcon } from '../ui/TrashIcon';
 import { VERDICT_META } from '../../lib/worktreeVerdict';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses, type TintHue } from '../../lib/tints';
@@ -34,18 +35,6 @@ const STATUS_HUE: Record<TicketStatus, TintHue> = {
   done: 'green',
   cancelled: 'red',
 };
-
-function TrashIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 4.5h10" />
-      <path d="M6 4.5V3a1 1 0 011-1h2a1 1 0 011 1v1.5" />
-      <path d="M4.5 4.5l.6 8.4A1.5 1.5 0 006.6 14.4h2.8a1.5 1.5 0 001.5-1.5l.6-8.4" />
-      <line x1="6.5" y1="7" x2="6.5" y2="11.5" />
-      <line x1="9.5" y1="7" x2="9.5" y2="11.5" />
-    </svg>
-  );
-}
 
 function BranchIcon() {
   return (
@@ -95,7 +84,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
             const behind = row.diff?.commitsBehind ?? 0;
 
             return (
-              <div key={row.worktree.path} className="border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0">
+              <div key={row.worktree.path} className="group border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
                   {ticket.type && (
@@ -133,11 +122,14 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                   </span>
                   <button
                     type="button"
-                    className={cn('ml-auto flex-shrink-0 rounded p-0.5 opacity-60 transition-opacity hover:opacity-100', tintText('red'))}
+                    className={cn(
+                      'ml-auto hidden flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors group-hover:flex',
+                      tintClasses('red').hoverText,
+                    )}
                     title="Delete worktree"
                     onClick={() => setPendingDelete(row)}
                   >
-                    <TrashIcon />
+                    <TrashIcon size={12} />
                   </button>
                 </div>
               </div>

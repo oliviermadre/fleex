@@ -4,7 +4,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { cn } from '../../lib/cn';
 import { useCallback } from 'react';
 import { GitHubIcon } from './icons';
-import { tintText } from '../../lib/tints';
+import { TrashIcon } from '../ui/TrashIcon';
+import { tintText, tintClasses } from '../../lib/tints';
 
 interface Props {
   summary: RepositorySummary;
@@ -83,11 +84,14 @@ export function RepoItem({ summary, wtCount, onRemove }: Props) {
           </span>
           <span
             role="button"
-            className={cn('ml-1 flex-shrink-0 rounded p-0.5 opacity-25 transition-opacity group-hover:opacity-100', tintText('red'), 'hover:bg-[var(--tint-red-bg)]')}
+            className={cn(
+              'ml-1 hidden flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors group-hover:flex',
+              tintClasses('red').hoverText,
+            )}
             title="Stop tracking this repo"
             onClick={handleRemoveClick}
           >
-            <TrashIcon />
+            <TrashIcon size={12} />
           </span>
         </div>
       </div>
@@ -104,18 +108,6 @@ function GitBranchIcon() {
       <circle cx="12" cy="8" r="1.5" />
       <line x1="4" y1="5.5" x2="4" y2="10.5" />
       <path d="M4 5.5a4 4 0 004 4h2.5" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 4.5h10" />
-      <path d="M6 4.5V3a1 1 0 011-1h2a1 1 0 011 1v1.5" />
-      <path d="M4.5 4.5l.6 8.4A1.5 1.5 0 006.6 14.4h2.8a1.5 1.5 0 001.5-1.5l.6-8.4" />
-      <line x1="6.5" y1="7" x2="6.5" y2="11.5" />
-      <line x1="9.5" y1="7" x2="9.5" y2="11.5" />
     </svg>
   );
 }
