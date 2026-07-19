@@ -126,6 +126,12 @@ describe('parseUrl', () => {
     expect(result.redirect).toBe('/settings');
   });
 
+  it('redirects legacy /settings/repositories to the Repos view', () => {
+    const result = parseUrl('/settings/repositories', '');
+    expect(result.panel).toBe('repositories');
+    expect(result.redirect).toBeUndefined();
+  });
+
   it('parses /agents', () => {
     const result = parseUrl('/agents', '');
     expect(result.panel).toBe('agents');

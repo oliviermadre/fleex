@@ -67,7 +67,6 @@ export interface AppSettings {
 interface SettingsState {
   settings: AppSettings;
   loaded: boolean;
-  resolving: boolean;
   loadSettings: () => Promise<void>;
   saveSettings: (partial: Partial<AppSettings>) => Promise<void>;
   setSessionDisplayName: (sessionId: string, name: string) => void;
@@ -75,7 +74,6 @@ interface SettingsState {
   setRepoOrder: (order: string[]) => void;
   setWorktreeOrder: (repoGroupId: string, order: string[]) => void;
   setSessionOrder: (worktreeGroupId: string, order: string[]) => void;
-  resolveRepositories: () => Promise<void>;
   executePinnedAction: (icon: PinnedIcon) => void;
   executeWorkspaceAction: (action: WorkspaceAction, context: WorkspaceContext) => void;
   addLayoutGroup: (type: SessionLayoutType) => string;
@@ -127,7 +125,6 @@ function saveToStorage(settings: AppSettings) {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: loadFromStorage(),
   loaded: false,
-  resolving: false,
 
   loadSettings: async () => {
     try {
@@ -224,49 +221,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
     }).catch(() => { /* ignore */ });
-  },
-
-  resolveRepositories: async () => {
-    const { settings } = get();
-    if (settings.repositories.length === 0) return;
-
-    set({ resolving: true });
-    const resolved: string[] = [];
-
-    for (const pattern of settings.repositories) {
-      if (pattern.includes('*')) {
-        // Wildcard pattern: org/* -> resolve via API
-        const org = pattern.replace('/*', '').replace('*', '');
-        try {
-          const res = await fetch(`${API_URL}/repositories/resolve?org=${encodeURIComponent(org)}`);
-          if (res.ok) {
-            const repos: string[] = await res.json();
-            resolved.push(...repos);
-          } else {
-            resolved.push(pattern);
-          }
-        } catch {
-          resolved.push(pattern);
-        }
-      } else {
-        resolved.push(pattern);
-      }
-    }
-
-    const updated = {
-      ...settings,
-      resolvedRepositories: [...new Set(resolved)],
-      resolvedAt: new Date().toISOString(),
-    };
-    set({ settings: updated, resolving: false });
-    saveToStorage(updated);
-    try {
-      await fetch(`${API_URL}/config`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      });
-    } catch { /* ignore */ }
   },
 
   executePinnedAction: (icon: PinnedIcon) => {
