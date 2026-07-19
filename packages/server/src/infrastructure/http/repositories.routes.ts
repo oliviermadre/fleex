@@ -131,7 +131,11 @@ export function repositoryRoutes(container: Container) {
       '/api/repositories/:org/:name/pulls',
       async (request, reply) => {
         const { org, name } = request.params;
-        const cacheKey = `pulls:${org}/${name}`;
+        // Dedicated cache key: this route serves the sidebar with a MIXED list
+        // (open+merged+closed) indexed by branch. It must NOT share `pulls:${key}`,
+        // which the dashboard reads as open-only — sharing it leaked merged/closed
+        // PRs into the dashboard's openPullRequests (duplicate rows).
+        const cacheKey = `pulls-all:${org}/${name}`;
         if (request.query.force === 'true') {
           container.repositoryCache.invalidate(cacheKey);
         }

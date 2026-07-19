@@ -513,8 +513,10 @@ export function ticketRoutes(container: Container) {
               if (prLink) {
                 const prNumber = parseInt(prLink.ref.split('#')[1]!, 10);
                 if (prNumber) {
-                  // Try cache first, then fetch
-                  const cached = container.repositoryCache.get<import('@fleex/shared').PullRequest[]>(`pulls:${org}/${name}`);
+                  // Try cache first, then fetch. Use the mixed-state `pulls-all:`
+                  // cache (open+merged+closed) since a linked PR may already be
+                  // merged/closed — the dashboard's `pulls:` cache is open-only.
+                  const cached = container.repositoryCache.get<import('@fleex/shared').PullRequest[]>(`pulls-all:${org}/${name}`);
                   const pr = cached?.data?.find((p) => p.number === prNumber);
                   if (pr) {
                     branchName = pr.headRefName;
