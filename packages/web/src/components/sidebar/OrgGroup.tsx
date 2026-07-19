@@ -22,7 +22,7 @@ export function OrgGroup({ org, repos, wtCounts, onRemove }: Props) {
   return (
     <div className="my-1.5">
       <button
-        className="flex w-full items-center gap-1.5 px-4 py-2 text-left hover:bg-[var(--theme-bg-hover)]"
+        className="group flex w-full items-center gap-1.5 px-4 py-2 text-left hover:bg-[var(--theme-bg-hover)]"
         onClick={() => toggleGroup(groupId)}
       >
         <svg
@@ -49,7 +49,7 @@ export function OrgGroup({ org, repos, wtCounts, onRemove }: Props) {
           href={`https://github.com/${org}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="ml-auto text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
+          className="ml-auto text-[var(--theme-text-muted)] opacity-0 transition-opacity hover:text-[var(--theme-text-secondary)] group-hover:opacity-100"
           onClick={(e) => e.stopPropagation()}
         >
           <GitHubIcon size={14} />
