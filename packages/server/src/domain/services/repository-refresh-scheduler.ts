@@ -125,22 +125,35 @@ export class RepositoryRefreshScheduler {
         }
       }
 
-      // Also keep summaries for repos not in current batch
-      for (const repo of this.repos) {
-        const key = `${repo.org}/${repo.name}`;
-        if (!batchResults.has(key)) {
-          const cached = this.cache.get<RepositorySummary>(`summary:${key}`);
-          if (cached) {
-            const isClonedLocally = this.checkRepoExists
-              ? await this.checkRepoExists(repo.org, repo.name)
-              : undefined;
-            const enriched = isClonedLocally !== undefined ? { ...cached.data, isClonedLocally } : cached.data;
-            summaries.push(enriched);
+      if (scope) {
+        // Item refresh: emit only the refreshed repo(s) as single-repo updates
+        // that the client MERGES into its list. We must never rebuild/rebroadcast
+        // the whole list here — doing so from a possibly-cold cache would silently
+        // drop the other repos and collapse the sidebar.
+        for (const summary of summaries) {
+          this.broadcast('repo:summary-updated', summary);
+        }
+      } else {
+        // Collection refresh: the batch covers every configured repo, so the
+        // built list is complete. Backfill from cache only as a safety net for a
+        // partial GraphQL failure, then broadcast the full list (client replaces).
+        for (const repo of this.repos) {
+          const key = `${repo.org}/${repo.name}`;
+          if (!batchResults.has(key)) {
+            const cached = this.cache.get<RepositorySummary>(`summary:${key}`);
+            if (cached) {
+              const isClonedLocally = this.checkRepoExists
+                ? await this.checkRepoExists(repo.org, repo.name)
+                : undefined;
+              const enriched = isClonedLocally !== undefined ? { ...cached.data, isClonedLocally } : cached.data;
+              summaries.push(enriched);
+            }
           }
         }
+
+        this.broadcast('repo:summaries-updated', summaries);
       }
 
-      this.broadcast('repo:summaries-updated', summaries);
       this.broadcast('repo:refresh-complete', { timestamp: now });
     } finally {
       this.refreshing = false;

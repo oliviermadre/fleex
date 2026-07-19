@@ -81,6 +81,26 @@ export const useRepositoryDashboardStore = create<RepositoryDashboardState>((set
           summaries[`${s.org}/${s.name}`] = s;
         }
         set({ summaries, lastRefreshedAt: new Date().toISOString() });
+        // A collection refresh also refreshed the open dashboard's cache — pull
+        // its detailed data (issues/PRs) so the main panel stays reactive.
+        const open = get().dashboardData;
+        if (open) get().fetchDashboard(open.org, open.name);
+        break;
+      }
+      case 'repo:summary-updated': {
+        // Item refresh: merge the single repo into the list, leaving every other
+        // repo untouched. Never replace the whole map here.
+        const s = msg.data as RepositorySummary;
+        set((state) => ({
+          summaries: { ...state.summaries, [`${s.org}/${s.name}`]: s },
+          lastRefreshedAt: new Date().toISOString(),
+        }));
+        // If the refreshed repo is the one open in the main panel, reload its
+        // detailed data so a just-created issue/PR appears without a tab switch.
+        const current = get().dashboardData;
+        if (current && current.org === s.org && current.name === s.name) {
+          get().fetchDashboard(s.org, s.name);
+        }
         break;
       }
       case 'repo:dashboard-updated': {
