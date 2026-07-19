@@ -244,11 +244,11 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
                   )
                 ) : lingering ? (
                   <Button variant="danger" size="sm" onClick={() => setCleanupTarget(row.headRefName)}>
-                    Clean up
+                    Delete worktree
                   </Button>
                 ) : (
                   <Button variant="ghost" size="sm" onClick={() => window.open(prUrl, '_blank')}>
-                    Open
+                    View PR
                   </Button>
                 )}
               </div>
