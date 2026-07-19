@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import type { CreateWorktreeRequest, DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepoDiscovery, RepositorySummary, Worktree, WorktreeTicketRef } from '@fleex/shared';
+import type { DiffStats, GitHubIssue, GitHubIssueDetail, PullRequest, RepoDiscovery, RepositorySummary, Worktree, WorktreeTicketRef } from '@fleex/shared';
 import { RepositoryCache } from '../../domain/services/repository-cache.js';
-import { sanitizeBranchForPath } from '../../domain/services/branch-utils.js';
 import { parseTicketBranch } from '../../domain/services/worktree-ticket-resolver.js';
 import { GetRepositoryStatsUseCase } from '../../application/use-cases/get-repository-stats.js';
 import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
@@ -90,28 +89,6 @@ export function repositoryRoutes(container: Container) {
       },
     );
 
-    app.post<{ Params: { org: string; name: string }; Body: CreateWorktreeRequest }>(
-      '/api/repositories/:org/:name/worktrees',
-      async (request, reply) => {
-        const { org, name } = request.params;
-        const sanitized = sanitizeBranchForPath(request.body.branch);
-        const { prNumber, issueNumber } = request.body;
-        let dirName: string;
-        if (prNumber) {
-          dirName = `${name}.pr-${prNumber}-${sanitized}`;
-        } else if (issueNumber) {
-          dirName = `${name}.issue-${issueNumber}-${sanitized}`;
-        } else {
-          dirName = `${name}.${sanitized}`;
-        }
-        const wtPath = container.resolver.worktreeDir(org, dirName);
-        const result = await container.createWorktree.executeWithHook(org, name, wtPath, request.body);
-        return reply.code(201).send({
-          path: result.existingPath ?? wtPath,
-          hookStarted: result.hookStarted,
-        });
-      },
-    );
 
     app.delete<{ Params: { org: string; name: string }; Body: { path: string } }>(
       '/api/repositories/:org/:name/worktrees',

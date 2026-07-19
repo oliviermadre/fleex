@@ -79,6 +79,12 @@ export interface AgentWorktreeInfo {
   readonly agentDisplayName: string;
   readonly executionStatus: 'idle' | 'running' | 'completed' | 'failed';
   readonly latestExecutionId: string | null;
+  /**
+   * PR number when the ticket is linked to a GitHub pull request. Lets worktree
+   * reconciliation fetch `refs/pull/<n>/head` so a fork PR (whose branch is not on
+   * origin) checks out the actual PR head instead of falling back to origin/main.
+   */
+  readonly prNumber?: number;
 }
 
 export interface WorktreeDiffStats {

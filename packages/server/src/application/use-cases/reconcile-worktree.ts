@@ -1,4 +1,5 @@
-import { buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
@@ -31,8 +32,13 @@ export class ReconcileWorktreeUseCase {
     private readonly logger: LoggerPort,
   ) {}
 
-  async execute(org: string, repoName: string, branch: string): Promise<ReconcileResult> {
-    const cacheKey = `${org}/${repoName}:${branch}`;
+  async execute(
+    org: string,
+    repoName: string,
+    branch: string,
+    ws: { workspaceId: string; ticketId: string; prNumber?: number },
+  ): Promise<ReconcileResult> {
+    const cacheKey = `${ws.workspaceId}/${repoName}:${branch}`;
     const cached = this.cache.get(cacheKey);
     if (cached) {
       const ttl = cached.result.status === 'exists' || cached.result.status === 'created'
@@ -43,18 +49,26 @@ export class ReconcileWorktreeUseCase {
       }
     }
 
-    const result = await this.reconcile(org, repoName, branch);
+    const result = await this.reconcile(org, repoName, branch, ws);
     this.cache.set(cacheKey, { result, checkedAt: Date.now() });
     return result;
   }
 
-  private async reconcile(org: string, repoName: string, branch: string): Promise<ReconcileResult> {
+  private async reconcile(
+    org: string,
+    repoName: string,
+    branch: string,
+    ws: { workspaceId: string; ticketId: string; prNumber?: number },
+  ): Promise<ReconcileResult> {
     const barePath = this.resolver.barePath(org, repoName);
-    const wtPath = this.resolver.worktreeDir(org, buildWorktreeDirName(repoName, branch));
+    // Homogeneous convention: every ticket-scoped worktree lives under
+    // workspaces/{workspaceId}/{repoName}, never the legacy worktrees/{org}/... path.
+    const wtPath = this.resolver.workspaceRepoPath(ws.workspaceId, repoName);
 
     // 1. Check if worktree path already exists
     try {
       if (await this.hostFs.exists(wtPath)) {
+        this.ensureWorkspaceManifest(ws);
         return { path: wtPath, status: 'exists' };
       }
     } catch {
@@ -71,11 +85,18 @@ export class ReconcileWorktreeUseCase {
       return { path: null, status: 'failed' };
     }
 
-    // 3. Try to create worktree using existing branch
+    // 3. Ensure the ticket workspace + manifest exist so the dashboard can resolve
+    // this worktree back to its ticket (same manifest as ensureWorkspace /
+    // create-session-from-ticket), then create the worktree using the existing branch.
+    this.ensureWorkspaceManifest(ws);
+    // Pass prNumber so create-worktree can fetch refs/pull/<n>/head when the branch
+    // is not on origin (fork PRs) instead of falling back to a branch off main.
+    const prOpt = ws.prNumber ? { prNumber: ws.prNumber } : {};
     try {
       const existingPath = await this.createWorktree.execute(org, repoName, wtPath, {
         branch,
         createNewBranch: false,
+        ...prOpt,
       });
       // createWorktree returns null on success, or an existing path if reused
       const finalPath = existingPath ?? wtPath;
@@ -90,6 +111,7 @@ export class ReconcileWorktreeUseCase {
         const existingPath = await this.createWorktree.execute(org, repoName, wtPath, {
           branch,
           createNewBranch: true,
+          ...prOpt,
         });
         const finalPath = existingPath ?? wtPath;
         this.logger.info('Reconciled worktree (new branch from origin/main)', { org, repoName, branch, path: finalPath });
@@ -100,6 +122,22 @@ export class ReconcileWorktreeUseCase {
         });
         return { path: null, status: 'failed' };
       }
+    }
+  }
+
+  /** Create the ticket workspace dir + `.fleex.json` manifest if missing. */
+  private ensureWorkspaceManifest(ws: { workspaceId: string; ticketId: string }): void {
+    try {
+      const root = this.resolver.workspacePath(ws.workspaceId);
+      mkdirSync(root, { recursive: true });
+      const manifestPath = join(root, '.fleex.json');
+      if (!existsSync(manifestPath)) {
+        writeFileSync(manifestPath, JSON.stringify({ ticketId: ws.ticketId }, null, 2));
+      }
+    } catch (err) {
+      this.logger.warn('Failed to write workspace manifest during reconcile', {
+        workspaceId: ws.workspaceId, error: String(err),
+      });
     }
   }
 }

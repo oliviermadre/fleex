@@ -8,7 +8,7 @@ import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId, buildWorktreeDirName } from '../../domain/services/branch-utils.js';
+import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
 import { deriveTicketUpdateEvents } from '../../domain/services/ticket-audit-events.js';
 import { deriveTicketAgentActivity, deriveActivitySince } from '../../domain/services/ticket-agent-activity.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
@@ -633,13 +633,22 @@ export function ticketRoutes(container: Container) {
               }
             }
 
-            // If worktree is inside the workspace, move it back to standalone worktrees/
-            if (wtPath && org && name && branch && wtPath.startsWith(workspaceBase)) {
+            // Detaching a worktree from its ticket removes the physical worktree
+            // (branch preserved), mirroring the repository-unlink cleanup below. We
+            // no longer demote it to a standalone worktrees/ path — every worktree
+            // lives under the ticket's workspace or not at all.
+            if (wtPath && org && name && wtPath.startsWith(workspaceBase)) {
               const barePath = container.resolver.barePath(org, name);
-              const standalonePath = container.resolver.worktreeDir(org, buildWorktreeDirName(name, branch));
-              await container.git.moveWorktree(barePath, wtPath, standalonePath);
-              container.logger.info('Worktree moved back from workspace', {
-                from: wtPath, to: standalonePath, ticketId: ticket.id,
+              await container.git.removeWorktree(barePath, wtPath);
+              container.logger.info('Worktree removed on worktree-link deletion', {
+                wtPath, ticketId: ticket.id,
+              });
+              emit({
+                type: 'worktree.deleted',
+                repoPath: barePath,
+                worktreePath: wtPath,
+                ...(branch ? { branch } : {}),
+                occurredAt: new Date(),
               });
             }
 

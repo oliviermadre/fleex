@@ -4,8 +4,6 @@ import type {
   CreateSessionRequest,
   Repository,
   Worktree,
-  CreateWorktreeRequest,
-  CreateWorktreeResponse,
   PullRequest,
   GitHubIssue,
   GitHubIssueDetail,
@@ -111,17 +109,6 @@ export async function fetchBranches(org: string, name: string): Promise<string[]
 
 export async function fetchWorktrees(org: string, name: string): Promise<Worktree[]> {
   return request<Worktree[]>(`/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`);
-}
-
-export async function createWorktree(
-  org: string,
-  name: string,
-  req: CreateWorktreeRequest
-): Promise<CreateWorktreeResponse> {
-  return request<CreateWorktreeResponse>(
-    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`,
-    { method: 'POST', body: JSON.stringify(req) }
-  );
 }
 
 export async function fetchPullRequests(org: string, name: string, force = false): Promise<PullRequest[]> {
