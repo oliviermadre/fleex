@@ -53,6 +53,7 @@ export function repositoryRoutes(container: Container) {
         title: ticket.title,
         status: ticket.status,
         type: ticket.type,
+        priority: ticket.priority,
         boardId: ticket.boardId,
       }));
   }

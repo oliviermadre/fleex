@@ -1,5 +1,5 @@
 import type { PullRequest, GitHubIssue, Worktree, DiffStats } from './repository.js';
-import type { TicketStatus, TicketType } from './ticket.js';
+import type { TicketStatus, TicketType, TicketPriority } from './ticket.js';
 
 /**
  * Server-resolved link from a git worktree to its Fleex ticket. Resolved
@@ -15,6 +15,7 @@ export interface WorktreeTicketRef {
   readonly title: string;
   readonly status: TicketStatus;
   readonly type: TicketType | null;
+  readonly priority: TicketPriority;
   readonly boardId: string;
 }
 

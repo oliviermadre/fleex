@@ -19,6 +19,7 @@ function toRef(worktreePath: string, ticket: Ticket): WorktreeTicketRef {
     title: ticket.title,
     status: ticket.status,
     type: ticket.type ?? null,
+    priority: ticket.priority,
     boardId: ticket.boardId,
   };
 }

@@ -4,6 +4,7 @@ import type { PullRequest, TicketStatus, TicketType } from '@fleex/shared';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { TrashIcon } from '../ui/TrashIcon';
+import { PriorityIndicator } from '../tickets/PriorityIndicator';
 import { VERDICT_META } from '../../lib/worktreeVerdict';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses, type TintHue } from '../../lib/tints';
@@ -143,6 +144,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
+                    <PriorityIndicator priority={ticket.priority} size="sm" />
                     {ticket.type && (
                       <span className={cn('flex-shrink-0 text-[12px] font-medium capitalize', tintText(TYPE_HUE[ticket.type]))}>
                         {ticket.type}
@@ -207,6 +209,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                       {ticket && (
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
+                          <PriorityIndicator priority={ticket.priority} size="sm" />
                           {ticket.type && (
                             <span className={cn('flex-shrink-0 text-[12px] font-medium capitalize', tintText(TYPE_HUE[ticket.type]))}>
                               {ticket.type}
