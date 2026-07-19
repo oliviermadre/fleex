@@ -104,7 +104,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
                     {ticket.type && (
-                      <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]', tint(TYPE_HUE[ticket.type]))}>
+                      <span className={cn('flex-shrink-0 text-[12px] font-medium capitalize', tintText(TYPE_HUE[ticket.type]))}>
                         {ticket.type}
                       </span>
                     )}
@@ -165,7 +165,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
                           {ticket.type && (
-                            <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]', tint(TYPE_HUE[ticket.type]))}>
+                            <span className={cn('flex-shrink-0 text-[12px] font-medium capitalize', tintText(TYPE_HUE[ticket.type]))}>
                               {ticket.type}
                             </span>
                           )}
