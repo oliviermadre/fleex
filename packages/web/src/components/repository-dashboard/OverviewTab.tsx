@@ -159,7 +159,7 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
           <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-5 py-3">
-            <span className="text-sm font-semibold text-[var(--theme-text-primary)]">Pull requests</span>
+            <span className="text-sm font-semibold uppercase tracking-wide text-[var(--theme-text-primary)]">Pull requests</span>
             <button
               type="button"
               onClick={() => onNavigate('pulls')}
@@ -191,7 +191,7 @@ export function OverviewTab({ org, name, data, stats, onNavigate }: Props) {
 
         <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
           <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-5 py-3">
-            <span className="text-sm font-semibold text-[var(--theme-text-primary)]">Recent issues</span>
+            <span className="text-sm font-semibold uppercase tracking-wide text-[var(--theme-text-primary)]">Recent issues</span>
             <button
               type="button"
               onClick={() => onNavigate('issues')}
