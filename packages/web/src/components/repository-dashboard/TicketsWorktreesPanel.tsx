@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import type { TicketStatus, TicketType } from '@fleex/shared';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { ConfirmModal } from '../ui/ConfirmModal';
-import { Button } from '../ui/Button';
 import { TrashIcon } from '../ui/TrashIcon';
 import { VERDICT_META } from '../../lib/worktreeVerdict';
 import { cn } from '../../lib/cn';
@@ -84,54 +83,56 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
             const behind = row.diff?.commitsBehind ?? 0;
 
             return (
-              <div key={row.worktree.path} className="group border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
-                  {ticket.type && (
-                    <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]', tint(TYPE_HUE[ticket.type]))}>
-                      {ticket.type}
-                    </span>
-                  )}
-                  <span
-                    className="min-w-0 flex-1 cursor-pointer truncate text-[13.5px] font-semibold text-[var(--theme-text-primary)] hover:underline"
-                    onClick={() => navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)}
-                  >
-                    {ticket.title}
-                  </span>
-                  <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]', tint(STATUS_HUE[ticket.status]))}>
-                    {ticket.status}
-                  </span>
-                  {cost !== undefined && (
-                    <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tintClasses('pink').bg, tintClasses('pink').text)}>
-                      ${cost.toFixed(2)}
-                    </span>
-                  )}
-                  {row.pr && (
-                    <span className={cn('flex flex-shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tint('green'))}>
-                      <BranchIcon />
-                      {name}#{row.pr.number}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">└ {row.worktree.branch}</span>
-                  {ahead > 0 && <span className={cn('font-mono text-[11px]', tintText('green'))}>↑{ahead}</span>}
-                  {behind > 0 && <span className={cn('font-mono text-[11px]', tintText('red'))}>↓{behind}</span>}
-                  <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', tint(VERDICT_META[row.verdict].hue))}>
-                    {VERDICT_META[row.verdict].label}
-                  </span>
-                  <button
-                    type="button"
-                    className={cn(
-                      'ml-auto hidden flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors group-hover:flex',
-                      tintClasses('red').hoverText,
+              <div key={row.worktree.path} className="group flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0">
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
+                    {ticket.type && (
+                      <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]', tint(TYPE_HUE[ticket.type]))}>
+                        {ticket.type}
+                      </span>
                     )}
-                    title="Delete worktree"
-                    onClick={() => setPendingDelete(row)}
-                  >
-                    <TrashIcon />
-                  </button>
+                    <span
+                      className="min-w-0 flex-1 cursor-pointer truncate text-[13.5px] font-semibold text-[var(--theme-text-primary)] hover:underline"
+                      onClick={() => navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)}
+                    >
+                      {ticket.title}
+                    </span>
+                    <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]', tint(STATUS_HUE[ticket.status]))}>
+                      {ticket.status}
+                    </span>
+                    {cost !== undefined && (
+                      <span className={cn('flex-shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tintClasses('pink').bg, tintClasses('pink').text)}>
+                        ${cost.toFixed(2)}
+                      </span>
+                    )}
+                    {row.pr && (
+                      <span className={cn('flex flex-shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tint('green'))}>
+                        <BranchIcon />
+                        {name}#{row.pr.number}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">└ {row.worktree.branch}</span>
+                    {ahead > 0 && <span className={cn('font-mono text-[11px]', tintText('green'))}>↑{ahead}</span>}
+                    {behind > 0 && <span className={cn('font-mono text-[11px]', tintText('red'))}>↓{behind}</span>}
+                    <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', tint(VERDICT_META[row.verdict].hue))}>
+                      {VERDICT_META[row.verdict].label}
+                    </span>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  className={cn(
+                    'hidden flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors group-hover:flex',
+                    tintClasses('red').hoverText,
+                  )}
+                  title="Delete worktree"
+                  onClick={() => setPendingDelete(row)}
+                >
+                  <TrashIcon />
+                </button>
               </div>
             );
           })}
@@ -147,11 +148,17 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                   <div key={row.worktree.path} className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-2 last:border-0">
                     <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">{row.worktree.branch}</span>
                     {behind > 0 && <span className={cn('font-mono text-[11px]', tintText('red'))}>↓{behind}</span>}
-                    <span className="ml-auto">
-                      <Button variant="danger" size="sm" onClick={() => setPendingDelete(row)}>
-                        Remove
-                      </Button>
-                    </span>
+                    <button
+                      type="button"
+                      className={cn(
+                        'ml-auto flex flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors',
+                        tintClasses('red').hoverText,
+                      )}
+                      title="Delete worktree"
+                      onClick={() => setPendingDelete(row)}
+                    >
+                      <TrashIcon />
+                    </button>
                   </div>
                 );
               })}
