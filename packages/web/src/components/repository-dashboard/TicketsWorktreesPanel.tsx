@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { PullRequest, TicketStatus, TicketType } from '@fleex/shared';
+import type { PullRequest, TicketType } from '@fleex/shared';
 import { useTicketActivityStore } from '../../stores/ticketActivityStore';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { TrashIcon } from '../ui/TrashIcon';
@@ -8,6 +8,7 @@ import { PriorityIndicator } from '../tickets/PriorityIndicator';
 import { VERDICT_META } from '../../lib/worktreeVerdict';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses, type TintHue } from '../../lib/tints';
+import { getStatusBadgeClass } from '../../lib/statusColors';
 import * as api from '../../services/api';
 import type { WorktreeRow } from './overview-helpers';
 
@@ -27,15 +28,6 @@ const TYPE_HUE: Record<TicketType, TintHue> = {
   think: 'indigo',
   review: 'purple',
   lead: 'orange',
-};
-
-const STATUS_HUE: Record<TicketStatus, TintHue> = {
-  backlog: 'gray',
-  todo: 'gray',
-  doing: 'yellow',
-  reviewing: 'purple',
-  done: 'green',
-  cancelled: 'red',
 };
 
 const PR_STATE_HUE: Record<PullRequest['state'], TintHue> = {
@@ -161,13 +153,14 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                     <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">└ {row.worktree.branch}</span>
                     {ahead > 0 && <span className={cn('font-mono text-[11px]', tintText('green'))}>↑{ahead}</span>}
                     {behind > 0 && <span className={cn('font-mono text-[11px]', tintText('red'))}>↓{behind}</span>}
+                    {row.pr && <PrBadge repoName={name} pr={row.pr} />}
                     <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', tint(VERDICT_META[row.verdict].hue))}>
                       {VERDICT_META[row.verdict].label}
                     </span>
                   </div>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
-                  <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', tint(STATUS_HUE[ticket.status]))}>
+                  <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', getStatusBadgeClass(ticket.status))}>
                     {ticket.status}
                   </span>
                   {cost !== undefined && (
@@ -175,7 +168,6 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                       ${cost.toFixed(2)}
                     </span>
                   )}
-                  {row.pr && <PrBadge repoName={name} pr={row.pr} />}
                 </div>
                 <button
                   type="button"
@@ -228,16 +220,14 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
                           {ticket ? '└ ' : ''}{row.worktree.branch}
                         </span>
                         {behind > 0 && <span className={cn('font-mono text-[11px]', tintText('red'))}>↓{behind}</span>}
+                        {row.pr && <PrBadge repoName={name} pr={row.pr} />}
                       </div>
                     </div>
-                    {(ticket || row.pr) && (
+                    {ticket && (
                       <div className="flex flex-shrink-0 items-center gap-2">
-                        {ticket && (
-                          <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', tint(STATUS_HUE[ticket.status]))}>
-                            {ticket.status}
-                          </span>
-                        )}
-                        {row.pr && <PrBadge repoName={name} pr={row.pr} />}
+                        <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', getStatusBadgeClass(ticket.status))}>
+                          {ticket.status}
+                        </span>
                       </div>
                     )}
                     <button
