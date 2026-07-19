@@ -17,6 +17,8 @@ interface Props {
   onDeleted: () => void;
 }
 
+type WorktreeFilter = 'all' | 'active' | 'stale';
+
 const TYPE_HUE: Record<TicketType, TintHue> = {
   fix: 'red',
   build: 'green',
@@ -68,6 +70,7 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
   const costByTicket = useTicketActivityStore((s) => s.costByTicket);
   const [pendingDelete, setPendingDelete] = useState<WorktreeRow | null>(null);
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<WorktreeFilter>('all');
 
   const handleConfirm = useCallback(async () => {
     if (!pendingDelete) return;
@@ -81,17 +84,48 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
     }
   }, [pendingDelete, org, name, onDeleted]);
 
-  const isEmpty = rows.active.length === 0 && rows.orphaned.length === 0;
+  const total = rows.active.length + rows.orphaned.length;
+  const visibleActive = filter === 'stale' ? [] : rows.active;
+  const visibleStale = filter === 'active' ? [] : rows.orphaned;
+  const nothingVisible = visibleActive.length === 0 && visibleStale.length === 0;
+
+  const SEGMENTS: { key: WorktreeFilter; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: total },
+    { key: 'active', label: 'Active', count: rows.active.length },
+    { key: 'stale', label: 'Stale', count: rows.orphaned.length },
+  ];
 
   return (
     <div id="tickets-worktrees-panel" className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
-      <div className="px-5 py-3 text-sm font-semibold border-b border-[var(--theme-border)]">Tickets & worktrees</div>
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--theme-border)] px-5 py-3">
+        <span className="text-sm font-semibold">Tickets & worktrees</span>
+        {total > 0 && (
+          <div className="flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-0.5">
+            {SEGMENTS.map((s) => (
+              <button
+                key={s.key}
+                className={cn(
+                  'rounded-md px-3 py-1 text-xs transition-colors',
+                  filter === s.key
+                    ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
+                )}
+                onClick={() => setFilter(s.key)}
+              >
+                {s.label} {s.count}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {isEmpty ? (
-        <div className="py-10 text-center text-sm text-[var(--theme-text-muted)]">No active worktrees</div>
+      {nothingVisible ? (
+        <div className="py-10 text-center text-sm text-[var(--theme-text-muted)]">
+          {filter === 'stale' ? 'No stale worktrees' : 'No active worktrees'}
+        </div>
       ) : (
         <>
-          {rows.active.map((row) => {
+          {visibleActive.map((row) => {
             const ticket = row.ticket;
             if (!ticket) return null;
             const cost = costByTicket[ticket.id];
@@ -150,12 +184,15 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted }: Props) {
             );
           })}
 
-          {rows.orphaned.length > 0 && (
+          {visibleStale.length > 0 && (
             <div id="orphaned-worktrees">
-              <div className={cn('px-5 pt-3 pb-1 text-[10.5px] font-bold uppercase tracking-wider', tintText('red'))}>
-                Orphaned worktrees
-              </div>
-              {rows.orphaned.map((row) => {
+              {filter === 'all' && (
+                <div className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-overlay)] px-5 py-1.5">
+                  <span className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Stale</span>
+                  <span className="text-[10.5px] text-[var(--theme-text-faint)]">{rows.orphaned.length}</span>
+                </div>
+              )}
+              {visibleStale.map((row) => {
                 const ticket = row.ticket;
                 const behind = row.diff?.commitsBehind ?? 0;
                 return (
