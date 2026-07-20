@@ -115,6 +115,51 @@ export function parseGithubIssueUrl(
 }
 
 /**
+ * Parse a full GitHub PR URL (`https://github.com/{org}/{name}/pull/{n}`) into
+ * its parts. Mirror of `parseGithubIssueUrl`: tolerates `http`, a trailing
+ * slash, and a query/fragment. Exits with a helpful message on anything that
+ * isn't a GitHub *pull* URL (e.g. an `/issues/` URL or a non-github host).
+ * Returns the canonical `org/name#number` ref and a normalized PR URL.
+ */
+export function parseGithubPrUrl(
+  input: string,
+): { ref: string; org: string; name: string; number: number; url: string } {
+  const m = input.match(
+    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:[/?#].*)?$/,
+  );
+  if (!m) {
+    die(`Invalid GitHub PR URL "${input}" (expected https://github.com/org/name/pull/N)`);
+  }
+  const [, org, name, num] = m as RegExpMatchArray;
+  const number = parseInt(num!, 10);
+  return {
+    ref: `${org}/${name}#${number}`,
+    org: org!,
+    name: name!,
+    number,
+    url: `https://github.com/${org}/${name}/pull/${number}`,
+  };
+}
+
+/** True if `s` looks like an http(s) URL (vs a shorthand `org/name#N` ref). */
+const isHttpUrl = (s: string): boolean => /^https?:\/\//i.test(s);
+
+/**
+ * Resolve a PR reference from EITHER a full GitHub PR URL (the natural output
+ * of `gh pr create`) OR the `org/name#N` shortcut. Both yield the same
+ * canonical `org/name#N` ref, so linking by URL and unlinking by shortcut
+ * (or vice-versa) match.
+ */
+export function resolvePrRef(input: string) {
+  return isHttpUrl(input) ? parseGithubPrUrl(input) : parseGithubRef(input, 'pull');
+}
+
+/** Resolve an issue reference from either a full issue URL or `org/name#N`. */
+export function resolveIssueRef(input: string) {
+  return isHttpUrl(input) ? parseGithubIssueUrl(input) : parseGithubRef(input, 'issues');
+}
+
+/**
  * Normalize a due date input (`YYYY-MM-DD` or a full ISO string) to an ISO
  * 8601 string. Exits if the value can't be parsed into a real date.
  */

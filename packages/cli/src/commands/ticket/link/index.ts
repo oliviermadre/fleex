@@ -1,7 +1,7 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { ok, die, err, c } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiPost } from '../../../core/api.ts';
-import { accumulate, parseGithubRef, resolveTicketId } from '../_shared.ts';
+import { accumulate, resolvePrRef, resolveIssueRef, resolveTicketId } from '../_shared.ts';
 
 interface LinkOptions {
   repo?: string[];
@@ -18,12 +18,12 @@ interface Repository {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'link',
-  description: 'Link repositories / PRs / issues to a ticket (link <id> --repo org/name | --pr org/name#n | --issue org/name#n)',
+  description: 'Link repositories / PRs / issues to a ticket — --pr and --issue accept a full GitHub URL or org/name#N (link <id> --repo org/name | --pr <pr-url|org/name#n> | --issue <issue-url|org/name#n>)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
     cmd.option('--repo <org/name>', 'Repository to link (repeatable)', accumulate, [] as string[]);
-    cmd.option('--pr <org/name#n>', 'GitHub PR to link (repeatable)', accumulate, [] as string[]);
-    cmd.option('--issue <org/name#n>', 'GitHub issue to link (repeatable)', accumulate, [] as string[]);
+    cmd.option('--pr <url|org/name#n>', 'GitHub PR to link — full PR URL or org/name#N (repeatable)', accumulate, [] as string[]);
+    cmd.option('--issue <url|org/name#n>', 'GitHub issue to link — full issue URL or org/name#N (repeatable)', accumulate, [] as string[]);
     cmd.option('--board <id>', 'Disambiguate by board');
   },
   action: async (idArg: string, opts: LinkOptions) => {
@@ -41,9 +41,9 @@ const def: CommandDef = {
         die(`Invalid --repo "${r}" (expected format org/name, e.g. github/fleex)`);
       }
     }
-    // Validate PR/issue refs up-front (org/name#number).
-    const prRefs = prs.map((p) => parseGithubRef(p, 'pull'));
-    const issueRefs = issues.map((i) => parseGithubRef(i, 'issues'));
+    // Validate PR/issue refs up-front — accepts a full GitHub URL or org/name#N.
+    const prRefs = prs.map(resolvePrRef);
+    const issueRefs = issues.map(resolveIssueRef);
 
     const uuid = await resolveTicketId(idArg, opts.board);
     const base = apiBase();

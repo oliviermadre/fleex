@@ -1,7 +1,7 @@
 import type { CommandDef } from '../../../core/types.ts';
 import { ok, die, info } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiDelete } from '../../../core/api.ts';
-import { accumulate, parseGithubRef, resolveTicketId } from '../_shared.ts';
+import { accumulate, resolvePrRef, resolveIssueRef, resolveTicketId } from '../_shared.ts';
 
 interface UnlinkOptions {
   repo?: string[];
@@ -17,12 +17,12 @@ interface TicketWithLinks {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'unlink',
-  description: 'Unlink repositories / PRs / issues from a ticket (unlink <id> --repo org/name | --pr org/name#n | --issue org/name#n)',
+  description: 'Unlink repositories / PRs / issues from a ticket — --pr and --issue accept a full GitHub URL or org/name#N (unlink <id> --repo org/name | --pr <pr-url|org/name#n> | --issue <issue-url|org/name#n>)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
     cmd.option('--repo <org/name>', 'Repository to unlink (repeatable)', accumulate, [] as string[]);
-    cmd.option('--pr <org/name#n>', 'GitHub PR to unlink (repeatable)', accumulate, [] as string[]);
-    cmd.option('--issue <org/name#n>', 'GitHub issue to unlink (repeatable)', accumulate, [] as string[]);
+    cmd.option('--pr <url|org/name#n>', 'GitHub PR to unlink — full PR URL or org/name#N (repeatable)', accumulate, [] as string[]);
+    cmd.option('--issue <url|org/name#n>', 'GitHub issue to unlink — full issue URL or org/name#N (repeatable)', accumulate, [] as string[]);
     cmd.option('--board <id>', 'Disambiguate by board');
   },
   action: async (idArg: string, opts: UnlinkOptions) => {
@@ -39,8 +39,10 @@ const def: CommandDef = {
         die(`Invalid --repo "${r}" (expected format org/name, e.g. github/fleex)`);
       }
     }
-    const prRefs = prs.map((p) => parseGithubRef(p, 'pull'));
-    const issueRefs = issues.map((i) => parseGithubRef(i, 'issues'));
+    // Accepts a full GitHub URL or org/name#N; both normalise to the canonical
+    // org/name#N ref, so unlink matches a link made either way.
+    const prRefs = prs.map(resolvePrRef);
+    const issueRefs = issues.map(resolveIssueRef);
 
     const uuid = await resolveTicketId(idArg, opts.board);
     const base = apiBase();

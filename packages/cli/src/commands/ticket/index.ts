@@ -39,8 +39,8 @@ ${SECTION('Examples:')}
   ${DIM('$')} fleex ticket mentions 42                   ${DIM('# list mentions + their ids')}
   ${DIM('$')} fleex ticket mention resolve 42 a1b2c3d4   ${DIM('# resolve/ack/wait/run/delete a mention')}
   ${DIM('$')} fleex ticket link 42 --repo github/fleex    ${DIM('# link a repo (auto-creates worktree)')}
-  ${DIM('$')} fleex ticket link 42 --pr org/name#123      ${DIM('# attach a PR (link PR before repo)')}
-  ${DIM('$')} fleex ticket link 42 --issue org/name#45    ${DIM('# attach a GitHub issue')}
+  ${DIM('$')} fleex ticket link 42 --pr https://github.com/org/name/pull/123  ${DIM('# attach a PR (URL or org/name#N)')}
+  ${DIM('$')} fleex ticket link 42 --issue org/name#45    ${DIM('# attach an issue (URL or org/name#N)')}
   ${DIM('$')} fleex ticket unlink 42 --repo github/fleex  ${DIM('# unlink a repo / --pr / --issue')}
   ${DIM('$')} fleex ticket deliverable list 42           ${DIM('# list deliverables')}
   ${DIM('$')} fleex ticket deliverable add 42 --title T --type prd --file ./prd.md
