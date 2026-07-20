@@ -1,10 +1,14 @@
 import type { CommandDef } from '../../../core/types.ts';
+import chalk from 'chalk';
 import { die, info } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
 import { printJson, renderTable, trunc } from '../../../core/agentic.ts';
 import { resolveRepoArg, type PullRequest } from '../_shared.ts';
 
 const STATES = ['open', 'merged', 'closed'] as const;
+const SECTION = chalk.bold.yellow;
+const GREEN = chalk.green;
+const DIM = chalk.dim;
 
 interface Options { repo?: string; state?: string; json?: boolean }
 
@@ -13,6 +17,10 @@ const def: CommandDef = {
   name: 'pr',
   aliases: ['prs', 'pulls'],
   description: 'List the pull requests of a repository',
+  extraHelp: `\n${SECTION('Read-only:')}  lists a repo's PRs — it does NOT create or attach a PR.
+  To ATTACH an existing PR to a ticket (e.g. after ${GREEN('gh pr create')}):
+  ${DIM('$')} fleex ticket link <ticket-id> --pr <pr-url|org/name#N>
+`,
   setup(cmd) {
     cmd.argument('[org/name]', 'Repository reference (or use --repo)');
     cmd.option('--repo <org/name>', 'Repository reference');

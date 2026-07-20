@@ -71,6 +71,25 @@ const def: CommandDef = {
 
 export default def;
 
+/**
+ * Curated goal → command recipes, rendered at the TOP of the reference so an
+ * LLM maps an intent to the right command before scanning the full index.
+ *
+ * Why this static list lives in an otherwise zero-maintenance file: the whole
+ * point is that some high-frequency agent tasks (esp. "attach a PR to a
+ * ticket") were undiscoverable in the flat, alphabetical command dump. Keep it
+ * SHORT, keep it in sync with the commands it points at, and centralise the
+ * maintenance here in this single constant.
+ */
+const COMMON_TASKS: Array<{ goal: string; command: string }> = [
+  { goal: 'Attacher / linker une PR GitHub existante à un ticket', command: 'fleex ticket link <ticket-id> --pr <pr-url|org/name#N>' },
+  { goal: 'Attacher / linker une issue GitHub à un ticket', command: 'fleex ticket link <ticket-id> --issue <issue-url|org/name#N>' },
+  { goal: 'Linker un repo à un ticket (crée le worktree)', command: 'fleex ticket link <ticket-id> --repo <org/name>' },
+  { goal: 'Créer un ticket', command: 'fleex ticket create --title "…"' },
+  { goal: 'Commenter un ticket', command: 'fleex ticket comment <ticket-id> "…"' },
+  { goal: 'Déplacer un ticket vers un statut', command: 'fleex ticket move <ticket-id> <status>' },
+];
+
 export function describeCommand(cmd: Command, breadcrumb: string[]): CommandDoc {
   const args = (cmd as unknown as { registeredArguments?: Argument[]; _args?: Argument[] });
   const argList: Argument[] = (args.registeredArguments ?? args._args ?? []) as Argument[];
@@ -100,13 +119,18 @@ export function describeCommand(cmd: Command, breadcrumb: string[]): CommandDoc 
   };
 }
 
-function renderMarkdown(root: Command, docs: CommandDoc[]): string {
+export function renderMarkdown(root: Command, docs: CommandDoc[]): string {
   const lines: string[] = [];
   lines.push(`# ${root.name()} CLI Reference`);
   if (root.version()) lines.push(`Version: \`${root.version()}\``);
   if (root.description()) lines.push('', root.description());
   lines.push('');
   lines.push('> Auto-generated from the live command tree. Re-run `fleex documentation` after any update.');
+  lines.push('');
+  lines.push('## Common tasks');
+  lines.push('> Intention → commande. Si ton but est listé ici, utilise directement cette commande.');
+  lines.push('');
+  for (const t of COMMON_TASKS) lines.push(`- **${t.goal}** → \`${t.command}\``);
   lines.push('');
   lines.push('## Index');
   for (const d of docs) lines.push(`- \`${d.path}\` — ${d.description}`);
@@ -147,9 +171,12 @@ function renderMarkdown(root: Command, docs: CommandDoc[]): string {
   return lines.join('\n');
 }
 
-function renderText(root: Command, docs: CommandDoc[]): string {
+export function renderText(root: Command, docs: CommandDoc[]): string {
   const lines: string[] = [];
   lines.push(`${root.name()} CLI Reference (v${root.version() ?? '?'})`);
+  lines.push('');
+  lines.push('Common tasks (intention -> command):');
+  for (const t of COMMON_TASKS) lines.push(`  - ${t.goal} -> ${t.command}`);
   lines.push('');
   for (const d of docs) {
     lines.push(`${d.path}${d.aliases.length ? ' (' + d.aliases.join(', ') + ')' : ''}`);
