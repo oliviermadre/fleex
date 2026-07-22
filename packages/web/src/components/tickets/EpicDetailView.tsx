@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { TicketGroup, Ticket, TicketStatus } from '@fleex/shared';
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { DomainEventLog } from '@fleex/shared';
@@ -511,8 +510,10 @@ function TicketsTab({ epicId, boardIds, epicTickets }: { epicId: string; boardId
   const [showPicker, setShowPicker] = useState(false);
   const removeTicketFromGroup = useTicketGroupStore((s) => s.removeTicketFromGroup);
   const setSelectedEpicDetail = useTicketGroupStore((s) => s.setSelectedEpicDetail);
+  const setActiveView = useTicketGroupStore((s) => s.setActiveView);
   const boards = useTicketStore((s) => s.boards);
-  const navigate = useNavigate();
+  const selectBoard = useTicketStore((s) => s.selectBoard);
+  const selectTicket = useTicketStore((s) => s.selectTicket);
 
   const boardMap = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
 
@@ -543,9 +544,17 @@ function TicketsTab({ epicId, boardIds, epicTickets }: { epicId: string; boardId
     return groups;
   }, [epicTickets, boardMap]);
 
+  // Navigate store-driven (like KanbanCard / RoadmapView) so RouterSync computes a
+  // single coherent ticket URL. An epic is only opened from the roadmap, so the
+  // store still holds activeView='roadmap'; without resetting it to 'board' the
+  // roadmap branch of storeToUrl wins and bounces us back to the roadmap.
+  // Order matters: selectBoard() resets selectedTicketId, so selectTicket() must
+  // run after it (an epic can span several boards, hence selectBoard first).
   const handleClickTicket = (ticket: Ticket) => {
     setSelectedEpicDetail(null);
-    navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`);
+    setActiveView('board');
+    selectBoard(ticket.boardId);
+    selectTicket(ticket.id);
   };
 
   return (
