@@ -91,6 +91,40 @@ describe('useDraft', () => {
     expect(getByTestId('value').textContent).toBe('note B');
   });
 
+  it('routes a stale-closure setter to the currently rendered key (Cockpit: switch ticket, sidebar open)', () => {
+    // Reproduces the Cockpit bug. TicketComments is NOT remounted when the
+    // inspector switches tickets (no `key`), so a memoized handler keeps
+    // calling the exact `setDraft` it captured while the FIRST ticket was on
+    // screen. That captured setter MUST write to the ticket currently
+    // displayed — never leak a keystroke back into the previous ticket's draft.
+    let latestSet: (v: string) => void = () => {};
+    function CaptureHarness({ draftKey }: { draftKey: string }) {
+      const { draft, setDraft } = useDraft(draftKey);
+      latestSet = setDraft;
+      return <span data-testid="value">{draft}</span>;
+    }
+
+    const { rerender, getByTestId } = render(<CaptureHarness draftKey="ticketA" />);
+
+    // Ticket A: the user types "foo".
+    act(() => latestSet('foo'));
+    expect(localStorage.getItem('ticketA')).toBe('foo');
+
+    // Capture A's setter, then switch to ticket B WITHOUT unmounting
+    // (sidebar stays open). B has no draft yet.
+    const setterCapturedOnA = latestSet;
+    rerender(<CaptureHarness draftKey="ticketB" />);
+    expect(getByTestId('value').textContent).toBe('');
+
+    // A keystroke fires through the handler captured while A was displayed.
+    act(() => setterCapturedOnA('x'));
+
+    // It must land on the ticket on screen (B); A's draft stays intact.
+    expect(localStorage.getItem('ticketB')).toBe('x');
+    expect(localStorage.getItem('ticketA')).toBe('foo');
+    expect(getByTestId('value').textContent).toBe('x');
+  });
+
   it('does not crash when localStorage is unavailable', () => {
     const mock = installMemoryStorage();
     vi.spyOn(mock, 'getItem').mockImplementation(() => {

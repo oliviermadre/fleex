@@ -1155,7 +1155,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       ta.style.height = 'auto';
       ta.style.height = `${ta.scrollHeight}px`;
     });
-  }, [body, acTriggerPos, closeMentionAc]);
+  }, [body, setBody, acTriggerPos, closeMentionAc]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -1182,7 +1182,10 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       }
     }
     closeMentionAc();
-  }, [autoResize, closeMentionAc]);
+    // `setBody` is now identity-stable (see useDraft), but it is listed here so
+    // this handler stays correct under exhaustive-deps and can never re-capture
+    // a stale setter — the mechanism behind the Cockpit draft-collision bug.
+  }, [setBody, autoResize, closeMentionAc]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

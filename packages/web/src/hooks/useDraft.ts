@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useLayoutEffect } from 'react';
 
 function readDraft(key: string): string {
   try {
@@ -35,6 +35,19 @@ export function useDraft(key: string) {
     value: readDraft(key),
   }));
 
+  // Keep the latest key in a ref so `setDraft`/`clearDraft` can stay
+  // identity-stable (empty dep array) while still always targeting the key
+  // that is currently on screen. Without this, a consumer that memoises an
+  // event handler and omits the setter from its deps (e.g. the Cockpit, where
+  // TicketComments is re-used across tickets without a remount) would capture
+  // the setter bound to the FIRST key forever, and every keystroke would leak
+  // into the previous entity's draft. Reading the key from a ref neutralises
+  // that whole class of stale-closure bug at the source.
+  const keyRef = useRef(key);
+  useLayoutEffect(() => {
+    keyRef.current = key;
+  }, [key]);
+
   // Key changed since last render → load the new key's draft synchronously.
   // Setting state during render (React's "adjusting state on prop change"
   // pattern) re-renders immediately, avoiding a flash of the stale value.
@@ -44,18 +57,17 @@ export function useDraft(key: string) {
     setState({ key, value });
   }
 
-  const setDraft = useCallback(
-    (next: string) => {
-      setState({ key, value: next });
-      writeDraft(key, next);
-    },
-    [key],
-  );
+  const setDraft = useCallback((next: string) => {
+    const k = keyRef.current;
+    setState({ key: k, value: next });
+    writeDraft(k, next);
+  }, []);
 
   const clearDraft = useCallback(() => {
-    setState({ key, value: '' });
-    writeDraft(key, '');
-  }, [key]);
+    const k = keyRef.current;
+    setState({ key: k, value: '' });
+    writeDraft(k, '');
+  }, []);
 
   return { draft: value, setDraft, clearDraft } as const;
 }
