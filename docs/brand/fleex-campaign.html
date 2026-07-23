@@ -1,0 +1,618 @@
+<style>
+  /* ============================================================
+     FLEEX — Brand Identity System · Campaign 001
+     Self-contained. No external assets. Light + dark aware.
+     ============================================================ */
+
+  :root {
+    /* Neutrals — cool, green-biased (chosen, not defaulted) */
+    --ink:        #f4f6f7;   /* page ground (light) */
+    --paper:      #ffffff;
+    --panel:      #f0f3f2;
+    --line:       rgba(11, 20, 24, 0.12);
+    --line-soft:  rgba(11, 20, 24, 0.07);
+    --text:       #0c1418;
+    --text-dim:   #4d5a5c;
+    --text-faint: #8894915e;
+
+    /* Brand */
+    --mint:       #6ee7b7;   /* the one bold move */
+    --mint-deep:  #10b981;
+    --mint-ink:   #067a55;   /* mint legible on light */
+    --navy-a:     #1a1a2e;   /* logo gradient */
+    --navy-b:     #0f0f1a;
+    --navy-deep:  #060810;
+
+    --shadow: 0 1px 2px rgba(6,8,16,.06), 0 12px 40px rgba(6,8,16,.10);
+    --shadow-lg: 0 2px 8px rgba(6,8,16,.10), 0 40px 90px rgba(6,8,16,.22);
+
+    --maxw: 1160px;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink:        #06080d;
+      --paper:      #0e131c;
+      --panel:      #111826;
+      --line:       rgba(110, 231, 183, 0.16);
+      --line-soft:  rgba(150, 170, 190, 0.10);
+      --text:       #e9eef3;
+      --text-dim:   #93a1b0;
+      --text-faint: #5f6d7c;
+      --mint-ink:   #6ee7b7;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 44px rgba(0,0,0,.5);
+      --shadow-lg: 0 2px 10px rgba(0,0,0,.5), 0 44px 100px rgba(0,0,0,.7);
+    }
+  }
+  /* Explicit toggle wins over the OS media query, both directions */
+  :root[data-theme="light"] {
+    --ink:#f4f6f7; --paper:#fff; --panel:#f0f3f2;
+    --line:rgba(11,20,24,.12); --line-soft:rgba(11,20,24,.07);
+    --text:#0c1418; --text-dim:#4d5a5c; --text-faint:#889491;
+    --mint-ink:#067a55;
+    --shadow:0 1px 2px rgba(6,8,16,.06),0 12px 40px rgba(6,8,16,.10);
+    --shadow-lg:0 2px 8px rgba(6,8,16,.10),0 40px 90px rgba(6,8,16,.22);
+  }
+  :root[data-theme="dark"] {
+    --ink:#06080d; --paper:#0e131c; --panel:#111826;
+    --line:rgba(110,231,183,.16); --line-soft:rgba(150,170,190,.10);
+    --text:#e9eef3; --text-dim:#93a1b0; --text-faint:#5f6d7c;
+    --mint-ink:#6ee7b7;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 44px rgba(0,0,0,.5);
+    --shadow-lg:0 2px 10px rgba(0,0,0,.5),0 44px 100px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 28px; }
+
+  /* ---- type primitives ---- */
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--mint-ink);
+    margin: 0;
+  }
+  .eyebrow.dim { color: var(--text-faint); }
+  h1,h2,h3 { text-wrap: balance; margin: 0; font-weight: 800; letter-spacing: -0.02em; }
+  .lead { color: var(--text-dim); max-width: 62ch; }
+
+  section { padding: 92px 0; border-top: 1px solid var(--line-soft); }
+  section:first-of-type { border-top: 0; }
+  .sec-head { display: flex; flex-direction: column; gap: 14px; margin-bottom: 44px; }
+  .sec-head h2 { font-size: clamp(28px, 4vw, 44px); line-height: 1.05; }
+
+  /* ============================================================ MASTHEAD */
+  .top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 28px; max-width: var(--maxw); margin: 0 auto;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .top .brandline { display: flex; align-items: center; gap: 12px; }
+  .top .brandline .wm { font-weight: 800; letter-spacing: -.04em; font-size: 19px; }
+  .top .meta { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em;
+               text-transform: uppercase; color: var(--text-faint); display: flex; gap: 22px; flex-wrap: wrap; }
+
+  /* ============================================================ HERO */
+  .hero { position: relative; overflow: hidden; padding: 70px 0 96px; }
+  .hero .wrap { position: relative; z-index: 2; }
+  .hero-grid {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(120% 90% at 78% 12%, #000 0%, transparent 72%);
+            mask-image: radial-gradient(120% 90% at 78% 12%, #000 0%, transparent 72%);
+    opacity: .8;
+  }
+  .hero-inner { display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; }
+  .hero h1 { font-size: clamp(40px, 7vw, 84px); line-height: .96; margin: 22px 0 20px; }
+  .hero h1 .mintword { color: var(--mint-ink); }
+  .hero .lead { font-size: clamp(16px, 1.4vw, 19px); }
+  .hero .kpis { display: flex; gap: 30px; margin-top: 34px; flex-wrap: wrap; }
+  .kpi .n { font-family: var(--mono); font-weight: 700; font-size: 24px; letter-spacing: -.02em; }
+  .kpi .l { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
+
+  /* The hero app-icon tile (containered mark) */
+  .hero-mark { display: grid; place-items: center; }
+  .tile {
+    width: clamp(220px, 26vw, 320px); aspect-ratio: 1;
+    border-radius: 24%;
+    background: linear-gradient(150deg, var(--navy-a), var(--navy-b));
+    display: grid; place-items: center;
+    box-shadow: var(--shadow-lg);
+    position: relative; overflow: hidden;
+  }
+  .tile::after { /* subtle top sheen */
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(120% 80% at 30% 0%, rgba(110,231,183,.14), transparent 55%);
+  }
+  .tile svg { width: 52%; height: 52%; position: relative; z-index: 1;
+              filter: drop-shadow(0 6px 26px rgba(110,231,183,.35)); }
+  .mark-fill { fill: var(--mint); }
+
+  @keyframes trace { from { stroke-dashoffset: 620; } to { stroke-dashoffset: 0; } }
+  .tile .stroke {
+    fill: none; stroke: var(--mint); stroke-width: 2.4; opacity: .0;
+  }
+
+  /* ============================================================ RATIONALE / CONSTRUCTION */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+  .constr {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .constr .plate { aspect-ratio: 1 / 0.86; display: grid; place-items: center;
+                   background:
+                     linear-gradient(var(--line-soft) 1px, transparent 1px) 0 0/ 8.33% 8.33%,
+                     linear-gradient(90deg, var(--line-soft) 1px, transparent 1px) 0 0/ 8.33% 8.33%,
+                     var(--panel);
+                   position: relative; }
+  .constr .plate svg { width: 58%; }
+  .constr .cap { padding: 16px 20px; border-top: 1px solid var(--line);
+                 font-family: var(--mono); font-size: 12px; color: var(--text-dim);
+                 display:flex; justify-content:space-between; gap:12px; letter-spacing:.04em;}
+  .mark-ink { fill: var(--text); }
+
+  .rationale-list { display: flex; flex-direction: column; gap: 26px; margin: 0; padding: 0; list-style: none; }
+  .rationale-list li { display: grid; grid-template-columns: 30px 1fr; gap: 16px; }
+  .rationale-list .idx { font-family: var(--mono); font-size: 12px; color: var(--mint-ink);
+                         padding-top: 4px; letter-spacing:.06em; }
+  .rationale-list h3 { font-size: 18px; margin-bottom: 4px; }
+  .rationale-list p { margin: 0; color: var(--text-dim); font-size: 15px; }
+
+  /* Evolution before/after */
+  .evo { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center;
+         margin-top: 8px; }
+  .evo .cell { background: linear-gradient(150deg, var(--navy-a), var(--navy-b));
+               border-radius: 16px; aspect-ratio: 1.4; display:grid; place-items:center; position:relative; }
+  .evo .cell svg { width: 42%; }
+  .evo .tag { position:absolute; bottom:10px; left:12px; font-family:var(--mono); font-size:10.5px;
+              letter-spacing:.14em; text-transform:uppercase; color: rgba(233,238,243,.55); }
+  .evo .arrow { font-family: var(--mono); color: var(--text-faint); font-size: 22px; }
+  .old-bolt { fill: #6ee7b7; opacity:.55; }
+
+  /* ============================================================ MOCKUPS */
+  .mock { display: flex; flex-direction: column; gap: 14px; }
+  .mock-frame {
+    border-radius: 18px; overflow: hidden; box-shadow: var(--shadow-lg);
+    border: 1px solid var(--line); position: relative;
+  }
+  .mock-cap { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+  .mock-cap .t { font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
+  .mock-cap .n { font-family: var(--mono); font-size: 11px; color: var(--text-faint);
+                 letter-spacing: .14em; text-transform: uppercase; }
+  .mock-note { color: var(--text-dim); font-size: 14px; margin: 2px 0 0; max-width: 56ch; }
+
+  /* --- Business cards --- */
+  .cards-stage {
+    background:
+      radial-gradient(90% 120% at 20% 0%, #1b2233, #0a0d15 70%);
+    padding: 64px 40px; display: grid; place-items: center; min-height: 360px;
+  }
+  .cards { position: relative; width: min(460px, 90%); }
+  .bcard { position: absolute; width: 100%; aspect-ratio: 1.75; border-radius: 14px;
+           box-shadow: 0 30px 60px rgba(0,0,0,.5); padding: 26px; }
+  .bcard.back { background: var(--mint); transform: rotate(-8deg) translate(-14%, -6%) scale(.92);
+                color: var(--navy-b); }
+  .bcard.front { background: linear-gradient(150deg, var(--navy-a), var(--navy-b));
+                 transform: rotate(4deg) translate(14%, 10%);
+                 color: #e9eef3; border: 1px solid rgba(110,231,183,.14); position: relative; }
+  .bcard.front { display: flex; flex-direction: column; justify-content: space-between; }
+  .bcard .b-top { display: flex; align-items: center; gap: 12px; }
+  .bcard .b-tile { width: 40px; aspect-ratio:1; border-radius: 11px; display:grid; place-items:center;
+                   background: rgba(110,231,183,.12); }
+  .bcard .b-tile svg { width: 60%; }
+  .bcard .b-wm { font-weight: 800; letter-spacing: -.04em; font-size: 19px; }
+  .bcard .b-info { font-family: var(--mono); font-size: 11px; line-height: 1.7; opacity: .9; }
+  .bcard .b-info b { font-family: var(--sans); font-weight:700; font-size:13px; letter-spacing:-.01em; display:block; }
+  .bcard.back { display: flex; align-items: center; justify-content: center; }
+  .bcard.back svg { width: 34%; }
+  .cards .spacer { padding-bottom: 74%; } /* holds height for absolute cards */
+
+  /* --- Packaging --- */
+  .pkg-stage { background: radial-gradient(80% 110% at 70% 10%, #eef3f1, #d7ded9 75%);
+               padding: 56px 30px 0; display: grid; place-items: end center; min-height: 380px; }
+  @media (prefers-color-scheme: dark){ .pkg-stage{ background: radial-gradient(80% 110% at 70% 10%, #141b28, #090c13 78%);} }
+  :root[data-theme="dark"] .pkg-stage{ background: radial-gradient(80% 110% at 70% 10%, #141b28, #090c13 78%);}
+  :root[data-theme="light"] .pkg-stage{ background: radial-gradient(80% 110% at 70% 10%, #eef3f1, #d7ded9 75%);}
+  .box { position: relative; width: 210px; filter: drop-shadow(0 40px 40px rgba(0,0,0,.35)); }
+  .box .face { border-radius: 6px 6px 0 0; }
+  .box .front { background: linear-gradient(155deg, var(--navy-a), var(--navy-b));
+                aspect-ratio: 0.82; border-radius: 8px 0 0 0; padding: 22px 20px;
+                display: flex; flex-direction: column; justify-content: space-between;
+                color: #e9eef3; position: relative; }
+  .box .side { position:absolute; top:-14px; right:-26px; width: 30px; height: calc(100% + 14px);
+               background: linear-gradient(155deg, #0c0c16, #070710);
+               transform: skewY(-30deg); border-radius: 0 6px 0 0; }
+  .box .top { position:absolute; top:-15px; left:0; width: 100%; height: 26px;
+              background: linear-gradient(90deg, #232338, #171726);
+              transform: skewX(-45deg); transform-origin: left; border-radius: 4px 4px 0 0; }
+  .box .b-tile { width: 44px; aspect-ratio:1; border-radius:12px; background: rgba(110,231,183,.12);
+                 display:grid; place-items:center; }
+  .box .b-tile svg { width: 60%; }
+  .box .p-wm { font-weight:800; letter-spacing:-.03em; font-size: 22px; }
+  .box .p-sub { font-family: var(--mono); font-size: 10px; letter-spacing:.16em; text-transform:uppercase;
+                color: var(--mint); margin-top: 4px; }
+  .box .p-foot { font-family: var(--mono); font-size:9.5px; letter-spacing:.1em; color: rgba(233,238,243,.5); }
+
+  /* --- Website --- */
+  .browser { background: var(--paper); }
+  .browser .chrome { display:flex; align-items:center; gap:14px; padding: 12px 16px;
+                     background: var(--panel); border-bottom: 1px solid var(--line); }
+  .dots { display:flex; gap:7px; }
+  .dots i { width:11px; height:11px; border-radius:50%; display:block; }
+  .dots i:nth-child(1){ background:#ff5f57; } .dots i:nth-child(2){ background:#febc2e; } .dots i:nth-child(3){ background:#28c840; }
+  .urlbar { flex:1; background: var(--ink); border:1px solid var(--line); border-radius: 8px;
+            font-family: var(--mono); font-size: 12px; color: var(--text-dim); padding: 6px 12px; }
+  .urlbar b { color: var(--text); font-weight:600; }
+  .site { background: linear-gradient(180deg, var(--navy-b), #0b0b14); color:#e9eef3; padding: 22px 30px 34px; }
+  .site-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom: 40px; }
+  .site-nav .l { display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:-.03em; }
+  .site-nav .l svg { width: 22px; }
+  .site-nav .r { display:flex; gap:22px; font-family: var(--mono); font-size:12px; color: rgba(233,238,243,.65); }
+  .site-hero { display:grid; grid-template-columns: 1.1fr .9fr; gap: 30px; align-items:center; }
+  .site-hero h3 { font-size: clamp(24px, 3.4vw, 40px); line-height:1.02; letter-spacing:-.03em; }
+  .site-hero h3 em { color: var(--mint); font-style: normal; }
+  .site-hero p { color: rgba(233,238,243,.62); font-size: 14px; max-width: 40ch; }
+  .site-cta { display:inline-flex; gap:12px; margin-top: 18px; }
+  .btn { font-family: var(--mono); font-size: 12px; letter-spacing:.06em; padding: 10px 18px; border-radius: 9px; }
+  .btn.p { background: var(--mint); color: var(--navy-b); font-weight: 700; }
+  .btn.s { border: 1px solid rgba(233,238,243,.22); color:#e9eef3; }
+  /* faux kanban screenshot */
+  .kanban { background: #0a0d15; border:1px solid rgba(110,231,183,.14); border-radius: 12px; padding: 12px;
+            display:grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+  .kanban .col { background: rgba(255,255,255,.02); border-radius: 8px; padding: 8px; display:flex; flex-direction:column; gap:6px; }
+  .kanban .h { font-family: var(--mono); font-size: 9px; letter-spacing:.14em; text-transform:uppercase; color: rgba(233,238,243,.4); }
+  .kanban .t { height: 22px; border-radius: 5px; background: rgba(255,255,255,.05); }
+  .kanban .t.on { background: rgba(110,231,183,.18); border-left: 2px solid var(--mint); }
+
+  /* --- Billboard --- */
+  .bb-stage { position:relative; padding: 0; overflow:hidden; min-height: 420px;
+              background: linear-gradient(180deg, #f4b06a 0%, #d98567 32%, #6d4a6e 66%, #2c2740 100%); }
+  @media (prefers-color-scheme: dark){ .bb-stage{ background: linear-gradient(180deg,#3a2f4d,#241d33 55%,#0d0b16);} }
+  :root[data-theme="dark"] .bb-stage{ background: linear-gradient(180deg,#3a2f4d,#241d33 55%,#0d0b16);}
+  :root[data-theme="light"] .bb-stage{ background: linear-gradient(180deg,#f4b06a 0%,#d98567 32%,#6d4a6e 66%,#2c2740 100%);}
+  .bb-sun { position:absolute; top: 14%; right: 16%; width: 120px; height:120px; border-radius:50%;
+            background: radial-gradient(circle, rgba(255,240,210,.9), rgba(255,210,150,.25) 60%, transparent 70%); }
+  .skyline { position:absolute; bottom:0; left:0; width:100%; height: 34%;
+             background: linear-gradient(180deg, transparent, rgba(6,8,13,.85));
+             -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='200' preserveAspectRatio='none'><g fill='black'><rect x='0' y='120' width='90' height='80'/><rect x='95' y='90' width='60' height='110'/><rect x='160' y='140' width='70' height='60'/><rect x='235' y='70' width='50' height='130'/><rect x='290' y='110' width='80' height='90'/><rect x='375' y='150' width='60' height='50'/><rect x='440' y='95' width='55' height='105'/><rect x='500' y='130' width='90' height='70'/><rect x='595' y='60' width='45' height='140'/><rect x='645' y='120' width='75' height='80'/><rect x='725' y='100' width='60' height='100'/><rect x='790' y='150' width='80' height='50'/><rect x='875' y='85' width='55' height='115'/><rect x='935' y='135' width='70' height='65'/><rect x='1010' y='105' width='60' height='95'/><rect x='1075' y='145' width='125' height='55'/></g></svg>");
+             mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='200' preserveAspectRatio='none'><g fill='black'><rect x='0' y='120' width='90' height='80'/><rect x='95' y='90' width='60' height='110'/><rect x='160' y='140' width='70' height='60'/><rect x='235' y='70' width='50' height='130'/><rect x='290' y='110' width='80' height='90'/><rect x='375' y='150' width='60' height='50'/><rect x='440' y='95' width='55' height='105'/><rect x='500' y='130' width='90' height='70'/><rect x='595' y='60' width='45' height='140'/><rect x='645' y='120' width='75' height='80'/><rect x='725' y='100' width='60' height='100'/><rect x='790' y='150' width='80' height='50'/><rect x='875' y='85' width='55' height='115'/><rect x='935' y='135' width='70' height='65'/><rect x='1010' y='105' width='60' height='95'/><rect x='1075' y='145' width='125' height='55'/></g></svg>");
+             -webkit-mask-size: cover; mask-size: cover; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; }
+  .billboard { position:absolute; z-index: 3; top: 46px; left: 50%; transform: translateX(-50%);
+               width: min(560px, 78%); }
+  .billboard .panel { background: linear-gradient(150deg, var(--navy-a), var(--navy-b));
+                      border: 6px solid #0a0a12; border-radius: 8px; padding: 30px 34px;
+                      box-shadow: 0 30px 60px rgba(0,0,0,.5); color:#e9eef3;
+                      display:flex; align-items:center; gap: 26px; }
+  .billboard .panel .bb-tile { width: 92px; aspect-ratio:1; border-radius: 22px; flex: none;
+                               background: rgba(110,231,183,.12); display:grid; place-items:center; }
+  .billboard .panel .bb-tile svg { width: 58%; filter: drop-shadow(0 4px 18px rgba(110,231,183,.5)); }
+  .billboard .panel .bb-txt .w { font-weight:800; font-size: clamp(28px,4.4vw,46px); letter-spacing:-.04em; line-height:1; }
+  .billboard .panel .bb-txt .s { font-family: var(--mono); font-size: 12px; letter-spacing:.12em;
+                                 text-transform:uppercase; color: var(--mint); margin-top: 8px; }
+  .billboard .legs { display:flex; justify-content: space-between; padding: 0 40px; }
+  .billboard .legs i { width: 14px; height: 130px; background: linear-gradient(90deg,#0a0a12,#191922);
+                       display:block; border-radius: 0 0 3px 3px; }
+  .bb-scale { position:absolute; bottom: 6%; left: 14%; z-index:3; font-family:var(--mono);
+              font-size: 10px; letter-spacing:.14em; text-transform:uppercase; color: rgba(255,255,255,.7);
+              display:flex; align-items:flex-end; gap:8px; }
+  .bb-scale .car { width: 40px; height: 15px; background: rgba(10,12,20,.8); border-radius: 4px 6px 3px 3px; }
+
+  /* ============================================================ SCALABILITY */
+  .scale-strip { display:flex; align-items:flex-end; gap: 40px; flex-wrap: wrap; }
+  .scale-item { display:flex; flex-direction:column; align-items:center; gap: 12px; }
+  .scale-item .tile2 { background: linear-gradient(150deg, var(--navy-a), var(--navy-b)); display:grid; place-items:center;
+                       box-shadow: var(--shadow); }
+  .scale-item .tile2 svg { width: 56%; }
+  .scale-item .s16 { width:16px; height:16px; border-radius: 4px; }
+  .scale-item .s32 { width:32px; height:32px; border-radius: 7px; }
+  .scale-item .s64 { width:64px; height:64px; border-radius: 14px; }
+  .scale-item .s112 { width:112px; height:112px; border-radius: 26px; }
+  .scale-item .lbl { font-family: var(--mono); font-size: 10.5px; letter-spacing:.12em; text-transform:uppercase; color: var(--text-faint); }
+  /* mono lockup on a chip / merch */
+  .merch-row { display:flex; gap: 20px; flex-wrap: wrap; margin-top: 40px; }
+  .chip { border:1px solid var(--line); border-radius: 12px; padding: 18px 22px; background: var(--paper);
+          display:flex; align-items:center; gap: 12px; box-shadow: var(--shadow); }
+  .chip svg { width: 26px; }
+  .chip .wm { font-weight:800; letter-spacing:-.04em; font-size: 18px; }
+  .chip.dark { background: linear-gradient(150deg,var(--navy-a),var(--navy-b)); color:#e9eef3; border-color: rgba(110,231,183,.18); }
+  .chip.mint { background: var(--mint); color: var(--navy-b); border-color: transparent; }
+
+  /* ============================================================ POSITIONING */
+  .pos { background: linear-gradient(150deg, var(--navy-a), var(--navy-b)); color:#e9eef3; border-radius: 22px;
+         padding: 60px clamp(30px,6vw,80px); box-shadow: var(--shadow-lg); position:relative; overflow:hidden; }
+  .pos::before { content:""; position:absolute; right:-60px; top:-60px; width: 320px; height:320px;
+                 background: radial-gradient(circle, rgba(110,231,183,.14), transparent 65%); }
+  .pos .eyebrow { color: var(--mint); }
+  .pos blockquote { margin: 18px 0 0; font-size: clamp(22px, 3.2vw, 34px); font-weight: 700;
+                    letter-spacing:-.02em; line-height: 1.22; max-width: 22ch; }
+  .pos blockquote em { color: var(--mint); font-style: normal; }
+  .pos .sig { margin-top: 34px; font-family: var(--mono); font-size: 12px; letter-spacing:.1em;
+              color: rgba(233,238,243,.6); }
+
+  footer { padding: 46px 0 70px; color: var(--text-faint); font-family: var(--mono); font-size: 12px; letter-spacing:.06em; }
+  footer .wrap { display:flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  /* ============================================================ RESPONSIVE */
+  @media (max-width: 860px) {
+    .hero-inner, .grid-2, .site-hero, .evo { grid-template-columns: 1fr; }
+    .hero-mark { order: -1; }
+    .evo .arrow { transform: rotate(90deg); justify-self:center; }
+    section { padding: 66px 0; }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tile .stroke { animation: trace 2.4s ease forwards .2s; opacity: 1; stroke-dasharray: 620; }
+    .float { animation: floaty 6s ease-in-out infinite; }
+    @keyframes floaty { 0%,100%{ transform: translateY(0);} 50%{ transform: translateY(-8px);} }
+  }
+</style>
+
+<!-- ============ reusable mark (the new Fleex monogram) ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="fmark" viewBox="0 0 120 120">
+    <path d="M29 22 L91 22 L81 48 L55 48 L55 59 L77 59 L67 85 L55 85 L55 98 L29 98 Z"/>
+  </symbol>
+  <!-- legacy bolt, for the evolution panel -->
+  <symbol id="bolt" viewBox="0 0 24 24">
+    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+  </symbol>
+</svg>
+
+<!-- ============ MASTHEAD ============ -->
+<div class="top">
+  <div class="brandline">
+    <svg viewBox="0 0 120 120" width="26" height="26" aria-hidden="true"><use href="#fmark" class="mark-ink"/></svg>
+    <span class="wm">fleex</span>
+  </div>
+  <div class="meta">
+    <span>Brand Identity System</span>
+    <span>Campaign 001 · 2026</span>
+    <span>Rollout budget · $500,000</span>
+  </div>
+</div>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <div class="hero-grid" aria-hidden="true"></div>
+  <div class="wrap">
+    <div class="hero-inner">
+      <div>
+        <p class="eyebrow">The identity</p>
+        <h1>One mark for the<br><span class="mintword">orchestrated</span> swarm.</h1>
+        <p class="lead">Fleex conducts fleets of AI coding agents across every repository you own. The new identity trades the literal spark for a disciplined monogram — velocity you feel in the geometry, not a bolt drawn on the nose.</p>
+        <div class="kpis">
+          <div class="kpi"><div class="n">1</div><div class="l">idea, one mark</div></div>
+          <div class="kpi"><div class="n">16px</div><div class="l">favicon-legible</div></div>
+          <div class="kpi"><div class="n">2</div><div class="l">colors carry it</div></div>
+        </div>
+      </div>
+      <div class="hero-mark">
+        <div class="tile float">
+          <svg viewBox="0 0 120 120" aria-label="Fleex monogram">
+            <use href="#fmark" class="mark-fill"/>
+            <use href="#fmark" class="stroke"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ THE MARK / RATIONALE ============ -->
+<section id="mark">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">The mark</p>
+      <h2>A monogram engineered on a grid.</h2>
+      <p class="lead">The “F” is cut on a strict 12-unit grid. Its right-hand terminals are sheared on a single shared diagonal — the ghost of a lightning strike passing through the letter. The form stays upright and calm so it reads as a serious tool, while the cuts keep it moving forward.</p>
+    </div>
+    <div class="grid-2">
+      <figure class="constr">
+        <div class="plate">
+          <svg viewBox="0 0 120 120"><use href="#fmark" class="mark-ink"/></svg>
+        </div>
+        <figcaption class="cap"><span>construction · 12u grid</span><span>terminals @ 22°</span></figcaption>
+      </figure>
+      <ol class="rationale-list">
+        <li><span class="idx">01</span><div><h3>Symbol with meaning</h3><p>An “F” whose arms relay outward like tasks handed between agents — orchestration, drawn as a letterform rather than a picture.</p></div></li>
+        <li><span class="idx">02</span><div><h3>Velocity, implied</h3><p>Every free edge is cut on the same forward diagonal. Motion is built into the negative space, so the mark never has to shout it.</p></div></li>
+        <li><span class="idx">03</span><div><h3>Timeless over trendy</h3><p>Flat geometry, no gradients in the glyph itself, no effects. It will survive a decade of platform redesigns untouched.</p></div></li>
+        <li><span class="idx">04</span><div><h3>Colour equity kept</h3><p>The signal-mint from the original product stays. The form matured; the recognition didn’t reset.</p></div></li>
+      </ol>
+    </div>
+
+    <div style="margin-top:56px">
+      <p class="eyebrow dim" style="margin-bottom:16px">Evolution · before → after</p>
+      <div class="evo">
+        <div class="cell">
+          <svg viewBox="0 0 24 24"><use href="#bolt" class="old-bolt"/></svg>
+          <span class="tag">was · literal bolt</span>
+        </div>
+        <div class="arrow">→</div>
+        <div class="cell">
+          <svg viewBox="0 0 120 120"><use href="#fmark" class="mark-fill"/></svg>
+          <span class="tag">now · relay monogram</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MOCKUPS ============ -->
+<section id="mockups">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">The rollout</p>
+      <h2>Across every surface it will live on.</h2>
+      <p class="lead">The same two-colour system, from a 90&nbsp;mm card to a highway panel. Nothing is redrawn per medium — proof the identity is a system, not a picture.</p>
+    </div>
+
+    <div style="display:grid; gap: 64px;">
+
+      <!-- Business cards -->
+      <div class="mock">
+        <div class="mock-cap"><span class="t">Business cards</span><span class="n">01 · print · 90×55mm</span></div>
+        <div class="mock-frame">
+          <div class="cards-stage">
+            <div class="cards">
+              <div class="spacer"></div>
+              <div class="bcard back">
+                <svg viewBox="0 0 120 120"><use href="#fmark" fill="currentColor"/></svg>
+              </div>
+              <div class="bcard front">
+                <div class="b-top">
+                  <div class="b-tile"><svg viewBox="0 0 120 120"><use href="#fmark" class="mark-fill"/></svg></div>
+                  <span class="b-wm">fleex</span>
+                </div>
+                <div class="b-info">
+                  <b>Alex Rivera</b>
+                  Founding Engineer<br>
+                  alex@fleex.dev · fleex.dev
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="mock-note">Front on the brand navy, reverse on solid mint — the mark flips colour but never form. Contact set in the product’s own monospace, tying the paper back to the terminal.</p>
+      </div>
+
+      <!-- Packaging -->
+      <div class="mock">
+        <div class="mock-cap"><span class="t">Product packaging</span><span class="n">02 · Developer Kit</span></div>
+        <div class="mock-frame">
+          <div class="pkg-stage">
+            <div class="box float">
+              <div class="top"></div>
+              <div class="side"></div>
+              <div class="face front">
+                <div>
+                  <div class="b-tile"><svg viewBox="0 0 120 120"><use href="#fmark" class="mark-fill"/></svg></div>
+                  <div style="margin-top:18px" class="p-wm">fleex</div>
+                  <div class="p-sub">Developer Kit</div>
+                </div>
+                <div class="p-foot">ORCHESTRATE · v1.0 · fleex.dev</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="mock-note">The app-icon tile becomes a physical seal on the box face. A single dark side panel and cap imply depth — the mark holds the whole packshot on its own.</p>
+      </div>
+
+      <!-- Website -->
+      <div class="mock">
+        <div class="mock-cap"><span class="t">Website</span><span class="n">03 · fleex.dev</span></div>
+        <div class="mock-frame browser">
+          <div class="chrome">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <div class="urlbar">https://<b>fleex.dev</b></div>
+          </div>
+          <div class="site">
+            <div class="site-nav">
+              <div class="l"><svg viewBox="0 0 120 120"><use href="#fmark" class="mark-fill"/></svg> fleex</div>
+              <div class="r"><span>Product</span><span>Docs</span><span>Pricing</span><span>Sign in</span></div>
+            </div>
+            <div class="site-hero">
+              <div>
+                <h3>Run a <em>fleet</em> of coding agents from one tab.</h3>
+                <p>Spin up agents per repo, watch every terminal live, hand off work with an @mention.</p>
+                <div class="site-cta">
+                  <span class="btn p">Start free</span>
+                  <span class="btn s">$ curl fleex.dev/install</span>
+                </div>
+              </div>
+              <div class="kanban" aria-hidden="true">
+                <div class="col"><span class="h">todo</span><span class="t"></span><span class="t"></span></div>
+                <div class="col"><span class="h">doing</span><span class="t on"></span><span class="t"></span></div>
+                <div class="col"><span class="h">review</span><span class="t on"></span><span class="t on"></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="mock-note">On screen the mark leads the nav at 22px and the mint becomes the single call-to-action colour — accent discipline that makes “Start free” impossible to miss.</p>
+      </div>
+
+      <!-- Billboard -->
+      <div class="mock">
+        <div class="mock-cap"><span class="t">Billboard</span><span class="n">04 · out-of-home · 14×48ft</span></div>
+        <div class="mock-frame">
+          <div class="bb-stage">
+            <div class="bb-sun" aria-hidden="true"></div>
+            <div class="skyline" aria-hidden="true"></div>
+            <div class="billboard">
+              <div class="panel">
+                <div class="bb-tile"><svg viewBox="0 0 120 120"><use href="#fmark" class="mark-fill"/></svg></div>
+                <div class="bb-txt">
+                  <div class="w">fleex</div>
+                  <div class="s">Orchestrate the swarm.</div>
+                </div>
+              </div>
+              <div class="legs" aria-hidden="true"><i></i><i></i></div>
+            </div>
+            <div class="bb-scale"><span class="car"></span> viewed at 400ft</div>
+          </div>
+        </div>
+        <p class="mock-note">At highway distance detail dies first — so the panel carries only mark, wordmark and three words. High mint-on-navy contrast keeps it readable long after the type would blur.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCALABILITY ============ -->
+<section id="scale">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">The system</p>
+      <h2>One mark, every scale.</h2>
+      <p class="lead">From a 16-pixel favicon to a merch embroidery, the geometry never breaks. The counters stay open, the terminals stay crisp.</p>
+    </div>
+    <div class="scale-strip">
+      <div class="scale-item"><div class="tile2 s16"><svg viewBox="0 0 120 120"><use href="#fmark" class="mark-fill"/></svg></div><span class="lbl">16 · favicon</span></div>
+      <div class="scale-item"><div class="tile2 s32"><svg viewBox="0 0 120 120"><use href="#fmark" class="mark-fill"/></svg></div><span class="lbl">32 · tab</span></div>
+      <div class="scale-item"><div class="tile2 s64"><svg viewBox="0 0 120 120"><use href="#fmark" class="mark-fill"/></svg></div><span class="lbl">64 · app icon</span></div>
+      <div class="scale-item"><div class="tile2 s112"><svg viewBox="0 0 120 120"><use href="#fmark" class="mark-fill"/></svg></div><span class="lbl">112 · dock</span></div>
+    </div>
+    <div class="merch-row">
+      <div class="chip"><svg viewBox="0 0 120 120"><use href="#fmark" class="mark-ink"/></svg><span class="wm">fleex</span></div>
+      <div class="chip dark"><svg viewBox="0 0 120 120"><use href="#fmark" class="mark-fill"/></svg><span class="wm">fleex</span></div>
+      <div class="chip mint"><svg viewBox="0 0 120 120"><use href="#fmark" fill="currentColor"/></svg><span class="wm">fleex</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ POSITIONING ============ -->
+<section id="positioning">
+  <div class="wrap">
+    <div class="pos">
+      <p class="eyebrow">Market positioning</p>
+      <blockquote>Every rival draws a robot or a spark. Fleex owns <em>the letter</em> — the calm, precise mark of the tool that runs the room.</blockquote>
+      <p class="lead" style="color:rgba(233,238,243,.72); margin-top:22px; max-width:56ch">
+        The category signals hustle: cartoon bolts, neon glyphs, gradient blobs. By moving to a restrained monogram in a single confident colour, Fleex reads less like a gadget and more like infrastructure you trust with your whole codebase — premium, durable, unmistakably its own.
+      </p>
+      <div class="sig">Fleex Brand System · Campaign 001 · presented as a $500,000 rollout</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>fleex — orchestrate the swarm</span>
+    <span>Identity system · 2026</span>
+  </div>
+</footer>
