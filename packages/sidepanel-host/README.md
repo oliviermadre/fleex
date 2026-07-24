@@ -20,7 +20,7 @@ FLEEX_MCP_BIN=bun FLEEX_MCP_PREFIX="run /path/to/fleex/packages/cli/index.ts" \
 |---|---|
 | `ANTHROPIC_API_KEY` | Required for live use |
 | `FLEEX_SIDEPANEL_PORT` | Listen port (default 4399) |
-| `FLEEX_SIDEPANEL_MODEL` | Model id (default `claude-opus-4-8`) |
+| `FLEEX_SIDEPANEL_MODEL` | Model id (default `claude-opus-5`) |
 | `FLEEX_MCP_BIN` / `FLEEX_MCP_PREFIX` | fleex binary + prefix args |
 | `FLEEX_SIDEPANEL_DEV` | `1` enables hot reload: watch the extension dir and tell the panel to reload on change |
 | `FLEEX_EXTENSION_DIR` | Override the watched extension dir (default: repo `extension/`) |

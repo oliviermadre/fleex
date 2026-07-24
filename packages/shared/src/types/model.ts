@@ -56,6 +56,7 @@ export interface ModelsResponse {
  */
 export const FALLBACK_MODELS: ModelOption[] = [
   { id: 'claude-fable-5', label: 'Claude Fable 5', family: 'fable', supportsEffort: true, supportsFastMode: true },
+  { id: 'claude-opus-5', label: 'Claude Opus 5', family: 'opus', supportsEffort: true, supportsFastMode: true },
   { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', family: 'opus', supportsEffort: true, supportsFastMode: true },
   { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', family: 'opus', supportsEffort: true, supportsFastMode: true },
   { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', family: 'sonnet', supportsEffort: true, supportsFastMode: true },

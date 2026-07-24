@@ -20,7 +20,7 @@ Chrome extension (extension/)               thin client
         │ ws://localhost:4399/chat
 @fleex/sidepanel-host                        assistant host
   • holds ANTHROPIC_API_KEY
-  • Messages API tool-use loop (opus-4-8, adaptive thinking, streaming)
+  • Messages API tool-use loop (opus-5, adaptive thinking, streaming)
   • gates mutating tools behind a WS confirmation round-trip
         │ in-process
 @fleex/mcp                                   tool kernel (+ MCP stdio server)

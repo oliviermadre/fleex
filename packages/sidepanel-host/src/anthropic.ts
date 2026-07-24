@@ -7,7 +7,7 @@ import { execFleex, type ExecOptions } from '@fleex/mcp';
 import { inferModelCapabilities } from '@fleex/shared';
 import type { ExecFn, LlmComplete } from './assistant.ts';
 
-export const DEFAULT_MODEL = 'claude-opus-4-8';
+export const DEFAULT_MODEL = 'claude-opus-5';
 
 export function createClient(apiKey?: string): Anthropic {
   return apiKey ? new Anthropic({ apiKey }) : new Anthropic();
