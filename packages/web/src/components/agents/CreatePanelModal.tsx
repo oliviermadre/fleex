@@ -38,8 +38,8 @@ export function CreatePanelModal({ open, onClose }: CreatePanelModalProps) {
         displayName: displayName.trim(),
         description: description.trim(),
         members: [],
-        orchestratorModel: 'claude-sonnet-4-6',
-        defaultMemberModel: 'claude-sonnet-4-6',
+        orchestratorModel: 'claude-sonnet-5',
+        defaultMemberModel: 'claude-sonnet-5',
         orchestratorPrompt: '',
         enabled: true,
       });

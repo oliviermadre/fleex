@@ -13,20 +13,29 @@ export type ConversationMode = 'talk' | 'plan' | 'edit';
 export const DEFAULT_CONVERSATION_MODE: ConversationMode = 'plan';
 
 /**
- * Reasoning-effort level, conversation-scoped override. Subset of the Claude
- * Agent SDK's EffortLevel exposed in the UI. Only applied when the resolved
- * model advertises effort support (see ModelOption.supportsEffort).
+ * Reasoning-effort level, conversation-scoped override. The full Claude Agent
+ * SDK ladder — but NOT every model accepts every level (`xhigh` only exists
+ * from Opus 4.7 / Sonnet 5 on, `max` from the 4.6 generation on), and sending
+ * an unsupported one is a 400. Never hand a raw level to the SDK: resolve it
+ * against the model first with `resolveEffortLevel` (types/model.ts), which is
+ * the single gate every execution path goes through.
  */
-export type EffortLevel = 'low' | 'medium' | 'high';
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export const EFFORT_LEVELS: readonly EffortLevel[] = ['low', 'medium', 'high'] as const;
+/** Ascending by depth/cost — the order doubles as the clamp ranking. */
+export const EFFORT_LEVELS: readonly EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
 export function isConversationMode(v: unknown): v is ConversationMode {
   return v === 'talk' || v === 'plan' || v === 'edit';
 }
 
 export function isEffortLevel(v: unknown): v is EffortLevel {
-  return v === 'low' || v === 'medium' || v === 'high';
+  return typeof v === 'string' && (EFFORT_LEVELS as readonly string[]).includes(v);
+}
+
+/** Position in the ladder, or -1 for anything that isn't a level. */
+export function effortRank(v: unknown): number {
+  return isEffortLevel(v) ? EFFORT_LEVELS.indexOf(v) : -1;
 }
 export type TicketLinkType = 'github_issue' | 'github_pr' | 'worktree' | 'session' | 'repository' | 'slack_message';
 

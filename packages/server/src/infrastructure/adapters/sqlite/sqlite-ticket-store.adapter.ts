@@ -1,4 +1,5 @@
-import type { TicketStatus, TicketPriority, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
+import type { TicketStatus, TicketPriority, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata, ConversationMode } from '@fleex/shared';
+import { isEffortLevel } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -446,7 +447,7 @@ export class SqliteTicketStoreAdapter implements TicketStorePort {
       new Date(row.updated_at),
       (row.conversation_mode as ConversationMode | null) ?? 'plan',
       row.model_override ?? null,
-      (row.effort_override as EffortLevel | null) ?? null,
+      isEffortLevel(row.effort_override) ? row.effort_override : null,
       row.fast_mode === 1,
     );
   }

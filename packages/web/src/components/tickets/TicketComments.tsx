@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
 import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel, StepRun, WorkflowStep, WorkflowRun } from '@fleex/shared';
-import { EFFORT_LEVELS } from '@fleex/shared';
+import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
 import { tint, tintText, tintClasses } from '../../lib/tints';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -566,8 +566,18 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     () => (modelOverride ? models.find((m) => m.id === modelOverride) : undefined),
     [models, modelOverride],
   );
-  const showEffort = overriddenModel?.supportsEffort === true;
+  // Only the levels THIS model accepts — a model can support effort and still
+  // reject xhigh/max, and an unsupported level is a 400. Fall back to local
+  // inference if the model list predates the effortLevels field.
+  const effortLevels = useMemo(
+    () => (modelOverride ? overriddenModel?.effortLevels ?? inferModelCapabilities(modelOverride).effortLevels : []),
+    [modelOverride, overriddenModel],
+  );
+  const showEffort = effortLevels.length > 0;
   const showFast = overriddenModel?.supportsFastMode === true;
+  // What will actually run: a stored level above this model's ceiling is clamped
+  // down, so show the clamped value rather than a phantom selection.
+  const effectiveEffort = modelOverride ? resolveEffortLevel(modelOverride, effortOverride) ?? '' : '';
 
   const patchExecConfig = useCallback(
     (req: import('@fleex/shared').UpdateTicketExecutionConfigRequest) => {
@@ -1511,13 +1521,17 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
             <label className="flex items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1 text-[var(--theme-text-secondary)]">
               <span className="opacity-60">◐</span>
               <select
-                value={effortOverride ?? ''}
+                value={effectiveEffort}
                 onChange={(e) => patchExecConfig({ effortOverride: e.target.value === '' ? null : (e.target.value as EffortLevel) })}
-                title="Reasoning effort for the next agent run."
+                title={
+                  effortOverride && effectiveEffort !== effortOverride
+                    ? `Reasoning effort for the next agent run. "${effortOverride}" isn't available on this model — it will run at "${effectiveEffort || 'default'}".`
+                    : 'Reasoning effort for the next agent run.'
+                }
                 className="cursor-pointer bg-transparent pr-1 text-xs text-[var(--theme-text-secondary)] focus:outline-none"
               >
                 <option value="">Effort: default</option>
-                {EFFORT_LEVELS.map((lvl) => (
+                {effortLevels.map((lvl) => (
                   <option key={lvl} value={lvl}>Effort: {lvl}</option>
                 ))}
               </select>

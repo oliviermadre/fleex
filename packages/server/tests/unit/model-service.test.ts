@@ -52,6 +52,8 @@ describe('ModelService', () => {
       family: 'opus',
       supportsEffort: true,
       supportsFastMode: true,
+      // Full ladder — the client enumerates this rather than re-deriving it.
+      effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     });
   });
 

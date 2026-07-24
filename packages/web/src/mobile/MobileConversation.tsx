@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { EFFORT_LEVELS } from '@fleex/shared';
+import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
 import type {
   ConversationMode,
   EffortLevel,
@@ -391,6 +391,15 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
   const overriddenModel = ticket.modelOverride
     ? models.find((m) => m.id === ticket.modelOverride)
     : undefined;
+  // Only the levels this model accepts (xhigh/max don't exist on every model and
+  // an unsupported level is a 400); `effectiveEffort` is what will really run,
+  // since a stored level above the model's ceiling gets clamped down.
+  const effortLevels = ticket.modelOverride
+    ? overriddenModel?.effortLevels ?? inferModelCapabilities(ticket.modelOverride).effortLevels
+    : [];
+  const effectiveEffort = ticket.modelOverride
+    ? resolveEffortLevel(ticket.modelOverride, ticket.effortOverride) ?? ''
+    : '';
   const hasOverrides = !!(ticket.modelOverride || ticket.effortOverride || ticket.fastMode);
 
   const runMention = useCallback(async (m: TicketMention) => {
@@ -738,20 +747,20 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
               className="mb-3"
               ariaLabel="Modèle"
             />
-            {overriddenModel?.supportsEffort === true && (
+            {effortLevels.length > 0 && (
               <>
                 <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
                   Effort de raisonnement
                 </label>
                 <select
-                  value={ticket.effortOverride ?? ''}
+                  value={effectiveEffort}
                   onChange={(e) =>
                     patchExecConfig({ effortOverride: e.target.value === '' ? null : (e.target.value as EffortLevel) })
                   }
                   className="mb-3 w-full appearance-none rounded-lg bg-[var(--theme-bg-secondary)] px-3 py-2.5 text-sm text-[var(--theme-text-primary)]"
                 >
                   <option value="">Défaut</option>
-                  {EFFORT_LEVELS.map((lvl) => (
+                  {effortLevels.map((lvl) => (
                     <option key={lvl} value={lvl}>{lvl}</option>
                   ))}
                 </select>

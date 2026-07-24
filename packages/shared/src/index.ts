@@ -29,8 +29,8 @@ export type { ParsedSlackMessageUrl } from './slack.js';
 
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
 
-export type { ModelFamily, ModelOption, ModelsResponse } from './types/model.js';
-export { FALLBACK_MODELS, inferModelCapabilities } from './types/model.js';
+export type { ModelFamily, ModelOption, ModelsResponse, ModelCapabilities } from './types/model.js';
+export { FALLBACK_MODELS, inferModelCapabilities, resolveEffortLevel } from './types/model.js';
 
 export type {
   HookEventType,
@@ -171,6 +171,7 @@ export {
   EFFORT_LEVELS,
   isConversationMode,
   isEffortLevel,
+  effortRank,
   isDeliverableType,
   isDeliverableStatus,
   normalizeDeliverableTypes,

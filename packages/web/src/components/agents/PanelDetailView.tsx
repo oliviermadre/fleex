@@ -38,8 +38,8 @@ export function PanelDetailView() {
   const [displayName, setDisplayName] = useState('');
   const [description, setDescription] = useState('');
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('claude_code');
-  const [orchestratorModel, setOrchestratorModel] = useState('claude-sonnet-4-6');
-  const [defaultMemberModel, setDefaultMemberModel] = useState('claude-sonnet-4-6');
+  const [orchestratorModel, setOrchestratorModel] = useState('claude-sonnet-5');
+  const [defaultMemberModel, setDefaultMemberModel] = useState('claude-sonnet-5');
   const [orchestratorPrompt, setOrchestratorPrompt] = useState('');
   const [orchestratorPersonaId, setOrchestratorPersonaId] = useState<string | null>(null);
   const [members, setMembers] = useState<PanelMember[]>([]);
