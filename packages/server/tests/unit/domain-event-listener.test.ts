@@ -201,6 +201,39 @@ describe('DomainEventListener', () => {
       });
     });
 
+    // WHY: the ephemeral mention:execution_failed event is gone after a reload,
+    // so the crash card must be driven by durable status. The handler pairs the
+    // event with a mention:updated carrying the persisted `failed` status — this
+    // is what keeps the card visible across a cold reload (the ticket's core bug).
+    it('should also broadcast the companion mention:updated with the failed status', async () => {
+      const mentionId = randomUUID();
+      const ticketId = randomUUID();
+      const mention = TicketMentionEntity.create({
+        id: mentionId,
+        ticketId,
+        commentId: randomUUID(),
+        targetAgent: 'tldr',
+        sourceAgent: 'user',
+      });
+      mention.acknowledge();
+      mention.markFailed();
+      expect(mention.status).toBe('failed');
+      vi.mocked(mocks.mentionStore.getById).mockResolvedValue(mention);
+
+      eventBus.emit({
+        type: 'mention.execution_failed',
+        mentionId,
+        ticketId,
+        targetAgent: 'tldr',
+        reason: 'usage_limit',
+        message: "Quota d'usage épuisé.",
+        occurredAt: new Date(),
+      });
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(ticketBroadcast).toHaveBeenCalledWith('mention:updated', mention.toDTO());
+    });
+
     it('should broadcast persona.created via personaBroadcast', async () => {
       const personaId = randomUUID();
       const persona = AgentPersonaEntity.create({

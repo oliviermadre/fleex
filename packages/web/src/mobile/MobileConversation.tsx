@@ -39,6 +39,7 @@ const MENTION_STATUS_LABEL: Record<TicketMention['status'], string> = {
   acknowledged: '⚙️ en cours',
   resolved: '✅ résolu',
   waiting_for_info: '❓ question posée',
+  failed: '❌ échec',
 };
 
 function parseAgentMentions(body: string): string[] {

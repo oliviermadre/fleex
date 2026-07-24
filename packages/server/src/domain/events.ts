@@ -188,17 +188,20 @@ export interface MentionDeletedEvent extends DomainEvent {
 }
 
 /**
- * Emitted when an agent execution triggered by a mention fails to start
- * (i.e. crashes before the mention reaches `acknowledged`). The mention
- * stays in `pending` and the UI uses this event to surface the failure
- * instead of waiting forever on a `mention.acknowledged` that never comes.
+ * Emitted when an agent execution triggered by a mention crashes — either at
+ * startup (pre-`acknowledged`: workspace error, usage limit, not logged in) or
+ * mid-run (post-`acknowledged`: usage limit, max turns, subprocess crash). In
+ * every case the mention is transitioned to `failed` (see `markFailed`) and a
+ * companion `mention:updated` carries the new status, so the crash card renders
+ * and survives a reload. The UI uses this event's `reason`/`message` to show the
+ * precise remediation and offer a one-click relaunch.
  */
 export interface MentionExecutionFailedEvent extends DomainEvent {
   type: 'mention.execution_failed';
   mentionId: string;
   ticketId: string;
   targetAgent: string;
-  /** Short machine code: 'workspace_error' | 'startup_error' | 'no_persona' | ... */
+  /** Short machine code: 'usage_limit' | 'not_authenticated' | 'max_turns' | 'startup_error' | 'unknown' | ... */
   reason: string;
   /** Human-readable message for the UI to display verbatim. */
   message: string;

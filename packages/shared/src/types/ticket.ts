@@ -211,7 +211,7 @@ export interface TicketComment {
 
 // ── Mentions ──
 
-export type MentionStatus = 'pending' | 'acknowledged' | 'resolved' | 'waiting_for_info';
+export type MentionStatus = 'pending' | 'acknowledged' | 'resolved' | 'waiting_for_info' | 'failed';
 
 export type MentionTargetType = 'agent' | 'human' | 'panel' | 'skill' | 'workflow';
 
@@ -233,11 +233,12 @@ export interface TicketMention {
 }
 
 /**
- * Payload broadcast on the `mention:execution_failed` WS message. Sent when
- * an agent execution triggered by ▶ fails before the mention can transition
- * from `pending` to `acknowledged`. The mention DTO itself does not change;
- * the UI uses this to surface an error toast / chip without waiting for an
- * `acknowledged` event that will never arrive.
+ * Payload broadcast on the `mention:execution_failed` WS message. Sent whenever
+ * an agent execution crashes — either *before* the mention reaches `acknowledged`
+ * (startup errors) or *during* the run after acknowledge (usage limit, not logged
+ * in, max turns, subprocess crash…). In both cases the mention is transitioned to
+ * `failed` and a companion `mention:updated` carries the new status; this payload
+ * carries the `reason`/`message` the UI surfaces in the crash card + toast.
  */
 export interface MentionExecutionFailedPayload {
   readonly mentionId: string;

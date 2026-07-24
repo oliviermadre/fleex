@@ -52,9 +52,15 @@ const STATUS_CONFIG: Record<MentionStatus, { label: string; color: string; bg: s
     bg: tintClasses('green').bg,
     dot: tintClasses('green').solid,
   },
+  failed: {
+    label: 'Failed',
+    color: tintText('red'),
+    bg: tintClasses('red').bg,
+    dot: tintClasses('red').solid,
+  },
 };
 
-const STATUS_ORDER: MentionStatus[] = ['pending', 'acknowledged', 'waiting_for_info', 'resolved'];
+const STATUS_ORDER: MentionStatus[] = ['pending', 'acknowledged', 'waiting_for_info', 'failed', 'resolved'];
 
 type FilterStatus = MentionStatus | 'all';
 
@@ -202,9 +208,11 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
           const m = msg.data as TicketMention;
           if (m.ticketId === ticketId) {
             setMentions((prev) => prev.map((x) => (x.id === m.id ? m : x)));
-            // A subsequent successful state change clears any prior failure.
+            // A subsequent *successful* state change clears any prior failure.
+            // The companion mention:updated that accompanies a crash carries
+            // status `failed` — keep the live reason/message for it.
             setFailures((prev) => {
-              if (!(m.id in prev)) return prev;
+              if (m.status === 'failed' || !(m.id in prev)) return prev;
               const { [m.id]: _drop, ...rest } = prev;
               return rest;
             });
@@ -356,6 +364,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     pending: mentions.filter((m) => m.status === 'pending').length,
     acknowledged: mentions.filter((m) => m.status === 'acknowledged').length,
     waiting_for_info: mentions.filter((m) => m.status === 'waiting_for_info').length,
+    failed: mentions.filter((m) => m.status === 'failed').length,
     resolved: mentions.filter((m) => m.status === 'resolved').length,
   };
 
@@ -369,6 +378,7 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     { key: 'pending', label: 'Pending' },
     { key: 'acknowledged', label: 'Acknowledged' },
     { key: 'waiting_for_info', label: 'Waiting' },
+    { key: 'failed', label: 'Failed' },
     { key: 'resolved', label: 'Resolved' },
   ];
 
