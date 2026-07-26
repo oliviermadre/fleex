@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { FLEEX_DIR } from '@fleex/shared';
+import { FLEEX_DIR, isEffortLevel } from '@fleex/shared';
 import type { TicketStatus, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
@@ -311,7 +311,7 @@ export class JsonTicketStore implements TicketStorePort {
           new Date(t.createdAt), new Date(t.updatedAt),
           t.conversationMode ?? 'plan',
           t.modelOverride ?? null,
-          t.effortOverride ?? null,
+          isEffortLevel(t.effortOverride) ? t.effortOverride : null,
           t.fastMode ?? false,
         );
         this.tickets.set(entity.id, entity);

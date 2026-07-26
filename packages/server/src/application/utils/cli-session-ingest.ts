@@ -14,10 +14,12 @@ import { dirname, join } from 'node:path';
 export interface Price { inp: number; out: number; read: number; w5: number; w1: number }
 const price = (inp: number, out: number): Price => ({ inp, out, read: inp * 0.1, w5: inp * 1.25, w1: inp * 2 });
 export const MODEL_PRICING: Record<string, Price> = {
+  'claude-opus-5': price(5e-6, 25e-6),
   'claude-opus-4-8': price(5e-6, 25e-6),
   'claude-opus-4-7': price(5e-6, 25e-6),
   'claude-opus-4-6': price(5e-6, 25e-6),
   'claude-opus-4-5': price(5e-6, 25e-6),
+  'claude-sonnet-5': price(3e-6, 15e-6),
   'claude-sonnet-4-6': price(3e-6, 15e-6),
   'claude-sonnet-4-5': price(3e-6, 15e-6),
   'claude-haiku-4-5': price(1e-6, 5e-6),

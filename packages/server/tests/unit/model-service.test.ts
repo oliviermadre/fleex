@@ -20,6 +20,7 @@ describe('ModelService', () => {
       { id: 'claude-haiku-4-5', display_name: 'Claude Haiku 4.5' },
       { id: 'claude-opus-4-6', display_name: 'Claude Opus 4.6' },
       { id: 'claude-opus-4-8', display_name: 'Claude Opus 4.8' },
+      { id: 'claude-opus-5', display_name: 'Claude Opus 5' },
       { id: 'claude-sonnet-4-6', display_name: 'Claude Sonnet 4.6' },
     ]);
     const svc = new ModelService(new FakeLoggerPort(), 60_000, () => fake as never);
@@ -27,12 +28,33 @@ describe('ModelService', () => {
     const { models, fallback } = await svc.getAvailableModels();
 
     expect(fallback).toBe(false);
+    // Single-token generation ids (opus-5 → 500) must outrank 'major-minor'
+    // ones (opus-4-8 → 408), so the newest Opus heads the dropdown.
     expect(models.map((m) => m.id)).toEqual([
+      'claude-opus-5',
       'claude-opus-4-8',
       'claude-opus-4-6',
       'claude-sonnet-4-6',
       'claude-haiku-4-5',
     ]);
+  });
+
+  it('maps Opus 5 with effort + fast-mode support and a derived label', async () => {
+    // No display_name: exercises deriveLabel on a single-token generation id.
+    const fake = makeFakeClient([{ id: 'claude-opus-5' }]);
+    const svc = new ModelService(new FakeLoggerPort(), 60_000, () => fake as never);
+
+    const { models } = await svc.getAvailableModels();
+
+    expect(models[0]).toEqual({
+      id: 'claude-opus-5',
+      label: 'Claude Opus 5',
+      family: 'opus',
+      supportsEffort: true,
+      supportsFastMode: true,
+      // Full ladder — the client enumerates this rather than re-deriving it.
+      effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    });
   });
 
   it('excludes legacy Claude 1/2/instant models so dropdowns stay clean', async () => {
@@ -55,8 +77,9 @@ describe('ModelService', () => {
     const { models, fallback } = await svc.getAvailableModels();
 
     expect(fallback).toBe(true);
-    // Opus 4.8 must be present in fallback so the immediate UX works even
+    // Opus 5 must be present in fallback so the immediate UX works even
     // if Anthropic is unreachable on first boot.
+    expect(models.some((m) => m.id === 'claude-opus-5')).toBe(true);
     expect(models.some((m) => m.id === 'claude-opus-4-8')).toBe(true);
   });
 

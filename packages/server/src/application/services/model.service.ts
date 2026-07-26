@@ -106,6 +106,9 @@ function toModelOption(entry: AnthropicModelEntry): ModelOption {
     family: familyOf(entry.id),
     supportsEffort: caps.supportsEffort,
     supportsFastMode: caps.supportsFastMode,
+    // Shipped to the client so dropdowns enumerate exactly the accepted levels
+    // instead of re-deriving them (and risking a 400 on a level this model lacks).
+    effortLevels: caps.effortLevels,
   };
 }
 

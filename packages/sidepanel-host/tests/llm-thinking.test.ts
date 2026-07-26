@@ -30,6 +30,7 @@ async function paramsFor(model: string): Promise<Record<string, unknown>> {
 
 describe('createLlm — adaptive thinking gating', () => {
   it('sends adaptive thinking for models that support effort (Opus/Sonnet)', async () => {
+    expect((await paramsFor('claude-opus-5')).thinking).toEqual({ type: 'adaptive' });
     expect((await paramsFor('claude-opus-4-8')).thinking).toEqual({ type: 'adaptive' });
     expect((await paramsFor('claude-sonnet-4-6')).thinking).toEqual({ type: 'adaptive' });
   });

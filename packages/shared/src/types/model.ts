@@ -1,3 +1,5 @@
+import { EFFORT_LEVELS, effortRank, isEffortLevel, type EffortLevel } from './ticket.js';
+
 /**
  * A Claude model exposed in the UI dropdowns.
  * Sourced either from the Anthropic API (dynamic) or from FALLBACK_MODELS.
@@ -5,29 +7,46 @@
 export type ModelFamily = 'fable' | 'opus' | 'sonnet' | 'haiku' | 'other';
 
 export interface ModelOption {
-  id: string; // e.g. 'claude-opus-4-8'
-  label: string; // e.g. 'Claude Opus 4.8'
+  id: string; // e.g. 'claude-opus-5'
+  label: string; // e.g. 'Claude Opus 5'
   family: ModelFamily;
-  /** Whether the model accepts a reasoning-effort level (low/medium/high…). */
+  /** Whether the model accepts a reasoning-effort level at all. */
   supportsEffort?: boolean;
   /** Whether the model supports a low-latency "fast mode". */
   supportsFastMode?: boolean;
+  /**
+   * Exactly the levels this model accepts, ascending. Empty when the model has
+   * no effort parameter. This — not `supportsEffort` — is what the UI must
+   * enumerate: a model can support effort while rejecting `xhigh` or `max`.
+   */
+  effortLevels?: readonly EffortLevel[];
+}
+
+export interface ModelCapabilities {
+  supportsEffort: boolean;
+  supportsFastMode: boolean;
+  effortLevels: readonly EffortLevel[];
 }
 
 /**
  * Best-effort capability inference from a model id, used as a fallback when the
- * Anthropic API does not advertise capabilities. Effort & fast mode landed with
- * the Opus 4.5 / Sonnet 4.6 generation. Conservative: unknown/older models get
- * `false`, so the UI simply hides the control (graceful degradation) rather than
- * sending an unsupported option to the SDK.
+ * Anthropic API does not advertise capabilities.
+ *
+ * Three separate thresholds, because the ladder grew one rung at a time:
+ *  - effort at all → Opus ≥ 4.5, Sonnet ≥ 4.6, and the Fable line (Claude 5 gen)
+ *  - `max`         → the 4.6 generation on (so Opus 4.5 is effort-capable but caps at `high`)
+ *  - `xhigh`       → Opus ≥ 4.7 and Sonnet ≥ 5 (it never shipped on Sonnet 4.6)
+ *
+ * Conservative by construction: unknown/older ids get no effort at all, so the
+ * UI hides the control instead of offering a level the API would 400 on.
  */
-export function inferModelCapabilities(id: string): { supportsEffort: boolean; supportsFastMode: boolean } {
+export function inferModelCapabilities(id: string): ModelCapabilities {
   const lower = id.toLowerCase();
   // Extract a "major.minor" weight, e.g. opus-4-8 → 408, sonnet-4-6 → 406.
   const nums = lower.match(/\d+/g);
   let weight = 0;
   if (nums && nums.length === 1) {
-    // Single numeric token is the generation itself → "major.0", e.g. sonnet-5 → 500.
+    // Single numeric token is the generation itself → "major.0", e.g. opus-5 → 500.
     weight = parseInt(nums[0] ?? '0', 10) * 100;
   } else if (nums && nums.length > 1) {
     const last = nums[nums.length - 1] ?? '0';
@@ -37,9 +56,48 @@ export function inferModelCapabilities(id: string): { supportsEffort: boolean; s
   const isOpus = lower.includes('opus');
   const isSonnet = lower.includes('sonnet');
   const isFable = lower.includes('fable');
-  // Opus ≥ 4.5, Sonnet ≥ 4.6, and the Fable line (Claude 5 gen) expose effort + fast mode.
+
   const capable = (isOpus && weight >= 405) || (isSonnet && weight >= 406) || isFable;
-  return { supportsEffort: capable, supportsFastMode: capable };
+  if (!capable) return { supportsEffort: false, supportsFastMode: false, effortLevels: [] };
+
+  const hasXhigh = isFable || (isOpus && weight >= 407) || (isSonnet && weight >= 500);
+  const hasMax = isFable || weight >= 406;
+  const effortLevels: EffortLevel[] = ['low', 'medium', 'high'];
+  if (hasXhigh) effortLevels.push('xhigh');
+  if (hasMax) effortLevels.push('max');
+
+  return { supportsEffort: true, supportsFastMode: true, effortLevels };
+}
+
+/**
+ * The one gate between a stored/requested effort level and the SDK. Returns the
+ * level that is safe to send for `modelId`, or `undefined` for "send nothing".
+ *
+ * - unknown model, or a model with no effort parameter → `undefined`
+ * - garbage (a stale enum value from the DB, an unvalidated API body) → `undefined`
+ * - a level above the model's ceiling → clamped DOWN to the highest supported
+ *   one (so `xhigh` on Sonnet 4.6 runs as `high` instead of failing the request)
+ *
+ * Clamping rather than dropping keeps the user's intent — "as deep as this model
+ * goes" — and keeps the execution audit trail truthful about what actually ran.
+ */
+export function resolveEffortLevel(
+  modelId: string,
+  requested: EffortLevel | string | null | undefined,
+): EffortLevel | undefined {
+  if (!requested || !isEffortLevel(requested)) return undefined;
+
+  const { effortLevels } = inferModelCapabilities(modelId);
+  if (effortLevels.length === 0) return undefined;
+  if (effortLevels.includes(requested)) return requested;
+
+  const ceiling = effortRank(requested);
+  // Walk the canonical ladder downwards for the best level this model accepts.
+  for (let rank = ceiling - 1; rank >= 0; rank--) {
+    const candidate = EFFORT_LEVELS[rank];
+    if (candidate && effortLevels.includes(candidate)) return candidate;
+  }
+  return undefined;
 }
 
 export interface ModelsResponse {
@@ -48,6 +106,15 @@ export interface ModelsResponse {
   fallback?: boolean;
 }
 
+/** Capabilities are derived, never hand-written, so the static list can't drift
+ *  out of sync with what `resolveEffortLevel` will actually allow. */
+const staticModel = (id: string, label: string, family: ModelFamily): ModelOption => ({
+  id,
+  label,
+  family,
+  ...inferModelCapabilities(id),
+});
+
 /**
  * Static list used:
  *  - as the immediate fallback when the Anthropic API is unreachable
@@ -55,10 +122,11 @@ export interface ModelsResponse {
  *  - as the canonical default order when the dynamic list cannot be filtered
  */
 export const FALLBACK_MODELS: ModelOption[] = [
-  { id: 'claude-fable-5', label: 'Claude Fable 5', family: 'fable', supportsEffort: true, supportsFastMode: true },
-  { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', family: 'opus', supportsEffort: true, supportsFastMode: true },
-  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', family: 'opus', supportsEffort: true, supportsFastMode: true },
-  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', family: 'sonnet', supportsEffort: true, supportsFastMode: true },
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', family: 'sonnet', supportsEffort: true, supportsFastMode: true },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', family: 'haiku', supportsEffort: false, supportsFastMode: false },
+  staticModel('claude-fable-5', 'Claude Fable 5', 'fable'),
+  staticModel('claude-opus-5', 'Claude Opus 5', 'opus'),
+  staticModel('claude-opus-4-8', 'Claude Opus 4.8', 'opus'),
+  staticModel('claude-opus-4-6', 'Claude Opus 4.6', 'opus'),
+  staticModel('claude-sonnet-5', 'Claude Sonnet 5', 'sonnet'),
+  staticModel('claude-sonnet-4-6', 'Claude Sonnet 4.6', 'sonnet'),
+  staticModel('claude-haiku-4-5', 'Claude Haiku 4.5', 'haiku'),
 ];

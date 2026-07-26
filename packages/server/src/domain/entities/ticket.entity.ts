@@ -1,5 +1,5 @@
 import type { Ticket, TicketStatus, TicketPriority, TicketType, TicketLink, TicketLinkType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
-import { DEFAULT_CONVERSATION_MODE } from '@fleex/shared';
+import { DEFAULT_CONVERSATION_MODE, isEffortLevel } from '@fleex/shared';
 
 export class TicketEntity {
   constructor(
@@ -196,9 +196,17 @@ export class TicketEntity {
       diff['modelOverride'] = { from: this.modelOverride, to: changes.modelOverride };
       this.modelOverride = changes.modelOverride;
     }
-    if (changes.effortOverride !== undefined && changes.effortOverride !== this.effortOverride) {
-      diff['effortOverride'] = { from: this.effortOverride, to: changes.effortOverride };
-      this.effortOverride = changes.effortOverride;
+    // Ignore anything that isn't a known level, so an unvalidated API body can't
+    // persist a value the SDK would 400 on. `null` (clear it) stays valid; the
+    // level is still resolved against the model at execution time, since a model
+    // change can leave a perfectly valid level above the new model's ceiling.
+    const nextEffort =
+      changes.effortOverride === undefined || changes.effortOverride === null || isEffortLevel(changes.effortOverride)
+        ? changes.effortOverride
+        : undefined;
+    if (nextEffort !== undefined && nextEffort !== this.effortOverride) {
+      diff['effortOverride'] = { from: this.effortOverride, to: nextEffort };
+      this.effortOverride = nextEffort;
     }
     if (changes.fastMode !== undefined && changes.fastMode !== this.fastMode) {
       diff['fastMode'] = { from: this.fastMode, to: changes.fastMode };

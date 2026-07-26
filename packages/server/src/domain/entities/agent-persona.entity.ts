@@ -31,7 +31,7 @@ export class AgentPersonaEntity {
       params.id,
       params.name,
       params.displayName,
-      params.model ?? 'claude-sonnet-4-6',
+      params.model ?? 'claude-sonnet-5',
       params.executionMode ?? 'claude_code',
       params.soulMd ?? '',
       params.identityMd ?? '',

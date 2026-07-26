@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel } from '@fleex/shared';
-import { inferModelCapabilities } from '@fleex/shared';
+import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
@@ -617,7 +617,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    * - mode  = min(persona ceiling, ticket.conversationMode). A `message` persona
    *   is capped at `talk`; a `claude_code` persona inherits the ticket's mode.
    * - model = ticket.modelOverride ?? persona.model.
-   * - effort = ticket.effortOverride, applied only if the resolved model supports it.
+   * - effort = ticket.effortOverride, resolved against the model: dropped if the
+   *   model has no effort parameter, clamped down if it sits above the model's
+   *   ceiling (e.g. `xhigh` on Sonnet 4.6 → `high`). Sending an unsupported
+   *   level is a hard 400, so this gate is the only path to the SDK.
    * - fast  = ticket.fastMode, applied only if the resolved model supports it.
    *
    * The ticket may be null (deleted mid-flight) — we fall back to persona defaults
@@ -635,7 +638,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const model = ticket?.modelOverride ?? persona.model;
     const caps = inferModelCapabilities(model);
 
-    const effort = caps.supportsEffort && ticket?.effortOverride ? ticket.effortOverride : undefined;
+    const requestedEffort = ticket?.effortOverride ?? null;
+    const effort = resolveEffortLevel(model, requestedEffort);
+    if (requestedEffort && effort !== requestedEffort) {
+      this.logger.warn('Effort override not supported by model — adjusted', {
+        model,
+        requested: requestedEffort,
+        applied: effort ?? 'none',
+        supported: caps.effortLevels,
+      });
+    }
     const fast = caps.supportsFastMode && (ticket?.fastMode ?? false);
 
     return { mode, model, effort, fast };

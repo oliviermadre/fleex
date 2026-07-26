@@ -6,7 +6,11 @@ interface SdkOptionsContext {
   cwd?: string | null;
   outputFormat?: Record<string, unknown>;
   resume?: string;
-  /** Reasoning effort override, applied only when the model supports it. */
+  /**
+   * Reasoning effort override. MUST already be resolved against `model` via
+   * `resolveEffortLevel` — this is a passthrough, not a gate, and a level the
+   * model doesn't accept (e.g. `xhigh` on Sonnet 4.6) is a hard 400.
+   */
   effort?: EffortLevel;
   /** Fast-mode toggle, applied via SDK settings only when the model supports it. */
   fast?: boolean;

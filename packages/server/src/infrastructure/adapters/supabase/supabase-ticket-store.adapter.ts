@@ -1,4 +1,5 @@
-import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
+import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata, ConversationMode } from '@fleex/shared';
+import { isEffortLevel } from '@fleex/shared';
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
 import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
@@ -96,7 +97,7 @@ function ticketRowToEntity(r: TicketRow): TicketEntity {
     new Date(r.updated_at),
     (r.conversation_mode as ConversationMode | null) ?? 'plan',
     r.model_override ?? null,
-    (r.effort_override as EffortLevel | null) ?? null,
+    isEffortLevel(r.effort_override) ? r.effort_override : null,
     r.fast_mode === true,
   );
 }

@@ -10,7 +10,7 @@
  * Config (env):
  *   ANTHROPIC_API_KEY        required for live use
  *   FLEEX_SIDEPANEL_PORT     listen port (default 4399)
- *   FLEEX_SIDEPANEL_MODEL    model id (default claude-opus-4-8)
+ *   FLEEX_SIDEPANEL_MODEL    model id (default claude-opus-5)
  *   FLEEX_MCP_BIN/PREFIX     fleex binary + prefix args (in-repo dev)
  */
 import fs from 'node:fs';

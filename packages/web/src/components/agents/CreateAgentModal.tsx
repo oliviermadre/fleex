@@ -13,7 +13,7 @@ export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
   const selectPersona = useAgentPersonaStore((s) => s.selectPersona);
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState('claude-sonnet-5');
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -37,7 +37,7 @@ export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
       onClose();
       setName('');
       setDisplayName('');
-      setModel('claude-sonnet-4-6');
+      setModel('claude-sonnet-5');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create agent');
     } finally {
