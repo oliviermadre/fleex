@@ -59,9 +59,14 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
   }
 
   async getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]> {
+    // `failed` is excluded alongside `resolved`/`waiting_for_info`: a crashed
+    // mention must only be relaunched by the user (crash card → runMention), never
+    // swept up by the persona-scoped auto-trigger — otherwise a new mention for the
+    // same agent would silently re-run a crashed one, looping on an unresolved
+    // cause (the "no auto-retry" non-goal, ticket #443).
     const rows = this.conn.db
-      .prepare('SELECT * FROM mentions WHERE target_agent = ? AND status NOT IN (?, ?) ORDER BY created_at ASC')
-      .all(agentName, 'resolved', 'waiting_for_info') as MentionRow[];
+      .prepare('SELECT * FROM mentions WHERE target_agent = ? AND status NOT IN (?, ?, ?) ORDER BY created_at ASC')
+      .all(agentName, 'resolved', 'waiting_for_info', 'failed') as MentionRow[];
     return rows.map((r) => this.toEntity(r));
   }
 

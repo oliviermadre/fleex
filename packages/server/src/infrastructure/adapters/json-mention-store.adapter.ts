@@ -65,8 +65,19 @@ export class JsonMentionStore implements MentionStorePort {
   }
 
   async getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]> {
+    // `failed` is excluded like `resolved`/`waiting_for_info`: a crashed mention
+    // must only be relaunched by the user (crash card → runMention), never swept
+    // up by the persona-scoped auto-trigger — otherwise a new mention for the same
+    // agent would silently re-run a crashed one, looping on an unresolved cause
+    // (the "no auto-retry" non-goal, ticket #443).
     return Array.from(this.mentions.values())
-      .filter((m) => m.targetAgent === agentName && m.status !== 'resolved' && m.status !== 'waiting_for_info')
+      .filter(
+        (m) =>
+          m.targetAgent === agentName &&
+          m.status !== 'resolved' &&
+          m.status !== 'waiting_for_info' &&
+          m.status !== 'failed',
+      )
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 

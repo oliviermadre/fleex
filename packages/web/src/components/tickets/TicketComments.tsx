@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
-import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel, StepRun, WorkflowStep, WorkflowRun } from '@fleex/shared';
+import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel, StepRun, WorkflowStep, WorkflowRun, MentionExecutionFailedPayload } from '@fleex/shared';
 import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
 import { tint, tintText, tintClasses } from '../../lib/tints';
 import Markdown from 'react-markdown';
@@ -17,6 +17,7 @@ import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunSt
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
 import { NeedsReviewRespondPanel } from '../workflows/NeedsReviewRespondPanel';
 import { selectWaitingInputCards } from '../workflows/waitingInputCards';
+import { selectCrashedMentionCards, crashReasonLabel } from './crashedMentionCards';
 import { ModelSelect } from '../agents/ModelSelect';
 import { useTicketStore } from '../../stores/ticketStore';
 import { isMissingRepo, mentionsPrimitive } from '../../lib/repoStatus';
@@ -25,6 +26,7 @@ import { useStickToBottom } from '../../hooks/useStickToBottom';
 import { FloatingExecutionPanel } from './ExecutionModal';
 import { useUnreadStore } from '../../stores/unreadStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useToastStore } from '../../stores/toastStore';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { MentionTypeIcon } from '../../lib/primitives';
@@ -519,6 +521,14 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [mentions, setMentions] = useState<TicketMention[]>([]);
   const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
+  // Live crash reason/message per mentionId, from the ephemeral
+  // `mention:execution_failed` event. On a cold reload this map is empty but the
+  // mention is still persisted as `failed`, so the crash card renders with a
+  // generic fallback (see selectCrashedMentionCards).
+  const [failures, setFailures] = useState<Record<string, { reason: string; message: string }>>({});
+  // Guards double-clicks on the crash card's "Relancer" button while the relaunch
+  // request is in flight.
+  const [relaunching, setRelaunching] = useState<Record<string, boolean>>({});
   const { draft: body, setDraft: setBody, clearDraft } = useCommentDraft(ticketId);
   const [modalExecutionId, setModalExecutionId] = useState<string | null>(null);
   const [modalTitle, setModalTitle] = useState('');
@@ -869,6 +879,50 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
     [workflowRuns, workflowDetail],
   );
 
+  // Inline "the last Claude session crashed — relaunch?" card(s). Presence is
+  // driven by the persisted `failed` mention status (survives reload); the
+  // reason/message come from the live crash event when still available. Mirrors
+  // the waiting-input card above.
+  const crashedMentionCards = useMemo(
+    () => selectCrashedMentionCards(mentions, failures),
+    [mentions, failures],
+  );
+
+  // Latest executionId per mention, so the crash card's "Voir les logs" link can
+  // open the exact failed run (which carries the precise error even after a
+  // reload dropped the ephemeral crash event).
+  const latestExecutionByMention = useMemo(() => {
+    const map: Record<string, string> = {};
+    const execs = executionsByTicket[ticketId] ?? [];
+    for (const e of execs) {
+      const prev = map[e.mentionId];
+      if (!prev) { map[e.mentionId] = e.id; continue; }
+      const prevExec = execs.find((x) => x.id === prev);
+      if (prevExec && new Date(e.startedAt).getTime() >= new Date(prevExec.startedAt).getTime()) {
+        map[e.mentionId] = e.id;
+      }
+    }
+    return map;
+  }, [executionsByTicket, ticketId]);
+
+  // "Relancer" on the crash card: re-run the failed mention. The server resets
+  // it to `pending` and resumes the SDK session (preserved history), so the
+  // agent continues where it crashed. The card clears when the mention leaves
+  // `failed` (mention:updated → status pending/acknowledged).
+  const handleRelaunchCrash = useCallback(async (mentionId: string) => {
+    setRelaunching((prev) => ({ ...prev, [mentionId]: true }));
+    try {
+      await api.runMention(mentionId);
+    } catch (err) {
+      useToastStore.getState().addToast('error', `Échec du relancement : ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRelaunching((prev) => {
+        const { [mentionId]: _drop, ...rest } = prev;
+        return rest;
+      });
+    }
+  }, []);
+
   // Read cursor for "new messages" line
   const loadCursors = useUnreadStore((s) => s.loadCursors);
   const markCommentsRead = useUnreadStore((s) => s.markCommentsRead);
@@ -949,10 +1003,26 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
           const m = msg.data as TicketMention;
           if (m.ticketId === ticketId) {
             setMentions((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+            // Any state change away from `failed` (e.g. a successful relaunch
+            // that goes pending → acknowledged) clears the stale crash reason so
+            // the card disappears. The companion mention:updated that *carries*
+            // `failed` must keep it.
+            if (m.status !== 'failed') {
+              setFailures((prev) => {
+                if (!(m.id in prev)) return prev;
+                const { [m.id]: _drop, ...rest } = prev;
+                return rest;
+              });
+            }
             // Fallback: if execution_end was missed (WS reconnect, etc.), reconcile on mention resolution
             if (msg.type === 'mention:resolved') {
               useAgentEventStore.getState().reconcileOnMentionResolved(m.ticketId, m.id);
             }
+          }
+        } else if (msg.type === 'mention:execution_failed') {
+          const d = msg.data as MentionExecutionFailedPayload;
+          if (d.ticketId === ticketId) {
+            setFailures((prev) => ({ ...prev, [d.mentionId]: { reason: d.reason, message: d.message } }));
           }
         }
       } catch {
@@ -1428,6 +1498,52 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 />
               </div>
             ))}
+            {/* Inline "the last Claude session crashed — relaunch?" card(s).
+                Red-tinted, mirrors the waiting-input card above. Persisted
+                `failed` status keeps it visible across reloads; "Relancer"
+                resumes the crashed session, "Voir les logs" opens the exact run. */}
+            {crashedMentionCards.map(({ mention, reason, message }) => {
+              const persona = personas.find((p) => p.name === mention.targetAgent);
+              const agentName = persona?.displayName || persona?.name || mention.targetAgent;
+              const execId = latestExecutionByMention[mention.id];
+              const isRelaunching = !!relaunching[mention.id];
+              return (
+                <div
+                  key={mention.id}
+                  className={`my-3 rounded-lg border ${tintClasses('red').borderColor} ${tintClasses('red').bg} p-3`}
+                >
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${tintClasses('red').solid}`} />
+                    <div className="text-xs font-semibold text-[var(--theme-text-primary)]">
+                      {agentName}
+                      <span className={`ml-1 font-normal ${tintClasses('red').text}`}>
+                        — la dernière session a crashé ({crashReasonLabel(reason)})
+                      </span>
+                    </div>
+                  </div>
+                  <p className="mb-3 text-xs leading-snug text-[var(--theme-text-secondary)]">{message}</p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      disabled={isRelaunching}
+                      onClick={() => handleRelaunchCrash(mention.id)}
+                    >
+                      {isRelaunching ? 'Relance…' : 'Relancer'}
+                    </Button>
+                    {execId && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-[var(--theme-text-muted)] underline-offset-2 hover:text-[var(--theme-accent)] hover:underline"
+                        onClick={() => { setModalTitle(`${agentName} execution`); setModalExecutionId(execId); }}
+                      >
+                        Voir les logs
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
             <div ref={listEndRef} />
           </div>
         )}

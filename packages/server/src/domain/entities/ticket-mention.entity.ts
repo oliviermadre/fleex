@@ -48,8 +48,24 @@ export class TicketMentionEntity {
   }
 
   resetToPending(): void {
-    if (this.status === 'acknowledged') {
+    // `acknowledged` → the run was interrupted (startup recovery, timeout/cancel);
+    // `failed` → the user asked to relaunch a crashed run from the crash card.
+    // Both return to `pending` so the scheduler can (re-)dispatch the mention.
+    if (this.status === 'acknowledged' || this.status === 'failed') {
       this.status = 'pending';
+    }
+  }
+
+  /**
+   * Mark the mention as crashed. Called when the SDK session dies — either at
+   * startup (pre-acknowledge: usage limit, not logged in, workspace error) or
+   * mid-run (post-acknowledge: usage limit, max turns, subprocess crash). Keeps
+   * the mention out of a stuck `acknowledged`/`pending` state so the crash card
+   * and the cockpit reflect reality. A `resolved` run never fails retroactively.
+   */
+  markFailed(): void {
+    if (this.status === 'pending' || this.status === 'acknowledged') {
+      this.status = 'failed';
     }
   }
 

@@ -86,11 +86,16 @@ export class SupabaseMentionStore implements MentionStorePort {
   }
 
   async getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]> {
+    // `failed` is excluded alongside `resolved`/`waiting_for_info`: a crashed
+    // mention must only be relaunched by the user (crash card → runMention), never
+    // swept up by the persona-scoped auto-trigger — otherwise a new mention for the
+    // same agent would silently re-run a crashed one, looping on an unresolved
+    // cause (the "no auto-retry" non-goal, ticket #443).
     const { data, error } = await this.conn.client
       .from('mentions')
       .select('*')
       .eq('target_agent', agentName)
-      .not('status', 'in', '("resolved","waiting_for_info")');
+      .not('status', 'in', '("resolved","waiting_for_info","failed")');
     if (error) throw new Error(`SupabaseMentionStore.getPendingForAgent failed: ${error.message}`);
     return (data as MentionRow[]).map(rowToEntity);
   }

@@ -44,8 +44,13 @@ export class PgMentionStore implements MentionStorePort {
   }
 
   async getPendingForAgent(agentName: string): Promise<TicketMentionEntity[]> {
+    // `failed` is excluded alongside `resolved`/`waiting_for_info`: a crashed
+    // mention must only be relaunched by the user (crash card → runMention), never
+    // swept up by the persona-scoped auto-trigger — otherwise a new mention for the
+    // same agent would silently re-run a crashed one, looping on an unresolved
+    // cause (the "no auto-retry" non-goal, ticket #443).
     const { rows } = await this.db.query(
-      `SELECT * FROM mentions WHERE target_agent = $1 AND status NOT IN ('resolved', 'waiting_for_info') ORDER BY created_at ASC`,
+      `SELECT * FROM mentions WHERE target_agent = $1 AND status NOT IN ('resolved', 'waiting_for_info', 'failed') ORDER BY created_at ASC`,
       [agentName],
     );
     return rows.map(rowToMention);

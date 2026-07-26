@@ -112,8 +112,10 @@ export class BroadcastRegistrar {
         this.ticketBroadcast('mention:deleted', { id: e.mentionId, ticketId: e.ticketId, commentId: e.commentId });
       }
     });
-    bus.on('mention.execution_failed', (e) => {
+    bus.on('mention.execution_failed', async (e) => {
       if (e.type === 'mention.execution_failed') {
+        // The ephemeral crash event carries the live reason/message the crash
+        // card shows immediately…
         this.ticketBroadcast('mention:execution_failed', {
           mentionId: e.mentionId,
           ticketId: e.ticketId,
@@ -121,6 +123,10 @@ export class BroadcastRegistrar {
           reason: e.reason,
           message: e.message,
         });
+        // …and a companion mention:updated flips the persisted status to
+        // `failed`, so the card is driven by durable state and survives a reload
+        // (after which the ephemeral event above is gone).
+        await this.broadcastMentionEntity(e, 'mention:updated');
       }
     });
 
