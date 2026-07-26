@@ -1,4 +1,5 @@
 import type { MentionExecutionMode, EffortLevel } from '@fleex/shared';
+import { DEFAULT_AGENT_MAX_TURNS, AGENT_MAX_TURNS_MIN, AGENT_MAX_TURNS_MAX } from '@fleex/shared';
 
 interface SdkOptionsContext {
   model: string;
@@ -16,6 +17,19 @@ interface SdkOptionsContext {
    * Read tool, so we enable just Read (+ a few turns) when one is present.
    */
   talkCanReadImages?: boolean;
+  /**
+   * Agentic loop cap for plan/edit modes (Settings › General → `agentMaxTurns`).
+   * Falls back to DEFAULT_AGENT_MAX_TURNS when unset, and is clamped to a sane
+   * range so a bad config value can't disable the loop or unbound it.
+   * Talk mode ignores this — its 0/4 caps are permission guards, not budgets.
+   */
+  maxTurns?: number;
+}
+
+/** Clamp a configured turn budget, falling back to the default when unusable. */
+function resolveMaxTurns(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_AGENT_MAX_TURNS;
+  return Math.min(AGENT_MAX_TURNS_MAX, Math.max(AGENT_MAX_TURNS_MIN, Math.floor(value)));
 }
 
 export function buildSdkOptions(
@@ -23,6 +37,7 @@ export function buildSdkOptions(
   ctx: SdkOptionsContext,
 ): Record<string, unknown> {
   const cliPath = process.env['CLAUDE_CLI_PATH'];
+  const maxTurns = resolveMaxTurns(ctx.maxTurns);
   const base: Record<string, unknown> = {
     model: ctx.model,
     systemPrompt: ctx.systemPrompt,
@@ -61,7 +76,7 @@ export function buildSdkOptions(
         allowedTools: ['Read', 'Glob', 'Grep', 'Skill'],
         permissionMode: 'dontAsk',
         settingSources: ['user', 'project'],
-        maxTurns: 150,
+        maxTurns,
         ...(ctx.cwd ? { cwd: ctx.cwd } : {}),
       };
 
@@ -72,7 +87,7 @@ export function buildSdkOptions(
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         settingSources: ['user', 'project'],
-        maxTurns: 150,
+        maxTurns,
         ...(ctx.cwd ? { cwd: ctx.cwd } : {}),
         ...(ctx.resume ? { resume: ctx.resume } : {}),
       };

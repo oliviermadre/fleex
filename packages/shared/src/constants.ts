@@ -136,6 +136,13 @@ export const TICKET_STATUS = {
 export const USAGE_WARN_THRESHOLD_PCT = 50;   // above → success/green
 export const USAGE_DANGER_THRESHOLD_PCT = 20; // below → danger/red
 
+// Agent SDK loop cap — how many turns a plan/edit execution may take before the
+// SDK stops it. Configurable per workspace via Settings › General
+// (`agentMaxTurns`); this is the fallback when unset.
+export const DEFAULT_AGENT_MAX_TURNS = 150;
+export const AGENT_MAX_TURNS_MIN = 1;
+export const AGENT_MAX_TURNS_MAX = 1000;
+
 // Time conversion units
 export const MS_IN_MINUTE = 60_000;
 export const MINUTES_IN_HOUR = 60;

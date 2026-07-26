@@ -838,6 +838,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           resume: previousSessionId ?? undefined,
           effort: resolved.effort,
           fast: resolved.fast,
+          maxTurns: this.config.get().agentMaxTurns,
           talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
         });
 
@@ -1446,6 +1447,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         cwd: worktreePath,
         outputFormat: opts?.outputFormatOverride ?? this.outputFormatSchema(),
         resume: previousSessionId ?? undefined,
+        maxTurns: this.config.get().agentMaxTurns,
       });
 
       // Build prompt: content blocks if images, string otherwise
@@ -1846,6 +1848,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       const queryOptions = buildSdkOptions(effectiveMode, {
         model: persona.model, systemPrompt, cwd: worktreePath,
         outputFormat: params.outputFormat,
+        maxTurns: this.config.get().agentMaxTurns,
         talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
       });
 

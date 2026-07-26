@@ -13,6 +13,11 @@ export interface AppConfig {
   humanMentionName?: string;
   agentMaxConcurrency?: number;
   agentExecutionTimeout?: number;
+  /**
+   * Agentic loop cap for plan/edit executions. Unset → DEFAULT_AGENT_MAX_TURNS.
+   * Talk mode is unaffected (it has no agentic loop).
+   */
+  agentMaxTurns?: number;
   repositories?: string[];
   resolvedRepositories?: string[];
   resolvedAt?: string;
