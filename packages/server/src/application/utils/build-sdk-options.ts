@@ -22,6 +22,12 @@ interface SdkOptionsContext {
    * Falls back to DEFAULT_AGENT_MAX_TURNS when unset, and is clamped to a sane
    * range so a bad config value can't disable the loop or unbound it.
    * Talk mode ignores this — its 0/4 caps are permission guards, not budgets.
+   *
+   * NB: this is the SDK's own `maxTurns` — "a turn consists of a user message
+   * and assistant response" (one API round-trip), not a per-tool-call count.
+   * A single turn can bundle several parallel tool calls (e.g. reading many
+   * files at once), so the number of tool actions visible in the Execution Log
+   * can exceed this value without indicating the cap was ignored.
    */
   maxTurns?: number;
 }

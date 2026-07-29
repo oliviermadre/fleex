@@ -272,8 +272,11 @@ function GeneralTab({
           }
         />
         <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
-          How many turns an agent may take in a single <strong>plan</strong> or <strong>edit</strong> execution before
-          the SDK stops it. Raise it for long refactors, lower it to cap runaway loops. Default{' '}
+          How many conversation turns (assistant round-trips) an agent may take in a single{' '}
+          <strong>plan</strong> or <strong>edit</strong> execution before the SDK stops it — not a count of
+          individual tool calls. A single turn can bundle several tool calls the model runs in parallel (e.g.
+          reading many files at once), so you may see more tool actions in the log than this number. Raise it
+          for long refactors, lower it to cap runaway loops. Default{' '}
           <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
             {DEFAULT_AGENT_MAX_TURNS}
           </code>
