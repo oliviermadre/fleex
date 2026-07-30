@@ -6,6 +6,7 @@ import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+import { appendAgentEventsToJsonl } from '../agent-event-jsonl.js';
 import type { PgConnection } from './connection.js';
 
 export class PgAgentEventStore implements AgentEventStorePort {
@@ -29,13 +30,17 @@ export class PgAgentEventStore implements AgentEventStorePort {
     model?: string;
     effort?: string;
     fast?: boolean;
+    instanceId?: string;
+    instanceLabel?: string;
   }): Promise<void> {
     await this.db.query(
       `INSERT INTO agent_event_executions
-        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, model, effort, fast_mode)
-       VALUES ($1, $2, $3, $4, 0, 'running', $5, $6, $7, $8)`,
+        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, model, effort, fast_mode,
+         instance_id, instance_label)
+       VALUES ($1, $2, $3, $4, 0, 'running', $5, $6, $7, $8, $9, $10)`,
       [params.executionId, params.personaId, params.ticketId, params.mentionId, new Date().toISOString(),
-       params.model ?? null, params.effort ?? null, params.fast ?? null],
+       params.model ?? null, params.effort ?? null, params.fast ?? null,
+       params.instanceId ?? null, params.instanceLabel ?? null],
     );
   }
 
@@ -48,6 +53,10 @@ export class PgAgentEventStore implements AgentEventStorePort {
       'UPDATE agent_event_executions SET event_count = event_count + 1, last_event_at = $1 WHERE execution_id = $2',
       [new Date().toISOString(), event.executionId],
     );
+  }
+
+  async mirrorRemoteEvents(events: AgentEventEntity[]): Promise<void> {
+    await appendAgentEventsToJsonl(this.eventsDir, events);
   }
 
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
@@ -144,6 +153,14 @@ export class PgAgentEventStore implements AgentEventStorePort {
     return rows.map(rowToExecution);
   }
 
+  async getExecutionById(executionId: string): Promise<AgentExecution | null> {
+    const { rows } = await this.db.query(
+      'SELECT * FROM agent_event_executions WHERE execution_id = $1',
+      [executionId],
+    );
+    return rows[0] ? rowToExecution(rows[0]) : null;
+  }
+
   async updateSessionId(executionId: string, sdkSessionId: string): Promise<void> {
     await this.db.query(
       'UPDATE agent_event_executions SET sdk_session_id = $1 WHERE execution_id = $2',
@@ -151,13 +168,14 @@ export class PgAgentEventStore implements AgentEventStorePort {
     );
   }
 
-  async markInterruptedExecutions(): Promise<string[]> {
+  async markInterruptedExecutions(instanceId: string): Promise<string[]> {
     const { rows } = await this.db.query(
-      "SELECT mention_id FROM agent_event_executions WHERE status = 'running'",
+      "SELECT mention_id FROM agent_event_executions WHERE status = 'running' AND instance_id = $1",
+      [instanceId],
     );
     await this.db.query(
-      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = $1 WHERE status = 'running'",
-      [new Date().toISOString()],
+      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = $1 WHERE status = 'running' AND instance_id = $2",
+      [new Date().toISOString(), instanceId],
     );
     return rows.map((r: Record<string, unknown>) => r.mention_id as string);
   }
@@ -209,5 +227,7 @@ function rowToExecution(row: Record<string, unknown>): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: (row.comment_id as string) ?? null,
     deliverableId: (row.deliverable_id as string) ?? null,
+    instanceId: (row.instance_id as string) ?? null,
+    instanceLabel: (row.instance_label as string) ?? null,
   };
 }

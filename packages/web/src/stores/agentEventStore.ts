@@ -1,10 +1,40 @@
 import { create } from 'zustand';
 import type { AgentExecution, AgentEvent } from '@fleex/shared';
+
+/**
+ * Attribution attached by the server to an agent event it relayed from another
+ * Fleex instance. Absent for locally-produced events.
+ */
+interface AgentEventOrigin {
+  instanceId: string;
+  instanceLabel: string;
+  truncated?: boolean;
+}
 import * as api from '../services/api';
 import { appWs } from '../services/websocket';
 
 const subscribedExecutionIds = new Set<string>();
 const subscribedTicketIds = new Set<string>();
+
+/**
+ * Merge event lists, deduped by id and ordered by sequence.
+ *
+ * Needed because a cross-instance history fetch and the live relay deliberately
+ * overlap: the server asks the owning instance for the recorded log while events
+ * keep streaming in.
+ */
+/** Does this `execution_start` belong to a ticket the user currently has open? */
+function isOnSubscribedTicket(event: AgentEvent): boolean {
+  const ticketId = (event.data as Record<string, unknown> | undefined)?.['ticketId'];
+  return typeof ticketId === 'string' && subscribedTicketIds.has(ticketId);
+}
+
+function mergeEvents(existing: AgentEvent[] | undefined, incoming: AgentEvent[]): AgentEvent[] {
+  if (!existing?.length) return [...incoming].sort((a, b) => a.sequence - b.sequence);
+  const byId = new Map(existing.map((e) => [e.id, e]));
+  for (const event of incoming) byId.set(event.id, event);
+  return [...byId.values()].sort((a, b) => a.sequence - b.sequence);
+}
 
 interface AgentEventState {
   executionsByTicket: Record<string, AgentExecution[]>;
@@ -13,6 +43,11 @@ interface AgentEventState {
   streamingExecutionIds: Record<string, boolean>;
   /** Tracks whether events for an execution have been loaded (or failed). */
   eventsLoadStatus: Record<string, 'loading' | 'loaded' | 'error'>;
+  /**
+   * Per-execution notes about a stream that isn't wholly ours: which machine ran
+   * it, and whether part of the log couldn't be transferred. Absent for local runs.
+   */
+  streamNotices: Record<string, { origin?: string; elided?: boolean; truncated?: boolean }>;
 
   loadExecutionsForTicket: (ticketId: string) => Promise<void>;
   loadExecutionsForPersona: (personaId: string) => Promise<void>;
@@ -33,6 +68,7 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
   eventsByExecution: {},
   streamingExecutionIds: {},
   eventsLoadStatus: {},
+  streamNotices: {},
 
   loadExecutionsForTicket: async (ticketId) => {
     try {
@@ -61,10 +97,23 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
       eventsLoadStatus: { ...state.eventsLoadStatus, [executionId]: 'loading' as const },
     }));
     try {
-      const events = await api.fetchEventsForExecution(executionId);
+      const history = await api.fetchEventsForExecution(executionId);
       set((state) => ({
-        eventsByExecution: { ...state.eventsByExecution, [executionId]: events },
+        // Merge rather than replace: live events may already have landed while the
+        // (possibly cross-instance) history fetch was in flight.
+        eventsByExecution: {
+          ...state.eventsByExecution,
+          [executionId]: mergeEvents(state.eventsByExecution[executionId], history.events),
+        },
         eventsLoadStatus: { ...state.eventsLoadStatus, [executionId]: 'loaded' as const },
+        streamNotices: {
+          ...state.streamNotices,
+          [executionId]: {
+            ...state.streamNotices[executionId],
+            ...(history.origin ? { origin: history.origin } : {}),
+            ...(history.elided ? { elided: true } : {}),
+          },
+        },
       }));
     } catch (err) {
       console.error('Failed to load events for execution:', err);
@@ -110,16 +159,30 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
   handleWsEvent: (msg) => {
     if (msg.type === 'agent_event:delta') {
       const event = msg.data as AgentEvent;
+      // Sits alongside `type`/`data` on the envelope, not inside the event DTO —
+      // the generic channel handler type doesn't know about it.
+      const origin = (msg as { origin?: AgentEventOrigin }).origin;
       set((state) => {
         const next: Partial<AgentEventState> = {
           eventsByExecution: {
             ...state.eventsByExecution,
-            [event.executionId]: [...(state.eventsByExecution[event.executionId] ?? []), event],
+            [event.executionId]: mergeEvents(state.eventsByExecution[event.executionId], [event]),
           },
           streamingExecutionIds: state.streamingExecutionIds[event.executionId]
             ? state.streamingExecutionIds
             : { ...state.streamingExecutionIds, [event.executionId]: true },
         };
+
+        if (origin) {
+          next.streamNotices = {
+            ...state.streamNotices,
+            [event.executionId]: {
+              ...state.streamNotices[event.executionId],
+              origin: origin.instanceLabel,
+              ...(origin.truncated ? { truncated: true } : {}),
+            },
+          };
+        }
 
         // When execution starts, add a new execution entry to executionsByTicket
         if (event.eventType === 'execution_start') {
@@ -182,8 +245,16 @@ export const useAgentEventStore = create<AgentEventState>((set) => ({
         return next as AgentEventState;
       });
 
-      // Auto-subscribe to new executions so the events tab updates live
-      if (event.eventType === 'execution_start' && !subscribedExecutionIds.has(event.executionId)) {
+      // Auto-subscribe to new executions so the events tab of an OPEN ticket updates
+      // live. Scoped to subscribed tickets on purpose: an execution subscription is
+      // what makes the server pull a run's full stream from the instance running it,
+      // so subscribing to everything we merely hear about would drag every sibling's
+      // SDK traffic across the hub while the user looks at an unrelated screen.
+      if (
+        event.eventType === 'execution_start'
+        && !subscribedExecutionIds.has(event.executionId)
+        && isOnSubscribedTicket(event)
+      ) {
         subscribedExecutionIds.add(event.executionId);
         appWs.sendChannel('agent-events',{ action: 'subscribe', executionId: event.executionId });
       }

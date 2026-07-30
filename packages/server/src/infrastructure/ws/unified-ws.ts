@@ -7,7 +7,8 @@ import {
   DEFAULT_COLS,
   DEFAULT_ROWS,
 } from '@fleex/shared';
-import type { PtyHandle, DashboardMessage, WsChannel } from '@fleex/shared';
+import type { AgentEvent, PtyHandle, DashboardMessage, WsChannel } from '@fleex/shared';
+import type { AgentEventOrigin } from '../../application/ports/agent-event-relay.port.js';
 import type { Container } from '../container.js';
 import type { JsonlFileWatcher } from '../services/jsonl-file-watcher.js';
 import type { WsHeartbeat } from './ws-heartbeat.js';
@@ -209,11 +210,26 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       }
     };
 
-    const broadcastAgentEvent = (event: { toDTO: () => { executionId: string; eventType: string; data: unknown } }) => {
+    const broadcastAgentEvent = (dto: AgentEvent, origin?: AgentEventOrigin) => {
+      // A remote `execution_end` has no local `onExecutionComplete` callback (that
+      // fires inside the owning process), so drive persona status from the event.
+      if (origin?.personaId && dto.eventType === 'execution_end') {
+        const status = (dto.data as { status?: string } | undefined)?.status;
+        const failed = status === 'failed' || status === 'interrupted';
+        container.personaBroadcast(
+          failed ? 'persona:execution_failed' : 'persona:execution_completed',
+          { personaId: origin.personaId },
+        );
+      }
+
       if (clients.size === 0) return;
-      const dto = event.toDTO();
       const executionId = dto.executionId;
-      const payload = JSON.stringify({ channel: 'agent-events' as WsChannel, type: 'agent_event:delta', data: dto });
+      const payload = JSON.stringify({
+        channel: 'agent-events' as WsChannel,
+        type: 'agent_event:delta',
+        data: dto,
+        ...(origin ? { origin } : {}),
+      });
 
       for (const client of clients.values()) {
         if (client.subscribedExecutions.has(executionId)) {
@@ -241,8 +257,9 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
       }
     };
 
-    container.executeAgent.onEvent = broadcastAgentEvent;
-    container.runPanel.onEvent = broadcastAgentEvent;
+    // Register rather than assign: `executeAgent.onEvent` is the container's
+    // fan-out entry point, and overwriting it would evict the hub publisher.
+    container.addAgentEventListener(broadcastAgentEvent);
 
     container.executeAgent.onExecutionComplete = (personaId, status, _mentionId) => {
       const type = status === 'completed' ? 'persona:execution_completed' : 'persona:execution_failed';
@@ -257,6 +274,26 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
           client.socket.send(payload);
         }
       }
+    };
+
+    /**
+     * Tell the hub which remote executions our browsers are actually watching.
+     *
+     * Only explicit per-execution subscriptions count. `allExecutions` (Execution
+     * Log) and ticket subscriptions are deliberately excluded: they only ever
+     * receive lifecycle events, which are relayed unconditionally. That is what
+     * keeps an idle screen from pulling every sibling's SDK stream.
+     */
+    const publishStreamDemand = () => {
+      const wanted = new Set<string>();
+      for (const client of clients.values()) {
+        for (const executionId of client.subscribedExecutions) {
+          // Runs we own stream in-process; asking siblings for them would be noise.
+          if (container.executeAgent.ownsExecution(executionId)) continue;
+          wanted.add(executionId);
+        }
+      }
+      container.setAgentStreamDemand(wanted);
     };
 
     // ─── Unified WS route ───
@@ -390,10 +427,12 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
                 if (msg.executionId) client.subscribedExecutions.add(msg.executionId);
                 if (msg.ticketId) client.subscribedTickets.add(msg.ticketId);
                 if (msg.allExecutions) client.subscribedToAllExecutions = true;
+                if (msg.executionId) publishStreamDemand();
               } else if (msg.action === 'unsubscribe') {
                 if (msg.executionId) client.subscribedExecutions.delete(msg.executionId);
                 if (msg.ticketId) client.subscribedTickets.delete(msg.ticketId);
                 if (msg.allExecutions) client.subscribedToAllExecutions = false;
+                if (msg.executionId) publishStreamDemand();
               }
             }
           } catch {
@@ -407,8 +446,12 @@ export function unifiedWsPlugin(container: Container, fileWatcher: JsonlFileWatc
           handle.kill();
         }
         client.ptyHandles.clear();
+        const wasWatching = client.subscribedExecutions.size > 0;
         clients.delete(ws);
         heartbeat.unregister(ws);
+        // A closed tab is the common way a stream stops being watched — release
+        // it now rather than letting the owner's demand TTL expire.
+        if (wasWatching) publishStreamDemand();
       });
     });
 

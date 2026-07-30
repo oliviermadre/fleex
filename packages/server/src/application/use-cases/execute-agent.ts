@@ -33,6 +33,7 @@ import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
+import { resolveInstanceIdentity } from '../services/instance-identity.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import { resolveFileReferences, promptHasImageAttachment, type PromptContentBlock } from '../utils/resolve-file-references.js';
@@ -193,8 +194,13 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    * reset their mentions to pending, and reload SDK session history.
    */
   async init(): Promise<void> {
-    // 1. Mark all 'running' executions as 'interrupted' (orphaned from previous process)
-    const interruptedMentionIds = await this.agentEventStore.markInterruptedExecutions();
+    // 1. Mark *our* 'running' executions as 'interrupted' (orphaned from previous
+    //    process). Scoped to this instance: with shared storage a sibling's live
+    //    runs are rows in the same table, and an unscoped sweep would kill them
+    //    and re-queue their mentions here — a duplicate execution.
+    const interruptedMentionIds = await this.agentEventStore.markInterruptedExecutions(
+      resolveInstanceIdentity().id,
+    );
     if (interruptedMentionIds.length > 0) {
       this.logger.info(`Marked ${interruptedMentionIds.length} interrupted executions`, {
         mentionIds: interruptedMentionIds,
@@ -486,6 +492,20 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       status: 'running',
       abortController: entry.abortController,
     });
+  }
+
+  /**
+   * Is this execution running in *this* process?
+   *
+   * Two callers care: the WS layer, which must not ask siblings to stream a run
+   * it already streams in-process; and the cancel path, which can only abort what
+   * it holds an `AbortController` for.
+   */
+  ownsExecution(executionId: string): boolean {
+    for (const exec of this.activeExecutions.values()) {
+      if (exec.executionId === executionId) return true;
+    }
+    return false;
   }
 
   /**

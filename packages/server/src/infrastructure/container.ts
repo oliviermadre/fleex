@@ -1,4 +1,3 @@
-import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { SessionNamingService } from '../domain/services/session-naming.js';
@@ -11,10 +10,12 @@ import { RepoPathResolver } from '../domain/services/repo-path-resolver.js';
 import { BareCloneManager } from '../application/services/bare-clone-manager.js';
 import { SdkConcurrencyLimiter, DEFAULT_AGENT_MAX_CONCURRENCY } from '../application/services/sdk-concurrency-limiter.js';
 import { OverlayManager } from '../application/services/overlay-manager.js';
+import { resolveInstanceIdentity } from '../application/services/instance-identity.js';
 import { EventBus } from '../application/event-bus.js';
 import { DomainEventListener } from '../application/domain-event-listener.js';
 import { RemoteDomainEventListener } from '../application/remote-domain-event-listener.js';
 import { HubClient } from './hub/hub-client.js';
+import { AgentBackfillRegistry } from './hub/agent-backfill-registry.js';
 import { HubEventPublisher } from './hub/hub-event-publisher.adapter.js';
 import { NullHubEventPublisher } from './hub/null-hub-event-publisher.js';
 import type { HubEventPublisherPort } from '../application/ports/hub-event-publisher.port.js';
@@ -87,10 +88,25 @@ import { CachedTicketStore } from './adapters/cached-ticket-store.js';
 import { CachedPersonaStore } from './adapters/cached-persona-store.js';
 import { CachedAgentEventStore } from './adapters/cached-agent-event-store.js';
 import { isRemoteCacheSync, type RemoteCacheSync } from '../application/ports/remote-cache-sync.port.js';
+import type { AgentEventListener, AgentEventOrigin } from '../application/ports/agent-event-relay.port.js';
+import { AgentEventEntity } from '../domain/entities/agent-event.entity.js';
+import type { AgentEvent } from '@fleex/shared';
 import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
+
+/** Rehydrate a relayed agent event so it can be mirrored to local storage. */
+function agentEventFromDTO(dto: AgentEvent): AgentEventEntity {
+  return new AgentEventEntity(
+    dto.id,
+    dto.executionId,
+    dto.eventType,
+    dto.data,
+    dto.sequence,
+    new Date(dto.createdAt),
+  );
+}
 
 export async function createContainer() {
   const logger = new PinoLoggerAdapter();
@@ -141,7 +157,8 @@ export async function createContainer() {
   await ticketStore_.warmUp();
   const personaStore_ = new CachedPersonaStore(personaStore);
   await personaStore_.warmUp();
-  const agentEventStore_ = new CachedAgentEventStore(agentEventStore);
+  const instance = resolveInstanceIdentity();
+  const agentEventStore_ = new CachedAgentEventStore(agentEventStore, instance);
   await agentEventStore_.warmUp();
 
   // Caches that can re-sync themselves from shared storage when a sibling
@@ -303,6 +320,34 @@ export async function createContainer() {
   );
   remoteDomainEventListener.register();
 
+  // ── Agent event fan-out ──
+  // Agent events (the SDK stream of a run) do NOT travel on the domain event bus:
+  // they'd be re-audited and would re-trigger side-effects. They get their own
+  // fan-out, fed by local runs and by the hub, and consumed by the WS layer and
+  // the hub publisher.
+  const agentEventListeners: AgentEventListener[] = [];
+  const emitAgentEvent = (event: AgentEvent, origin?: AgentEventOrigin): void => {
+    for (const listener of agentEventListeners) {
+      try {
+        listener(event, origin);
+      } catch (err) {
+        logger.warn('Agent event listener threw', {
+          executionId: event.executionId,
+          eventType: event.eventType,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  };
+  executeAgent.onEvent = (e) => emitAgentEvent(e.toDTO());
+  runPanel.onEvent = executeAgent.onEvent;
+
+  // Executions a local browser is actively watching. Gates two things: which
+  // streams we ask siblings for, and which relayed events we bother writing to
+  // disk. A run merely *seen* as running must cost neither bandwidth nor I/O.
+  let localStreamDemand = new Set<string>();
+  const agentBackfills = new AgentBackfillRegistry();
+
   // Hub wiring — active only when FLEEX_EVENT_HUB_URL is set. Works with any
   // storage driver (cloud mode with Supabase/PgSQL, but also local dev with
   // SQLite when two instances share ~/.fleex/fleex.db via main + worktree).
@@ -314,6 +359,66 @@ export async function createContainer() {
       url: hubUrl,
       token: process.env['FLEEX_EVENT_HUB_TOKEN'],
       serverId,
+      instance,
+      relayAgentEvents: process.env['FLEEX_HUB_RELAY_AGENT_EVENTS'] !== '0',
+      onRemoteAgentEvent: async (msg) => {
+        const { event } = msg;
+
+        // The execution row itself lives in shared storage, but our write-through
+        // cache never saw the sibling's write — re-read it before anything reads
+        // "is this running?" from the cache (Kanban pill, Execution Log).
+        let personaId: string | undefined;
+        if (event.eventType === 'execution_start' || event.eventType === 'execution_end') {
+          try {
+            await agentEventStore_.refreshExecution(event.executionId);
+            personaId = (await agentEventStore_.getExecutionById(event.executionId))?.personaId;
+          } catch (err) {
+            logger.warn('Remote execution refresh failed', {
+              executionId: event.executionId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
+        // Persist only what someone here is watching (or explicitly asked for via
+        // backfill), so the local event-history endpoint can replay it.
+        if (msg.targetServerId != null || localStreamDemand.has(event.executionId)) {
+          try {
+            await agentEventStore_.mirrorRemoteEvents([agentEventFromDTO(event)]);
+          } catch (err) {
+            logger.warn('Remote agent event mirroring failed', {
+              executionId: event.executionId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
+        emitAgentEvent(event, {
+          instanceId: msg.originatorInstanceId,
+          instanceLabel: msg.originatorInstanceLabel,
+          ...(msg.truncated ? { truncated: true } : {}),
+          ...(personaId ? { personaId } : {}),
+        });
+      },
+      onAgentBackfillRequest: async (msg) => {
+        // Answer only for runs we own: another instance may hold a partial mirror
+        // of the same execution, and replying from it would serve a truncated log
+        // as if it were complete.
+        try {
+          const exec = await agentEventStore_.getExecutionById(msg.executionId);
+          if (!exec || exec.instanceId !== instance.id) return;
+          const events = await agentEventStore_.getEventsByExecution(msg.executionId);
+          hubClient?.respondAgentBackfill(msg, events.map((e) => e.toDTO()));
+        } catch (err) {
+          logger.warn('Agent backfill response failed', {
+            executionId: msg.executionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      },
+      onAgentBackfillEnd: (msg) => {
+        agentBackfills.settle(msg);
+      },
       logger,
       onRemoteEvent: async (e) => {
         // Re-sync write-through caches from shared storage BEFORE dispatching,
@@ -334,7 +439,22 @@ export async function createContainer() {
     });
     hubClient.start();
     hubPublisher = new HubEventPublisher(hubClient);
-    logger.info('Event hub configured', { url: hubUrl, serverId });
+
+    // Relay locally-produced agent events only. Re-publishing a relayed one would
+    // ping-pong it: the hub's originator filter protects the sender, not a third
+    // instance forwarding someone else's event under its own id.
+    const client = hubClient;
+    agentEventListeners.push((event, origin) => {
+      if (origin) return;
+      client.publishAgentEvent(event);
+    });
+
+    logger.info('Event hub configured', {
+      url: hubUrl,
+      serverId,
+      instanceId: instance.id,
+      relayAgentEvents: process.env['FLEEX_HUB_RELAY_AGENT_EVENTS'] !== '0',
+    });
   } else {
     logger.info('Event hub disabled (FLEEX_EVENT_HUB_URL not set) — running single-instance');
   }
@@ -354,7 +474,7 @@ export async function createContainer() {
   const AUDIT_EXCLUDED_EVENTS = new Set<string>([
     'session.hookStatusChanged',
   ]);
-  const instanceId = process.env['FLEEX_INSTANCE_ID'] ?? `${hostname()}:${process.env['PORT'] ?? '3000'}`;
+  const instanceId = instance.id;
   eventBus.on('*', (event) => {
     if (AUDIT_EXCLUDED_EVENTS.has(event.type)) return;
     const entry = DomainEventLogEntity.create({
@@ -550,6 +670,38 @@ export async function createContainer() {
     remoteDomainEventListener,
     hubClient,
     serverId,
+    instance,
+
+    /**
+     * Subscribe to every agent event this server surfaces, local or relayed. The
+     * WS layer registers here instead of assigning `executeAgent.onEvent`, which
+     * would evict the hub publisher.
+     */
+    addAgentEventListener: (listener: AgentEventListener) => {
+      agentEventListeners.push(listener);
+    },
+
+    /**
+     * Declare which remote executions local browsers are watching. Idempotent
+     * snapshot: the WS layer recomputes and calls this on every subscribe,
+     * unsubscribe and disconnect.
+     */
+    setAgentStreamDemand: (executionIds: Iterable<string>) => {
+      localStreamDemand = new Set(executionIds);
+      hubClient?.setAgentStreamDemand(localStreamDemand);
+    },
+
+    /**
+     * Pull an execution's event history from the instance that owns it, mirroring
+     * it locally as the events arrive. Resolves `answered: false` when nobody
+     * responds in time (owner offline, or history pruned).
+     */
+    requestRemoteEventHistory: async (executionId: string) => {
+      const requestId = hubClient?.requestAgentBackfill(executionId);
+      if (!requestId) return { answered: false, count: 0, elided: false };
+      return agentBackfills.await(requestId);
+    },
+
     ticketBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     agentBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,
     personaBroadcast: ((_type: string, _data: unknown) => {}) as (type: string, data: unknown) => void,

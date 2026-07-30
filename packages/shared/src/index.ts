@@ -227,18 +227,32 @@ export type {
   ExecutionStartData,
 } from './types/agent-event.js';
 
-export { computeInitials } from './types/agent-event.js';
+export { computeInitials, AGENT_EVENT_LIFECYCLE_TYPES } from './types/agent-event.js';
 
 export type { DomainEventLog } from './types/domain-event-log.js';
 
 export type {
   HubHelloMessage,
   HubEventMessage,
+  HubAgentEventMessage,
+  HubAgentStreamDemandMessage,
+  HubAgentBackfillRequestMessage,
+  HubAgentBackfillEndMessage,
   HubPingMessage,
   HubPongMessage,
   HubMessage,
+  HubRelayMessage,
 } from './types/event-hub.js';
-export { HUB_SHARED_EXCLUDED } from './types/event-hub.js';
+export {
+  HUB_SHARED_EXCLUDED,
+  HUB_RELAYED_KINDS,
+  MAX_AGENT_EVENT_BYTES,
+  AGENT_STREAM_DEMAND_HEARTBEAT_MS,
+  AGENT_STREAM_DEMAND_TTL_MS,
+  AGENT_BACKFILL_MAX_EVENTS,
+  AGENT_BACKFILL_MAX_BYTES,
+  AGENT_BACKFILL_TIMEOUT_MS,
+} from './types/event-hub.js';
 
 export type { FileMetadata } from './types/file.js';
 

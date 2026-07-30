@@ -6,6 +6,7 @@ import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+import { appendAgentEventsToJsonl } from '../agent-event-jsonl.js';
 import type { SqliteConnection } from './connection.js';
 
 interface ExecutionRow {
@@ -32,6 +33,8 @@ interface ExecutionRow {
   source: string | null;
   comment_id: string | null;
   deliverable_id: string | null;
+  instance_id: string | null;
+  instance_label: string | null;
 }
 
 export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
@@ -55,11 +58,15 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     model?: string;
     effort?: string;
     fast?: boolean;
+    instanceId?: string;
+    instanceLabel?: string;
   }): Promise<void> {
     this.conn.db.prepare(`
       INSERT INTO agent_event_executions
-        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, model, effort, fast_mode)
-      VALUES (@execution_id, @persona_id, @ticket_id, @mention_id, 0, 'running', @started_at, @model, @effort, @fast_mode)
+        (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, model, effort, fast_mode,
+         instance_id, instance_label)
+      VALUES (@execution_id, @persona_id, @ticket_id, @mention_id, 0, 'running', @started_at, @model, @effort, @fast_mode,
+         @instance_id, @instance_label)
     `).run({
       execution_id: params.executionId,
       persona_id: params.personaId,
@@ -69,6 +76,8 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
       model: params.model ?? null,
       effort: params.effort ?? null,
       fast_mode: params.fast == null ? null : params.fast ? 1 : 0,
+      instance_id: params.instanceId ?? null,
+      instance_label: params.instanceLabel ?? null,
     });
   }
 
@@ -80,6 +89,10 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     this.conn.db.prepare(
       'UPDATE agent_event_executions SET event_count = event_count + 1, last_event_at = ? WHERE execution_id = ?'
     ).run(new Date().toISOString(), event.executionId);
+  }
+
+  async mirrorRemoteEvents(events: AgentEventEntity[]): Promise<void> {
+    await appendAgentEventsToJsonl(this.eventsDir, events);
   }
 
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
@@ -171,6 +184,13 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     return rows.map(rowToExecution);
   }
 
+  async getExecutionById(executionId: string): Promise<AgentExecution | null> {
+    const row = this.conn.db
+      .prepare('SELECT * FROM agent_event_executions WHERE execution_id = ?')
+      .get(executionId) as ExecutionRow | undefined;
+    return row ? rowToExecution(row) : null;
+  }
+
   async updateSessionId(executionId: string, sdkSessionId: string): Promise<void> {
     this.conn.db.prepare(
       'UPDATE agent_event_executions SET sdk_session_id = ? WHERE execution_id = ?'
@@ -209,14 +229,14 @@ export class SqliteAgentEventStoreAdapter implements AgentEventStorePort {
     });
   }
 
-  async markInterruptedExecutions(): Promise<string[]> {
+  async markInterruptedExecutions(instanceId: string): Promise<string[]> {
     const rows = this.conn.db
-      .prepare("SELECT mention_id FROM agent_event_executions WHERE status = 'running'")
-      .all() as { mention_id: string }[];
+      .prepare("SELECT mention_id FROM agent_event_executions WHERE status = 'running' AND instance_id = ?")
+      .all(instanceId) as { mention_id: string }[];
 
     this.conn.db.prepare(
-      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = ? WHERE status = 'running'"
-    ).run(new Date().toISOString());
+      "UPDATE agent_event_executions SET status = 'interrupted', completed_at = ? WHERE status = 'running' AND instance_id = ?"
+    ).run(new Date().toISOString(), instanceId);
 
     return rows.map((r) => r.mention_id);
   }
@@ -267,5 +287,7 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: row.comment_id ?? null,
     deliverableId: row.deliverable_id ?? null,
+    instanceId: row.instance_id ?? null,
+    instanceLabel: row.instance_label ?? null,
   };
 }

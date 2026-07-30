@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from 'bun';
-import type { HubEventMessage, HubMessage } from '@fleex/shared';
+import type { HubMessage, HubRelayMessage } from '@fleex/shared';
 
 export interface HubClientData {
   /** Authenticated client name (from authorized_clients file). */
@@ -43,14 +43,21 @@ export class Hub {
     this.clients.delete(ws);
   }
 
-  /** Forward an event from `from` to every other connected server. */
-  forward(from: ServerWebSocket<HubClientData>, event: HubEventMessage): number {
-    const payload = JSON.stringify(event);
+  /**
+   * Forward a relayable message from `from` to every other connected server.
+   *
+   * Deliberately shape-agnostic: domain events, agent events, stream-demand
+   * snapshots and backfill traffic all go through here. The hub does no
+   * addressing, filtering or bookkeeping beyond "not back to the sender" —
+   * receivers decide what concerns them (including `targetServerId`).
+   */
+  forward(from: ServerWebSocket<HubClientData>, message: HubRelayMessage): number {
+    const payload = JSON.stringify(message);
     let delivered = 0;
     for (const ws of this.clients) {
       if (ws === from) continue;
       // Defensively guard against same serverId reconnecting on a new socket.
-      if (ws.data.serverId && ws.data.serverId === event.originatorServerId) continue;
+      if (ws.data.serverId && ws.data.serverId === message.originatorServerId) continue;
       ws.send(payload);
       delivered++;
     }

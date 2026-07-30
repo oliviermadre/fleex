@@ -99,14 +99,24 @@ Bun.serve<HubClientData>({
           });
           break;
 
+        // Every relayable kind shares the same two guards and the same dumb
+        // fan-out; only `hello`/`ping`/`pong` are handled by the hub itself.
         case 'event':
+        case 'agentEvent':
+        case 'agentStreamDemand':
+        case 'agentBackfillRequest':
+        case 'agentBackfillEnd':
           if (!ws.data.serverId) {
-            log('warn', 'event received before hello — dropping', { clientName: ws.data.clientName });
+            log('warn', 'message received before hello — dropping', {
+              clientName: ws.data.clientName,
+              kind: msg.kind,
+            });
             return;
           }
           if (msg.originatorServerId !== ws.data.serverId) {
-            log('warn', 'event originator mismatch — dropping', {
+            log('warn', 'originator mismatch — dropping', {
               clientName: ws.data.clientName,
+              kind: msg.kind,
               claimed: msg.originatorServerId,
               actual: ws.data.serverId,
             });

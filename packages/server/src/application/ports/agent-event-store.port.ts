@@ -34,9 +34,28 @@ export interface AgentEventStorePort {
     effort?: string;
     /** Resolved fast/low-latency mode (if the model supports it), recorded up-front. */
     fast?: boolean;
+    /**
+     * The instance that owns this run. Recorded up-front because it decides who
+     * may cancel it and whose startup sweep may reclaim it — see
+     * `markInterruptedExecutions`.
+     */
+    instanceId?: string;
+    /** Human-facing hostname of `instanceId`, for the "runs on …" chip. */
+    instanceLabel?: string;
   }): Promise<void>;
 
   appendEvent(event: AgentEventEntity): Promise<void>;
+
+  /**
+   * Persist agent events that were streamed by *another* instance and relayed to
+   * us over the hub, so the local event-history endpoint can replay them.
+   *
+   * Deliberately not `appendEvent`: `event_count` / `last_event_at` on the
+   * execution row belong to the originator, and bumping them here would
+   * double-count in shared storage. Batched because a backfill response arrives
+   * as hundreds of events at once.
+   */
+  mirrorRemoteEvents(events: AgentEventEntity[]): Promise<void>;
 
   completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
     model?: string;
@@ -73,8 +92,15 @@ export interface AgentEventStorePort {
    */
   upsertCliExecution(params: CliExecutionUpsert): Promise<void>;
 
-  /** Mark all 'running' executions as 'interrupted'. Returns affected mention IDs. */
-  markInterruptedExecutions(): Promise<string[]>;
+  /**
+   * Mark this instance's orphaned 'running' executions as 'interrupted'. Returns
+   * affected mention IDs.
+   *
+   * Scoped to `instanceId`: with shared storage a sibling instance's runs are
+   * live rows in the same table, and an unscoped sweep would kill them (and
+   * re-trigger their mentions) on every boot.
+   */
+  markInterruptedExecutions(instanceId: string): Promise<string[]>;
 
   /** Returns a map of "personaId:ticketId" → sdkSessionId from latest executions. */
   getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>>;
@@ -86,4 +112,11 @@ export interface AgentEventStorePort {
   getExecutionsByPersona(personaId: string, limit?: number): Promise<AgentExecution[]>;
 
   getAllExecutions(): Promise<AgentExecution[]>;
+
+  /**
+   * Read a single execution straight from the source of truth. Used by the
+   * write-through cache to re-read a row a sibling instance just wrote, rather
+   * than serving a stale entry.
+   */
+  getExecutionById(executionId: string): Promise<AgentExecution | null>;
 }

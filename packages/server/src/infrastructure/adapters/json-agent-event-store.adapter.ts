@@ -30,6 +30,8 @@ interface ExecutionIndex {
   source?: 'sdk' | 'cli';
   commentId?: string;
   deliverableId?: string;
+  instanceId?: string;
+  instanceLabel?: string;
 }
 
 export class JsonAgentEventStore implements AgentEventStorePort {
@@ -64,6 +66,8 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     model?: string;
     effort?: string;
     fast?: boolean;
+    instanceId?: string;
+    instanceLabel?: string;
   }): Promise<void> {
     const entry: ExecutionIndex = {
       id: params.executionId,
@@ -78,6 +82,8 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       model: params.model ?? undefined,
       effort: params.effort ?? undefined,
       fast: params.fast ?? undefined,
+      instanceId: params.instanceId ?? undefined,
+      instanceLabel: params.instanceLabel ?? undefined,
     };
     this.index.push(entry);
     await this.syncIndex();
@@ -96,6 +102,21 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       if (entry.eventCount % 100 === 0) {
         await this.syncIndex();
       }
+    }
+  }
+
+  async mirrorRemoteEvents(events: AgentEventEntity[]): Promise<void> {
+    // Group by execution so a mixed batch costs one append per file. The index is
+    // untouched on purpose: `eventCount` / `lastEventAt` belong to the originator.
+    const byExecution = new Map<string, string[]>();
+    for (const event of events) {
+      const line = JSON.stringify(event.toDTO()) + '\n';
+      const lines = byExecution.get(event.executionId);
+      if (lines) lines.push(line);
+      else byExecution.set(event.executionId, [line]);
+    }
+    for (const [executionId, lines] of byExecution) {
+      await this.hostFs.appendFile(join(this.eventsDir, `${executionId}.jsonl`), lines.join(''));
     }
   }
 
@@ -178,6 +199,11 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       .map(this.indexToExecution);
   }
 
+  async getExecutionById(executionId: string): Promise<AgentExecution | null> {
+    const entry = this.index.find((e) => e.id === executionId);
+    return entry ? this.indexToExecution(entry) : null;
+  }
+
   async updateSessionId(executionId: string, sdkSessionId: string): Promise<void> {
     const entry = this.index.find((e) => e.id === executionId);
     if (entry) {
@@ -207,11 +233,11 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     await this.syncIndex();
   }
 
-  async markInterruptedExecutions(): Promise<string[]> {
+  async markInterruptedExecutions(instanceId: string): Promise<string[]> {
     const mentionIds: string[] = [];
     const now = new Date().toISOString();
     for (const entry of this.index) {
-      if (entry.status === 'running') {
+      if (entry.status === 'running' && entry.instanceId === instanceId) {
         entry.status = 'interrupted';
         entry.completedAt = now;
         mentionIds.push(entry.mentionId);
@@ -263,6 +289,8 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       source: entry.source ?? null,
       commentId: entry.commentId ?? null,
       deliverableId: entry.deliverableId ?? null,
+      instanceId: entry.instanceId ?? null,
+      instanceLabel: entry.instanceLabel ?? null,
     };
   }
 

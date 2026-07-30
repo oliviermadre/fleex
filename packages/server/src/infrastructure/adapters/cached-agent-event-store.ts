@@ -1,17 +1,37 @@
 import type { AgentExecution } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../application/ports/agent-event-store.port.js';
+import type { RemoteCacheSync } from '../../application/ports/remote-cache-sync.port.js';
+import { resolveInstanceIdentity, type InstanceIdentity } from '../../application/services/instance-identity.js';
+import type { AnyDomainEvent } from '../../domain/events.js';
 
 /**
  * Write-through in-memory cache over any AgentEventStorePort.
  * Hot path (getAllExecutions, getExecutionsByTicket, getExecutionsByPersona)
  * never touches the DB after warmUp.
+ *
+ * Implements `RemoteCacheSync` because with shared storage a sibling instance's
+ * runs land in the same table without ever passing through this cache. Until it
+ * did, `GET /api/executions` on instance B never showed instance A's runs — not
+ * even after a page reload, only after a restart re-ran `warmUp`.
  */
-export class CachedAgentEventStore implements AgentEventStorePort {
+export class CachedAgentEventStore implements AgentEventStorePort, RemoteCacheSync {
   private executions = new Map<string, AgentExecution>();
   private warmedUp = false;
 
-  constructor(private readonly inner: AgentEventStorePort) {}
+  /**
+   * Every execution-creating path (persona, skill, workflow step, panel member,
+   * panel orchestrator) funnels through this wrapper, so stamping ownership here
+   * — rather than at the five call sites — means no path can forget to.
+   */
+  private readonly instance: InstanceIdentity;
+
+  constructor(
+    private readonly inner: AgentEventStorePort,
+    instance: InstanceIdentity = resolveInstanceIdentity(),
+  ) {
+    this.instance = instance;
+  }
 
   async warmUp(): Promise<void> {
     const all = await this.inner.getAllExecutions();
@@ -24,6 +44,36 @@ export class CachedAgentEventStore implements AgentEventStorePort {
 
   private async ensureWarmed(): Promise<void> {
     if (!this.warmedUp) await this.warmUp();
+  }
+
+  // ── Cross-instance cache coherence ──
+
+  /**
+   * Re-read one execution from the source store, adding, updating or evicting the
+   * cached entry. Called when a sibling instance signals that it touched this row
+   * (relayed agent event, or a domain event referencing it).
+   */
+  async refreshExecution(executionId: string): Promise<void> {
+    const fresh = await this.inner.getExecutionById(executionId);
+    if (fresh) this.executions.set(executionId, fresh);
+    else this.executions.delete(executionId);
+  }
+
+  /**
+   * Domain-event path (`RemoteCacheSync`). Execution rows are mostly refreshed
+   * from relayed *agent* events, which don't travel on the domain bus — these two
+   * are the domain events that also mutate an execution's terminal state.
+   */
+  async applyRemoteEvent(event: AnyDomainEvent): Promise<void> {
+    if (!this.warmedUp) return; // warmUp will read the sibling's write anyway
+    if (event.type === 'execution.cancelled') {
+      await this.refreshExecution(event.executionId);
+      return;
+    }
+    if (event.type === 'mention.execution_failed') {
+      const affected = [...this.executions.values()].filter((e) => e.mentionId === event.mentionId);
+      for (const exec of affected) await this.refreshExecution(exec.id);
+    }
   }
 
   // ── Hot-path reads (cache only) ──
@@ -59,8 +109,15 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     model?: string;
     effort?: string;
     fast?: boolean;
+    instanceId?: string;
+    instanceLabel?: string;
   }): Promise<void> {
-    await this.inner.startExecution(params);
+    const owned = {
+      ...params,
+      instanceId: params.instanceId ?? this.instance.id,
+      instanceLabel: params.instanceLabel ?? this.instance.label,
+    };
+    await this.inner.startExecution(owned);
     this.executions.set(params.executionId, {
       id: params.executionId,
       personaId: params.personaId,
@@ -82,6 +139,8 @@ export class CachedAgentEventStore implements AgentEventStorePort {
       outputTokens: null,
       cacheReadTokens: null,
       cacheCreationTokens: null,
+      instanceId: owned.instanceId,
+      instanceLabel: owned.instanceLabel,
     });
   }
 
@@ -172,11 +231,13 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     }
   }
 
-  async markInterruptedExecutions(): Promise<string[]> {
-    const mentionIds = await this.inner.markInterruptedExecutions();
+  async markInterruptedExecutions(instanceId: string): Promise<string[]> {
+    const mentionIds = await this.inner.markInterruptedExecutions(instanceId);
     const now = new Date().toISOString();
     for (const [id, exec] of this.executions) {
-      if (exec.status === 'running') {
+      // Mirror the store's instance predicate: a sibling's running row stays
+      // running in our cache too, otherwise the UI would show it as interrupted.
+      if (exec.status === 'running' && exec.instanceId === instanceId) {
         this.executions.set(id, { ...exec, status: 'interrupted', completedAt: now });
       }
     }
@@ -187,6 +248,16 @@ export class CachedAgentEventStore implements AgentEventStorePort {
 
   async getEventsByExecution(executionId: string): Promise<AgentEventEntity[]> {
     return this.inner.getEventsByExecution(executionId);
+  }
+
+  async getExecutionById(executionId: string): Promise<AgentExecution | null> {
+    return this.inner.getExecutionById(executionId);
+  }
+
+  async mirrorRemoteEvents(events: AgentEventEntity[]): Promise<void> {
+    // No cache impact: mirrored events belong to a sibling's run, and its
+    // `eventCount` / `lastEventAt` arrive via `refreshExecution`.
+    return this.inner.mirrorRemoteEvents(events);
   }
 
   async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {

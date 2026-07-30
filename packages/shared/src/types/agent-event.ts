@@ -39,7 +39,34 @@ export interface AgentExecution {
    * from a first-class link rather than a heuristic.
    */
   readonly deliverableId?: string | null;
+  /**
+   * The Fleex instance that owns this run (migration 025). Only that process
+   * holds the SDK `AbortController`, so it is the only one able to cancel — and
+   * the only one whose startup sweep may reclaim the row. NULL on rows that
+   * predate the migration.
+   */
+  readonly instanceId?: string | null;
+  /** Human-facing hostname of `instanceId`, shown when a run isn't local. */
+  readonly instanceLabel?: string | null;
 }
+
+/**
+ * Agent events cheap enough to relay across instances unconditionally: a handful
+ * per run, a few hundred bytes each. They carry everything the Kanban pill, the
+ * cockpit and the Execution Log need ("running", duration, final status).
+ *
+ * Every other type (in practice `content_block_delta` and `message_stop`) is
+ * stream payload and is relayed only while a remote instance has declared demand
+ * for that execution — otherwise sitting on an unrelated screen would pull every
+ * sibling's SDK traffic over the hub.
+ */
+export const AGENT_EVENT_LIFECYCLE_TYPES: ReadonlySet<string> = new Set([
+  'execution_start',
+  'execution_end',
+  'execution_retry',
+  'turn_start',
+  'error',
+]);
 
 export type AgentEventType =
   | 'message_start'

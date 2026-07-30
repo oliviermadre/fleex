@@ -584,20 +584,58 @@ export function agentEventsRoutes(container: Container) {
       '/api/executions/:id/cancel',
       async (request, reply) => {
         const cancelled = await container.executeAgent.cancelExecution(request.params.id);
-        if (!cancelled) {
-          return reply.status(404).send({ error: 'Execution not found or not running' });
+        if (cancelled) return { cancelled: true };
+
+        // Only the process holding the SDK AbortController can abort a run. With
+        // shared storage the row is visible everywhere, so distinguish "not
+        // running" from "running, just not here" — a 404 for the latter reads as
+        // data loss.
+        const exec = await container.agentEventStore.getExecutionById(request.params.id);
+        if (exec?.status === 'running' && exec.instanceId && exec.instanceId !== container.instance.id) {
+          return reply.status(409).send({
+            error: 'Execution runs on another Fleex instance',
+            ownedBy: exec.instanceLabel ?? exec.instanceId,
+          });
         }
-        return { cancelled: true };
+        return reply.status(404).send({ error: 'Execution not found or not running' });
       },
     );
 
     // GET /api/executions/:id/events — get all events for an execution (historical replay)
     app.get<{ Params: { id: string } }>(
       '/api/executions/:id/events',
-      async (request) => {
+      async (request, reply) => {
         const executionId = request.params.id;
-        const events = await container.agentEventStore.getEventsByExecution(executionId);
-        const dtos = events.map((e) => e.toDTO());
+        let events = await container.agentEventStore.getEventsByExecution(executionId);
+
+        // Agent events are per-execution JSONL on the *owning* machine's disk,
+        // never in shared storage. For a sibling's run we hold at most what was
+        // relayed while a local viewer was watching — so pull the recorded history
+        // over the hub before answering. Best-effort: on timeout (owner offline)
+        // we serve whatever we have and the UI shows its empty state.
+        let elided = false;
+        const exec = await container.agentEventStore.getExecutionById(executionId);
+        const isRemote = exec != null && exec.instanceId != null && exec.instanceId !== container.instance.id;
+        if (isRemote) {
+          const backfill = await container.requestRemoteEventHistory(executionId);
+          if (backfill.answered && backfill.count > 0) {
+            events = await container.agentEventStore.getEventsByExecution(executionId);
+            elided = backfill.elided;
+          }
+        }
+
+        // Dedup by event id: a backfill and the live relay overlap by design, and
+        // both append to the same JSONL.
+        const seen = new Set<string>();
+        const dtos = events
+          .filter((e) => (seen.has(e.id) ? false : (seen.add(e.id), true)))
+          .map((e) => e.toDTO())
+          .sort((a, b) => a.sequence - b.sequence);
+
+        if (isRemote) {
+          reply.header('x-fleex-execution-origin', exec.instanceLabel ?? exec.instanceId ?? '');
+          if (elided) reply.header('x-fleex-execution-history-elided', '1');
+        }
 
         // Backfill execution_start events that lack executionId/sdkSessionId (old events)
         for (const dto of dtos) {

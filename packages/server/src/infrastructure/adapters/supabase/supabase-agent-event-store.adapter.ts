@@ -6,6 +6,7 @@ import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
 import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+import { appendAgentEventsToJsonl } from '../agent-event-jsonl.js';
 import type { SupabaseConnection } from './connection.js';
 
 interface ExecutionRow {
@@ -32,6 +33,8 @@ interface ExecutionRow {
   source: string | null;
   comment_id: string | null;
   deliverable_id: string | null;
+  instance_id: string | null;
+  instance_label: string | null;
 }
 
 export class SupabaseAgentEventStore implements AgentEventStorePort {
@@ -55,6 +58,8 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     model?: string;
     effort?: string;
     fast?: boolean;
+    instanceId?: string;
+    instanceLabel?: string;
   }): Promise<void> {
     const { error } = await this.conn.client.from('agent_event_executions').insert({
       execution_id: params.executionId,
@@ -67,6 +72,8 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       model: params.model ?? null,
       effort: params.effort ?? null,
       fast_mode: params.fast ?? null,
+      instance_id: params.instanceId ?? null,
+      instance_label: params.instanceLabel ?? null,
     });
     if (error) throw new Error(`SupabaseAgentEventStore.startExecution failed: ${error.message}`);
   }
@@ -92,6 +99,10 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
         })
         .eq('execution_id', event.executionId);
     }
+  }
+
+  async mirrorRemoteEvents(events: AgentEventEntity[]): Promise<void> {
+    await appendAgentEventsToJsonl(this.eventsDir, events);
   }
 
   async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
@@ -207,6 +218,16 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     return (data as ExecutionRow[]).map(rowToExecution);
   }
 
+  async getExecutionById(executionId: string): Promise<AgentExecution | null> {
+    const { data, error } = await this.conn.client
+      .from('agent_event_executions')
+      .select('*')
+      .eq('execution_id', executionId)
+      .maybeSingle();
+    if (error) throw new Error(`SupabaseAgentEventStore.getExecutionById failed: ${error.message}`);
+    return data ? rowToExecution(data as ExecutionRow) : null;
+  }
+
   async updateSessionId(executionId: string, sdkSessionId: string): Promise<void> {
     const { error } = await this.conn.client
       .from('agent_event_executions')
@@ -215,11 +236,12 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     if (error) throw new Error(`SupabaseAgentEventStore.updateSessionId failed: ${error.message}`);
   }
 
-  async markInterruptedExecutions(): Promise<string[]> {
+  async markInterruptedExecutions(instanceId: string): Promise<string[]> {
     const { data: running, error: readErr } = await this.conn.client
       .from('agent_event_executions')
       .select('mention_id')
-      .eq('status', 'running');
+      .eq('status', 'running')
+      .eq('instance_id', instanceId);
     if (readErr) throw new Error(`SupabaseAgentEventStore.markInterruptedExecutions read failed: ${readErr.message}`);
 
     const mentionIds = (running as { mention_id: string }[]).map((r) => r.mention_id);
@@ -228,7 +250,8 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
       const { error } = await this.conn.client
         .from('agent_event_executions')
         .update({ status: 'interrupted', completed_at: new Date().toISOString() })
-        .eq('status', 'running');
+        .eq('status', 'running')
+        .eq('instance_id', instanceId);
       if (error) throw new Error(`SupabaseAgentEventStore.markInterruptedExecutions update failed: ${error.message}`);
     }
 
@@ -279,5 +302,7 @@ function rowToExecution(row: ExecutionRow): AgentExecution {
     source: (row.source as AgentExecution['source']) ?? null,
     commentId: row.comment_id ?? null,
     deliverableId: row.deliverable_id ?? null,
+    instanceId: row.instance_id ?? null,
+    instanceLabel: row.instance_label ?? null,
   };
 }

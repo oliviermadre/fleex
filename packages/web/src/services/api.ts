@@ -737,8 +737,33 @@ export async function fetchExecutionsForTicket(ticketId: string): Promise<AgentE
   return request<AgentExecution[]>(`/tickets/${ticketId}/executions`);
 }
 
-export async function fetchEventsForExecution(executionId: string): Promise<AgentEvent[]> {
-  return request<AgentEvent[]>(`/executions/${executionId}/events`);
+export interface ExecutionEventHistory {
+  events: AgentEvent[];
+  /**
+   * Hostname of the instance that ran this execution, when it isn't the one we're
+   * talking to. Set from a response header rather than the body so the endpoint
+   * keeps returning a plain event array.
+   */
+  origin?: string;
+  /** The oldest events were dropped to respect the cross-instance transfer cap. */
+  elided: boolean;
+}
+
+export async function fetchEventsForExecution(executionId: string): Promise<ExecutionEventHistory> {
+  const res = await fetch(`${API_URL}/executions/${executionId}/events`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    const message = extractErrorMessage(body, res.statusText);
+    useToastStore.getState().addToast('error', message);
+    throw new Error(`API error ${res.status}: ${body || res.statusText}`);
+  }
+  const events = (await res.json()) as AgentEvent[];
+  const origin = res.headers.get('x-fleex-execution-origin');
+  return {
+    events,
+    ...(origin ? { origin } : {}),
+    elided: res.headers.get('x-fleex-execution-history-elided') === '1',
+  };
 }
 
 export async function cancelExecution(executionId: string): Promise<{ cancelled: boolean }> {
