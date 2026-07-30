@@ -10,14 +10,28 @@ export function configRoutes(container: Container) {
       // workspace the user is viewing. Read-only, never persisted — see the PUT
       // handler, which strips it back out.
       const workspace = process.env['FLEEX_WORKSPACE']?.trim() || undefined;
-      return { ...container.config.get(), ...(workspace ? { workspace } : {}) };
+      // Same read-only treatment for this instance's identity: the UI needs it to
+      // tell its own agentic runs from a sibling's (badge, Terminate availability).
+      return {
+        ...container.config.get(),
+        ...(workspace ? { workspace } : {}),
+        instanceId: container.instance.id,
+        instanceLabel: container.instance.label,
+      };
     });
 
-    app.put<{ Body: Partial<AppConfig> & { workspace?: string } }>('/api/config', async (request) => {
+    app.put<{ Body: Partial<AppConfig> & { workspace?: string; instanceId?: string; instanceLabel?: string } }>('/api/config', async (request) => {
       // basePath is managed by ~/.fleex/workspaces.json (injected via env at
       // startup), not the DB — ignore any attempt to change it through the API.
-      // workspace is likewise env-derived and echoed back on GET, never stored.
-      const { basePath: _ignoredBasePath, workspace: _ignoredWorkspace, ...updatable } = request.body;
+      // workspace and the instance identity are likewise env-derived and echoed
+      // back on GET, never stored.
+      const {
+        basePath: _ignoredBasePath,
+        workspace: _ignoredWorkspace,
+        instanceId: _ignoredInstanceId,
+        instanceLabel: _ignoredInstanceLabel,
+        ...updatable
+      } = request.body;
       await container.config.update(updatable);
 
       // Auto-resolve repository patterns when repositories change

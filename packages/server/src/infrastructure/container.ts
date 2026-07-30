@@ -290,7 +290,10 @@ export async function createContainer() {
   // Per-workspace deliverable-type backoffice (CRUD + usage + reassignment).
   const manageDeliverableTypes = new ManageDeliverableTypesUseCase(config, deliverableStore, logger, eventBus);
 
-  // Unique per-process server identifier — used to filter our own events on the hub fan-out.
+  // Per-process hub identity: only ever answers "is this message mine?", so a
+  // fresh UUID per start is fine and deliberate. Distinct from `instance.id`,
+  // which must stay stable across restarts because it is persisted on execution
+  // rows and audit entries — see `resolveInstanceIdentity`.
   const serverId = process.env['FLEEX_INSTANCE_ID'] ?? randomUUID();
 
   const domainEventListener = new DomainEventListener({

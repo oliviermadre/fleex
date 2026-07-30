@@ -62,6 +62,13 @@ export interface AppSettings {
    * to the workspace the user is actually viewing — see assistantStore.
    */
   workspace: string;
+  /**
+   * Identity of the server instance this client is talking to, reported read-only
+   * from its env. Lets the UI tell a locally-owned agentic run from one executing
+   * on a sibling instance — only the owner can terminate it.
+   */
+  instanceId: string;
+  instanceLabel: string;
 }
 
 interface SettingsState {
@@ -106,6 +113,8 @@ const defaultSettings: AppSettings = {
   humanDisplayName: '',
   repoConfigs: {},
   workspace: '',
+  instanceId: '',
+  instanceLabel: '',
 };
 
 function loadFromStorage(): AppSettings {
@@ -113,7 +122,10 @@ function loadFromStorage(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEY_SETTINGS);
     if (!raw) return defaultSettings;
     const parsed = JSON.parse(raw);
-    return { ...defaultSettings, ...parsed };
+    // The instance identity describes the server we're connected to, not a user
+    // preference: a persisted copy would be wrong the moment this browser points
+    // at another instance. Always take it from the live /config response.
+    return { ...defaultSettings, ...parsed, instanceId: '', instanceLabel: '' };
   } catch { /* ignore */ }
   return defaultSettings;
 }
@@ -135,6 +147,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           const merged = { ...defaultSettings, ...data };
           set({ settings: merged, loaded: true });
           saveToStorage(merged);
+          return;
+        }
+        // A config too sparse to trust for user preferences still tells us which
+        // instance we're talking to — keep that much.
+        if (data && typeof data === 'object' && typeof data.instanceId === 'string') {
+          const merged = {
+            ...loadFromStorage(),
+            instanceId: data.instanceId,
+            instanceLabel: typeof data.instanceLabel === 'string' ? data.instanceLabel : '',
+          };
+          set({ settings: merged, loaded: true });
           return;
         }
       }

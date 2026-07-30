@@ -37,6 +37,11 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
     return !events.some((e) => e.eventType === 'execution_end');
   });
 
+  // Set when the stream (or its history) came from another Fleex instance. Only
+  // the owning process holds the SDK AbortController, so Terminate can't work
+  // from here — better to say so than to let the click 409.
+  const remoteOrigin = useAgentEventStore((s) => s.streamNotices[executionId]?.origin);
+
   const [terminateState, setTerminateState] = useState<ExecutionState>(EXECUTION_STATES.IDLE);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -57,7 +62,8 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
     }
   }, [terminateState, executionId]);
 
-  const showTerminate = isRunning && terminateState !== EXECUTION_STATES.DONE;
+  const showTerminate = isRunning && !remoteOrigin && terminateState !== EXECUTION_STATES.DONE;
+  const showRemoteOwner = isRunning && !!remoteOrigin;
   // --- End terminate button state ---
 
   const handleTitleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -187,6 +193,14 @@ export const FloatingExecutionPanel = memo(function FloatingExecutionPanel({
               {terminateState === EXECUTION_STATES.TERMINATING && 'Stopping\u2026'}
               {terminateState === EXECUTION_STATES.ERROR && 'Failed'}
             </button>
+          )}
+          {showRemoteOwner && (
+            <span
+              title={`This run executes on ${remoteOrigin} — terminate it from that machine`}
+              style={{ fontSize: 11, color: 'var(--theme-text-faint)', fontWeight: 600, flexShrink: 0 }}
+            >
+              runs on {remoteOrigin}
+            </span>
           )}
           {terminateState === EXECUTION_STATES.DONE && (
             <span style={{ fontSize: 11, color: 'var(--theme-text-muted)', fontWeight: 600, flexShrink: 0 }}>

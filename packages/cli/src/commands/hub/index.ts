@@ -14,6 +14,18 @@ const def: CommandDef = {
   so frontends connected to any instance receive updates from writes that
   happened on other instances. Side-effects stay on the originator.
 
+${SECTION('Agentic runs:')}
+  Run lifecycle events are always relayed, so every instance shows a sibling's
+  run as "running" (Kanban pill, cockpit, Execution Log) with the machine it
+  runs on. The SDK stream itself is only relayed while someone is actually
+  watching that run — sitting on an unrelated screen costs nothing. Opening a
+  remote run pulls its recorded history from the owning instance.
+  Set ${chalk.cyan('FLEEX_HUB_RELAY_AGENT_EVENTS=0')} to keep the "running"
+  visibility but never relay the stream.
+
+  Terminating a run only works on the instance executing it — the others show
+  which machine owns it instead of offering a button that can't work.
+
 ${SECTION('Auth model:')}
   Each instance authenticates with its own token (modelled after SSH's
   authorized_keys). Tokens are stored as sha256 hashes at

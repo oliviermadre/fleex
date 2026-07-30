@@ -8,6 +8,7 @@ import { cn } from '../../lib/cn';
 import { TYPE_COLORS as TICKET_TYPE_COLORS } from '../tickets/TicketTypeBadge';
 import { tint, tintText, tintSolid, tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
+import { useRemoteExecutionLabel } from '../../lib/execution-origin';
 
 // ── Type badge ──
 
@@ -407,6 +408,8 @@ export const ExecutionRow = memo(function ExecutionRow({
     setActivePanel('tickets');
   }, [entry.ticketId, selectTicket, setTicketTab, setActivePanel]);
 
+  // Null in the single-instance case, so nothing is added to the row.
+  const remoteLabel = useRemoteExecutionLabel(entry);
   const isPanelRun = entry.type === 'panel' && !!entry.panelMembers && entry.panelMembers.length > 0;
   const isWorkflow = entry.type === 'workflow';
   const title = entry.ticketTitle || entry.executorName;
@@ -517,6 +520,14 @@ export const ExecutionRow = memo(function ExecutionRow({
         {/* Col 4: Status */}
         <div className="w-[110px] flex-shrink-0 text-center">
           <StatusBadge status={entry.status} workflowSubStatus={entry.workflowSubStatus} />
+          {remoteLabel && (
+            <div
+              className="mt-0.5 truncate text-[10px] text-[var(--theme-text-faint)]"
+              title={`This run is executing on ${remoteLabel}`}
+            >
+              on {remoteLabel}
+            </div>
+          )}
         </div>
 
         {/* Col 5: Execution detail (tokens + cost) */}

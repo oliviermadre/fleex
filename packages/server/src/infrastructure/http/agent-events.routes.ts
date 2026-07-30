@@ -606,35 +606,42 @@ export function agentEventsRoutes(container: Container) {
       '/api/executions/:id/events',
       async (request, reply) => {
         const executionId = request.params.id;
-        let events = await container.agentEventStore.getEventsByExecution(executionId);
+
+        // Dedup by event id, ordered by sequence: a backfill and the live relay
+        // overlap by design, and both append to the same JSONL.
+        const readLocal = async () => {
+          const seen = new Set<string>();
+          return (await container.agentEventStore.getEventsByExecution(executionId))
+            .filter((e) => (seen.has(e.id) ? false : (seen.add(e.id), true)))
+            .sort((a, b) => a.sequence - b.sequence);
+        };
+
+        let events = await readLocal();
 
         // Agent events are per-execution JSONL on the *owning* machine's disk,
         // never in shared storage. For a sibling's run we hold at most what was
-        // relayed while a local viewer was watching — so pull the recorded history
-        // over the hub before answering. Best-effort: on timeout (owner offline)
-        // we serve whatever we have and the UI shows its empty state.
-        let elided = false;
+        // relayed while a local viewer was watching, so pull the recorded history
+        // over the hub — but only when we're actually short of the owner's count.
+        // `event_count` on the (shared) execution row is that reference, and it
+        // keeps repeated opens of the same run from re-appending the whole log.
         const exec = await container.agentEventStore.getExecutionById(executionId);
         const isRemote = exec != null && exec.instanceId != null && exec.instanceId !== container.instance.id;
-        if (isRemote) {
+        if (isRemote && events.length < exec.eventCount) {
+          // Best-effort: on timeout (owner offline) we serve what we have and say
+          // the history is partial.
           const backfill = await container.requestRemoteEventHistory(executionId);
-          if (backfill.answered && backfill.count > 0) {
-            events = await container.agentEventStore.getEventsByExecution(executionId);
-            elided = backfill.elided;
-          }
+          if (backfill.answered && backfill.count > 0) events = await readLocal();
         }
 
-        // Dedup by event id: a backfill and the live relay overlap by design, and
-        // both append to the same JSONL.
-        const seen = new Set<string>();
-        const dtos = events
-          .filter((e) => (seen.has(e.id) ? false : (seen.add(e.id), true)))
-          .map((e) => e.toDTO())
-          .sort((a, b) => a.sequence - b.sequence);
+        const dtos = events.map((e) => e.toDTO());
 
         if (isRemote) {
           reply.header('x-fleex-execution-origin', exec.instanceLabel ?? exec.instanceId ?? '');
-          if (elided) reply.header('x-fleex-execution-history-elided', '1');
+          // Still short of the owner's count: the beginning (or a gap) stayed on
+          // the originating machine. Say so rather than imply a complete log.
+          if (events.length < exec.eventCount) {
+            reply.header('x-fleex-execution-history-elided', '1');
+          }
         }
 
         // Backfill execution_start events that lack executionId/sdkSessionId (old events)

@@ -17,6 +17,7 @@ export function AgentEventStream({ executionId }: Props) {
   const subscribeExecution = useAgentEventStore((s) => s.subscribeExecution);
   const unsubscribeExecution = useAgentEventStore((s) => s.unsubscribeExecution);
   const loadStatus = useAgentEventStore((s) => s.eventsLoadStatus[executionId]);
+  const notice = useAgentEventStore((s) => s.streamNotices[executionId]);
   const { containerRef, maybeStick } = useStickToBottom<HTMLDivElement>();
 
   useEffect(() => {
@@ -48,6 +49,16 @@ export function AgentEventStream({ executionId }: Props) {
         </div>
       ) : (
         <div className="space-y-2">
+          {/* Only a cross-instance stream can be partial: the event log lives on the
+              machine that ran the agent, and both the history transfer and single
+              oversized events are capped. Say so rather than imply a full log. */}
+          {(notice?.elided || notice?.truncated) && (
+            <div className="rounded border border-[var(--theme-border)] bg-[var(--theme-bg-hover)] px-2 py-1 text-[11px] text-[var(--theme-text-faint)]">
+              {notice.elided
+                ? `Stream joined in progress — earlier events stayed on ${notice.origin ?? 'the originating machine'}.`
+                : `Some events were too large to transfer from ${notice.origin ?? 'the originating machine'} and show as placeholders.`}
+            </div>
+          )}
           {events.map((event, i) => (
             <EventBlock key={event.id ?? i} event={event} />
           ))}

@@ -5,6 +5,7 @@ import { AgentEventStream } from './AgentEventStream';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
 import { tint, tintText, tintClasses } from '../../lib/tints';
+import { remoteExecutionLabel, useLocalInstanceId } from '../../lib/execution-origin';
 
 function formatDuration(startedAt: string, completedAt?: string | null): string {
   const start = new Date(startedAt).getTime();
@@ -65,6 +66,8 @@ export function AgentExecutionsPanel({ executions }: Props) {
   }, []);
 
   const loadExecutions = useAgentEventStore((s) => s.loadExecutionsForTicket);
+  // Empty in the single-instance case, which makes every run read as local.
+  const localInstanceId = useLocalInstanceId();
 
   const handleCancel = useCallback(async (executionId: string, ticketId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -89,6 +92,7 @@ export function AgentExecutionsPanel({ executions }: Props) {
     <div className="flex flex-1 flex-col overflow-y-auto bg-[var(--theme-bg-primary)]">
       {sorted.map((exec) => {
         const isExpanded = expandedIds.has(exec.id);
+        const remoteLabel = remoteExecutionLabel(exec, localInstanceId);
         return (
           <div key={exec.id} className="border-b border-[var(--theme-border)]">
             <button
@@ -109,10 +113,11 @@ export function AgentExecutionsPanel({ executions }: Props) {
                   {exec.status !== 'running' && exec.completedAt && (
                     <> · {formatDuration(exec.startedAt, exec.completedAt)}</>
                   )}
+                  {remoteLabel && <> · on {remoteLabel}</>}
                 </span>
               </div>
               <div className="flex items-center gap-2 ml-auto shrink-0">
-                {exec.status === 'running' && (
+                {exec.status === 'running' && !remoteLabel && (
                   <span
                     role="button"
                     tabIndex={0}
