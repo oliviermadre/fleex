@@ -43,6 +43,8 @@ const PANEL_MEMBER_NO_WORKTREE_MAX_TURNS = 10;
 interface SdkMetrics {
   durationMs?: number;
   costUsd?: number;
+  /** Conversation turns consumed (one user↔assistant round-trip each). */
+  numTurns?: number;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;

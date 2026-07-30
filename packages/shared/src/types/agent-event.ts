@@ -53,6 +53,12 @@ export type AgentEventType =
   | 'execution_start'
   | 'execution_end'
   | 'execution_retry'
+  /**
+   * The SDK stopped the agentic loop because the configured turn budget was
+   * exhausted (`result` subtype `error_max_turns`). Emitted so a truncated run
+   * is unmistakable in the log instead of looking like a normal completion.
+   */
+  | 'max_turns_reached'
   | 'error';
 
 /**
@@ -100,6 +106,14 @@ export interface ExecutionStartData {
   readonly label?: string;
   readonly skillId?: string;
   readonly skillName?: string;
+  /**
+   * Turn budget handed to the SDK for this run (Settings › General → Max Agent
+   * Turns), after clamping. Surfaced in the header so the log shows the budget
+   * up front instead of leaving it to be inferred from tool-call counts.
+   * Undefined for runs whose mode ignores the setting (talk) or for events
+   * emitted before this field existed.
+   */
+  readonly maxTurns?: number;
   readonly context: ExecutionStartContext;
 }
 

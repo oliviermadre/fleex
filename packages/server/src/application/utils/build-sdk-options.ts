@@ -38,6 +38,21 @@ function resolveMaxTurns(value: number | undefined): number {
   return Math.min(AGENT_MAX_TURNS_MAX, Math.max(AGENT_MAX_TURNS_MIN, Math.floor(value)));
 }
 
+/**
+ * The turn budget a run will actually get, for reporting purposes (execution
+ * header + `execution_end`). Mirrors what `buildSdkOptions` hands the SDK, so
+ * the number shown in the Execution Log is the real, clamped cap rather than
+ * the raw config value. Returns undefined for talk mode, whose 0/4 caps are
+ * permission guards rather than a user-facing budget.
+ */
+export function effectiveMaxTurns(
+  effectiveMode: MentionExecutionMode,
+  configured: number | undefined,
+): number | undefined {
+  if (effectiveMode === 'talk') return undefined;
+  return resolveMaxTurns(configured);
+}
+
 export function buildSdkOptions(
   effectiveMode: MentionExecutionMode,
   ctx: SdkOptionsContext,

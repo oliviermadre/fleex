@@ -280,7 +280,9 @@ function GeneralTab({
           <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
             {DEFAULT_AGENT_MAX_TURNS}
           </code>
-          . Talk mode is unaffected — it has no agentic loop.
+          . Each execution reports its actual usage as <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">turns used / budget</code>{' '}
+          in the Execution Log, so you can size this from real runs. Talk mode is unaffected — it has no
+          agentic loop.
         </p>
       </div>
     </div>
