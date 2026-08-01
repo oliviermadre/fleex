@@ -251,6 +251,7 @@ export type {
 
 export type {
   StatisticsTimeBucket,
+  CostBySource,
   AgentLeaderboardEntry,
   SkillLeaderboardEntry,
   PanelLeaderboardEntry,
