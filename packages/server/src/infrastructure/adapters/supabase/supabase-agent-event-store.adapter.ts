@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert, SessionHistoryRow } from '../../../application/ports/agent-event-store.port.js';
 import type { SupabaseConnection } from './connection.js';
 
 interface ExecutionRow {
@@ -177,6 +177,16 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     return events;
   }
 
+  async getExecutionById(executionId: string): Promise<AgentExecution | null> {
+    const { data, error } = await this.conn.client
+      .from('agent_event_executions')
+      .select('*')
+      .eq('execution_id', executionId)
+      .maybeSingle();
+    if (error) throw new Error(`SupabaseAgentEventStore.getExecutionById failed: ${error.message}`);
+    return data ? rowToExecution(data as ExecutionRow) : null;
+  }
+
   async getExecutionsByTicket(ticketId: string): Promise<AgentExecution[]> {
     const { data, error } = await this.conn.client
       .from('agent_event_executions')
@@ -235,22 +245,24 @@ export class SupabaseAgentEventStore implements AgentEventStorePort {
     return mentionIds;
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<SessionHistoryRow[]> {
     const { data, error } = await this.conn.client
       .from('agent_event_executions')
-      .select('persona_id, ticket_id, sdk_session_id')
+      .select('persona_id, ticket_id, mention_id, sdk_session_id, status')
       .not('sdk_session_id', 'is', null)
       .order('started_at', { ascending: false });
     if (error) throw new Error(`SupabaseAgentEventStore.getSessionHistory failed: ${error.message}`);
 
-    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
-    for (const row of data as { persona_id: string; ticket_id: string; sdk_session_id: string }[]) {
-      const key = `${row.persona_id}:${row.ticket_id}`;
-      if (!result.has(key)) {
-        result.set(key, { sdkSessionId: row.sdk_session_id, personaId: row.persona_id, ticketId: row.ticket_id });
-      }
-    }
-    return result;
+    return (data as {
+      persona_id: string; ticket_id: string; mention_id: string;
+      sdk_session_id: string; status: string;
+    }[]).map((row) => ({
+      sdkSessionId: row.sdk_session_id,
+      personaId: row.persona_id,
+      ticketId: row.ticket_id,
+      mentionId: row.mention_id,
+      status: row.status as SessionHistoryRow['status'],
+    }));
   }
 }
 

@@ -1,6 +1,6 @@
 import type { AgentExecution } from '@fleex/shared';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert, SessionHistoryRow } from '../../application/ports/agent-event-store.port.js';
 
 /**
  * Write-through in-memory cache over any AgentEventStorePort.
@@ -32,6 +32,13 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     await this.ensureWarmed();
     return [...this.executions.values()]
       .sort((a, b) => (b.startedAt > a.startedAt ? 1 : b.startedAt < a.startedAt ? -1 : 0));
+  }
+
+  async getExecutionById(executionId: string): Promise<AgentExecution | null> {
+    await this.ensureWarmed();
+    // Fall back to the inner store: an execution can predate this cache's
+    // warm-up window in a store that trims what `getAllExecutions` returns.
+    return this.executions.get(executionId) ?? (await this.inner.getExecutionById(executionId));
   }
 
   async getExecutionsByTicket(ticketId: string): Promise<AgentExecution[]> {
@@ -189,7 +196,7 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     return this.inner.getEventsByExecution(executionId);
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<SessionHistoryRow[]> {
     return this.inner.getSessionHistory();
   }
 }
