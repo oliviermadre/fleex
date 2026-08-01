@@ -61,7 +61,9 @@ export function CreateTaskModal() {
   const [taskTitle, setTaskTitle] = useState('');
   const [selectedBoardId, setSelectedBoardId] = useState('');
   const repos = useRepositoryStore((s) => s.repositories);
+  const fetchRepositories = useRepositoryStore((s) => s.fetchRepositories);
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
+  const [loadingRepos, setLoadingRepos] = useState(false);
 
   // Load data when modal opens
   useEffect(() => {
@@ -80,6 +82,29 @@ export function CreateTaskModal() {
       .catch(() => {})
       .finally(() => setLoadingPRs(false));
   }, [open, fetchTickets, boards, selectedBoardId]);
+
+  // Refresh the repository list on every open. Kept separate from the effect
+  // above, whose deps make it re-run on every board change. The list is
+  // otherwise loaded once at app boot, so repos added since (from the
+  // Repositories panel, the CLI, or another window) would never show up here.
+  useEffect(() => {
+    if (!open) return;
+    setLoadingRepos(true);
+    fetchRepositories().finally(() => setLoadingRepos(false));
+  }, [open, fetchRepositories]);
+
+  // Drop selections for repos that are no longer tracked: a ticket linked to an
+  // untracked repo is filtered out of the sidebar, so its session would be
+  // created but invisible.
+  useEffect(() => {
+    if (!open) return;
+    setSelectedRepos((prev) => {
+      if (prev.size === 0) return prev;
+      const tracked = new Set(repos.map((r) => `${r.org}/${r.name}`));
+      const next = new Set([...prev].filter((key) => tracked.has(key)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [open, repos]);
 
   // Reset on close
   useEffect(() => {
@@ -391,6 +416,13 @@ export function CreateTaskModal() {
                 Repositories ({selectedRepos.size} selected)
               </label>
               <div className="max-h-[160px] overflow-y-auto rounded-md border border-[var(--theme-border)] p-1">
+                {repos.length === 0 && (
+                  <p className="px-2 py-3 text-center text-xs text-[var(--theme-text-muted)]">
+                    {loadingRepos
+                      ? 'Loading repositories...'
+                      : 'No repositories tracked — add one from the Repositories panel'}
+                  </p>
+                )}
                 {[...repos].sort((a, b) => a.org.localeCompare(b.org) || a.name.localeCompare(b.name)).map((r) => {
                   const key = `${r.org}/${r.name}`;
                   const selected = selectedRepos.has(key);
