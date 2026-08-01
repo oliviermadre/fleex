@@ -41,6 +41,28 @@ describe('AgentStepExecutor', () => {
     expect(r.output.result).toBe('needs_review');
   });
 
+  // WHY (ticket #454): the orchestrator resolves which session a retry may
+  // resume, but the executor is the only thing between it and the SDK. If it
+  // drops `resumeSessionId` the whole chain is dead code and the retry silently
+  // restarts cold — the exact symptom that was reported.
+  it('threads resumeSessionId through to executeForWorkflowStep', async () => {
+    const executeAgent = {
+      executeForWorkflowStep: vi.fn().mockResolvedValue({
+        structuredOutput: { comment: 'ok' }, rawText: '', executionId: 'exec-4',
+      }),
+    };
+    const exec = new AgentStepExecutor(executeAgent as never);
+    await exec.execute({
+      ticketId: 't-1', workflowRunId: 'r-1', stepRunId: 'sr-1',
+      resumeSessionId: 'sess-xyz',
+      step: { id: 's1', name: 'X', executorType: 'agent', executorRef: 'p', position: { x: 0, y: 0 } },
+      workflowContext: { workflowName: 'W', stepName: 'X', outgoingEdges: [], previousOutputs: {} },
+    });
+    expect(executeAgent.executeForWorkflowStep).toHaveBeenCalledWith(
+      expect.objectContaining({ resumeSessionId: 'sess-xyz' }),
+    );
+  });
+
   it('marks result=ko when SDK returns no structured output', async () => {
     const executeAgent = {
       executeForWorkflowStep: vi.fn().mockResolvedValue({
