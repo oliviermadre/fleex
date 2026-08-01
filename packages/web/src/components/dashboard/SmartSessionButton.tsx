@@ -19,6 +19,9 @@ import { cn } from '../../lib/cn';
 import { foldAccents } from '../../lib/normalize';
 import { tintClasses } from '../../lib/tints';
 import * as api from '../../services/api';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/dashboard/SmartSessionButton');
 
 interface SmartSessionButtonProps {
   sessions: Session[];
@@ -555,7 +558,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
           await onExecuteSkill(skillId);
           addToast('success', `🧩 Skill ${label} lancé`);
         } catch (err) {
-          console.error('Failed to execute skill:', err);
+          log.error('Failed to execute skill', { err });
           addToast('error', `Échec du lancement du skill ${label}`);
         } finally {
           setLaunching(false);
@@ -573,7 +576,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
           await startRun(ticketId, templateId);
           addToast('success', `🚦 Workflow "${name}" lancé`);
         } catch (err) {
-          console.error('Failed to start workflow:', err);
+          log.error('Failed to start workflow', { err });
           addToast('error', `Échec du lancement du workflow "${name}"`);
         } finally {
           setLaunching(false);
@@ -589,7 +592,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
           await api.executePanel(panelId, ticketId);
           addToast('success', `🏛️ Panel "${name}" lancé`);
         } catch (err) {
-          console.error('Failed to execute panel:', err);
+          log.error('Failed to execute panel', { err });
           addToast('error', `Échec du lancement du panel "${name}"`);
         } finally {
           setLaunching(false);
@@ -605,7 +608,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
           await api.postTicketComment(ticketId, `@agent:${personaName}`);
           addToast('success', `🧠 Persona "${displayName}" lancé`);
         } catch (err) {
-          console.error('Failed to launch persona:', err);
+          log.error('Failed to launch persona', { err });
           addToast('error', `Échec du lancement du persona "${displayName}"`);
         } finally {
           setLaunching(false);

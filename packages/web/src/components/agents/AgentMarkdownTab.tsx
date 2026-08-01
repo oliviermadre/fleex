@@ -2,6 +2,9 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { AgentPersona } from '@fleex/shared';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { cn } from '../../lib/cn';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/agents/AgentMarkdownTab');
 
 interface AgentMarkdownTabProps {
   persona: AgentPersona;
@@ -42,7 +45,7 @@ export function AgentMarkdownTab({ persona, field }: AgentMarkdownTabProps) {
         try {
           await updatePersona(persona.id, { [field]: value });
         } catch (err) {
-          console.error(`Failed to save ${field}:`, err);
+          log.error('Failed to save persona field', { field, err });
         }
       }, 1000);
     },

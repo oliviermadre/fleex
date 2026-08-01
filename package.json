@@ -22,7 +22,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:bun": "cd packages/server && bunx --bun vitest run --config vitest.bun.config.ts",
-    "lint": "node scripts/check-raw-palette.mjs && tsc -b packages/shared && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json && tsc --noEmit -p packages/mcp/tsconfig.json && tsc --noEmit -p packages/sidepanel-host/tsconfig.json",
+    "lint": "node scripts/check-no-console.mjs && node scripts/check-raw-palette.mjs && tsc -b packages/shared && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json && tsc --noEmit -p packages/mcp/tsconfig.json && tsc --noEmit -p packages/sidepanel-host/tsconfig.json",
     "audit:theme": "node scripts/theme-audit/run.mjs",
     "dev:desktop": "FLEEX_SERVER_PORT=${PORT:-3000} electron packages/desktop"
   },

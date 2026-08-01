@@ -1,6 +1,7 @@
 import type { IClipboardProvider, ClipboardSelectionType } from '@xterm/addon-clipboard';
+import { createLogger } from '../lib/logger';
 
-const LOG_PREFIX = '[FLEEX:Clipboard]';
+const log = createLogger('services/clipboard');
 
 export class AsmClipboardProvider implements IClipboardProvider {
   private pendingText: string | null = null;
@@ -10,12 +11,12 @@ export class AsmClipboardProvider implements IClipboardProvider {
       await navigator.clipboard.writeText(text);
       this.pendingText = null;
     } catch (err) {
-      console.warn(LOG_PREFIX, 'writeText FAILED, buffering for Cmd+C fallback', {
+      log.warn('writeText FAILED, buffering for Cmd+C fallback', {
         selection,
         len: text.length,
         isSecureContext: window.isSecureContext,
         hasFocus: document.hasFocus(),
-        error: err instanceof Error ? err.message : String(err),
+        err,
       });
       this.pendingText = text;
     }
@@ -26,10 +27,7 @@ export class AsmClipboardProvider implements IClipboardProvider {
       const text = await navigator.clipboard.readText();
       return text;
     } catch (err) {
-      console.warn(LOG_PREFIX, 'readText FAILED', {
-        selection,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      log.warn('readText FAILED', { selection, err });
       return '';
     }
   }

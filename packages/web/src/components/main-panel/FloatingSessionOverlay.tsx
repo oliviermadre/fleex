@@ -9,6 +9,9 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 import type { Session } from '@fleex/shared';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/main-panel/FloatingSessionOverlay');
 
 const MIN_WIDTH = 480;
 const MIN_HEIGHT = 300;
@@ -78,7 +81,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
       setPathCopied(true);
       setTimeout(() => setPathCopied(false), 1200);
     } catch (err) {
-      console.warn('[Fleex] Copy path failed', err);
+      log.warn('Copy path failed', { err });
     }
   }, [session]);
 

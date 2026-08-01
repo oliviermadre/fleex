@@ -6,6 +6,9 @@ import type {
   PanelWsMessage,
 } from '@fleex/shared';
 import * as api from '../services/api';
+import { createLogger } from '../lib/logger';
+
+const log = createLogger('stores/panelStore');
 
 interface PanelState {
   panels: Panel[];
@@ -30,7 +33,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       const panels = await api.fetchPanels();
       set({ panels, loaded: true });
     } catch (err) {
-      console.error('Failed to load panels:', err);
+      log.error('Failed to load panels', { err });
     }
   },
 

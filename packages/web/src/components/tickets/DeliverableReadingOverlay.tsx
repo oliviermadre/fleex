@@ -6,6 +6,9 @@ import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { DeliverableTypePicker } from './DeliverableTypePicker';
 import { TicketPickerModal } from './TicketPickerModal';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/tickets/DeliverableReadingOverlay');
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -65,7 +68,7 @@ export function DeliverableReadingOverlay({ ticketId }: { ticketId?: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      console.warn('[Fleex] Copy to clipboard failed', err);
+      log.warn('Copy to clipboard failed', { err });
     }
   };
 

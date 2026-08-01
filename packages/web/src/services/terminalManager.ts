@@ -6,6 +6,9 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { TERMINAL_THEME, TERMINAL_ANSI_LIGHT, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, TERMINAL_SCROLLBACK } from '../lib/constants';
 import { isLightTheme, type Theme } from '../lib/themes';
 import { AsmClipboardProvider } from './clipboardProvider';
+import { createLogger } from '../lib/logger';
+
+const log = createLogger('services/terminalManager');
 
 interface TerminalInstance {
   terminal: Terminal;
@@ -68,7 +71,7 @@ class TerminalManager {
       // Priority 1: xterm.js native selection (user gesture → clipboard works)
       if (terminal.hasSelection()) {
         navigator.clipboard.writeText(terminal.getSelection()).catch(
-          (err) => console.warn('[FLEEX:Clipboard] failed to copy xterm selection', err),
+          (err) => log.warn('failed to copy xterm selection', { err }),
         );
         return false;
       }
@@ -77,7 +80,7 @@ class TerminalManager {
       const pending = clipboardProvider.consumePendingText();
       if (pending) {
         navigator.clipboard.writeText(pending).catch(
-          (err) => console.warn('[FLEEX:Clipboard] failed to copy pending OSC52 text', err),
+          (err) => log.warn('failed to copy pending OSC52 text', { err }),
         );
         return false;
       }

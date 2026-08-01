@@ -4,6 +4,9 @@ import { isSlackMessageUrl } from '@fleex/shared';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { computeInheritedAttributes, toCreateFields, toUpdateFields } from './filterInheritance';
+import { createLogger } from '../../lib/logger';
+
+const log = createLogger('components/tickets/InlineCardCreator');
 
 const GITHUB_ISSUE_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+\/?$/;
 
@@ -73,7 +76,7 @@ export function InlineCardCreator({ boardId, status }: { boardId: string; status
       setTitle('');
       setActive(false);
     } catch (err) {
-      console.error('Failed to import from link:', err);
+      log.error('Failed to import from link', { err });
       setError(err instanceof Error ? err.message : 'Failed to import from link');
     } finally {
       setImporting(false);
