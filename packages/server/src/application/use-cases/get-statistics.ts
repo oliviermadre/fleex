@@ -10,6 +10,7 @@ import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 import type { RoutineStorePort } from '../ports/routine-store.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
 import {
   MOVE_EVENTS_FETCH_LIMIT,
   PANEL_EVENTS_FETCH_LIMIT,
@@ -61,6 +62,11 @@ export class GetStatisticsUseCase {
     private readonly domainEventLogStore?: DomainEventLogStorePort,
     private readonly workflowRunStore?: WorkflowRunStorePort | null,
     private readonly routineStore?: RoutineStorePort | null,
+    /**
+     * Optional so every existing call site keeps working unchanged; used only to
+     * report silently truncated event fetches.
+     */
+    private readonly logger?: LoggerPort,
   ) {}
 
   async execute(params: {
@@ -168,9 +174,25 @@ export class GetStatisticsUseCase {
       this.routineStore ? this.routineStore.getAll() : Promise.resolve([]),
     ]);
 
+    this.warnIfTruncated('panel.executed', panelEvents.length, PANEL_EVENTS_FETCH_LIMIT);
+    this.warnIfTruncated('ticket.moved', moveEvents.length, MOVE_EVENTS_FETCH_LIMIT);
+
     return {
       tickets, boards, comments, mentions, deliverables, executions, personas, sessions,
       skills, panelEvents, moveEvents, workflowRuns, routines,
     };
+  }
+
+  /**
+   * A fetch that returns exactly its limit has almost certainly been cut short,
+   * which silently understates every aggregate derived from it. Raising the
+   * limit is a separate decision, so this only reports it.
+   */
+  private warnIfTruncated(eventType: string, received: number, limit: number): void {
+    if (received < limit) return;
+    this.logger?.warn('Statistics event fetch hit its limit; results may be incomplete', {
+      eventType,
+      limit,
+    });
   }
 }
