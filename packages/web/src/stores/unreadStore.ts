@@ -42,6 +42,13 @@ interface UnreadState {
 
 const EMPTY_UNREAD: TicketUnreadCounts = { ticketId: '', totalComments: 0, totalDeliverables: 0, unreadComments: 0, unreadDeliverables: 0 };
 
+// Monotonic request counter for loadUnreadCounts. Unlike every other slice of this
+// store it writes the WHOLE map rather than one `[ticketId]` key, so concurrent
+// callers (cockpit, kanban, dashboard — each with a different id set) can clobber
+// one another when a slow request resolves last. Only the most-recently-issued
+// request may write. Same pattern as workflowRunStore.
+let unreadSeq = 0;
+
 export const useUnreadStore = create<UnreadState>((set, get) => ({
   unreadByTicket: {},
   cursorsByTicket: {},
@@ -55,8 +62,10 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
     // that smaller response can resolve AFTER a full-ids one and replace the
     // map, zeroing badges for every never-read ticket (cockpit bug, #400).
     if (ticketIds && ticketIds.length === 0) return;
+    const seq = ++unreadSeq;
     try {
       const counts = await api.fetchUnreadCounts(ticketIds);
+      if (seq !== unreadSeq) return; // superseded by a newer request
       const map: Record<string, TicketUnreadCounts> = {};
       let total = 0;
       for (const c of counts) {

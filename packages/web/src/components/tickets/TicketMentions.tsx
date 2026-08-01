@@ -179,7 +179,9 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     name === 'user' && humanMentionName ? humanMentionName : name;
 
   useEffect(() => {
-    api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
+    const ac = new AbortController();
+    api.fetchTicketMentions(ticketId, { signal: ac.signal }).then(setMentions).catch(api.ignoreAbort);
+    return () => ac.abort();
   }, [ticketId]);
 
   // Per-mention startup failures (server emitted mention:execution_failed

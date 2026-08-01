@@ -32,7 +32,9 @@ export function TicketActivityTimeline({ ticketId }: { ticketId: string }) {
   const [activities, setActivities] = useState<TicketActivity[]>([]);
 
   useEffect(() => {
-    api.fetchTicketActivity(ticketId).then(setActivities).catch(() => {});
+    const ac = new AbortController();
+    api.fetchTicketActivity(ticketId, { signal: ac.signal }).then(setActivities).catch(api.ignoreAbort);
+    return () => ac.abort();
   }, [ticketId]);
 
   if (activities.length === 0) {

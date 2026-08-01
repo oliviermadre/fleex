@@ -451,7 +451,10 @@ function ExpandedTicketMetaSidebar({
   useEffect(() => {
     const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
     if (prLinks.length === 0) return;
-    api.fetchPRStates(ticket.id).then(setPrStates).catch(() => {});
+    // This one hits the GitHub API server-side (~1s), so the race window is wide.
+    const ac = new AbortController();
+    api.fetchPRStates(ticket.id, { signal: ac.signal }).then(setPrStates).catch(api.ignoreAbort);
+    return () => ac.abort();
   }, [ticket.id]);
 
   const handleStatusChange = (status: TicketStatus) => {

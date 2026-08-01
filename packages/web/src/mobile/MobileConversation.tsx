@@ -255,10 +255,13 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
   }, [body]);
 
   useEffect(() => {
-    api.fetchTicketComments(ticketId).then(setComments).catch(() => {});
-    api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
-    api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
-    loadSeenDeliverables(ticketId).catch(() => {});
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    api.fetchTicketComments(ticketId, opts).then(setComments).catch(api.ignoreAbort);
+    api.fetchTicketMentions(ticketId, opts).then(setMentions).catch(api.ignoreAbort);
+    api.fetchTicketDeliverables(ticketId, opts).then(setDeliverables).catch(api.ignoreAbort);
+    loadSeenDeliverables(ticketId).catch(api.ignoreAbort); // store writes under [ticketId] — race-free
+    return () => ac.abort();
   }, [ticketId, loadSeenDeliverables]);
 
   // Opening the conversation on the phone = caught up
