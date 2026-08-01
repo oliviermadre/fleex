@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel } from '@fleex/shared';
 import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
-import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
+import { AgentPersonaNotFoundError, ExecutionCancelledError, MaxTurnsReachedError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
 import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
@@ -20,6 +20,13 @@ import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
 import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
+import {
+  lineageKeyForExecution,
+  mentionLineageKey,
+  skillLineageKey,
+  type LineageRunStatus,
+} from '../utils/session-lineage.js';
+import { resolveSessionDefault } from '../utils/resolve-session-default.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
@@ -52,6 +59,20 @@ interface ActiveExecution {
 interface QueueItem {
   persona: AgentPersonaEntity;
   mention: TicketMentionEntity;
+}
+
+/**
+ * The most recent session of one lineage, plus the state its run ended in.
+ *
+ * The status is what makes the terminal-state rule decidable: we only resume
+ * where the machine stopped *without having finished*. A tip is written as soon
+ * as the SDK hands us a session id — pessimistically as `interrupted`, because
+ * if nothing ever overwrites it (hard crash, kill -9) then "interrupted" is
+ * exactly what happened.
+ */
+interface SessionTip {
+  sdkSessionId: string;
+  lastStatus: LineageRunStatus;
 }
 
 /**
@@ -115,7 +136,11 @@ ${typeLines}
 
 export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegistryPort {
   private activeExecutions = new Map<string, ActiveExecution>();
-  private sessionHistory = new Map<string, string>(); // `${agentName}:${ticketId}` -> sdkSessionId
+  // Session tips, keyed by *lineage* (see `session-lineage.ts`): a mention, a
+  // skill and a workflow step on the same ticket each own a separate entry, so
+  // none of them can inherit another's transcript. Was `${agentName}:${ticketId}`
+  // with no notion of kind, which let a mention resume a skill's session.
+  private sessionHistory = new Map<string, SessionTip>();
   private queue: QueueItem[] = [];
   // `${agentName}:${ticketId}` currently dispatched (parked on the limiter OR
   // actively running). Covers the dispatch→acknowledge window where the DB does
@@ -189,6 +214,58 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   }
 
   /**
+   * Record the session id of a lineage together with the state its run ended in.
+   * Called mid-flight (`interrupted`, pessimistic) and again at settle with the
+   * real outcome, so the terminal-state rule always reads a truthful status.
+   */
+  private rememberSession(key: string, sdkSessionId: string, lastStatus: LineageRunStatus): void {
+    this.sessionHistory.set(key, { sdkSessionId, lastStatus });
+  }
+
+  /**
+   * The session a new run on this lineage may resume — or `undefined` to start
+   * fresh. Applies the terminal-state rule (`resolveSessionDefault`): we only
+   * pick the transcript back up where the machine stopped without having
+   * finished. `force` is for the two contexts that always resume regardless of
+   * the previous outcome: waking a `waiting_for_info` mention, and recovering an
+   * orphan after a restart.
+   */
+  private resumeSessionFor(key: string, opts?: { force?: boolean }): string | undefined {
+    const tip = this.sessionHistory.get(key);
+    if (!tip) return undefined;
+    if (opts?.force) return tip.sdkSessionId;
+    return resolveSessionDefault(tip.lastStatus) === 'resume' ? tip.sdkSessionId : undefined;
+  }
+
+  /**
+   * The SDK's turn ceiling resolves the query loop *normally* with
+   * `subtype: 'error_max_turns'` — it never throws. Every launch path therefore
+   * has to detect it explicitly or it records a truncated run as a success:
+   * that is how a workflow step ended up `completed` with `result: 'ko'`,
+   * silently taking its ko edge with no Retry affordance (ticket #454).
+   *
+   * Persists the truncated session (in-memory tip + DB) so whatever retries can
+   * resume it, and returns the classified crash. Returns `null` when the run did
+   * not hit the ceiling, so callers can guard with a single `if`.
+   */
+  private async recordMaxTurns(params: {
+    resultSubtype: string | undefined;
+    executionId: string;
+    sdkSessionId: string | undefined;
+    lineageKey: string | null;
+  }): Promise<{ reason: string; message: string } | null> {
+    if (params.resultSubtype !== 'error_max_turns') return null;
+
+    if (params.sdkSessionId) {
+      if (params.lineageKey) {
+        this.rememberSession(params.lineageKey, params.sdkSessionId, 'failed');
+      }
+      await this.agentEventStore.updateSessionId(params.executionId, params.sdkSessionId);
+    }
+    return classifyCrash('error_max_turns', { acknowledged: true });
+  }
+
+  /**
    * Startup recovery: mark orphaned executions as interrupted,
    * reset their mentions to pending, and reload SDK session history.
    */
@@ -221,15 +298,20 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }
     }
 
-    // 3. Reload SDK session history from DB
+    // 3. Reload SDK session history from DB, bucketed per lineage.
+    //    Rows come back most-recent-first, so the first row seen for a lineage
+    //    is its tip. Workflow-step rows are skipped on purpose: a step resumes
+    //    through `step_run.executionId`, not through this in-memory map.
     const history = await this.agentEventStore.getSessionHistory();
-    for (const [key, { sdkSessionId, personaId, ticketId }] of history) {
-      // Key is "personaId:ticketId" — we need to convert to "personaName:ticketId"
-      const persona = await this.personaStore.getById(personaId);
-      if (persona) {
-        const sessionKey = `${persona.name}:${ticketId}`;
-        this.sessionHistory.set(sessionKey, sdkSessionId);
-      }
+    for (const row of history) {
+      const key = lineageKeyForExecution(row);
+      if (!key || this.sessionHistory.has(key)) continue;
+      this.sessionHistory.set(key, {
+        sdkSessionId: row.sdkSessionId,
+        // `running` should already have been rewritten by step 1; if a row
+        // slips through it is by definition a run that never finished.
+        lastStatus: row.status === 'running' ? 'interrupted' : row.status,
+      });
     }
 
     this.logger.info('Agent execution startup recovery complete', {
@@ -770,7 +852,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       });
 
       // 6. Build user prompt with ticket context (content blocks for multimodal support)
-      const sessionKey = `${persona.name}:${mention.ticketId}`;
+      const sessionKey = mentionLineageKey(persona.id, mention.ticketId);
       // `isWakeUp` is decided up front from `wokenMentionIds` (a genuine resume
       // from waiting_for_info), NOT from "a session exists" — a fresh queued
       // mention reuses the session but is not a wake-up.
@@ -801,8 +883,26 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         this.onEvent?.(event);
       };
 
-      // 8. Check for previous SDK session (resume)
-      const previousSessionId = this.sessionHistory.get(sessionKey);
+      // 8. Check for previous SDK session (resume).
+      //    A wake-up from `waiting_for_info` always resumes — the agent is
+      //    literally mid-thought. Any other mention goes through the
+      //    terminal-state rule, so re-mentioning an agent that finished cleanly
+      //    starts a fresh session instead of dragging the old transcript along.
+      const previousSessionId = this.resumeSessionFor(sessionKey, { force: isWakeUp });
+
+      // Built BEFORE `execution_start` is emitted: the event must report the
+      // resume the SDK actually receives, not the one we hoped to pass. They
+      // diverged whenever `buildSdkOptions` dropped it (see ticket #454).
+      const queryOptions = buildSdkOptions(effectiveMode, {
+        model: resolved.model,
+        systemPrompt,
+        cwd: worktreePath,
+        outputFormat: this.outputFormatSchema(),
+        resume: previousSessionId ?? undefined,
+        effort: resolved.effort,
+        fast: resolved.fast,
+        talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
+      });
 
       // Build context window summary for observability
       const contextSections: string[] = [];
@@ -822,7 +922,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         model: resolved.model,
         effectiveMode,
         worktreePath,
-        resumeSessionId: previousSessionId ?? null,
+        resumeSessionId: (queryOptions as Record<string, unknown>)['resume'] as string ?? null,
         kind: 'persona',
         systemPromptSections: contextSections,
         systemPromptLength: systemPrompt.length,
@@ -854,28 +954,19 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       let resultSubtype: string | undefined;
 
       {
-        const queryOptions = buildSdkOptions(effectiveMode, {
-          model: resolved.model,
-          systemPrompt,
-          cwd: worktreePath,
-          outputFormat: this.outputFormatSchema(),
-          resume: previousSessionId ?? undefined,
-          effort: resolved.effort,
-          fast: resolved.fast,
-          talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
-        });
-
         // Build the prompt: use content blocks if there are images, plain string otherwise
         const hasImages = userPromptBlocks.some((b) => b.type === 'image');
         const userPrompt = hasImages
           ? userPromptBlocks  // Will be wrapped into SDKUserMessage below
           : userPromptBlocks.map((b) => (b as { text: string }).text).join('');
 
-        // Persist the session as soon as it exists (not only on success). If
-        // this run is later aborted/superseded, the next mention on the same
-        // agent+ticket can still resume from here — so "stop & redo" keeps the
-        // agent's memory of what it was doing plus the correction.
-        const onSessionId = (sid: string) => { this.sessionHistory.set(sessionKey, sid); };
+        // Persist the session as soon as it exists (not only on success), tagged
+        // `interrupted` until we know better. If this run is later aborted or
+        // superseded, the next mention on the same lineage can still resume from
+        // here — so "stop & redo" keeps the agent's memory of what it was doing
+        // plus the correction. A clean completion overwrites the tag below,
+        // which is what makes the *next* mention start fresh.
+        const onSessionId = (sid: string) => { this.rememberSession(sessionKey, sid, 'interrupted'); };
 
         const runStream = (fallbackSession: string) => streamSdkQuery({
           prompt: userPrompt,
@@ -997,8 +1088,11 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // as a crash here — otherwise the run would be recorded as `completed` and
       // the mention would stay stuck in `acknowledged`. The crash card offers a
       // one-click relaunch, which resumes the session to continue where it stopped.
-      if (resultSubtype === 'error_max_turns') {
-        const { reason, message } = classifyCrash('error_max_turns', { acknowledged: true });
+      // `recordMaxTurns` persists the truncated session before we report the
+      // crash, so the one-click relaunch resumes where it stopped.
+      const maxTurns = await this.recordMaxTurns({ resultSubtype, executionId, sdkSessionId, lineageKey: sessionKey });
+      if (maxTurns) {
+        const { reason, message } = maxTurns;
         this.logger.warn('SDK reached max turns — recording as a recoverable crash', {
           executionId,
           persona: persona.name,
@@ -1007,11 +1101,6 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         await emitEvent('error', { error: message, ticketId: mention.ticketId });
         await emitEvent('execution_end', { status: 'failed', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
-        // Persist the session so the relaunch can resume from where it stopped.
-        if (sdkSessionId) {
-          this.sessionHistory.set(sessionKey, sdkSessionId);
-          await this.agentEventStore.updateSessionId(executionId, sdkSessionId);
-        }
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
         mention.markFailed();
         await this.mentionStore.save(mention);
@@ -1047,9 +1136,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         cacheCreationTokens: sdkCacheCreationTokens,
       });
 
-      // 10. Store session ID for future resume (in-memory + DB)
+      // 10. Store session ID for future resume (in-memory + DB). Tagged
+      //     `completed`: the transcript stays reachable (wake-up from
+      //     waiting_for_info, orphan recovery, an explicit "Continuer" in the
+      //     UI) but a plain re-mention will now start fresh.
       if (sdkSessionId) {
-        this.sessionHistory.set(sessionKey, sdkSessionId);
+        this.rememberSession(sessionKey, sdkSessionId, 'completed');
         await this.agentEventStore.updateSessionId(executionId, sdkSessionId);
       }
 
@@ -1497,6 +1589,22 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       0,
     );
 
+    // Resume lineage + SDK options are resolved BEFORE `execution_start` so the
+    // event reports the resume the SDK actually receives. Keyed on `skillId`
+    // (not `commandName`, which is renamable) and namespaced `skill:` so a
+    // skill run never inherits a persona mention's transcript on the same
+    // ticket — the ticket context is re-injected anyway.
+    const skillSessionKey = skillLineageKey(skillId, ticketId);
+    const previousSessionId = this.resumeSessionFor(skillSessionKey);
+
+    const queryOptions = buildSdkOptions('edit', {
+      model: persona.model,
+      systemPrompt,
+      cwd: worktreePath,
+      outputFormat: opts?.outputFormatOverride ?? this.outputFormatSchema(),
+      resume: previousSessionId ?? undefined,
+    });
+
     await emitEvent('execution_start', buildExecutionStartData({
       executionId,
       personaId: persona.id,
@@ -1507,6 +1615,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // Skills always run with full edit rights.
       effectiveMode: 'edit',
       worktreePath,
+      resumeSessionId: (queryOptions as Record<string, unknown>)['resume'] as string ?? null,
       kind: 'skill',
       label: skill.displayName,
       skillId,
@@ -1535,17 +1644,6 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // 8. Call Claude Agent SDK
       const effectiveMode = 'edit' as const;
 
-      const sessionKey = `skill:${skill.commandName}:${ticketId}`;
-      const previousSessionId = this.sessionHistory.get(sessionKey);
-
-      const queryOptions = buildSdkOptions('edit', {
-        model: persona.model,
-        systemPrompt,
-        cwd: worktreePath,
-        outputFormat: opts?.outputFormatOverride ?? this.outputFormatSchema(),
-        resume: previousSessionId ?? undefined,
-      });
-
       // Build prompt: content blocks if images, string otherwise
       const skillHasImages = skillPromptBlocks.some((b) => b.type === 'image');
       const skillPrompt = skillHasImages
@@ -1573,14 +1671,39 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       clearTimeout(timeoutHandle);
 
       if (abortController.signal.aborted) {
+        // Keep the tip resumable: an interrupted skill is exactly the case where
+        // relaunching should continue rather than restart.
+        if (sdkSessionId) {
+          this.rememberSession(skillSessionKey, sdkSessionId, 'interrupted');
+          await this.agentEventStore.updateSessionId(executionId, sdkSessionId);
+        }
         await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId, model: persona.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: persona.model, effectiveMode });
         return;
       }
 
-      // 8. Store session for potential resume
+      // 7-bis. Turn ceiling: without this the truncated run would be recorded as
+      // a clean completion with an empty structured output. Throwing routes it
+      // into the catch below, which marks the execution `failed` — the state the
+      // UI needs to offer a relaunch.
+      const skillMaxTurns = await this.recordMaxTurns({
+        resultSubtype: streamResult.resultSubtype,
+        executionId,
+        sdkSessionId,
+        lineageKey: skillSessionKey,
+      });
+      if (skillMaxTurns) {
+        this.logger.warn('Skill reached max turns — failing so it can be relaunched', {
+          executionId, skillId, persona: persona.name, ticketId,
+        });
+        throw new MaxTurnsReachedError(skillMaxTurns.message, sdkSessionId);
+      }
+
+      // 8. Store session for potential resume. Tagged `completed`: relaunching
+      //    the same skill after a clean run starts fresh (the ticket context is
+      //    re-injected), whereas a crash leaves a resumable tip below.
       if (sdkSessionId) {
-        this.sessionHistory.set(sessionKey, sdkSessionId);
+        this.rememberSession(skillSessionKey, sdkSessionId, 'completed');
         await this.agentEventStore.updateSessionId(executionId, sdkSessionId);
       }
 
@@ -1846,6 +1969,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     workflowContextPrompt: string;
     mode: MentionExecutionMode;
     /**
+     * SDK session of the previous attempt of THIS step of THIS run, when that
+     * attempt failed. Resolved by the orchestrator by walking
+     * `step_run.executionId → execution.sdkSessionId`; absent on a first attempt
+     * and on a step whose previous attempt completed. Without it a Retry restarted
+     * the agent cold — re-doing the work it had already done before running out
+     * of turns, which is precisely the bug reported on ticket #454.
+     */
+    resumeSessionId?: string;
+    /**
      * Called as soon as the execution is registered and its `executionId` is
      * known (before the SDK query runs), so the orchestrator can persist
      * `step_run.executionId` live and make the in-flight step cancellable.
@@ -1920,6 +2052,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       if (worktreePath) wfContextSections.push(`Working directory (${worktreePath})`);
       wfContextSections.push('Workflow step');
 
+      // Built before `execution_start` so the event reports the resume the SDK
+      // actually gets rather than the one we intended to pass.
+      const queryOptions = buildSdkOptions(effectiveMode, {
+        model: persona.model, systemPrompt, cwd: worktreePath,
+        outputFormat: params.outputFormat,
+        resume: params.resumeSessionId,
+        talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
+      });
+
       await emitEvent('execution_start', buildExecutionStartData({
         executionId,
         personaId: persona.id,
@@ -1929,6 +2070,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         model: persona.model,
         effectiveMode,
         worktreePath,
+        resumeSessionId: (queryOptions as Record<string, unknown>)['resume'] as string ?? null,
         kind: 'workflow_step',
         label: 'workflow step',
         systemPromptSections: wfContextSections,
@@ -1939,13 +2081,6 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         commentsCount: context.comments.length,
         deliverablesCount: context.deliverables.length,
       }));
-
-      // SDK query
-      const queryOptions = buildSdkOptions(effectiveMode, {
-        model: persona.model, systemPrompt, cwd: worktreePath,
-        outputFormat: params.outputFormat,
-        talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
-      });
 
       const hasImages = userPromptBlocks.some((b) => b.type === 'image');
       let structuredOutput: Record<string, unknown> | null = null;
@@ -1960,16 +2095,40 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       let sdkOutputTokens: number | undefined;
       let sdkCacheReadTokens: number | undefined;
       let sdkCacheCreationTokens: number | undefined;
+      let resultSubtype: string | undefined;
+      const runStream = () => streamSdkQuery({
+        prompt: hasImages ? userPromptBlocks : userPromptText,
+        queryOptions: queryOptions as Record<string, unknown>,
+        emitEvent,
+        abortSignal: abortController.signal,
+      });
       try {
-        const streamResult = await streamSdkQuery({
-          prompt: hasImages ? userPromptBlocks : userPromptText,
-          queryOptions: queryOptions as Record<string, unknown>,
-          emitEvent,
-          abortSignal: abortController.signal,
-        });
+        let streamResult: StreamSdkQueryResult;
+        try {
+          streamResult = await runStream();
+        } catch (queryErr) {
+          // A session id can go stale (transcript pruned, another machine). The
+          // mention path already degrades to a cold start rather than failing
+          // the run; a workflow step must not be stricter, or a retry would fail
+          // twice over for a reason the user cannot act on.
+          if (!abortController.signal.aborted && params.resumeSessionId) {
+            this.logger.warn('Workflow step SDK query failed with resume, retrying without resume', {
+              executionId,
+              persona: persona.name,
+              staleSessionId: params.resumeSessionId,
+              error: queryErr instanceof Error ? queryErr.message : String(queryErr),
+            });
+            delete (queryOptions as Record<string, unknown>)['resume'];
+            await emitEvent('execution_retry', { reason: 'stale_resume_session', staleSessionId: params.resumeSessionId });
+            streamResult = await runStream();
+          } else {
+            throw queryErr;
+          }
+        }
         structuredOutput = streamResult.structuredOutput;
         resultText = streamResult.resultText;
         sdkSessionId = streamResult.sessionId;
+        resultSubtype = streamResult.resultSubtype;
         sdkDurationMs = streamResult.metrics.durationMs;
         sdkCostUsd = streamResult.metrics.costUsd;
         sdkInputTokens = streamResult.metrics.inputTokens;
@@ -2002,6 +2161,34 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // cost backfill to match this execution by session id).
       if (sdkSessionId) {
         await this.agentEventStore.updateSessionId(executionId, sdkSessionId);
+      }
+
+      // Turn ceiling. Left unhandled, the step recorded `completed` with a null
+      // structured output, which `toStepOutput` turns into `result: 'ko'` — the
+      // run then quietly followed its ko edge and no Retry button ever appeared.
+      // Throwing makes `RunWorkflowStepUseCase` mark the step `failed`, which is
+      // both truthful and the state that unlocks the retry (which now resumes).
+      const wfMaxTurns = await this.recordMaxTurns({ resultSubtype, executionId, sdkSessionId, lineageKey: null });
+      if (wfMaxTurns) {
+        this.logger.warn('Workflow step reached max turns — failing so it can be retried', {
+          executionId, persona: persona.name, ticketId: params.ticketId,
+        });
+        await emitEvent('error', { error: wfMaxTurns.message, ticketId: params.ticketId });
+        await emitEvent('execution_end', {
+          status: 'failed', reason: wfMaxTurns.reason, ticketId: params.ticketId,
+          model: persona.model, effectiveMode,
+          durationMs: sdkDurationMs, costUsd: sdkCostUsd,
+          inputTokens: sdkInputTokens, outputTokens: sdkOutputTokens,
+          cacheReadTokens: sdkCacheReadTokens, cacheCreationTokens: sdkCacheCreationTokens,
+        });
+        await this.agentEventStore.completeExecution(executionId, 'failed', {
+          model: persona.model, effectiveMode,
+          durationMs: sdkDurationMs, costUsd: sdkCostUsd,
+          inputTokens: sdkInputTokens, outputTokens: sdkOutputTokens,
+          cacheReadTokens: sdkCacheReadTokens, cacheCreationTokens: sdkCacheCreationTokens,
+        });
+        finalStatus = 'failed';
+        throw new MaxTurnsReachedError(wfMaxTurns.message, sdkSessionId);
       }
 
       await emitEvent('execution_end', {

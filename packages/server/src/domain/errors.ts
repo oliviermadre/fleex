@@ -188,6 +188,26 @@ export class ExecutionCancelledError extends DomainError {
   }
 }
 
+/**
+ * The SDK hit its turn ceiling. It does NOT throw for this — the query loop
+ * resolves normally with `subtype: 'error_max_turns'` and no structured output.
+ *
+ * On the skill / workflow-step paths that used to be indistinguishable from "the
+ * agent answered nothing", which meant a step was recorded `completed` with
+ * `result: 'ko'`: the run silently followed its ko edge and no Retry affordance
+ * ever appeared. Throwing turns it back into a real failure, so the step is
+ * marked `failed` and can be retried — resuming the session (ticket #454).
+ */
+export class MaxTurnsReachedError extends DomainError {
+  constructor(
+    message: string,
+    /** SDK session of the truncated run, so the retry can resume it. */
+    public readonly sdkSessionId?: string,
+  ) {
+    super(message, 'MAX_TURNS_REACHED');
+  }
+}
+
 export class InvalidGateOutcomeError extends DomainError {
   constructor(outcome: string, allowed: string[]) {
     super(`Invalid gate outcome "${outcome}". Allowed: ${allowed.join(', ')}`, 'INVALID_GATE_OUTCOME');
