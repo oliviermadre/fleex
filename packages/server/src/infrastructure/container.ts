@@ -65,6 +65,11 @@ import { AgentStepExecutor } from '../application/services/step-executors/agent-
 import { SkillStepExecutor } from '../application/services/step-executors/skill-step-executor.js';
 import { PanelStepExecutor } from '../application/services/step-executors/panel-step-executor.js';
 import { HumanGateStepExecutor } from '../application/services/step-executors/human-gate-step-executor.js';
+import { NativeStepExecutor } from '../application/services/step-executors/native-step-executor.js';
+import { NativeOperationRegistry } from '../application/services/native-operations/registry.js';
+import { ApplyNativeActionsUseCase } from '../application/use-cases/apply-native-actions.js';
+import { ApplyTicketMutationUseCase } from '../application/use-cases/apply-ticket-mutation.js';
+import { CreateTicketUseCase } from '../application/use-cases/create-ticket.js';
 import { WorkflowOrchestrator } from '../application/services/workflow-orchestrator.js';
 import { RunWorkflowStepUseCase } from '../application/use-cases/run-workflow-step.js';
 import { CreateWorkflowRunUseCase } from '../application/use-cases/create-workflow-run.js';
@@ -273,6 +278,11 @@ export async function createContainer() {
   // Per-workspace deliverable-type backoffice (CRUD + usage + reassignment).
   const manageDeliverableTypes = new ManageDeliverableTypesUseCase(config, deliverableStore, logger, eventBus);
 
+  // Ticket mutation use-cases — the single write path shared by the HTTP routes
+  // and the native workflow steps, so the two can never drift apart.
+  const createTicket = new CreateTicketUseCase(ticketStore_, eventBus);
+  const applyTicketMutation = new ApplyTicketMutationUseCase(ticketStore_, eventBus);
+
   // Unique per-process server identifier — used to filter our own events on the hub fan-out.
   const serverId = process.env['FLEEX_INSTANCE_ID'] ?? randomUUID();
 
@@ -404,6 +414,13 @@ export async function createContainer() {
     const skillStepExecutor = new SkillStepExecutor(executeAgent, skillStore);
     const panelStepExecutor = new PanelStepExecutor(runPanel);
     const humanGateStepExecutor = new HumanGateStepExecutor(postComment);
+    const nativeStepExecutor = new NativeStepExecutor(new ApplyNativeActionsUseCase({
+      ticketStore: ticketStore_,
+      registry: new NativeOperationRegistry(),
+      createTicket,
+      applyTicketMutation,
+      postComment,
+    }));
 
     // RunWorkflowStep — orchestrator dep resolved below (circular dep pattern)
     const runWorkflowStep = new RunWorkflowStepUseCase({
@@ -416,6 +433,7 @@ export async function createContainer() {
         skill: skillStepExecutor,
         panel: panelStepExecutor,
         human_gate: humanGateStepExecutor,
+        native: nativeStepExecutor,
       },
       submitDeliverable,
       postComment,
@@ -511,6 +529,8 @@ export async function createContainer() {
     resolveMention,
     submitDeliverable,
     manageDeliverableTypes,
+    createTicket,
+    applyTicketMutation,
     getTicketContext,
     personaStore: personaStore_,
     createPersona,

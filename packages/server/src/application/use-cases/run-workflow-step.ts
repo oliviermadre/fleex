@@ -80,6 +80,9 @@ export class RunWorkflowStepUseCase {
         workflowContext: {
           workflowName: run.templateSnapshot.name, stepName: step.name,
           outgoingEdges, previousOutputs,
+          predecessorStepIds: run.templateSnapshot.edges
+            .filter((e) => e.target === step.id)
+            .map((e) => e.source),
         },
         // Persist the live executionId the moment the agent starts, so the run /
         // step can be cancelled while still in flight (Terminate, cancel run,

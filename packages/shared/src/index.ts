@@ -285,6 +285,7 @@ export type {
   JsonSchemaProperty,
   JsonSchema,
   WorkflowStep,
+  NativeAction,
   WorkflowEdgeCondition,
   WorkflowEdge,
   WorkflowTemplate,
@@ -298,6 +299,37 @@ export type {
   CreateWorkflowRunInput,
   ResolveHumanGateInput,
 } from './types/workflow.js';
+
+export type {
+  NativeParamType,
+  NativeOperationParam,
+  NativeOperationDescriptor,
+} from './native-operations/descriptors.js';
+export {
+  NATIVE_OPERATIONS,
+  NATIVE_OPERATION_IDS,
+  NATIVE_OP_CREATE_TICKET,
+  NATIVE_STEP_KIND_TICKET_ACTIONS,
+  getNativeOperation,
+} from './native-operations/descriptors.js';
+
+export type { ParsedReference, ReferenceKind, TicketReferenceField } from './native-operations/references.js';
+export {
+  REFERENCE_PATTERN,
+  TICKET_REFERENCE_FIELDS,
+  ReferenceSyntaxError,
+  parseReferencePath,
+  findReferences,
+  asFullValueReference,
+  containsReference,
+} from './native-operations/references.js';
+
+export type { NativeValidationResult, ReferenceSuggestion } from './native-operations/validate.js';
+export {
+  validateNativeSteps,
+  validateResolvedParams,
+  nativeReferenceSuggestions,
+} from './native-operations/validate.js';
 
 export type {
   PrimitiveKind,

@@ -45,6 +45,7 @@ describe('RunWorkflowStepUseCase', () => {
         skill: { execute: vi.fn() } as never,
         panel: { execute: vi.fn() } as never,
         human_gate: { execute: vi.fn() } as never,
+        native: { execute: vi.fn() } as never,
       },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
@@ -59,6 +60,57 @@ describe('RunWorkflowStepUseCase', () => {
     expect(orchestrator.runStep).toHaveBeenCalledWith('run-1', 'b');
     expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.step_started' }));
     expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'workflow.step_completed' }));
+  });
+
+  it('tells the executor which steps feed it, so {{ output.* }} can be resolved', async () => {
+    // A native step resolving `{{ output.priority }}` has to know its direct
+    // predecessor, and only the engine holds the graph. Without this the
+    // shorthand could not be implemented anywhere but the engine itself.
+    const run = makeRun();
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { save: vi.fn(), getLatestForStep: vi.fn().mockResolvedValue(null), getByWorkflowRun: vi.fn().mockResolvedValue([]) };
+    const agentExecutor = { execute: vi.fn().mockResolvedValue({ output: { schemaFields: {}, result: 'ok' } }) };
+
+    const artifacts = makeArtifactStubs();
+    const uc = new RunWorkflowStepUseCase({
+      runStore: runStore as never, stepRunStore: stepRunStore as never,
+      orchestrator: { runStep: vi.fn() } as never, eventBus: { emit: vi.fn() } as never,
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
+    });
+
+    await uc.execute({ workflowRunId: 'run-1', stepId: 'b' });
+
+    const input = agentExecutor.execute.mock.calls[0]?.[0] as {
+      workflowContext: { predecessorStepIds: string[] };
+    };
+    expect(input.workflowContext.predecessorStepIds).toEqual(['a']);
+  });
+
+  it('reports no predecessor for the entry step', async () => {
+    const run = makeRun();
+    const runStore = { getById: vi.fn().mockResolvedValue(run), save: vi.fn() };
+    const stepRunStore = { save: vi.fn(), getLatestForStep: vi.fn().mockResolvedValue(null), getByWorkflowRun: vi.fn().mockResolvedValue([]) };
+    const agentExecutor = { execute: vi.fn().mockResolvedValue({ output: { schemaFields: {}, result: 'ok' } }) };
+
+    const artifacts = makeArtifactStubs();
+    const uc = new RunWorkflowStepUseCase({
+      runStore: runStore as never, stepRunStore: stepRunStore as never,
+      orchestrator: { runStep: vi.fn() } as never, eventBus: { emit: vi.fn() } as never,
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
+    });
+
+    await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
+
+    const input = agentExecutor.execute.mock.calls[0]?.[0] as {
+      workflowContext: { predecessorStepIds: string[] };
+    };
+    expect(input.workflowContext.predecessorStepIds).toEqual([]);
   });
 
   it('emits comment.posted and deliverable.created for real-time UI broadcast when a step produces artifacts', async () => {
@@ -80,7 +132,7 @@ describe('RunWorkflowStepUseCase', () => {
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never, stepRunStore: stepRunStore as never,
       orchestrator: orchestrator as never, eventBus: eventBus as never,
-      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
       agentEventStore: artifacts.agentEventStore as never,
@@ -119,7 +171,7 @@ describe('RunWorkflowStepUseCase', () => {
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never, stepRunStore: stepRunStore as never,
       orchestrator: orchestrator as never, eventBus: eventBus as never,
-      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
       agentEventStore: artifacts.agentEventStore as never,
@@ -150,7 +202,7 @@ describe('RunWorkflowStepUseCase', () => {
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never, stepRunStore: stepRunStore as never,
       orchestrator: orchestrator as never, eventBus: eventBus as never,
-      executors: { agent: deterministic as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      executors: { agent: deterministic as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
       agentEventStore: artifacts.agentEventStore as never,
@@ -177,7 +229,7 @@ describe('RunWorkflowStepUseCase', () => {
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never, stepRunStore: stepRunStore as never,
       orchestrator: orchestrator as never, eventBus: eventBus as never,
-      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
       agentEventStore: artifacts.agentEventStore as never,
@@ -229,7 +281,7 @@ describe('RunWorkflowStepUseCase', () => {
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never, stepRunStore: stepRunStore as never,
       orchestrator: orchestrator as never, eventBus: eventBus as never,
-      executors: { agent: failing as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      executors: { agent: failing as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
       agentEventStore: artifacts.agentEventStore as never,
@@ -262,7 +314,7 @@ describe('RunWorkflowStepUseCase', () => {
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never, stepRunStore: stepRunStore as never,
       orchestrator: orchestrator as never, eventBus: eventBus as never,
-      executors: { agent: cancelled as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      executors: { agent: cancelled as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
       agentEventStore: artifacts.agentEventStore as never,
@@ -309,7 +361,7 @@ describe('RunWorkflowStepUseCase', () => {
     const uc = new RunWorkflowStepUseCase({
       runStore: runStore as never, stepRunStore: stepRunStore as never,
       orchestrator: orchestrator as never, eventBus: eventBus as never,
-      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never, native: {} as never },
       submitDeliverable: artifacts.submitDeliverable as never,
       postComment: artifacts.postComment as never,
       agentEventStore: artifacts.agentEventStore as never,

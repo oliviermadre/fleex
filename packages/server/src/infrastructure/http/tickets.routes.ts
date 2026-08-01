@@ -9,7 +9,6 @@ import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
-import { deriveTicketUpdateEvents } from '../../domain/services/ticket-audit-events.js';
 import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
@@ -192,81 +191,27 @@ export function ticketRoutes(container: Container) {
 
     app.post<{ Body: CreateTicketRequest }>('/api/tickets', async (request, reply) => {
       const { boardId, title, description, status, priority, type, tags, links, dueDate } = request.body;
-
-      const board = await container.ticketStore.getBoardById(boardId);
-      if (!board) throw new BoardNotFoundError(boardId);
-
-      // Calculate position (top of column)
-      const targetStatus = status ?? 'backlog';
-      const existing = await container.ticketStore.getTicketsByStatus(boardId, targetStatus);
-      const minPos = existing.length > 0
-        ? existing.reduce((min, t) => Math.min(min, t.position), Infinity)
-        : 1;
-
-      const ticketId = randomUUID();
-      const ticketLinks = (links ?? []).map((l) => ({
-        ...l,
-        id: randomUUID(),
-        createdAt: new Date().toISOString(),
-      }));
-
-      const ticket = TicketEntity.create({
-        id: ticketId,
-        boardId,
-        displayId: 0, // assigned by createTicket() below
-        title,
-        description,
-        status: targetStatus,
-        priority,
-        type,
-        position: minPos - 1,
-        tags,
-        links: ticketLinks,
-        dueDate: dueDate ? new Date(dueDate) : null,
+      const ticket = await container.createTicket.execute({
+        boardId, title, description, status, priority, type, tags, links, dueDate,
       });
-
-      await container.ticketStore.createTicket(ticket);
-      await container.ticketStore.saveActivity(TicketActivityEntity.create({
-        id: randomUUID(),
-        ticketId,
-        action: 'created',
-        source: 'web',
-      }));
-
-      emit({ type: 'ticket.created', ticketId, boardId, occurredAt: new Date() });
       return reply.code(201).send(ticket.toDTO());
     });
 
     app.patch<{ Params: { id: string }; Querystring: { silent?: string }; Body: UpdateTicketRequest }>('/api/tickets/:id', async (request) => {
-      const ticket = await container.ticketStore.getTicketById(request.params.id);
-      if (!ticket) throw new TicketNotFoundError(request.params.id);
-
       const { dueDate, ...rest } = request.body;
       const changes: Parameters<TicketEntity['update']>[0] = { ...rest };
       if (dueDate !== undefined) {
         changes.dueDate = dueDate ? new Date(dueDate) : null;
       }
 
-      const diff = ticket.update(changes);
-      await container.ticketStore.saveTicket(ticket);
-
-      const silent = request.query.silent === 'true';
-      if (!silent && Object.keys(diff).length > 0) {
-        await container.ticketStore.saveActivity(TicketActivityEntity.create({
-          id: randomUUID(),
-          ticketId: ticket.id,
-          action: 'updated',
-          changes: diff,
-          source: 'web',
-        }));
-      }
-
-      // Emit semantic events for favorite/blocked/tags so the audit trail records
-      // *what* the user did, not an opaque `ticket.updated`. Remaining fields
-      // (title, priority, due date…) still go through the generic `ticket.updated`.
-      for (const event of deriveTicketUpdateEvents(ticket.id, diff, new Date())) {
-        emit(event);
-      }
+      // NB: a `status` sent here still goes through `update()` — i.e. a generic
+      // `ticket.updated`, exactly as before. Only `/move` (and native steps)
+      // route the status through `moveTo()` and emit `ticket.moved`.
+      const { ticket } = await container.applyTicketMutation.execute({
+        ticketId: request.params.id,
+        fields: changes,
+        silent: request.query.silent === 'true',
+      });
       return ticket.toDTO();
     });
 
@@ -416,29 +361,10 @@ export function ticketRoutes(container: Container) {
     app.post<{ Params: { id: string }; Body: { status: TicketStatus; position?: number } }>(
       '/api/tickets/:id/move',
       async (request) => {
-        const ticket = await container.ticketStore.getTicketById(request.params.id);
-        if (!ticket) throw new TicketNotFoundError(request.params.id);
-
-        const fromStatus = ticket.status;
-        const diff = ticket.moveTo(request.body.status);
-        if (request.body.position !== undefined) {
-          ticket.position = request.body.position;
-          ticket.updatedAt = new Date();
-        }
-
-        await container.ticketStore.saveTicket(ticket);
-
-        if (Object.keys(diff).length > 0) {
-          await container.ticketStore.saveActivity(TicketActivityEntity.create({
-            id: randomUUID(),
-            ticketId: ticket.id,
-            action: 'moved',
-            changes: diff,
-            source: 'web',
-          }));
-        }
-
-        emit({ type: 'ticket.moved', ticketId: ticket.id, fromStatus, toStatus: request.body.status, occurredAt: new Date() });
+        const { ticket } = await container.applyTicketMutation.execute({
+          ticketId: request.params.id,
+          move: { status: request.body.status, position: request.body.position },
+        });
         return ticket.toDTO();
       },
     );

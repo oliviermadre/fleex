@@ -1,6 +1,7 @@
 import type {
   WorkflowTemplate, WorkflowStep, WorkflowEdge,
 } from '@fleex/shared';
+import { validateNativeSteps } from '@fleex/shared';
 
 const SLUG_PATTERN = /^[a-z0-9_-]+$/;
 
@@ -77,6 +78,13 @@ export class WorkflowTemplateEntity {
         }
       }
     }
+
+    // Native steps: actions, parameters and `{{ … }}` references are checked at
+    // save time so a misconfigured workflow can never reach a run. Warnings
+    // (e.g. a reference to a step on a branch that may not run) are surfaced by
+    // the editor only — they don't block saving.
+    const { errors } = validateNativeSteps(input.steps, input.edges, input.entryStepId);
+    if (errors.length > 0) throw new Error(errors.join('\n'));
   }
 
   update(changes: {
