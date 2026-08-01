@@ -27,6 +27,14 @@ import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
 import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
+import {
+  FLOW_STATUSES,
+  MOVE_EVENTS_FETCH_LIMIT,
+  PANEL_EVENTS_FETCH_LIMIT,
+  STATS_CACHE_TTL_MS,
+} from '../utils/statistics/constants.js';
+import { percentile } from '../utils/statistics/math.js';
+import { buildBuckets } from '../utils/statistics/buckets.js';
 
 interface CacheEntry {
   data: StatisticsResponse;
@@ -35,14 +43,6 @@ interface CacheEntry {
 
 /** A persisted domain-event-log row, as returned by the store port. */
 type LogEntry = Awaited<ReturnType<DomainEventLogStorePort['list']>>[number];
-
-const FLOW_STATUSES = ['backlog', 'todo', 'doing', 'reviewing', 'done'] as const;
-
-function percentile(sorted: number[], p: number): number | null {
-  if (sorted.length === 0) return null;
-  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
-  return sorted[idx]!;
-}
 
 /** Execution origin for the cost-by-source breakdown. NULL is read as agentic (`sdk`). */
 function sourceOf(e: AgentExecution): 'sdk' | 'cli' {
@@ -185,7 +185,7 @@ export class GetStatisticsUseCase {
       }));
 
     // Compute time series
-    const buckets = this.buildBuckets(from, to, params.granularity);
+    const buckets = buildBuckets(from, to, params.granularity);
     const timeSeries: StatisticsTimeBucket[] = buckets.map((bucket) => {
       const bucketStart = bucket.start;
       const bucketEnd = bucket.end;
@@ -321,7 +321,7 @@ export class GetStatisticsUseCase {
     let panelEvents: LogEntry[] = [];
     if (this.domainEventLogStore) {
       panelEvents = await this.domainEventLogStore.list({
-        limit: 1000,
+        limit: PANEL_EVENTS_FETCH_LIMIT,
         eventType: 'panel.executed',
         since: from,
         until: to,
@@ -400,7 +400,7 @@ export class GetStatisticsUseCase {
     const [allRuns, fetchedMoves] = await Promise.all([
       this.workflowRunStore ? this.workflowRunStore.getAll() : Promise.resolve([]),
       this.domainEventLogStore
-        ? this.domainEventLogStore.list({ limit: 50_000, eventType: 'ticket.moved', until: to })
+        ? this.domainEventLogStore.list({ limit: MOVE_EVENTS_FETCH_LIMIT, eventType: 'ticket.moved', until: to })
         : Promise.resolve([] as LogEntry[]),
     ]);
     moveEvents = fetchedMoves;
@@ -623,48 +623,8 @@ export class GetStatisticsUseCase {
       throughputWip,
     };
 
-    // Cache for 60 seconds
-    this.cache.set(cacheKey, { data: result, expiresAt: Date.now() + 60_000 });
+    this.cache.set(cacheKey, { data: result, expiresAt: Date.now() + STATS_CACHE_TTL_MS });
 
     return result;
-  }
-
-  private buildBuckets(
-    from: Date,
-    to: Date,
-    granularity: 'day' | 'week' | 'month',
-  ): Array<{ start: Date; end: Date; label: string }> {
-    const buckets: Array<{ start: Date; end: Date; label: string }> = [];
-    let current = new Date(from);
-
-    while (current < to) {
-      const start = new Date(current);
-      let end: Date;
-      let label: string;
-
-      switch (granularity) {
-        case 'day':
-          end = new Date(current);
-          end.setDate(end.getDate() + 1);
-          label = start.toISOString().split('T')[0]!;
-          break;
-        case 'week':
-          end = new Date(current);
-          end.setDate(end.getDate() + 7);
-          label = start.toISOString().split('T')[0]!;
-          break;
-        case 'month':
-          end = new Date(current);
-          end.setMonth(end.getMonth() + 1);
-          label = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`;
-          break;
-      }
-
-      if (end > to) end = new Date(to);
-      buckets.push({ start, end, label });
-      current = end;
-    }
-
-    return buckets;
   }
 }
