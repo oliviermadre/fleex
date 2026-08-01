@@ -63,9 +63,12 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
 
   // Fetch comment, deliverable & mention counts
   useEffect(() => {
-    api.fetchTicketComments(ticketId).then((c) => setCommentCount(c.length)).catch(() => {});
-    api.fetchTicketDeliverables(ticketId).then((d) => setDeliverableCount(d.length)).catch(() => {});
-    api.fetchTicketMentions(ticketId).then((m) => setMentionCount(m.length)).catch(() => {});
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    api.fetchTicketComments(ticketId, opts).then((c) => setCommentCount(c.length)).catch(api.ignoreAbort);
+    api.fetchTicketDeliverables(ticketId, opts).then((d) => setDeliverableCount(d.length)).catch(api.ignoreAbort);
+    api.fetchTicketMentions(ticketId, opts).then((m) => setMentionCount(m.length)).catch(api.ignoreAbort);
+    return () => ac.abort();
   }, [ticketId]);
 
   // Track deliverable & mention counts via WebSocket

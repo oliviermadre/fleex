@@ -20,9 +20,11 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
   const loadTypes = useDeliverableTypesStore((s) => s.load);
 
   useEffect(() => {
-    api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
-    loadSeenDeliverables(ticketId).catch(() => {});
+    const ac = new AbortController();
+    api.fetchTicketDeliverables(ticketId, { signal: ac.signal }).then(setDeliverables).catch(api.ignoreAbort);
+    loadSeenDeliverables(ticketId).catch(api.ignoreAbort); // store writes under [ticketId] — race-free
     loadTypes();
+    return () => ac.abort();
   }, [ticketId, loadSeenDeliverables, loadTypes]);
 
   useEffect(() => {

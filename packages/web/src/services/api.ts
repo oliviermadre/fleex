@@ -52,11 +52,47 @@ function extractErrorMessage(body: string, statusText: string): string {
   return body || statusText;
 }
 
+/**
+ * Options a caller may pass to a read fetcher. Deliberately narrow: the only
+ * thing a component legitimately needs to control is cancellation.
+ */
+export interface ApiRequestOptions {
+  signal?: AbortSignal;
+}
+
+/** True when a rejection comes from an AbortController rather than a real failure. */
+export function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError';
+}
+
+/**
+ * `.catch()` handler for effect-driven fetches. Swallows the cancellation that a
+ * ticket switch deliberately triggers, logs everything else — replacing the
+ * `.catch(() => {})` that made every failure invisible.
+ *
+ * It does NOT toast: `request()` already toasts both HTTP and network errors, so
+ * toasting here too would double up.
+ */
+export function ignoreAbort(err: unknown): void {
+  if (!isAbortError(err)) console.error('[api] request failed:', err);
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: options?.body ? { 'Content-Type': 'application/json', ...options?.headers } : options?.headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: options?.body ? { 'Content-Type': 'application/json', ...options?.headers } : options?.headers,
+    });
+  } catch (err) {
+    // Deliberate cancellation: stay completely silent.
+    if (isAbortError(err)) throw err;
+    // A transport failure rejects `fetch` instead of producing a non-ok Response,
+    // so it never reached the `!res.ok` toast below — until now, a server that was
+    // simply down produced a blank screen and no diagnostic whatsoever.
+    useToastStore.getState().addToast('error', 'Network error — is the Fleex server reachable?');
+    throw err;
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     const message = extractErrorMessage(body, res.statusText);
@@ -396,8 +432,8 @@ export async function removeTicketLink(id: string, linkId: string): Promise<void
   await request<void>(`/tickets/${encodeURIComponent(id)}/links/${encodeURIComponent(linkId)}`, { method: 'DELETE' });
 }
 
-export async function fetchTicketActivity(id: string): Promise<import('@fleex/shared').TicketActivity[]> {
-  return request<import('@fleex/shared').TicketActivity[]>(`/tickets/${encodeURIComponent(id)}/activity`);
+export async function fetchTicketActivity(id: string, opts?: ApiRequestOptions): Promise<import('@fleex/shared').TicketActivity[]> {
+  return request<import('@fleex/shared').TicketActivity[]>(`/tickets/${encodeURIComponent(id)}/activity`, { signal: opts?.signal });
 }
 
 export async function openSessionFromTicket(id: string): Promise<{ sessionId: string }> {
@@ -436,8 +472,8 @@ export async function syncGithubIssue(ticketId: string): Promise<import('@fleex/
   });
 }
 
-export async function fetchPRStates(ticketId: string): Promise<Record<string, string>> {
-  return request<Record<string, string>>(`/tickets/${encodeURIComponent(ticketId)}/pr-states`);
+export async function fetchPRStates(ticketId: string, opts?: ApiRequestOptions): Promise<Record<string, string>> {
+  return request<Record<string, string>>(`/tickets/${encodeURIComponent(ticketId)}/pr-states`, { signal: opts?.signal });
 }
 
 export async function fetchBulkPRStates(refs: string[]): Promise<Record<string, string>> {
@@ -451,8 +487,8 @@ export async function fetchBulkPRStates(refs: string[]): Promise<Record<string, 
 
 // ── Ticket Mentions API ──
 
-export async function fetchTicketMentions(ticketId: string): Promise<import('@fleex/shared').TicketMention[]> {
-  return request<import('@fleex/shared').TicketMention[]>(`/tickets/${encodeURIComponent(ticketId)}/mentions`);
+export async function fetchTicketMentions(ticketId: string, opts?: ApiRequestOptions): Promise<import('@fleex/shared').TicketMention[]> {
+  return request<import('@fleex/shared').TicketMention[]>(`/tickets/${encodeURIComponent(ticketId)}/mentions`, { signal: opts?.signal });
 }
 
 export async function updateMentionStatus(mentionId: string, status: import('@fleex/shared').MentionStatus): Promise<import('@fleex/shared').TicketMention> {
@@ -472,8 +508,8 @@ export async function deleteMentionFromComment(mentionId: string): Promise<void>
 
 // ── Ticket Deliverables API ──
 
-export async function fetchTicketDeliverables(ticketId: string): Promise<import('@fleex/shared').TicketDeliverable[]> {
-  return request<import('@fleex/shared').TicketDeliverable[]>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
+export async function fetchTicketDeliverables(ticketId: string, opts?: ApiRequestOptions): Promise<import('@fleex/shared').TicketDeliverable[]> {
+  return request<import('@fleex/shared').TicketDeliverable[]>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`, { signal: opts?.signal });
 }
 
 export async function createDeliverable(
@@ -538,8 +574,8 @@ export async function changeDeliverableType(deliverableId: string, type: string)
 
 // ── Ticket Comments API ──
 
-export async function fetchTicketComments(ticketId: string): Promise<import('@fleex/shared').TicketComment[]> {
-  return request<import('@fleex/shared').TicketComment[]>(`/tickets/${encodeURIComponent(ticketId)}/comments`);
+export async function fetchTicketComments(ticketId: string, opts?: ApiRequestOptions): Promise<import('@fleex/shared').TicketComment[]> {
+  return request<import('@fleex/shared').TicketComment[]>(`/tickets/${encodeURIComponent(ticketId)}/comments`, { signal: opts?.signal });
 }
 
 export type MentionConflictAction = 'answer' | 'new_subject' | 'supersede' | 'queue';
@@ -592,9 +628,9 @@ export async function toggleDeliverableSeen(ticketId: string, deliverableId: str
   });
 }
 
-export async function fetchUnreadCounts(ticketIds?: string[]): Promise<import('@fleex/shared').TicketUnreadCounts[]> {
+export async function fetchUnreadCounts(ticketIds?: string[], opts?: ApiRequestOptions): Promise<import('@fleex/shared').TicketUnreadCounts[]> {
   const params = ticketIds?.length ? `?ticketIds=${ticketIds.join(',')}` : '';
-  return request<import('@fleex/shared').TicketUnreadCounts[]>(`/tickets/unread-counts${params}`);
+  return request<import('@fleex/shared').TicketUnreadCounts[]>(`/tickets/unread-counts${params}`, { signal: opts?.signal });
 }
 
 export async function fetchTicketAgentActivity(ticketIds: string[]): Promise<import('@fleex/shared').TicketAgentActivity[]> {

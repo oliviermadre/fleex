@@ -941,10 +941,16 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const cursorPinnedRef = useRef(false);
 
   useEffect(() => {
-    api.fetchTicketComments(ticketId).then(setComments).catch(() => {});
-    api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
-    api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
-    loadCursors(ticketId).catch(() => {});
+    // Abort on ticket change: nothing re-syncs this state afterwards (the WS only
+    // pushes deltas), so a response for the ticket we just left would overwrite
+    // the current thread and stay wrong until the next switch.
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    api.fetchTicketComments(ticketId, opts).then(setComments).catch(api.ignoreAbort);
+    api.fetchTicketMentions(ticketId, opts).then(setMentions).catch(api.ignoreAbort);
+    api.fetchTicketDeliverables(ticketId, opts).then(setDeliverables).catch(api.ignoreAbort);
+    loadCursors(ticketId).catch(api.ignoreAbort); // store writes under [ticketId] — race-free
+    return () => ac.abort();
   }, [ticketId, loadCursors]);
 
   const mentionLookup = useMemo(() => buildMentionLookup(mentions), [mentions]);

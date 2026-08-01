@@ -63,8 +63,10 @@ export function TicketDeliverables({ ticketId }: { ticketId: string }) {
   }, [ticketId, toggleDeliverableSeen]);
 
   useEffect(() => {
-    api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
+    const ac = new AbortController();
+    api.fetchTicketDeliverables(ticketId, { signal: ac.signal }).then(setDeliverables).catch(api.ignoreAbort);
     loadSeenDeliverables(ticketId);
+    return () => ac.abort();
   }, [ticketId, loadSeenDeliverables]);
 
   // Real-time updates
