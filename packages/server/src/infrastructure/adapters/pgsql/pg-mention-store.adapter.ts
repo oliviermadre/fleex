@@ -1,4 +1,4 @@
-import type { MentionStatus } from '@fleex/shared';
+import type { MentionFailureReason, MentionStatus } from '@fleex/shared';
 import { TicketMentionEntity } from '../../../domain/entities/ticket-mention.entity.js';
 import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
 import type { PgConnection } from './connection.js';
@@ -76,8 +76,9 @@ export class PgMentionStore implements MentionStorePort {
     await this.db.query(
       `INSERT INTO mentions (
         id, ticket_id, comment_id, target_agent, source_agent, target_type, execution_mode,
-        status, resolved_at, resolved_comment_id, resolved_deliverable_id, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        status, resolved_at, resolved_comment_id, resolved_deliverable_id, created_at,
+        attempt_count, failure_reason, failure_detail
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
       ON CONFLICT (id) DO UPDATE SET
         ticket_id = $2,
         comment_id = $3,
@@ -89,7 +90,10 @@ export class PgMentionStore implements MentionStorePort {
         resolved_at = $9,
         resolved_comment_id = $10,
         resolved_deliverable_id = $11,
-        created_at = $12`,
+        created_at = $12,
+        attempt_count = $13,
+        failure_reason = $14,
+        failure_detail = $15`,
       [
         mention.id,
         mention.ticketId,
@@ -103,6 +107,9 @@ export class PgMentionStore implements MentionStorePort {
         mention.resolvedCommentId,
         mention.resolvedDeliverableId,
         mention.createdAt.toISOString(),
+        mention.attemptCount,
+        mention.failureReason,
+        mention.failureDetail,
       ],
     );
   }
@@ -126,5 +133,9 @@ function rowToMention(row: Record<string, unknown>): TicketMentionEntity {
     (row.resolved_comment_id as string) ?? null,
     (row.resolved_deliverable_id as string) ?? null,
     new Date(row.created_at as string),
+    // NULL on rows written before migration 025 — read as a fresh budget.
+    (row.attempt_count as number) ?? 0,
+    (row.failure_reason as MentionFailureReason) ?? null,
+    (row.failure_detail as string) ?? null,
   );
 }

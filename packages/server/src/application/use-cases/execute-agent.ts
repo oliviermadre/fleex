@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel } from '@fleex/shared';
+import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, MentionFailureReason, EffortLevel } from '@fleex/shared';
 import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
 import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
 import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
@@ -19,13 +19,13 @@ import { parseAgentOutput } from '../utils/parse-agent-output.js';
 import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
-import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
+import { classifyCrash } from '../utils/classify-crash.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
 import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
-import type { ConfigPort } from '../ports/config.port.js';
+import { DEFAULT_AGENT_MAX_ATTEMPTS, type ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { AutoReviewWorkflowUseCase } from './auto-review-workflow.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
@@ -53,6 +53,17 @@ interface QueueItem {
   persona: AgentPersonaEntity;
   mention: TicketMentionEntity;
 }
+
+/**
+ * SDK result subtypes that end a run with nothing usable. The query loop returns
+ * these *normally* instead of throwing, so they must be caught explicitly or the
+ * run gets recorded `completed` with an empty result.
+ *
+ * `error_max_structured_output_retries` is deliberately absent: the text parser
+ * still recovers a deliverable from the raw output in that case, and turning a
+ * working degradation into a hard failure would be a regression.
+ */
+const TERMINAL_RESULT_SUBTYPES = new Set(['error_max_turns', 'error_max_budget_usd']);
 
 /**
  * Build the structured-output instructions, enumerating the workspace's
@@ -189,8 +200,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   }
 
   /**
-   * Startup recovery: mark orphaned executions as interrupted,
-   * reset their mentions to pending, and reload SDK session history.
+   * Startup recovery: mark orphaned executions as interrupted, mark their
+   * mentions `failed`, and reload SDK session history.
    */
   async init(): Promise<void> {
     // 1. Mark all 'running' executions as 'interrupted' (orphaned from previous process)
@@ -200,20 +211,22 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         mentionIds: interruptedMentionIds,
       });
 
-      // 2. Reset acknowledged mentions back to pending so they can be re-executed
+      // 2. Mark orphaned mentions `failed` — NOT back to `pending`. A restart is
+      // not a diagnosis: re-queueing here meant the next auto-trigger silently
+      // relaunched a run nobody looked at, the exact opposite of what a crash
+      // does. The user relaunches from the crash card when they choose to.
       for (const mentionId of interruptedMentionIds) {
         try {
           const mention = await this.mentionStore.getById(mentionId);
           if (mention) {
-            mention.resetToPending();
-            await this.mentionStore.save(mention);
-            this.logger.info('Reset mention to pending after interrupted execution', {
+            await this.failMention(mention, 'server_restart');
+            this.logger.info('Marked mention failed after interrupted execution', {
               mentionId,
               ticketId: mention.ticketId,
             });
           }
         } catch (err) {
-          this.logger.warn('Failed to reset mention after interrupted execution', {
+          this.logger.warn('Failed to mark mention as failed after interrupted execution', {
             mentionId,
             error: err instanceof Error ? err.message : String(err),
           });
@@ -280,8 +293,17 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    * mention parked in `waiting_for_info` — matching the user's expectation
    * that clicking ▶ on a waiting mention wakes it, exactly like posting a
    * follow-up comment does.
+   *
+   * This is the ONLY caller of `resetToPending()`. Every other former caller
+   * (timeout, cancel, boot recovery) now fails the mention instead, which is
+   * what makes "no silent relaunch" hold — see
+   * `docs/execution-recovery-policy.md`.
+   *
+   * @param opts.force bypass the attempt budget of a dead-lettered mention and
+   * give it a fresh one. Reserved for an explicit, confirmed user action: we
+   * remove the *automatic* retry loop, never the user's ability to insist.
    */
-  async runMention(mention: TicketMentionEntity): Promise<AgentExecutionResult> {
+  async runMention(mention: TicketMentionEntity, opts?: { force?: boolean }): Promise<AgentExecutionResult> {
     // waiting_for_info → wake it up (transitions to pending and enqueues)
     if (mention.status === 'waiting_for_info') {
       await this.wakeUp(mention);
@@ -298,12 +320,25 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       return { status: 'no_work', mentionIds: [] };
     }
 
-    // failed → the user hit "Relancer" on the crash card. Reset to pending and
+    // failed → the user hit "Relaunch" on the crash card. Reset to pending and
     // enqueue; the preserved session history lets the SDK resume where it
     // crashed. Clear the stale `failed` activeExecutions entry left by the crash
     // so the enqueue guard below doesn't reject the relaunch as already-running.
     if (mention.status === 'failed') {
+      // Dead-letter gate: a mention that burned its budget keeps failing for a
+      // reason. Stop one-click relaunches here so a deterministic crash can't be
+      // clicked into an endless loop; "Force relaunch" (confirmed in the UI)
+      // still gets through and starts a fresh budget.
+      if (!opts?.force && mention.isExhausted(this.maxAttempts())) {
+        return { status: 'attempts_exhausted', mentionIds: [] };
+      }
+      if (opts?.force) {
+        mention.resetAttempts();
+      }
       if (this.activeExecutions.has(mention.id)) this.activeExecutions.delete(mention.id);
+      // Drop the previous cause: the crash card must not keep showing a failure
+      // the user has just relaunched past.
+      mention.clearFailure();
       mention.resetToPending();
       await this.mentionStore.save(mention);
     }
@@ -431,12 +466,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     exec.status = 'failed';
     this.onExecutionComplete?.(exec.personaId, 'failed', mentionId);
 
-    // 3. Reset mention to pending
+    // 3. Mark the mention `failed` — NOT back to `pending`. The human decided to
+    // stop this run; re-queueing it meant the next mention to the same agent
+    // silently restarted what they had just killed. The execution above stays
+    // `interrupted` on purpose, so the audit trail still distinguishes "the
+    // human stopped it" from "the system gave up".
     try {
       const mention = await this.mentionStore.getById(mentionId);
       if (mention) {
-        mention.resetToPending();
-        await this.mentionStore.save(mention);
+        await this.failMention(mention, 'cancelled');
       }
     } catch {
       // Best-effort
@@ -520,6 +558,58 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     bus.on('mention.deleted', reDrain);
   }
 
+  /**
+   * Configured dead-letter ceiling. `0` or negative means "no cap", so a bad
+   * config can never freeze an instance.
+   */
+  private maxAttempts(): number {
+    return this.config.get().agentMaxAttempts ?? DEFAULT_AGENT_MAX_ATTEMPTS;
+  }
+
+  /**
+   * The SINGLE exit door for "this execution did not complete normally" —
+   * crash, timeout, user cancel, server restart. It transitions the mention to
+   * `failed` with its cause, persists it, and announces it.
+   *
+   * It never sends the mention back to `pending`: `handleAutoTriggerAgent`
+   * sweeps every `pending` mention of a persona, so a silent re-queue turns the
+   * next unrelated mention to that agent into an invisible retry of a run
+   * nobody diagnosed. See `docs/execution-recovery-policy.md`.
+   *
+   * Callers must invoke it AFTER `completeExecution`, so the cockpit reconcile
+   * already sees the execution settled when the crash card renders.
+   */
+  private async failMention(
+    mention: TicketMentionEntity,
+    reason: MentionFailureReason,
+    detail?: string,
+  ): Promise<void> {
+    // A `resolved` / `waiting_for_info` mention never fails retroactively.
+    if (mention.status !== 'pending' && mention.status !== 'acknowledged') return;
+
+    mention.markFailed(reason, detail);
+    try {
+      await this.mentionStore.save(mention);
+    } catch (saveErr) {
+      this.logger.error('Failed to persist crashed mention status', {
+        mentionId: mention.id,
+        error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+      });
+    }
+
+    this.eventBus?.emit({
+      type: 'mention.execution_failed',
+      mentionId: mention.id,
+      ticketId: mention.ticketId,
+      targetAgent: mention.targetAgent,
+      reason,
+      ...(mention.failureDetail ? { detail: mention.failureDetail } : {}),
+      attemptCount: mention.attemptCount,
+      maxAttempts: this.maxAttempts(),
+      occurredAt: new Date(),
+    });
+  }
+
   /** Resolve human mention name: persona override → global config */
   private resolveHumanMentionName(persona: AgentPersonaEntity): string | null {
     if (persona.humanMentionName) return persona.humanMentionName;
@@ -566,6 +656,22 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const remaining: QueueItem[] = [];
     for (const item of snapshot) {
       const key = `${item.persona.name}:${item.mention.ticketId}`;
+      // Guard rail: a dead-lettered mention must never reach the SDK. Reaching
+      // here means something re-queued it without going through `runMention`,
+      // i.e. a hole in the policy — so we refuse it loudly rather than let the
+      // crash loop the budget exists to break run one more time.
+      if (item.mention.isExhausted(this.maxAttempts())) {
+        this.logger.warn('Refusing to dispatch a mention that exhausted its attempt budget', {
+          mentionId: item.mention.id,
+          ticketId: item.mention.ticketId,
+          targetAgent: item.mention.targetAgent,
+          attemptCount: item.mention.attemptCount,
+          maxAttempts: this.maxAttempts(),
+        });
+        this.claimedMentionIds.delete(item.mention.id);
+        await this.failMention(item.mention, item.mention.failureReason ?? 'unknown');
+        continue;
+      }
       // Gate: skip (keep queued) if the lane is occupied in-memory (covers the
       // dispatch→acknowledge window) OR the DB shows a live/parked thread for
       // this (agent, ticket). The DB read is what makes `waiting_for_info` hold
@@ -686,6 +792,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       });
       return;
     }
+
+    // Charge one attempt HERE — before the worktree is created, before the SDK
+    // is touched. Charging at acknowledge would leave failures that never reach
+    // the SDK (workspace error, quota, auth) uncounted, i.e. infinitely
+    // retryable — precisely the crash loop the budget exists to break.
+    // Internal retries that stay inside this dispatch (stale-resume) do not
+    // charge again. See `docs/execution-recovery-policy.md`.
+    mention.startAttempt();
+    await this.mentionStore.save(mention);
 
     const executionId = randomUUID();
     const abortController = new AbortController();
@@ -852,6 +967,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       let sdkCacheCreationTokens: number | undefined;
       let cliStderr = '';
       let resultSubtype: string | undefined;
+      let lastAssistantError: string | undefined;
 
       {
         const queryOptions = buildSdkOptions(effectiveMode, {
@@ -921,8 +1037,13 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         sdkCacheCreationTokens = streamResult.metrics.cacheCreationTokens;
         cliStderr = streamResult.stderr ?? '';
         resultSubtype = streamResult.resultSubtype;
+        lastAssistantError = streamResult.lastAssistantError;
 
         if (streamResult.resultSubtype === 'error_max_structured_output_retries') {
+          // Deliberately NOT a hard failure: the text parser below still
+          // recovers a deliverable from the raw result most of the time. Only a
+          // subtype that leaves nothing usable (see TERMINAL_RESULT_SUBTYPES)
+          // ends the run.
           this.logger.warn('SDK structured output retries exhausted, falling back to parser', {
             executionId,
             persona: persona.name,
@@ -940,14 +1061,24 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           // Already cleaned up by cancelExecution()
           return;
         }
-        // Timeout path — cancelExecution didn't run, we need to do cleanup
-        const reason = abortController.signal.reason instanceof Error && abortController.signal.reason.message === 'timeout'
+        // Timeout path — cancelExecution didn't run, we need to do cleanup.
+        const reason: MentionFailureReason = abortController.signal.reason instanceof Error && abortController.signal.reason.message === 'timeout'
           ? 'timeout' : 'cancelled';
-        await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        // A timed-out run is a failure, not a pause: the execution is recorded
+        // `failed`. A cancel keeps `interrupted` so the audit trail still says
+        // the human stopped it. Either way the MENTION goes to `failed` — it
+        // used to go back to `pending`, which made the next unrelated mention
+        // to this agent silently re-run it.
+        const executionStatus = reason === 'timeout' ? 'failed' : 'interrupted';
+        await emitEvent('execution_end', { status: executionStatus, reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
+        await this.agentEventStore.completeExecution(executionId, executionStatus, { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
-        mention.resetToPending();
-        await this.mentionStore.save(mention);
+        // Keep the session so a relaunch resumes where the run was cut off.
+        if (sdkSessionId) {
+          this.sessionHistory.set(sessionKey, sdkSessionId);
+          await this.agentEventStore.updateSessionId(executionId, sdkSessionId);
+        }
+        await this.failMention(mention, reason);
         this.onExecutionComplete?.(persona.id, 'failed', mention.id);
         this.logger.info(`Agent execution ${reason}`, { executionId, persona: persona.name });
         return;
@@ -972,39 +1103,36 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         await emitEvent('execution_end', { status: 'failed', reason: 'subprocess_crash', ticketId: mention.ticketId, model: resolved.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
-        // markFailed (not resetToPending): a silent subprocess crash sent back to
-        // `pending` is exactly the "invisible crash" bug this ticket fixes. Mark it
-        // `failed` so the crash card surfaces it and offers a one-click relaunch.
-        mention.markFailed();
-        await this.mentionStore.save(mention);
-        // Emit AFTER completeExecution + save so the cockpit reconcile sees the
-        // failed execution (→ idle) and the crash card renders with the reason.
-        this.eventBus?.emit({
-          type: 'mention.execution_failed',
-          mentionId: mention.id,
-          ticketId: mention.ticketId,
-          targetAgent: mention.targetAgent,
-          reason: 'subprocess',
-          message: CRASH_MESSAGES.subprocess!,
-          occurredAt: new Date(),
-        });
+        // Fail (never re-queue): a silent subprocess crash sent back to `pending`
+        // is exactly the "invisible crash" bug this policy fixes. Called AFTER
+        // completeExecution so the cockpit reconcile sees the execution settled
+        // (→ idle) by the time the crash card renders. The stderr summary rides
+        // along as raw technical detail — never as user-facing copy.
+        await this.failMention(mention, 'subprocess', stderrSummary || undefined);
         this.onExecutionComplete?.(persona.id, 'failed', mention.id);
         return;
       }
 
-      // 11a-bis. Detect the SDK "max turns" limit (150). The query loop returns
-      // normally with `error_max_turns` rather than throwing, so we must treat it
-      // as a crash here — otherwise the run would be recorded as `completed` and
-      // the mention would stay stuck in `acknowledged`. The crash card offers a
-      // one-click relaunch, which resumes the session to continue where it stopped.
-      if (resultSubtype === 'error_max_turns') {
-        const { reason, message } = classifyCrash('error_max_turns', { acknowledged: true });
-        this.logger.warn('SDK reached max turns — recording as a recoverable crash', {
+      // 11a-bis. Terminal SDK budget limits. The query loop returns *normally*
+      // with an error subtype instead of throwing, so without this the run would
+      // be recorded `completed` and the mention would stay stuck in
+      // `acknowledged`. The crash card offers a one-click relaunch, which
+      // resumes the session to continue where it stopped.
+      if (resultSubtype && TERMINAL_RESULT_SUBTYPES.has(resultSubtype)) {
+        const { reason, detail } = classifyCrash({
+          assistantError: lastAssistantError,
+          resultSubtype,
+          raw: resultText,
+          acknowledged: true,
+        });
+        this.logger.warn('SDK returned a terminal error subtype — recording as a recoverable crash', {
           executionId,
           persona: persona.name,
           mentionId: mention.id,
+          resultSubtype,
+          reason,
         });
-        await emitEvent('error', { error: message, ticketId: mention.ticketId });
+        await emitEvent('error', { error: detail ?? resultSubtype, ticketId: mention.ticketId });
         await emitEvent('execution_end', { status: 'failed', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
         await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
         // Persist the session so the relaunch can resume from where it stopped.
@@ -1013,18 +1141,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           await this.agentEventStore.updateSessionId(executionId, sdkSessionId);
         }
         this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
-        mention.markFailed();
-        await this.mentionStore.save(mention);
-        // Emit AFTER completeExecution so the cockpit reconcile computes `idle`.
-        this.eventBus?.emit({
-          type: 'mention.execution_failed',
-          mentionId: mention.id,
-          ticketId: mention.ticketId,
-          targetAgent: mention.targetAgent,
-          reason,
-          message,
-          occurredAt: new Date(),
-        });
+        await this.failMention(mention, reason, detail);
         this.onExecutionComplete?.(persona.id, 'failed', mention.id);
         return;
       }
@@ -1275,10 +1392,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // workspace error, usage limit, not logged in) or mid-run (post-acknowledge:
       // usage limit, subprocess crash). Either way the mention would otherwise stay
       // stuck (`pending`/`acknowledged`) with the UI spinning forever. Classify the
-      // crash into a stable reason + remediation, mark the mention `failed`, and
-      // surface it so the crash card can offer a one-click relaunch.
+      // crash into a stable reason, mark the mention `failed`, and surface it so
+      // the crash card can offer a one-click relaunch.
+      //
+      // This is the one path with no structured SDK code to lean on — the error
+      // was *thrown* by the CLI, so `classifyCrash` falls back to its regex layer
+      // over the raw text (which already carries the appended stderr).
       const rawError = err instanceof Error ? err.message : String(err);
-      const { reason, message } = classifyCrash(rawError, { acknowledged });
+      const { reason, detail } = classifyCrash({ raw: rawError, acknowledged });
 
       // Emit error event (err.message already carries the CLI stderr, appended
       // by streamSdkQuery) followed by execution_end so every log view flips out
@@ -1305,34 +1426,13 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         // Don't let event store errors mask the original error
       }
 
-      // Persist the `failed` status so the crash card survives a reload. A
-      // `resolved`/`waiting_for_info` mention is never failed retroactively
-      // (markFailed only acts on `pending`/`acknowledged`).
-      try {
-        mention.markFailed();
-        await this.mentionStore.save(mention);
-      } catch (saveErr) {
-        this.logger.error('Failed to persist crashed mention status', {
-          executionId,
-          mentionId: mention.id,
-          error: saveErr instanceof Error ? saveErr.message : String(saveErr),
-        });
-      }
-
       this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
 
-      // Emit AFTER completeExecution + save so the cockpit reconcile sees the
-      // execution as `failed` (→ idle) and the client can flip the mention to
-      // `failed` and render the crash card with the live reason/message.
-      this.eventBus?.emit({
-        type: 'mention.execution_failed',
-        mentionId: mention.id,
-        ticketId: mention.ticketId,
-        targetAgent: mention.targetAgent,
-        reason,
-        message,
-        occurredAt: new Date(),
-      });
+      // Persist the `failed` status (so the crash card survives a reload) and
+      // announce it. Emitted AFTER completeExecution + save so the cockpit
+      // reconcile sees the execution as `failed` (→ idle) and the client renders
+      // the crash card with the right reason.
+      await this.failMention(mention, reason, detail);
 
       this.onExecutionComplete?.(persona.id, 'failed', mention.id);
       this.logger.error('Agent execution failed', {
@@ -1573,8 +1673,15 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       clearTimeout(timeoutHandle);
 
       if (abortController.signal.aborted) {
-        await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId, model: persona.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: persona.model, effectiveMode });
+        // Same policy as a mention run: a timed-out skill is a failure, not a
+        // pause. It used to be recorded `interrupted` with a hardcoded
+        // `timeout` reason even when the user had cancelled it, which left the
+        // log view showing a neutral stop for a run that had actually died.
+        const reason = abortController.signal.reason instanceof Error && abortController.signal.reason.message === 'timeout'
+          ? 'timeout' : 'cancelled';
+        const status = reason === 'timeout' ? 'failed' : 'interrupted';
+        await emitEvent('execution_end', { status, reason, ticketId, model: persona.model, effectiveMode });
+        await this.agentEventStore.completeExecution(executionId, status, { model: persona.model, effectiveMode });
         return;
       }
 
@@ -1873,6 +1980,19 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       mentionId: workflowExecKey, executionId, personaId: persona.id,
       ticketId: params.ticketId, status: 'running', abortController,
     });
+    // Bound the run like every other SDK path. Without this a stuck step held a
+    // global SDK slot forever, stalling the workflow and every queued execution
+    // behind it. Armed after `sdkLimiter.acquire()` above, so time spent waiting
+    // for a slot never counts toward the timeout.
+    const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
+    let timedOut = false;
+    const timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      this.logger.warn('Workflow step execution timed out', {
+        executionId, persona: persona.name, ticketId: params.ticketId, timeoutMs,
+      });
+      abortController.abort(new Error('timeout'));
+    }, timeoutMs);
     let finalStatus: 'completed' | 'failed' = 'completed';
     try {
       const humanName = this.resolveHumanMentionName(persona);
@@ -1983,7 +2103,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         // mark the step cancelled rather than failed.
         if (abortController.signal.aborted) {
           finalStatus = 'failed';
-          throw new ExecutionCancelledError(executionId);
+          throw timedOut ? await this.failWorkflowStepOnTimeout(executionId, persona.model, emitEvent) : new ExecutionCancelledError(executionId);
         }
         await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
         await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
@@ -1994,7 +2114,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // The SDK can also resolve normally on abort (yields empty result).
       if (abortController.signal.aborted) {
         finalStatus = 'failed';
-        throw new ExecutionCancelledError(executionId);
+        throw timedOut ? await this.failWorkflowStepOnTimeout(executionId, persona.model, emitEvent) : new ExecutionCancelledError(executionId);
       }
 
       // Persist the SDK session id so this workflow step is linked to its
@@ -2030,12 +2150,38 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       if (!(err instanceof ExecutionCancelledError)) finalStatus = 'failed';
       throw err;
     } finally {
+      clearTimeout(timeoutHandle);
       // Parity with mention/skill paths: leave a terminal in-memory marker so
       // getStatus()/cancelExecution() never treat a finished step as running.
       const exec = this.activeExecutions.get(workflowExecKey);
       if (exec) exec.status = finalStatus;
       releaseSdkSlot();
     }
+  }
+
+  /**
+   * Settle a timed-out workflow step and build the error to throw for it.
+   *
+   * Deliberately NOT an `ExecutionCancelledError`: the orchestrator reads that
+   * as "a human cancelled this" and marks the step cancelled. A timeout is a
+   * failure, so the step lands in `failed` and the existing FailedStepRetryPanel
+   * offers a manual retry — same policy as a timed-out mention, no auto-retry.
+   */
+  private async failWorkflowStepOnTimeout(
+    executionId: string,
+    model: string | undefined,
+    emitEvent: (eventType: AgentEventType, data: unknown) => Promise<void>,
+  ): Promise<Error> {
+    try {
+      await emitEvent('execution_end', { status: 'failed', reason: 'timeout' });
+      await this.agentEventStore.completeExecution(executionId, 'failed', { model });
+    } catch (err) {
+      this.logger.error('Failed to record workflow step timeout', {
+        executionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return new Error('Workflow step timed out');
   }
 
   private async composeWorkflowUserPrompt(

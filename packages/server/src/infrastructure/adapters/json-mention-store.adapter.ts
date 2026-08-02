@@ -1,6 +1,11 @@
 import { join } from 'node:path';
 import { FLEEX_DIR } from '@fleex/shared';
-import type { MentionExecutionMode, MentionStatus, MentionTargetType } from '@fleex/shared';
+import type {
+  MentionExecutionMode,
+  MentionFailureReason,
+  MentionStatus,
+  MentionTargetType,
+} from '@fleex/shared';
 import { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
 import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
@@ -19,6 +24,10 @@ interface SerializedMention {
   resolvedCommentId: string | null;
   resolvedDeliverableId: string | null;
   createdAt: string;
+  /** Optional: mentions written before the attempt budget existed have none. */
+  attemptCount?: number;
+  failureReason?: MentionFailureReason | null;
+  failureDetail?: string | null;
 }
 
 export class JsonMentionStore implements MentionStorePort {
@@ -116,6 +125,9 @@ export class JsonMentionStore implements MentionStorePort {
           m.status, m.resolvedAt ? new Date(m.resolvedAt) : null,
           m.resolvedCommentId, m.resolvedDeliverableId,
           new Date(m.createdAt),
+          m.attemptCount ?? 0,
+          m.failureReason ?? null,
+          m.failureDetail ?? null,
         ));
       }
       this.logger.info('Mention store loaded', { count: this.mentions.size });
@@ -136,6 +148,9 @@ export class JsonMentionStore implements MentionStorePort {
         resolvedCommentId: m.resolvedCommentId,
         resolvedDeliverableId: m.resolvedDeliverableId,
         createdAt: m.createdAt.toISOString(),
+        attemptCount: m.attemptCount,
+        failureReason: m.failureReason,
+        failureDetail: m.failureDetail,
       }));
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));
     } catch (err) {

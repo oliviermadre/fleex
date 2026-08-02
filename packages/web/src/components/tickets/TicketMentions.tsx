@@ -12,6 +12,7 @@ import { useTicketStore } from '../../stores/ticketStore';
 import { isMissingRepo } from '../../lib/repoStatus';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { crashReasonCopy, crashReasonLabel, type LiveFailure } from './crashedMentionCards';
 import * as api from '../../services/api';
 
 function relativeTime(dateStr: string): string {
@@ -182,9 +183,10 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
   }, [ticketId]);
 
-  // Per-mention startup failures (server emitted mention:execution_failed
-  // before the mention could reach `acknowledged`). Keyed by mentionId.
-  const [failures, setFailures] = useState<Record<string, { reason: string; message: string }>>({});
+  // Per-mention failures from the live `mention:execution_failed` event, keyed
+  // by mentionId. The server sends a reason code only — the label and the
+  // remediation are rendered here (see crashedMentionCards.ts).
+  const [failures, setFailures] = useState<Record<string, LiveFailure>>({});
 
   // Real-time updates
   useEffect(() => {
@@ -222,9 +224,14 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
           if (d.ticketId === ticketId) {
             setFailures((prev) => ({
               ...prev,
-              [d.mentionId]: { reason: d.reason, message: d.message },
+              [d.mentionId]: {
+                reason: d.reason,
+                ...(d.detail ? { detail: d.detail } : {}),
+                attemptCount: d.attemptCount,
+                maxAttempts: d.maxAttempts,
+              },
             }));
-            useToastStore.getState().addToast('error', `${d.targetAgent}: ${d.message}`);
+            useToastStore.getState().addToast('error', `${d.targetAgent}: ${crashReasonLabel(d.reason)}`);
           }
         } else if (msg.type === 'mention:deleted') {
           const d = msg.data as { id: string; ticketId: string };
@@ -498,14 +505,16 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                     disabled={m.status === 'acknowledged' || m.status === 'resolved'}
                   />
 
-                  {/* Startup-failure chip — last server attempt could not start the agent */}
+                  {/* Failure chip — the last run did not complete normally. The
+                      label names the actual cause (timeout, quota, stopped…);
+                      the tooltip carries the remediation. */}
                   {failures[m.id] && (
                     <span
                       className={`inline-flex max-w-[220px] items-center gap-1 truncate rounded-full px-2 py-0.5 text-[10px] font-medium ${tint('red')}`}
-                      title={failures[m.id]!.message}
+                      title={crashReasonCopy(failures[m.id]!.reason).remediation}
                     >
                       <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${tintClasses('red').solid}`} />
-                      <span className="truncate">Failed to start</span>
+                      <span className="truncate">{crashReasonLabel(failures[m.id]!.reason)}</span>
                     </span>
                   )}
 

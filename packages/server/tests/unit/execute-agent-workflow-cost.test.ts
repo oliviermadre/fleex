@@ -45,6 +45,9 @@ function makeUseCase() {
   // acquire() returns the (idempotent) release fn the method calls in finally.
   const sdkLimiter = { acquire: async () => () => {} } as never;
   const logger = { info() {}, warn() {}, error() {}, debug() {} } as never;
+  // The step run is now bounded by `agentExecutionTimeout` like every other SDK
+  // path; an empty config keeps the 30 min default, far beyond this test.
+  const config = { get: () => ({}) } as never;
   const stub = {} as never;
 
   const useCase = new ExecuteAgentUseCase(
@@ -57,7 +60,7 @@ function makeUseCase() {
     agentEventStore,  // 7 agentEventStore
     stub,           // 8 ticketStore
     stub,           // 9 createWorktree
-    stub,           // 10 config
+    config,         // 10 config
     logger,         // 11 logger
     stub,           // 12 autoReviewWorkflow
     sdkLimiter,     // 13 sdkLimiter

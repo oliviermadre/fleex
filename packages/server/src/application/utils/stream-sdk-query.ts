@@ -34,6 +34,13 @@ export interface StreamSdkQueryResult {
   structuredOutput: Record<string, unknown> | null;
   /** Subtype of the final result message (e.g. `error_max_structured_output_retries`). */
   resultSubtype?: string;
+  /**
+   * Last `SDKAssistantMessage.error` seen on the stream — a structured SDK code
+   * (`rate_limit`, `authentication_failed`, …). It is the most trustworthy crash
+   * signal available, ranked above the regex layer in `classifyCrash`. The last
+   * one wins: a run can recover from a transient error and die of another cause.
+   */
+  lastAssistantError?: string;
   metrics: SdkQueryMetrics;
   /** Total SDK messages iterated (useful to detect a zero-message crash). */
   messageCount: number;
@@ -82,6 +89,7 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
   let resultText = '';
   let structuredOutput: Record<string, unknown> | null = null;
   let resultSubtype: string | undefined;
+  let lastAssistantError: string | undefined;
   let messageCount = 0;
   const metrics: SdkQueryMetrics = {};
 
@@ -134,6 +142,11 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
         await emitEvent('turn_start', { sessionId });
       }
 
+      // Structured SDK error code, when the assistant reports one.
+      if (msg['type'] === 'assistant' && typeof msg['error'] === 'string' && msg['error']) {
+        lastAssistantError = msg['error'] as string;
+      }
+
       if ('result' in message) {
         resultText = (message as { result: string }).result;
         resultSubtype = msg['subtype'] as string | undefined;
@@ -180,5 +193,5 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
     throw err;
   }
 
-  return { sessionId, resultText, structuredOutput, resultSubtype, metrics, messageCount, stderr: stderrBuf };
+  return { sessionId, resultText, structuredOutput, resultSubtype, lastAssistantError, metrics, messageCount, stderr: stderrBuf };
 }

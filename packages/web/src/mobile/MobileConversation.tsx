@@ -24,6 +24,7 @@ import { useToastStore } from '../stores/toastStore';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { ModelSelect } from '../components/agents/ModelSelect';
+import { isMentionExhausted } from '../components/tickets/crashedMentionCards';
 import { MobileDeliverableReader } from './MobileDeliverableReader';
 import { MentionTypeIcon } from '../lib/primitives';
 import { tint } from '../lib/tints';
@@ -403,14 +404,23 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
     : '';
   const hasOverrides = !!(ticket.modelOverride || ticket.effortOverride || ticket.fastMode);
 
+  // A mention that spent its attempt budget is refused by the server (409); only
+  // an explicit `force` gets through. Ask before spending it, so the user meets a
+  // confirmation rather than a silent no-op.
   const runMention = useCallback(async (m: TicketMention) => {
+    const force = isMentionExhausted(m);
+    if (force && !window.confirm(
+      `${m.targetAgent} a échoué ${m.attemptCount} fois d'affilée. Forcer une nouvelle exécution ?`,
+    )) return;
     setMentionSheet(null);
     try {
-      const result = await api.runMention(m.id);
+      const result = await api.runMention(m.id, { force });
       if (result.status === 'no_work') {
         useToastStore.getState().addToast('info', `Rien à exécuter pour ${m.targetAgent}`);
       } else if (result.status === 'already_running') {
         useToastStore.getState().addToast('info', `${m.targetAgent} tourne déjà`);
+      } else if (result.status === 'attempts_exhausted') {
+        useToastStore.getState().addToast('error', `${m.targetAgent} a épuisé ses tentatives`);
       }
     } catch {
       // toast raised by the api layer
@@ -800,7 +810,9 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                   onClick={() => runMention(mentionSheet)}
                   className="rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)]"
                 >
-                  ▶ Relancer l'exécution
+                  {isMentionExhausted(mentionSheet)
+                    ? `⚠ Forcer l'exécution (${mentionSheet.attemptCount}/${mentionSheet.maxAttempts})`
+                    : "▶ Relancer l'exécution"}
                 </button>
               )}
               {mentionSheet.status !== 'resolved' && (

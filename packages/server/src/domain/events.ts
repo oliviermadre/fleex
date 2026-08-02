@@ -1,4 +1,4 @@
-import type { MentionTargetType, MentionExecutionMode, HookResult } from '@fleex/shared';
+import type { MentionTargetType, MentionExecutionMode, MentionFailureReason, HookResult } from '@fleex/shared';
 
 // ── Base ──
 
@@ -188,23 +188,30 @@ export interface MentionDeletedEvent extends DomainEvent {
 }
 
 /**
- * Emitted when an agent execution triggered by a mention crashes — either at
- * startup (pre-`acknowledged`: workspace error, usage limit, not logged in) or
- * mid-run (post-`acknowledged`: usage limit, max turns, subprocess crash). In
- * every case the mention is transitioned to `failed` (see `markFailed`) and a
- * companion `mention:updated` carries the new status, so the crash card renders
- * and survives a reload. The UI uses this event's `reason`/`message` to show the
- * precise remediation and offer a one-click relaunch.
+ * Emitted when an agent execution triggered by a mention did not complete
+ * normally — a crash (pre- or post-`acknowledged`), a timeout, a user cancel or
+ * a server restart. In every case the mention is transitioned to `failed` (see
+ * `markFailed`) and a companion `mention:updated` carries the new status, so the
+ * crash card renders and survives a reload.
+ *
+ * This event is an *accelerator*, not the source of truth: the reason is also
+ * persisted on the mention. It carries no user-facing copy — labels and
+ * remediations live in the web client, in English (see
+ * `docs/execution-recovery-policy.md`).
  */
 export interface MentionExecutionFailedEvent extends DomainEvent {
   type: 'mention.execution_failed';
   mentionId: string;
   ticketId: string;
   targetAgent: string;
-  /** Short machine code: 'usage_limit' | 'not_authenticated' | 'max_turns' | 'startup_error' | 'unknown' | ... */
-  reason: string;
-  /** Human-readable message for the UI to display verbatim. */
-  message: string;
+  /** Closed machine code from the `MentionFailureReason` union. */
+  reason: MentionFailureReason;
+  /** Raw technical detail (stderr excerpt, SDK error text). Never translated. */
+  detail?: string;
+  /** Executions started since the last success — drives the "Attempt 2/3" badge. */
+  attemptCount: number;
+  /** Configured ceiling; `0` means no cap. Past it, only Force relaunch works. */
+  maxAttempts: number;
 }
 
 export interface MentionExecutionModeChangedEvent extends DomainEvent {

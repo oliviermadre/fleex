@@ -13,6 +13,7 @@ import { deriveTicketUpdateEvents } from '../../domain/services/ticket-audit-eve
 import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
 import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
+import { DEFAULT_AGENT_MAX_ATTEMPTS } from '../../application/ports/config.port.js';
 import type { Container } from '../container.js';
 
 export function ticketRoutes(container: Container) {
@@ -919,12 +920,21 @@ export function ticketRoutes(container: Container) {
 
     // ── Mentions (web) ──
 
+    /**
+     * Attempt ceiling advertised on the mention DTOs this file serves. These are
+     * the web surfaces that render the crash card, so they must carry it: on a
+     * cold reload the WS event is long gone, and without the ceiling the card
+     * cannot tell "Attempt 2/3" from a dead-lettered mention that needs a Force
+     * relaunch. Read per request — Settings can change it at runtime.
+     */
+    const maxAttempts = () => container.config.get().agentMaxAttempts ?? DEFAULT_AGENT_MAX_ATTEMPTS;
+
     app.get<{ Params: { id: string } }>('/api/tickets/:id/mentions', async (request) => {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const mentions = await container.mentionStore.getByTicket(request.params.id);
-      return mentions.map((m) => m.toDTO());
+      return mentions.map((m) => m.toDTO(maxAttempts()));
     });
 
     // ── Mention management (web) ──
@@ -955,18 +965,34 @@ export function ticketRoutes(container: Container) {
         emit({ type: 'mention.acknowledged', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, occurredAt: now });
       } else {
         // Generic broadcast for other status changes (e.g. pending)
-        container.ticketBroadcast('mention:updated', mention.toDTO());
+        container.ticketBroadcast('mention:updated', mention.toDTO(maxAttempts()));
       }
 
-      return mention.toDTO();
+      return mention.toDTO(maxAttempts());
     });
 
     // POST /api/mentions/:id/run — run this specific mention (▶ button).
     // Mention-scoped: wakes a waiting_for_info mention, enqueues a pending one.
-    app.post<{ Params: { id: string } }>('/api/mentions/:id/run', async (request) => {
+    //
+    // `?force=true` bypasses the attempt budget of a dead-lettered mention and
+    // gives it a fresh one. The UI only sends it behind an explicit
+    // confirmation: the policy removes the *automatic* retry loop, not the
+    // user's ability to insist. See `docs/execution-recovery-policy.md`.
+    app.post<{ Params: { id: string }; Querystring: { force?: string } }>('/api/mentions/:id/run', async (request, reply) => {
       const mention = await container.mentionStore.getById(request.params.id);
       if (!mention) throw new MentionNotFoundError(request.params.id);
-      return container.executeAgent.runMention(mention);
+      const force = request.query.force === 'true';
+      const result = await container.executeAgent.runMention(mention, { force });
+      if (result.status === 'attempts_exhausted') {
+        // 409, not 500: the request is well-formed, the mention's state refuses
+        // it. The client turns this into the "Force relaunch" affordance.
+        return reply.code(409).send({
+          error: 'attempts_exhausted',
+          attemptCount: mention.attemptCount,
+          maxAttempts: maxAttempts(),
+        });
+      }
+      return result;
     });
 
     // PATCH /api/mentions/:id/execution-mode — update mention execution mode
@@ -980,7 +1006,7 @@ export function ticketRoutes(container: Container) {
       const previousMode = mention.executionMode;
       mention.executionMode = request.body.executionMode;
       await container.mentionStore.save(mention);
-      container.ticketBroadcast('mention:updated', mention.toDTO());
+      container.ticketBroadcast('mention:updated', mention.toDTO(maxAttempts()));
 
       if (previousMode !== request.body.executionMode) {
         emit({

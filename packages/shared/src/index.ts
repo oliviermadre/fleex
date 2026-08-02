@@ -140,6 +140,7 @@ export type {
   MentionStatus,
   MentionTargetType,
   MentionExecutionMode,
+  MentionFailureReason,
   TicketMention,
   MentionExecutionFailedPayload,
   TicketDeliverable,

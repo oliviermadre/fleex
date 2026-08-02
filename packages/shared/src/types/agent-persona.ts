@@ -44,7 +44,14 @@ export interface AgentStructuredOutput {
   mentionStatus?: 'resolved' | 'waiting_for_info';
 }
 
-export type AgentExecutionStatus = 'no_work' | 'started' | 'already_running';
+/**
+ * `attempts_exhausted`: the mention burned its attempt budget
+ * (`AppConfig.agentMaxAttempts`) and is dead-lettered. It is NOT a mention
+ * status — dead-letter is a derived predicate — just the answer to "can I
+ * relaunch this in one click?". Only a confirmed Force relaunch gets past it.
+ * See `docs/execution-recovery-policy.md`.
+ */
+export type AgentExecutionStatus = 'no_work' | 'started' | 'already_running' | 'attempts_exhausted';
 
 export interface AgentExecutionResult {
   readonly status: AgentExecutionStatus;

@@ -16,6 +16,7 @@ import type { AutoReviewWorkflowUseCase } from '../../src/application/use-cases/
 import type { ExecuteAgentUseCase } from '../../src/application/use-cases/execute-agent.js';
 import type { WakeWaitingAgentsUseCase } from '../../src/application/use-cases/wake-waiting-agents.js';
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
+import { DEFAULT_AGENT_MAX_ATTEMPTS } from '../../src/application/ports/config.port.js';
 
 function createMocks() {
   const personaStore: PersonaStorePort = {
@@ -174,10 +175,15 @@ describe('DomainEventListener', () => {
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(ticketBroadcast).toHaveBeenCalledWith('mention:created', mention.toDTO());
+      // No `config` in the mocks → the DTO advertises the default ceiling.
+      expect(ticketBroadcast).toHaveBeenCalledWith('mention:created', mention.toDTO(DEFAULT_AGENT_MAX_ATTEMPTS));
     });
 
-    it('should broadcast mention.execution_failed with reason and message', async () => {
+    // WHY: the server must ship a machine `reason` plus raw technical `detail`
+    // and the attempt budget — never user-facing copy. The label and the
+    // remediation are rendered client-side, in English, so a payload carrying a
+    // `message` would reintroduce server-side (French) copy in an English UI.
+    it('should broadcast mention.execution_failed with a reason code, raw detail and the attempt budget', async () => {
       const mentionId = randomUUID();
       const ticketId = randomUUID();
 
@@ -187,7 +193,9 @@ describe('DomainEventListener', () => {
         ticketId,
         targetAgent: 'tldr',
         reason: 'startup_error',
-        message: 'Could not create workspace directory for ticket',
+        detail: 'Could not create workspace directory for ticket',
+        attemptCount: 1,
+        maxAttempts: 3,
         occurredAt: new Date(),
       });
       await new Promise((r) => setTimeout(r, 10));
@@ -197,7 +205,38 @@ describe('DomainEventListener', () => {
         ticketId,
         targetAgent: 'tldr',
         reason: 'startup_error',
-        message: 'Could not create workspace directory for ticket',
+        detail: 'Could not create workspace directory for ticket',
+        attemptCount: 1,
+        maxAttempts: 3,
+      });
+    });
+
+    // WHY: `detail` is optional (a timeout has no technical text to show). It
+    // must be omitted rather than sent as undefined, so the card's "Technical
+    // details" block stays collapsed instead of rendering an empty section.
+    it('omits the detail entirely when the failure carries none', async () => {
+      const mentionId = randomUUID();
+      const ticketId = randomUUID();
+
+      eventBus.emit({
+        type: 'mention.execution_failed',
+        mentionId,
+        ticketId,
+        targetAgent: 'tldr',
+        reason: 'timeout',
+        attemptCount: 2,
+        maxAttempts: 3,
+        occurredAt: new Date(),
+      });
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(ticketBroadcast).toHaveBeenCalledWith('mention:execution_failed', {
+        mentionId,
+        ticketId,
+        targetAgent: 'tldr',
+        reason: 'timeout',
+        attemptCount: 2,
+        maxAttempts: 3,
       });
     });
 
@@ -216,7 +255,7 @@ describe('DomainEventListener', () => {
         sourceAgent: 'user',
       });
       mention.acknowledge();
-      mention.markFailed();
+      mention.markFailed('usage_limit');
       expect(mention.status).toBe('failed');
       vi.mocked(mocks.mentionStore.getById).mockResolvedValue(mention);
 
@@ -226,12 +265,13 @@ describe('DomainEventListener', () => {
         ticketId,
         targetAgent: 'tldr',
         reason: 'usage_limit',
-        message: "Quota d'usage épuisé.",
+        attemptCount: 1,
+        maxAttempts: 3,
         occurredAt: new Date(),
       });
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(ticketBroadcast).toHaveBeenCalledWith('mention:updated', mention.toDTO());
+      expect(ticketBroadcast).toHaveBeenCalledWith('mention:updated', mention.toDTO(DEFAULT_AGENT_MAX_ATTEMPTS));
     });
 
     it('should broadcast persona.created via personaBroadcast', async () => {

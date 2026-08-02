@@ -17,7 +17,7 @@ import { useWorkflowRunStore, ACTIVE_STATUSES } from '../../stores/workflowRunSt
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
 import { NeedsReviewRespondPanel } from '../workflows/NeedsReviewRespondPanel';
 import { selectWaitingInputCards } from '../workflows/waitingInputCards';
-import { selectCrashedMentionCards, crashReasonLabel } from './crashedMentionCards';
+import { selectCrashedMentionCards, ATTEMPTS_EXHAUSTED_REMEDIATION, type LiveFailure } from './crashedMentionCards';
 import { ModelSelect } from '../agents/ModelSelect';
 import { useTicketStore } from '../../stores/ticketStore';
 import { isMissingRepo, mentionsPrimitive } from '../../lib/repoStatus';
@@ -521,11 +521,11 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [mentions, setMentions] = useState<TicketMention[]>([]);
   const [deliverables, setDeliverables] = useState<TicketDeliverable[]>([]);
-  // Live crash reason/message per mentionId, from the ephemeral
-  // `mention:execution_failed` event. On a cold reload this map is empty but the
-  // mention is still persisted as `failed`, so the crash card renders with a
-  // generic fallback (see selectCrashedMentionCards).
-  const [failures, setFailures] = useState<Record<string, { reason: string; message: string }>>({});
+  // Live crash signal per mentionId, from the ephemeral
+  // `mention:execution_failed` event. Only an accelerator for the window before
+  // the companion `mention:updated` lands: the cause is persisted on the mention
+  // itself, so the card survives a reload (see selectCrashedMentionCards).
+  const [failures, setFailures] = useState<Record<string, LiveFailure>>({});
   // Guards double-clicks on the crash card's "Relancer" button while the relaunch
   // request is in flight.
   const [relaunching, setRelaunching] = useState<Record<string, boolean>>({});
@@ -909,12 +909,23 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   // it to `pending` and resumes the SDK session (preserved history), so the
   // agent continues where it crashed. The card clears when the mention leaves
   // `failed` (mention:updated → status pending/acknowledged).
-  const handleRelaunchCrash = useCallback(async (mentionId: string) => {
+  /**
+   * Relaunch a crashed run. `force` is sent only after an explicit confirmation
+   * on a dead-lettered mention: the policy removes the *automatic* retry loop,
+   * never the user's ability to insist (docs/execution-recovery-policy.md).
+   */
+  const handleRelaunchCrash = useCallback(async (mentionId: string, force = false) => {
     setRelaunching((prev) => ({ ...prev, [mentionId]: true }));
     try {
-      await api.runMention(mentionId);
+      const result = await api.runMention(mentionId, { force });
+      // The budget was already spent (e.g. the ceiling was lowered while this
+      // page was open, so the card still showed a plain Relaunch). Say why
+      // nothing happened instead of leaving the button silently idle.
+      if (result.status === 'attempts_exhausted') {
+        useToastStore.getState().addToast('error', ATTEMPTS_EXHAUSTED_REMEDIATION);
+      }
     } catch (err) {
-      useToastStore.getState().addToast('error', `Échec du relancement : ${err instanceof Error ? err.message : String(err)}`);
+      useToastStore.getState().addToast('error', `Relaunch failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setRelaunching((prev) => {
         const { [mentionId]: _drop, ...rest } = prev;
@@ -1022,7 +1033,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         } else if (msg.type === 'mention:execution_failed') {
           const d = msg.data as MentionExecutionFailedPayload;
           if (d.ticketId === ticketId) {
-            setFailures((prev) => ({ ...prev, [d.mentionId]: { reason: d.reason, message: d.message } }));
+            setFailures((prev) => ({
+              ...prev,
+              [d.mentionId]: {
+                reason: d.reason,
+                ...(d.detail ? { detail: d.detail } : {}),
+                attemptCount: d.attemptCount,
+                maxAttempts: d.maxAttempts,
+              },
+            }));
           }
         }
       } catch {
@@ -1498,38 +1517,69 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 />
               </div>
             ))}
-            {/* Inline "the last Claude session crashed — relaunch?" card(s).
-                Red-tinted, mirrors the waiting-input card above. Persisted
-                `failed` status keeps it visible across reloads; "Relancer"
-                resumes the crashed session, "Voir les logs" opens the exact run. */}
-            {crashedMentionCards.map(({ mention, reason, message }) => {
+            {/* Inline "the last run ended badly — relaunch?" card(s). Mirrors the
+                waiting-input card above. Persisted `failed` status + reason keep
+                it visible (and precise) across reloads; "Relaunch" resumes the
+                session, "View logs" opens the exact run.
+                Tinted by tone: red for a system failure, gray for a run the user
+                stopped themselves — the two must not look alike. */}
+            {crashedMentionCards.map(({ mention, label, remediation, tone, detail, attemptCount, maxAttempts, exhausted }) => {
               const persona = personas.find((p) => p.name === mention.targetAgent);
               const agentName = persona?.displayName || persona?.name || mention.targetAgent;
               const execId = latestExecutionByMention[mention.id];
               const isRelaunching = !!relaunching[mention.id];
+              const hue = tone === 'neutral' ? 'gray' : 'red';
               return (
                 <div
                   key={mention.id}
-                  className={`my-3 rounded-lg border ${tintClasses('red').borderColor} ${tintClasses('red').bg} p-3`}
+                  className={`my-3 rounded-lg border ${tintClasses(hue).borderColor} ${tintClasses(hue).bg} p-3`}
                 >
                   <div className="mb-2 flex items-center gap-2">
-                    <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${tintClasses('red').solid}`} />
+                    <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${tintClasses(hue).solid}`} />
                     <div className="text-xs font-semibold text-[var(--theme-text-primary)]">
                       {agentName}
-                      <span className={`ml-1 font-normal ${tintClasses('red').text}`}>
-                        — la dernière session a crashé ({crashReasonLabel(reason)})
+                      <span className={`ml-1 font-normal ${tintClasses(hue).text}`}>
+                        — {label}
                       </span>
                     </div>
+                    {/* Attempt budget: tells the user how close this mention is to
+                        losing its one-click relaunch. Hidden when uncapped. */}
+                    {maxAttempts > 0 && (
+                      <span className="ml-auto flex-shrink-0 text-[10px] font-medium text-[var(--theme-text-muted)]">
+                        Attempt {attemptCount}/{maxAttempts}
+                      </span>
+                    )}
                   </div>
-                  <p className="mb-3 text-xs leading-snug text-[var(--theme-text-secondary)]">{message}</p>
+                  <p className="mb-3 text-xs leading-snug text-[var(--theme-text-secondary)]">
+                    {exhausted ? ATTEMPTS_EXHAUSTED_REMEDIATION : remediation}
+                  </p>
+                  {/* Raw server-side text (stderr excerpt, SDK error). Collapsed by
+                      default: it is diagnostic material, not the remediation. */}
+                  {detail && (
+                    <details className="mb-3">
+                      <summary className="cursor-pointer text-[11px] font-medium text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]">
+                        Technical details
+                      </summary>
+                      <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-[var(--theme-bg-surface)] p-2 text-[10px] leading-snug text-[var(--theme-text-muted)]">
+                        {detail}
+                      </pre>
+                    </details>
+                  )}
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
                       variant="primary"
                       disabled={isRelaunching}
-                      onClick={() => handleRelaunchCrash(mention.id)}
+                      onClick={() => {
+                        // Past the ceiling the run keeps failing for a reason:
+                        // make the user acknowledge that before insisting.
+                        if (exhausted && !window.confirm(
+                          `This mention already failed ${attemptCount} times in a row. Force another run anyway?`,
+                        )) return;
+                        void handleRelaunchCrash(mention.id, exhausted);
+                      }}
                     >
-                      {isRelaunching ? 'Relance…' : 'Relancer'}
+                      {isRelaunching ? 'Relaunching…' : exhausted ? 'Force relaunch' : 'Relaunch'}
                     </Button>
                     {execId && (
                       <button
@@ -1537,7 +1587,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                         className="text-xs font-medium text-[var(--theme-text-muted)] underline-offset-2 hover:text-[var(--theme-accent)] hover:underline"
                         onClick={() => { setModalTitle(`${agentName} execution`); setModalExecutionId(execId); }}
                       >
-                        Voir les logs
+                        View logs
                       </button>
                     )}
                   </div>

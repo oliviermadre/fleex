@@ -653,8 +653,34 @@ export async function executeAgent(id: string): Promise<import('@fleex/shared').
   return request<import('@fleex/shared').AgentExecutionResult>(`/personas/${encodeURIComponent(id)}/execute`, { method: 'POST' });
 }
 
-export async function runMention(mentionId: string): Promise<import('@fleex/shared').AgentExecutionResult> {
-  return request<import('@fleex/shared').AgentExecutionResult>(`/mentions/${encodeURIComponent(mentionId)}/run`, { method: 'POST' });
+/**
+ * Run a single mention (▶ / Relaunch on the crash card).
+ *
+ * `force` bypasses the attempt budget of a dead-lettered mention and gives it a
+ * fresh one — send it only behind an explicit user confirmation.
+ *
+ * The server answers `409 attempts_exhausted` when the budget is spent. That is
+ * a normal, expected outcome, not a transport error, so it is returned as a
+ * result instead of going through the generic error toast (which would surface
+ * the raw `attempts_exhausted` code to the user). See
+ * `docs/execution-recovery-policy.md`.
+ */
+export async function runMention(
+  mentionId: string,
+  opts?: { force?: boolean },
+): Promise<import('@fleex/shared').AgentExecutionResult> {
+  const query = opts?.force ? '?force=true' : '';
+  const res = await fetch(`${API_URL}/mentions/${encodeURIComponent(mentionId)}/run${query}`, { method: 'POST' });
+  if (res.status === 409) {
+    const body = await res.json().catch(() => ({}));
+    if (body?.error === 'attempts_exhausted') return { status: 'attempts_exhausted', mentionIds: [] };
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    useToastStore.getState().addToast('error', extractErrorMessage(body, res.statusText));
+    throw new Error(`API error ${res.status}: ${body || res.statusText}`);
+  }
+  return res.json() as Promise<import('@fleex/shared').AgentExecutionResult>;
 }
 
 export async function fetchAgentStatus(id: string): Promise<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }> {

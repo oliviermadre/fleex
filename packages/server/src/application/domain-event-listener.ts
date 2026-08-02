@@ -7,6 +7,7 @@ import type { MentionStorePort } from './ports/mention-store.port.js';
 import type { CommentStorePort } from './ports/comment-store.port.js';
 import type { DeliverableStorePort } from './ports/deliverable-store.port.js';
 import type { LoggerPort } from './ports/logger.port.js';
+import { DEFAULT_AGENT_MAX_ATTEMPTS, type ConfigPort } from './ports/config.port.js';
 import type { AutoReviewWorkflowUseCase } from './use-cases/auto-review-workflow.js';
 import type { ExecuteAgentUseCase } from './use-cases/execute-agent.js';
 import type { WakeWaitingAgentsUseCase } from './use-cases/wake-waiting-agents.js';
@@ -42,6 +43,8 @@ export interface DomainEventListenerDeps {
   logger: LoggerPort;
   workflowTemplateStore?: WorkflowTemplateStorePort | null;
   createWorkflowRun?: CreateWorkflowRunUseCase | null;
+  /** Used only to advertise the attempt ceiling on broadcast mention DTOs. */
+  config?: ConfigPort | null;
 }
 
 /**
@@ -68,6 +71,7 @@ export class DomainEventListener {
       mentionStore: deps.mentionStore,
       commentStore: deps.commentStore,
       deliverableStore: deps.deliverableStore,
+      getMaxAttempts: () => deps.config?.get().agentMaxAttempts ?? DEFAULT_AGENT_MAX_ATTEMPTS,
     });
   }
 

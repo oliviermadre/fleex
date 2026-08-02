@@ -16,6 +16,13 @@ export interface BroadcastRegistrarDeps {
   mentionStore: MentionStorePort;
   commentStore: CommentStorePort;
   deliverableStore: DeliverableStorePort;
+  /**
+   * Current `agentMaxAttempts` ceiling, advertised on broadcast mention DTOs so
+   * the crash card can render "Attempt 2/3" and flip to Force relaunch. Read
+   * lazily: the ceiling can change at runtime via Settings. Optional — when
+   * absent the DTO advertises `0` ("no cap"), which is the safe default.
+   */
+  getMaxAttempts?: () => number;
 }
 
 /**
@@ -114,14 +121,18 @@ export class BroadcastRegistrar {
     });
     bus.on('mention.execution_failed', async (e) => {
       if (e.type === 'mention.execution_failed') {
-        // The ephemeral crash event carries the live reason/message the crash
-        // card shows immediately…
+        // The ephemeral crash event carries the machine reason (never copy — the
+        // label and remediation are rendered client-side, in English) plus the
+        // attempt budget the card needs to show "Attempt 2/3" and switch to
+        // Force relaunch…
         this.ticketBroadcast('mention:execution_failed', {
           mentionId: e.mentionId,
           ticketId: e.ticketId,
           targetAgent: e.targetAgent,
           reason: e.reason,
-          message: e.message,
+          ...(e.detail ? { detail: e.detail } : {}),
+          attemptCount: e.attemptCount,
+          maxAttempts: e.maxAttempts,
         });
         // …and a companion mention:updated flips the persisted status to
         // `failed`, so the card is driven by durable state and survives a reload
@@ -269,7 +280,7 @@ export class BroadcastRegistrar {
   private async broadcastMentionEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
     if (!('mentionId' in event)) return;
     const mention = await this.deps.mentionStore.getById((event as { mentionId: string }).mentionId);
-    if (mention) this.ticketBroadcast(wsType, mention.toDTO());
+    if (mention) this.ticketBroadcast(wsType, mention.toDTO(this.deps.getMaxAttempts?.() ?? 0));
   }
 
   private async broadcastDeliverableEntity(event: AnyDomainEvent, wsType: string): Promise<void> {

@@ -40,10 +40,13 @@ function makeUseCase() {
   const personaStore = { getById: async () => persona, getByName: async () => persona } as never;
   const sdkLimiter = { run: (fn: () => Promise<unknown>) => fn() } as never;
   const logger = { info() {}, warn() {}, error() {}, debug() {} } as never;
+  // The dispatch loop reads `agentMaxAttempts` to refuse dead-lettered mentions;
+  // an empty config keeps the default ceiling, which these mentions never reach.
+  const config = { get: () => ({}) } as never;
   const stub = {} as never;
 
   const useCase = new ExecuteAgentUseCase(
-    personaStore, mentionStore, stub, stub, stub, stub, stub, stub, stub, stub, logger, stub, sdkLimiter, stub,
+    personaStore, mentionStore, stub, stub, stub, stub, stub, stub, stub, config, logger, stub, sdkLimiter, stub,
   );
 
   const dispatched: string[] = [];

@@ -1,4 +1,4 @@
-import type { MentionStatus } from '@fleex/shared';
+import type { MentionFailureReason, MentionStatus } from '@fleex/shared';
 import { TicketMentionEntity } from '../../../domain/entities/ticket-mention.entity.js';
 import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
 import type { SupabaseConnection } from './connection.js';
@@ -16,6 +16,10 @@ interface MentionRow {
   resolved_comment_id: string | null;
   resolved_deliverable_id: string | null;
   created_at: string;
+  /** NULL on rows written before migration 025 — read as a fresh budget. */
+  attempt_count: number | null;
+  failure_reason: string | null;
+  failure_detail: string | null;
 }
 
 function rowToEntity(r: MentionRow): TicketMentionEntity {
@@ -32,6 +36,9 @@ function rowToEntity(r: MentionRow): TicketMentionEntity {
     r.resolved_comment_id,
     r.resolved_deliverable_id,
     new Date(r.created_at),
+    r.attempt_count ?? 0,
+    (r.failure_reason as MentionFailureReason | null) ?? null,
+    r.failure_detail ?? null,
   );
 }
 
@@ -134,6 +141,9 @@ export class SupabaseMentionStore implements MentionStorePort {
       resolved_comment_id: mention.resolvedCommentId,
       resolved_deliverable_id: mention.resolvedDeliverableId,
       created_at: mention.createdAt.toISOString(),
+      attempt_count: mention.attemptCount,
+      failure_reason: mention.failureReason,
+      failure_detail: mention.failureDetail,
     });
     if (error) throw new Error(`SupabaseMentionStore.save failed: ${error.message}`);
   }

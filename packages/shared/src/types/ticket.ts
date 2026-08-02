@@ -217,6 +217,36 @@ export type MentionTargetType = 'agent' | 'human' | 'panel' | 'skill' | 'workflo
 
 export type MentionExecutionMode = 'talk' | 'plan' | 'edit';
 
+/**
+ * Why an agent execution ended without reaching a normal completion. Closed
+ * union: the server only ever emits a code from this list, never user-facing
+ * copy — the label and the remediation live client-side (see
+ * `crashedMentionCards.ts`). See `docs/execution-recovery-policy.md`.
+ *
+ * Grouped by origin:
+ *  - SDK assistant error codes: usage_limit, not_authenticated, billing,
+ *    invalid_request, server_error, max_output_tokens
+ *  - SDK result subtypes: max_turns, max_budget, output_format, subprocess
+ *  - Fleex-side policy decisions: timeout, cancelled, server_restart
+ *  - Fallbacks: startup_error (crash before acknowledge), unknown
+ */
+export type MentionFailureReason =
+  | 'usage_limit'
+  | 'not_authenticated'
+  | 'billing'
+  | 'invalid_request'
+  | 'server_error'
+  | 'max_turns'
+  | 'max_output_tokens'
+  | 'max_budget'
+  | 'output_format'
+  | 'subprocess'
+  | 'timeout'
+  | 'cancelled'
+  | 'server_restart'
+  | 'startup_error'
+  | 'unknown';
+
 export interface TicketMention {
   readonly id: string;
   readonly ticketId: string;
@@ -230,22 +260,41 @@ export interface TicketMention {
   readonly resolvedCommentId: string | null;
   readonly resolvedDeliverableId: string | null;
   readonly createdAt: string;
+  /**
+   * How many SDK executions have been started for this mention since the last
+   * success (or the last explicit human instruction). Incremented at dispatch,
+   * reset by `resolve()` / `wakeUp()` / a forced relaunch.
+   */
+  readonly attemptCount: number;
+  /** Ceiling from `AppConfig.agentMaxAttempts`; `0` means "no cap". */
+  readonly maxAttempts: number;
+  /** Persisted cause of the last failure — survives a page reload. */
+  readonly failureReason: MentionFailureReason | null;
+  /** Raw technical detail (stderr excerpt, SDK error text). Never translated. */
+  readonly failureDetail: string | null;
 }
 
 /**
  * Payload broadcast on the `mention:execution_failed` WS message. Sent whenever
- * an agent execution crashes — either *before* the mention reaches `acknowledged`
- * (startup errors) or *during* the run after acknowledge (usage limit, not logged
- * in, max turns, subprocess crash…). In both cases the mention is transitioned to
- * `failed` and a companion `mention:updated` carries the new status; this payload
- * carries the `reason`/`message` the UI surfaces in the crash card + toast.
+ * an agent execution ends without a normal completion — a crash before
+ * `acknowledged` (startup errors), a crash mid-run (usage limit, max turns,
+ * subprocess), a timeout, a user cancellation, or a server restart. In every
+ * case the mention is transitioned to `failed` and a companion `mention:updated`
+ * carries the new status.
+ *
+ * Carries a machine `reason` plus an optional raw `detail`; the user-facing
+ * label and remediation are rendered client-side from `reason`, so no
+ * localizable copy is produced by the server.
  */
 export interface MentionExecutionFailedPayload {
   readonly mentionId: string;
   readonly ticketId: string;
   readonly targetAgent: string;
-  readonly reason: string;
-  readonly message: string;
+  readonly reason: MentionFailureReason;
+  /** Raw technical detail, when one is available. Not user-facing copy. */
+  readonly detail?: string;
+  readonly attemptCount: number;
+  readonly maxAttempts: number;
 }
 
 // ── Deliverables ──

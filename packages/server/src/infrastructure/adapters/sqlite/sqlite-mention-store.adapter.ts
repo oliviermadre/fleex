@@ -1,4 +1,4 @@
-import type { MentionStatus } from '@fleex/shared';
+import type { MentionFailureReason, MentionStatus } from '@fleex/shared';
 import { TicketMentionEntity } from '../../../domain/entities/ticket-mention.entity.js';
 import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
 import type { SqliteConnection } from './connection.js';
@@ -16,6 +16,10 @@ interface MentionRow {
   resolved_comment_id: string | null;
   resolved_deliverable_id: string | null;
   created_at: string;
+  /** NULL on rows written before migration 025 — read as a fresh budget. */
+  attempt_count: number | null;
+  failure_reason: string | null;
+  failure_detail: string | null;
 }
 
 export class SqliteMentionStoreAdapter implements MentionStorePort {
@@ -88,10 +92,12 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
     const stmt = this.conn.db.prepare(`
       INSERT OR REPLACE INTO mentions
         (id, ticket_id, comment_id, target_agent, source_agent, target_type, execution_mode, status,
-         resolved_at, resolved_comment_id, resolved_deliverable_id, created_at)
+         resolved_at, resolved_comment_id, resolved_deliverable_id, created_at,
+         attempt_count, failure_reason, failure_detail)
       VALUES
         (@id, @ticket_id, @comment_id, @target_agent, @source_agent, @target_type, @execution_mode, @status,
-         @resolved_at, @resolved_comment_id, @resolved_deliverable_id, @created_at)
+         @resolved_at, @resolved_comment_id, @resolved_deliverable_id, @created_at,
+         @attempt_count, @failure_reason, @failure_detail)
     `);
 
     stmt.run({
@@ -107,6 +113,9 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
       resolved_comment_id: mention.resolvedCommentId,
       resolved_deliverable_id: mention.resolvedDeliverableId,
       created_at: mention.createdAt.toISOString(),
+      attempt_count: mention.attemptCount,
+      failure_reason: mention.failureReason,
+      failure_detail: mention.failureDetail,
     });
   }
 
@@ -128,6 +137,9 @@ export class SqliteMentionStoreAdapter implements MentionStorePort {
       row.resolved_comment_id,
       row.resolved_deliverable_id,
       new Date(row.created_at),
+      row.attempt_count ?? 0,
+      (row.failure_reason as MentionFailureReason | null) ?? null,
+      row.failure_detail ?? null,
     );
   }
 }
