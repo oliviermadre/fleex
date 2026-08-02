@@ -1,0 +1,14 @@
+# Revisions to skip when running `git blame`.
+#
+# Enable it once, locally:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub picks this file up automatically.
+#
+# Only ever add commits that are provably mechanical (a formatter run, a
+# mass rename). Never add a commit that changes behaviour — blame is how the
+# next person finds out why a line exists.
+
+# style: apply Prettier and ESLint autofixes repo-wide (ticket #467)
+# First formatter run in the repo's history: 923 files, no hand edits.
+afbd329030cdd4b1419c700a3da469c82ef69bec
