@@ -1,16 +1,16 @@
 import { useMemo, useCallback } from 'react';
+import { buildWorkspaceContext } from '@fleex/shared';
 import type { Session, WorktreeSessionGroup, Ticket, TicketStatus } from '@fleex/shared';
 import { cn } from '../../../lib/cn';
 import { tint, tintText } from '../../../lib/tints';
 import { PrBadge } from '../../ui/PrBadge';
 import { useTicketStore } from '../../../stores/ticketStore';
-import { useSettingsStore } from '../../../stores/settingsStore';
+import { globalActions, workspaceActions as selectWorkspaceActions, useSettingsStore } from '../../../stores/settingsStore';
 import { usePullRequestStore } from '../../../stores/pullRequestStore';
 import { deriveDisplayStatus } from '../../../lib/deriveStatus';
 import { StatusDot } from '../../ui/StatusDot';
 import { NanoKanban } from '../../tickets/NanoKanban';
 import { renderIcon } from '../../sidebar/PinnedIcons';
-import { buildWorkspaceContext } from '../../../lib/templateUtils';
 import { OverlaySyncButton } from '../../overlay-sync/OverlaySyncButton';
 
 interface Props {
@@ -46,10 +46,11 @@ const ICON_BTN = 'flex h-6 w-6 items-center justify-center rounded border border
 export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, ticket, splitFocused }: Props) {
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const basePath = useSettingsStore((s) => s.settings.basePath);
-  const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
-  const workspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
-  const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
-  const executeWorkspaceAction = useSettingsStore((s) => s.executeWorkspaceAction);
+  const actions = useSettingsStore((s) => s.settings.actions);
+  const executeAction = useSettingsStore((s) => s.executeAction);
+
+  const pinnedIcons = useMemo(() => globalActions(actions), [actions]);
+  const workspaceActions = useMemo(() => selectWorkspaceActions(actions), [actions]);
 
   // Workspace actions are bound to the ticket's workspace; without a ticket
   // there is no workspace, so only the global pinned actions show.
@@ -143,18 +144,18 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
       <div className="ml-auto flex items-center gap-2">
         {/* Sync overlay — capture gitignored files into the per-repo overlay */}
         <OverlaySyncButton ticket={ticket} worktree={worktree} repoOrg={repoOrg} repoName={repoName} />
-        {(pinnedIcons.length > 0 || (workspaceContext && workspaceActions && workspaceActions.length > 0)) && (
+        {(pinnedIcons.length > 0 || (workspaceContext && workspaceActions.length > 0)) && (
           <div className="h-4 w-px bg-[var(--theme-border)]" />
         )}
 
         {/* Pinned actions + workspace actions */}
-        {(pinnedIcons.length > 0 || (workspaceContext && workspaceActions && workspaceActions.length > 0)) && (
+        {(pinnedIcons.length > 0 || (workspaceContext && workspaceActions.length > 0)) && (
           <div className="flex items-center gap-1">
             {pinnedIcons.map((icon) => (
               <button
                 key={icon.id}
                 className={ICON_BTN}
-                onClick={() => executePinnedAction(icon)}
+                onClick={() => executeAction(icon)}
                 title={icon.label}
               >
                 <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
@@ -162,14 +163,14 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
                 </span>
               </button>
             ))}
-            {pinnedIcons.length > 0 && workspaceContext && workspaceActions && workspaceActions.length > 0 && (
+            {pinnedIcons.length > 0 && workspaceContext && workspaceActions.length > 0 && (
               <div className="mx-0.5 h-4 w-px bg-[var(--theme-border)]" />
             )}
-            {workspaceContext && workspaceActions?.map((action) => (
+            {workspaceContext && workspaceActions.map((action) => (
               <button
                 key={action.id}
                 className={ICON_BTN}
-                onClick={() => executeWorkspaceAction(action, workspaceContext)}
+                onClick={() => executeAction(action, workspaceContext)}
                 title={action.label}
               >
                 {action.icon ? (

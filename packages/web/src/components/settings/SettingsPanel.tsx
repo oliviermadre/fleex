@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSettingsStore, type AppSettings, type PinnedIcon, type WorkspaceAction } from '../../stores/settingsStore';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { ACTION_DEFAULT_TIMEOUT_MS } from '@fleex/shared';
+import type { ActionDef, ActionKind, ActionParamDef, ActionParamType, ActionScope } from '@fleex/shared';
+import { useSettingsStore, type AppSettings } from '../../stores/settingsStore';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -21,81 +23,42 @@ const tabLabels: Record<SettingsTab, string> = {
 export function SettingsPanel() {
   const settings = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.saveSettings);
+  const saveActions = useSettingsStore((s) => s.saveActions);
   const settingsTab = useUIStore((s) => s.settingsTab);
 
   const [basePath, setBasePath] = useState('');
   const [humanDisplayName, setHumanDisplayName] = useState('');
   const [humanMentionName, setHumanMentionName] = useState('');
   const [agentMaxConcurrency, setAgentMaxConcurrency] = useState(1);
-  const [pinnedIcons, setPinnedIcons] = useState<PinnedIcon[]>([]);
-  const [workspaceActions, setWorkspaceActions] = useState<WorkspaceAction[]>([]);
+  // One registry for both tabs — each tab is just a `scope` filter over it.
+  const [actions, setActions] = useState<ActionDef[]>([]);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setBasePath(settings.basePath);
     setHumanDisplayName((settings as unknown as Record<string, unknown>)['humanDisplayName'] as string ?? '');
     setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
-    setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
-    setWorkspaceActions((settings.workspaceActions ?? []).map((a) => ({ ...a })));
+    setActions((settings.actions ?? []).map((a) => ({ ...a })));
   }, [settings]);
 
   const handleSave = async () => {
+    setSaveError(null);
+    try {
+      // Actions are saved through their own call because the server validates
+      // them and can reject: swallowing that would leave the user looking at an
+      // action the server never accepted.
+      await saveActions(actions);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save actions');
+      return;
+    }
     await saveSettings({
       basePath,
-      pinnedIcons,
-      workspaceActions,
       ...(humanDisplayName.trim() ? { humanDisplayName: humanDisplayName.trim() } : { humanDisplayName: undefined }),
       ...(humanMentionName.trim() ? { humanMentionName: humanMentionName.trim() } : { humanMentionName: undefined }),
       agentMaxConcurrency,
     } as Partial<AppSettings> & Record<string, unknown>);
-  };
-
-  const addPinnedIcon = () => {
-    setPinnedIcons([
-      ...pinnedIcons,
-      {
-        id: crypto.randomUUID(),
-        icon: '',
-        iconType: 'svg',
-        label: '',
-        actionType: 'url',
-        actionValue: '',
-      },
-    ]);
-  };
-
-  const updatePinnedIcon = (index: number, patch: Partial<PinnedIcon>) => {
-    setPinnedIcons((prev) =>
-      prev.map((icon, i) => (i === index ? { ...icon, ...patch } : icon))
-    );
-  };
-
-  const removePinnedIcon = (index: number) => {
-    setPinnedIcons((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const addWorkspaceAction = () => {
-    setWorkspaceActions([
-      ...workspaceActions,
-      {
-        id: crypto.randomUUID(),
-        icon: '',
-        iconType: 'svg',
-        label: '',
-        actionType: 'url',
-        actionValue: '',
-      },
-    ]);
-  };
-
-  const updateWorkspaceAction = (index: number, patch: Partial<WorkspaceAction>) => {
-    setWorkspaceActions((prev) =>
-      prev.map((action, i) => (i === index ? { ...action, ...patch } : action))
-    );
-  };
-
-  const removeWorkspaceAction = (index: number) => {
-    setWorkspaceActions((prev) => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -124,29 +87,20 @@ export function SettingsPanel() {
           )}
           {settingsTab === 'appearance' && <AppearanceTab />}
           {settingsTab === 'pinned-icons' && (
-            <PinnedIconsTab
-              pinnedIcons={pinnedIcons}
-              onAdd={addPinnedIcon}
-              onUpdate={updatePinnedIcon}
-              onRemove={removePinnedIcon}
-              onReorder={setPinnedIcons}
-            />
+            <ActionsTab scope="global" actions={actions} onChange={setActions} />
           )}
           {settingsTab === 'workspace-actions' && (
-            <WorkspaceActionsTab
-              workspaceActions={workspaceActions}
-              onAdd={addWorkspaceAction}
-              onUpdate={updateWorkspaceAction}
-              onRemove={removeWorkspaceAction}
-              onReorder={setWorkspaceActions}
-            />
+            <ActionsTab scope="workspace" actions={actions} onChange={setActions} />
           )}
           {settingsTab === 'agent-tokens' && <AgentTokensTab />}
           {settingsTab === 'deliverable-types' && <DeliverableTypesTab />}
 
           {/* Save button — hidden for tabs that persist changes immediately. */}
           {settingsTab !== 'deliverable-types' && (
-            <div className="mt-8 flex justify-end">
+            <div className="mt-8 flex flex-col items-end gap-2">
+              {saveError && (
+                <p className="text-xs text-[var(--theme-danger)]">{saveError}</p>
+              )}
               <Button variant="primary" onClick={handleSave}>
                 Save Settings
               </Button>
@@ -247,139 +201,82 @@ function GeneralTab({
   );
 }
 
-function PinnedIconsTab({
-  pinnedIcons,
-  onAdd,
-  onUpdate,
-  onRemove,
-  onReorder,
-}: {
-  pinnedIcons: PinnedIcon[];
-  onAdd: () => void;
-  onUpdate: (index: number, patch: Partial<PinnedIcon>) => void;
-  onRemove: (index: number) => void;
-  onReorder: (icons: PinnedIcon[]) => void;
-}) {
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [dropEdge, setDropEdge] = useState<'top' | 'bottom'>('bottom');
-  const draggedIdRef = useRef<string | null>(null);
+const KIND_LABELS: Record<ActionKind, string> = {
+  url: 'Open URL',
+  exec: 'Command',
+  shell: 'Shell Script',
+};
 
-  const handleDragStart = useCallback((id: string) => (e: React.DragEvent) => {
-    draggedIdRef.current = id;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-pinned-icon', id);
-    (e.currentTarget as HTMLElement).style.opacity = '0.4';
-  }, []);
+const SCOPE_COPY: Record<ActionScope, { title: string; addLabel: string; empty: string; hint: string }> = {
+  global: {
+    title: 'Pinned Icons',
+    addLabel: '+ Add Icon',
+    empty: 'No pinned icons configured. Add one to pin it to the top of the sidebar.',
+    hint: 'Pinned actions run without any ticket, so workspace template variables are unavailable here — use parameters instead.',
+  },
+  workspace: {
+    title: 'Workspace Actions',
+    addLabel: '+ Add Action',
+    empty: 'No workspace actions configured. Add one to show action buttons on every ticket.',
+    hint: "Actions appear as icon buttons in ticket and session headers. Template variables resolve to the ticket's workspace.",
+  },
+};
 
-  const handleDragEnd = useCallback((e: React.DragEvent) => {
-    draggedIdRef.current = null;
-    setDragOverId(null);
-    (e.currentTarget as HTMLElement).style.opacity = '';
-  }, []);
-
-  const handleDragOver = useCallback((id: string) => (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('application/x-pinned-icon')) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    setDropEdge(e.clientY < midY ? 'top' : 'bottom');
-    setDragOverId(id);
-  }, []);
-
-  const handleDragLeave = useCallback((id: string) => (e: React.DragEvent) => {
-    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-    if (dragOverId === id) setDragOverId(null);
-  }, [dragOverId]);
-
-  const handleDrop = useCallback((targetId: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    const draggedId = e.dataTransfer.getData('application/x-pinned-icon');
-    setDragOverId(null);
-    if (!draggedId || draggedId === targetId) return;
-
-    const items = [...pinnedIcons];
-    const fromIdx = items.findIndex((a) => a.id === draggedId);
-    if (fromIdx === -1) return;
-    const moved = items.splice(fromIdx, 1)[0];
-    if (!moved) return;
-    let toIdx = items.findIndex((a) => a.id === targetId);
-    if (toIdx === -1) return;
-    if (dropEdge === 'bottom') toIdx += 1;
-    items.splice(toIdx, 0, moved);
-    onReorder(items);
-  }, [pinnedIcons, dropEdge, onReorder]);
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
-          Pinned Icons ({pinnedIcons.length})
-        </label>
-        <Button variant="secondary" size="sm" onClick={onAdd}>
-          + Add Icon
-        </Button>
-      </div>
-
-      {pinnedIcons.length === 0 && (
-        <p className="py-6 text-center text-sm text-[var(--theme-text-muted)]">
-          No pinned icons configured. Add one to pin it to the top of the sidebar.
-        </p>
-      )}
-
-      <div className="flex flex-col gap-3">
-        {pinnedIcons.map((icon, i) => (
-          <div
-            key={icon.id}
-            draggable
-            onDragStart={handleDragStart(icon.id)}
-            onDragEnd={handleDragEnd}
-            onDragOver={handleDragOver(icon.id)}
-            onDragLeave={handleDragLeave(icon.id)}
-            onDrop={handleDrop(icon.id)}
-            className="relative"
-          >
-            {dragOverId === icon.id && dropEdge === 'top' && (
-              <div className="absolute -top-1.5 left-0 right-0 h-0.5 rounded bg-[var(--theme-accent)]" />
-            )}
-            <PinnedIconEditor
-              icon={icon}
-              onUpdate={(patch) => onUpdate(i, patch)}
-              onRemove={() => onRemove(i)}
-            />
-            {dragOverId === icon.id && dropEdge === 'bottom' && (
-              <div className="absolute -bottom-1.5 left-0 right-0 h-0.5 rounded bg-[var(--theme-accent)]" />
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+function newAction(scope: ActionScope): ActionDef {
+  return {
+    id: crypto.randomUUID(),
+    label: '',
+    scope,
+    icon: '',
+    iconType: 'svg',
+    enabled: true,
+    kind: 'url',
+    url: '',
+  };
 }
 
-function WorkspaceActionsTab({
-  workspaceActions,
-  onAdd,
-  onUpdate,
-  onRemove,
-  onReorder,
+/**
+ * Both action tabs render this component — they differ only by the `scope` they
+ * filter on. Edits are mapped back onto the full registry by id, so the other
+ * scope's entries are carried through untouched.
+ */
+function ActionsTab({
+  scope,
+  actions,
+  onChange,
 }: {
-  workspaceActions: WorkspaceAction[];
-  onAdd: () => void;
-  onUpdate: (index: number, patch: Partial<WorkspaceAction>) => void;
-  onRemove: (index: number) => void;
-  onReorder: (actions: WorkspaceAction[]) => void;
+  scope: ActionScope;
+  actions: ActionDef[];
+  onChange: (actions: ActionDef[]) => void;
 }) {
+  const copy = SCOPE_COPY[scope];
+  const visible = useMemo(() => actions.filter((a) => a.scope === scope), [actions, scope]);
+
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dropEdge, setDropEdge] = useState<'top' | 'bottom'>('bottom');
   const draggedIdRef = useRef<string | null>(null);
+  const dragType = `application/x-fleex-action-${scope}`;
+
+  const update = (id: string, patch: Partial<ActionDef>) =>
+    onChange(actions.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+
+  const remove = (id: string) => onChange(actions.filter((a) => a.id !== id));
+
+  const add = () => onChange([...actions, newAction(scope)]);
+
+  // Reordering only ever happens inside one scope; splice the reordered slice
+  // back around the untouched entries of the other scope.
+  const reorder = useCallback((ordered: ActionDef[]) => {
+    const others = actions.filter((a) => a.scope !== scope);
+    onChange(scope === 'global' ? [...ordered, ...others] : [...others, ...ordered]);
+  }, [actions, scope, onChange]);
 
   const handleDragStart = useCallback((id: string) => (e: React.DragEvent) => {
     draggedIdRef.current = id;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-workspace-action', id);
+    e.dataTransfer.setData(dragType, id);
     (e.currentTarget as HTMLElement).style.opacity = '0.4';
-  }, []);
+  }, [dragType]);
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     draggedIdRef.current = null;
@@ -388,14 +285,14 @@ function WorkspaceActionsTab({
   }, []);
 
   const handleDragOver = useCallback((id: string) => (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('application/x-workspace-action')) return;
+    if (!e.dataTransfer.types.includes(dragType)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
     setDropEdge(e.clientY < midY ? 'top' : 'bottom');
     setDragOverId(id);
-  }, []);
+  }, [dragType]);
 
   const handleDragLeave = useCallback((id: string) => (e: React.DragEvent) => {
     if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
@@ -404,11 +301,11 @@ function WorkspaceActionsTab({
 
   const handleDrop = useCallback((targetId: string) => (e: React.DragEvent) => {
     e.preventDefault();
-    const draggedId = e.dataTransfer.getData('application/x-workspace-action');
+    const draggedId = e.dataTransfer.getData(dragType);
     setDragOverId(null);
     if (!draggedId || draggedId === targetId) return;
 
-    const items = [...workspaceActions];
+    const items = [...visible];
     const fromIdx = items.findIndex((a) => a.id === draggedId);
     if (fromIdx === -1) return;
     const moved = items.splice(fromIdx, 1)[0];
@@ -417,33 +314,31 @@ function WorkspaceActionsTab({
     if (toIdx === -1) return;
     if (dropEdge === 'bottom') toIdx += 1;
     items.splice(toIdx, 0, moved);
-    onReorder(items);
-  }, [workspaceActions, dropEdge, onReorder]);
+    reorder(items);
+  }, [visible, dropEdge, reorder, dragType]);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
-          Workspace Actions ({workspaceActions.length})
+          {copy.title} ({visible.length})
         </label>
-        <Button variant="secondary" size="sm" onClick={onAdd}>
-          + Add Action
+        <Button variant="secondary" size="sm" onClick={add}>
+          {copy.addLabel}
         </Button>
       </div>
 
       <p className="text-xs text-[var(--theme-text-muted)]">
-        Actions appear as icon buttons in ticket and session headers. Template variables resolve to the ticket's workspace.
-        {workspaceActions.length > 1 && ' Drag to reorder.'}
+        {copy.hint}
+        {visible.length > 1 && ' Drag to reorder.'}
       </p>
 
-      {workspaceActions.length === 0 && (
-        <p className="py-6 text-center text-sm text-[var(--theme-text-muted)]">
-          No workspace actions configured. Add one to show action buttons on every ticket.
-        </p>
+      {visible.length === 0 && (
+        <p className="py-6 text-center text-sm text-[var(--theme-text-muted)]">{copy.empty}</p>
       )}
 
       <div className="flex flex-col gap-3">
-        {workspaceActions.map((action, i) => (
+        {visible.map((action) => (
           <div
             key={action.id}
             draggable
@@ -457,10 +352,10 @@ function WorkspaceActionsTab({
             {dragOverId === action.id && dropEdge === 'top' && (
               <div className="absolute -top-1.5 left-0 right-0 h-0.5 rounded bg-[var(--theme-accent)]" />
             )}
-            <WorkspaceActionEditor
+            <ActionEditor
               action={action}
-              onUpdate={(patch) => onUpdate(i, patch)}
-              onRemove={() => onRemove(i)}
+              onUpdate={(patch) => update(action.id, patch)}
+              onRemove={() => remove(action.id)}
             />
             {dragOverId === action.id && dropEdge === 'bottom' && (
               <div className="absolute -bottom-1.5 left-0 right-0 h-0.5 rounded bg-[var(--theme-accent)]" />
@@ -469,26 +364,26 @@ function WorkspaceActionsTab({
         ))}
       </div>
 
-      {/* Template variables reference */}
-      <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
-        <p className="mb-2 text-xs font-medium text-[var(--theme-text-secondary)]">Template Variables</p>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
-          {[
-            ['{{workspace_path}}', "Workspace folder absolute path"],
-            ['{{workspace_name}}', 'Workspace folder name (id-slug)'],
-            ['{{ticket_id}}', 'Full ticket id'],
-            ['{{ticket_slug}}', 'Slugified ticket title'],
-            ['{{ticket_display_id}}', 'Ticket display number'],
-          ].map(([variable, description]) => (
-            <div key={variable} className="flex items-baseline gap-2">
-              <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">{variable}</code>
-              <span className="text-[var(--theme-text-muted)]">{description}</span>
-            </div>
-          ))}
+      {scope === 'workspace' && (
+        <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
+          <p className="mb-2 text-xs font-medium text-[var(--theme-text-secondary)]">Template Variables</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+            {[
+              ['{{workspace_path}}', 'Workspace folder absolute path'],
+              ['{{workspace_name}}', 'Workspace folder name (id-slug)'],
+              ['{{ticket_id}}', 'Full ticket id'],
+              ['{{ticket_slug}}', 'Slugified ticket title'],
+              ['{{ticket_display_id}}', 'Ticket display number'],
+            ].map(([variable, description]) => (
+              <div key={variable} className="flex items-baseline gap-2">
+                <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">{variable}</code>
+                <span className="text-[var(--theme-text-muted)]">{description}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Pipe functions reference */}
       <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
         <p className="mb-1 text-xs font-medium text-[var(--theme-text-secondary)]">Pipe Functions</p>
         <p className="mb-2 text-xs text-[var(--theme-text-muted)]">
@@ -518,16 +413,27 @@ function WorkspaceActionsTab({
   );
 }
 
-function WorkspaceActionEditor({
+const TEXTAREA_CLASS =
+  'w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]';
+
+function ActionEditor({
   action,
   onUpdate,
   onRemove,
 }: {
-  action: WorkspaceAction;
-  onUpdate: (patch: Partial<WorkspaceAction>) => void;
+  action: ActionDef;
+  onUpdate: (patch: Partial<ActionDef>) => void;
   onRemove: () => void;
 }) {
   const [expanded, setExpanded] = useState(!action.label);
+  // Raw text is kept locally so a trailing newline survives typing; only the
+  // cleaned list is pushed up.
+  const [argsText, setArgsText] = useState((action.args ?? []).join('\n'));
+
+  const handleArgs = (text: string) => {
+    setArgsText(text);
+    onUpdate({ args: text.split('\n').map((s) => s.trim()).filter(Boolean) });
+  };
 
   return (
     <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
@@ -542,10 +448,7 @@ function WorkspaceActionEditor({
             height="10"
             viewBox="0 0 10 10"
             fill="currentColor"
-            className={cn(
-              'transition-transform',
-              expanded ? 'rotate-90' : 'rotate-0'
-            )}
+            className={cn('transition-transform', expanded ? 'rotate-90' : 'rotate-0')}
           >
             <path d="M3 1l5 4-5 4V1z" />
           </svg>
@@ -553,8 +456,13 @@ function WorkspaceActionEditor({
         <span className="flex-1 truncate text-xs text-[var(--theme-text-secondary)]">
           {action.label || 'Untitled'}
         </span>
+        {action.enabled === false && (
+          <span className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-faint)]">
+            disabled
+          </span>
+        )}
         <span className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
-          {action.actionType}
+          {action.kind}
         </span>
         <button
           className="text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-danger)]"
@@ -578,32 +486,39 @@ function WorkspaceActionEditor({
             onChange={(e) => onUpdate({ label: e.target.value })}
           />
 
-          <div className="flex gap-2">
-            <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Type</label>
-              <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
-                {(['svg', 'base64', 'url', 'path'] as const).map((type) => (
-                  <button
-                    key={type}
-                    className={cn(
-                      'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
-                      action.iconType === type
-                        ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                        : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
-                    )}
-                    onClick={() => onUpdate({ iconType: type })}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
+          <label className="flex items-center gap-2 text-sm text-[var(--theme-text-secondary)]">
+            <input
+              type="checkbox"
+              checked={action.enabled !== false}
+              onChange={(e) => onUpdate({ enabled: e.target.checked })}
+            />
+            Enabled
+          </label>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Type</label>
+            <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
+              {(['svg', 'base64', 'url', 'path'] as const).map((type) => (
+                <button
+                  key={type}
+                  className={cn(
+                    'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
+                    action.iconType === type
+                      ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
+                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                  )}
+                  onClick={() => onUpdate({ iconType: type })}
+                >
+                  {type}
+                </button>
+              ))}
             </div>
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Value</label>
             <textarea
-              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
+              className={TEXTAREA_CLASS}
               rows={3}
               placeholder={
                 action.iconType === 'svg'
@@ -622,199 +537,219 @@ function WorkspaceActionEditor({
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Type</label>
             <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
-              <button
-                className={cn(
-                  'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                  action.actionType === 'url'
-                    ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
-                )}
-                onClick={() => onUpdate({ actionType: 'url' })}
-              >
-                Open URL
-              </button>
-              <button
-                className={cn(
-                  'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                  action.actionType === 'shell'
-                    ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
-                )}
-                onClick={() => onUpdate({ actionType: 'shell' })}
-              >
-                Shell Command
-              </button>
+              {(Object.keys(KIND_LABELS) as ActionKind[]).map((kind) => (
+                <button
+                  key={kind}
+                  className={cn(
+                    'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                    action.kind === kind
+                      ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
+                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                  )}
+                  onClick={() => onUpdate({ kind })}
+                >
+                  {KIND_LABELS[kind]}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Value</label>
-            <textarea
-              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
-              rows={action.actionType === 'shell' ? 4 : 2}
-              placeholder={
-                action.actionType === 'url'
-                  ? 'https://example.com/?ws={{workspace_name}}'
-                  : 'open -a "PhpStorm" "{{workspace_path}}"'
-              }
-              value={action.actionValue}
-              onChange={(e) => onUpdate({ actionValue: e.target.value })}
-            />
-            <p className="text-xs text-[var(--theme-text-muted)]">
-              Use {'{{template}}'} variables above. They resolve to the ticket's workspace at click time.
-            </p>
-          </div>
+          {action.kind === 'url' && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">URL</label>
+              <textarea
+                className={TEXTAREA_CLASS}
+                rows={2}
+                placeholder="https://example.com/?ws={{workspace_name}}"
+                value={action.url ?? ''}
+                onChange={(e) => onUpdate({ url: e.target.value })}
+              />
+              <p className="text-xs text-[var(--theme-text-muted)]">
+                Opened by the browser. Never sent to the server.
+              </p>
+            </div>
+          )}
+
+          {action.kind === 'exec' && (
+            <div className="flex flex-col gap-1.5">
+              <Input
+                label="Command"
+                placeholder="/usr/bin/open"
+                value={action.command ?? ''}
+                onChange={(e) => onUpdate({ command: e.target.value })}
+              />
+              <p className="text-xs text-[var(--theme-text-muted)]">
+                Executed directly, without a shell. Template placeholders are not allowed here — put them in the arguments.
+              </p>
+            </div>
+          )}
+
+          {action.kind === 'shell' && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Script</label>
+              <textarea
+                className={TEXTAREA_CLASS}
+                rows={4}
+                placeholder={'open -a "PhpStorm" "$1"'}
+                value={action.script ?? ''}
+                onChange={(e) => onUpdate({ script: e.target.value })}
+              />
+              <p className="text-xs text-[var(--theme-text-muted)]">
+                Runs in your login shell. Arguments below arrive as{' '}
+                <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">$1</code>…
+                <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">$n</code>, so
+                their values are read as data and never as script.
+              </p>
+            </div>
+          )}
+
+          {action.kind !== 'url' && (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+                  Arguments (one per line)
+                </label>
+                <textarea
+                  className={TEXTAREA_CLASS}
+                  rows={3}
+                  placeholder={'-a\nPhpStorm\n{{workspace_path}}'}
+                  value={argsText}
+                  onChange={(e) => handleArgs(e.target.value)}
+                />
+                <p className="text-xs text-[var(--theme-text-muted)]">
+                  Each line becomes one argument. Values are passed as-is, so quoting and shell metacharacters have no effect.
+                </p>
+              </div>
+
+              <Input
+                label="Working Directory (optional)"
+                placeholder="{{workspace_path}}"
+                value={action.cwd ?? ''}
+                onChange={(e) => onUpdate({ cwd: e.target.value })}
+              />
+
+              <Input
+                label="Timeout (ms)"
+                type="number"
+                value={String(action.timeoutMs ?? ACTION_DEFAULT_TIMEOUT_MS)}
+                onChange={(e) => onUpdate({ timeoutMs: parseInt(e.target.value, 10) || ACTION_DEFAULT_TIMEOUT_MS })}
+              />
+
+              <ParamsEditor
+                params={action.params ?? []}
+                onChange={(params) => onUpdate({ params })}
+              />
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function PinnedIconEditor({
-  icon,
-  onUpdate,
-  onRemove,
+const PARAM_TYPES: ActionParamType[] = ['string', 'number', 'boolean', 'enum'];
+
+/**
+ * Parameters are the only caller-supplied values an action accepts. They are
+ * declared here and validated server-side against this declaration, which is
+ * what lets `{{param}}` placeholders be substituted into arguments safely.
+ */
+function ParamsEditor({
+  params,
+  onChange,
 }: {
-  icon: PinnedIcon;
-  onUpdate: (patch: Partial<PinnedIcon>) => void;
-  onRemove: () => void;
+  params: ActionParamDef[];
+  onChange: (params: ActionParamDef[]) => void;
 }) {
-  const [expanded, setExpanded] = useState(!icon.label);
+  const update = (index: number, patch: Partial<ActionParamDef>) =>
+    onChange(params.map((p, i) => (i === index ? { ...p, ...patch } : p)));
 
   return (
-    <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
-      {/* Header row */}
-      <div className="flex items-center gap-2 px-3 py-2">
-        <button
-          className="text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]"
-          onClick={() => setExpanded(!expanded)}
+    <div className="flex flex-col gap-2 rounded-md border border-[var(--theme-border)] px-3 py-3">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+          Parameters ({params.length})
+        </label>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onChange([...params, { name: '', type: 'string' }])}
         >
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 10 10"
-            fill="currentColor"
-            className={cn(
-              'transition-transform',
-              expanded ? 'rotate-90' : 'rotate-0'
-            )}
-          >
-            <path d="M3 1l5 4-5 4V1z" />
-          </svg>
-        </button>
-        <span className="flex-1 truncate text-xs text-[var(--theme-text-secondary)]">
-          {icon.label || 'Untitled'}
-        </span>
-        <span className="rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
-          {icon.actionType}
-        </span>
-        <button
-          className="text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-danger)]"
-          onClick={onRemove}
-          title="Remove"
-        >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="4" y1="4" x2="12" y2="12" />
-            <line x1="12" y1="4" x2="4" y2="12" />
-          </svg>
-        </button>
+          + Add Parameter
+        </Button>
       </div>
 
-      {/* Expanded editor */}
-      {expanded && (
-        <div className="flex flex-col gap-4 border-t border-[var(--theme-border)] px-4 py-4">
-          <Input
-            label="Label"
-            placeholder="My Shortcut"
-            value={icon.label}
-            onChange={(e) => onUpdate({ label: e.target.value })}
-          />
-
-          <div className="flex gap-2">
-            <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Type</label>
-              <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
-                {(['svg', 'base64', 'url', 'path'] as const).map((type) => (
-                  <button
-                    key={type}
-                    className={cn(
-                      'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
-                      icon.iconType === type
-                        ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                        : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
-                    )}
-                    onClick={() => onUpdate({ iconType: type })}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Value</label>
-            <textarea
-              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
-              rows={3}
-              placeholder={
-                icon.iconType === 'svg'
-                  ? '<svg>...</svg>'
-                  : icon.iconType === 'base64'
-                    ? 'iVBORw0KGgo...'
-                    : icon.iconType === 'url'
-                      ? 'https://example.com/icon.svg'
-                      : '/path/to/icon.svg'
-              }
-              value={icon.icon}
-              onChange={(e) => onUpdate({ icon: e.target.value })}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Type</label>
-            <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
-              <button
-                className={cn(
-                  'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                  icon.actionType === 'url'
-                    ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
-                )}
-                onClick={() => onUpdate({ actionType: 'url' })}
-              >
-                Open URL
-              </button>
-              <button
-                className={cn(
-                  'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                  icon.actionType === 'shell'
-                    ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
-                )}
-                onClick={() => onUpdate({ actionType: 'shell' })}
-              >
-                Shell Command
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Value</label>
-            <textarea
-              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
-              rows={icon.actionType === 'shell' ? 4 : 2}
-              placeholder={
-                icon.actionType === 'url'
-                  ? 'https://example.com'
-                  : 'echo "Hello"\nls -la'
-              }
-              value={icon.actionValue}
-              onChange={(e) => onUpdate({ actionValue: e.target.value })}
-            />
-          </div>
-        </div>
+      {params.length === 0 && (
+        <p className="text-xs text-[var(--theme-text-muted)]">
+          No parameters. Declare one to accept a caller-supplied value as{' '}
+          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+            {'{{name}}'}
+          </code>{' '}
+          in the arguments above.
+        </p>
       )}
+
+      {params.map((param, i) => (
+        <div key={i} className="flex flex-col gap-2 border-t border-[var(--theme-border-subtle)] pt-2">
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Input
+                label="Name"
+                placeholder="branch"
+                value={param.name}
+                onChange={(e) => update(i, { name: e.target.value })}
+              />
+            </div>
+            <select
+              className="h-9 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 text-sm text-[var(--theme-text-primary)]"
+              value={param.type}
+              onChange={(e) => update(i, { type: e.target.value as ActionParamType })}
+            >
+              {PARAM_TYPES.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+            <label className="flex h-9 items-center gap-1.5 text-xs text-[var(--theme-text-secondary)]">
+              <input
+                type="checkbox"
+                checked={param.required === true}
+                onChange={(e) => update(i, { required: e.target.checked })}
+              />
+              required
+            </label>
+            <button
+              className="h-9 px-1 text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-danger)]"
+              onClick={() => onChange(params.filter((_, idx) => idx !== i))}
+              title="Remove parameter"
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="4" x2="12" y2="12" />
+                <line x1="12" y1="4" x2="4" y2="12" />
+              </svg>
+            </button>
+          </div>
+
+          {param.type === 'enum' && (
+            <Input
+              label="Allowed values (comma separated)"
+              placeholder="staging, production"
+              value={(param.values ?? []).join(', ')}
+              onChange={(e) =>
+                update(i, { values: e.target.value.split(',').map((v) => v.trim()).filter(Boolean) })
+              }
+            />
+          )}
+
+          {param.type === 'string' && (
+            <Input
+              label="Pattern (optional regex)"
+              placeholder="[a-z0-9-]+"
+              value={param.pattern ?? ''}
+              onChange={(e) => update(i, { pattern: e.target.value })}
+            />
+          )}
+        </div>
+      ))}
     </div>
   );
 }

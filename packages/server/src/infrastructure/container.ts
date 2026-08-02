@@ -44,6 +44,7 @@ import { BackfillPRTicketUseCase } from '../application/use-cases/backfill-pr-ti
 import { PostCommentUseCase } from '../application/use-cases/post-comment.js';
 import { ResolveMentionUseCase } from '../application/use-cases/resolve-mention.js';
 import { SubmitDeliverableUseCase } from '../application/use-cases/submit-deliverable.js';
+import { RunActionUseCase } from '../application/use-cases/run-action.js';
 import { ManageDeliverableTypesUseCase } from '../application/use-cases/manage-deliverable-types.js';
 import { GetTicketContextUseCase } from '../application/use-cases/get-ticket-context.js';
 import { CreatePersonaUseCase } from '../application/use-cases/create-persona.js';
@@ -225,6 +226,9 @@ export async function createContainer() {
   const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore_, logger);
   const resolveMention = new ResolveMentionUseCase(mentionStore, ticketStore_, logger);
   const submitDeliverable = new SubmitDeliverableUseCase(deliverableStore, ticketStore_, config, logger);
+  // Declared action registry — the only server-side execution path reachable
+  // from an HTTP body (see POST /api/actions/:id/run).
+  const runAction = new RunActionUseCase(config, ticketStore_, resolver, execFn, logger);
   const getRelevantSummaries = new GetRelevantSummariesUseCase(deliverableStore, ticketStore_);
   const getTicketContext = new GetTicketContextUseCase(ticketStore_, commentStore, mentionStore, deliverableStore, getRelevantSummaries, ticketGroupStore);
 
@@ -369,6 +373,7 @@ export async function createContainer() {
 
   // Wire eventBus + config (avoids circular constructor dep)
   createWorktreeUC.eventBus = eventBus;
+  runAction.eventBus = eventBus;
   executeAgent.eventBus = eventBus;
   // Re-drain the per-(agent,ticket) queue when a thread frees its lane via an
   // external resolve/delete (e.g. manual UI resolve of a waiting_for_info mention).
@@ -510,6 +515,7 @@ export async function createContainer() {
     postComment,
     resolveMention,
     submitDeliverable,
+    runAction,
     manageDeliverableTypes,
     getTicketContext,
     personaStore: personaStore_,
