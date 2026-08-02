@@ -19,7 +19,48 @@ export type SessionStatus = 'idle' | 'working' | 'awaiting_input';
 export type TranscriptItem =
   | { role: 'user'; text: string }
   | { role: 'assistant'; text: string }
-  | { tool: { name: string; argv: string[]; status: 'running' | 'ok' | 'fail' | 'denied'; text?: string } };
+  | {
+      tool: {
+        name: string;
+        argv: string[];
+        status: 'running' | 'ok' | 'fail' | 'denied';
+        text?: string;
+        /** Ran without a confirmation round-trip (conversation allowlist). */
+        autoApproved?: boolean;
+      };
+    };
+
+/**
+ * Auto-approval of mutating tools, scoped to a single conversation.
+ *
+ * Consent never leaves the conversation that granted it: a new session always
+ * starts empty (see `create`), and it is wiped as soon as untrusted web-page
+ * content is attached (the prompt-injection vector the confirmation gate exists
+ * for — see `server.ts`, `page` handler).
+ */
+export interface AutoApprove {
+  /** true = every mutating tool runs without confirmation in this conversation. */
+  all: boolean;
+  /** Explicitly allowed tool names (e.g. 'fleex_ticket_create'). */
+  tools: string[];
+}
+
+/** A fresh, disarmed state. A factory, not a shared const: `tools` is mutated
+ *  in place by `allowTool`, so every session needs its own array. */
+export function noAutoApprove(): AutoApprove {
+  return { all: false, tools: [] };
+}
+
+/** True when this tool may run without a confirmation round-trip. */
+export function isToolAutoApproved(aa: AutoApprove | undefined, toolName: string): boolean {
+  if (!aa) return false;
+  return aa.all || aa.tools.includes(toolName);
+}
+
+/** True when the conversation has any auto-approval armed. */
+export function isAutoApproveActive(aa: AutoApprove | undefined): boolean {
+  return Boolean(aa && (aa.all || aa.tools.length > 0));
+}
 
 export interface SessionData {
   id: string;
@@ -33,6 +74,8 @@ export interface SessionData {
   lastMessageAt?: string;
   messages: Anthropic.MessageParam[];
   transcript: TranscriptItem[];
+  /** Absent on sessions persisted by an older companion. */
+  autoApprove?: AutoApprove;
 }
 
 /** Lightweight projection sent to the side panel for the session list. */
@@ -46,6 +89,8 @@ export interface SessionSummary {
   createdAt: string;
   /** Last user/assistant message time; falls back to createdAt for legacy sessions. */
   lastMessageAt: string;
+  /** Always defined client-side, even for sessions persisted before the field existed. */
+  autoApprove: AutoApprove;
 }
 
 const DEFAULT_TITLE = 'New conversation';
@@ -69,6 +114,7 @@ export function toSummary(s: SessionData): SessionSummary {
     messageCount: messageCount(s),
     createdAt: s.createdAt,
     lastMessageAt: s.lastMessageAt ?? s.createdAt,
+    autoApprove: s.autoApprove ?? noAutoApprove(),
   };
 }
 
@@ -101,6 +147,7 @@ export class SessionStore {
         s.status = 'idle';
         s.messages ??= [];
         s.transcript ??= [];
+        s.autoApprove ??= noAutoApprove();
         this.sessions.set(s.id, s);
       } catch {
         // skip corrupt file
@@ -142,6 +189,8 @@ export class SessionStore {
       createdAt: new Date().toISOString(),
       messages: [],
       transcript: [],
+      // Consent is never inherited: a fresh conversation re-earns it.
+      autoApprove: noAutoApprove(),
     };
     this.sessions.set(s.id, s);
     this.save(s.id);
@@ -171,6 +220,36 @@ export class SessionStore {
     if (!s || s.status === status) return;
     s.status = status;
     this.save(id);
+  }
+
+  /**
+   * Replace the conversation's auto-approval state (full replacement, so the
+   * caller never has to reason about a partial patch).
+   *
+   * Mutates the live SessionData the running turn holds a reference to — that
+   * is what makes a mid-turn "always allow" cover the remaining tool calls of
+   * the *same* turn without another round-trip.
+   */
+  setAutoApprove(id: string, next: AutoApprove): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    s.autoApprove = { all: next.all, tools: [...new Set(next.tools)] };
+    this.save(id);
+  }
+
+  /** Add one tool name to the conversation's allowlist (no-op if redundant). */
+  allowTool(id: string, toolName: string): void {
+    const s = this.sessions.get(id);
+    if (!s || !toolName) return;
+    s.autoApprove ??= noAutoApprove();
+    if (s.autoApprove.all || s.autoApprove.tools.includes(toolName)) return;
+    s.autoApprove.tools.push(toolName);
+    this.save(id);
+  }
+
+  /** Disarm every auto-approval for this conversation. */
+  clearAutoApprove(id: string): void {
+    this.setAutoApprove(id, noAutoApprove());
   }
 
   /** Stamp the last-message time (called when a user/assistant item lands). */

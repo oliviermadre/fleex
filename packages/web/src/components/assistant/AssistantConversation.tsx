@@ -11,6 +11,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import {
   useAssistantStore,
+  toolLabel,
   type AssistantChatItem,
   type AssistantToolStatus,
 } from '../../stores/assistantStore';
@@ -45,14 +46,18 @@ export function AssistantConversation() {
   const items = useAssistantStore((s) => (s.activeId ? s.itemsBySession[s.activeId] ?? EMPTY_ITEMS : EMPTY_ITEMS));
   const confirmReqs = useAssistantStore((s) => s.confirmReqs);
   const errorMsg = useAssistantStore((s) => s.errorMsg);
+  const autoApproveNotice = useAssistantStore((s) => s.autoApproveNotice);
   const ensureConnected = useAssistantStore((s) => s.ensureConnected);
   const newSession = useAssistantStore((s) => s.newSession);
   const openSession = useAssistantStore((s) => s.openSession);
   const sendUser = useAssistantStore((s) => s.sendUser);
   const answerConfirm = useAssistantStore((s) => s.answerConfirm);
+  const setAutoApprove = useAssistantStore((s) => s.setAutoApprove);
+  const clearAutoApproveNotice = useAssistantStore((s) => s.clearAutoApproveNotice);
   const setModel = useAssistantStore((s) => s.setModel);
 
   const [draft, setDraft] = useState('');
+  const [autoApproveOpen, setAutoApproveOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { containerRef, maybeStick, scrollToBottom } = useStickToBottom<HTMLDivElement>();
 
@@ -66,6 +71,8 @@ export function AssistantConversation() {
 
   const session = sessions.find((s) => s.id === activeId) ?? null;
   const busy = session ? session.status !== 'idle' : false;
+  // Undefined when the companion predates the feature — nothing is approved.
+  const autoApprove = session?.autoApprove;
 
   // ── Image / file upload — same engine as everywhere else ──
   const { isUploading, isDragOver, pasteHandler, dragProps, openFilePicker } = useFileUpload({
@@ -275,6 +282,59 @@ export function AssistantConversation() {
             {session.workspace}
           </span>
         )}
+        {/* Standing approvals for this conversation — always visible while
+            armed, so auto-run commands are never a surprise. */}
+        {autoApprove && (autoApprove.all || autoApprove.tools.length > 0) && (
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setAutoApproveOpen((o) => !o)}
+              className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', tint('yellow'))}
+              title="Commandes auto-approuvées dans cette conversation"
+            >
+              ⚡ {autoApprove.all ? 'tout' : `${autoApprove.tools.length} auto`}
+            </button>
+            {autoApproveOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setAutoApproveOpen(false)} />
+                <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 shadow-xl">
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-[var(--theme-text-muted)]">
+                    Auto-approuvé dans cette conversation
+                  </p>
+                  {autoApprove.all ? (
+                    <p className="mb-2 text-xs text-[var(--theme-text-secondary)]">
+                      Toutes les commandes de modification.
+                    </p>
+                  ) : (
+                    <ul className="mb-2 flex flex-col gap-0.5">
+                      {autoApprove.tools.map((t) => (
+                        <li key={t} className="font-mono text-[11px] text-[var(--theme-text-secondary)]">
+                          • {toolLabel(t)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <label className="flex cursor-pointer items-center gap-2 border-t border-[var(--theme-border)] pt-2 text-xs text-[var(--theme-text-primary)]">
+                    <input
+                      type="checkbox"
+                      checked={autoApprove.all}
+                      onChange={(e) => setAutoApprove(session.id, { all: e.target.checked, tools: [] })}
+                    />
+                    Tout auto-approuver
+                  </label>
+                  <button
+                    onClick={() => {
+                      setAutoApprove(session.id, { all: false, tools: [] });
+                      setAutoApproveOpen(false);
+                    }}
+                    className="mt-2 w-full rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]"
+                  >
+                    Tout réinitialiser
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {/* Per-conversation model — same principle as the ticket composer */}
         <ModelSelect
           variant="inline"
@@ -313,6 +373,11 @@ export function AssistantConversation() {
                 className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2"
               >
                 <summary className="cursor-pointer font-mono text-[11px]">
+                  {item.autoApproved && (
+                    <span className={cn('mr-1', tintText('yellow'))} title="Auto-approuvé">
+                      ⚡
+                    </span>
+                  )}
                   <span className={cn('mr-2', badge.className)}>{badge.label}</span>
                   <span className="break-all text-[var(--theme-text-secondary)]">
                     fleex {item.argv.join(' ')}
@@ -360,6 +425,20 @@ export function AssistantConversation() {
                 >
                   Refuser
                 </button>
+                {/* Scoped to this command name: approving "ticket create" 50
+                    times in a row is data entry, not a security decision. */}
+                <button
+                  onClick={() => answerConfirm(req.id, true, 'tool')}
+                  title={`Toutes les commandes « ${toolLabel(req.name)} » de cette conversation`}
+                  className={cn(
+                    'rounded-md border px-4 py-1.5 text-xs font-medium',
+                    tintClasses('yellow').borderColor,
+                    tintText('yellow'),
+                    'hover:bg-[var(--theme-bg-hover)]',
+                  )}
+                >
+                  ⚡ Toujours autoriser «&nbsp;{toolLabel(req.name)}&nbsp;»
+                </button>
                 <button
                   onClick={() => answerConfirm(req.id, true)}
                   className="rounded-md bg-[var(--theme-accent)] px-4 py-1.5 text-xs font-semibold text-[var(--theme-accent-fg)] hover:bg-[var(--theme-accent-hover)]"
@@ -391,6 +470,22 @@ export function AssistantConversation() {
             </div>
           </div>
         ))}
+
+      {/* Auto-approval was disarmed server-side (untrusted page attached) */}
+      {autoApproveNotice && (
+        <div className={cn('shrink-0 border-t px-6 py-2', tintClasses('yellow').borderColor, tintClasses('yellow').bg)}>
+          <div className="mx-auto flex max-w-3xl items-center gap-2 text-xs text-[var(--theme-text-primary)]">
+            <span className="min-w-0 flex-1">{autoApproveNotice}</span>
+            <button
+              onClick={clearAutoApproveNotice}
+              className="shrink-0 rounded px-2 py-0.5 text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)]"
+              aria-label="Masquer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Composer */}
       <div className="shrink-0 border-t border-[var(--theme-border)] px-6 py-3">
