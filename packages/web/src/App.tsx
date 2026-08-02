@@ -6,6 +6,7 @@ import { ToastContainer } from './components/ui/ToastContainer';
 import { NotificationToasts } from './components/notifications/NotificationToasts';
 import { VersionBanner } from './components/ui/VersionBanner';
 import { RouterSync } from './router/RouterSync';
+import { ErrorBoundary } from './components/errors/ErrorBoundary';
 import { useTheme } from './hooks/useTheme';
 import { useTerminalFont } from './hooks/useTerminalFont';
 import { useMobileMode } from './mobile/useMobileMode';
@@ -19,7 +20,10 @@ export function App() {
   if (isMobile) {
     return (
       <BrowserRouter>
-        <MobileApp />
+        {/* Kept outside ToastContainer so toasts still render if the app crashes. */}
+        <ErrorBoundary name="mobile-app">
+          <MobileApp />
+        </ErrorBoundary>
         <ToastContainer />
       </BrowserRouter>
     );

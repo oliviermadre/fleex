@@ -29,6 +29,18 @@ export type { ParsedSlackMessageUrl } from './slack.js';
 
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
 
+export type {
+  ClientErrorSource,
+  ClientErrorReport,
+  ClientErrorResponse,
+} from './types/client-error.js';
+export {
+  CLIENT_ERROR_MAX_MESSAGE,
+  CLIENT_ERROR_MAX_STACK,
+  CLIENT_ERROR_MAX_COMPONENT_STACK,
+  CLIENT_ERROR_MAX_PER_PAGE,
+} from './types/client-error.js';
+
 export type { ModelFamily, ModelOption, ModelsResponse, ModelCapabilities } from './types/model.js';
 export { FALLBACK_MODELS, inferModelCapabilities, resolveEffortLevel } from './types/model.js';
 

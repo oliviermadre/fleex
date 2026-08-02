@@ -47,6 +47,7 @@ import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
+import { clientErrorRoutes } from './infrastructure/http/client-errors.routes.js';
 import { modelsRoutes } from './infrastructure/http/models.routes.js';
 import { overlaySyncRoutes } from './infrastructure/http/overlay-sync.routes.js';
 import { ModelService } from './application/services/model.service.js';
@@ -84,6 +85,10 @@ async function main() {
 
   // Claude Code hook ingress — public (localhost-only enforced inside the route)
   await app.register(hookRoutes(container));
+
+  // Client crash ingress — public: a crash must still be reportable when the
+  // session is dead, which is exactly when auth would reject the report.
+  await app.register(clientErrorRoutes(container));
 
   // Auth middleware for all subsequent routes
   const authMiddleware = createAuthMiddleware(container);
