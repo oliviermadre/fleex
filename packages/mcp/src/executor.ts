@@ -10,6 +10,9 @@ import { execFile } from 'node:child_process';
 import { buildArgv, type BuildArgvOptions } from './argv.ts';
 import type { GeneratedTool } from './types.ts';
 
+/** Ambient execution budget, overridden per command by `GeneratedTool.timeoutMs`. */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
 export interface ExecOptions extends BuildArgvOptions {
   /** Executable to run. Default: $FLEEX_BIN or `fleex`. */
   bin?: string;
@@ -31,6 +34,10 @@ export interface ExecResult {
   data?: unknown;
   /** The fleex argv (without the binary) — for display, audit, and gating. */
   argv: string[];
+  /** True when the child was killed by the timeout rather than exiting itself. */
+  timedOut?: boolean;
+  /** The budget actually applied, so callers can say so in an error message. */
+  timeoutMs: number;
 }
 
 /** Resolve the default fleex invocation (binary + prefix args). */
@@ -45,13 +52,14 @@ export function resolveFleexBin(opts: ExecOptions = {}): { bin: string; prefixAr
 export function runFleexArgv(argv: string[], opts: ExecOptions = {}): Promise<ExecResult> {
   const { bin, prefixArgs } = resolveFleexBin(opts);
   const fullArgs = [...prefixArgs, ...argv];
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return new Promise((resolve) => {
     execFile(
       bin,
       fullArgs,
       {
         cwd: opts.cwd,
-        timeout: opts.timeoutMs ?? 30_000,
+        timeout: timeoutMs,
         maxBuffer: opts.maxBuffer ?? 16 * 1024 * 1024,
         windowsHide: true,
       },
@@ -61,12 +69,17 @@ export function runFleexArgv(argv: string[], opts: ExecOptions = {}): Promise<Ex
           : err
             ? 1
             : 0;
+        // A timeout kill leaves no exit code, so we'd otherwise report the
+        // generic "exited with code 1" — a message that lies about the cause.
+        const timedOut = Boolean(err && (err as { killed?: boolean }).killed);
         const result: ExecResult = {
           ok: exitCode === 0,
           exitCode,
           stdout: stdout ?? '',
           stderr: stderr ?? '',
           argv,
+          timeoutMs,
+          ...(timedOut ? { timedOut } : {}),
         };
         if (opts.json && result.stdout.trim()) {
           try {
@@ -88,5 +101,7 @@ export function execFleex(
   opts: ExecOptions = {},
 ): Promise<ExecResult> {
   const argv = buildArgv(tool, input, opts);
-  return runFleexArgv(argv, opts);
+  // The per-command budget wins over the ambient default: it is a deliberate
+  // decision about that command, not a global preference.
+  return runFleexArgv(argv, { ...opts, timeoutMs: tool.timeoutMs ?? opts.timeoutMs });
 }

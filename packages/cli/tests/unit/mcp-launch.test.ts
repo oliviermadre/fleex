@@ -53,6 +53,19 @@ describe('buildMcpLaunch', () => {
     expect(envOverrides.FLEEX_MCP_INCLUDE).toBe('ticket');
   });
 
+  it('keeps the confirmation bypass off unless explicitly asked for', () => {
+    // The server refuses prompt-blocking tools by default; enabling the bypass
+    // hands approval authority to the MCP client, so it must be a conscious act.
+    expect('FLEEX_MCP_ASSUME_YES' in buildMcpLaunch({}, ctx).envOverrides).toBe(false);
+    expect(buildMcpLaunch({ assumeYes: true }, ctx).envOverrides.FLEEX_MCP_ASSUME_YES).toBe('1');
+  });
+
+  it('honours the confirmation bypass set through the environment', () => {
+    const base = { FLEEX_MCP_ASSUME_YES: '1' } as NodeJS.ProcessEnv;
+    const { envOverrides } = buildMcpLaunch({}, { ...ctx, baseEnv: base });
+    expect(envOverrides.FLEEX_MCP_ASSUME_YES).toBe('1');
+  });
+
   it('an explicit flag still wins over the env (flag > env > default)', () => {
     const base = { FLEEX_WORKSPACE: 'from-env' } as NodeJS.ProcessEnv;
     const { envOverrides } = buildMcpLaunch({ workspace: 'from-flag' }, { ...ctx, baseEnv: base });

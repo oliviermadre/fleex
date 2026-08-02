@@ -38,10 +38,12 @@ same tool surface is reusable by Claude Code, OpenClaw, and Claude Desktop.
 
 - **No shell**: tools run via `execFile` with an argv array; a page's content
   passed as `--description` is one inert argument — no injection, no quoting.
-- **Gated writes**: read-only tools run automatically; create/update/move/
-  delete require explicit user approval in the side panel (the exact `fleex …`
-  command is shown). A decline is fed back to the model as an error result and
-  never executed — the defense against prompt injection from page content.
+- **Gated writes**: the classification is an allowlist of *read* commands —
+  anything else is treated as a write and requires explicit user approval in the
+  side panel (the exact `fleex …` command is shown). It fails closed on purpose:
+  a new CLI command is gated until it is proven read-only. A decline is fed back
+  to the model as an error result and never executed — the defense against
+  prompt injection from page content.
 - **Auto-approval, scoped to one conversation**: batches ("create these 50
   tickets") turned the gate into data entry — one approval per call, with
   attention gone by click 20, which *weakens* the gate rather than reinforcing

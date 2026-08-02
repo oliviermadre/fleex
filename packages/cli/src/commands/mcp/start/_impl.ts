@@ -6,6 +6,8 @@ export interface McpStartOptions {
   workspace?: string;
   /** Comma-separated top-level command groups to expose (FLEEX_MCP_INCLUDE). */
   include?: string;
+  /** Let destructive tools skip the CLI confirmation prompt (FLEEX_MCP_ASSUME_YES). */
+  assumeYes?: boolean;
 }
 
 /** Filesystem anchors the launcher resolves against — overridable in tests. */
@@ -45,6 +47,10 @@ export function buildMcpLaunch(opts: McpStartOptions, ctx: McpLaunchContext): Mc
 
   const include = opts.include ?? base.FLEEX_MCP_INCLUDE;
   if (include) envOverrides.FLEEX_MCP_INCLUDE = include;
+
+  // Opt-in only: without it the server refuses tools that would block on the
+  // CLI's confirmation prompt, rather than silently forcing them through.
+  if (opts.assumeYes || base.FLEEX_MCP_ASSUME_YES) envOverrides.FLEEX_MCP_ASSUME_YES = '1';
 
   // Re-invoke this exact CLI for tool execution unless the caller overrode it.
   envOverrides.FLEEX_MCP_BIN = base.FLEEX_MCP_BIN ?? ctx.execPath;
