@@ -23,8 +23,8 @@ function iconEl(name) {
 // ── DOM refs ───────────────────────────────────────────────────────────────
 const thread     = document.getElementById('thread');
 const statusEl   = document.getElementById('status');
-const input      = document.getElementById('input');
-const sendBtn    = document.getElementById('send');
+const input      = /** @type {HTMLTextAreaElement} */ (document.getElementById('input'));
+const sendBtn    = /** @type {HTMLButtonElement} */ (document.getElementById('send'));
 const ctxBtn     = document.getElementById('ctx-btn');
 const wsBtnEl    = document.getElementById('ws-btn');
 const wsLabel    = document.getElementById('ws-label');
@@ -37,7 +37,7 @@ const overlay    = document.getElementById('overlay');
 const sbClose    = document.getElementById('sb-close');
 const newSbBtn   = document.getElementById('new-sb');
 const sessionsEl = document.getElementById('sessions');
-const sbSearch   = document.getElementById('sb-search');
+const sbSearch   = /** @type {HTMLInputElement} */ (document.getElementById('sb-search'));
 const sbFilter   = document.getElementById('sb-filter');
 const toastEl    = document.getElementById('toast');
 
@@ -447,7 +447,7 @@ function renderSidebar() {
   // Build workspace filter tabs
   const wsNames = [...new Set(sessions.map((s) => s.workspace || 'default'))];
   const segs = sbFilter.querySelectorAll('.seg[data-filter]');
-  const existing = [...segs].map((b) => b.dataset.filter);
+  const existing = [...segs].map((b) => /** @type {HTMLElement} */ (b).dataset.filter);
   const needed = ['all', ...wsNames];
   if (JSON.stringify(existing) !== JSON.stringify(needed)) {
     sbFilter.innerHTML = '';
@@ -456,7 +456,7 @@ function renderSidebar() {
       btn.className = 'seg' + (f === convFilter ? ' active' : '');
       btn.dataset.filter = f;
       btn.textContent = f === 'all' ? 'All' : f;
-      btn.onclick = () => { convFilter = f; sbFilter.querySelectorAll('.seg').forEach((b) => b.classList.toggle('active', b.dataset.filter === f)); renderSidebar(); };
+      btn.onclick = () => { convFilter = f; sbFilter.querySelectorAll('.seg').forEach((b) => b.classList.toggle('active', /** @type {HTMLElement} */ (b).dataset.filter === f)); renderSidebar(); };
       sbFilter.appendChild(btn);
     }
   }
@@ -649,7 +649,7 @@ input.addEventListener('input', autoGrow);
 // ── Page capture ───────────────────────────────────────────────────────────
 function extractPage() {
   const pick = document.querySelector('article') || document.querySelector('main') || document.body;
-  const clone = pick.cloneNode(true);
+  const clone = /** @type {HTMLElement} */ (pick.cloneNode(true));
   clone.querySelectorAll('script,style,noscript,svg,canvas,iframe').forEach((e) => e.remove());
   const text = (clone.innerText || '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 20000);
   return { url: location.href, title: document.title, content: text };
@@ -846,10 +846,11 @@ function togglePopover(id, anchor, placement, align) {
 }
 
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('.popover') &&
-      !e.target.closest('#ws-btn') &&
-      !e.target.closest('#model-btn') &&
-      !e.target.closest('#ctx-btn')) {
+  const target = /** @type {HTMLElement} */ (e.target);
+  if (!target.closest('.popover') &&
+      !target.closest('#ws-btn') &&
+      !target.closest('#model-btn') &&
+      !target.closest('#ctx-btn')) {
     closeAllPopovers();
   }
 });
@@ -882,7 +883,7 @@ function initResize() {
       app.style.width = w + 'px';
     };
     const onUp = () => {
-      localStorage.setItem('fa.w', parseInt(app.style.width, 10) || startW);
+      localStorage.setItem('fa.w', String(parseInt(app.style.width, 10) || startW));
       window.removeEventListener('mousemove', onMove);
     };
     window.addEventListener('mousemove', onMove, { passive: true });
@@ -947,7 +948,7 @@ wsBtnEl.onclick   = () => togglePopover('ws-popover', wsBtnEl, 'below', 'right')
 modelBtnEl.onclick = () => togglePopover('model-popover', modelBtnEl, 'above', 'left');
 ctxBtn.onclick    = () => { renderCtxMenu(); togglePopover('ctx-menu', ctxBtn, 'above', 'left'); };
 
-sbSearch.addEventListener('input', (e) => { convQuery = e.target.value; renderSidebar(); });
+sbSearch.addEventListener('input', () => { convQuery = sbSearch.value; renderSidebar(); });
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 initResize();

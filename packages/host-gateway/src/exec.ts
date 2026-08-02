@@ -1,6 +1,15 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { logInfo, logDebug } from './logger';
+import {
+  ValidationError,
+  asRecord,
+  optionalBoolean,
+  optionalNumber,
+  optionalString,
+  optionalStringArray,
+  requireString,
+} from './validation';
 
 const execFileAsync = promisify(execFile);
 
@@ -11,6 +20,25 @@ interface ExecRequest {
   timeout?: number;
   maxBuffer?: number;
   shell?: boolean;
+}
+
+/** Validates an untrusted `/exec` body. Throws {@link ValidationError} on any bad field. */
+function parseExecRequest(raw: unknown): ExecRequest {
+  const body = asRecord(raw);
+
+  const command = requireString(body['command'], 'command');
+  if (command.length === 0) {
+    throw new ValidationError('"command" must not be empty');
+  }
+
+  return {
+    command,
+    args: optionalStringArray(body['args'], 'args') ?? [],
+    cwd: optionalString(body['cwd'], 'cwd'),
+    timeout: optionalNumber(body['timeout'], 'timeout'),
+    maxBuffer: optionalNumber(body['maxBuffer'], 'maxBuffer'),
+    shell: optionalBoolean(body['shell'], 'shell'),
+  };
 }
 
 interface ExecResponse {
@@ -32,8 +60,15 @@ function isPollingCommand(command: string, args: string[], shell?: boolean): boo
   return false;
 }
 
-export async function handleExec(body: ExecRequest): Promise<ExecResponse> {
-  const { command, args = [], cwd, timeout = 30_000, maxBuffer = 10 * 1024 * 1024, shell } = body;
+export async function handleExec(raw: unknown): Promise<ExecResponse> {
+  const {
+    command,
+    args,
+    cwd,
+    timeout = 30_000,
+    maxBuffer = 10 * 1024 * 1024,
+    shell,
+  } = parseExecRequest(raw);
 
   const line = `[exec] ${shell ? 'shell' : 'exec'} ${command} ${shell ? '' : JSON.stringify(args)} ${cwd ?? ''}`.trimEnd();
   if (isPollingCommand(command, args, shell)) {

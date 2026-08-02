@@ -30,7 +30,7 @@ function resolveTmuxPath(): string {
 
 const TMUX_PATH = resolveTmuxPath();
 
-export function handlePtyOpen(ws: ServerWebSocket<PtyWsData>) {
+export function handlePtyOpen(_ws: ServerWebSocket<PtyWsData>) {
   logInfo('[pty] WebSocket connected, waiting for init message');
 }
 

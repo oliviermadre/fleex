@@ -1,7 +1,16 @@
 {
   "name": "@fleex/event-hub",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "bun run --watch src/main.ts"
+  },
+  "dependencies": {
+    "@fleex/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
   }
 }

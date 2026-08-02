@@ -40,6 +40,8 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
+# The palette is intentionally complete; not every color is used today.
+# shellcheck disable=SC2034
 WHITE='\033[1;37m'
 BOLD='\033[1m'
 DIM='\033[2m'
@@ -256,7 +258,6 @@ check_tool() {
   local tool="$1"
   local required="$2"
   local purpose="$3"
-  local install_hint="$4"
 
   if command -v "$tool" >/dev/null 2>&1; then
     local version=""
@@ -304,6 +305,8 @@ check_claude_auth() {
 # Bash 3.x-compatible semver comparison: returns 0 if $1 >= $2
 version_gte() {
   local IFS=.
+  # Splitting on "." is the intent here: it turns 1.2.3 into an array of parts.
+  # shellcheck disable=SC2206
   local i a=($1) b=($2)
   for ((i=0; i<${#b[@]}; i++)); do
     local va="${a[i]:-0}" vb="${b[i]:-0}"
@@ -444,11 +447,8 @@ install_python3() {
 phase_prerequisites() {
   ui_section "Prerequisites"
 
-  local all_ok=true
-
   # git — manual install only
-  if ! check_tool "git" "required" "VCS operations" ""; then
-    all_ok=false
+  if ! check_tool "git" "required" "VCS operations"; then
     case "$OS_TYPE" in
       macos) err "Please install Xcode Command Line Tools: xcode-select --install" ;;
       linux) err "Please install git: sudo apt install git (or your package manager)" ;;
@@ -458,7 +458,7 @@ phase_prerequisites() {
   fi
 
   # bun
-  if ! check_tool "bun" "required" "JS runtime & package manager" ""; then
+  if ! check_tool "bun" "required" "JS runtime & package manager"; then
     local answer
     answer="$(ui_prompt_yn "Install bun automatically?" "y")"
     if [ "$answer" = "y" ]; then
@@ -483,7 +483,7 @@ phase_prerequisites() {
   fi
 
   # tmux
-  if ! check_tool "tmux" "required" "Terminal multiplexer for agent sessions" ""; then
+  if ! check_tool "tmux" "required" "Terminal multiplexer for agent sessions"; then
     local answer
     answer="$(ui_prompt_yn "Install tmux automatically?" "y")"
     if [ "$answer" = "y" ]; then
@@ -494,7 +494,7 @@ phase_prerequisites() {
   fi
 
   # claude
-  if ! check_tool "claude" "required" "Anthropic CLI for AI agents" ""; then
+  if ! check_tool "claude" "required" "Anthropic CLI for AI agents"; then
     local answer
     answer="$(ui_prompt_yn "Install claude CLI automatically?" "y")"
     if [ "$answer" = "y" ]; then
@@ -507,7 +507,7 @@ phase_prerequisites() {
   check_claude_auth || true
 
   # gh
-  if ! check_tool "gh" "required" "GitHub CLI for repository operations" ""; then
+  if ! check_tool "gh" "required" "GitHub CLI for repository operations"; then
     local answer
     answer="$(ui_prompt_yn "Install gh CLI automatically?" "y")"
     if [ "$answer" = "y" ]; then
@@ -520,7 +520,7 @@ phase_prerequisites() {
   check_gh_auth || true
 
   # python3 (optional)
-  if ! check_tool "python3" "optional" "Dynamic port allocation (has fallback)" ""; then
+  if ! check_tool "python3" "optional" "Dynamic port allocation (has fallback)"; then
     local answer
     answer="$(ui_prompt_yn "Install python3? (optional, has fallback)" "n")"
     if [ "$answer" = "y" ]; then
@@ -1074,6 +1074,8 @@ phase_complete_update() {
     ok "Migrations checked."
   elif [ -f "$ENV_FILE" ]; then
     set -a
+    # Runtime-generated user env file; nothing to follow at lint time.
+    # shellcheck source=/dev/null
     . "$ENV_FILE"
     set +a
     info "Running database migrations..."
@@ -1147,6 +1149,10 @@ DONE
   local shell_name
   shell_name="$(basename "${SHELL:-/bin/bash}")"
   local rc_file
+  # Display-only: the user copy-pastes `source ~/.zshrc`, so the tilde is meant
+  # to reach their shell unexpanded. Printing an absolute $HOME path here would
+  # be less idiomatic, not more correct.
+  # shellcheck disable=SC2088
   case "$shell_name" in
     zsh)  rc_file="~/.zshrc" ;;
     bash) rc_file="~/.bashrc" ;;
