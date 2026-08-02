@@ -1,10 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, info } from '../../../core/colors.ts';
-import { apiBase, apiGet } from '../../../core/api.ts';
 import { printJson, renderTable } from '../../../core/agentic.ts';
+import { apiBase, apiGet } from '../../../core/api.ts';
+import { c, info } from '../../../core/colors.ts';
 import { parseRepo, type Worktree } from '../_shared.ts';
 
-interface Options { json?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface Options {
+  json?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -17,7 +20,9 @@ const def: CommandDef = {
   },
   action: async (repoArg: string, opts: Options) => {
     const { org, name } = parseRepo(repoArg);
-    const worktrees = await apiGet<Worktree[]>(`${apiBase()}/api/repositories/${org}/${name}/worktrees`);
+    const worktrees = await apiGet<Worktree[]>(
+      `${apiBase()}/api/repositories/${org}/${name}/worktrees`,
+    );
     if (opts.json) {
       printJson(worktrees);
       return;

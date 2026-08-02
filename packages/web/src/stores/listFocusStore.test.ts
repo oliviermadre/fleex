@@ -1,16 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import {
   useListFocusStore,
   DEFAULT_LIST_FOCUS_STATUSES,
   type ListFocusGroupSnapshot,
 } from './listFocusStore';
 
-const groupsA: ListFocusGroupSnapshot[] = [
-  { key: 'doing', label: 'Doing', ticketIds: ['a', 'b'] },
-];
-const groupsB: ListFocusGroupSnapshot[] = [
-  { key: 'doing', label: 'Doing', ticketIds: ['b'] },
-];
+const groupsA: ListFocusGroupSnapshot[] = [{ key: 'doing', label: 'Doing', ticketIds: ['a', 'b'] }];
+const groupsB: ListFocusGroupSnapshot[] = [{ key: 'doing', label: 'Doing', ticketIds: ['b'] }];
 
 describe('listFocusStore.refreeze', () => {
   beforeEach(() => {

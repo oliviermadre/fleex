@@ -1,11 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import {
-  editDistance,
-  handle,
-  resolveFromList,
-  suggest,
-  trunc,
-} from '../../src/core/agentic.ts';
+
+import { editDistance, handle, resolveFromList, suggest, trunc } from '../../src/core/agentic.ts';
 
 describe('handle', () => {
   it('builds a @type:name mention token', () => {
@@ -38,7 +33,11 @@ describe('suggest', () => {
 });
 
 describe('resolveFromList', () => {
-  interface Item { id: string; name: string; displayName: string }
+  interface Item {
+    id: string;
+    name: string;
+    displayName: string;
+  }
   const list: Item[] = [
     { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', name: 'builder', displayName: 'The Builder' },
     { id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', name: 'catalyst', displayName: 'The Catalyst' },
@@ -47,7 +46,9 @@ describe('resolveFromList', () => {
   const displayOf = (x: Item) => x.displayName;
 
   it('matches by UUID', () => {
-    expect(resolveFromList('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', list, handleOf)?.name).toBe('builder');
+    expect(resolveFromList('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', list, handleOf)?.name).toBe(
+      'builder',
+    );
   });
   it('matches by handle name (case-insensitive)', () => {
     expect(resolveFromList('BUILDER', list, handleOf)?.name).toBe('builder');

@@ -1,7 +1,9 @@
 import type { CommentVisibility } from '@fleex/shared';
+
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
-import type { CommentStorePort } from '../../../application/ports/comment-store.port.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type { CommentStorePort } from '../../../application/ports/comment-store.port.js';
 
 interface CommentRow {
   id: string;
@@ -107,10 +109,7 @@ export class SupabaseCommentStore implements CommentStorePort {
   }
 
   async remove(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('comments')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('comments').delete().eq('id', id);
     if (error) throw new Error(`SupabaseCommentStore.remove failed: ${error.message}`);
   }
 }

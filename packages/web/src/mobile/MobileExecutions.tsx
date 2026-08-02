@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
+
 import type { AgentExecution } from '@fleex/shared';
-import { useAgentEventStore } from '../stores/agentEventStore';
-import { useAgentPersonaStore } from '../stores/agentPersonaStore';
-import { cancelExecution } from '../services/api';
+
 import { AgentEventStream } from '../components/main-panel/AgentEventStream';
 import { tint, tintClasses, tintSolid } from '../lib/tints';
+import { cancelExecution } from '../services/api';
+import { useAgentEventStore } from '../stores/agentEventStore';
+import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 
 const EMPTY_EXECUTIONS: AgentExecution[] = [];
 
@@ -133,7 +135,10 @@ export function MobileExecutions({ ticketId }: { ticketId: string }) {
               </button>
             )}
           </header>
-          <div className="flex min-h-0 flex-1 flex-col" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div
+            className="flex min-h-0 flex-1 flex-col"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
             <AgentEventStream executionId={openExec.id} />
           </div>
         </div>

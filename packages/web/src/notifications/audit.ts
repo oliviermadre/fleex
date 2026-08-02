@@ -1,7 +1,9 @@
 import type { DomainEventLog } from '@fleex/shared';
+
+import { toNotification } from './pipeline';
+
 import type { NotificationRendererRegistry } from './registry';
 import type { PulseNotification, RendererContext, WsChannelMessage } from './types';
-import { toNotification } from './pipeline';
 
 /**
  * Audit-trail → Pulse bridge.

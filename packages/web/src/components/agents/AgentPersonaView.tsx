@@ -1,12 +1,14 @@
 import { useNavigate } from 'react-router-dom';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { AgentEmptyState } from './AgentEmptyState';
-import { AgentConfigTab } from './AgentConfigTab';
-import { AgentMarkdownTab } from './AgentMarkdownTab';
-import { AgentEventsTab } from './AgentEventsTab';
-import { ModelBadge } from './ModelBadge';
+
 import { cn } from '../../lib/cn';
 import { tintClasses, tintSolid } from '../../lib/tints';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+
+import { AgentConfigTab } from './AgentConfigTab';
+import { AgentEmptyState } from './AgentEmptyState';
+import { AgentEventsTab } from './AgentEventsTab';
+import { AgentMarkdownTab } from './AgentMarkdownTab';
+import { ModelBadge } from './ModelBadge';
 
 const TABS = [
   { key: 'config' as const, label: 'Config' },
@@ -38,7 +40,7 @@ export function AgentPersonaView() {
     }
   };
 
-  const handleTabClick = (tab: typeof TABS[number]['key']) => {
+  const handleTabClick = (tab: (typeof TABS)[number]['key']) => {
     if (tab === 'config') {
       navigate(`/agents/${persona.id}`, { replace: true });
     } else {
@@ -49,9 +51,22 @@ export function AgentPersonaView() {
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
       {/* Header — matches SessionHeader pattern */}
-      <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
+      <div
+        className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3"
+        style={{ height: 'var(--header-height)' }}
+      >
         <div className="flex items-center gap-1.5 min-w-0">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-text-secondary)]">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0 text-[var(--theme-text-secondary)]"
+          >
             <path d="M12 8V4H8" />
             <rect width="16" height="12" x="4" y="8" rx="2" />
             <path d="M2 14h2" />
@@ -89,7 +104,13 @@ export function AgentPersonaView() {
             )}
             title="Run agent on pending mentions"
           >
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              className="shrink-0"
+            >
               <path d="M4 2l10 6-10 6V2z" />
             </svg>
             Play

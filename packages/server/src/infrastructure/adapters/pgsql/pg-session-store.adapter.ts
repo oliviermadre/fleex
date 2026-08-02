@@ -1,7 +1,9 @@
 import type { SessionType, SessionStatus, SessionHookStatus, WaitingReason } from '@fleex/shared';
+
 import { SessionEntity } from '../../../domain/entities.js';
-import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
+
 import type { PgConnection } from './connection.js';
+import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
 
 export class PgSessionStore implements SessionStorePort {
   constructor(private readonly db: PgConnection) {}
@@ -94,8 +96,8 @@ function rowToSession(row: Record<string, unknown>): SessionEntity {
     (row.claude_prompt as string) ?? undefined,
     (row.display_name as string) ?? '',
     undefined,
-    ((row.hook_status as string) as SessionHookStatus) ?? 'unknown',
-    ((row.hook_waiting_reason as string | null) as WaitingReason | null) ?? null,
+    (row.hook_status as string as SessionHookStatus) ?? 'unknown',
+    (row.hook_waiting_reason as string | null as WaitingReason | null) ?? null,
     (row.hook_last_message as string | null) ?? null,
     row.hook_status_updated_at ? new Date(row.hook_status_updated_at as string) : null,
   );

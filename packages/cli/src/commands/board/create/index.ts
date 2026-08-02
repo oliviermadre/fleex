@@ -1,9 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
+import { ok, die, present } from '../../../core/colors.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 import type { Board } from '../_shared.ts';
 
-interface CreateOptions { name?: string; emoji?: string }
+interface CreateOptions {
+  name?: string;
+  emoji?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,

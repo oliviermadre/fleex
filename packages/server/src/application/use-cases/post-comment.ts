@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
+
 import type { CommentVisibility, MentionExecutionMode } from '@fleex/shared';
+
+import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
-import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+
 import type { CommentStorePort } from '../ports/comment-store.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
 import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
 
 export class PostCommentUseCase {
   constructor(
@@ -148,14 +151,16 @@ export class PostCommentUseCase {
     }
 
     // Log activity
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
-      ticketId: params.ticketId,
-      action: 'commented',
-      actorType: params.authorType,
-      actorName: params.authorName,
-      source: params.authorType === 'agent' ? 'api' : 'web',
-    }));
+    await this.ticketStore.saveActivity(
+      TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: params.ticketId,
+        action: 'commented',
+        actorType: params.authorType,
+        actorName: params.authorName,
+        source: params.authorType === 'agent' ? 'api' : 'web',
+      }),
+    );
 
     this.logger.info('Comment posted', {
       ticketId: params.ticketId,

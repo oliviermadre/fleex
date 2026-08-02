@@ -1,5 +1,6 @@
-import type { CommandDef } from '../../../core/types.ts';
 import { listBoardsWithCounts } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const def: CommandDef = {
   workspaceAware: true,

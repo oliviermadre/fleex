@@ -1,11 +1,16 @@
-import type { TmuxPort, TmuxSessionInfo, ManagedSessionsWithPanes } from '../../src/application/ports/tmux.port.js';
-import type { SessionStorePort } from '../../src/application/ports/session-store.port.js';
-import type { GitPort } from '../../src/application/ports/git.port.js';
-import type { ConfigPort, AppConfig } from '../../src/application/ports/config.port.js';
-import type { LoggerPort } from '../../src/application/ports/logger.port.js';
-import type { HostFs } from '../../src/infrastructure/host/types.js';
 import type { DiffStats, GitRemoteInfo, Worktree } from '@fleex/shared';
-import { SessionEntity } from '../../src/domain/entities.js';
+
+import type { ConfigPort, AppConfig } from '../../src/application/ports/config.port.js';
+import type { GitPort } from '../../src/application/ports/git.port.js';
+import type { LoggerPort } from '../../src/application/ports/logger.port.js';
+import type { SessionStorePort } from '../../src/application/ports/session-store.port.js';
+import type {
+  TmuxPort,
+  TmuxSessionInfo,
+  ManagedSessionsWithPanes,
+} from '../../src/application/ports/tmux.port.js';
+import type { SessionEntity } from '../../src/domain/entities.js';
+import type { HostFs } from '../../src/infrastructure/host/types.js';
 
 export class FakeTmuxPort implements TmuxPort {
   sessions = new Map<string, { cwd: string; command?: string }>();
@@ -144,8 +149,12 @@ export class FakeGitPort implements GitPort {
     return { commitsAhead: 0, commitsBehind: 0, filesChanged: 0, additions: 0, deletions: 0 };
   }
   async cloneBare(): Promise<void> {}
-  async getDiffSummary(): Promise<string> { return ''; }
-  async getLogOneline(): Promise<string> { return ''; }
+  async getDiffSummary(): Promise<string> {
+    return '';
+  }
+  async getLogOneline(): Promise<string> {
+    return '';
+  }
   async repairWorktrees(): Promise<void> {}
   async pruneWorktrees(): Promise<void> {}
 }
@@ -201,7 +210,10 @@ export class FakeHostFs implements HostFs {
   }
 
   /** Register the entries returned by readdir(path); marks the path as existing. */
-  addDirEntries(path: string, entries: { name: string; isFile: boolean; isDirectory: boolean }[]): void {
+  addDirEntries(
+    path: string,
+    entries: { name: string; isFile: boolean; isDirectory: boolean }[],
+  ): void {
     this.existingPaths.add(path);
     this.dirEntries.set(path, entries);
   }

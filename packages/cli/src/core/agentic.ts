@@ -112,9 +112,7 @@ export function fetchPanels(enabledOnly = false): Promise<Panel[]> {
   return apiGet<Panel[]>(`${apiBase()}/api/panels${enabledOnly ? '/enabled' : ''}`);
 }
 export function fetchWorkflows(enabledOnly = false): Promise<Workflow[]> {
-  return apiGet<Workflow[]>(
-    `${apiBase()}/api/workflows/templates${enabledOnly ? '/enabled' : ''}`,
-  );
+  return apiGet<Workflow[]>(`${apiBase()}/api/workflows/templates${enabledOnly ? '/enabled' : ''}`);
 }
 
 /** The mention handle name for each primitive (the part after `@type:`). */

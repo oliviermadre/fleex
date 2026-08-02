@@ -1,5 +1,3 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { info } from '../../../core/colors.ts';
 import {
   fetchPersonas,
   fetchPersonaStatuses,
@@ -8,8 +6,13 @@ import {
   printJson,
   renderTable,
 } from '../../../core/agentic.ts';
+import { info } from '../../../core/colors.ts';
 
-interface ListOptions { json?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface ListOptions {
+  json?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -30,7 +33,9 @@ const def: CommandDef = {
       return;
     }
     // Status is best-effort: don't fail the listing if it's unavailable.
-    const statuses = await fetchPersonaStatuses().catch(() => ({} as Record<string, { running: boolean; pendingMentionCount: number }>));
+    const statuses = await fetchPersonaStatuses().catch(
+      () => ({}) as Record<string, { running: boolean; pendingMentionCount: number }>,
+    );
     personas.sort((a, b) => a.name.localeCompare(b.name));
 
     const rows = personas.map((p) => {

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useUIStore } from '../../stores/uiStore';
-import { useAssistantStore, type AssistantSession } from '../../stores/assistantStore';
+
 import { cn } from '../../lib/cn';
 import { tintSolid, tintText } from '../../lib/tints';
+import { useAssistantStore, type AssistantSession } from '../../stores/assistantStore';
+import { useUIStore } from '../../stores/uiStore';
 
 /** "x unit ago" relative time, matching the comment feed's tone. */
 export function relativeTime(iso: string): string {
@@ -18,16 +19,30 @@ export function relativeTime(iso: string): string {
 }
 
 /** Idle vs answering indicator: pulses while the LLM is working. */
-export function AssistantStatusDot({ status, size = 8 }: { status: AssistantSession['status']; size?: number }) {
+export function AssistantStatusDot({
+  status,
+  size = 8,
+}: {
+  status: AssistantSession['status'];
+  size?: number;
+}) {
   const working = status !== 'idle';
   return (
     <span
       className={cn(
         'inline-block shrink-0 rounded-full',
-        working ? cn('animate-pulse', tintSolid('yellow')) : 'bg-[var(--theme-text-faint)] opacity-40',
+        working
+          ? cn('animate-pulse', tintSolid('yellow'))
+          : 'bg-[var(--theme-text-faint)] opacity-40',
       )}
       style={{ width: size, height: size }}
-      title={status === 'idle' ? 'Inactif' : status === 'awaiting_input' ? 'En attente de confirmation' : 'En train de répondre'}
+      title={
+        status === 'idle'
+          ? 'Inactif'
+          : status === 'awaiting_input'
+            ? 'En attente de confirmation'
+            : 'En train de répondre'
+      }
     />
   );
 }
@@ -84,7 +99,15 @@ export function AssistantSidebar() {
             onClick={() => newSession()}
             title="Nouvelle conversation"
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            >
               <line x1="8" y1="3" x2="8" y2="13" />
               <line x1="3" y1="8" x2="13" y2="8" />
             </svg>
@@ -95,7 +118,16 @@ export function AssistantSidebar() {
             className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
             title="Collapse panel"
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
               <line x1="6" y1="1.5" x2="6" y2="14.5" />
             </svg>
@@ -152,7 +184,9 @@ export function AssistantSidebar() {
                     className="w-full rounded border border-[var(--theme-accent)] bg-[var(--theme-bg-surface)] px-1.5 py-0.5 text-xs text-[var(--theme-text-primary)] outline-none"
                   />
                 ) : (
-                  <p className="truncate text-xs font-medium text-[var(--theme-text-primary)]">{s.title}</p>
+                  <p className="truncate text-xs font-medium text-[var(--theme-text-primary)]">
+                    {s.title}
+                  </p>
                 )}
                 <p className="truncate text-[10px] text-[var(--theme-text-faint)]">
                   {s.messageCount} message{s.messageCount > 1 ? 's' : ''}
@@ -171,7 +205,16 @@ export function AssistantSidebar() {
                 className="hidden shrink-0 rounded p-1 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)] group-hover:block"
                 title="Renommer"
               >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M11.5 2.5l2 2L6 12l-2.7.7L4 10l7.5-7.5z" />
                 </svg>
               </button>
@@ -192,7 +235,15 @@ export function AssistantSidebar() {
                 {confirmDeleteId === s.id ? (
                   'Sûr ?'
                 ) : (
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
                     <line x1="4" y1="4" x2="12" y2="12" />
                     <line x1="12" y1="4" x2="4" y2="12" />
                   </svg>

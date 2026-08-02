@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+
 import type { ClaudeUsage } from '@fleex/shared';
 import { CLAUDE_USAGE_CACHE_TTL_MS } from '@fleex/shared';
+
 import { fetchClaudeUsage } from '../services/api';
 
 export function useClaudeUsage() {

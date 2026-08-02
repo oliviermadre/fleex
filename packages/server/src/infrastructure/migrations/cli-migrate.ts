@@ -70,8 +70,12 @@ async function main() {
     }
     const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];
     if (!dbUrl) {
-      logger.warn('FLEEX_SUPABASE_DB_URL is not set — migrations require a direct PostgreSQL connection to Supabase.');
-      logger.warn('Set FLEEX_SUPABASE_DB_URL to your Supabase PostgreSQL connection string (found in Supabase Dashboard > Settings > Database).');
+      logger.warn(
+        'FLEEX_SUPABASE_DB_URL is not set — migrations require a direct PostgreSQL connection to Supabase.',
+      );
+      logger.warn(
+        'Set FLEEX_SUPABASE_DB_URL to your Supabase PostgreSQL connection string (found in Supabase Dashboard > Settings > Database).',
+      );
     }
     const { SupabaseConnection } = await import('../adapters/supabase/connection.js');
     const conn = new SupabaseConnection(url, key, dbUrl);

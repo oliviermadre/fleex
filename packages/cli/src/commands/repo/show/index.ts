@@ -1,8 +1,9 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, info } from '../../../core/colors.ts';
-import { apiBase, apiGet } from '../../../core/api.ts';
 import { printJson } from '../../../core/agentic.ts';
+import { apiBase, apiGet } from '../../../core/api.ts';
+import { c, info } from '../../../core/colors.ts';
 import { parseRepo, type GitHubIssue, type PullRequest, type Worktree } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface Dashboard {
   org: string;
@@ -15,7 +16,9 @@ interface Dashboard {
   isClonedLocally: boolean;
 }
 
-interface ShowOptions { json?: boolean }
+interface ShowOptions {
+  json?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -49,7 +52,9 @@ const def: CommandDef = {
     if (d.openPullRequests?.length) {
       for (const pr of d.openPullRequests) {
         const draft = pr.isDraft ? c.dim(' [draft]') : '';
-        process.stdout.write(`  #${pr.number}  ${pr.title}${draft} ${c.dim(`(${pr.headRefName})`)}\n`);
+        process.stdout.write(
+          `  #${pr.number}  ${pr.title}${draft} ${c.dim(`(${pr.headRefName})`)}\n`,
+        );
       }
     } else process.stdout.write(`  ${c.dim('(none)')}\n`);
 

@@ -54,7 +54,8 @@ export const TERMINAL_ANSI_LIGHT: Partial<TerminalTheme> = {
   brightWhite: '#a1a1aa',
 };
 
-export const TERMINAL_FONT_FAMILY = '"Berkeley Mono", "JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace';
+export const TERMINAL_FONT_FAMILY =
+  '"Berkeley Mono", "JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace';
 export const TERMINAL_FONT_SIZE = 13;
 export const TERMINAL_SCROLLBACK = 10000;
 
@@ -73,5 +74,5 @@ export const PAGE_SIZE_ARCHIVED_TICKETS = 20;
 export const COLOR_ERROR_RED = '#dc2626';
 
 // UI — semantic dimensions
-export const TITLE_BAR_HEIGHT = 36;     // floating panel drag/title bar
+export const TITLE_BAR_HEIGHT = 36; // floating panel drag/title bar
 export const PILL_BORDER_RADIUS = 9999; // fully rounded badge

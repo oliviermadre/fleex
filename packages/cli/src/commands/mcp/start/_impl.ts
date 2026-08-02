@@ -1,5 +1,5 @@
-import path from 'node:path';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 
 export interface McpStartOptions {
   /** Workspace the MCP tools target (forwarded as FLEEX_WORKSPACE → --workspace). */

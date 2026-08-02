@@ -1,7 +1,9 @@
 import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
+
 import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliverable.entity.js';
-import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
+
 import type { SqliteConnection } from './connection.js';
+import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
 
 interface DeliverableRow {
   id: string;
@@ -31,15 +33,16 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
     if (ticketIds.length === 0) return [];
     const placeholders = ticketIds.map(() => '?').join(',');
     const rows = this.conn.db
-      .prepare(`SELECT * FROM deliverables WHERE ticket_id IN (${placeholders}) ORDER BY created_at ASC`)
+      .prepare(
+        `SELECT * FROM deliverables WHERE ticket_id IN (${placeholders}) ORDER BY created_at ASC`,
+      )
       .all(...ticketIds) as DeliverableRow[];
     return rows.map((r) => this.toEntity(r));
   }
 
   async getById(id: string): Promise<TicketDeliverableEntity | null> {
-    const row = this.conn.db
-      .prepare('SELECT * FROM deliverables WHERE id = ?')
-      .get(id) as DeliverableRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM deliverables WHERE id = ?').get(id) as
+      DeliverableRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 
@@ -50,7 +53,10 @@ export class SqliteDeliverableStoreAdapter implements DeliverableStorePort {
     return rows.map((r) => this.toEntity(r));
   }
 
-  async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
+  async getByTicketAndType(
+    ticketId: string,
+    type: string,
+  ): Promise<TicketDeliverableEntity | null> {
     const row = this.conn.db
       .prepare('SELECT * FROM deliverables WHERE ticket_id = ? AND type = ? LIMIT 1')
       .get(ticketId, type) as DeliverableRow | undefined;

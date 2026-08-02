@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
+
 import { isSlackMessageUrl, parseSlackMessageUrl } from '@fleex/shared';
 
 describe('isSlackMessageUrl', () => {
   it('accepts a canonical Slack message permalink', () => {
-    expect(isSlackMessageUrl('https://acme.slack.com/archives/C01234ABCDE/p1700000000123456')).toBe(true);
+    expect(isSlackMessageUrl('https://acme.slack.com/archives/C01234ABCDE/p1700000000123456')).toBe(
+      true,
+    );
   });
 
   it('accepts a permalink with thread_ts/cid query params (a reply inside a thread)', () => {
@@ -17,17 +20,23 @@ describe('isSlackMessageUrl', () => {
   });
 
   it('accepts a private-channel (group) permalink', () => {
-    expect(isSlackMessageUrl('https://acme.slack.com/archives/G07ABCDEF12/p1700000000123456')).toBe(true);
+    expect(isSlackMessageUrl('https://acme.slack.com/archives/G07ABCDEF12/p1700000000123456')).toBe(
+      true,
+    );
   });
 
   it('accepts a trailing slash', () => {
-    expect(isSlackMessageUrl('https://acme.slack.com/archives/C01234ABCDE/p1700000000123456/')).toBe(true);
+    expect(
+      isSlackMessageUrl('https://acme.slack.com/archives/C01234ABCDE/p1700000000123456/'),
+    ).toBe(true);
   });
 
   it('trims surrounding whitespace before matching', () => {
     // WHY: the same paste field handles GitHub URLs and trims input; a Slack URL with a stray
     // trailing newline from the clipboard must behave identically.
-    expect(isSlackMessageUrl('  https://acme.slack.com/archives/C01234ABCDE/p1700000000123456\n')).toBe(true);
+    expect(
+      isSlackMessageUrl('  https://acme.slack.com/archives/C01234ABCDE/p1700000000123456\n'),
+    ).toBe(true);
   });
 
   it('rejects a Slack app/client URL that is not a message permalink', () => {
@@ -41,7 +50,9 @@ describe('isSlackMessageUrl', () => {
   it('rejects a slack-lookalike host that is not *.slack.com', () => {
     // WHY: the `.slack.com` literal must be required — a path-compatible URL on another domain
     // must not be mistaken for a Slack permalink and shipped to the synthesis agent.
-    expect(isSlackMessageUrl('https://acme.example.com/archives/C01234ABCDE/p1700000000123456')).toBe(false);
+    expect(
+      isSlackMessageUrl('https://acme.example.com/archives/C01234ABCDE/p1700000000123456'),
+    ).toBe(false);
   });
 
   it('rejects a GitHub issue URL', () => {
@@ -60,7 +71,9 @@ describe('isSlackMessageUrl', () => {
     // WHY: parity with GITHUB_ISSUE_RE — the field treats the whole input as a single URL or a
     // title, never "URL surrounded by prose". Anchoring keeps that contract explicit.
     expect(
-      isSlackMessageUrl('see https://acme.slack.com/archives/C01234ABCDE/p1700000000123456 for context'),
+      isSlackMessageUrl(
+        'see https://acme.slack.com/archives/C01234ABCDE/p1700000000123456 for context',
+      ),
     ).toBe(false);
   });
 });
@@ -69,7 +82,9 @@ describe('parseSlackMessageUrl', () => {
   it('extracts workspace, channel id and reconstructs the message ts (the `p<digits>` decoding)', () => {
     // WHY: the `p<digits>` permalink encodes ts*1e6 with the dot removed. The use case needs the
     // real "1700000000.123456" ts (Slack's own field name) to attribute the conversation.
-    expect(parseSlackMessageUrl('https://acme.slack.com/archives/C01234ABCDE/p1700000000123456')).toEqual({
+    expect(
+      parseSlackMessageUrl('https://acme.slack.com/archives/C01234ABCDE/p1700000000123456'),
+    ).toEqual({
       workspace: 'acme',
       channelId: 'C01234ABCDE',
       ts: '1700000000.123456',

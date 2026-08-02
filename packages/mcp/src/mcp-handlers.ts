@@ -6,6 +6,7 @@
  * produces a `tools/call` result by executing the underlying CLI command.
  */
 import { execFleex, type ExecOptions, type ExecResult } from './executor.ts';
+
 import type { GeneratedTool } from './types.ts';
 
 const DESTRUCTIVE_LEAVES = new Set(['delete', 'rm', 'remove', 'unlink']);
@@ -46,7 +47,11 @@ export function listTools(tools: GeneratedTool[]): { tools: McpToolDef[] } {
 
 export interface CallContext {
   /** Override the executor (tests). Defaults to the real `execFleex`. */
-  exec?: (tool: GeneratedTool, input: Record<string, unknown>, opts: ExecOptions) => Promise<ExecResult>;
+  exec?: (
+    tool: GeneratedTool,
+    input: Record<string, unknown>,
+    opts: ExecOptions,
+  ) => Promise<ExecResult>;
   /** Exec options (bin, prefixArgs, workspace, timeout). `json` is forced on. */
   execOpts?: ExecOptions;
 }

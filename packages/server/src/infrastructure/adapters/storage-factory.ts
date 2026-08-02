@@ -1,23 +1,23 @@
-import type { SessionStorePort } from '../../application/ports/session-store.port.js';
-import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
+import type { AgentEventStorePort } from '../../application/ports/agent-event-store.port.js';
 import type { AgentTokenStorePort } from '../../application/ports/agent-token-store.port.js';
 import type { CommentStorePort } from '../../application/ports/comment-store.port.js';
-import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
-import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
-import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
-import type { AgentEventStorePort } from '../../application/ports/agent-event-store.port.js';
-import type { DomainEventLogStorePort } from '../../application/ports/domain-event-log-store.port.js';
 import type { ConfigPort } from '../../application/ports/config.port.js';
-import type { KvStorePort } from '../../application/ports/kv-store.port.js';
-import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
-import type { PanelStorePort } from '../../application/ports/panel-store.port.js';
-import type { FileStorePort } from '../../application/ports/file-store.port.js';
+import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
+import type { DomainEventLogStorePort } from '../../application/ports/domain-event-log-store.port.js';
 import type { FileMetaStorePort } from '../../application/ports/file-meta-store.port.js';
-import type { TicketGroupStorePort } from '../../application/ports/ticket-group-store.port.js';
-import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
-import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
-import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
+import type { FileStorePort } from '../../application/ports/file-store.port.js';
+import type { KvStorePort } from '../../application/ports/kv-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type { MentionStorePort } from '../../application/ports/mention-store.port.js';
+import type { PanelStorePort } from '../../application/ports/panel-store.port.js';
+import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
+import type { SessionStorePort } from '../../application/ports/session-store.port.js';
+import type { SkillStorePort } from '../../application/ports/skill-store.port.js';
+import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
+import type { TicketGroupStorePort } from '../../application/ports/ticket-group-store.port.js';
+import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
+import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
+import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 
 export type StorageDriver = 'json' | 'sqlite' | 'pgsql' | 'supabase';
@@ -48,9 +48,7 @@ export function resolveStorageDriver(): StorageDriver {
   const raw = process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'json';
   const valid: StorageDriver[] = ['json', 'sqlite', 'pgsql', 'supabase'];
   if (!valid.includes(raw as StorageDriver)) {
-    throw new Error(
-      `Invalid FLEEX_STORAGE_DRIVER="${raw}". Must be one of: ${valid.join(', ')}`,
-    );
+    throw new Error(`Invalid FLEEX_STORAGE_DRIVER="${raw}". Must be one of: ${valid.join(', ')}`);
   }
   return raw as StorageDriver;
 }
@@ -133,7 +131,27 @@ async function createJsonStores(deps: {
   const ticketGroupStore = new JsonTicketGroupStore(deps.hostFs, deps.homedir, deps.logger);
   await ticketGroupStore.init();
 
-  return { configStore, sessionStore, ticketStore, agentTokenStore, commentStore, mentionStore, deliverableStore, personaStore, agentEventStore, domainEventLogStore, skillStore, panelStore, kvStore: null, fileStore, fileMetaStore, ticketGroupStore, workflowTemplateStore: null, workflowRunStore: null, stepRunStore: null };
+  return {
+    configStore,
+    sessionStore,
+    ticketStore,
+    agentTokenStore,
+    commentStore,
+    mentionStore,
+    deliverableStore,
+    personaStore,
+    agentEventStore,
+    domainEventLogStore,
+    skillStore,
+    panelStore,
+    kvStore: null,
+    fileStore,
+    fileMetaStore,
+    ticketGroupStore,
+    workflowTemplateStore: null,
+    workflowRunStore: null,
+    stepRunStore: null,
+  };
 }
 
 async function createJsonSessionStore(deps: {
@@ -161,21 +179,28 @@ async function createSqliteStores(deps: {
   const { SqliteConnection } = await import('./sqlite/connection.js');
   const { SqliteConfigAdapter } = await import('./sqlite/sqlite-config.adapter.js');
   const { SqliteTicketStoreAdapter } = await import('./sqlite/sqlite-ticket-store.adapter.js');
-  const { SqliteAgentTokenStoreAdapter } = await import('./sqlite/sqlite-agent-token-store.adapter.js');
+  const { SqliteAgentTokenStoreAdapter } =
+    await import('./sqlite/sqlite-agent-token-store.adapter.js');
   const { SqliteCommentStoreAdapter } = await import('./sqlite/sqlite-comment-store.adapter.js');
   const { SqliteMentionStoreAdapter } = await import('./sqlite/sqlite-mention-store.adapter.js');
-  const { SqliteDeliverableStoreAdapter } = await import('./sqlite/sqlite-deliverable-store.adapter.js');
+  const { SqliteDeliverableStoreAdapter } =
+    await import('./sqlite/sqlite-deliverable-store.adapter.js');
   const { SqlitePersonaStoreAdapter } = await import('./sqlite/sqlite-persona-store.adapter.js');
-  const { SqliteAgentEventStoreAdapter } = await import('./sqlite/sqlite-agent-event-store.adapter.js');
-  const { SqliteDomainEventLogStoreAdapter } = await import('./sqlite/sqlite-domain-event-log-store.adapter.js');
+  const { SqliteAgentEventStoreAdapter } =
+    await import('./sqlite/sqlite-agent-event-store.adapter.js');
+  const { SqliteDomainEventLogStoreAdapter } =
+    await import('./sqlite/sqlite-domain-event-log-store.adapter.js');
   const { SqliteKvStoreAdapter } = await import('./sqlite/sqlite-kv-store.adapter.js');
   const { SqliteSkillStoreAdapter } = await import('./sqlite/sqlite-skill-store.adapter.js');
   const { SqlitePanelStoreAdapter } = await import('./sqlite/sqlite-panel-store.adapter.js');
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { SqliteFileMetaStoreAdapter } = await import('./sqlite/sqlite-file-meta-store.adapter.js');
-  const { SqliteTicketGroupStoreAdapter } = await import('./sqlite/sqlite-ticket-group-store.adapter.js');
-  const { SqliteWorkflowTemplateStoreAdapter } = await import('./sqlite/sqlite-workflow-template-store.adapter.js');
-  const { SqliteWorkflowRunStoreAdapter } = await import('./sqlite/sqlite-workflow-run-store.adapter.js');
+  const { SqliteTicketGroupStoreAdapter } =
+    await import('./sqlite/sqlite-ticket-group-store.adapter.js');
+  const { SqliteWorkflowTemplateStoreAdapter } =
+    await import('./sqlite/sqlite-workflow-template-store.adapter.js');
+  const { SqliteWorkflowRunStoreAdapter } =
+    await import('./sqlite/sqlite-workflow-run-store.adapter.js');
   const { SqliteStepRunStoreAdapter } = await import('./sqlite/sqlite-step-run-store.adapter.js');
 
   const dbPath = process.env['FLEEX_SQLITE_PATH'] ?? join(homedir(), FLEEX_DIR, 'fleex.db');
@@ -301,21 +326,28 @@ async function createSupabaseStores(deps: {
   const { SupabaseConnection } = await import('./supabase/connection.js');
   const { SupabaseConfigAdapter } = await import('./supabase/supabase-config.adapter.js');
   const { SupabaseTicketStore } = await import('./supabase/supabase-ticket-store.adapter.js');
-  const { SupabaseAgentTokenStore } = await import('./supabase/supabase-agent-token-store.adapter.js');
+  const { SupabaseAgentTokenStore } =
+    await import('./supabase/supabase-agent-token-store.adapter.js');
   const { SupabaseCommentStore } = await import('./supabase/supabase-comment-store.adapter.js');
   const { SupabaseMentionStore } = await import('./supabase/supabase-mention-store.adapter.js');
-  const { SupabaseDeliverableStore } = await import('./supabase/supabase-deliverable-store.adapter.js');
+  const { SupabaseDeliverableStore } =
+    await import('./supabase/supabase-deliverable-store.adapter.js');
   const { SupabasePersonaStore } = await import('./supabase/supabase-persona-store.adapter.js');
-  const { SupabaseAgentEventStore } = await import('./supabase/supabase-agent-event-store.adapter.js');
-  const { SupabaseDomainEventLogStore } = await import('./supabase/supabase-domain-event-log-store.adapter.js');
+  const { SupabaseAgentEventStore } =
+    await import('./supabase/supabase-agent-event-store.adapter.js');
+  const { SupabaseDomainEventLogStore } =
+    await import('./supabase/supabase-domain-event-log-store.adapter.js');
   const { SupabaseKvStoreAdapter } = await import('./supabase/supabase-kv-store.adapter.js');
   const { SupabaseSkillStore } = await import('./supabase/supabase-skill-store.adapter.js');
   const { SupabasePanelStore } = await import('./supabase/supabase-panel-store.adapter.js');
   const { SupabaseFileStoreAdapter } = await import('./supabase/supabase-file-store.adapter.js');
   const { SupabaseFileMetaStore } = await import('./supabase/supabase-file-meta-store.adapter.js');
-  const { SupabaseTicketGroupStore } = await import('./supabase/supabase-ticket-group-store.adapter.js');
-  const { SupabaseWorkflowTemplateStore } = await import('./supabase/supabase-workflow-template-store.adapter.js');
-  const { SupabaseWorkflowRunStore } = await import('./supabase/supabase-workflow-run-store.adapter.js');
+  const { SupabaseTicketGroupStore } =
+    await import('./supabase/supabase-ticket-group-store.adapter.js');
+  const { SupabaseWorkflowTemplateStore } =
+    await import('./supabase/supabase-workflow-template-store.adapter.js');
+  const { SupabaseWorkflowRunStore } =
+    await import('./supabase/supabase-workflow-run-store.adapter.js');
   const { SupabaseStepRunStore } = await import('./supabase/supabase-step-run-store.adapter.js');
 
   const dbUrl = process.env['FLEEX_SUPABASE_DB_URL'];

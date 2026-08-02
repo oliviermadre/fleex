@@ -72,11 +72,7 @@ export type {
   RepositoryWsMessageType,
 } from './types/repository-dashboard.js';
 
-export type {
-  PtyHandle,
-  TerminalConfig,
-  TerminalTheme,
-} from './types/terminal.js';
+export type { PtyHandle, TerminalConfig, TerminalTheme } from './types/terminal.js';
 
 export type { ClaudeConfigTreeEntry } from './types/claude-config.js';
 
@@ -267,10 +263,7 @@ export type {
   ThroughputWipBucket,
 } from './types/statistics.js';
 
-export {
-  ClientMessageType,
-  ServerMessageType,
-} from './types/websocket.js';
+export { ClientMessageType, ServerMessageType } from './types/websocket.js';
 
 export type {
   DashboardMessage,

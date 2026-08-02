@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import { useSettingsStore } from './settingsStore';
 
 /**
@@ -40,7 +41,14 @@ export type AssistantToolStatus = 'running' | 'ok' | 'fail' | 'denied';
 export type AssistantChatItem =
   | { kind: 'user'; text: string }
   | { kind: 'assistant'; text: string }
-  | { kind: 'tool'; id?: string; name: string; argv: string[]; status: AssistantToolStatus; text?: string };
+  | {
+      kind: 'tool';
+      id?: string;
+      name: string;
+      argv: string[];
+      status: AssistantToolStatus;
+      text?: string;
+    };
 
 export interface AssistantConfirmRequest {
   sessionId: string;
@@ -108,8 +116,19 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
         const items = transcript.map((t): AssistantChatItem => {
           const o = t as Record<string, unknown>;
           if (o.tool) {
-            const tool = o.tool as { name: string; argv: string[]; status: AssistantToolStatus; text?: string };
-            return { kind: 'tool', name: tool.name, argv: tool.argv ?? [], status: tool.status, text: tool.text };
+            const tool = o.tool as {
+              name: string;
+              argv: string[];
+              status: AssistantToolStatus;
+              text?: string;
+            };
+            return {
+              kind: 'tool',
+              name: tool.name,
+              argv: tool.argv ?? [],
+              status: tool.status,
+              text: tool.text,
+            };
           }
           return { kind: o.role === 'user' ? 'user' : 'assistant', text: (o.text as string) ?? '' };
         });
@@ -165,7 +184,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
           argv: (msg.argv as string[]) ?? [],
         };
         set((s) => ({
-          confirmReqs: s.confirmReqs.some((r) => r.id === req.id) ? s.confirmReqs : [...s.confirmReqs, req],
+          confirmReqs: s.confirmReqs.some((r) => r.id === req.id)
+            ? s.confirmReqs
+            : [...s.confirmReqs, req],
         }));
         break;
       }

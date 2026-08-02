@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+
 import type { DbPool } from '../database/db.js';
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -25,10 +26,10 @@ export class SessionManager {
   }
 
   async get(sessionId: string): Promise<SessionData | null> {
-    const { rows } = await this.pool.query(
+    const { rows } = (await this.pool.query(
       'SELECT user_id, data, expires_at FROM user_sessions WHERE id = $1',
       [sessionId],
-    ) as { rows: { user_id: string; data: Record<string, unknown>; expires_at: string }[] };
+    )) as { rows: { user_id: string; data: Record<string, unknown>; expires_at: string }[] };
 
     if (rows.length === 0) return null;
 

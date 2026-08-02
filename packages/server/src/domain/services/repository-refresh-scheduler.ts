@@ -1,7 +1,12 @@
-import type { LoggerPort } from '../../application/ports/logger.port.js';
-import type { GitHubGraphQLAdapter, RepoBatchResult } from '../../infrastructure/adapters/github-graphql.adapter.js';
-import { RepositoryCache } from './repository-cache.js';
 import type { RepositorySummary } from '@fleex/shared';
+
+import { RepositoryCache } from './repository-cache.js';
+
+import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type {
+  GitHubGraphQLAdapter,
+  RepoBatchResult,
+} from '../../infrastructure/adapters/github-graphql.adapter.js';
 
 export interface RepoRef {
   org: string;
@@ -17,7 +22,9 @@ export class RepositoryRefreshScheduler {
   private refreshing = false;
   private repos: RepoRef[] = [];
   private broadcast: BroadcastFn = () => {};
-  private onMergedPRs: ((mergedPRs: import('@fleex/shared').PullRequest[], repoKey: string) => Promise<void>) | null = null;
+  private onMergedPRs:
+    ((mergedPRs: import('@fleex/shared').PullRequest[], repoKey: string) => Promise<void>) | null =
+    null;
   private checkRepoExists: CheckRepoExistsFn | null = null;
 
   constructor(
@@ -30,7 +37,9 @@ export class RepositoryRefreshScheduler {
     this.broadcast = fn;
   }
 
-  setOnMergedPRs(fn: (mergedPRs: import('@fleex/shared').PullRequest[], repoKey: string) => Promise<void>): void {
+  setOnMergedPRs(
+    fn: (mergedPRs: import('@fleex/shared').PullRequest[], repoKey: string) => Promise<void>,
+  ): void {
     this.onMergedPRs = fn;
   }
 
@@ -75,7 +84,9 @@ export class RepositoryRefreshScheduler {
           remaining: rateLimit.remaining,
           resetAt: rateLimit.resetAt.toISOString(),
         });
-        this.logger.warn('GitHub rate limit low, skipping refresh', { remaining: rateLimit.remaining });
+        this.logger.warn('GitHub rate limit low, skipping refresh', {
+          remaining: rateLimit.remaining,
+        });
         return;
       }
 
@@ -145,7 +156,8 @@ export class RepositoryRefreshScheduler {
               const isClonedLocally = this.checkRepoExists
                 ? await this.checkRepoExists(repo.org, repo.name)
                 : undefined;
-              const enriched = isClonedLocally !== undefined ? { ...cached.data, isClonedLocally } : cached.data;
+              const enriched =
+                isClonedLocally !== undefined ? { ...cached.data, isClonedLocally } : cached.data;
               summaries.push(enriched);
             }
           }

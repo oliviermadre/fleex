@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+
 import type { WorkflowRun, StepRun } from '@fleex/shared';
+
 import * as api from '../services/api';
 
 interface RunDetail {
@@ -117,7 +119,8 @@ export const useWorkflowRunStore = create<State>((set, get) => ({
 
     store.loadForTicket(ticketId);
 
-    const workflowRunId = typeof payload.workflowRunId === 'string' ? payload.workflowRunId : undefined;
+    const workflowRunId =
+      typeof payload.workflowRunId === 'string' ? payload.workflowRunId : undefined;
     if (workflowRunId && workflowRunId in store.detail) {
       store.loadDetail(workflowRunId);
     }

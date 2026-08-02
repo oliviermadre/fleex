@@ -1,6 +1,7 @@
 import { DomainEventLogEntity } from '../../../domain/entities/domain-event-log.entity.js';
-import type { DomainEventLogStorePort } from '../../../application/ports/domain-event-log-store.port.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type { DomainEventLogStorePort } from '../../../application/ports/domain-event-log-store.port.js';
 
 interface EventLogRow {
   id: string;
@@ -95,7 +96,8 @@ export class SupabaseDomainEventLogStore implements DomainEventLogStorePort {
       .delete()
       .lt('occurred_at', date.toISOString())
       .select('id');
-    if (error) throw new Error(`SupabaseDomainEventLogStore.deleteOlderThan failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseDomainEventLogStore.deleteOlderThan failed: ${error.message}`);
     return data?.length ?? 0;
   }
 }

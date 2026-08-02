@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { SessionEntity } from '../../src/domain/entities.js';
 
 function createSession(overrides?: Partial<ConstructorParameters<typeof SessionEntity>>) {

@@ -1,5 +1,5 @@
-import type { FastifyInstance } from 'fastify';
 import type { ModelService } from '../../application/services/model.service.js';
+import type { FastifyInstance } from 'fastify';
 
 export function modelsRoutes(modelService: ModelService) {
   return async function (app: FastifyInstance) {

@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import type { Theme, ThemeColors } from '../../lib/themes';
+
 import { applyTheme } from '../../lib/themes';
+
+import type { Theme, ThemeColors } from '../../lib/themes';
 
 interface Props {
   theme: Theme;

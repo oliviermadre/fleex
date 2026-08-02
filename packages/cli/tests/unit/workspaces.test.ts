@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
-import path from 'node:path';
 import os from 'node:os';
+import path from 'node:path';
+
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+
 import {
   parseWorkspacesFile,
   resolveWorkspace,
@@ -69,18 +71,24 @@ describe('parseWorkspacesFile', () => {
   });
 
   it('parses a top-level basePath when present', () => {
-    const p = writeWs('with-base.json', JSON.stringify({
-      workspaces: [{ name: 'tada', is_default: true, basePath: '~/projects-tada', env: {} }],
-    }));
+    const p = writeWs(
+      'with-base.json',
+      JSON.stringify({
+        workspaces: [{ name: 'tada', is_default: true, basePath: '~/projects-tada', env: {} }],
+      }),
+    );
     expect(parseWorkspacesFile(p)).toEqual([
       { name: 'tada', is_default: true, env: {}, basePath: '~/projects-tada' },
     ]);
   });
 
   it('throws on an invalid basePath (non-empty string required)', () => {
-    const p = writeWs('bad-base.json', JSON.stringify({
-      workspaces: [{ name: 'tada', is_default: true, basePath: '' }],
-    }));
+    const p = writeWs(
+      'bad-base.json',
+      JSON.stringify({
+        workspaces: [{ name: 'tada', is_default: true, basePath: '' }],
+      }),
+    );
     expect(() => parseWorkspacesFile(p)).toThrow(/invalid "basePath"/i);
   });
 
@@ -100,10 +108,7 @@ describe('parseWorkspacesFile', () => {
   });
 
   it('throws on duplicate workspace names', () => {
-    const p = writeWs(
-      'dup.json',
-      JSON.stringify({ workspaces: [{ name: 'x' }, { name: 'x' }] }),
-    );
+    const p = writeWs('dup.json', JSON.stringify({ workspaces: [{ name: 'x' }, { name: 'x' }] }));
     expect(() => parseWorkspacesFile(p)).toThrow(/duplicate/i);
   });
 
@@ -165,7 +170,9 @@ describe('activateWorkspace', () => {
 
   it('resolves the default workspace, sets FLEEX_WORKSPACE and injects env', () => {
     writeGlobalWs(
-      JSON.stringify({ workspaces: [{ name: 'tada', is_default: true, env: { FLEEX_STORAGE_DRIVER: 'supabase' } }] }),
+      JSON.stringify({
+        workspaces: [{ name: 'tada', is_default: true, env: { FLEEX_STORAGE_DRIVER: 'supabase' } }],
+      }),
     );
     delete process.env.FLEEX_STORAGE_DRIVER;
     const result = activateWorkspace();
@@ -176,7 +183,9 @@ describe('activateWorkspace', () => {
 
   it('workspace env overrides an already-exported shell variable', () => {
     writeGlobalWs(
-      JSON.stringify({ workspaces: [{ name: 'tada', is_default: true, env: { FLEEX_STORAGE_DRIVER: 'supabase' } }] }),
+      JSON.stringify({
+        workspaces: [{ name: 'tada', is_default: true, env: { FLEEX_STORAGE_DRIVER: 'supabase' } }],
+      }),
     );
     process.env.FLEEX_STORAGE_DRIVER = 'sqlite-from-shell';
     activateWorkspace();
@@ -201,7 +210,9 @@ describe('activateWorkspace', () => {
 
   it('injects basePath as FLEEX_REPOSITORIES_BASE_PATH', () => {
     writeGlobalWs(
-      JSON.stringify({ workspaces: [{ name: 'tada', is_default: true, basePath: '~/projects-tada', env: {} }] }),
+      JSON.stringify({
+        workspaces: [{ name: 'tada', is_default: true, basePath: '~/projects-tada', env: {} }],
+      }),
     );
     delete process.env.FLEEX_REPOSITORIES_BASE_PATH;
     const result = activateWorkspace();
@@ -242,19 +253,30 @@ describe('bootstrapWorkspacesFromEnv', () => {
     expect(created?.env).toEqual({ FLEEX_STORAGE_DRIVER: 'sqlite', ANTHROPIC_API_KEY: 'sk-test' });
 
     const onDisk = parseWorkspacesFile(workspacesFilePath());
-    expect(onDisk).toEqual([{ name: 'default', is_default: true, env: { FLEEX_STORAGE_DRIVER: 'sqlite', ANTHROPIC_API_KEY: 'sk-test' } }]);
+    expect(onDisk).toEqual([
+      {
+        name: 'default',
+        is_default: true,
+        env: { FLEEX_STORAGE_DRIVER: 'sqlite', ANTHROPIC_API_KEY: 'sk-test' },
+      },
+    ]);
     // secrets: file must be created with 0600 perms
     const mode = fs.statSync(workspacesFilePath()).mode & 0o777;
     expect(mode).toBe(0o600);
   });
 
   it('returns null and does nothing when workspaces.json already exists', () => {
-    fs.writeFileSync(workspacesFilePath(), JSON.stringify({ workspaces: [{ name: 'keep', is_default: true }] }));
+    fs.writeFileSync(
+      workspacesFilePath(),
+      JSON.stringify({ workspaces: [{ name: 'keep', is_default: true }] }),
+    );
     const envFile = path.join(repoDir, '.env');
     fs.writeFileSync(envFile, 'FLEEX_STORAGE_DRIVER=sqlite\n');
     expect(bootstrapWorkspacesFromEnv(envFile)).toBeNull();
     // existing file untouched
-    expect(parseWorkspacesFile(workspacesFilePath())).toEqual([{ name: 'keep', is_default: true, env: {} }]);
+    expect(parseWorkspacesFile(workspacesFilePath())).toEqual([
+      { name: 'keep', is_default: true, env: {} },
+    ]);
   });
 
   it('returns null when no .env exists', () => {
@@ -269,66 +291,93 @@ describe('validateWorkspacesConfig', () => {
   });
 
   it('is ok with exactly one default', () => {
-    const p = writeWs('v-one.json', JSON.stringify({
-      workspaces: [
-        { name: 'a', is_default: true, env: {} },
-        { name: 'b', env: {} },
-      ],
-    }));
+    const p = writeWs(
+      'v-one.json',
+      JSON.stringify({
+        workspaces: [
+          { name: 'a', is_default: true, env: {} },
+          { name: 'b', env: {} },
+        ],
+      }),
+    );
     expect(validateWorkspacesConfig(p)).toEqual({ ok: true });
   });
 
   it('is ok with zero defaults (explicit --workspace setup)', () => {
-    const p = writeWs('v-zero.json', JSON.stringify({
-      workspaces: [
-        { name: 'a', env: {} },
-        { name: 'b', env: {} },
-      ],
-    }));
+    const p = writeWs(
+      'v-zero.json',
+      JSON.stringify({
+        workspaces: [
+          { name: 'a', env: {} },
+          { name: 'b', env: {} },
+        ],
+      }),
+    );
     expect(validateWorkspacesConfig(p)).toEqual({ ok: true });
   });
 
   it('is invalid when two workspaces share the same basePath', () => {
-    const p = writeWs('v-dup-base.json', JSON.stringify({
-      workspaces: [
-        { name: 'a', is_default: true, basePath: '~/projects' },
-        { name: 'b', basePath: '~/projects' },
-      ],
-    }));
+    const p = writeWs(
+      'v-dup-base.json',
+      JSON.stringify({
+        workspaces: [
+          { name: 'a', is_default: true, basePath: '~/projects' },
+          { name: 'b', basePath: '~/projects' },
+        ],
+      }),
+    );
     const res = validateWorkspacesConfig(p);
     expect(res.ok).toBe(false);
     expect(res.ok === false && res.error).toMatch(/share the same basePath/);
   });
 
   it('is valid when basePaths are distinct', () => {
-    const p = writeWs('v-distinct-base.json', JSON.stringify({
-      workspaces: [
-        { name: 'a', is_default: true, basePath: '~/projects-a' },
-        { name: 'b', basePath: '~/projects-b' },
-      ],
-    }));
+    const p = writeWs(
+      'v-distinct-base.json',
+      JSON.stringify({
+        workspaces: [
+          { name: 'a', is_default: true, basePath: '~/projects-a' },
+          { name: 'b', basePath: '~/projects-b' },
+        ],
+      }),
+    );
     expect(validateWorkspacesConfig(p)).toEqual({ ok: true });
   });
 
   it('is invalid when two sqlite workspaces share the same db file', () => {
-    const p = writeWs('v-dup-sqlite.json', JSON.stringify({
-      workspaces: [
-        { name: 'a', is_default: true, basePath: '~/p-a', env: { FLEEX_STORAGE_DRIVER: 'sqlite', FLEEX_SQLITE_PATH: '~/.fleex/fleex.db' } },
-        { name: 'b', basePath: '~/p-b', env: { FLEEX_STORAGE_DRIVER: 'sqlite', FLEEX_SQLITE_PATH: '~/.fleex/fleex.db' } },
-      ],
-    }));
+    const p = writeWs(
+      'v-dup-sqlite.json',
+      JSON.stringify({
+        workspaces: [
+          {
+            name: 'a',
+            is_default: true,
+            basePath: '~/p-a',
+            env: { FLEEX_STORAGE_DRIVER: 'sqlite', FLEEX_SQLITE_PATH: '~/.fleex/fleex.db' },
+          },
+          {
+            name: 'b',
+            basePath: '~/p-b',
+            env: { FLEEX_STORAGE_DRIVER: 'sqlite', FLEEX_SQLITE_PATH: '~/.fleex/fleex.db' },
+          },
+        ],
+      }),
+    );
     const res = validateWorkspacesConfig(p);
     expect(res.ok).toBe(false);
     expect(res.ok === false && res.error).toMatch(/share the same database file/);
   });
 
   it('is invalid when more than one default is flagged', () => {
-    const p = writeWs('v-two.json', JSON.stringify({
-      workspaces: [
-        { name: 'default', is_default: true, env: {} },
-        { name: 'sqlite', is_default: true, env: {} },
-      ],
-    }));
+    const p = writeWs(
+      'v-two.json',
+      JSON.stringify({
+        workspaces: [
+          { name: 'default', is_default: true, env: {} },
+          { name: 'sqlite', is_default: true, env: {} },
+        ],
+      }),
+    );
     const res = validateWorkspacesConfig(p);
     expect(res.ok).toBe(false);
     expect(res.ok === false && res.error).toMatch(/only one default/);
@@ -343,12 +392,15 @@ describe('validateWorkspacesConfig', () => {
   });
 
   it('is invalid on a duplicate workspace name', () => {
-    const p = writeWs('v-dup.json', JSON.stringify({
-      workspaces: [
-        { name: 'dup', is_default: true, env: {} },
-        { name: 'dup', env: {} },
-      ],
-    }));
+    const p = writeWs(
+      'v-dup.json',
+      JSON.stringify({
+        workspaces: [
+          { name: 'dup', is_default: true, env: {} },
+          { name: 'dup', env: {} },
+        ],
+      }),
+    );
     const res = validateWorkspacesConfig(p);
     expect(res.ok).toBe(false);
     expect(res.ok === false && res.error).toMatch(/duplicate/);
@@ -361,29 +413,35 @@ describe('defaultWorkspaceName', () => {
   });
 
   it('returns the name of the single default', () => {
-    const p = writeWs('d-one.json', JSON.stringify({
-      workspaces: [
-        { name: 'default', is_default: true },
-        { name: 'sqlite' },
-      ],
-    }));
+    const p = writeWs(
+      'd-one.json',
+      JSON.stringify({
+        workspaces: [{ name: 'default', is_default: true }, { name: 'sqlite' }],
+      }),
+    );
     expect(defaultWorkspaceName(p)).toBe('default');
   });
 
   it('returns null when there is no default (explicit --workspace setup)', () => {
-    const p = writeWs('d-zero.json', JSON.stringify({
-      workspaces: [{ name: 'a' }, { name: 'b' }],
-    }));
+    const p = writeWs(
+      'd-zero.json',
+      JSON.stringify({
+        workspaces: [{ name: 'a' }, { name: 'b' }],
+      }),
+    );
     expect(defaultWorkspaceName(p)).toBeNull();
   });
 
   it('returns null when the config is ambiguous (>1 default)', () => {
-    const p = writeWs('d-two.json', JSON.stringify({
-      workspaces: [
-        { name: 'a', is_default: true },
-        { name: 'b', is_default: true },
-      ],
-    }));
+    const p = writeWs(
+      'd-two.json',
+      JSON.stringify({
+        workspaces: [
+          { name: 'a', is_default: true },
+          { name: 'b', is_default: true },
+        ],
+      }),
+    );
     expect(defaultWorkspaceName(p)).toBeNull();
   });
 
@@ -396,13 +454,18 @@ describe('defaultWorkspaceName', () => {
 describe('reportWorkspacesConfig', () => {
   it('reports legacy mode when the file is absent', () => {
     const lines = reportWorkspacesConfig(path.join(tmpDir, 'absent.json'));
-    expect(lines).toEqual([{ level: 'legacy', message: expect.stringMatching(/legacy \.env mode/) }]);
+    expect(lines).toEqual([
+      { level: 'legacy', message: expect.stringMatching(/legacy \.env mode/) },
+    ]);
   });
 
   it('reports ONE error line for a corrupt file (duplicate name) — never a legacy line', () => {
-    const p = writeWs('r-dup-name.json', JSON.stringify({
-      workspaces: [{ name: 'dup', is_default: true }, { name: 'dup' }],
-    }));
+    const p = writeWs(
+      'r-dup-name.json',
+      JSON.stringify({
+        workspaces: [{ name: 'dup', is_default: true }, { name: 'dup' }],
+      }),
+    );
     const lines = reportWorkspacesConfig(p);
     expect(lines).toHaveLength(1);
     expect(lines[0]!.level).toBe('error');
@@ -414,22 +477,36 @@ describe('reportWorkspacesConfig', () => {
   it('shows the file path exactly once on a JSON parse error (no double path)', () => {
     const p = writeWs('r-badjson.json', '{ not json');
     const lines = reportWorkspacesConfig(p);
-    expect(lines).toEqual([{ level: 'error', message: `workspaces.json is not valid JSON. Fix: ${p}` }]);
+    expect(lines).toEqual([
+      { level: 'error', message: `workspaces.json is not valid JSON. Fix: ${p}` },
+    ]);
   });
 
   it('reports an ok line for a valid config', () => {
-    const p = writeWs('r-valid.json', JSON.stringify({
-      workspaces: [{ name: 'default', is_default: true, basePath: '~/a' }, { name: 'b', basePath: '~/b' }],
-    }));
+    const p = writeWs(
+      'r-valid.json',
+      JSON.stringify({
+        workspaces: [
+          { name: 'default', is_default: true, basePath: '~/a' },
+          { name: 'b', basePath: '~/b' },
+        ],
+      }),
+    );
     const lines = reportWorkspacesConfig(p);
     const ok = lines.find((l) => l.level === 'ok');
     expect(ok?.message).toMatch(/valid \(2 workspaces, default: default\)/);
   });
 
   it('reports an error and no ok line when a rule fails (duplicate basePath)', () => {
-    const p = writeWs('r-dup-base.json', JSON.stringify({
-      workspaces: [{ name: 'a', is_default: true, basePath: '~/x' }, { name: 'b', basePath: '~/x' }],
-    }));
+    const p = writeWs(
+      'r-dup-base.json',
+      JSON.stringify({
+        workspaces: [
+          { name: 'a', is_default: true, basePath: '~/x' },
+          { name: 'b', basePath: '~/x' },
+        ],
+      }),
+    );
     const lines = reportWorkspacesConfig(p);
     expect(lines.some((l) => l.level === 'error')).toBe(true);
     expect(lines.some((l) => l.level === 'ok')).toBe(false);

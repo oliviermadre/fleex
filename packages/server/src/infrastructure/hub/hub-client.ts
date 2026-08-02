@@ -1,7 +1,10 @@
-import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
+
 import { WebSocket } from 'ws';
+
 import { HUB_SHARED_EXCLUDED, type HubEventMessage, type HubMessage } from '@fleex/shared';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { AnyDomainEvent } from '../../domain/events.js';
 
@@ -64,7 +67,11 @@ export class HubClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
     if (this.ws) {
-      try { this.ws.close(); } catch { /* swallow */ }
+      try {
+        this.ws.close();
+      } catch {
+        /* swallow */
+      }
       this.ws = null;
     }
   }
@@ -142,7 +149,11 @@ export class HubClient {
 
       this.pingTimer = setInterval(() => {
         if (this.connected && this.ws) {
-          try { this.ws.send(JSON.stringify({ kind: 'ping' } satisfies HubMessage)); } catch { /* swallow */ }
+          try {
+            this.ws.send(JSON.stringify({ kind: 'ping' } satisfies HubMessage));
+          } catch {
+            /* swallow */
+          }
         }
       }, PING_INTERVAL_MS);
     });
@@ -177,13 +188,20 @@ export class HubClient {
       this.pingTimer = null;
     }
     if (this.ws) {
-      try { this.ws.removeAllListeners(); } catch { /* swallow */ }
+      try {
+        this.ws.removeAllListeners();
+      } catch {
+        /* swallow */
+      }
       this.ws = null;
     }
     if (this.closed) return;
 
     this.reconnectAttempts++;
-    const base = Math.min(RECONNECT_INITIAL_MS * 2 ** (this.reconnectAttempts - 1), RECONNECT_MAX_MS);
+    const base = Math.min(
+      RECONNECT_INITIAL_MS * 2 ** (this.reconnectAttempts - 1),
+      RECONNECT_MAX_MS,
+    );
     const jitter = Math.random() * 0.3 * base;
     const delay = base + jitter;
     this.opts.logger.info('Hub disconnected — scheduling reconnect', {
@@ -197,7 +215,11 @@ export class HubClient {
     if (msg.kind === 'pong') return;
     if (msg.kind === 'ping') {
       if (this.ws) {
-        try { this.ws.send(JSON.stringify({ kind: 'pong' } satisfies HubMessage)); } catch { /* swallow */ }
+        try {
+          this.ws.send(JSON.stringify({ kind: 'pong' } satisfies HubMessage));
+        } catch {
+          /* swallow */
+        }
       }
       return;
     }
@@ -269,7 +291,11 @@ function cryptoRandomUUID(): string {
  * (e.g. ECONNREFUSED, ENOTFOUND, or "Unexpected server response: 401").
  */
 function describeWsError(err: unknown): { message: string; code?: string } {
-  const e = err as { message?: unknown; code?: unknown; error?: { message?: unknown; code?: unknown } };
+  const e = err as {
+    message?: unknown;
+    code?: unknown;
+    error?: { message?: unknown; code?: unknown };
+  };
   const inner = e?.error;
   const message =
     (typeof e?.message === 'string' && e.message) ||

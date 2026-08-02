@@ -1,4 +1,5 @@
 import type { ClaudeUsage, ClaudeUsageMetric } from '@fleex/shared';
+
 import type { ClaudeUsagePort } from '../../application/ports/claude-usage.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
@@ -105,7 +106,10 @@ export class ApiClaudeUsageAdapter implements ClaudeUsagePort {
   }
 }
 
-function toMetric(label: string, window: OAuthWindow | null | undefined): ClaudeUsageMetric | undefined {
+function toMetric(
+  label: string,
+  window: OAuthWindow | null | undefined,
+): ClaudeUsageMetric | undefined {
   if (!window || typeof window.utilization !== 'number') return undefined;
   return {
     label,

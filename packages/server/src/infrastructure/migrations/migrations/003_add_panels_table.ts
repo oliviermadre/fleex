@@ -60,7 +60,9 @@ const migration: Migration = {
     // ── Supabase RLS ──
     if (ctx.adapter === 'supabase') {
       await ctx.exec('ALTER TABLE panels ENABLE ROW LEVEL SECURITY');
-      await ctx.exec(`CREATE POLICY "service_role_panels" ON panels FOR ALL USING (true) WITH CHECK (true)`);
+      await ctx.exec(
+        `CREATE POLICY "service_role_panels" ON panels FOR ALL USING (true) WITH CHECK (true)`,
+      );
     }
   },
 

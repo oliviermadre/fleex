@@ -1,8 +1,9 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok } from '../../../core/colors.ts';
 import { apiBase, apiDelete } from '../../../core/api.ts';
-import { resolveEpic } from '../_shared.ts';
+import { ok } from '../../../core/colors.ts';
 import { resolveBoard } from '../../board/_shared.ts';
+import { resolveEpic } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -19,7 +20,9 @@ const def: CommandDef = {
     // The API refuses to remove the last board or a board with tickets still in
     // the epic (400/409); those messages are surfaced verbatim by the api layer.
     await apiDelete(`${apiBase()}/api/epics/${epic.id}/boards/${board.id}`);
-    ok(`Unlinked board ${board.emoji ?? ''} ${board.name} from epic ${epic.emoji ?? ''} ${epic.name}`);
+    ok(
+      `Unlinked board ${board.emoji ?? ''} ${board.name} from epic ${epic.emoji ?? ''} ${epic.name}`,
+    );
   },
 };
 

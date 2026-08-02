@@ -23,7 +23,8 @@ async function api(base, path, init) {
     headers: { 'Content-Type': 'application/json' },
     ...init,
   });
-  if (!res.ok) throw new Error(`${init?.method || 'GET'} ${path} → ${res.status} ${await res.text()}`);
+  if (!res.ok)
+    throw new Error(`${init?.method || 'GET'} ${path} → ${res.status} ${await res.text()}`);
   return res.json();
 }
 
@@ -54,8 +55,18 @@ export async function seedKitchenSink(base) {
       const links =
         i % 6 === 0
           ? [
-              { type: 'github_pr', ref: 'acme/fleex#1', label: 'PR #1', url: 'https://github.com/acme/fleex/pull/1' },
-              { type: 'github_issue', ref: 'acme/fleex#2', label: 'Issue #2', url: 'https://github.com/acme/fleex/issues/2' },
+              {
+                type: 'github_pr',
+                ref: 'acme/fleex#1',
+                label: 'PR #1',
+                url: 'https://github.com/acme/fleex/pull/1',
+              },
+              {
+                type: 'github_issue',
+                ref: 'acme/fleex#2',
+                label: 'Issue #2',
+                url: 'https://github.com/acme/fleex/issues/2',
+              },
             ]
           : undefined;
       const ticket = await api(base, '/tickets', {
@@ -73,8 +84,16 @@ export async function seedKitchenSink(base) {
         }),
       });
       // Blocked + favorite flags render extra colored affordances on cards.
-      if (i % 7 === 0) await api(base, `/tickets/${ticket.id}`, { method: 'PATCH', body: JSON.stringify({ blocked: true }) });
-      if (i % 5 === 0) await api(base, `/tickets/${ticket.id}`, { method: 'PATCH', body: JSON.stringify({ favorite: true }) });
+      if (i % 7 === 0)
+        await api(base, `/tickets/${ticket.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ blocked: true }),
+        });
+      if (i % 5 === 0)
+        await api(base, `/tickets/${ticket.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ favorite: true }),
+        });
       i++;
     }
   }

@@ -1,14 +1,13 @@
 import { SkillEntity } from '../../../domain/entities/skill.entity.js';
-import type { SkillStorePort } from '../../../application/ports/skill-store.port.js';
+
 import type { PgConnection } from './connection.js';
+import type { SkillStorePort } from '../../../application/ports/skill-store.port.js';
 
 export class PgSkillStore implements SkillStorePort {
   constructor(private readonly db: PgConnection) {}
 
   async getAll(): Promise<SkillEntity[]> {
-    const { rows } = await this.db.query(
-      'SELECT * FROM skills ORDER BY name ASC',
-    );
+    const { rows } = await this.db.query('SELECT * FROM skills ORDER BY name ASC');
     return rows.map(rowToSkill);
   }
 
@@ -18,7 +17,9 @@ export class PgSkillStore implements SkillStorePort {
   }
 
   async getByCommandName(commandName: string): Promise<SkillEntity | null> {
-    const { rows } = await this.db.query('SELECT * FROM skills WHERE command_name = $1', [commandName]);
+    const { rows } = await this.db.query('SELECT * FROM skills WHERE command_name = $1', [
+      commandName,
+    ]);
     return rows.length > 0 ? rowToSkill(rows[0]) : null;
   }
 

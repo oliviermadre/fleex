@@ -1,14 +1,19 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
-import path from 'node:path';
 import os from 'node:os';
+import path from 'node:path';
+
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+
 import {
   resolveWorkspaceSelection,
   ambientWorkspaceWarning,
   type InstanceContext,
 } from '../../src/core/instance.ts';
 import { stackNotRunningMessage } from '../../src/core/ports.ts';
-import { setSelectedWorkspace, resetSelectedWorkspace } from '../../src/core/workspace-selection.ts';
+import {
+  setSelectedWorkspace,
+  resetSelectedWorkspace,
+} from '../../src/core/workspace-selection.ts';
 import { workspacesFilePath } from '../../src/core/workspaces.ts';
 
 let tmpDir: string;
@@ -142,7 +147,12 @@ describe('stackNotRunningMessage', () => {
   it('names the exact instance and gives a plain start command for the default workspace', () => {
     withDefault('default');
     const msg = stackNotRunningMessage(
-      ctx({ workspace: 'default', workspaceSource: 'default', branch: 'main', instanceSlug: 'default@main' }),
+      ctx({
+        workspace: 'default',
+        workspaceSource: 'default',
+        branch: 'main',
+        instanceSlug: 'default@main',
+      }),
     );
     expect(msg).toContain("workspace 'default'");
     expect(msg).toContain("branch 'main'");
@@ -155,7 +165,12 @@ describe('stackNotRunningMessage', () => {
   it('adds --workspace to the start command for a non-default workspace', () => {
     withDefault('default');
     const msg = stackNotRunningMessage(
-      ctx({ workspace: 'sqlite', workspaceSource: 'flag', branch: 'main', instanceSlug: 'sqlite@main' }),
+      ctx({
+        workspace: 'sqlite',
+        workspaceSource: 'flag',
+        branch: 'main',
+        instanceSlug: 'sqlite@main',
+      }),
     );
     expect(msg).toContain('fleex start --workspace sqlite');
   });
@@ -163,7 +178,12 @@ describe('stackNotRunningMessage', () => {
   it('explains the stale-env footgun when the workspace came from FLEEX_WORKSPACE', () => {
     withDefault('default');
     const msg = stackNotRunningMessage(
-      ctx({ workspace: 'sqlite', workspaceSource: 'env', branch: 'main', instanceSlug: 'sqlite@main' }),
+      ctx({
+        workspace: 'sqlite',
+        workspaceSource: 'env',
+        branch: 'main',
+        instanceSlug: 'sqlite@main',
+      }),
     );
     expect(msg).toContain('fleex start --workspace sqlite');
     expect(msg).toContain('inherited $FLEEX_WORKSPACE');
@@ -175,7 +195,12 @@ describe('stackNotRunningMessage', () => {
   it('does not add the stale-env note when the env workspace IS the default', () => {
     withDefault('default');
     const msg = stackNotRunningMessage(
-      ctx({ workspace: 'default', workspaceSource: 'env', branch: 'main', instanceSlug: 'default@main' }),
+      ctx({
+        workspace: 'default',
+        workspaceSource: 'env',
+        branch: 'main',
+        instanceSlug: 'default@main',
+      }),
     );
     expect(msg).not.toContain('inherited $FLEEX_WORKSPACE');
     expect(msg).toContain('fleex start');

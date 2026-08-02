@@ -1,10 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, warn, info, die, present, c } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
+import { ok, warn, info, die, present, c } from '../../../core/colors.ts';
 import { canPrompt, promptYesNo, closePrompts } from '../../../core/prompt.ts';
 import { fetchDeliverableTypes, resolveDeliverableType } from '../_shared.ts';
 
-interface ReassignOptions { force?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface ReassignOptions {
+  force?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -33,7 +36,9 @@ const def: CommandDef = {
     if (!opts.force) {
       // Bulk-mutating many deliverables must not happen silently in agents/CI.
       if (!canPrompt()) {
-        die(`Refusing to reassign ${count} deliverable(s) from "${from}" to "${to.id}" without confirmation. Re-run with -f to force.`);
+        die(
+          `Refusing to reassign ${count} deliverable(s) from "${from}" to "${to.id}" without confirmation. Re-run with -f to force.`,
+        );
       }
       warn(`This moves ${count} deliverable(s) from "${from}" to "${to.id}".`);
       const confirmed = await promptYesNo(`Reassign ${count} deliverable(s)?`, false);
@@ -44,10 +49,13 @@ const def: CommandDef = {
       }
     }
 
-    const result = await apiPost<{ migrated: number }>(`${apiBase()}/api/deliverable-types/reassign`, {
-      from,
-      to: to.id,
-    });
+    const result = await apiPost<{ migrated: number }>(
+      `${apiBase()}/api/deliverable-types/reassign`,
+      {
+        from,
+        to: to.id,
+      },
+    );
     present(result, () =>
       ok(`Reassigned ${result.migrated} deliverable(s) from ${c.bold(from)} to ${c.bold(to.id)}`),
     );

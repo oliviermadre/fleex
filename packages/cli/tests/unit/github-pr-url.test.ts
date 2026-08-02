@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+
 import {
   parseGithubPrUrl,
   resolvePrRef,
@@ -37,21 +38,27 @@ describe('parseGithubPrUrl', () => {
   });
 
   it('rejects an issue URL (not a pull request)', () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('exit');
+    });
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     expect(() => parseGithubPrUrl('https://github.com/org/name/issues/42')).toThrow();
     expect(exit).toHaveBeenCalledWith(1);
   });
 
   it('rejects a non-github URL', () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('exit');
+    });
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     expect(() => parseGithubPrUrl('https://gitlab.com/org/name/pull/42')).toThrow();
     expect(exit).toHaveBeenCalledWith(1);
   });
 
   it('rejects a malformed string', () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('exit');
+    });
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     expect(() => parseGithubPrUrl('not a url')).toThrow();
     expect(exit).toHaveBeenCalledWith(1);

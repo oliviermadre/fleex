@@ -1,11 +1,22 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR, isEffortLevel } from '@fleex/shared';
-import type { TicketStatus, TicketType, TicketLinkType, TicketLink, GitHubIssueMetadata, ConversationMode, EffortLevel } from '@fleex/shared';
+import type {
+  TicketStatus,
+  TicketType,
+  TicketLinkType,
+  TicketLink,
+  GitHubIssueMetadata,
+  ConversationMode,
+  EffortLevel,
+} from '@fleex/shared';
+
 import { BoardEntity } from '../../domain/entities/board.entity.js';
-import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
+import { TicketEntity } from '../../domain/entities/ticket.entity.js';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
 import type { HostFs } from '../host/types.js';
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2, none: 3 };
@@ -13,10 +24,20 @@ const MAX_ACTIVITY_ENTRIES = 5000;
 
 /** Map legacy 14-type values to new 6-type system */
 const LEGACY_TYPE_MAP: Record<string, TicketType> = {
-  feat: 'build', refactor: 'build', perf: 'build', test: 'build',
-  ci: 'build', chore: 'build', task: 'build',
-  fix: 'fix', review: 'review', ops: 'ops',
-  doc: 'think', research: 'think', design: 'think', data: 'think',
+  feat: 'build',
+  refactor: 'build',
+  perf: 'build',
+  test: 'build',
+  ci: 'build',
+  chore: 'build',
+  task: 'build',
+  fix: 'fix',
+  review: 'review',
+  ops: 'ops',
+  doc: 'think',
+  research: 'think',
+  design: 'think',
+  data: 'think',
 };
 
 interface SerializedBoard {
@@ -209,7 +230,7 @@ export class JsonTicketStore implements TicketStorePort {
   async getArchivedTickets(boardId?: string, limit = 50, offset = 0): Promise<TicketEntity[]> {
     let archived = Array.from(this.tickets.values()).filter((t) => t.archivedAt !== null);
     if (boardId) archived = archived.filter((t) => t.boardId === boardId);
-    archived.sort((a, b) => (b.archivedAt!.getTime()) - (a.archivedAt!.getTime()));
+    archived.sort((a, b) => b.archivedAt!.getTime() - a.archivedAt!.getTime());
     return archived.slice(offset, offset + limit);
   }
 
@@ -277,8 +298,11 @@ export class JsonTicketStore implements TicketStorePort {
       const data = JSON.parse(raw) as SerializedBoard[];
       for (const b of data) {
         const entity = new BoardEntity(
-          b.id, b.name, b.emoji,
-          new Date(b.createdAt), new Date(b.updatedAt),
+          b.id,
+          b.name,
+          b.emoji,
+          new Date(b.createdAt),
+          new Date(b.updatedAt),
         );
         this.boards.set(entity.id, entity);
       }
@@ -297,10 +321,19 @@ export class JsonTicketStore implements TicketStorePort {
       const data = JSON.parse(raw) as SerializedTicket[];
       for (const t of data) {
         const entity = new TicketEntity(
-          t.id, t.boardId, t.displayId ?? 0, t.title, t.description,
-          t.status, t.priority as TicketEntity['priority'],
-          (t.type ? (LEGACY_TYPE_MAP[t.type] ?? t.type as TicketType) : null),
-          t.position, t.tags, t.links, t.blocked, t.favorite ?? false,
+          t.id,
+          t.boardId,
+          t.displayId ?? 0,
+          t.title,
+          t.description,
+          t.status,
+          t.priority as TicketEntity['priority'],
+          t.type ? (LEGACY_TYPE_MAP[t.type] ?? (t.type as TicketType)) : null,
+          t.position,
+          t.tags,
+          t.links,
+          t.blocked,
+          t.favorite ?? false,
           t.dueDate ? new Date(t.dueDate) : null,
           t.assignee,
           t.agentClaimedAt ? new Date(t.agentClaimedAt) : null,
@@ -308,7 +341,8 @@ export class JsonTicketStore implements TicketStorePort {
           t.archivedAt ? new Date(t.archivedAt) : null,
           t.firstDoingAt ? new Date(t.firstDoingAt) : null,
           new Date(t.statusChangedAt ?? t.updatedAt),
-          new Date(t.createdAt), new Date(t.updatedAt),
+          new Date(t.createdAt),
+          new Date(t.updatedAt),
           t.conversationMode ?? 'plan',
           t.modelOverride ?? null,
           isEffortLevel(t.effortOverride) ? t.effortOverride : null,
@@ -330,11 +364,18 @@ export class JsonTicketStore implements TicketStorePort {
       const raw = await this.hostFs.readFile(this.activityFile);
       const data = JSON.parse(raw) as SerializedActivity[];
       for (const a of data) {
-        this.activities.push(new TicketActivityEntity(
-          a.id, a.ticketId, a.action, a.changes,
-          a.actorType, a.actorName, a.source,
-          new Date(a.createdAt),
-        ));
+        this.activities.push(
+          new TicketActivityEntity(
+            a.id,
+            a.ticketId,
+            a.action,
+            a.changes,
+            a.actorType,
+            a.actorName,
+            a.source,
+            new Date(a.createdAt),
+          ),
+        );
       }
     } catch (err) {
       this.logger.warn('Failed to load activity from disk', {
@@ -346,8 +387,11 @@ export class JsonTicketStore implements TicketStorePort {
   private async syncBoardsToDisk(): Promise<void> {
     try {
       const data: SerializedBoard[] = Array.from(this.boards.values()).map((b) => ({
-        id: b.id, name: b.name, emoji: b.emoji,
-        createdAt: b.createdAt.toISOString(), updatedAt: b.updatedAt.toISOString(),
+        id: b.id,
+        name: b.name,
+        emoji: b.emoji,
+        createdAt: b.createdAt.toISOString(),
+        updatedAt: b.updatedAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.boardsFile, JSON.stringify(data, null, 2));
     } catch (err) {
@@ -360,9 +404,19 @@ export class JsonTicketStore implements TicketStorePort {
   private async syncTicketsToDisk(): Promise<void> {
     try {
       const data: SerializedTicket[] = Array.from(this.tickets.values()).map((t) => ({
-        id: t.id, boardId: t.boardId, displayId: t.displayId, title: t.title, description: t.description,
-        status: t.status, priority: t.priority, type: t.type ?? null, position: t.position,
-        tags: t.tags, links: t.links, blocked: t.blocked, favorite: t.favorite,
+        id: t.id,
+        boardId: t.boardId,
+        displayId: t.displayId,
+        title: t.title,
+        description: t.description,
+        status: t.status,
+        priority: t.priority,
+        type: t.type ?? null,
+        position: t.position,
+        tags: t.tags,
+        links: t.links,
+        blocked: t.blocked,
+        favorite: t.favorite,
         dueDate: t.dueDate?.toISOString() ?? null,
         assignee: t.assignee,
         agentClaimedAt: t.agentClaimedAt?.toISOString() ?? null,
@@ -374,7 +428,8 @@ export class JsonTicketStore implements TicketStorePort {
         modelOverride: t.modelOverride,
         effortOverride: t.effortOverride,
         fastMode: t.fastMode,
-        createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(),
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.ticketsFile, JSON.stringify(data, null, 2));
     } catch (err) {
@@ -387,8 +442,13 @@ export class JsonTicketStore implements TicketStorePort {
   private async syncActivityToDisk(): Promise<void> {
     try {
       const data: SerializedActivity[] = this.activities.map((a) => ({
-        id: a.id, ticketId: a.ticketId, action: a.action, changes: a.changes,
-        actorType: a.actorType, actorName: a.actorName, source: a.source,
+        id: a.id,
+        ticketId: a.ticketId,
+        action: a.action,
+        changes: a.changes,
+        actorType: a.actorType,
+        actorName: a.actorName,
+        source: a.source,
         createdAt: a.createdAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.activityFile, JSON.stringify(data, null, 2));

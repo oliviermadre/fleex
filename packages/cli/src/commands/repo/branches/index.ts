@@ -1,10 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { info } from '../../../core/colors.ts';
-import { apiBase, apiGet } from '../../../core/api.ts';
 import { printJson } from '../../../core/agentic.ts';
+import { apiBase, apiGet } from '../../../core/api.ts';
+import { info } from '../../../core/colors.ts';
 import { parseRepo } from '../_shared.ts';
 
-interface Options { json?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface Options {
+  json?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -16,7 +19,9 @@ const def: CommandDef = {
   },
   action: async (repoArg: string, opts: Options) => {
     const { org, name } = parseRepo(repoArg);
-    const branches = await apiGet<string[]>(`${apiBase()}/api/repositories/${org}/${name}/branches`);
+    const branches = await apiGet<string[]>(
+      `${apiBase()}/api/repositories/${org}/${name}/branches`,
+    );
     if (opts.json) {
       printJson(branches);
       return;

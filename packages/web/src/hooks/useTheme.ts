@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
-import { useSettingsStore } from '../stores/settingsStore';
+
 import { resolveTheme, applyTheme } from '../lib/themes';
 import { terminalManager } from '../services/terminalManager';
+import { useSettingsStore } from '../stores/settingsStore';
 
 export function useTheme() {
   const activeThemeId = useSettingsStore((s) => s.settings.activeThemeId);

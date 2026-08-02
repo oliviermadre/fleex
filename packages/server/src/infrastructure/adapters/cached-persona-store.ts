@@ -1,6 +1,6 @@
-import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { PersonaStorePort } from '../../application/ports/persona-store.port.js';
 import type { RemoteCacheSync } from '../../application/ports/remote-cache-sync.port.js';
+import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import type { AnyDomainEvent } from '../../domain/events.js';
 
 /**

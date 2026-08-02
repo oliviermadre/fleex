@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
+
 import type { DashboardMessage, SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
-import { useSessionStore } from '../stores/sessionStore';
-import { appWs } from '../services/websocket';
+
 import * as api from '../services/api';
+import { appWs } from '../services/websocket';
+import { useSessionStore } from '../stores/sessionStore';
 
 export function useSessions() {
   const setSessionGroups = useSessionStore((s) => s.setSessionGroups);
@@ -11,12 +13,24 @@ export function useSessions() {
 
   useEffect(() => {
     // Fetch initial data
-    api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
-    api.fetchSessions().then(setSessions).catch(() => {});
+    api
+      .fetchSessionGroups()
+      .then(setSessionGroups)
+      .catch(() => {});
+    api
+      .fetchSessions()
+      .then(setSessions)
+      .catch(() => {});
 
     const handleDashboardOpen = () => {
-      api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
-      api.fetchSessions().then(setSessions).catch(() => {});
+      api
+        .fetchSessionGroups()
+        .then(setSessionGroups)
+        .catch(() => {});
+      api
+        .fetchSessions()
+        .then(setSessions)
+        .catch(() => {});
     };
 
     const unsubOpen = appWs.onOpen(handleDashboardOpen);
@@ -28,7 +42,7 @@ export function useSessions() {
           setSessionGroups(dashMsg.data);
           {
             const allSessions = dashMsg.data.flatMap((g: SessionGroup) =>
-              g.worktrees.flatMap((w: WorktreeSessionGroup) => w.sessions)
+              g.worktrees.flatMap((w: WorktreeSessionGroup) => w.sessions),
             );
             setSessions(allSessions);
           }

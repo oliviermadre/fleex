@@ -1,5 +1,6 @@
-import type { ServerWebSocket } from 'bun';
 import type { HubEventMessage, HubMessage } from '@fleex/shared';
+
+import type { ServerWebSocket } from 'bun';
 
 export interface HubClientData {
   /** Authenticated client name (from authorized_clients file). */
@@ -67,7 +68,11 @@ export class Hub {
     const closed: string[] = [];
     for (const ws of this.clients) {
       if (!isAuthorized(ws.data.clientName)) {
-        try { ws.close(4001, 'revoked'); } catch { /* ignore */ }
+        try {
+          ws.close(4001, 'revoked');
+        } catch {
+          /* ignore */
+        }
         closed.push(ws.data.clientName);
       }
     }

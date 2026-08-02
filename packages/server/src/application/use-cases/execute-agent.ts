@@ -1,44 +1,68 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentExecutionResult, AgentEventType, AgentStructuredOutput, MentionExecutionMode, EffortLevel } from '@fleex/shared';
+
 import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
-import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
-import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
-import type { ExecutionRegistryPort, ExecutionRegistryEntry } from '../ports/execution-registry.port.js';
-import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import { normalizeDeliverableTypes } from '@fleex/shared';
+import type {
+  AgentExecutionResult,
+  AgentEventType,
+  AgentStructuredOutput,
+  MentionExecutionMode,
+  EffortLevel,
+} from '@fleex/shared';
+import type { DeliverableTypeDef } from '@fleex/shared';
+
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
-import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
-import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
-import type { PersonaStorePort } from '../ports/persona-store.port.js';
-import type { MentionStorePort } from '../ports/mention-store.port.js';
-import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import { parseAgentOutput } from '../utils/parse-agent-output.js';
-import { buildSdkOptions } from '../utils/build-sdk-options.js';
-import { streamSdkQuery, summarizeStderr, type StreamSdkQueryResult } from '../utils/stream-sdk-query.js';
+import { AgentPersonaNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
+import {
+  buildTicketBranchName,
+  buildTicketWorkspaceId,
+} from '../../domain/services/branch-utils.js';
 import { buildExecutionStartData } from '../utils/build-execution-start-data.js';
+import { buildSdkOptions } from '../utils/build-sdk-options.js';
 import { classifyCrash, CRASH_MESSAGES } from '../utils/classify-crash.js';
+import { buildStandardOutputSchema } from '../utils/merge-output-schemas.js';
+import { parseAgentOutput } from '../utils/parse-agent-output.js';
+import {
+  resolveFileReferences,
+  promptHasImageAttachment,
+  type PromptContentBlock,
+} from '../utils/resolve-file-references.js';
+import {
+  streamSdkQuery,
+  summarizeStderr,
+  type StreamSdkQueryResult,
+} from '../utils/stream-sdk-query.js';
+
+import type { AutoReviewWorkflowUseCase } from './auto-review-workflow.js';
+import type { CreateWorktreeUseCase } from './create-worktree.js';
+import type { GetTicketContextUseCase } from './get-ticket-context.js';
 import type { PostCommentUseCase } from './post-comment.js';
 import type { ResolveMentionUseCase } from './resolve-mention.js';
 import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
-import type { GetTicketContextUseCase } from './get-ticket-context.js';
-import type { CreateWorktreeUseCase } from './create-worktree.js';
+import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
+import type { TicketMentionEntity } from '../../domain/entities/ticket-mention.entity.js';
+import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+import type { EventBus } from '../event-bus.js';
+import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
+import type { CancelExecutionPort } from '../ports/cancel-execution.port.js';
 import type { ConfigPort } from '../ports/config.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
-import type { AutoReviewWorkflowUseCase } from './auto-review-workflow.js';
-import type { SkillStorePort } from '../ports/skill-store.port.js';
+import type {
+  ExecutionRegistryPort,
+  ExecutionRegistryEntry,
+} from '../ports/execution-registry.port.js';
 import type { FileMetaStorePort } from '../ports/file-meta-store.port.js';
 import type { FileStorePort } from '../ports/file-store.port.js';
-import type { EventBus } from '../event-bus.js';
-import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
+import type { LoggerPort } from '../ports/logger.port.js';
+import type { MentionStorePort } from '../ports/mention-store.port.js';
+import type { PersonaStorePort } from '../ports/persona-store.port.js';
+import type { SkillStorePort } from '../ports/skill-store.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { BareCloneManager } from '../services/bare-clone-manager.js';
-import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
-import { resolveFileReferences, promptHasImageAttachment, type PromptContentBlock } from '../utils/resolve-file-references.js';
-import { STANDARD_OUTPUT_SCHEMA as OUTPUT_FORMAT_SCHEMA, buildStandardOutputSchema } from '../utils/merge-output-schemas.js';
-import { normalizeDeliverableTypes } from '@fleex/shared';
-import type { DeliverableTypeDef } from '@fleex/shared';
+import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
+import type { STANDARD_OUTPUT_SCHEMA as OUTPUT_FORMAT_SCHEMA } from '../utils/merge-output-schemas.js';
 
 interface ActiveExecution {
   mentionId: string;
@@ -60,7 +84,9 @@ interface QueueItem {
  */
 function buildStructuredOutputInstructions(types: DeliverableTypeDef[]): string {
   const selectable = types.filter((t) => !t.system);
-  const fallback = selectable.some((t) => t.id === 'report') ? 'report' : (selectable[0]?.id ?? 'report');
+  const fallback = selectable.some((t) => t.id === 'report')
+    ? 'report'
+    : (selectable[0]?.id ?? 'report');
   const typeLines = selectable
     .map((t) => {
       const htmlNote = t.renderer === 'html' ? ' (rendered as a standalone HTML page)' : '';
@@ -68,9 +94,10 @@ function buildStructuredOutputInstructions(types: DeliverableTypeDef[]): string 
     })
     .join('\n');
   const htmlTypeIds = selectable.filter((t) => t.renderer === 'html').map((t) => `\`"${t.id}"\``);
-  const htmlRule = htmlTypeIds.length > 0
-    ? `\n- **HTML-rendered types** (${htmlTypeIds.join(', ')}): the \`markdown\` field MUST contain a single, complete, self-contained raw HTML document starting with \`<!DOCTYPE html>\`. Do **NOT** wrap it in a markdown code fence (no \`\`\`html … \`\`\`) — the content is embedded directly into an iframe, so any fence markers would render literally.`
-    : '';
+  const htmlRule =
+    htmlTypeIds.length > 0
+      ? `\n- **HTML-rendered types** (${htmlTypeIds.join(', ')}): the \`markdown\` field MUST contain a single, complete, self-contained raw HTML document starting with \`<!DOCTYPE html>\`. Do **NOT** wrap it in a markdown code fence (no \`\`\`html … \`\`\`) — the content is embedded directly into an iframe, so any fence markers would render literally.`
+      : '';
   return `
 # Output Format
 
@@ -143,7 +170,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   public onEvent: ((event: AgentEventEntity) => void) | null = null;
 
   /** Set by WS plugin to broadcast execution completion */
-  public onExecutionComplete: ((personaId: string, status: 'completed' | 'failed', mentionId: string) => void) | null = null;
+  public onExecutionComplete:
+    ((personaId: string, status: 'completed' | 'failed', mentionId: string) => void) | null = null;
 
   /** Set by container after construction (avoids circular dep) */
   public eventBus: EventBus | null = null;
@@ -180,7 +208,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
   /** Type ids agents may select (system types excluded). */
   private agentSelectableTypeIds(): string[] {
-    return this.deliverableTypeDefs().filter((t) => !t.system).map((t) => t.id);
+    return this.deliverableTypeDefs()
+      .filter((t) => !t.system)
+      .map((t) => t.id);
   }
 
   /** Structured-output JSON schema constrained to the configured selectable types. */
@@ -341,7 +371,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const persona = await this.personaStore.getByName(mention.targetAgent);
     if (!persona) {
       this.logger.warn('Cannot wake mention: persona not found', {
-        mentionId: mention.id, targetAgent: mention.targetAgent,
+        mentionId: mention.id,
+        targetAgent: mention.targetAgent,
       });
       return;
     }
@@ -373,7 +404,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     });
 
     this.logger.info('Waking up waiting agent', {
-      mentionId: mention.id, targetAgent: mention.targetAgent, ticketId: mention.ticketId,
+      mentionId: mention.id,
+      targetAgent: mention.targetAgent,
+      ticketId: mention.ticketId,
     });
 
     if (laneFree) {
@@ -546,7 +579,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   /** Coalesces concurrent kicks: at most one loop runs; a kick that arrives
    *  mid-pass schedules exactly one more pass afterwards. */
   private async drainLoop(): Promise<void> {
-    if (this.draining) { this.drainPending = true; return; }
+    if (this.draining) {
+      this.drainPending = true;
+      return;
+    }
     this.draining = true;
     try {
       do {
@@ -570,8 +606,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // dispatch→acknowledge window) OR the DB shows a live/parked thread for
       // this (agent, ticket). The DB read is what makes `waiting_for_info` hold
       // the lane until it resolves — no fragile "keep the key" bookkeeping.
-      if (this.occupiedAgentTickets.has(key) ||
-          await this.hasActiveThread(item.persona.name, item.mention.ticketId)) {
+      if (
+        this.occupiedAgentTickets.has(key) ||
+        (await this.hasActiveThread(item.persona.name, item.mention.ticketId))
+      ) {
         remaining.push(item);
         continue;
       }
@@ -591,7 +629,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
   private async hasActiveThread(agentName: string, ticketId: string): Promise<boolean> {
     const mentions = await this.mentionStore.getByTicket(ticketId);
     return mentions.some(
-      (m) => m.targetAgent === agentName &&
+      (m) =>
+        m.targetAgent === agentName &&
         (m.status === 'acknowledged' || m.status === 'waiting_for_info'),
     );
   }
@@ -642,9 +681,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     ticket: TicketEntity | null,
   ): { mode: MentionExecutionMode; model: string; effort?: EffortLevel; fast: boolean } {
     const conversationMode: MentionExecutionMode = ticket?.conversationMode ?? 'plan';
-    const mode: MentionExecutionMode = persona.executionMode === 'message'
-      ? 'talk'
-      : conversationMode;
+    const mode: MentionExecutionMode =
+      persona.executionMode === 'message' ? 'talk' : conversationMode;
 
     const model = ticket?.modelOverride ?? persona.model;
     const caps = inferModelCapabilities(model);
@@ -689,7 +727,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     const executionId = randomUUID();
     const abortController = new AbortController();
-    this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'running', abortController });
+    this.activeExecutions.set(mention.id, {
+      mentionId: mention.id,
+      executionId,
+      personaId: persona.id,
+      ticketId: mention.ticketId,
+      status: 'running',
+      abortController,
+    });
 
     const humanName = this.resolveHumanMentionName(persona);
     // Tracks whether `mention.acknowledge()` succeeded. Drives the catch
@@ -775,7 +820,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       // from waiting_for_info), NOT from "a session exists" — a fresh queued
       // mention reuses the session but is not a wake-up.
       const userPromptBlocks = await this.composeUserPrompt(context, mention, isWakeUp);
-      const userPromptTextLength = userPromptBlocks.reduce((n, b) => n + (b.type === 'text' ? b.text.length : 0), 0);
+      const userPromptTextLength = userPromptBlocks.reduce(
+        (n, b) => n + (b.type === 'text' ? b.text.length : 0),
+        0,
+      );
 
       this.logger.info('Agent execution started', {
         executionId,
@@ -813,30 +861,37 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       if (humanName) contextSections.push(`Human operator (@${humanName})`);
       if (worktreePath) contextSections.push(`Working directory (${worktreePath})`);
 
-      await emitEvent('execution_start', buildExecutionStartData({
-        executionId,
-        personaId: persona.id,
-        personaName: persona.name,
-        ticketId: mention.ticketId,
-        mentionId: mention.id,
-        model: resolved.model,
-        effectiveMode,
-        worktreePath,
-        resumeSessionId: previousSessionId ?? null,
-        kind: 'persona',
-        systemPromptSections: contextSections,
-        systemPromptLength: systemPrompt.length,
-        userPromptLength: userPromptTextLength,
-        ticketTitle: context.ticket.title,
-        ticketStatus: context.ticket.status,
-        commentsCount: context.comments.length,
-        deliverablesCount: context.deliverables.length,
-      }));
+      await emitEvent(
+        'execution_start',
+        buildExecutionStartData({
+          executionId,
+          personaId: persona.id,
+          personaName: persona.name,
+          ticketId: mention.ticketId,
+          mentionId: mention.id,
+          model: resolved.model,
+          effectiveMode,
+          worktreePath,
+          resumeSessionId: previousSessionId ?? null,
+          kind: 'persona',
+          systemPromptSections: contextSections,
+          systemPromptLength: systemPrompt.length,
+          userPromptLength: userPromptTextLength,
+          ticketTitle: context.ticket.title,
+          ticketStatus: context.ticket.status,
+          commentsCount: context.comments.length,
+          deliverablesCount: context.deliverables.length,
+        }),
+      );
 
       // 9. Setup execution timeout
       const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
       const timeoutHandle = setTimeout(() => {
-        this.logger.warn('Agent execution timed out', { executionId, persona: persona.name, timeoutMs });
+        this.logger.warn('Agent execution timed out', {
+          executionId,
+          persona: persona.name,
+          timeoutMs,
+        });
         abortController.abort(new Error('timeout'));
       }, timeoutMs);
 
@@ -868,23 +923,26 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         // Build the prompt: use content blocks if there are images, plain string otherwise
         const hasImages = userPromptBlocks.some((b) => b.type === 'image');
         const userPrompt = hasImages
-          ? userPromptBlocks  // Will be wrapped into SDKUserMessage below
+          ? userPromptBlocks // Will be wrapped into SDKUserMessage below
           : userPromptBlocks.map((b) => (b as { text: string }).text).join('');
 
         // Persist the session as soon as it exists (not only on success). If
         // this run is later aborted/superseded, the next mention on the same
         // agent+ticket can still resume from here — so "stop & redo" keeps the
         // agent's memory of what it was doing plus the correction.
-        const onSessionId = (sid: string) => { this.sessionHistory.set(sessionKey, sid); };
+        const onSessionId = (sid: string) => {
+          this.sessionHistory.set(sessionKey, sid);
+        };
 
-        const runStream = (fallbackSession: string) => streamSdkQuery({
-          prompt: userPrompt,
-          queryOptions: queryOptions as Record<string, unknown>,
-          emitEvent,
-          abortSignal: abortController.signal,
-          fallbackSessionId: fallbackSession,
-          onSessionId,
-        });
+        const runStream = (fallbackSession: string) =>
+          streamSdkQuery({
+            prompt: userPrompt,
+            queryOptions: queryOptions as Record<string, unknown>,
+            emitEvent,
+            abortSignal: abortController.signal,
+            fallbackSessionId: fallbackSession,
+            onSessionId,
+          });
 
         let streamResult: StreamSdkQueryResult;
         try {
@@ -892,7 +950,13 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         } catch (queryErr) {
           if (abortController.signal.aborted) {
             // Abort was triggered — handled below.
-            streamResult = { resultText: '', structuredOutput: null, metrics: {}, messageCount: 0, stderr: '' };
+            streamResult = {
+              resultText: '',
+              structuredOutput: null,
+              metrics: {},
+              messageCount: 0,
+              stderr: '',
+            };
           } else if (previousSessionId) {
             // Stale resume — clear session and retry fresh
             this.logger.warn('SDK query failed with resume, retrying without resume', {
@@ -903,7 +967,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
             });
             this.sessionHistory.delete(sessionKey);
             delete queryOptions['resume'];
-            await emitEvent('execution_retry', { reason: 'stale_resume_session', staleSessionId: previousSessionId });
+            await emitEvent('execution_retry', {
+              reason: 'stale_resume_session',
+              staleSessionId: previousSessionId,
+            });
             streamResult = await runStream(''); // If this also fails, propagates to outer catch
           } else {
             throw queryErr;
@@ -941,11 +1008,32 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           return;
         }
         // Timeout path — cancelExecution didn't run, we need to do cleanup
-        const reason = abortController.signal.reason instanceof Error && abortController.signal.reason.message === 'timeout'
-          ? 'timeout' : 'cancelled';
-        await emitEvent('execution_end', { status: 'interrupted', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
-        this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
+        const reason =
+          abortController.signal.reason instanceof Error &&
+          abortController.signal.reason.message === 'timeout'
+            ? 'timeout'
+            : 'cancelled';
+        await emitEvent('execution_end', {
+          status: 'interrupted',
+          reason,
+          ticketId: mention.ticketId,
+          model: resolved.model,
+          effectiveMode,
+        });
+        await this.agentEventStore.completeExecution(executionId, 'interrupted', {
+          model: resolved.model,
+          effectiveMode,
+          effort: resolved.effort,
+          fast: resolved.fast,
+        });
+        this.activeExecutions.set(mention.id, {
+          mentionId: mention.id,
+          executionId,
+          personaId: persona.id,
+          ticketId: mention.ticketId,
+          status: 'failed',
+          abortController,
+        });
         mention.resetToPending();
         await this.mentionStore.save(mention);
         this.onExecutionComplete?.(persona.id, 'failed', mention.id);
@@ -969,9 +1057,27 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         await emitEvent('error', { error: errorText, ticketId: mention.ticketId });
         // Emit execution_end so every log view flips out of "running" and shows
         // the failed state (the store keys failure off execution_end).
-        await emitEvent('execution_end', { status: 'failed', reason: 'subprocess_crash', ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
-        this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
+        await emitEvent('execution_end', {
+          status: 'failed',
+          reason: 'subprocess_crash',
+          ticketId: mention.ticketId,
+          model: resolved.model,
+          effectiveMode,
+        });
+        await this.agentEventStore.completeExecution(executionId, 'failed', {
+          model: resolved.model,
+          effectiveMode,
+          effort: resolved.effort,
+          fast: resolved.fast,
+        });
+        this.activeExecutions.set(mention.id, {
+          mentionId: mention.id,
+          executionId,
+          personaId: persona.id,
+          ticketId: mention.ticketId,
+          status: 'failed',
+          abortController,
+        });
         // markFailed (not resetToPending): a silent subprocess crash sent back to
         // `pending` is exactly the "invisible crash" bug this ticket fixes. Mark it
         // `failed` so the crash card surfaces it and offers a one-click relaunch.
@@ -1005,14 +1111,32 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           mentionId: mention.id,
         });
         await emitEvent('error', { error: message, ticketId: mention.ticketId });
-        await emitEvent('execution_end', { status: 'failed', reason, ticketId: mention.ticketId, model: resolved.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: resolved.model, effectiveMode, effort: resolved.effort, fast: resolved.fast });
+        await emitEvent('execution_end', {
+          status: 'failed',
+          reason,
+          ticketId: mention.ticketId,
+          model: resolved.model,
+          effectiveMode,
+        });
+        await this.agentEventStore.completeExecution(executionId, 'failed', {
+          model: resolved.model,
+          effectiveMode,
+          effort: resolved.effort,
+          fast: resolved.fast,
+        });
         // Persist the session so the relaunch can resume from where it stopped.
         if (sdkSessionId) {
           this.sessionHistory.set(sessionKey, sdkSessionId);
           await this.agentEventStore.updateSessionId(executionId, sdkSessionId);
         }
-        this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
+        this.activeExecutions.set(mention.id, {
+          mentionId: mention.id,
+          executionId,
+          personaId: persona.id,
+          ticketId: mention.ticketId,
+          status: 'failed',
+          abortController,
+        });
         mention.markFailed();
         await this.mentionStore.save(mention);
         // Emit AFTER completeExecution so the cockpit reconcile computes `idle`.
@@ -1030,7 +1154,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }
 
       // 11b. Parse structured output — prefer SDK-validated output, fall back to text parser
-      const structured = structuredOutput ?? parseAgentOutput(resultText, { validTypes: this.agentSelectableTypeIds() });
+      const structured =
+        structuredOutput ??
+        parseAgentOutput(resultText, { validTypes: this.agentSelectableTypeIds() });
 
       await emitEvent('execution_end', {
         status: 'completed',
@@ -1057,7 +1183,16 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       let resultCommentId: string | undefined;
       let resultDeliverableId: string | undefined;
 
-      const emitDomainEvents = (commentMentions: { id: string; targetAgent: string; targetType: string; sourceAgent: string }[], commentId: string, ticketId: string) => {
+      const emitDomainEvents = (
+        commentMentions: {
+          id: string;
+          targetAgent: string;
+          targetType: string;
+          sourceAgent: string;
+        }[],
+        commentId: string,
+        ticketId: string,
+      ) => {
         if (!this.eventBus) return;
         const now = new Date();
         // Emit comment.posted — triggers broadcast, auto-review, wake
@@ -1125,7 +1260,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
             if (m.targetType === 'human' && ticket) {
               ticket.assign(m.targetAgent);
               await this.ticketStore.saveTicket(ticket);
-              this.eventBus?.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
+              this.eventBus?.emit({
+                type: 'ticket.updated',
+                ticketId: ticket.id,
+                changes: {},
+                occurredAt: new Date(),
+              });
             }
           }
 
@@ -1165,11 +1305,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         }
       } else if (resultText.length > 0) {
         // Fallback path: agent didn't produce valid JSON — post raw text as comment only
-        this.logger.warn('Agent output was not valid structured JSON, falling back to raw comment', {
-          executionId,
-          persona: persona.name,
-          resultLength: resultText.length,
-        });
+        this.logger.warn(
+          'Agent output was not valid structured JSON, falling back to raw comment',
+          {
+            executionId,
+            persona: persona.name,
+            resultLength: resultText.length,
+          },
+        );
 
         const { comment, createdMentions: fallbackMentions } = await this.postComment.execute({
           ticketId: mention.ticketId,
@@ -1186,7 +1329,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           if (m.targetType === 'human' && ticket) {
             ticket.assign(m.targetAgent);
             await this.ticketStore.saveTicket(ticket);
-            this.eventBus?.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
+            this.eventBus?.emit({
+              type: 'ticket.updated',
+              ticketId: ticket.id,
+              changes: {},
+              occurredAt: new Date(),
+            });
           }
         }
 
@@ -1200,7 +1348,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         // Server-side enforcement: waiting_for_info requires at least a comment or deliverable
         if (!structured.comment && !structured.deliverable) {
           this.logger.warn('Agent set waiting_for_info but produced no output, forcing resolved', {
-            executionId, persona: persona.name,
+            executionId,
+            persona: persona.name,
           });
           mention.resolve({ commentId: resultCommentId, deliverableId: resultDeliverableId });
           await this.mentionStore.save(mention);
@@ -1219,7 +1368,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           if (ticket) {
             ticket.update({ blocked: true });
             await this.ticketStore.saveTicket(ticket);
-            this.eventBus?.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
+            this.eventBus?.emit({
+              type: 'ticket.updated',
+              ticketId: ticket.id,
+              changes: {},
+              occurredAt: new Date(),
+            });
           }
           this.eventBus?.emit({
             type: 'mention.waiting_for_info',
@@ -1260,7 +1414,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         commentId: resultCommentId,
         deliverableId: resultDeliverableId,
       });
-      this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'completed', abortController });
+      this.activeExecutions.set(mention.id, {
+        mentionId: mention.id,
+        executionId,
+        personaId: persona.id,
+        ticketId: mention.ticketId,
+        status: 'completed',
+        abortController,
+      });
       this.onExecutionComplete?.(persona.id, 'completed', mention.id);
 
       this.logger.info('Agent execution completed', {
@@ -1319,7 +1480,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         });
       }
 
-      this.activeExecutions.set(mention.id, { mentionId: mention.id, executionId, personaId: persona.id, ticketId: mention.ticketId, status: 'failed', abortController });
+      this.activeExecutions.set(mention.id, {
+        mentionId: mention.id,
+        executionId,
+        personaId: persona.id,
+        ticketId: mention.ticketId,
+        status: 'failed',
+        abortController,
+      });
 
       // Emit AFTER completeExecution + save so the cockpit reconcile sees the
       // execution as `failed` (→ idle) and the client can flip the mention to
@@ -1361,18 +1529,26 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
    * Execute a skill against a ticket.
    * This bypasses the mention lifecycle and runs the agent with the skill's markdown as instructions.
    */
-  async executeForSkill(skillId: string, ticketId: string, opts?: {
-    commentBody?: string;
-    mentionId?: string;
-    outputFormatOverride?: typeof OUTPUT_FORMAT_SCHEMA;
-    workflowContextPrompt?: string;
-    returnStructured?: boolean;
-    // When set, the "Running skill: X" announce comment is authored with a
-    // workflow-aware label (e.g. "workflow:Smoke Test → PR FAQ") so readers
-    // of the ticket comments tab can tell at a glance which workflow run
-    // produced each comment instead of seeing just the bare persona name.
-    workflowContext?: { workflowName: string; stepName: string };
-  }): Promise<{ structuredOutput: Record<string, unknown> | null; rawText: string; executionId: string } | void> {
+  async executeForSkill(
+    skillId: string,
+    ticketId: string,
+    opts?: {
+      commentBody?: string;
+      mentionId?: string;
+      outputFormatOverride?: typeof OUTPUT_FORMAT_SCHEMA;
+      workflowContextPrompt?: string;
+      returnStructured?: boolean;
+      // When set, the "Running skill: X" announce comment is authored with a
+      // workflow-aware label (e.g. "workflow:Smoke Test → PR FAQ") so readers
+      // of the ticket comments tab can tell at a glance which workflow run
+      // produced each comment instead of seeing just the bare persona name.
+      workflowContext?: { workflowName: string; stepName: string };
+    },
+  ): Promise<{
+    structuredOutput: Record<string, unknown> | null;
+    rawText: string;
+    executionId: string;
+  } | void> {
     if (!this.skillStore) {
       throw new Error('SkillStore not available');
     }
@@ -1404,7 +1580,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       : `Running skill: **${skill.displayName}**`;
     const announceAuthor = opts?.workflowContext
       ? `workflow:${opts.workflowContext.workflowName} → ${opts.workflowContext.stepName}`
-      : (persona.displayName || persona.name);
+      : persona.displayName || persona.name;
     const { comment: announceComment } = await this.postComment.execute({
       ticketId,
       body: announceBody,
@@ -1428,7 +1604,11 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // 2. Try to resolve workspace (optional for skills — many don't need file access)
     const worktreePath = await this.ensureWorkspace(ticketId);
     if (!worktreePath) {
-      this.logger.info('Skill execution proceeding without workspace', { executionId, ticketId, skillId });
+      this.logger.info('Skill execution proceeding without workspace', {
+        executionId,
+        ticketId,
+        skillId,
+      });
     }
 
     // 3. Start execution tracking
@@ -1436,9 +1616,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // Execution Log can filter them out of the standalone SKILL listing
     // (they're already represented by the parent workflow row). Non-workflow
     // skill runs keep the `skill:` prefix used for internal lookups.
-    const startMentionId = opts?.workflowContext
-      ? `workflow:${executionId}`
-      : `skill:${skillId}`;
+    const startMentionId = opts?.workflowContext ? `workflow:${executionId}` : `skill:${skillId}`;
     await this.agentEventStore.startExecution({
       executionId,
       personaId: persona.id,
@@ -1455,7 +1633,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       agentName: persona.name,
     });
 
-    const skillPromptBlocks = await this.composeSkillUserPrompt(context, skill.displayName, skill.markdownContent, opts?.commentBody);
+    const skillPromptBlocks = await this.composeSkillUserPrompt(
+      context,
+      skill.displayName,
+      skill.markdownContent,
+      opts?.commentBody,
+    );
 
     if (opts?.workflowContextPrompt) {
       skillPromptBlocks.push({ type: 'text', text: `\n---\n\n${opts.workflowContextPrompt}` });
@@ -1497,28 +1680,31 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       0,
     );
 
-    await emitEvent('execution_start', buildExecutionStartData({
-      executionId,
-      personaId: persona.id,
-      personaName: persona.name,
-      ticketId,
-      mentionId: startMentionId,
-      model: persona.model,
-      // Skills always run with full edit rights.
-      effectiveMode: 'edit',
-      worktreePath,
-      kind: 'skill',
-      label: skill.displayName,
-      skillId,
-      skillName: skill.commandName,
-      systemPromptSections: skillContextSections,
-      systemPromptLength: systemPrompt.length,
-      userPromptLength: skillUserPromptLength,
-      ticketTitle: context.ticket.title,
-      ticketStatus: context.ticket.status,
-      commentsCount: context.comments.length,
-      deliverablesCount: context.deliverables.length,
-    }));
+    await emitEvent(
+      'execution_start',
+      buildExecutionStartData({
+        executionId,
+        personaId: persona.id,
+        personaName: persona.name,
+        ticketId,
+        mentionId: startMentionId,
+        model: persona.model,
+        // Skills always run with full edit rights.
+        effectiveMode: 'edit',
+        worktreePath,
+        kind: 'skill',
+        label: skill.displayName,
+        skillId,
+        skillName: skill.commandName,
+        systemPromptSections: skillContextSections,
+        systemPromptLength: systemPrompt.length,
+        userPromptLength: skillUserPromptLength,
+        ticketTitle: context.ticket.title,
+        ticketStatus: context.ticket.status,
+        commentsCount: context.comments.length,
+        deliverablesCount: context.deliverables.length,
+      }),
+    );
 
     // 6. Acquire a global SDK slot before arming the timeout, so time spent
     // waiting behind other executions never counts toward the execution timeout.
@@ -1527,7 +1713,11 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     // 7. Setup timeout + abort
     const timeoutMs = this.config.get().agentExecutionTimeout ?? 30 * 60 * 1000;
     const timeoutHandle = setTimeout(() => {
-      this.logger.warn('Skill execution timed out', { executionId, persona: persona.name, timeoutMs });
+      this.logger.warn('Skill execution timed out', {
+        executionId,
+        persona: persona.name,
+        timeoutMs,
+      });
       abortController.abort(new Error('timeout'));
     }, timeoutMs);
 
@@ -1573,8 +1763,17 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       clearTimeout(timeoutHandle);
 
       if (abortController.signal.aborted) {
-        await emitEvent('execution_end', { status: 'interrupted', reason: 'timeout', ticketId, model: persona.model, effectiveMode });
-        await this.agentEventStore.completeExecution(executionId, 'interrupted', { model: persona.model, effectiveMode });
+        await emitEvent('execution_end', {
+          status: 'interrupted',
+          reason: 'timeout',
+          ticketId,
+          model: persona.model,
+          effectiveMode,
+        });
+        await this.agentEventStore.completeExecution(executionId, 'interrupted', {
+          model: persona.model,
+          effectiveMode,
+        });
         return;
       }
 
@@ -1585,7 +1784,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }
 
       // 9. Process results — same as executeForMention
-      const structured = structuredOutput ?? parseAgentOutput(resultText, { validTypes: this.agentSelectableTypeIds() });
+      const structured =
+        structuredOutput ??
+        parseAgentOutput(resultText, { validTypes: this.agentSelectableTypeIds() });
       const ticket = await this.ticketStore.getTicketById(ticketId);
 
       await emitEvent('execution_end', {
@@ -1615,9 +1816,20 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           cacheReadTokens: sdkCacheReadTokens,
           cacheCreationTokens: sdkCacheCreationTokens,
         });
-        this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'completed', abortController });
+        this.activeExecutions.set(skillMentionKey, {
+          mentionId: skillMentionKey,
+          executionId,
+          personaId: persona.id,
+          ticketId,
+          status: 'completed',
+          abortController,
+        });
         this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);
-        return { structuredOutput: structured as Record<string, unknown> | null, rawText: resultText, executionId };
+        return {
+          structuredOutput: structured as Record<string, unknown> | null,
+          rawText: resultText,
+          executionId,
+        };
       }
 
       // Track the artifacts this skill run produced so the execution row can link
@@ -1668,7 +1880,12 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
             if (m.targetType === 'human' && ticket) {
               ticket.assign(m.targetAgent);
               await this.ticketStore.saveTicket(ticket);
-              this.eventBus?.emit({ type: 'ticket.updated', ticketId: ticket.id, changes: {}, occurredAt: new Date() });
+              this.eventBus?.emit({
+                type: 'ticket.updated',
+                ticketId: ticket.id,
+                changes: {},
+                occurredAt: new Date(),
+              });
             }
           }
         }
@@ -1737,7 +1954,14 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         commentId: resultCommentId,
         deliverableId: resultDeliverableId,
       });
-      this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'completed', abortController });
+      this.activeExecutions.set(skillMentionKey, {
+        mentionId: skillMentionKey,
+        executionId,
+        personaId: persona.id,
+        ticketId,
+        status: 'completed',
+        abortController,
+      });
       this.onExecutionComplete?.(persona.id, 'completed', skillMentionKey);
 
       // Resolve the mention if this was triggered from a comment
@@ -1782,12 +2006,21 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
         });
         await this.agentEventStore.appendEvent(errorEvent);
         this.onEvent?.(errorEvent);
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
+        await this.agentEventStore.completeExecution(executionId, 'failed', {
+          model: persona.model,
+        });
       } catch {
         // Don't mask original error
       }
 
-      this.activeExecutions.set(skillMentionKey, { mentionId: skillMentionKey, executionId, personaId: persona.id, ticketId, status: 'failed', abortController });
+      this.activeExecutions.set(skillMentionKey, {
+        mentionId: skillMentionKey,
+        executionId,
+        personaId: persona.id,
+        ticketId,
+        status: 'failed',
+        abortController,
+      });
       this.onExecutionComplete?.(persona.id, 'failed', skillMentionKey);
 
       // Resolve the mention even on failure so it doesn't stay pending
@@ -1870,15 +2103,20 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const workflowExecKey = `workflow:${executionId}`;
     const abortController = new AbortController();
     this.activeExecutions.set(workflowExecKey, {
-      mentionId: workflowExecKey, executionId, personaId: persona.id,
-      ticketId: params.ticketId, status: 'running', abortController,
+      mentionId: workflowExecKey,
+      executionId,
+      personaId: persona.id,
+      ticketId: params.ticketId,
+      status: 'running',
+      abortController,
     });
     let finalStatus: 'completed' | 'failed' = 'completed';
     try {
       const humanName = this.resolveHumanMentionName(persona);
 
       // Effective mode: respect persona ceiling
-      const effectiveMode: MentionExecutionMode = persona.executionMode === 'message' ? 'talk' : params.mode;
+      const effectiveMode: MentionExecutionMode =
+        persona.executionMode === 'message' ? 'talk' : params.mode;
 
       // Workspace if needed (same as executeForMention)
       let worktreePath: string | null = null;
@@ -1888,7 +2126,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
       // Start tracking
       await this.agentEventStore.startExecution({
-        executionId, personaId: persona.id, ticketId: params.ticketId, mentionId: workflowExecKey,
+        executionId,
+        personaId: persona.id,
+        ticketId: params.ticketId,
+        mentionId: workflowExecKey,
         model: persona.model,
       });
 
@@ -1899,13 +2140,26 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
       // Compose prompts
       const systemPrompt = this.composeSystemPrompt(persona, humanName, worktreePath);
-      const context = await this.getTicketContext.execute({ ticketId: params.ticketId, agentName: persona.name });
-      const userPromptBlocks = await this.composeWorkflowUserPrompt(context, params.workflowContextPrompt);
-      const userPromptText = userPromptBlocks.map((b) => b.type === 'text' ? b.text : '').join('');
+      const context = await this.getTicketContext.execute({
+        ticketId: params.ticketId,
+        agentName: persona.name,
+      });
+      const userPromptBlocks = await this.composeWorkflowUserPrompt(
+        context,
+        params.workflowContextPrompt,
+      );
+      const userPromptText = userPromptBlocks
+        .map((b) => (b.type === 'text' ? b.text : ''))
+        .join('');
 
       let sequence = 0;
       const emitEvent = async (eventType: AgentEventType, data: unknown) => {
-        const event = AgentEventEntity.create({ executionId, eventType, data, sequence: sequence++ });
+        const event = AgentEventEntity.create({
+          executionId,
+          eventType,
+          data,
+          sequence: sequence++,
+        });
         await this.agentEventStore.appendEvent(event);
         this.onEvent?.(event);
       };
@@ -1920,29 +2174,34 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       if (worktreePath) wfContextSections.push(`Working directory (${worktreePath})`);
       wfContextSections.push('Workflow step');
 
-      await emitEvent('execution_start', buildExecutionStartData({
-        executionId,
-        personaId: persona.id,
-        personaName: persona.name,
-        ticketId: params.ticketId,
-        mentionId: `workflow:${executionId}`,
-        model: persona.model,
-        effectiveMode,
-        worktreePath,
-        kind: 'workflow_step',
-        label: 'workflow step',
-        systemPromptSections: wfContextSections,
-        systemPromptLength: systemPrompt.length,
-        userPromptLength: userPromptText.length,
-        ticketTitle: context.ticket.title,
-        ticketStatus: context.ticket.status,
-        commentsCount: context.comments.length,
-        deliverablesCount: context.deliverables.length,
-      }));
+      await emitEvent(
+        'execution_start',
+        buildExecutionStartData({
+          executionId,
+          personaId: persona.id,
+          personaName: persona.name,
+          ticketId: params.ticketId,
+          mentionId: `workflow:${executionId}`,
+          model: persona.model,
+          effectiveMode,
+          worktreePath,
+          kind: 'workflow_step',
+          label: 'workflow step',
+          systemPromptSections: wfContextSections,
+          systemPromptLength: systemPrompt.length,
+          userPromptLength: userPromptText.length,
+          ticketTitle: context.ticket.title,
+          ticketStatus: context.ticket.status,
+          commentsCount: context.comments.length,
+          deliverablesCount: context.deliverables.length,
+        }),
+      );
 
       // SDK query
       const queryOptions = buildSdkOptions(effectiveMode, {
-        model: persona.model, systemPrompt, cwd: worktreePath,
+        model: persona.model,
+        systemPrompt,
+        cwd: worktreePath,
         outputFormat: params.outputFormat,
         talkCanReadImages: effectiveMode === 'talk' && promptHasImageAttachment(userPromptBlocks),
       });
@@ -1986,7 +2245,9 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           throw new ExecutionCancelledError(executionId);
         }
         await emitEvent('error', { error: err instanceof Error ? err.message : String(err) });
-        await this.agentEventStore.completeExecution(executionId, 'failed', { model: persona.model });
+        await this.agentEventStore.completeExecution(executionId, 'failed', {
+          model: persona.model,
+        });
         finalStatus = 'failed';
         throw err;
       }
@@ -2005,7 +2266,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       }
 
       await emitEvent('execution_end', {
-        status: 'completed', ticketId: params.ticketId, model: persona.model, effectiveMode,
+        status: 'completed',
+        ticketId: params.ticketId,
+        model: persona.model,
+        effectiveMode,
         resultLength: resultText.length,
         durationMs: sdkDurationMs,
         costUsd: sdkCostUsd,
@@ -2045,14 +2309,18 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const blocks: PromptContentBlock[] = [];
     const pushText = (text: string) => blocks.push({ type: 'text', text });
 
-    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`);
+    pushText(
+      `# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}`,
+    );
     if (context.ticket.description) {
-      blocks.push(...await this.resolveText(`\n## Description\n\n${context.ticket.description}`));
+      blocks.push(...(await this.resolveText(`\n## Description\n\n${context.ticket.description}`)));
     }
     if (context.comments.length > 0) {
       pushText('\n## Comments\n');
       for (const c of context.comments) {
-        blocks.push(...await this.resolveText(`**${c.authorName}** (${c.authorType}):\n${c.body}\n`));
+        blocks.push(
+          ...(await this.resolveText(`**${c.authorName}** (${c.authorType}):\n${c.body}\n`)),
+        );
       }
     }
     if (context.deliverables.length > 0) {
@@ -2074,16 +2342,22 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const blocks: PromptContentBlock[] = [];
     const pushText = (text: string) => blocks.push({ type: 'text', text });
 
-    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}${context.ticket.type ? ` | Type: ${context.ticket.type}` : ''}`);
+    pushText(
+      `# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}${context.ticket.type ? ` | Type: ${context.ticket.type}` : ''}`,
+    );
 
     if (context.ticket.description) {
-      blocks.push(...await this.resolveText(`\n## Description\n\n${context.ticket.description}`));
+      blocks.push(...(await this.resolveText(`\n## Description\n\n${context.ticket.description}`)));
     }
 
     if (context.comments.length > 0) {
       pushText('\n## Comments\n');
       for (const comment of context.comments) {
-        blocks.push(...await this.resolveText(`**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`));
+        blocks.push(
+          ...(await this.resolveText(
+            `**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`,
+          )),
+        );
       }
     }
 
@@ -2147,7 +2421,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     for (const link of repoLinks) {
       const slashIdx = link.ref.indexOf('/');
       if (slashIdx > 0) {
-        repos.push({ org: link.ref.substring(0, slashIdx), name: link.ref.substring(slashIdx + 1) });
+        repos.push({
+          org: link.ref.substring(0, slashIdx),
+          name: link.ref.substring(slashIdx + 1),
+        });
       }
     }
     if (repos.length === 0) {
@@ -2162,7 +2439,10 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     let createNewBranch: boolean;
     if (existingWorktreeLink) {
       const colonIdx = existingWorktreeLink.ref.indexOf(':');
-      branchName = colonIdx > 0 ? existingWorktreeLink.ref.substring(colonIdx + 1) : (existingWorktreeLink.label || existingWorktreeLink.ref);
+      branchName =
+        colonIdx > 0
+          ? existingWorktreeLink.ref.substring(colonIdx + 1)
+          : existingWorktreeLink.label || existingWorktreeLink.ref;
       createNewBranch = false;
     } else {
       const slug = ticket.title
@@ -2188,7 +2468,8 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
           await this.bareCloneManager!.ensureBareClone(repo.org, repo.name, remote);
         } catch (err) {
           this.logger.warn('Failed to clone repository for agent', {
-            ticketId, repo: `${repo.org}/${repo.name}`,
+            ticketId,
+            repo: `${repo.org}/${repo.name}`,
             error: err instanceof Error ? err.message : String(err),
           });
           continue;
@@ -2198,24 +2479,41 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       try {
         let usedBranch = branchName;
         try {
-          await this.createWorktree.execute(repo.org, repo.name, wtPath, { branch: branchName, createNewBranch });
+          await this.createWorktree.execute(repo.org, repo.name, wtPath, {
+            branch: branchName,
+            createNewBranch,
+          });
         } catch {
           // Branch may not exist on this repo (e.g. PR branch from another repo) — create a new one
           if (!createNewBranch) {
             usedBranch = buildTicketBranchName(ticket.title, ticket.id);
-            await this.createWorktree.execute(repo.org, repo.name, wtPath, { branch: usedBranch, createNewBranch: true });
+            await this.createWorktree.execute(repo.org, repo.name, wtPath, {
+              branch: usedBranch,
+              createNewBranch: true,
+            });
           } else {
             throw new Error(`Failed to create branch ${branchName}`);
           }
         }
-        if (!ticket.links.some((l) => l.type === 'worktree' && l.ref.startsWith(`${repo.org}/${repo.name}:`))) {
+        if (
+          !ticket.links.some(
+            (l) => l.type === 'worktree' && l.ref.startsWith(`${repo.org}/${repo.name}:`),
+          )
+        ) {
           ticket.addLink('worktree', wtPath, usedBranch, null, randomUUID());
           needsSave = true;
         }
-        this.logger.info('Agent worktree ready', { ticketId, repo: `${repo.org}/${repo.name}`, wtPath, branch: usedBranch });
+        this.logger.info('Agent worktree ready', {
+          ticketId,
+          repo: `${repo.org}/${repo.name}`,
+          wtPath,
+          branch: usedBranch,
+        });
       } catch (err) {
         this.logger.warn('Failed to create agent worktree', {
-          ticketId, repo: `${repo.org}/${repo.name}`, wtPath,
+          ticketId,
+          repo: `${repo.org}/${repo.name}`,
+          wtPath,
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -2223,19 +2521,29 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     if (needsSave) {
       await this.ticketStore.saveTicket(ticket);
-      this.eventBus?.emit({ type: 'ticket.updated', ticketId, changes: {}, occurredAt: new Date() });
+      this.eventBus?.emit({
+        type: 'ticket.updated',
+        ticketId,
+        changes: {},
+        occurredAt: new Date(),
+      });
     }
 
     return workspaceRoot;
   }
 
-  private composeSystemPrompt(persona: AgentPersonaEntity, humanName: string | null, worktreePath: string | null = null, repoCount?: number): string {
+  private composeSystemPrompt(
+    persona: AgentPersonaEntity,
+    humanName: string | null,
+    worktreePath: string | null = null,
+    repoCount?: number,
+  ): string {
     const parts: string[] = [];
 
     if (persona.soulMd) {
       parts.push(
-        'If SOUL.md is present, embody its persona and tone. Avoid stiff, generic replies; follow its guidance unless higher-priority instructions override it.\n\n'
-        + `---\n## ${persona.name} - SOUL.md\n\n${persona.soulMd}\n---`,
+        'If SOUL.md is present, embody its persona and tone. Avoid stiff, generic replies; follow its guidance unless higher-priority instructions override it.\n\n' +
+          `---\n## ${persona.name} - SOUL.md\n\n${persona.soulMd}\n---`,
       );
     }
 
@@ -2251,23 +2559,24 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     if (humanName) {
       parts.push(
-        `## Human Operator\n\n`
-        + `To mention the human, you **MUST** use exactly \`@${humanName}\` — this is the only tag the system tracks. `
-        + `Do NOT use any other form (no display name, no email, no variation). `
-        + `Use \`@${humanName}\` whenever you need human input, decisions, or answers to open questions.`,
+        `## Human Operator\n\n` +
+          `To mention the human, you **MUST** use exactly \`@${humanName}\` — this is the only tag the system tracks. ` +
+          `Do NOT use any other form (no display name, no email, no variation). ` +
+          `Use \`@${humanName}\` whenever you need human input, decisions, or answers to open questions.`,
       );
     }
 
     if (worktreePath) {
-      const workdirNote = repoCount === 0
-        ? `\n\nNote: this ticket has **no repository attached**. The workspace is empty — there is no codebase to read, edit, or run git against. Rely on MCP tools, web search, and file operations within this workspace as appropriate.`
-        : '';
+      const workdirNote =
+        repoCount === 0
+          ? `\n\nNote: this ticket has **no repository attached**. The workspace is empty — there is no codebase to read, edit, or run git against. Rely on MCP tools, web search, and file operations within this workspace as appropriate.`
+          : '';
       parts.push(
-        `## Working Directory\n\n`
-        + `Your working directory is:\n\`${worktreePath}\`\n\n`
-        + `Always use relative paths (e.g. \`packages/server/src/...\`) or this exact path for absolute references. `
-        + `Do NOT guess or infer the project root from other context — use this path.`
-        + workdirNote,
+        `## Working Directory\n\n` +
+          `Your working directory is:\n\`${worktreePath}\`\n\n` +
+          `Always use relative paths (e.g. \`packages/server/src/...\`) or this exact path for absolute references. ` +
+          `Do NOT guess or infer the project root from other context — use this path.` +
+          workdirNote,
       );
     }
 
@@ -2283,17 +2592,23 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
 
     const pushText = (text: string) => blocks.push({ type: 'text', text });
 
-    pushText(`# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}${context.ticket.type ? ` | Type: ${context.ticket.type}` : ''}`);
+    pushText(
+      `# Ticket: ${context.ticket.title}\nStatus: ${context.ticket.status} | Priority: ${context.ticket.priority}${context.ticket.type ? ` | Type: ${context.ticket.type}` : ''}`,
+    );
 
     if (context.ticket.description) {
-      const descBlocks = await this.resolveText(`\n## Description\n\n${context.ticket.description}`);
+      const descBlocks = await this.resolveText(
+        `\n## Description\n\n${context.ticket.description}`,
+      );
       blocks.push(...descBlocks);
     }
 
     if (context.comments.length > 0) {
       pushText('\n## Comments\n');
       for (const comment of context.comments) {
-        const commentBlocks = await this.resolveText(`**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`);
+        const commentBlocks = await this.resolveText(
+          `**${comment.authorName}** (${comment.authorType}):\n${comment.body}\n`,
+        );
         blocks.push(...commentBlocks);
       }
     }
@@ -2313,7 +2628,7 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
       for (const epic of context.epics) {
         pushText(`### ${epic.emoji} ${epic.name} (${epic.timeframe}, ${epic.groupStatus})\n`);
         if (epic.description) {
-          blocks.push(...await this.resolveText(epic.description + '\n'));
+          blocks.push(...(await this.resolveText(epic.description + '\n')));
         }
       }
     }
@@ -2334,17 +2649,21 @@ export class ExecuteAgentUseCase implements CancelExecutionPort, ExecutionRegist
     const ownComment = context.comments.find((c) => c.id === mention.commentId)?.body;
     if (isWakeUp) {
       pushText(
-        `\n---\n\n**Resuming your task.** You paused waiting for input. Review the latest activity on the ticket: `
-        + `if it answers what you were waiting for, finish your task and resolve; if it redirects you, follow the new direction. `
-        + `Stay focused on YOUR task${ownComment ? ' (your original request below)' : ''} — other comments that @mention you with different requests are separate queued tasks, not for now. `
-        + `You MUST produce at least a comment or a deliverable — ask someone, escalate to a human, or move forward on your own.`
-        + (ownComment ? `\n\n**Your original request** (from ${mention.sourceAgent}):\n> ${ownComment.replace(/\n/g, '\n> ')}` : ''),
+        `\n---\n\n**Resuming your task.** You paused waiting for input. Review the latest activity on the ticket: ` +
+          `if it answers what you were waiting for, finish your task and resolve; if it redirects you, follow the new direction. ` +
+          `Stay focused on YOUR task${ownComment ? ' (your original request below)' : ''} — other comments that @mention you with different requests are separate queued tasks, not for now. ` +
+          `You MUST produce at least a comment or a deliverable — ask someone, escalate to a human, or move forward on your own.` +
+          (ownComment
+            ? `\n\n**Your original request** (from ${mention.sourceAgent}):\n> ${ownComment.replace(/\n/g, '\n> ')}`
+            : ''),
       );
     } else {
       pushText(
-        `\n---\n\n**Your task** — respond to this request from ${mention.sourceAgent}:\n`
-        + (ownComment ? `> ${ownComment.replace(/\n/g, '\n> ')}\n\n` : `(comment ${mention.commentId})\n\n`)
-        + `Everything above is context. Other comments that @mention you with different requests are separate tasks, already queued and handled one at a time — do NOT answer them here. Focus only on the request above.`,
+        `\n---\n\n**Your task** — respond to this request from ${mention.sourceAgent}:\n` +
+          (ownComment
+            ? `> ${ownComment.replace(/\n/g, '\n> ')}\n\n`
+            : `(comment ${mention.commentId})\n\n`) +
+          `Everything above is context. Other comments that @mention you with different requests are separate tasks, already queued and handled one at a time — do NOT answer them here. Focus only on the request above.`,
       );
     }
 

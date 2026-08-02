@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
+
 import { describe, it, expect } from 'vitest';
-import { CachedTicketStore } from '../../src/infrastructure/adapters/cached-ticket-store.js';
-import { CachedPersonaStore } from '../../src/infrastructure/adapters/cached-persona-store.js';
-import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+
 import { AgentPersonaEntity } from '../../src/domain/entities/agent-persona.entity.js';
-import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
+import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+import { CachedPersonaStore } from '../../src/infrastructure/adapters/cached-persona-store.js';
+import { CachedTicketStore } from '../../src/infrastructure/adapters/cached-ticket-store.js';
+
 import type { PersonaStorePort } from '../../src/application/ports/persona-store.port.js';
+import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
 import type { AnyDomainEvent } from '../../src/domain/events.js';
 
 /**
@@ -19,7 +22,13 @@ describe('CachedTicketStore — RemoteCacheSync', () => {
     const boardId = randomUUID();
     const ticketId = randomUUID();
     // Source store starts with the ticket in "doing".
-    let current = TicketEntity.create({ id: ticketId, boardId, displayId: 1, title: 'T', status: 'doing' });
+    let current = TicketEntity.create({
+      id: ticketId,
+      boardId,
+      displayId: 1,
+      title: 'T',
+      status: 'doing',
+    });
     const inner: Partial<TicketStorePort> = {
       getAllTickets: async () => [current],
       getAllBoards: async () => [],
@@ -31,8 +40,20 @@ describe('CachedTicketStore — RemoteCacheSync', () => {
     expect((await cache.getTicketById(ticketId))?.status).toBe('doing');
 
     // A sibling instance moves the ticket in the shared store and forwards the event.
-    current = TicketEntity.create({ id: ticketId, boardId, displayId: 1, title: 'T', status: 'reviewing' });
-    const event = { type: 'ticket.moved', ticketId, fromStatus: 'doing', toStatus: 'reviewing', occurredAt: new Date() } as unknown as AnyDomainEvent;
+    current = TicketEntity.create({
+      id: ticketId,
+      boardId,
+      displayId: 1,
+      title: 'T',
+      status: 'reviewing',
+    });
+    const event = {
+      type: 'ticket.moved',
+      ticketId,
+      fromStatus: 'doing',
+      toStatus: 'reviewing',
+      occurredAt: new Date(),
+    } as unknown as AnyDomainEvent;
     await cache.applyRemoteEvent(event);
 
     // The cache must now reflect the sibling's write.
@@ -42,17 +63,31 @@ describe('CachedTicketStore — RemoteCacheSync', () => {
   it('ignores reference-only events that carry a ticketId without mutating the ticket', async () => {
     const ticketId = randomUUID();
     let reads = 0;
-    const ticket = TicketEntity.create({ id: ticketId, boardId: randomUUID(), displayId: 1, title: 'T', status: 'doing' });
+    const ticket = TicketEntity.create({
+      id: ticketId,
+      boardId: randomUUID(),
+      displayId: 1,
+      title: 'T',
+      status: 'doing',
+    });
     const inner: Partial<TicketStorePort> = {
       getAllTickets: async () => [ticket],
       getAllBoards: async () => [],
-      getTicketById: async () => { reads++; return ticket; },
+      getTicketById: async () => {
+        reads++;
+        return ticket;
+      },
     };
     const cache = new CachedTicketStore(inner as TicketStorePort);
     await cache.warmUp();
 
     // comment.posted references the ticket but does not change it — no re-read.
-    const event = { type: 'comment.posted', commentId: randomUUID(), ticketId, occurredAt: new Date() } as unknown as AnyDomainEvent;
+    const event = {
+      type: 'comment.posted',
+      commentId: randomUUID(),
+      ticketId,
+      occurredAt: new Date(),
+    } as unknown as AnyDomainEvent;
     await cache.applyRemoteEvent(event);
 
     expect(reads).toBe(0);
@@ -73,7 +108,11 @@ describe('CachedPersonaStore — RemoteCacheSync', () => {
     expect((await cache.getById(personaId))?.name).toBe('alpha');
 
     current = AgentPersonaEntity.create({ id: personaId, name: 'beta' });
-    const event = { type: 'persona.updated', personaId, occurredAt: new Date() } as unknown as AnyDomainEvent;
+    const event = {
+      type: 'persona.updated',
+      personaId,
+      occurredAt: new Date(),
+    } as unknown as AnyDomainEvent;
     await cache.applyRemoteEvent(event);
 
     expect((await cache.getById(personaId))?.name).toBe('beta');

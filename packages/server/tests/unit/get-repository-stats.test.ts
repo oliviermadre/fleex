@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { GetRepositoryStatsUseCase } from '../../src/application/use-cases/get-repository-stats.js';
 
 const NOW = new Date('2026-07-19T12:00:00Z');
@@ -11,7 +12,10 @@ function exec(costUsd: number | null, startedAt: string) {
   return { costUsd, startedAt } as never;
 }
 
-function makeUseCase(ticketsByRef: Record<string, unknown[]>, execsByTicket: Record<string, unknown[]>) {
+function makeUseCase(
+  ticketsByRef: Record<string, unknown[]>,
+  execsByTicket: Record<string, unknown[]>,
+) {
   return new GetRepositoryStatsUseCase(
     { getTicketsLinkedTo: async (_type, ref) => (ticketsByRef[ref] ?? []) as never },
     { getExecutionsByTicket: async (id) => (execsByTicket[id] ?? []) as never },

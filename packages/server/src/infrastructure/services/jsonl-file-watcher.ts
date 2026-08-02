@@ -1,5 +1,6 @@
-import { watch, type FSWatcher } from 'node:fs';
 import { EventEmitter } from 'node:events';
+import { watch, type FSWatcher } from 'node:fs';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 
 const DEBOUNCE_MS = 80;

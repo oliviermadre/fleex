@@ -1,4 +1,5 @@
 import type { DiffStats } from '@fleex/shared';
+
 import { cn } from '../../lib/cn';
 import { tintText } from '../../lib/tints';
 
@@ -24,18 +25,30 @@ export function DiffStatsBadge({ stats, loading }: DiffStatsBadgeProps) {
   return (
     <span className="inline-flex gap-2 text-xs font-mono whitespace-nowrap">
       <span className="inline-flex gap-1">
-        <span className={cn(stats.commitsAhead > 0 ? tintText('green') : 'text-[var(--theme-text-muted)]')}>
+        <span
+          className={cn(
+            stats.commitsAhead > 0 ? tintText('green') : 'text-[var(--theme-text-muted)]',
+          )}
+        >
           &uarr;{stats.commitsAhead}
         </span>
-        <span className={cn(stats.commitsBehind > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]')}>
+        <span
+          className={cn(
+            stats.commitsBehind > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]',
+          )}
+        >
           &darr;{stats.commitsBehind}
         </span>
       </span>
       <span className="inline-flex gap-1">
-        <span className={cn(stats.additions > 0 ? tintText('green') : 'text-[var(--theme-text-muted)]')}>
+        <span
+          className={cn(stats.additions > 0 ? tintText('green') : 'text-[var(--theme-text-muted)]')}
+        >
           +{stats.additions}
         </span>
-        <span className={cn(stats.deletions > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]')}>
+        <span
+          className={cn(stats.deletions > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]')}
+        >
           -{stats.deletions}
         </span>
       </span>

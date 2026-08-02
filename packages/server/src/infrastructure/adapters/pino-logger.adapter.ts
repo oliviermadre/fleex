@@ -1,4 +1,5 @@
 import pino from 'pino';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 
 export class PinoLoggerAdapter implements LoggerPort {

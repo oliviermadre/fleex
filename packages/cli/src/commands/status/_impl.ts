@@ -1,7 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+
 import { c, padEndVisible, visibleLength } from '../../core/colors.ts';
-import { FLEEX_HOME, resolveInstance, readInstanceMetaAt, type InstanceMeta } from '../../core/instance.ts';
+import {
+  FLEEX_HOME,
+  resolveInstance,
+  readInstanceMetaAt,
+  type InstanceMeta,
+} from '../../core/instance.ts';
 import { SERVICES, type Ports } from '../../core/ports.ts';
 import { isAlive } from '../../core/process.ts';
 
@@ -27,7 +33,9 @@ export async function runStatus(): Promise<void> {
   }
 
   // Compute column widths and preload per-instance metadata (workspace/driver).
-  const entries = fs.readdirSync(runBase).filter((e) => fs.statSync(path.join(runBase, e)).isDirectory());
+  const entries = fs
+    .readdirSync(runBase)
+    .filter((e) => fs.statSync(path.join(runBase, e)).isDirectory());
   const metaBySlug = new Map<string, InstanceMeta | null>();
   let maxIw = 'Instance'.length;
   let maxWs = 'Workspace'.length;
@@ -46,7 +54,10 @@ export async function runStatus(): Promise<void> {
   }
 
   // Header
-  const headerInstance = padEndVisible(c.cyan('Instance'), maxIw + visibleLength(c.cyan('')) - 'Instance'.length);
+  const headerInstance = padEndVisible(
+    c.cyan('Instance'),
+    maxIw + visibleLength(c.cyan('')) - 'Instance'.length,
+  );
   // Simpler: write with chalk, then pad. To keep visible length right, build header manually.
   const writeRow = (parts: string[]) => process.stdout.write('  ' + parts.join('  ') + '\n');
 

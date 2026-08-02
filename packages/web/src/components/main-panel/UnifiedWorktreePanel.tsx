@@ -1,18 +1,22 @@
 import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
+
+import { isSidebarSession } from '@fleex/shared';
+
+import { useWorktreeContext, type WorktreeEntry } from '../../hooks/useWorktreeContext';
+import * as api from '../../services/api';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useWorktreeContext, type WorktreeEntry } from '../../hooks/useWorktreeContext';
-import { WorktreeHeader } from './tab-engine/WorktreeHeader';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+
+import { SessionRightSidebar } from './right-sidebar/SessionRightSidebar';
+import { getTabKind } from './tab-engine/registry';
 import { TabBar } from './tab-engine/TabBar';
 import { useTabEngine } from './tab-engine/useTabEngine';
-import { getTabKind } from './tab-engine/registry';
+import { WorktreeHeader } from './tab-engine/WorktreeHeader';
+
 import type { TabDescriptor } from './tab-engine/types';
-import { SmartSessionButton } from '../dashboard/SmartSessionButton';
-import * as api from '../../services/api';
-import { SessionRightSidebar } from './right-sidebar/SessionRightSidebar';
-import { isSidebarSession } from '@fleex/shared';
 
 // Side-effect: register all tab kinds
 import './tab-engine/kinds';
@@ -42,10 +46,7 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
   // Sidebar-scoped sessions (tmuxName prefixed with fleex_sidebar_) are hosted
   // inside the right sidebar's bottom panel, NOT the main tab row or the
   // SmartSessionButton — filter them out here.
-  const mainSessions = useMemo(
-    () => sessions.filter((s) => !isSidebarSession(s)),
-    [sessions],
-  );
+  const mainSessions = useMemo(() => sessions.filter((s) => !isSidebarSession(s)), [sessions]);
 
   // Build tab descriptors from sessions + executions (grouped by agent).
   const allTabs = useMemo<TabDescriptor[]>(() => {
@@ -77,11 +78,12 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
   // Resolve the active session (if the active tab represents one)
   const activeSessionId = engine.activeTab?.meta.sessionId as string | undefined;
   const activeSession = activeSessionId
-    ? sessions.find((s) => s.id === activeSessionId) ?? null
+    ? (sessions.find((s) => s.id === activeSessionId) ?? null)
     : null;
 
   // Worktree availability
-  const isUnavailable = worktree?.worktreeStatus === 'repo_missing' || worktree?.worktreeStatus === 'unavailable';
+  const isUnavailable =
+    worktree?.worktreeStatus === 'repo_missing' || worktree?.worktreeStatus === 'unavailable';
 
   // Activating a brand-new tab is two-step: session enters the store asynchronously
   // via zustand, while setActiveTab is a React setState. Calling setActiveTab with a
@@ -114,7 +116,10 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
         addSessionToGroup(session);
         sessionId = session.id;
       }
-      api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
+      api
+        .fetchSessionGroups()
+        .then(setSessionGroups)
+        .catch(() => {});
       setPendingActiveKey(`s:${sessionId}`);
     } catch {
       // silently fail
@@ -124,7 +129,9 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
   // Listen for ⌘N "new tab" event
   useEffect(() => {
     if (isUnavailable) return;
-    const handler = () => { handleNewTab(); };
+    const handler = () => {
+      handleNewTab();
+    };
     window.addEventListener('fleex:new-tab', handler);
     return () => window.removeEventListener('fleex:new-tab', handler);
   }, [handleNewTab, isUnavailable]);
@@ -137,7 +144,9 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[var(--theme-text-faint)]">
           <span className="text-sm">
             {isUnavailable
-              ? (worktree?.worktreeStatus === 'repo_missing' ? 'Repository not found locally' : 'Worktree unavailable')
+              ? worktree?.worktreeStatus === 'repo_missing'
+                ? 'Repository not found locally'
+                : 'Worktree unavailable'
               : 'No tabs yet'}
           </span>
           {!isUnavailable && (
@@ -168,7 +177,9 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
     const repoKeys = Array.from(
       new Set(
         ticket!.links
-          .filter((l) => l.type === 'repository' && typeof l.ref === 'string' && l.ref.includes('/'))
+          .filter(
+            (l) => l.type === 'repository' && typeof l.ref === 'string' && l.ref.includes('/'),
+          )
           .map((l) => l.ref),
       ),
     );
@@ -221,9 +232,7 @@ export function UnifiedWorktreePanel({ entry, focused, isSplit, onFocus }: Props
               size="sm"
               ticketId={ticket?.id}
               onExecuteSkill={
-                ticket
-                  ? (skillId) => api.executeSkill(skillId, ticket.id)
-                  : undefined
+                ticket ? (skillId) => api.executeSkill(skillId, ticket.id) : undefined
               }
               alwaysShowMenu
             />

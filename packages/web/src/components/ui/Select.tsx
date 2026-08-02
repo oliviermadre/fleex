@@ -19,7 +19,7 @@ export function Select({ label, options, className, id, ...props }: SelectProps)
           'rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-1.5 text-sm text-[var(--theme-text-primary)]',
           'focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]',
           'appearance-none',
-          className
+          className,
         )}
         {...props}
       >

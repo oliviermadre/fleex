@@ -49,6 +49,8 @@ if (existsSync(pathTxt)) {
 }
 
 // Re-register with Launch Services so macOS picks up the change
-execSync(`/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "${appPath}"`);
+execSync(
+  `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "${appPath}"`,
+);
 
 console.log('Patched Fleex.app Info.plist and registered with Launch Services.');

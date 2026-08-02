@@ -68,7 +68,8 @@ export function buildArgv(
   }
 
   if (tool.workspaceAware && opts.workspace) argv.push('--workspace', opts.workspace);
-  if (opts.assumeYes && tool.confirmFlag && !argv.includes(tool.confirmFlag)) argv.push(tool.confirmFlag);
+  if (opts.assumeYes && tool.confirmFlag && !argv.includes(tool.confirmFlag))
+    argv.push(tool.confirmFlag);
   if (opts.json) argv.push('--json');
 
   return argv;

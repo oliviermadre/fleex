@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
+
 import { SdkConcurrencyLimiter } from '../../src/application/services/sdk-concurrency-limiter.js';
 
 /** A promise paired with its resolve fn, so tests can hold tasks open. */
 function deferred<T = void>() {
   let resolve!: (v: T) => void;
-  const promise = new Promise<T>((r) => { resolve = r; });
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
   return { promise, resolve };
 }
 
@@ -47,7 +50,10 @@ describe('SdkConcurrencyLimiter', () => {
     const release1 = await limiter.acquire();
     order.push(1);
 
-    const second = limiter.run(async () => { order.push(2); await g1.promise; });
+    const second = limiter.run(async () => {
+      order.push(2);
+      await g1.promise;
+    });
     await flush();
     expect(order).toEqual([1]); // second is blocked
 
@@ -81,13 +87,18 @@ describe('SdkConcurrencyLimiter', () => {
     let running = 0;
     let peak = 0;
     const waiters = gates.map((g) =>
-      limiter.run(async () => { running++; peak = Math.max(peak, running); await g.promise; running--; }),
+      limiter.run(async () => {
+        running++;
+        peak = Math.max(peak, running);
+        await g.promise;
+        running--;
+      }),
     );
     await flush();
     expect(limiter.snapshot.waiting).toBe(2);
 
-    limit = 3;       // raise the ceiling
-    r0();            // one release should now drain both waiters
+    limit = 3; // raise the ceiling
+    r0(); // one release should now drain both waiters
     await flush();
     expect(peak).toBe(2);
 
@@ -102,7 +113,12 @@ describe('SdkConcurrencyLimiter', () => {
     let active = 0;
     let peak = 0;
     const tasks = [0, 1].map(() =>
-      limiter.run(async () => { active++; peak = Math.max(peak, active); await g.promise; active--; }),
+      limiter.run(async () => {
+        active++;
+        peak = Math.max(peak, active);
+        await g.promise;
+        active--;
+      }),
     );
     await flush();
     expect(limiter.snapshot.active).toBe(1);

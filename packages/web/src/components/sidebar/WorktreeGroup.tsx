@@ -1,16 +1,17 @@
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import type { Session, WorktreeSessionGroup } from '@fleex/shared';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useUIStore } from '../../stores/uiStore';
-import { useTicketStore } from '../../stores/ticketStore';
 
 import { cn } from '../../lib/cn';
-import { PrBadge } from '../ui/PrBadge';
+import { aggregateBranchStatus } from '../../lib/deriveStatus';
 import { tintText } from '../../lib/tints';
 import { usePullRequestStore } from '../../stores/pullRequestStore';
-import { aggregateBranchStatus } from '../../lib/deriveStatus';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUIStore } from '../../stores/uiStore';
+import { PrBadge } from '../ui/PrBadge';
 import { StatusDot } from '../ui/StatusDot';
-import { useNavigate } from 'react-router-dom';
 
 const PRIORITY_ICON_COLOR: Record<string, string> = {
   none: 'text-[var(--theme-text-muted)]',
@@ -43,7 +44,13 @@ interface Props {
   flowType?: FlowType;
 }
 
-export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repositoryName, flowType }: Props) {
+export function WorktreeGroup({
+  worktree,
+  repoGroupId,
+  repositoryOrg,
+  repositoryName,
+  flowType,
+}: Props) {
   const navigate = useNavigate();
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const repoKey = `${repositoryOrg}/${repositoryName}`;
@@ -53,9 +60,9 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
 
   // Ticket is resolved by the backend grouping (ticketId on worktree group)
   const tickets = useTicketStore((s) => s.tickets);
-  const ticket = useMemo(() =>
-    worktree.ticketId ? (tickets.find((t) => t.id === worktree.ticketId) ?? null) : null,
-    [tickets, worktree.ticketId]
+  const ticket = useMemo(
+    () => (worktree.ticketId ? (tickets.find((t) => t.id === worktree.ticketId) ?? null) : null),
+    [tickets, worktree.ticketId],
   );
 
   // Aggregate status for branch
@@ -67,7 +74,14 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
   const isAgentSelected = agentInfo && selectedAgentWorktreeTicketId === agentInfo.ticketId;
   const ticketPRs = useMemo(() => {
     if (!ticket) return [];
-    const prs: { org: string; name: string; number: number; state: 'open' | 'merged' | 'closed'; isDraft: boolean; title: string }[] = [];
+    const prs: {
+      org: string;
+      name: string;
+      number: number;
+      state: 'open' | 'merged' | 'closed';
+      isDraft: boolean;
+      title: string;
+    }[] = [];
     for (const link of ticket.links) {
       if (link.type !== 'github_pr') continue;
       // ref format: "org/repo#number"
@@ -98,7 +112,10 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
   }, [ticket, pullsByRepo]);
 
   const sessionTicketId = useSessionStore((s) => s.selectedTicketId);
-  const isSelected = sessionTicketId === worktree.ticketId || worktree.sessions.some((s: Session) => s.id === selectedSessionId) || !!isAgentSelected;
+  const isSelected =
+    sessionTicketId === worktree.ticketId ||
+    worktree.sessions.some((s: Session) => s.id === selectedSessionId) ||
+    !!isAgentSelected;
 
   const handleBranchClick = () => {
     if (worktree.ticketId) {
@@ -123,18 +140,40 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
             'flex min-w-0 w-full flex-col gap-0.5 py-2.5 pl-6 pr-3 text-left transition-colors border-l-2',
             isSelected
               ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
-              : 'border-transparent hover:bg-[var(--theme-bg-hover)]'
+              : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
           )}
           onClick={handleBranchClick}
         >
           {/* Row 1: [icon colored by priority] [ticket name] [time in column : right] — favorite star floats in the left gutter (absolute, no layout shift) */}
           <div className="relative flex items-center gap-1.5">
             {ticket?.favorite && (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" className={cn('absolute right-full top-1/2 mr-1.5 -translate-y-1/2', tintText('yellow'))} aria-label="Favorite">
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                stroke="currentColor"
+                strokeWidth="2"
+                className={cn(
+                  'absolute right-full top-1/2 mr-1.5 -translate-y-1/2',
+                  tintText('yellow'),
+                )}
+                aria-label="Favorite"
+              >
                 <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
               </svg>
             )}
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn('shrink-0', iconColor)}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={cn('shrink-0', iconColor)}
+            >
               <rect x="2" y="2" width="12" height="12" rx="2" />
               <path d="M5 6h6M5 9h4" />
             </svg>
@@ -142,7 +181,9 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
               {ticket?.title ?? worktree.branch}
             </span>
             {timeInColumn && (
-              <span className="ml-auto shrink-0 text-[11px] text-[var(--theme-text-faint)]">{timeInColumn}</span>
+              <span className="ml-auto shrink-0 text-[11px] text-[var(--theme-text-faint)]">
+                {timeInColumn}
+              </span>
             )}
           </div>
 
@@ -150,17 +191,27 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
           <div className="flex items-center gap-1.5 pl-5">
             {/* PRs left-aligned */}
             {ticketPRs.map((tpr) => (
-              <PrBadge key={`${tpr.org}/${tpr.name}#${tpr.number}`} org={tpr.org} name={tpr.name} pr={tpr} />
+              <PrBadge
+                key={`${tpr.org}/${tpr.name}#${tpr.number}`}
+                org={tpr.org}
+                name={tpr.name}
+                pr={tpr}
+              />
             ))}
 
             {/* Diff centered via flex-1 spacer */}
             <span className="flex-1 text-center">
-              {worktree.diffStats && (worktree.diffStats.additions > 0 || worktree.diffStats.deletions > 0) && (
-                <span className="inline-flex gap-1 text-[11px] font-mono">
-                  {worktree.diffStats.additions > 0 && <span className={tintText('green')}>+{worktree.diffStats.additions}</span>}
-                  {worktree.diffStats.deletions > 0 && <span className={tintText('red')}>-{worktree.diffStats.deletions}</span>}
-                </span>
-              )}
+              {worktree.diffStats &&
+                (worktree.diffStats.additions > 0 || worktree.diffStats.deletions > 0) && (
+                  <span className="inline-flex gap-1 text-[11px] font-mono">
+                    {worktree.diffStats.additions > 0 && (
+                      <span className={tintText('green')}>+{worktree.diffStats.additions}</span>
+                    )}
+                    {worktree.diffStats.deletions > 0 && (
+                      <span className={tintText('red')}>-{worktree.diffStats.deletions}</span>
+                    )}
+                  </span>
+                )}
             </span>
 
             {/* Status right-aligned */}
@@ -168,11 +219,12 @@ export function WorktreeGroup({ worktree, repoGroupId, repositoryOrg, repository
               <StatusDot status={branchStatus.status} />
               <span className={`text-xs ${branchStatus.textColor}`}>{branchStatus.label}</span>
               {branchStatus.warning && (
-                <span className={cn('text-xs', tintText('yellow'))} title="Needs approval">&#9888;</span>
+                <span className={cn('text-xs', tintText('yellow'))} title="Needs approval">
+                  &#9888;
+                </span>
               )}
             </span>
           </div>
-
         </button>
       </div>
     </div>

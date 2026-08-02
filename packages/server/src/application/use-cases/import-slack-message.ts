@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+
 import {
   parseSlackMessageUrl,
   SLACK_IMPORT_PENDING_TAG,
@@ -6,13 +7,15 @@ import {
   isSlackImportTag,
 } from '@fleex/shared';
 import type { ParsedSlackMessageUrl } from '@fleex/shared';
-import { TicketEntity } from '../../domain/entities/ticket.entity.js';
+
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { SlackImportError, TicketNotFoundError } from '../../domain/errors.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { SlackImportPort, SlackImportResult } from '../ports/slack-import.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
+
 import type { EventBus } from '../event-bus.js';
+import type { LoggerPort } from '../ports/logger.port.js';
+import type { SlackImportPort, SlackImportResult } from '../ports/slack-import.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 
 /**
  * Creates a ticket from a pasted Slack message permalink, mirroring the
@@ -71,13 +74,15 @@ export class ImportSlackMessageUseCase {
     );
 
     await this.ticketStore.createTicket(ticket);
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
-      ticketId,
-      action: 'created',
-      changes: { source: { from: null, to: `slack:${parsed.channelId}/${parsed.ts}` } },
-      source: 'web',
-    }));
+    await this.ticketStore.saveActivity(
+      TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId,
+        action: 'created',
+        changes: { source: { from: null, to: `slack:${parsed.channelId}/${parsed.ts}` } },
+        source: 'web',
+      }),
+    );
 
     this.logger.info('Slack import placeholder created, synthesizing in background', {
       channelId: parsed.channelId,
@@ -136,7 +141,11 @@ export class ImportSlackMessageUseCase {
     });
     await this.ticketStore.saveTicket(ticket);
 
-    this.logger.info('Slack import completed', { ticketId, channelId: parsed.channelId, ts: parsed.ts });
+    this.logger.info('Slack import completed', {
+      ticketId,
+      channelId: parsed.channelId,
+      ts: parsed.ts,
+    });
     this.emitUpdated(ticketId, diff);
   }
 
@@ -154,10 +163,7 @@ export class ImportSlackMessageUseCase {
     const link = ticket.links.find((l) => l.type === 'slack_message');
     const parsed = link?.url ? parseSlackMessageUrl(link.url) : null;
     if (!parsed) {
-      throw new SlackImportError(
-        'Ticket has no retryable Slack message link',
-        'SLACK_INVALID_URL',
-      );
+      throw new SlackImportError('Ticket has no retryable Slack message link', 'SLACK_INVALID_URL');
     }
 
     const kind = this.kindOf(parsed);
@@ -169,7 +175,11 @@ export class ImportSlackMessageUseCase {
     await this.ticketStore.saveTicket(ticket);
     this.emitUpdated(ticketId, diff);
 
-    this.logger.info('Retrying Slack import', { ticketId, channelId: parsed.channelId, ts: parsed.ts });
+    this.logger.info('Retrying Slack import', {
+      ticketId,
+      channelId: parsed.channelId,
+      ts: parsed.ts,
+    });
 
     void this.completeImport(ticketId, parsed);
 
@@ -178,12 +188,18 @@ export class ImportSlackMessageUseCase {
 
   // ── helpers ──
 
-  private async markFailed(ticketId: string, reason: string, parsed: ParsedSlackMessageUrl): Promise<void> {
+  private async markFailed(
+    ticketId: string,
+    reason: string,
+    parsed: ParsedSlackMessageUrl,
+  ): Promise<void> {
     // Re-read here too: the failure path runs after the same slow synthesis, so a concurrent
     // move must be preserved while we flag the ticket failed.
     const ticket = await this.ticketStore.getTicketById(ticketId);
     if (!ticket) {
-      this.logger.warn('Slack import target ticket vanished before failure could be recorded', { ticketId });
+      this.logger.warn('Slack import target ticket vanished before failure could be recorded', {
+        ticketId,
+      });
       return;
     }
 
@@ -197,7 +213,10 @@ export class ImportSlackMessageUseCase {
     this.emitUpdated(ticketId, diff);
   }
 
-  private emitUpdated(ticketId: string, changes: Record<string, { from: unknown; to: unknown }>): void {
+  private emitUpdated(
+    ticketId: string,
+    changes: Record<string, { from: unknown; to: unknown }>,
+  ): void {
     this.eventBus?.emit({ type: 'ticket.updated', ticketId, changes, occurredAt: new Date() });
   }
 

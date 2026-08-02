@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import fs from 'node:fs';
-import path from 'node:path';
 import os from 'node:os';
+import path from 'node:path';
+
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
+
 import { parseDotEnv, loadDotEnv, applyEnv } from '../../src/core/env.ts';
 
 let tmpDir: string;
@@ -136,7 +138,10 @@ describe('applyEnv', () => {
     // workspace env injected with override
     applyEnv({ FLEEX_TEST_SHARED: 'workspace' }, { override: true });
     // .env loaded afterwards, non-override
-    const envFile = writeEnv('precedence.env', 'FLEEX_TEST_SHARED=dotenv\nFLEEX_TEST_ONLY_ENV=fromdotenv');
+    const envFile = writeEnv(
+      'precedence.env',
+      'FLEEX_TEST_SHARED=dotenv\nFLEEX_TEST_ONLY_ENV=fromdotenv',
+    );
     loadDotEnv(envFile);
     expect(process.env.FLEEX_TEST_SHARED).toBe('workspace'); // workspace beats shell + .env
     expect(process.env.FLEEX_TEST_ONLY_ENV).toBe('fromdotenv'); // .env still fills gaps

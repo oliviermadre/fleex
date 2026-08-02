@@ -1,6 +1,6 @@
 import { cn } from '../../lib/cn';
-import { tint } from '../../lib/tints';
 import { costTier, formatTicketCost } from '../../lib/cost';
+import { tint } from '../../lib/tints';
 
 const BADGE_CLASS =
   'inline-flex flex-shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium font-mono';

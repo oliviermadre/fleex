@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildBundle, type OkfInput } from '../../src/scripts/okf/build-bundle.js';
+
 import type {
   Board,
   Ticket,
@@ -12,6 +12,8 @@ import type {
   Skill,
   WorkflowTemplate,
 } from '@fleex/shared';
+
+import { buildBundle, type OkfInput } from '../../src/scripts/okf/build-bundle.js';
 
 // ── Fixture factories (only the fields buildBundle reads need to be realistic) ──
 
@@ -215,7 +217,16 @@ describe('buildBundle — conformance & determinism', () => {
     boards: [board()],
     epics: [epic()],
     tickets: [ticket()],
-    comments: [comment(), comment({ id: 'c-2', authorName: 'builder', authorType: 'agent', parentId: 'comment-1', body: 'On it.' })],
+    comments: [
+      comment(),
+      comment({
+        id: 'c-2',
+        authorName: 'builder',
+        authorType: 'agent',
+        parentId: 'comment-1',
+        body: 'On it.',
+      }),
+    ],
     deliverables: [deliverable()],
     mentions: [
       {
@@ -274,8 +285,21 @@ describe('buildBundle — conformance & determinism', () => {
         emoji: '🔁',
         description: 'Spec then build.',
         steps: [
-          { id: 's2', name: 'Build', executorType: 'agent', executorRef: 'builder', position: { x: 1, y: 0 } },
-          { id: 's1', name: 'Spec', executorType: 'agent', executorRef: 'catalyst', mode: 'plan', position: { x: 0, y: 0 } },
+          {
+            id: 's2',
+            name: 'Build',
+            executorType: 'agent',
+            executorRef: 'builder',
+            position: { x: 1, y: 0 },
+          },
+          {
+            id: 's1',
+            name: 'Spec',
+            executorType: 'agent',
+            executorRef: 'catalyst',
+            mode: 'plan',
+            position: { x: 0, y: 0 },
+          },
         ],
         edges: [{ id: 'e1', source: 's1', target: 's2', isDefault: true }],
         entryStepId: 's1',

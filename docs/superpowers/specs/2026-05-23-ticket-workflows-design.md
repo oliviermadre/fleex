@@ -128,18 +128,18 @@ Une row par exécution d'un step. Les retries créent une nouvelle row avec `att
 
 ```ts
 {
-  id: string
-  workflowRunId: string                   // FK vers workflow_runs.id
-  stepId: string                          // matché contre templateSnapshot.steps[].id
-  attempt: number                         // 1 pour le premier essai, 2 pour retry, etc.
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'needs_review' | 'cancelled' | 'skipped'
-  result: 'ok' | 'needs_review' | 'ko' | null
-  output: StepOutput | null               // JSONB — l'output mergé (cf. §5)
-  nextEdgeId: string | null               // l'edge emprunté à la sortie
-  executionId: string | null              // lie aux agent_events pour les agent/skill/panel
-  startedAt: Date | null
-  completedAt: Date | null
-  createdAt: Date
+  id: string;
+  workflowRunId: string; // FK vers workflow_runs.id
+  stepId: string; // matché contre templateSnapshot.steps[].id
+  attempt: number; // 1 pour le premier essai, 2 pour retry, etc.
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'needs_review' | 'cancelled' | 'skipped';
+  result: 'ok' | 'needs_review' | 'ko' | null;
+  output: StepOutput | null; // JSONB — l'output mergé (cf. §5)
+  nextEdgeId: string | null; // l'edge emprunté à la sortie
+  executionId: string | null; // lie aux agent_events pour les agent/skill/panel
+  startedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
 }
 ```
 
@@ -216,7 +216,7 @@ Ajout d'un 5ᵉ pattern dans `packages/server/src/domain/entities/ticket-comment
 const WORKFLOW_MENTION_PATTERN = /@workflow:([a-zA-Z0-9_-]+)/g;
 ```
 
-+ `static extractWorkflowMentions(body)` qui suit le pattern des trois extracteurs existants (skip struck-through `~~@workflow:xxx~~`).
+- `static extractWorkflowMentions(body)` qui suit le pattern des trois extracteurs existants (skip struck-through `~~@workflow:xxx~~`).
 
 Le type `MentionTargetType` dans `@fleex/shared` gagne la valeur `'workflow'` à côté de `agent | human | panel | skill`.
 
@@ -329,26 +329,31 @@ interface StepExecutor {
 }
 
 type StepExecutionInput = {
-  ticketId: string
-  workflowRunId: string
-  stepRunId: string
-  step: WorkflowStep
+  ticketId: string;
+  workflowRunId: string;
+  stepRunId: string;
+  step: WorkflowStep;
   workflowContext: {
-    workflowName: string
-    stepName: string
-    outgoingEdges: { id: string; label?: string; condition?: Edge['condition']; targetName: string }[]
-    previousOutputs: Record<string /* stepId */, Record<string, unknown> /* output mergé */>
-  }
-}
+    workflowName: string;
+    stepName: string;
+    outgoingEdges: {
+      id: string;
+      label?: string;
+      condition?: Edge['condition'];
+      targetName: string;
+    }[];
+    previousOutputs: Record<string /* stepId */, Record<string, unknown> /* output mergé */>;
+  };
+};
 
 type StepOutput = {
-  deliverable?: { title: string; markdown: string; type: string; status: 'draft'|'final' } | null
-  comment?: string | null
-  mentionStatus?: 'resolved' | 'waiting_for_info'
-  schemaFields: Record<string, unknown>      // champs custom du step.outputSchema
-  outcome?: string                            // pour human_gate uniquement
-  result: 'ok' | 'needs_review' | 'ko'
-}
+  deliverable?: { title: string; markdown: string; type: string; status: 'draft' | 'final' } | null;
+  comment?: string | null;
+  mentionStatus?: 'resolved' | 'waiting_for_info';
+  schemaFields: Record<string, unknown>; // champs custom du step.outputSchema
+  outcome?: string; // pour human_gate uniquement
+  result: 'ok' | 'needs_review' | 'ko';
+};
 ```
 
 `StepOutput` est sérialisé dans `step_runs.output` directement.
@@ -356,6 +361,7 @@ type StepOutput = {
 ### 5.3 Adapters
 
 **`AgentStepExecutor`** — délègue à `ExecuteAgentUseCase` avec :
+
 - Persona résolue depuis `step.executorRef` (par nom)
 - Mode `step.mode ?? persona.executionMode`
 - `outputFormat` = `mergeOutputSchemas(STANDARD_SCHEMA, step.outputSchema)` (cf. §5.4)
@@ -367,6 +373,7 @@ type StepOutput = {
 **`PanelStepExecutor`** — délègue à `RunPanelUseCase` avec panel résolu par `name` depuis `step.executorRef`. Le panel a sa propre logique d'orchestration ; l'adapter passe le `workflowContext` au panel via un nouveau champ optionnel `extraContext`. Le retour de `RunPanelUseCase` doit être adapté pour produire un `StepOutput` (le panel produit déjà un deliverable + comment final ; on convertit + extrait `schemaFields` du structured output du dernier agent du panel).
 
 **`HumanGateStepExecutor`** — ne lance rien. Algorithme :
+
 1. Validation : `step.humanGateOutcomes.length >= 1`
 2. Crée un commentaire sur le ticket : « Workflow X is awaiting human decision on step "Y". Outcomes : `approve | reject | …` »
 3. Retourne `{ result: 'needs_review', schemaFields: { outcomes: step.humanGateOutcomes } }` sans `outcome` (sera rempli par la mutation API)
@@ -387,18 +394,16 @@ function mergeOutputSchemas(standard: JsonSchema, custom?: JsonSchema): JsonSche
       ...standard.schema,
       properties: {
         ...standard.schema.properties,
-        ...custom.properties,           // champs custom au top-level
+        ...custom.properties, // champs custom au top-level
       },
-      required: [
-        ...(standard.schema.required ?? []),
-        ...(custom.required ?? []),
-      ],
+      required: [...(standard.schema.required ?? []), ...(custom.required ?? [])],
     },
   };
 }
 ```
 
 L'agent voit donc un schéma avec `deliverable`, `comment`, `mentionStatus` **plus** les champs custom du step (ex. `path`, `priority`). Sa sortie JSON contient tout au top-level. À la réception, on sépare :
+
 - Champs standards (deliverable/comment/mentionStatus) → posted/persisted comme aujourd'hui
 - Champs custom → `schemaFields` du `StepOutput`
 
@@ -441,19 +446,19 @@ Permet à l'agent d'aligner ses choix avec les branches du DAG.
 
 ## 6. Endpoints HTTP
 
-| Méthode | Route | Description |
-|---|---|---|
-| `GET` | `/api/workflows/templates` | Liste tous les templates (filtres : `?enabled=true`) |
-| `GET` | `/api/workflows/templates/:id` | Détail d'un template |
-| `POST` | `/api/workflows/templates` | Create un template (validation : slug unique, entry valide, edges cohérents, JSON Schema parsable) |
-| `PUT` | `/api/workflows/templates/:id` | Update (full replace) |
-| `DELETE` | `/api/workflows/templates/:id` | Soft delete (`enabled=false`) ; reject si run actif |
-| `GET` | `/api/workflows/runs?ticketId=X` | Liste les runs d'un ticket (actif + historique) |
-| `GET` | `/api/workflows/runs/:id` | Détail run + tous les step_runs |
-| `POST` | `/api/workflows/runs` | Démarre un run `{ticketId, templateId, triggeredFrom?}` |
-| `DELETE` | `/api/workflows/runs/:id` | Cancel un run actif |
-| `POST` | `/api/workflows/runs/:id/steps/:stepRunId/resolve` | Body : `{outcome: string, notes?: string}`. Résout un step `human_gate` en `needs_review`. Écrit `step_run.output.schemaFields.outcome = body.outcome` et, si fourni, `step_run.output.schemaFields.notes = body.notes`. Passe `step_run.status='completed'`, puis déclenche l'edge resolution (les edges sortantes peuvent matcher sur `field='outcome'`) |
-| `POST` | `/api/workflows/runs/:id/steps/:stepRunId/retry` | Crée un nouveau StepRun (attempt+1) sur le même step ; status='queued' ; orchestrator re-déclenche |
+| Méthode  | Route                                              | Description                                                                                                                                                                                                                                                                                                                                                |
+| -------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/workflows/templates`                         | Liste tous les templates (filtres : `?enabled=true`)                                                                                                                                                                                                                                                                                                       |
+| `GET`    | `/api/workflows/templates/:id`                     | Détail d'un template                                                                                                                                                                                                                                                                                                                                       |
+| `POST`   | `/api/workflows/templates`                         | Create un template (validation : slug unique, entry valide, edges cohérents, JSON Schema parsable)                                                                                                                                                                                                                                                         |
+| `PUT`    | `/api/workflows/templates/:id`                     | Update (full replace)                                                                                                                                                                                                                                                                                                                                      |
+| `DELETE` | `/api/workflows/templates/:id`                     | Soft delete (`enabled=false`) ; reject si run actif                                                                                                                                                                                                                                                                                                        |
+| `GET`    | `/api/workflows/runs?ticketId=X`                   | Liste les runs d'un ticket (actif + historique)                                                                                                                                                                                                                                                                                                            |
+| `GET`    | `/api/workflows/runs/:id`                          | Détail run + tous les step_runs                                                                                                                                                                                                                                                                                                                            |
+| `POST`   | `/api/workflows/runs`                              | Démarre un run `{ticketId, templateId, triggeredFrom?}`                                                                                                                                                                                                                                                                                                    |
+| `DELETE` | `/api/workflows/runs/:id`                          | Cancel un run actif                                                                                                                                                                                                                                                                                                                                        |
+| `POST`   | `/api/workflows/runs/:id/steps/:stepRunId/resolve` | Body : `{outcome: string, notes?: string}`. Résout un step `human_gate` en `needs_review`. Écrit `step_run.output.schemaFields.outcome = body.outcome` et, si fourni, `step_run.output.schemaFields.notes = body.notes`. Passe `step_run.status='completed'`, puis déclenche l'edge resolution (les edges sortantes peuvent matcher sur `field='outcome'`) |
+| `POST`   | `/api/workflows/runs/:id/steps/:stepRunId/retry`   | Crée un nouveau StepRun (attempt+1) sur le même step ; status='queued' ; orchestrator re-déclenche                                                                                                                                                                                                                                                         |
 
 ## 7. Edge resolution — `EdgeEvaluator`
 
@@ -470,10 +475,10 @@ Algorithme :
 2. Pour chaque `edge ∈ conditional` (ordre stable par `edge.id`) :
    - Extrait `actual = getByPath(output, edge.condition.field)` (supporte `"a.b.c"`)
    - Compare via `edge.condition.operator` :
-     - `eq`       : `actual === value`
-     - `neq`      : `actual !== value`
-     - `in`       : `Array.isArray(value) && value.includes(actual)`
-     - `gt`/`lt`  : `Number(actual) > / < Number(value)` (NaN → false)
+     - `eq` : `actual === value`
+     - `neq` : `actual !== value`
+     - `in` : `Array.isArray(value) && value.includes(actual)`
+     - `gt`/`lt` : `Number(actual) > / < Number(value)` (NaN → false)
      - `contains` : `typeof actual === 'string' && actual.includes(value)`
    - Si match : retourne cette edge immédiatement.
 3. Aucun match : retourne la première `default` edge (si plusieurs : log warning, prendre la première par ordre `id`).
@@ -488,6 +493,7 @@ Algorithme :
 ### 8.2 Composants
 
 **`<TicketWorkflowTab ticketId>`** — top-level :
+
 - Charge l'actif via `workflowRunStore.activeByTicket(ticketId)` (subscribe WS).
 - Charge l'historique via `workflowRunStore.historyByTicket(ticketId)`.
 - Si actif présent : `<WorkflowRunView run={active} />`.
@@ -586,31 +592,31 @@ Si un run actif existe sur ce template au moment du save → toast warning : "X 
 
 ## 11. Testing strategy
 
-| Couche | Quoi tester | Outil |
-|---|---|---|
-| **Domain entities** | Transitions (`run.start`, `run.complete`, `stepRun.markRunning`), invariants (status valides, attempt unique par retry) | Vitest unit |
-| **EdgeEvaluator** | Chaque opérateur, default fallback, no match, path pointé, NaN handling, `in` avec array | Vitest unit, ~30 cas |
-| **CreateWorkflowRunUseCase** | Rejet 409 si run actif, snapshot correct, currentStepId initial | Vitest avec stores mockés |
-| **RunWorkflowStepUseCase** | Avec chaque adapter mocké : stepRun créé, output mergé, edge résolu, next step enqueued, handling de `needs_review` | Vitest, ~10 scénarios |
-| **Adapters** | Chaque adapter isolément : mock `ExecuteAgentUseCase` / `RunPanelUseCase`, vérif call shape + retour mappé en `StepOutput` | Vitest |
-| **HumanGateExecutor** | Outcomes vides → throw ; commentaire posté ; status `needs_review` | Vitest |
-| **Resolve endpoint** | Outcome valide / outcome invalide / edge matching `outcome == X` / pas d'edge → completion | Vitest integration (server) |
-| **Mention parsing** | `@workflow:slug` extracted, struck-through skipped, mélangé avec autres mentions | Vitest (ticket-comment.entity test) |
-| **Migration `017`** | Up + down sur SQLite et Postgres ; RLS policies créées sur Supabase | Migration tests existants |
-| **UI éditeur** | Validation : entry step manquant, JSON Schema malformé, slug doublonné. Pas de drag-and-drop visual test | Vitest + Testing Library |
-| **UI runtime** | Smoke : mock run → DAG render → click step → details. WS broadcast → patch local | Vitest + Testing Library |
+| Couche                       | Quoi tester                                                                                                                | Outil                               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| **Domain entities**          | Transitions (`run.start`, `run.complete`, `stepRun.markRunning`), invariants (status valides, attempt unique par retry)    | Vitest unit                         |
+| **EdgeEvaluator**            | Chaque opérateur, default fallback, no match, path pointé, NaN handling, `in` avec array                                   | Vitest unit, ~30 cas                |
+| **CreateWorkflowRunUseCase** | Rejet 409 si run actif, snapshot correct, currentStepId initial                                                            | Vitest avec stores mockés           |
+| **RunWorkflowStepUseCase**   | Avec chaque adapter mocké : stepRun créé, output mergé, edge résolu, next step enqueued, handling de `needs_review`        | Vitest, ~10 scénarios               |
+| **Adapters**                 | Chaque adapter isolément : mock `ExecuteAgentUseCase` / `RunPanelUseCase`, vérif call shape + retour mappé en `StepOutput` | Vitest                              |
+| **HumanGateExecutor**        | Outcomes vides → throw ; commentaire posté ; status `needs_review`                                                         | Vitest                              |
+| **Resolve endpoint**         | Outcome valide / outcome invalide / edge matching `outcome == X` / pas d'edge → completion                                 | Vitest integration (server)         |
+| **Mention parsing**          | `@workflow:slug` extracted, struck-through skipped, mélangé avec autres mentions                                           | Vitest (ticket-comment.entity test) |
+| **Migration `017`**          | Up + down sur SQLite et Postgres ; RLS policies créées sur Supabase                                                        | Migration tests existants           |
+| **UI éditeur**               | Validation : entry step manquant, JSON Schema malformé, slug doublonné. Pas de drag-and-drop visual test                   | Vitest + Testing Library            |
+| **UI runtime**               | Smoke : mock run → DAG render → click step → details. WS broadcast → patch local                                           | Vitest + Testing Library            |
 
 **Tests manuels** via `fleex start` couvrent les chemins UI complets (création template, démarrage run, exécution, human_gate, completion).
 
 ## 12. Risques & inconnues
 
-| Risque | Mitigation |
-|---|---|
-| Le SDK Claude Agent ne respecte pas le `outputFormat` pour les champs custom au top-level | Le fallback parser texte existant attrape déjà les cas non-conformes ; logger un warning et marquer `result='ko'` |
-| `PanelStepExecutor` doit extraire les champs custom de `outputSchema` depuis un panel multi-agents | À clarifier en implémentation : peut-être que seul l'agent "orchestrateur" du panel produit l'output structuré, et les autres sont contextuels |
-| L'éditeur React Flow peut avoir des perfs dégradées sur les gros templates (>50 nodes) | V0 = pas de limite explicite, à monitorer ; le prototype gère bien quelques dizaines |
-| Migration `017` sur Supabase doit gérer la RLS sans break les bases existantes | Pattern testé sur les migrations précédentes, ajout simple |
-| Versioning des templates : si un user édite un template pendant qu'un run tourne, l'`outputSchema` peut diverger entre le snapshot et l'agent context | Le snapshot est la source de vérité ; l'agent reçoit le schema du snapshot, pas le live |
+| Risque                                                                                                                                                | Mitigation                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Le SDK Claude Agent ne respecte pas le `outputFormat` pour les champs custom au top-level                                                             | Le fallback parser texte existant attrape déjà les cas non-conformes ; logger un warning et marquer `result='ko'`                              |
+| `PanelStepExecutor` doit extraire les champs custom de `outputSchema` depuis un panel multi-agents                                                    | À clarifier en implémentation : peut-être que seul l'agent "orchestrateur" du panel produit l'output structuré, et les autres sont contextuels |
+| L'éditeur React Flow peut avoir des perfs dégradées sur les gros templates (>50 nodes)                                                                | V0 = pas de limite explicite, à monitorer ; le prototype gère bien quelques dizaines                                                           |
+| Migration `017` sur Supabase doit gérer la RLS sans break les bases existantes                                                                        | Pattern testé sur les migrations précédentes, ajout simple                                                                                     |
+| Versioning des templates : si un user édite un template pendant qu'un run tourne, l'`outputSchema` peut diverger entre le snapshot et l'agent context | Le snapshot est la source de vérité ; l'agent reçoit le schema du snapshot, pas le live                                                        |
 
 ## 13. Stack & dépendances
 
@@ -621,23 +627,23 @@ Si un run actif existe sur ce template au moment du save → toast warning : "X 
 
 ## 14. Décisions tracées
 
-| Décision | Choix | Pourquoi |
-|---|---|---|
-| Storage du template | Entité séparée `workflow_templates` | Réutilisabilité across tickets, éditabilité, audit |
-| Modèle de step | 4 types (agent, skill, panel, human_gate) avec executorType + executorRef | Match prototype, expressif, extensible |
-| Edges conditionnels | Schema field-based avec opérateurs énumérés | Plus puissant que `on.{done|question|failure}`, déterministe, audit-able |
-| Runs concurrents | 1 actif max par ticket | UX et débogage plus simples ; histoire queryable comble le besoin "audit" |
-| Trigger | Mention `@workflow:slug` + SmartSessionButton | Réutilise l'infra de mentions, UX cohérente avec skills |
-| Workflow conscient | Oui : workflow context injecté dans le user prompt | Meilleur alignement des outputs avec les branches |
-| Architecture | Orchestrateur + 4 adapters (option C) | Réutilise `ExecuteAgent`/`RunPanel` sans les tordre |
-| Output contract | `outputFormat` SDK = merge(standard, step.outputSchema) au top-level | Backward compat, agent voit un schéma unifié |
-| Human gate | Outcomes nommés par step | Uniforme avec les conditional edges, plus expressif que 3 boutons fixes |
-| Output schema authoring | Textarea JSON Schema brut + validation | Le plus rapide à livrer pour V0 ; builder visuel reporté V1 |
-| Versioning | Snapshot du template au démarrage du run | Pas de surprise sur les runs en cours, audit propre |
-| Étapes parallèles | Non, séquentiel strict | V0 simpler ; fan-out V1+ |
-| Runtime UI | Nouvel onglet "Workflow" dans `TicketDetail` | Surface dédiée pour le DAG plein écran |
-| Éditeur UI | 4ᵉ section dans `AgentListPanel` (à côté agents/panels/skills) | Cohérent avec le modèle de ressources agentiques existant |
-| Default-per-board | Hors scope V0 | Pas dans le prototype, complexité supplémentaire non justifiée |
+| Décision                | Choix                                                                     | Pourquoi                                                                  |
+| ----------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Storage du template     | Entité séparée `workflow_templates`                                       | Réutilisabilité across tickets, éditabilité, audit                        |
+| Modèle de step          | 4 types (agent, skill, panel, human_gate) avec executorType + executorRef | Match prototype, expressif, extensible                                    |
+| Edges conditionnels     | Schema field-based avec opérateurs énumérés                               | Plus puissant que `on.{done                                               | question | failure}`, déterministe, audit-able |
+| Runs concurrents        | 1 actif max par ticket                                                    | UX et débogage plus simples ; histoire queryable comble le besoin "audit" |
+| Trigger                 | Mention `@workflow:slug` + SmartSessionButton                             | Réutilise l'infra de mentions, UX cohérente avec skills                   |
+| Workflow conscient      | Oui : workflow context injecté dans le user prompt                        | Meilleur alignement des outputs avec les branches                         |
+| Architecture            | Orchestrateur + 4 adapters (option C)                                     | Réutilise `ExecuteAgent`/`RunPanel` sans les tordre                       |
+| Output contract         | `outputFormat` SDK = merge(standard, step.outputSchema) au top-level      | Backward compat, agent voit un schéma unifié                              |
+| Human gate              | Outcomes nommés par step                                                  | Uniforme avec les conditional edges, plus expressif que 3 boutons fixes   |
+| Output schema authoring | Textarea JSON Schema brut + validation                                    | Le plus rapide à livrer pour V0 ; builder visuel reporté V1               |
+| Versioning              | Snapshot du template au démarrage du run                                  | Pas de surprise sur les runs en cours, audit propre                       |
+| Étapes parallèles       | Non, séquentiel strict                                                    | V0 simpler ; fan-out V1+                                                  |
+| Runtime UI              | Nouvel onglet "Workflow" dans `TicketDetail`                              | Surface dédiée pour le DAG plein écran                                    |
+| Éditeur UI              | 4ᵉ section dans `AgentListPanel` (à côté agents/panels/skills)            | Cohérent avec le modèle de ressources agentiques existant                 |
+| Default-per-board       | Hors scope V0                                                             | Pas dans le prototype, complexité supplémentaire non justifiée            |
 
 ## 15. Annexes
 
@@ -701,18 +707,43 @@ Si un run actif existe sur ce template au moment du save → toast warning : "X 
     }
   ],
   "edges": [
-    { "id": "e1", "source": "triage", "target": "spec",
-      "condition": { "field": "path", "operator": "eq", "value": "standard" }, "label": "standard" },
-    { "id": "e2", "source": "triage", "target": "doc-update",
-      "condition": { "field": "path", "operator": "eq", "value": "doc_only" }, "label": "doc_only" },
-    { "id": "e3", "source": "triage", "target": "development",
-      "condition": { "field": "path", "operator": "eq", "value": "hotfix" }, "label": "hotfix" },
+    {
+      "id": "e1",
+      "source": "triage",
+      "target": "spec",
+      "condition": { "field": "path", "operator": "eq", "value": "standard" },
+      "label": "standard"
+    },
+    {
+      "id": "e2",
+      "source": "triage",
+      "target": "doc-update",
+      "condition": { "field": "path", "operator": "eq", "value": "doc_only" },
+      "label": "doc_only"
+    },
+    {
+      "id": "e3",
+      "source": "triage",
+      "target": "development",
+      "condition": { "field": "path", "operator": "eq", "value": "hotfix" },
+      "label": "hotfix"
+    },
     { "id": "e4", "source": "spec", "target": "human-review", "isDefault": true },
     { "id": "e5", "source": "doc-update", "target": "development", "isDefault": true },
-    { "id": "e6", "source": "human-review", "target": "development",
-      "condition": { "field": "outcome", "operator": "eq", "value": "approve" }, "label": "approved" },
-    { "id": "e7", "source": "human-review", "target": "spec",
-      "condition": { "field": "outcome", "operator": "eq", "value": "request_changes" }, "label": "changes" }
+    {
+      "id": "e6",
+      "source": "human-review",
+      "target": "development",
+      "condition": { "field": "outcome", "operator": "eq", "value": "approve" },
+      "label": "approved"
+    },
+    {
+      "id": "e7",
+      "source": "human-review",
+      "target": "spec",
+      "condition": { "field": "outcome", "operator": "eq", "value": "request_changes" },
+      "label": "changes"
+    }
   ]
 }
 ```

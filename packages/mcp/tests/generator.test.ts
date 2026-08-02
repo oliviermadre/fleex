@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
-import { generateTools } from '../src/generator.ts';
+import { describe, it, expect } from 'vitest';
+
 import { buildArgv } from '../src/argv.ts';
+import { generateTools } from '../src/generator.ts';
+
 import type { GeneratedTool } from '../src/types.ts';
 
 /** Build a small fleex-like tree mirroring real command shapes. */
@@ -14,7 +16,12 @@ function fakeProgram(): Command {
   create.requiredOption('--title <title>', 'Ticket title (required)');
   create.option('--board <id>', 'Board ID');
   create.option('--description <description>', 'Ticket description');
-  create.option('--tag <tag>', 'Tag (repeatable)', (v: string, p: string[] = []) => [...p, v], [] as string[]);
+  create.option(
+    '--tag <tag>',
+    'Tag (repeatable)',
+    (v: string, p: string[] = []) => [...p, v],
+    [] as string[],
+  );
   // Simulate workspaceAware bootstrap behaviour.
   create.option('--workspace <name>', 'Target workspace');
 
@@ -136,44 +143,63 @@ describe('buildArgv', () => {
       { workspace: 'acme' },
     );
     expect(argv).toEqual([
-      'ticket', 'create',
-      '--title', 'Fix bug',
-      '--description', 'line1\nline2',
-      '--tag', 'urgent',
-      '--tag', 'wip',
-      '--workspace', 'acme',
+      'ticket',
+      'create',
+      '--title',
+      'Fix bug',
+      '--description',
+      'line1\nline2',
+      '--tag',
+      'urgent',
+      '--tag',
+      'wip',
+      '--workspace',
+      'acme',
     ]);
   });
 
   it('places positional arguments in order', () => {
     const move = byName(tools, 'fleex_ticket_move');
-    expect(buildArgv(move, { id: '42', status: 'done' })).toEqual([
-      'ticket', 'move', '42', 'done',
-    ]);
+    expect(buildArgv(move, { id: '42', status: 'done' })).toEqual(['ticket', 'move', '42', 'done']);
   });
 
   it('emits boolean flags only when true', () => {
     const update = byName(tools, 'fleex_ticket_update');
     expect(buildArgv(update, { id: '7', favorite: true })).toEqual([
-      'ticket', 'update', '7', '--favorite',
+      'ticket',
+      'update',
+      '7',
+      '--favorite',
     ]);
-    expect(buildArgv(update, { id: '7', favorite: false })).toEqual([
-      'ticket', 'update', '7',
-    ]);
+    expect(buildArgv(update, { id: '7', favorite: false })).toEqual(['ticket', 'update', '7']);
   });
 
   it('appends --json when requested', () => {
     const list = byName(tools, 'fleex_ticket_list');
     expect(buildArgv(list, { status: 'doing' }, { json: true })).toEqual([
-      'ticket', 'list', '--status', 'doing', '--json',
+      'ticket',
+      'list',
+      '--status',
+      'doing',
+      '--json',
     ]);
   });
 
   it('injects the confirm flag with assumeYes, without duplicating it', () => {
     const del = byName(tools, 'fleex_ticket_delete');
-    expect(buildArgv(del, { id: '5' }, { assumeYes: true })).toEqual(['ticket', 'delete', '5', '--force']);
+    expect(buildArgv(del, { id: '5' }, { assumeYes: true })).toEqual([
+      'ticket',
+      'delete',
+      '5',
+      '--force',
+    ]);
     // already provided by the model → not duplicated
-    expect(buildArgv(del, { id: '5', force: true }, { assumeYes: true })).toEqual(['ticket', 'delete', '5', '--force']);
+    expect(buildArgv(del, { id: '5', force: true }, { assumeYes: true })).toEqual([
+      'ticket',
+      'delete',
+      '5',
+      '--force',
+    ]);
     // assumeYes off → no force flag
     expect(buildArgv(del, { id: '5' })).toEqual(['ticket', 'delete', '5']);
   });

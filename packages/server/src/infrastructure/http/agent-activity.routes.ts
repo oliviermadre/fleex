@@ -1,11 +1,12 @@
-import type { FastifyInstance } from 'fastify';
 import type { TicketActivitySummary } from '@fleex/shared';
+
 import { TicketNotFoundError } from '../../domain/errors.js';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function agentActivityRoutes(container: Container) {
   return async function (app: FastifyInstance) {
-
     // Per-ticket structured activity log
     app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
       '/tickets/:id/activity',
@@ -65,7 +66,10 @@ export function agentActivityRoutes(container: Container) {
       });
 
       // Group by ticketId
-      const ticketMap = new Map<string, { count: number; lastAt: string; eventTypes: Set<string> }>();
+      const ticketMap = new Map<
+        string,
+        { count: number; lastAt: string; eventTypes: Set<string> }
+      >();
       for (const activity of activities) {
         const existing = ticketMap.get(activity.ticketId);
         const createdAt = activity.createdAt.toISOString();

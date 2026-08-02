@@ -72,11 +72,25 @@ export function deriveTicketAgentActivity(
     const cumulativeCostUsd = sources.costByTicket?.get(ticketId) ?? 0;
     if (waiting.has(ticketId)) {
       const since = sources.waitingSinceByTicket?.get(ticketId);
-      return { ticketId, activity: 'waiting', detail: DETAIL.waiting, lastActivityAt, since, cumulativeCostUsd };
+      return {
+        ticketId,
+        activity: 'waiting',
+        detail: DETAIL.waiting,
+        lastActivityAt,
+        since,
+        cumulativeCostUsd,
+      };
     }
     if (running.has(ticketId)) {
       const since = sources.runningSinceByTicket?.get(ticketId);
-      return { ticketId, activity: 'running', detail: DETAIL.running, lastActivityAt, since, cumulativeCostUsd };
+      return {
+        ticketId,
+        activity: 'running',
+        detail: DETAIL.running,
+        lastActivityAt,
+        since,
+        cumulativeCostUsd,
+      };
     }
     return { ticketId, activity: 'idle', lastActivityAt, since: lastActivityAt, cumulativeCostUsd };
   });
@@ -125,7 +139,8 @@ export function deriveActivitySince(inputs: ActivitySinceInputs): {
 } {
   const runningSinceByTicket = new Map<string, string>();
   for (const e of inputs.runningExecutions) keepMin(runningSinceByTicket, e.ticketId, e.startedAt);
-  for (const r of inputs.runningWorkflowRuns) keepMin(runningSinceByTicket, r.ticketId, r.startedAt);
+  for (const r of inputs.runningWorkflowRuns)
+    keepMin(runningSinceByTicket, r.ticketId, r.startedAt);
 
   const waitingSinceByTicket = new Map<string, string>();
   for (const m of inputs.waitingMentions) {

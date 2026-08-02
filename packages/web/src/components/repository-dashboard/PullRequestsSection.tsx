@@ -1,19 +1,22 @@
 import { useState, useMemo, useCallback } from 'react';
+
 import type { PullRequest, DiffStats, Ticket, Worktree } from '@fleex/shared';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useTicketActivityStore } from '../../stores/ticketActivityStore';
-import { DiffStatsBadge } from '../ui/DiffStatsBadge';
-import { ConfirmModal } from '../ui/ConfirmModal';
-import { Button } from '../ui/Button';
-import { PrBadge } from '../ui/PrBadge';
-import { SmartSessionButton } from '../dashboard/SmartSessionButton';
-import { ImportTaskButton } from '../dashboard/ImportTaskButton';
-import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
+
 import { cn } from '../../lib/cn';
 import { tintText, tintClasses } from '../../lib/tints';
 import * as api from '../../services/api';
+import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useTicketActivityStore } from '../../stores/ticketActivityStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
+import { ImportTaskButton } from '../dashboard/ImportTaskButton';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { Button } from '../ui/Button';
+import { ConfirmModal } from '../ui/ConfirmModal';
+import { DiffStatsBadge } from '../ui/DiffStatsBadge';
+import { PrBadge } from '../ui/PrBadge';
+
 import { filterPulls, type PrSegment } from './prFilters';
 
 interface Props {
@@ -40,7 +43,16 @@ function formatRelativeTime(dateStr: string): string {
 
 function CheckIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="3,8 6.5,12 13,4" />
     </svg>
   );
@@ -52,7 +64,16 @@ const SEGMENTS: { key: PrSegment; label: string }[] = [
   { key: 'merged', label: 'Merged' },
 ];
 
-export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, diffStats, githubUser, loading }: Props) {
+export function PullRequestsSection({
+  org,
+  name,
+  openPRs,
+  mergedPRs,
+  worktrees,
+  diffStats,
+  githubUser,
+  loading,
+}: Props) {
   const [segment, setSegment] = useState<PrSegment>('all');
   const [mine, setMine] = useState(false);
   const [assigned, setAssigned] = useState(false);
@@ -80,19 +101,22 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
     [openPRs, mergedPRs, segment, mine, assigned, githubUser],
   );
 
-  const handleImportPR = useCallback(async (pr: PullRequest, boardId: string) => {
-    const key = `${org}/${name}#${pr.number}`;
-    if (importingKey) return;
-    setImportingKey(key);
-    try {
-      await api.importGitHubPR(org, name, pr.number, pr.title, pr.headRefName, boardId);
-      await fetchDashboard(org, name);
-    } catch {
-      // handled by api layer
-    } finally {
-      setImportingKey(null);
-    }
-  }, [importingKey, org, name, fetchDashboard]);
+  const handleImportPR = useCallback(
+    async (pr: PullRequest, boardId: string) => {
+      const key = `${org}/${name}#${pr.number}`;
+      if (importingKey) return;
+      setImportingKey(key);
+      try {
+        await api.importGitHubPR(org, name, pr.number, pr.title, pr.headRefName, boardId);
+        await fetchDashboard(org, name);
+      } catch {
+        // handled by api layer
+      } finally {
+        setImportingKey(null);
+      }
+    },
+    [importingKey, org, name, fetchDashboard],
+  );
 
   const cleanupWorktree = useMemo(
     () => worktrees.find((wt) => wt.branch === cleanupTarget) ?? null,
@@ -121,7 +145,12 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
       <div className="flex items-center gap-3">
         <div className="flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-0.5">
           {SEGMENTS.map((s) => {
-            const count = s.key === 'all' ? openPRs.length + mergedPRs.length : s.key === 'open' ? openPRs.length : mergedPRs.length;
+            const count =
+              s.key === 'all'
+                ? openPRs.length + mergedPRs.length
+                : s.key === 'open'
+                  ? openPRs.length
+                  : mergedPRs.length;
             return (
               <button
                 key={s.key}
@@ -143,7 +172,12 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
           className={cn(
             'flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-colors',
             mine
-              ? cn('border', tintClasses('purple').borderColor, tintClasses('purple').bg, tintClasses('purple').text)
+              ? cn(
+                  'border',
+                  tintClasses('purple').borderColor,
+                  tintClasses('purple').bg,
+                  tintClasses('purple').text,
+                )
               : 'border border-[var(--theme-border)] text-[var(--theme-text-muted)]',
           )}
           onClick={() => setMine((v) => !v)}
@@ -155,7 +189,12 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
           className={cn(
             'flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-colors',
             assigned
-              ? cn('border', tintClasses('purple').borderColor, tintClasses('purple').bg, tintClasses('purple').text)
+              ? cn(
+                  'border',
+                  tintClasses('purple').borderColor,
+                  tintClasses('purple').bg,
+                  tintClasses('purple').text,
+                )
               : 'border border-[var(--theme-border)] text-[var(--theme-text-muted)]',
           )}
           onClick={() => setAssigned((v) => !v)}
@@ -180,7 +219,9 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
             />
           ))
         ) : filtered.length === 0 ? (
-          <div className="py-8 text-center text-sm text-[var(--theme-text-muted)]">No pull requests match</div>
+          <div className="py-8 text-center text-sm text-[var(--theme-text-muted)]">
+            No pull requests match
+          </div>
         ) : (
           filtered.map((row) => {
             const ref = `${org}/${name}#${row.number}`;
@@ -204,7 +245,9 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
                     onClick={() => window.open(prUrl, '_blank')}
                   >
                     <PrBadge org={org} name={name} pr={row} />
-                    <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{row.title}</span>
+                    <span className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+                      {row.title}
+                    </span>
                   </div>
                   {isOpen ? (
                     <span className="font-mono text-[11px] text-[var(--theme-text-muted)]">
@@ -213,7 +256,11 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
                   ) : (
                     <span className="font-mono text-[11px] text-[var(--theme-text-muted)]">
                       merged {formatRelativeTime(row.mergedAt ?? row.updatedAt)} ago ·{' '}
-                      {lingering ? <span className={tintText('red')}>worktree still present</span> : 'worktree cleaned'}
+                      {lingering ? (
+                        <span className={tintText('red')}>worktree still present</span>
+                      ) : (
+                        'worktree cleaned'
+                      )}
                     </span>
                   )}
                 </div>
@@ -221,7 +268,13 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
                 {isOpen && <DiffStatsBadge stats={diffStats[row.headRefName]} />}
 
                 {!isOpen && ticket && cost !== undefined && (
-                  <span className={cn('rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tintClasses('pink').bg, tintClasses('pink').text)}>
+                  <span
+                    className={cn(
+                      'rounded-md px-1.5 py-0.5 font-mono text-[10.5px]',
+                      tintClasses('pink').bg,
+                      tintClasses('pink').text,
+                    )}
+                  >
                     ${cost.toFixed(2)}
                   </span>
                 )}
@@ -243,7 +296,11 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
                     />
                   )
                 ) : lingering ? (
-                  <Button variant="danger" size="sm" onClick={() => setCleanupTarget(row.headRefName)}>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => setCleanupTarget(row.headRefName)}
+                  >
                     Delete worktree
                   </Button>
                 ) : (
@@ -264,7 +321,8 @@ export function PullRequestsSection({ org, name, openPRs, mergedPRs, worktrees, 
         message={
           cleanupWorktree && (
             <span>
-              Delete the worktree for branch <span className="font-mono">{cleanupWorktree.branch}</span> at{' '}
+              Delete the worktree for branch{' '}
+              <span className="font-mono">{cleanupWorktree.branch}</span> at{' '}
               <span className="font-mono">{cleanupWorktree.path}</span>?
             </span>
           )

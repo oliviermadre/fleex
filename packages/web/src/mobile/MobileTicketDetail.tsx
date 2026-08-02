@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
+
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { Ticket, TicketStatus } from '@fleex/shared';
-import { useTicketStore } from '../stores/ticketStore';
-import { useAgentEventStore } from '../stores/agentEventStore';
-import { useWorkflowRunStore, ACTIVE_STATUSES } from '../stores/workflowRunStore';
-import { appWs } from '../services/websocket';
+
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
+import { appWs } from '../services/websocket';
+import { useAgentEventStore } from '../stores/agentEventStore';
+import { useTicketStore } from '../stores/ticketStore';
+import { useWorkflowRunStore, ACTIVE_STATUSES } from '../stores/workflowRunStore';
+
 import { MobileConversation } from './MobileConversation';
+import { MobileDeliverables } from './MobileDeliverables';
 import { MobileExecutions } from './MobileExecutions';
+import { MobileTicketMeta } from './MobileTicketMeta';
 import { MobileTicketRepos } from './MobileTicketRepos';
 import { MobileWorkflow } from './MobileWorkflow';
-import { MobileDeliverables } from './MobileDeliverables';
-import { MobileTicketMeta } from './MobileTicketMeta';
 
 type Tab = 'description' | 'conversation' | 'deliverables' | 'runs' | 'workflow';
 

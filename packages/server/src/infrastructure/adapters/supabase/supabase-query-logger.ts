@@ -6,7 +6,8 @@ interface QueryStats {
   errors: number;
 }
 
-type OperationType = 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'UPSERT' | 'RPC' | 'STORAGE' | 'AUTH' | 'UNKNOWN';
+type OperationType =
+  'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'UPSERT' | 'RPC' | 'STORAGE' | 'AUTH' | 'UNKNOWN';
 
 const STATS_INTERVAL_MS = 30_000;
 
@@ -19,7 +20,9 @@ function getPreferHeader(headers?: FetchHeaders): string | undefined {
     const entry = (headers as [string, string][]).find(([k]) => k.toLowerCase() === 'prefer');
     return entry?.[1];
   }
-  return (headers as Record<string, string>)['Prefer'] ?? (headers as Record<string, string>)['prefer'];
+  return (
+    (headers as Record<string, string>)['Prefer'] ?? (headers as Record<string, string>)['prefer']
+  );
 }
 
 function parseRequest(
@@ -99,13 +102,15 @@ export function createInstrumentedFetch(
   let totalRequests = 0;
 
   const instrumentedFetch: typeof globalThis.fetch = async (input, init) => {
-    const url = typeof input === 'string'
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : (input as Request).url;
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : (input as Request).url;
     const method = (
-      init?.method ?? (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET')
+      init?.method ??
+      (typeof input === 'object' && 'method' in input ? (input as Request).method : 'GET')
     ).toUpperCase();
 
     const { table, operation } = parseRequest(url, method, init?.headers ?? undefined);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Button } from '../ui/Button';
+
 import { tintClasses } from '../../lib/tints';
+import { Button } from '../ui/Button';
 
 interface Props {
   // Error message stored in stepRun.output.schemaFields.error (or null when the
@@ -26,7 +27,9 @@ export function FailedStepRetryPanel({ error, onRetry }: Props) {
   };
 
   return (
-    <div className={`space-y-3 rounded-md border ${tintClasses('red').borderColor} ${tintClasses('red').bg} p-3`}>
+    <div
+      className={`space-y-3 rounded-md border ${tintClasses('red').borderColor} ${tintClasses('red').bg} p-3`}
+    >
       <div>
         <div className={`text-xs font-medium uppercase tracking-wide ${tintClasses('red').text}`}>
           Step failed

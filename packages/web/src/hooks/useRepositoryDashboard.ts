@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
+
 import type { RepositoryWsMessage } from '@fleex/shared';
-import { useRepositoryDashboardStore } from '../stores/repositoryDashboardStore';
-import { appWs } from '../services/websocket';
+
 import * as api from '../services/api';
+import { appWs } from '../services/websocket';
+import { useRepositoryDashboardStore } from '../stores/repositoryDashboardStore';
 
 export function useRepositoryDashboard() {
   const fetchSummaries = useRepositoryDashboardStore((s) => s.fetchSummaries);
@@ -12,7 +14,8 @@ export function useRepositoryDashboard() {
   useEffect(() => {
     // Fetch initial data
     fetchSummaries();
-    api.fetchGitHubUser()
+    api
+      .fetchGitHubUser()
       .then((data) => setGithubUser(data.login))
       .catch(() => {});
 

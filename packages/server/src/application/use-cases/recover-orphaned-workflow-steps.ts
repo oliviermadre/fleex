@@ -1,7 +1,7 @@
-import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
-import type { StepRunStorePort } from '../ports/step-run-store.port.js';
 import type { EventBus } from '../event-bus.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { StepRunStorePort } from '../ports/step-run-store.port.js';
+import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
 
 /**
  * Startup recovery for workflow steps left in `running` from a previous server

@@ -1,5 +1,6 @@
-import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 import type { WorkflowRunStatus } from '@fleex/shared';
+
+import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
 
 export interface WorkflowRunStorePort {
   getById(id: string): Promise<WorkflowRunEntity | null>;

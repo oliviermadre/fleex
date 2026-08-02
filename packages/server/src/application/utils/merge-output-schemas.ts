@@ -9,9 +9,10 @@ import type { JsonSchema } from '@fleex/shared';
 export function buildStandardOutputSchema(typeIds: string[]) {
   // Guard against an empty enum (invalid JSON schema) by falling back to the
   // default preset's non-system types.
-  const types = typeIds.length > 0
-    ? typeIds
-    : DEFAULT_DELIVERABLE_TYPES.filter((t) => !t.system).map((t) => t.id);
+  const types =
+    typeIds.length > 0
+      ? typeIds
+      : DEFAULT_DELIVERABLE_TYPES.filter((t) => !t.system).map((t) => t.id);
   return {
     type: 'json_schema' as const,
     schema: {
@@ -33,7 +34,11 @@ export function buildStandardOutputSchema(typeIds: string[]) {
           ],
         },
         comment: { oneOf: [{ type: 'string' }, { type: 'null' }] },
-        mentionStatus: { type: 'string', enum: ['resolved', 'waiting_for_info'], default: 'resolved' },
+        mentionStatus: {
+          type: 'string',
+          enum: ['resolved', 'waiting_for_info'],
+          default: 'resolved',
+        },
       },
       required: ['deliverable', 'comment'],
     },
@@ -57,7 +62,9 @@ export function mergeOutputSchemas(
     schema: {
       type: 'object',
       properties: { ...standard.schema.properties, ...custom.properties },
-      required: Array.from(new Set([...(standard.schema.required ?? []), ...(custom.required ?? [])])),
+      required: Array.from(
+        new Set([...(standard.schema.required ?? []), ...(custom.required ?? [])]),
+      ),
     },
   } as typeof STANDARD_OUTPUT_SCHEMA;
 }

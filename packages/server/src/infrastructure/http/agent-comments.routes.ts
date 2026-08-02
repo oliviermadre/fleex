@@ -1,13 +1,15 @@
-import type { FastifyInstance } from 'fastify';
 import type { MentionTargetType } from '@fleex/shared';
+
 import { TicketNotFoundError, CommentNotFoundError, ForbiddenError } from '../../domain/errors.js';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function agentCommentsRoutes(container: Container) {
-  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) =>
+    container.eventBus.emit(...events);
 
   return async function (app: FastifyInstance) {
-
     // List comments for a ticket
     app.get<{
       Params: { id: string };
@@ -17,8 +19,9 @@ export function agentCommentsRoutes(container: Container) {
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
       const agentName = request.agent?.name ?? '';
-      let comments = (await container.commentStore.getByTicket(request.params.id))
-        .filter((c) => c.isVisibleTo(agentName));
+      let comments = (await container.commentStore.getByTicket(request.params.id)).filter((c) =>
+        c.isVisibleTo(agentName),
+      );
 
       if (request.query.visibility) {
         comments = comments.filter((c) => c.visibility === request.query.visibility);
@@ -38,7 +41,12 @@ export function agentCommentsRoutes(container: Container) {
     // Post a comment
     app.post<{
       Params: { id: string };
-      Body: { body: string; visibility?: 'public' | 'private'; privateRecipients?: string[]; parentId?: string };
+      Body: {
+        body: string;
+        visibility?: 'public' | 'private';
+        privateRecipients?: string[];
+        parentId?: string;
+      };
     }>('/tickets/:id/comments', async (request, reply) => {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
@@ -120,9 +128,14 @@ export function agentCommentsRoutes(container: Container) {
 
       // Create mentions for newly added targets
       const { randomUUID } = await import('node:crypto');
-      const { TicketMentionEntity } = await import('../../domain/entities/ticket-mention.entity.js');
+      const { TicketMentionEntity } =
+        await import('../../domain/entities/ticket-mention.entity.js');
       const { humanMentionName } = container.config.get();
-      const newlyCreatedMentions: Array<{ mentionId: string; targetAgent: string; targetType: MentionTargetType }> = [];
+      const newlyCreatedMentions: Array<{
+        mentionId: string;
+        targetAgent: string;
+        targetType: MentionTargetType;
+      }> = [];
 
       for (const target of newMentionNames) {
         if (!oldMentions.has(target) && target !== agentName) {
@@ -190,7 +203,12 @@ export function agentCommentsRoutes(container: Container) {
       }
 
       await container.commentStore.remove(comment.id);
-      emit({ type: 'comment.deleted', commentId: comment.id, ticketId: comment.ticketId, occurredAt: new Date() });
+      emit({
+        type: 'comment.deleted',
+        commentId: comment.id,
+        ticketId: comment.ticketId,
+        occurredAt: new Date(),
+      });
       return reply.code(204).send();
     });
   };

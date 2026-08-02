@@ -1,6 +1,10 @@
 import type { ParsedSlackMessageUrl } from '@fleex/shared';
-import type { SlackImportPort, SlackImportResult } from '../../application/ports/slack-import.port.js';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type {
+  SlackImportPort,
+  SlackImportResult,
+} from '../../application/ports/slack-import.port.js';
 import type { SdkConcurrencyLimiter } from '../../application/services/sdk-concurrency-limiter.js';
 
 /**

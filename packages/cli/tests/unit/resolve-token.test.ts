@@ -42,7 +42,9 @@ describe('resolveToken', () => {
   });
 
   it('exits on an ambiguous id prefix instead of guessing', async () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit'); }) as never);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     // Both bots share the "aaaaaaaa" prefix — revoking either would be wrong.
     await expect(resolveToken('aaaaaaaa')).rejects.toThrow('exit');
@@ -51,7 +53,9 @@ describe('resolveToken', () => {
   });
 
   it('exits when nothing matches', async () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit'); }) as never);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     await expect(resolveToken('nope')).rejects.toThrow('exit');
     exit.mockRestore();

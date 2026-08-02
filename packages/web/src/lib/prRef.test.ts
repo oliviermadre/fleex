@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest';
+
 import { parseGithubPrRef } from './prRef';
 
 describe('parseGithubPrRef', () => {
   it('parses the canonical org/name#number ref', () => {
-    expect(parseGithubPrRef('oliviermadre/fleex#204')).toEqual({ org: 'oliviermadre', name: 'fleex', number: 204 });
+    expect(parseGithubPrRef('oliviermadre/fleex#204')).toEqual({
+      org: 'oliviermadre',
+      name: 'fleex',
+      number: 204,
+    });
   });
 
   it('handles a ref with no org (name#number)', () => {

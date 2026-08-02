@@ -1,23 +1,25 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useStickToBottom } from '../../hooks/useStickToBottom';
+
 import { useFileUpload } from '../../hooks/useFileUpload';
-import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
-import { ModelSelect } from '../agents/ModelSelect';
+import { useStickToBottom } from '../../hooks/useStickToBottom';
+import { cn } from '../../lib/cn';
+import { MentionTypeIcon } from '../../lib/primitives';
+import { tint, tintText, tintClasses, tintSolid } from '../../lib/tints';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { usePanelStore } from '../../stores/panelStore';
-import { useSkillStore } from '../../stores/skillStore';
-import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { useTicketStore } from '../../stores/ticketStore';
 import {
   useAssistantStore,
   type AssistantChatItem,
   type AssistantToolStatus,
 } from '../../stores/assistantStore';
+import { usePanelStore } from '../../stores/panelStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useSkillStore } from '../../stores/skillStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { ModelSelect } from '../agents/ModelSelect';
+import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+
 import { AssistantStatusDot } from './AssistantSidebar';
-import { MentionTypeIcon } from '../../lib/primitives';
-import { cn } from '../../lib/cn';
-import { tint, tintText, tintClasses, tintSolid } from '../../lib/tints';
 
 const EMPTY_ITEMS: AssistantChatItem[] = [];
 
@@ -42,7 +44,9 @@ export function AssistantConversation() {
   const connected = useAssistantStore((s) => s.connected);
   const sessions = useAssistantStore((s) => s.sessions);
   const activeId = useAssistantStore((s) => s.activeId);
-  const items = useAssistantStore((s) => (s.activeId ? s.itemsBySession[s.activeId] ?? EMPTY_ITEMS : EMPTY_ITEMS));
+  const items = useAssistantStore((s) =>
+    s.activeId ? (s.itemsBySession[s.activeId] ?? EMPTY_ITEMS) : EMPTY_ITEMS,
+  );
   const confirmReqs = useAssistantStore((s) => s.confirmReqs);
   const errorMsg = useAssistantStore((s) => s.errorMsg);
   const ensureConnected = useAssistantStore((s) => s.ensureConnected);
@@ -85,7 +89,8 @@ export function AssistantConversation() {
   const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
   const refreshWorkflowTemplates = useWorkflowTemplateStore((s) => s.refresh);
   const humanMentionName = useSettingsStore(
-    (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
+    (s) =>
+      (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
   );
   const allTickets = useTicketStore((s) => s.tickets);
   const fetchTickets = useTicketStore((s) => s.fetchTickets);
@@ -110,17 +115,37 @@ export function AssistantConversation() {
       type: 'agent' as const,
     }));
     for (const panel of panels) {
-      if (panel.enabled) opts.push({ insertText: `@panel:${panel.name}`, label: panel.displayName || panel.name, type: 'panel' });
+      if (panel.enabled)
+        opts.push({
+          insertText: `@panel:${panel.name}`,
+          label: panel.displayName || panel.name,
+          type: 'panel',
+        });
     }
     for (const skill of skills) {
-      if (skill.enabled) opts.push({ insertText: `@skill:${skill.commandName}`, label: skill.displayName || skill.commandName, type: 'skill' });
+      if (skill.enabled)
+        opts.push({
+          insertText: `@skill:${skill.commandName}`,
+          label: skill.displayName || skill.commandName,
+          type: 'skill',
+        });
     }
     for (const wf of workflowTemplates) {
-      if (wf.enabled) opts.push({ insertText: `@workflow:${wf.slug}`, label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name, type: 'workflow' });
+      if (wf.enabled)
+        opts.push({
+          insertText: `@workflow:${wf.slug}`,
+          label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name,
+          type: 'workflow',
+        });
     }
-    if (humanMentionName) opts.push({ insertText: `@${humanMentionName}`, label: humanMentionName, type: 'human' });
+    if (humanMentionName)
+      opts.push({ insertText: `@${humanMentionName}`, label: humanMentionName, type: 'human' });
     for (const t of allTickets) {
-      opts.push({ insertText: `@ticket:${t.displayId}`, label: `#${t.displayId} ${t.title}`, type: 'ticket' });
+      opts.push({
+        insertText: `@ticket:${t.displayId}`,
+        label: `#${t.displayId} ${t.title}`,
+        type: 'ticket',
+      });
     }
     return opts;
   }, [personas, panels, skills, workflowTemplates, humanMentionName, allTickets]);
@@ -132,7 +157,9 @@ export function AssistantConversation() {
       o.label.toLowerCase().includes(q) || o.insertText.toLowerCase().includes(q);
     const nonTicket = allMentionOptions.filter((o) => o.type !== 'ticket' && matches(o));
     if (q.length === 0) return nonTicket;
-    const tickets = allMentionOptions.filter((o) => o.type === 'ticket' && matches(o)).slice(0, MAX_TICKET_SUGGESTIONS);
+    const tickets = allMentionOptions
+      .filter((o) => o.type === 'ticket' && matches(o))
+      .slice(0, MAX_TICKET_SUGGESTIONS);
     return [...nonTicket, ...tickets];
   }, [acOpen, acQuery, allMentionOptions]);
 
@@ -229,10 +256,12 @@ export function AssistantConversation() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-[var(--theme-bg-primary)] px-8 text-center">
         <p className="text-3xl">🤖</p>
-        <p className="text-sm font-medium text-[var(--theme-text-primary)]">Companion injoignable</p>
+        <p className="text-sm font-medium text-[var(--theme-text-primary)]">
+          Companion injoignable
+        </p>
         <p className="max-w-md text-xs leading-relaxed text-[var(--theme-text-muted)]">
-          L'assistant s'appuie sur le companion (<code>fleex companion start</code>, démarré automatiquement
-          par <code>fleex start</code>). Reconnexion automatique…
+          L'assistant s'appuie sur le companion (<code>fleex companion start</code>, démarré
+          automatiquement par <code>fleex start</code>). Reconnexion automatique…
         </p>
       </div>
     );
@@ -294,7 +323,10 @@ export function AssistantConversation() {
           {items.map((item, i) => {
             if (item.kind === 'user') {
               return (
-                <div key={i} className="ml-12 rounded-xl bg-[var(--theme-accent)]/10 px-4 py-3 text-sm">
+                <div
+                  key={i}
+                  className="ml-12 rounded-xl bg-[var(--theme-accent)]/10 px-4 py-3 text-sm"
+                >
                   <MarkdownRenderer content={item.text} onToggleCheckbox={() => {}} />
                 </div>
               );
@@ -328,14 +360,12 @@ export function AssistantConversation() {
           })}
           {busy && (
             <p className="animate-pulse text-xs text-[var(--theme-text-faint)]">
-              {session.status === 'awaiting_input' ? 'En attente de ta confirmation…' : 'Réflexion…'}
+              {session.status === 'awaiting_input'
+                ? 'En attente de ta confirmation…'
+                : 'Réflexion…'}
             </p>
           )}
-          {errorMsg && (
-            <p className={cn('rounded-lg p-2.5 text-xs', tint('red'))}>
-              {errorMsg}
-            </p>
-          )}
+          {errorMsg && <p className={cn('rounded-lg p-2.5 text-xs', tint('red'))}>{errorMsg}</p>}
         </div>
       </div>
 
@@ -344,10 +374,18 @@ export function AssistantConversation() {
       {confirmReqs
         .filter((r) => r.sessionId === session.id)
         .map((req) => (
-          <div key={req.id} className="shrink-0 border-t border-[var(--theme-accent)]/40 bg-[var(--theme-bg-surface)] px-6 py-3">
+          <div
+            key={req.id}
+            className="shrink-0 border-t border-[var(--theme-accent)]/40 bg-[var(--theme-bg-surface)] px-6 py-3"
+          >
             <div className="mx-auto max-w-3xl">
               <p className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[var(--theme-text-muted)]">
-                <span className={cn('inline-block h-2 w-2 animate-pulse rounded-full', tintSolid('yellow'))} />
+                <span
+                  className={cn(
+                    'inline-block h-2 w-2 animate-pulse rounded-full',
+                    tintSolid('yellow'),
+                  )}
+                />
                 L'assistant attend ta confirmation
               </p>
               <pre className="mb-3 max-h-32 overflow-auto rounded-lg bg-[var(--theme-bg-overlay)] p-3 font-mono text-xs leading-relaxed text-[var(--theme-text-primary)]">
@@ -375,9 +413,21 @@ export function AssistantConversation() {
       {confirmReqs
         .filter((r) => r.sessionId !== session.id)
         .map((req) => (
-          <div key={req.id} className={cn('shrink-0 border-t px-6 py-2', tintClasses('yellow').borderColor, tintClasses('yellow').bg)}>
+          <div
+            key={req.id}
+            className={cn(
+              'shrink-0 border-t px-6 py-2',
+              tintClasses('yellow').borderColor,
+              tintClasses('yellow').bg,
+            )}
+          >
             <div className="mx-auto flex max-w-3xl items-center gap-2 text-xs text-[var(--theme-text-primary)]">
-              <span className={cn('inline-block h-2 w-2 shrink-0 animate-pulse rounded-full', tintSolid('yellow'))} />
+              <span
+                className={cn(
+                  'inline-block h-2 w-2 shrink-0 animate-pulse rounded-full',
+                  tintSolid('yellow'),
+                )}
+              />
               <span className="min-w-0 flex-1 truncate">
                 Une commande attend ta confirmation dans «{' '}
                 {sessions.find((s) => s.id === req.sessionId)?.title ?? 'autre conversation'} »
@@ -414,7 +464,9 @@ export function AssistantConversation() {
                 >
                   <MentionTypeIcon type={opt.type} />
                   <span className="min-w-0 flex-1 truncate font-medium">{opt.label}</span>
-                  <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
+                  <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">
+                    {opt.type}
+                  </span>
                 </button>
               ))}
             </div>
@@ -431,7 +483,16 @@ export function AssistantConversation() {
               className="shrink-0 rounded-md p-2 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
               title="Joindre une image ou un fichier"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
               </svg>
             </button>

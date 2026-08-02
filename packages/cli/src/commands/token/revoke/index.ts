@@ -1,10 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, warn, info, die, c } from '../../../core/colors.ts';
 import { apiBase, apiDelete } from '../../../core/api.ts';
+import { ok, warn, info, die, c } from '../../../core/colors.ts';
 import { canPrompt, promptYesNo, closePrompts } from '../../../core/prompt.ts';
 import { resolveToken } from '../_shared.ts';
 
-interface RevokeOptions { force?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface RevokeOptions {
+  force?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -21,9 +24,13 @@ const def: CommandDef = {
     if (!opts.force) {
       // Revoking immediately breaks any integration still using this token.
       if (!canPrompt()) {
-        die(`Refusing to revoke token "${token.name}" without confirmation. Re-run with -f to force.`);
+        die(
+          `Refusing to revoke token "${token.name}" without confirmation. Re-run with -f to force.`,
+        );
       }
-      warn(`Revoking token "${token.name}" immediately breaks anything still authenticating with it.`);
+      warn(
+        `Revoking token "${token.name}" immediately breaks anything still authenticating with it.`,
+      );
       const confirmed = await promptYesNo(`Revoke token "${token.name}"?`, false);
       closePrompts();
       if (!confirmed) {

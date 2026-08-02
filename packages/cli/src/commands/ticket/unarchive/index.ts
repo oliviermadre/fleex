@@ -1,9 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
+import { ok, present } from '../../../core/colors.ts';
 import { resolveAnyTicketUuid } from '../_shared.ts';
 
-interface ArchiveResult { displayId: number; title: string }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface ArchiveResult {
+  displayId: number;
+  title: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,

@@ -15,33 +15,47 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ServerWebSocket } from 'bun';
-import type Anthropic from '@anthropic-ai/sdk';
+
 import { buildProgram } from '@fleex/cli/program';
 import { generateTools } from '@fleex/mcp';
 import type { ExecOptions } from '@fleex/mcp';
-import { runAssistant, type AssistantEvent } from './assistant.ts';
-import { toAnthropicTools } from './tools.ts';
-import { createClient, createLlm, createExec, DEFAULT_MODEL } from './anthropic.ts';
 import { FALLBACK_MODELS } from '@fleex/shared';
-import { buildSystemPrompt, formatPageContext } from './system-prompt.ts';
-import { listWorkspaces, resolveWorkspace } from './workspaces.ts';
-import { SessionStore, type TranscriptItem } from './sessions.ts';
+
+import { createClient, createLlm, createExec, DEFAULT_MODEL } from './anthropic.ts';
+import { runAssistant, type AssistantEvent } from './assistant.ts';
 import {
   findRunningInstance,
   findWorkspaceServerPort,
   instanceBranch,
 } from './instance-discovery.ts';
+import { SessionStore, type TranscriptItem } from './sessions.ts';
+import { buildSystemPrompt, formatPageContext } from './system-prompt.ts';
+import { toAnthropicTools } from './tools.ts';
+import { listWorkspaces, resolveWorkspace } from './workspaces.ts';
 
-interface PageRef { url?: string; title?: string; content: string }
-interface WsData { id: string }
+import type Anthropic from '@anthropic-ai/sdk';
+import type { ServerWebSocket } from 'bun';
 
-interface ThemeConfig { activeThemeId: string | null; customThemes: unknown[] }
+interface PageRef {
+  url?: string;
+  title?: string;
+  content: string;
+}
+interface WsData {
+  id: string;
+}
+
+interface ThemeConfig {
+  activeThemeId: string | null;
+  customThemes: unknown[];
+}
 
 /** Read a live workspace server's theme config (activeThemeId + customThemes). */
 async function fetchThemeConfig(serverPort: number): Promise<ThemeConfig> {
   try {
-    const r = await fetch(`http://127.0.0.1:${serverPort}/api/config`, { signal: AbortSignal.timeout(2000) });
+    const r = await fetch(`http://127.0.0.1:${serverPort}/api/config`, {
+      signal: AbortSignal.timeout(2000),
+    });
     if (!r.ok) return { activeThemeId: null, customThemes: [] };
     const cfg = (await r.json()) as { activeThemeId?: string; customThemes?: unknown[] };
     return { activeThemeId: cfg.activeThemeId ?? null, customThemes: cfg.customThemes ?? [] };
@@ -82,7 +96,9 @@ const store = new SessionStore();
 
 const baseExecOpts: ExecOptions = {
   bin: process.env.FLEEX_MCP_BIN,
-  prefixArgs: process.env.FLEEX_MCP_PREFIX ? process.env.FLEEX_MCP_PREFIX.split(' ').filter(Boolean) : undefined,
+  prefixArgs: process.env.FLEEX_MCP_PREFIX
+    ? process.env.FLEEX_MCP_PREFIX.split(' ').filter(Boolean)
+    : undefined,
 };
 
 const CORS = {
@@ -208,7 +224,12 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
   };
 
   const exec = createExec({ ...baseExecOpts, workspace });
-  const confirm = (req: { id: string; name: string; input: Record<string, unknown>; argv: string[] }) =>
+  const confirm = (req: {
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    argv: string[];
+  }) =>
     new Promise<boolean>((resolve) => {
       store.setStatus(sessionId, 'awaiting_input');
       broadcastSessions();
@@ -217,7 +238,15 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
         broadcastSessions();
         resolve(approved);
       });
-      for (const ws of sockets) send(ws, { type: 'confirm_request', sessionId, id: req.id, name: req.name, argv: req.argv, input: req.input });
+      for (const ws of sockets)
+        send(ws, {
+          type: 'confirm_request',
+          sessionId,
+          id: req.id,
+          name: req.name,
+          argv: req.argv,
+          input: req.input,
+        });
     });
 
   try {
@@ -233,7 +262,10 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
       workspace,
     });
   } catch (e) {
-    broadcastEvent(sessionId, { type: 'error', message: e instanceof Error ? e.message : String(e) });
+    broadcastEvent(sessionId, {
+      type: 'error',
+      message: e instanceof Error ? e.message : String(e),
+    });
   } finally {
     flushAssistant();
     store.setStatus(sessionId, 'idle');
@@ -260,7 +292,8 @@ Bun.serve<WsData>({
         { headers: CORS },
       );
     }
-    if (url.pathname === '/workspaces') return Response.json(await listWorkspacesEnriched(), { headers: CORS });
+    if (url.pathname === '/workspaces')
+      return Response.json(await listWorkspacesEnriched(), { headers: CORS });
     if (url.pathname === '/models') {
       // Canonical model list (shared with the web app). The host default is
       // marked so the panel can label its "Default" option.
@@ -298,7 +331,10 @@ Bun.serve<WsData>({
           send(ws, { type: 'sessions', sessions: store.list() });
           break;
         case 'new_session': {
-          const s = store.create({ workspace: asString(msg.workspace), model: asString(msg.model) });
+          const s = store.create({
+            workspace: asString(msg.workspace),
+            model: asString(msg.model),
+          });
           broadcastSessions();
           send(ws, { type: 'session_created', id: s.id });
           break;
@@ -358,7 +394,11 @@ Bun.serve<WsData>({
           const content = asString(msg.content);
           if (id && content) {
             pendingPages.set(id, { content, url: asString(msg.url), title: asString(msg.title) });
-            send(ws, { type: 'page_attached', sessionId: id, title: asString(msg.title) ?? asString(msg.url) ?? 'page' });
+            send(ws, {
+              type: 'page_attached',
+              sessionId: id,
+              title: asString(msg.title) ?? asString(msg.url) ?? 'page',
+            });
           }
           break;
         }
@@ -389,7 +429,8 @@ Bun.serve<WsData>({
 // panel to reload on change: a panel `location.reload()` for side-panel files,
 // or a full `chrome.runtime.reload()` when manifest/background change.
 if (process.env.FLEEX_SIDEPANEL_DEV === '1') {
-  const extDir = process.env.FLEEX_EXTENSION_DIR ?? path.resolve(import.meta.dir, '../../../extension');
+  const extDir =
+    process.env.FLEEX_EXTENSION_DIR ?? path.resolve(import.meta.dir, '../../../extension');
   let timer: ReturnType<typeof setTimeout> | null = null;
   let fullPending = false;
   try {
@@ -400,16 +441,28 @@ if (process.env.FLEEX_SIDEPANEL_DEV === '1') {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         const payload = JSON.stringify({ type: 'dev_reload', full: fullPending });
-        for (const ws of sockets) { try { ws.send(payload); } catch { /* ignore */ } }
-        process.stderr.write(`fleex-sidepanel-host: dev reload (${fullPending ? 'full' : 'panel'}) — ${name}\n`);
+        for (const ws of sockets) {
+          try {
+            ws.send(payload);
+          } catch {
+            /* ignore */
+          }
+        }
+        process.stderr.write(
+          `fleex-sidepanel-host: dev reload (${fullPending ? 'full' : 'panel'}) — ${name}\n`,
+        );
         fullPending = false;
         timer = null;
       }, 150);
     });
     process.stderr.write(`fleex-sidepanel-host: dev hot reload watching ${extDir}\n`);
   } catch (e) {
-    process.stderr.write(`fleex-sidepanel-host: dev reload unavailable (${e instanceof Error ? e.message : String(e)})\n`);
+    process.stderr.write(
+      `fleex-sidepanel-host: dev reload unavailable (${e instanceof Error ? e.message : String(e)})\n`,
+    );
   }
 }
 
-process.stderr.write(`fleex-sidepanel-host listening on http://localhost:${PORT} (${tools.length} tools, ${store.list().length} sessions)\n`);
+process.stderr.write(
+  `fleex-sidepanel-host listening on http://localhost:${PORT} (${tools.length} tools, ${store.list().length} sessions)\n`,
+);

@@ -1,8 +1,9 @@
 import { homedir } from 'node:os';
+
 import { handleExec } from './exec';
 import { handleFs } from './fs';
-import { handlePtyMessage, handlePtyOpen, handlePtyClose } from './pty';
 import { logAlways, getVerbosity } from './logger';
+import { handlePtyMessage, handlePtyOpen, handlePtyClose } from './pty';
 
 const PORT = parseInt(process.env['GATEWAY_PORT'] ?? '3001', 10);
 

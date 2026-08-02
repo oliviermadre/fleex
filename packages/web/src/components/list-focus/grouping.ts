@@ -1,8 +1,10 @@
 import type { Ticket, TicketStatus, AgentActivityState } from '@fleex/shared';
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
-import type { ListFocusFilters } from '../../stores/listFocusStore';
+
 import { STATUS_HUES } from '../../lib/statusColors';
+
 import type { TintHue } from '../../lib/tints';
+import type { ListFocusFilters } from '../../stores/listFocusStore';
 
 /**
  * Pure grouping for the List/Focus cockpit (spec §7).

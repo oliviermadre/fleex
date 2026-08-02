@@ -1,7 +1,8 @@
-@import "tailwindcss";
-@import "@xterm/xterm/css/xterm.css";
+@import 'tailwindcss';
+@import '@xterm/xterm/css/xterm.css';
 
-html, body {
+html,
+body {
   overflow: hidden;
   height: 100%;
   margin: 0;
@@ -17,7 +18,7 @@ html, body {
   --statusbar-height: 28px;
 
   /* Theme colors — Ember defaults (overridden by JS on mount) */
-  --theme-accent: #D77655;
+  --theme-accent: #d77655;
   --theme-accent-hover: #e08868;
   --theme-accent-active: #b85a3a;
   --theme-accent-muted: rgba(215, 118, 85, 0.15);
@@ -62,8 +63,13 @@ html, body {
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 .animate-blink {
@@ -86,8 +92,9 @@ html, body {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  transition: width 250ms cubic-bezier(0.16, 1, 0.3, 1),
-              max-width 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    width 250ms cubic-bezier(0.16, 1, 0.3, 1),
+    max-width 250ms cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Liquid glass effect */
   background:
@@ -177,11 +184,7 @@ html, body {
   border: 1px solid rgba(255, 255, 255, 0.08);
 
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.04) 0%,
-      rgba(255, 255, 255, 0.01) 100%
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%),
     var(--theme-glass-surface);
   backdrop-filter: blur(20px) saturate(1.3);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
@@ -195,11 +198,7 @@ html, body {
 .scratchpad-hint:hover {
   border-color: rgba(255, 255, 255, 0.14);
   background:
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.06) 0%,
-      rgba(255, 255, 255, 0.02) 100%
-    ),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%),
     var(--theme-glass-surface);
 }
 
@@ -230,8 +229,12 @@ html, body {
 }
 
 @keyframes command-palette-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .command-palette-container {
@@ -401,8 +404,12 @@ html, body {
 }
 
 @keyframes deliverable-overlay-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .deliverable-overlay-panel {
@@ -488,10 +495,13 @@ html, body {
 /* GitHub icon glow on kanban cards */
 .github-glow-icon {
   cursor: pointer;
-  transition: filter 200ms ease, color 200ms ease;
+  transition:
+    filter 200ms ease,
+    color 200ms ease;
 }
 .github-glow-icon:hover {
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6)) drop-shadow(0 0 12px rgba(255, 255, 255, 0.3));
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6))
+    drop-shadow(0 0 12px rgba(255, 255, 255, 0.3));
 }
 
 /* React Flow canvas — bound to the active Fleex theme so the workflow DAG
@@ -532,8 +542,12 @@ html, body {
   margin: 0 0 0.6em;
   padding-left: 1.25em;
 }
-.needs-review-markdown ul { list-style: disc outside; }
-.needs-review-markdown ol { list-style: decimal outside; }
+.needs-review-markdown ul {
+  list-style: disc outside;
+}
+.needs-review-markdown ol {
+  list-style: decimal outside;
+}
 .needs-review-markdown li {
   margin: 0.15em 0;
   line-height: 1.45;
@@ -571,10 +585,18 @@ html, body {
   margin: 0.4em 0 0.4em;
   color: var(--theme-text-primary);
 }
-.needs-review-markdown h1 { font-size: 1.05em; }
-.needs-review-markdown h2 { font-size: 1em; }
-.needs-review-markdown h3 { font-size: 0.96em; }
-.needs-review-markdown h4 { font-size: 0.92em; }
+.needs-review-markdown h1 {
+  font-size: 1.05em;
+}
+.needs-review-markdown h2 {
+  font-size: 1em;
+}
+.needs-review-markdown h3 {
+  font-size: 0.96em;
+}
+.needs-review-markdown h4 {
+  font-size: 0.92em;
+}
 .needs-review-markdown a {
   color: var(--theme-accent);
   text-decoration: underline;

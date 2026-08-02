@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { useAssistantStore, __resetAssistantSocketForTests } from './assistantStore';
 import { useSettingsStore } from './settingsStore';
 

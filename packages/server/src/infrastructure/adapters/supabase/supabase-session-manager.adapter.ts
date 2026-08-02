@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+
 import type { SupabaseConnection } from './connection.js';
 import type { SessionData } from '../../auth/session-manager.js';
 
@@ -18,14 +19,12 @@ export class SupabaseSessionManager {
     const sessionId = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
 
-    const { error } = await this.conn.client
-      .from('user_sessions')
-      .insert({
-        id: sessionId,
-        user_id: userId,
-        data,
-        expires_at: expiresAt,
-      });
+    const { error } = await this.conn.client.from('user_sessions').insert({
+      id: sessionId,
+      user_id: userId,
+      data,
+      expires_at: expiresAt,
+    });
     if (error) throw new Error(`SupabaseSessionManager.create failed: ${error.message}`);
     return sessionId;
   }
@@ -49,18 +48,12 @@ export class SupabaseSessionManager {
   }
 
   async destroy(sessionId: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('user_sessions')
-      .delete()
-      .eq('id', sessionId);
+    const { error } = await this.conn.client.from('user_sessions').delete().eq('id', sessionId);
     if (error) throw new Error(`SupabaseSessionManager.destroy failed: ${error.message}`);
   }
 
   async destroyAllForUser(userId: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('user_sessions')
-      .delete()
-      .eq('user_id', userId);
+    const { error } = await this.conn.client.from('user_sessions').delete().eq('user_id', userId);
     if (error) throw new Error(`SupabaseSessionManager.destroyAllForUser failed: ${error.message}`);
   }
 

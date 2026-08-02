@@ -38,6 +38,7 @@ import type {
   OverlaySyncRemoveRequest,
   OverlaySyncRemoveResponse,
 } from '@fleex/shared';
+
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
 
@@ -55,7 +56,9 @@ function extractErrorMessage(body: string, statusText: string): string {
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: options?.body ? { 'Content-Type': 'application/json', ...options?.headers } : options?.headers,
+    headers: options?.body
+      ? { 'Content-Type': 'application/json', ...options?.headers }
+      : options?.headers,
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -104,53 +107,60 @@ export async function fetchRepositories(): Promise<Repository[]> {
 }
 
 export async function fetchBranches(org: string, name: string): Promise<string[]> {
-  return request<string[]>(`/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/branches`);
+  return request<string[]>(
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/branches`,
+  );
 }
 
 export async function fetchWorktrees(org: string, name: string): Promise<Worktree[]> {
-  return request<Worktree[]>(`/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`);
+  return request<Worktree[]>(
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/worktrees`,
+  );
 }
 
-export async function fetchPullRequests(org: string, name: string, force = false): Promise<PullRequest[]> {
+export async function fetchPullRequests(
+  org: string,
+  name: string,
+  force = false,
+): Promise<PullRequest[]> {
   const qs = force ? '?force=true' : '';
   return request<PullRequest[]>(
-    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/pulls${qs}`
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/pulls${qs}`,
   );
 }
 
 export async function fetchIssues(org: string, name: string): Promise<GitHubIssue[]> {
   return request<GitHubIssue[]>(
-    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/issues`
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/issues`,
   );
 }
 
 export async function fetchDiffStats(
   org: string,
   name: string,
-  branches: string[]
+  branches: string[],
 ): Promise<Record<string, DiffStats>> {
   const query = branches.map(encodeURIComponent).join(',');
   return request<Record<string, DiffStats>>(
-    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/diff-stats?branches=${query}`
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/diff-stats?branches=${query}`,
   );
 }
 
 export async function fetchDefaultBranch(
   org: string,
-  name: string
+  name: string,
 ): Promise<{ defaultBranch: string; currentBranch: string; isOnDefault: boolean }> {
   return request<{ defaultBranch: string; currentBranch: string; isOnDefault: boolean }>(
-    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/default-branch`
+    `/repositories/${encodeURIComponent(org)}/${encodeURIComponent(name)}/default-branch`,
   );
 }
 
 export type CheckCwdResult =
-  | { exists: true }
-  | { exists: false; remote: string; targetPath: string };
+  { exists: true } | { exists: false; remote: string; targetPath: string };
 
 export async function checkRepoCwd(org: string, name: string): Promise<CheckCwdResult> {
   return request<CheckCwdResult>(
-    `/repositories/check-cwd?org=${encodeURIComponent(org)}&name=${encodeURIComponent(name)}`
+    `/repositories/check-cwd?org=${encodeURIComponent(org)}&name=${encodeURIComponent(name)}`,
   );
 }
 
@@ -229,11 +239,17 @@ export async function fetchGithubDiscovery(): Promise<RepoDiscovery> {
   return request('/github/discovery');
 }
 
-export async function verifyGithubRepo(repo: string): Promise<{ exists: boolean; nameWithOwner?: string }> {
+export async function verifyGithubRepo(
+  repo: string,
+): Promise<{ exists: boolean; nameWithOwner?: string }> {
   return request(`/github/verify-repo?repo=${encodeURIComponent(repo)}`);
 }
 
-export async function fetchRepositoryStats(org: string, name: string, days = 30): Promise<RepositoryStats> {
+export async function fetchRepositoryStats(
+  org: string,
+  name: string,
+  days = 30,
+): Promise<RepositoryStats> {
   return request(`/repositories/${org}/${name}/stats?days=${days}`);
 }
 
@@ -254,7 +270,10 @@ export async function saveClaudeConfigFile(path: string, content: string): Promi
   });
 }
 
-export async function createClaudeConfigEntry(path: string, type: 'file' | 'directory'): Promise<void> {
+export async function createClaudeConfigEntry(
+  path: string,
+  type: 'file' | 'directory',
+): Promise<void> {
   await request<{ ok: boolean }>('/claude-config/create', {
     method: 'POST',
     body: JSON.stringify({ path, type }),
@@ -287,7 +306,11 @@ export async function fetchRepoScratchpad(org: string, name: string): Promise<{ 
   );
 }
 
-export async function saveRepoScratchpad(org: string, name: string, content: string): Promise<void> {
+export async function saveRepoScratchpad(
+  org: string,
+  name: string,
+  content: string,
+): Promise<void> {
   await request<{ ok: boolean }>(
     `/scratchpads/${encodeURIComponent(org)}/${encodeURIComponent(name)}`,
     { method: 'PUT', body: JSON.stringify({ content }) },
@@ -309,12 +332,23 @@ export async function fetchBoards(): Promise<import('@fleex/shared').BoardWithCo
   return request<import('@fleex/shared').BoardWithCounts[]>('/boards');
 }
 
-export async function createBoard(req: import('@fleex/shared').CreateBoardRequest): Promise<import('@fleex/shared').Board> {
-  return request<import('@fleex/shared').Board>('/boards', { method: 'POST', body: JSON.stringify(req) });
+export async function createBoard(
+  req: import('@fleex/shared').CreateBoardRequest,
+): Promise<import('@fleex/shared').Board> {
+  return request<import('@fleex/shared').Board>('/boards', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
 }
 
-export async function updateBoard(id: string, req: import('@fleex/shared').UpdateBoardRequest): Promise<import('@fleex/shared').Board> {
-  return request<import('@fleex/shared').Board>(`/boards/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+export async function updateBoard(
+  id: string,
+  req: import('@fleex/shared').UpdateBoardRequest,
+): Promise<import('@fleex/shared').Board> {
+  return request<import('@fleex/shared').Board>(`/boards/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  });
 }
 
 export async function deleteBoard(id: string): Promise<void> {
@@ -330,16 +364,33 @@ export async function fetchTicket(id: string): Promise<import('@fleex/shared').T
   return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}`);
 }
 
-export async function createTicket(req: import('@fleex/shared').CreateTicketRequest): Promise<import('@fleex/shared').Ticket> {
-  return request<import('@fleex/shared').Ticket>('/tickets', { method: 'POST', body: JSON.stringify(req) });
+export async function createTicket(
+  req: import('@fleex/shared').CreateTicketRequest,
+): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>('/tickets', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
 }
 
-export async function updateTicket(id: string, req: import('@fleex/shared').UpdateTicketRequest): Promise<import('@fleex/shared').Ticket> {
-  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+export async function updateTicket(
+  id: string,
+  req: import('@fleex/shared').UpdateTicketRequest,
+): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  });
 }
 
-export async function updateTicketSilent(id: string, req: import('@fleex/shared').UpdateTicketRequest): Promise<import('@fleex/shared').Ticket> {
-  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}?silent=true`, { method: 'PATCH', body: JSON.stringify(req) });
+export async function updateTicketSilent(
+  id: string,
+  req: import('@fleex/shared').UpdateTicketRequest,
+): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}?silent=true`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  });
 }
 
 /**
@@ -361,79 +412,133 @@ export async function deleteTicket(id: string): Promise<void> {
 }
 
 export async function archiveTicket(id: string): Promise<import('@fleex/shared').Ticket> {
-  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/archive`, { method: 'POST' });
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/archive`, {
+    method: 'POST',
+  });
 }
 
 export async function unarchiveTicket(id: string): Promise<import('@fleex/shared').Ticket> {
-  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/unarchive`, { method: 'POST' });
+  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/unarchive`, {
+    method: 'POST',
+  });
 }
 
-export async function fetchArchivedTickets(boardId?: string, limit = 50, offset = 0): Promise<{ tickets: import('@fleex/shared').Ticket[]; total: number }> {
+export async function fetchArchivedTickets(
+  boardId?: string,
+  limit = 50,
+  offset = 0,
+): Promise<{ tickets: import('@fleex/shared').Ticket[]; total: number }> {
   const params = new URLSearchParams();
   if (boardId) params.set('boardId', boardId);
   params.set('limit', String(limit));
   params.set('offset', String(offset));
-  return request<{ tickets: import('@fleex/shared').Ticket[]; total: number }>(`/tickets/archived?${params}`);
+  return request<{ tickets: import('@fleex/shared').Ticket[]; total: number }>(
+    `/tickets/archived?${params}`,
+  );
 }
 
-export async function moveTicket(id: string, status: import('@fleex/shared').TicketStatus, position?: number): Promise<import('@fleex/shared').Ticket> {
+export async function moveTicket(
+  id: string,
+  status: import('@fleex/shared').TicketStatus,
+  position?: number,
+): Promise<import('@fleex/shared').Ticket> {
   return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(id)}/move`, {
-    method: 'POST', body: JSON.stringify({ status, position }),
+    method: 'POST',
+    body: JSON.stringify({ status, position }),
   });
 }
 
-export async function reorderTickets(updates: { id: string; status: import('@fleex/shared').TicketStatus; position: number }[]): Promise<void> {
-  await request<{ ok: boolean }>('/tickets/reorder', { method: 'POST', body: JSON.stringify({ updates }) });
+export async function reorderTickets(
+  updates: { id: string; status: import('@fleex/shared').TicketStatus; position: number }[],
+): Promise<void> {
+  await request<{ ok: boolean }>('/tickets/reorder', {
+    method: 'POST',
+    body: JSON.stringify({ updates }),
+  });
 }
 
-export async function addTicketLink(id: string, link: { type: string; ref: string; label: string; url?: string }): Promise<import('@fleex/shared').TicketLink> {
+export async function addTicketLink(
+  id: string,
+  link: { type: string; ref: string; label: string; url?: string },
+): Promise<import('@fleex/shared').TicketLink> {
   return request<import('@fleex/shared').TicketLink>(`/tickets/${encodeURIComponent(id)}/links`, {
-    method: 'POST', body: JSON.stringify(link),
+    method: 'POST',
+    body: JSON.stringify(link),
   });
 }
 
 export async function removeTicketLink(id: string, linkId: string): Promise<void> {
-  await request<void>(`/tickets/${encodeURIComponent(id)}/links/${encodeURIComponent(linkId)}`, { method: 'DELETE' });
-}
-
-export async function fetchTicketActivity(id: string): Promise<import('@fleex/shared').TicketActivity[]> {
-  return request<import('@fleex/shared').TicketActivity[]>(`/tickets/${encodeURIComponent(id)}/activity`);
-}
-
-export async function openSessionFromTicket(id: string): Promise<{ sessionId: string }> {
-  return request<{ sessionId: string }>(`/tickets/${encodeURIComponent(id)}/open-session`, { method: 'POST' });
-}
-
-export async function importGitHubIssue(org: string, name: string, issueNumber: number, boardId: string): Promise<import('@fleex/shared').Ticket> {
-  return request<import('@fleex/shared').Ticket>('/tickets/import-github-issue', {
-    method: 'POST', body: JSON.stringify({ org, name, number: issueNumber, boardId }),
+  await request<void>(`/tickets/${encodeURIComponent(id)}/links/${encodeURIComponent(linkId)}`, {
+    method: 'DELETE',
   });
 }
 
-export async function importSlackMessage(url: string, boardId: string): Promise<import('@fleex/shared').Ticket> {
+export async function fetchTicketActivity(
+  id: string,
+): Promise<import('@fleex/shared').TicketActivity[]> {
+  return request<import('@fleex/shared').TicketActivity[]>(
+    `/tickets/${encodeURIComponent(id)}/activity`,
+  );
+}
+
+export async function openSessionFromTicket(id: string): Promise<{ sessionId: string }> {
+  return request<{ sessionId: string }>(`/tickets/${encodeURIComponent(id)}/open-session`, {
+    method: 'POST',
+  });
+}
+
+export async function importGitHubIssue(
+  org: string,
+  name: string,
+  issueNumber: number,
+  boardId: string,
+): Promise<import('@fleex/shared').Ticket> {
+  return request<import('@fleex/shared').Ticket>('/tickets/import-github-issue', {
+    method: 'POST',
+    body: JSON.stringify({ org, name, number: issueNumber, boardId }),
+  });
+}
+
+export async function importSlackMessage(
+  url: string,
+  boardId: string,
+): Promise<import('@fleex/shared').Ticket> {
   return request<import('@fleex/shared').Ticket>('/tickets/import-slack-message', {
-    method: 'POST', body: JSON.stringify({ url, boardId }),
+    method: 'POST',
+    body: JSON.stringify({ url, boardId }),
   });
 }
 
 export async function retrySlackImport(ticketId: string): Promise<import('@fleex/shared').Ticket> {
-  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(ticketId)}/retry-slack-import`, {
-    method: 'POST',
-  });
+  return request<import('@fleex/shared').Ticket>(
+    `/tickets/${encodeURIComponent(ticketId)}/retry-slack-import`,
+    {
+      method: 'POST',
+    },
+  );
 }
 
 export async function importGitHubPR(
-  org: string, name: string, prNumber: number, prTitle: string, headRefName: string, boardId: string,
+  org: string,
+  name: string,
+  prNumber: number,
+  prTitle: string,
+  headRefName: string,
+  boardId: string,
 ): Promise<import('@fleex/shared').Ticket> {
   return request<import('@fleex/shared').Ticket>('/tickets/import-github-pr', {
-    method: 'POST', body: JSON.stringify({ org, name, prNumber, prTitle, headRefName, boardId }),
+    method: 'POST',
+    body: JSON.stringify({ org, name, prNumber, prTitle, headRefName, boardId }),
   });
 }
 
 export async function syncGithubIssue(ticketId: string): Promise<import('@fleex/shared').Ticket> {
-  return request<import('@fleex/shared').Ticket>(`/tickets/${encodeURIComponent(ticketId)}/sync-github`, {
-    method: 'POST',
-  });
+  return request<import('@fleex/shared').Ticket>(
+    `/tickets/${encodeURIComponent(ticketId)}/sync-github`,
+    {
+      method: 'POST',
+    },
+  );
 }
 
 export async function fetchPRStates(ticketId: string): Promise<Record<string, string>> {
@@ -451,15 +556,25 @@ export async function fetchBulkPRStates(refs: string[]): Promise<Record<string, 
 
 // ── Ticket Mentions API ──
 
-export async function fetchTicketMentions(ticketId: string): Promise<import('@fleex/shared').TicketMention[]> {
-  return request<import('@fleex/shared').TicketMention[]>(`/tickets/${encodeURIComponent(ticketId)}/mentions`);
+export async function fetchTicketMentions(
+  ticketId: string,
+): Promise<import('@fleex/shared').TicketMention[]> {
+  return request<import('@fleex/shared').TicketMention[]>(
+    `/tickets/${encodeURIComponent(ticketId)}/mentions`,
+  );
 }
 
-export async function updateMentionStatus(mentionId: string, status: import('@fleex/shared').MentionStatus): Promise<import('@fleex/shared').TicketMention> {
-  return request<import('@fleex/shared').TicketMention>(`/mentions/${encodeURIComponent(mentionId)}/status`, {
-    method: 'PATCH',
-    body: JSON.stringify({ status }),
-  });
+export async function updateMentionStatus(
+  mentionId: string,
+  status: import('@fleex/shared').MentionStatus,
+): Promise<import('@fleex/shared').TicketMention> {
+  return request<import('@fleex/shared').TicketMention>(
+    `/mentions/${encodeURIComponent(mentionId)}/status`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    },
+  );
 }
 
 export async function deleteMention(mentionId: string): Promise<void> {
@@ -467,27 +582,45 @@ export async function deleteMention(mentionId: string): Promise<void> {
 }
 
 export async function deleteMentionFromComment(mentionId: string): Promise<void> {
-  return request<void>(`/mentions/${encodeURIComponent(mentionId)}/from-comment`, { method: 'DELETE' });
+  return request<void>(`/mentions/${encodeURIComponent(mentionId)}/from-comment`, {
+    method: 'DELETE',
+  });
 }
 
 // ── Ticket Deliverables API ──
 
-export async function fetchTicketDeliverables(ticketId: string): Promise<import('@fleex/shared').TicketDeliverable[]> {
-  return request<import('@fleex/shared').TicketDeliverable[]>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`);
+export async function fetchTicketDeliverables(
+  ticketId: string,
+): Promise<import('@fleex/shared').TicketDeliverable[]> {
+  return request<import('@fleex/shared').TicketDeliverable[]>(
+    `/tickets/${encodeURIComponent(ticketId)}/deliverables`,
+  );
 }
 
 export async function createDeliverable(
   ticketId: string,
-  payload: { title: string; type: string; content: string; status?: 'draft' | 'final'; agentName?: string },
+  payload: {
+    title: string;
+    type: string;
+    content: string;
+    status?: 'draft' | 'final';
+    agentName?: string;
+  },
 ): Promise<import('@fleex/shared').TicketDeliverable> {
-  return request<import('@fleex/shared').TicketDeliverable>(`/tickets/${encodeURIComponent(ticketId)}/deliverables`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return request<import('@fleex/shared').TicketDeliverable>(
+    `/tickets/${encodeURIComponent(ticketId)}/deliverables`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function deleteDeliverable(ticketId: string, deliverableId: string): Promise<void> {
-  await request<void>(`/tickets/${encodeURIComponent(ticketId)}/deliverables/${encodeURIComponent(deliverableId)}`, { method: 'DELETE' });
+  await request<void>(
+    `/tickets/${encodeURIComponent(ticketId)}/deliverables/${encodeURIComponent(deliverableId)}`,
+    { method: 'DELETE' },
+  );
 }
 
 // ── Deliverable Types (per-workspace config / backoffice) ──
@@ -501,45 +634,84 @@ export async function fetchDeliverableTypes(): Promise<DeliverableTypesView> {
   return request<DeliverableTypesView>('/deliverable-types');
 }
 
-export async function createDeliverableType(
-  input: { id: string; label: string; description?: string; renderer: import('@fleex/shared').DeliverableRenderer; color?: import('@fleex/shared').DeliverableTypeColor | null },
-): Promise<DeliverableTypesView> {
-  return request<DeliverableTypesView>('/deliverable-types', { method: 'POST', body: JSON.stringify(input) });
+export async function createDeliverableType(input: {
+  id: string;
+  label: string;
+  description?: string;
+  renderer: import('@fleex/shared').DeliverableRenderer;
+  color?: import('@fleex/shared').DeliverableTypeColor | null;
+}): Promise<DeliverableTypesView> {
+  return request<DeliverableTypesView>('/deliverable-types', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function updateDeliverableType(
   id: string,
-  patch: { label?: string; description?: string; renderer?: import('@fleex/shared').DeliverableRenderer; color?: import('@fleex/shared').DeliverableTypeColor | null },
+  patch: {
+    label?: string;
+    description?: string;
+    renderer?: import('@fleex/shared').DeliverableRenderer;
+    color?: import('@fleex/shared').DeliverableTypeColor | null;
+  },
 ): Promise<DeliverableTypesView> {
-  return request<DeliverableTypesView>(`/deliverable-types/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  return request<DeliverableTypesView>(`/deliverable-types/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
 }
 
-export async function renameDeliverableType(id: string, newId: string): Promise<DeliverableTypesView & { migrated: number }> {
-  return request<DeliverableTypesView & { migrated: number }>(`/deliverable-types/${encodeURIComponent(id)}/rename`, {
-    method: 'POST',
-    body: JSON.stringify({ newId }),
-  });
+export async function renameDeliverableType(
+  id: string,
+  newId: string,
+): Promise<DeliverableTypesView & { migrated: number }> {
+  return request<DeliverableTypesView & { migrated: number }>(
+    `/deliverable-types/${encodeURIComponent(id)}/rename`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ newId }),
+    },
+  );
 }
 
 export async function deleteDeliverableType(id: string): Promise<DeliverableTypesView> {
-  return request<DeliverableTypesView>(`/deliverable-types/${encodeURIComponent(id)}`, { method: 'DELETE' });
-}
-
-export async function reassignDeliverableType(from: string, to: string): Promise<{ migrated: number }> {
-  return request<{ migrated: number }>('/deliverable-types/reassign', { method: 'POST', body: JSON.stringify({ from, to }) });
-}
-
-export async function changeDeliverableType(deliverableId: string, type: string): Promise<import('@fleex/shared').TicketDeliverable> {
-  return request<import('@fleex/shared').TicketDeliverable>(`/deliverables/${encodeURIComponent(deliverableId)}/type`, {
-    method: 'PATCH',
-    body: JSON.stringify({ type }),
+  return request<DeliverableTypesView>(`/deliverable-types/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
   });
+}
+
+export async function reassignDeliverableType(
+  from: string,
+  to: string,
+): Promise<{ migrated: number }> {
+  return request<{ migrated: number }>('/deliverable-types/reassign', {
+    method: 'POST',
+    body: JSON.stringify({ from, to }),
+  });
+}
+
+export async function changeDeliverableType(
+  deliverableId: string,
+  type: string,
+): Promise<import('@fleex/shared').TicketDeliverable> {
+  return request<import('@fleex/shared').TicketDeliverable>(
+    `/deliverables/${encodeURIComponent(deliverableId)}/type`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ type }),
+    },
+  );
 }
 
 // ── Ticket Comments API ──
 
-export async function fetchTicketComments(ticketId: string): Promise<import('@fleex/shared').TicketComment[]> {
-  return request<import('@fleex/shared').TicketComment[]>(`/tickets/${encodeURIComponent(ticketId)}/comments`);
+export async function fetchTicketComments(
+  ticketId: string,
+): Promise<import('@fleex/shared').TicketComment[]> {
+  return request<import('@fleex/shared').TicketComment[]>(
+    `/tickets/${encodeURIComponent(ticketId)}/comments`,
+  );
 }
 
 export type MentionConflictAction = 'answer' | 'new_subject' | 'supersede' | 'queue';
@@ -554,31 +726,53 @@ export async function postTicketComment(
   executionMode?: import('@fleex/shared').MentionExecutionMode,
   mentionConflicts?: MentionConflictResolution[],
 ): Promise<import('@fleex/shared').TicketComment> {
-  return request<import('@fleex/shared').TicketComment>(`/tickets/${encodeURIComponent(ticketId)}/comments`, {
-    method: 'POST', body: JSON.stringify({ body, executionMode, mentionConflicts }),
-  });
+  return request<import('@fleex/shared').TicketComment>(
+    `/tickets/${encodeURIComponent(ticketId)}/comments`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ body, executionMode, mentionConflicts }),
+    },
+  );
 }
 
-export async function updateMentionExecutionMode(mentionId: string, executionMode: import('@fleex/shared').MentionExecutionMode): Promise<import('@fleex/shared').TicketMention> {
-  return request<import('@fleex/shared').TicketMention>(`/mentions/${encodeURIComponent(mentionId)}/execution-mode`, {
-    method: 'PATCH', body: JSON.stringify({ executionMode }),
-  });
+export async function updateMentionExecutionMode(
+  mentionId: string,
+  executionMode: import('@fleex/shared').MentionExecutionMode,
+): Promise<import('@fleex/shared').TicketMention> {
+  return request<import('@fleex/shared').TicketMention>(
+    `/mentions/${encodeURIComponent(mentionId)}/execution-mode`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ executionMode }),
+    },
+  );
 }
 
 export async function deleteTicketComment(ticketId: string, commentId: string): Promise<void> {
-  const res = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}/comments/${encodeURIComponent(commentId)}`, { method: 'DELETE' });
+  const res = await fetch(
+    `/api/tickets/${encodeURIComponent(ticketId)}/comments/${encodeURIComponent(commentId)}`,
+    { method: 'DELETE' },
+  );
   if (!res.ok) throw new Error(`Failed to delete comment: ${res.statusText}`);
 }
 
 // ── Read Cursors API ──
 
-export async function fetchReadCursors(ticketId: string): Promise<import('@fleex/shared').TicketReadCursors> {
-  return request<import('@fleex/shared').TicketReadCursors>(`/tickets/${encodeURIComponent(ticketId)}/read-cursors`);
+export async function fetchReadCursors(
+  ticketId: string,
+): Promise<import('@fleex/shared').TicketReadCursors> {
+  return request<import('@fleex/shared').TicketReadCursors>(
+    `/tickets/${encodeURIComponent(ticketId)}/read-cursors`,
+  );
 }
 
-export async function updateReadCursors(ticketId: string, cursors: { commentLastSeenAt?: string }): Promise<void> {
+export async function updateReadCursors(
+  ticketId: string,
+  cursors: { commentLastSeenAt?: string },
+): Promise<void> {
   await request<void>(`/tickets/${encodeURIComponent(ticketId)}/read-cursors`, {
-    method: 'PATCH', body: JSON.stringify(cursors),
+    method: 'PATCH',
+    body: JSON.stringify(cursors),
   });
 }
 
@@ -586,20 +780,31 @@ export async function fetchSeenDeliverables(ticketId: string): Promise<string[]>
   return request<string[]>(`/tickets/${encodeURIComponent(ticketId)}/seen-deliverables`);
 }
 
-export async function toggleDeliverableSeen(ticketId: string, deliverableId: string, seen: boolean): Promise<void> {
+export async function toggleDeliverableSeen(
+  ticketId: string,
+  deliverableId: string,
+  seen: boolean,
+): Promise<void> {
   await request<void>(`/tickets/${encodeURIComponent(ticketId)}/seen-deliverables`, {
-    method: 'PATCH', body: JSON.stringify({ deliverableId, seen }),
+    method: 'PATCH',
+    body: JSON.stringify({ deliverableId, seen }),
   });
 }
 
-export async function fetchUnreadCounts(ticketIds?: string[]): Promise<import('@fleex/shared').TicketUnreadCounts[]> {
+export async function fetchUnreadCounts(
+  ticketIds?: string[],
+): Promise<import('@fleex/shared').TicketUnreadCounts[]> {
   const params = ticketIds?.length ? `?ticketIds=${ticketIds.join(',')}` : '';
   return request<import('@fleex/shared').TicketUnreadCounts[]>(`/tickets/unread-counts${params}`);
 }
 
-export async function fetchTicketAgentActivity(ticketIds: string[]): Promise<import('@fleex/shared').TicketAgentActivity[]> {
+export async function fetchTicketAgentActivity(
+  ticketIds: string[],
+): Promise<import('@fleex/shared').TicketAgentActivity[]> {
   if (!ticketIds.length) return [];
-  return request<import('@fleex/shared').TicketAgentActivity[]>(`/tickets/agent-activity?ticketIds=${ticketIds.join(',')}`);
+  return request<import('@fleex/shared').TicketAgentActivity[]>(
+    `/tickets/agent-activity?ticketIds=${ticketIds.join(',')}`,
+  );
 }
 
 // ── Agent Tokens API ──
@@ -608,8 +813,13 @@ export async function fetchAgentTokens(): Promise<import('@fleex/shared').AgentT
   return request<import('@fleex/shared').AgentToken[]>('/agent-tokens');
 }
 
-export async function createAgentToken(name: string): Promise<import('@fleex/shared').AgentTokenCreated> {
-  return request<import('@fleex/shared').AgentTokenCreated>('/agent-tokens', { method: 'POST', body: JSON.stringify({ name }) });
+export async function createAgentToken(
+  name: string,
+): Promise<import('@fleex/shared').AgentTokenCreated> {
+  return request<import('@fleex/shared').AgentTokenCreated>('/agent-tokens', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
 }
 
 export async function deleteAgentToken(id: string): Promise<void> {
@@ -626,32 +836,61 @@ export async function fetchPersona(id: string): Promise<import('@fleex/shared').
   return request<import('@fleex/shared').AgentPersona>(`/personas/${encodeURIComponent(id)}`);
 }
 
-export async function createPersona(req: import('@fleex/shared').CreateAgentPersonaRequest): Promise<import('@fleex/shared').AgentPersona> {
-  return request<import('@fleex/shared').AgentPersona>('/personas', { method: 'POST', body: JSON.stringify(req) });
+export async function createPersona(
+  req: import('@fleex/shared').CreateAgentPersonaRequest,
+): Promise<import('@fleex/shared').AgentPersona> {
+  return request<import('@fleex/shared').AgentPersona>('/personas', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
 }
 
-export async function updatePersona(id: string, req: import('@fleex/shared').UpdateAgentPersonaRequest): Promise<import('@fleex/shared').AgentPersona> {
-  return request<import('@fleex/shared').AgentPersona>(`/personas/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+export async function updatePersona(
+  id: string,
+  req: import('@fleex/shared').UpdateAgentPersonaRequest,
+): Promise<import('@fleex/shared').AgentPersona> {
+  return request<import('@fleex/shared').AgentPersona>(`/personas/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  });
 }
 
 export async function deletePersona(id: string): Promise<void> {
   await request<void>(`/personas/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export async function executeAgent(id: string): Promise<import('@fleex/shared').AgentExecutionResult> {
-  return request<import('@fleex/shared').AgentExecutionResult>(`/personas/${encodeURIComponent(id)}/execute`, { method: 'POST' });
+export async function executeAgent(
+  id: string,
+): Promise<import('@fleex/shared').AgentExecutionResult> {
+  return request<import('@fleex/shared').AgentExecutionResult>(
+    `/personas/${encodeURIComponent(id)}/execute`,
+    { method: 'POST' },
+  );
 }
 
-export async function runMention(mentionId: string): Promise<import('@fleex/shared').AgentExecutionResult> {
-  return request<import('@fleex/shared').AgentExecutionResult>(`/mentions/${encodeURIComponent(mentionId)}/run`, { method: 'POST' });
+export async function runMention(
+  mentionId: string,
+): Promise<import('@fleex/shared').AgentExecutionResult> {
+  return request<import('@fleex/shared').AgentExecutionResult>(
+    `/mentions/${encodeURIComponent(mentionId)}/run`,
+    { method: 'POST' },
+  );
 }
 
-export async function fetchAgentStatus(id: string): Promise<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }> {
-  return request<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>(`/personas/${encodeURIComponent(id)}/status`);
+export async function fetchAgentStatus(
+  id: string,
+): Promise<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }> {
+  return request<{ running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>(
+    `/personas/${encodeURIComponent(id)}/status`,
+  );
 }
 
-export async function fetchAllPersonaStatuses(): Promise<Record<string, { running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>> {
-  return request<Record<string, { running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>>('/personas/statuses');
+export async function fetchAllPersonaStatuses(): Promise<
+  Record<string, { running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>
+> {
+  return request<
+    Record<string, { running: boolean; pendingMentionCount: number; activeMentionIds: string[] }>
+  >('/personas/statuses');
 }
 
 // ── Skills API ──
@@ -668,23 +907,40 @@ export async function fetchSkill(id: string): Promise<import('@fleex/shared').Sk
   return request<import('@fleex/shared').Skill>(`/skills/${encodeURIComponent(id)}`);
 }
 
-export async function createSkill(req: import('@fleex/shared').CreateSkillRequest): Promise<import('@fleex/shared').Skill> {
-  return request<import('@fleex/shared').Skill>('/skills', { method: 'POST', body: JSON.stringify(req) });
+export async function createSkill(
+  req: import('@fleex/shared').CreateSkillRequest,
+): Promise<import('@fleex/shared').Skill> {
+  return request<import('@fleex/shared').Skill>('/skills', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
 }
 
-export async function updateSkill(id: string, req: import('@fleex/shared').UpdateSkillRequest): Promise<import('@fleex/shared').Skill> {
-  return request<import('@fleex/shared').Skill>(`/skills/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+export async function updateSkill(
+  id: string,
+  req: import('@fleex/shared').UpdateSkillRequest,
+): Promise<import('@fleex/shared').Skill> {
+  return request<import('@fleex/shared').Skill>(`/skills/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  });
 }
 
 export async function deleteSkill(id: string): Promise<void> {
   await request<void>(`/skills/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export async function executeSkill(id: string, ticketId: string): Promise<{ status: string; skillId: string; ticketId: string }> {
-  return request<{ status: string; skillId: string; ticketId: string }>(`/skills/${encodeURIComponent(id)}/execute`, {
-    method: 'POST',
-    body: JSON.stringify({ ticketId }),
-  });
+export async function executeSkill(
+  id: string,
+  ticketId: string,
+): Promise<{ status: string; skillId: string; ticketId: string }> {
+  return request<{ status: string; skillId: string; ticketId: string }>(
+    `/skills/${encodeURIComponent(id)}/execute`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ ticketId }),
+    },
+  );
 }
 
 // ── Panels API ──
@@ -697,23 +953,41 @@ export async function fetchPanel(id: string): Promise<import('@fleex/shared').Pa
   return request<import('@fleex/shared').Panel>(`/panels/${encodeURIComponent(id)}`);
 }
 
-export async function createPanel(req: import('@fleex/shared').CreatePanelRequest): Promise<import('@fleex/shared').Panel> {
-  return request<import('@fleex/shared').Panel>('/panels', { method: 'POST', body: JSON.stringify(req) });
+export async function createPanel(
+  req: import('@fleex/shared').CreatePanelRequest,
+): Promise<import('@fleex/shared').Panel> {
+  return request<import('@fleex/shared').Panel>('/panels', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
 }
 
-export async function updatePanel(id: string, req: import('@fleex/shared').UpdatePanelRequest): Promise<import('@fleex/shared').Panel> {
-  return request<import('@fleex/shared').Panel>(`/panels/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(req) });
+export async function updatePanel(
+  id: string,
+  req: import('@fleex/shared').UpdatePanelRequest,
+): Promise<import('@fleex/shared').Panel> {
+  return request<import('@fleex/shared').Panel>(`/panels/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  });
 }
 
 export async function deletePanel(id: string): Promise<void> {
   await request<void>(`/panels/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export async function executePanel(id: string, ticketId: string, topic?: string): Promise<{ status: string; panelId: string; ticketId: string }> {
-  return request<{ status: string; panelId: string; ticketId: string }>(`/panels/${encodeURIComponent(id)}/execute`, {
-    method: 'POST',
-    body: JSON.stringify({ ticketId, topic }),
-  });
+export async function executePanel(
+  id: string,
+  ticketId: string,
+  topic?: string,
+): Promise<{ status: string; panelId: string; ticketId: string }> {
+  return request<{ status: string; panelId: string; ticketId: string }>(
+    `/panels/${encodeURIComponent(id)}/execute`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ ticketId, topic }),
+    },
+  );
 }
 
 // Claude Usage API
@@ -729,7 +1003,10 @@ export async function fetchClaudeUsage(force = false): Promise<ClaudeUsage | nul
 
 // ── Agent Events & Executions ──
 
-export async function fetchExecutionsForPersona(personaId: string, limit = 50): Promise<AgentExecution[]> {
+export async function fetchExecutionsForPersona(
+  personaId: string,
+  limit = 50,
+): Promise<AgentExecution[]> {
   return request<AgentExecution[]>(`/personas/${personaId}/executions?limit=${limit}`);
 }
 
@@ -759,18 +1036,22 @@ export async function fetchAllExecutions(params?: {
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.offset) qs.set('offset', String(params.offset));
   const query = qs.toString();
-  return request<import('@fleex/shared').ExecutionLogResponse>(`/executions${query ? `?${query}` : ''}`);
+  return request<import('@fleex/shared').ExecutionLogResponse>(
+    `/executions${query ? `?${query}` : ''}`,
+  );
 }
 
 // ── Domain Event Log (Audit Trail) ──
 
-export async function fetchEvents(params: {
-  limit?: number;
-  before?: string;
-  eventType?: string;
-  instanceId?: string;
-  since?: string;
-} = {}): Promise<DomainEventLog[]> {
+export async function fetchEvents(
+  params: {
+    limit?: number;
+    before?: string;
+    eventType?: string;
+    instanceId?: string;
+    since?: string;
+  } = {},
+): Promise<DomainEventLog[]> {
   const qs = new URLSearchParams();
   if (params.limit) qs.set('limit', String(params.limit));
   if (params.before) qs.set('before', params.before);
@@ -793,12 +1074,14 @@ export async function fetchDashboard(): Promise<DashboardData> {
   return request<DashboardData>('/dashboard');
 }
 
-export async function fetchStatistics(params: {
-  from?: string;
-  to?: string;
-  granularity?: 'day' | 'week' | 'month';
-  tzOffsetMinutes?: number;
-} = {}): Promise<StatisticsResponse> {
+export async function fetchStatistics(
+  params: {
+    from?: string;
+    to?: string;
+    granularity?: 'day' | 'week' | 'month';
+    tzOffsetMinutes?: number;
+  } = {},
+): Promise<StatisticsResponse> {
   const qs = new URLSearchParams();
   if (params.from) qs.set('from', params.from);
   if (params.to) qs.set('to', params.to);
@@ -854,7 +1137,10 @@ export async function createTicketGroup(req: CreateTicketGroupRequest): Promise<
   });
 }
 
-export async function updateTicketGroup(id: string, req: UpdateTicketGroupRequest): Promise<TicketGroup> {
+export async function updateTicketGroup(
+  id: string,
+  req: UpdateTicketGroupRequest,
+): Promise<TicketGroup> {
   return request<TicketGroup>(`/epics/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(req),
@@ -878,19 +1164,27 @@ export async function fetchTicketGroupTickets(groupId: string): Promise<Ticket[]
 }
 
 export async function addTicketToGroup(groupId: string, ticketId: string): Promise<void> {
-  await request(`/epics/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, { method: 'POST' });
+  await request(`/epics/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, {
+    method: 'POST',
+  });
 }
 
 export async function removeTicketFromGroup(groupId: string, ticketId: string): Promise<void> {
-  await request(`/epics/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, { method: 'DELETE' });
+  await request(`/epics/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function addBoardToTicketGroup(groupId: string, boardId: string): Promise<void> {
-  await request(`/epics/${encodeURIComponent(groupId)}/boards/${encodeURIComponent(boardId)}`, { method: 'POST' });
+  await request(`/epics/${encodeURIComponent(groupId)}/boards/${encodeURIComponent(boardId)}`, {
+    method: 'POST',
+  });
 }
 
 export async function removeBoardFromTicketGroup(groupId: string, boardId: string): Promise<void> {
-  await request(`/epics/${encodeURIComponent(groupId)}/boards/${encodeURIComponent(boardId)}`, { method: 'DELETE' });
+  await request(`/epics/${encodeURIComponent(groupId)}/boards/${encodeURIComponent(boardId)}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function fetchTicketGroups4Ticket(ticketId: string): Promise<TicketGroup[]> {
@@ -908,11 +1202,17 @@ export async function fetchTicketParents(ticketId: string): Promise<Ticket[]> {
 }
 
 export async function addTicketChild(parentId: string, childId: string): Promise<void> {
-  await request(`/tickets/${encodeURIComponent(parentId)}/children/${encodeURIComponent(childId)}`, { method: 'POST' });
+  await request(
+    `/tickets/${encodeURIComponent(parentId)}/children/${encodeURIComponent(childId)}`,
+    { method: 'POST' },
+  );
 }
 
 export async function removeTicketChild(parentId: string, childId: string): Promise<void> {
-  await request(`/tickets/${encodeURIComponent(parentId)}/children/${encodeURIComponent(childId)}`, { method: 'DELETE' });
+  await request(
+    `/tickets/${encodeURIComponent(parentId)}/children/${encodeURIComponent(childId)}`,
+    { method: 'DELETE' },
+  );
 }
 
 // ── Workflow Templates ──
@@ -950,8 +1250,12 @@ export async function fetchWorkflowRuns(ticketId: string): Promise<WorkflowRun[]
   return request<WorkflowRun[]>(`/workflows/runs?ticketId=${encodeURIComponent(ticketId)}`);
 }
 
-export async function fetchWorkflowRunDetail(runId: string): Promise<{ run: WorkflowRun; stepRuns: StepRun[] }> {
-  return request<{ run: WorkflowRun; stepRuns: StepRun[] }>(`/workflows/runs/${encodeURIComponent(runId)}`);
+export async function fetchWorkflowRunDetail(
+  runId: string,
+): Promise<{ run: WorkflowRun; stepRuns: StepRun[] }> {
+  return request<{ run: WorkflowRun; stepRuns: StepRun[] }>(
+    `/workflows/runs/${encodeURIComponent(runId)}`,
+  );
 }
 
 export async function startWorkflowRun(body: {
@@ -989,9 +1293,7 @@ export async function retryWorkflowStep(runId: string, stepRunId: string): Promi
 
 // ── Overlay sync ────────────────────────────────────────────────────────────
 
-export async function overlaySyncScan(
-  rootPath: string,
-): Promise<OverlaySyncScanResponse> {
+export async function overlaySyncScan(rootPath: string): Promise<OverlaySyncScanResponse> {
   return request<OverlaySyncScanResponse>('/overlay-sync/scan', {
     method: 'POST',
     body: JSON.stringify({ rootPath } satisfies OverlaySyncScanRequest),

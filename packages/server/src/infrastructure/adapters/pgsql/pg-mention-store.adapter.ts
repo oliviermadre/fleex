@@ -1,7 +1,9 @@
 import type { MentionStatus } from '@fleex/shared';
+
 import { TicketMentionEntity } from '../../../domain/entities/ticket-mention.entity.js';
-import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
+
 import type { PgConnection } from './connection.js';
+import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
 
 export class PgMentionStore implements MentionStorePort {
   constructor(private readonly db: PgConnection) {}
@@ -21,25 +23,21 @@ export class PgMentionStore implements MentionStorePort {
 
   async getByIds(ids: string[]): Promise<TicketMentionEntity[]> {
     if (ids.length === 0) return [];
-    const { rows } = await this.db.query(
-      'SELECT * FROM mentions WHERE id = ANY($1::text[])',
-      [ids],
-    );
+    const { rows } = await this.db.query('SELECT * FROM mentions WHERE id = ANY($1::text[])', [
+      ids,
+    ]);
     return rows.map(rowToMention);
   }
 
   async getAll(): Promise<TicketMentionEntity[]> {
-    const { rows } = await this.db.query(
-      'SELECT * FROM mentions ORDER BY created_at ASC',
-    );
+    const { rows } = await this.db.query('SELECT * FROM mentions ORDER BY created_at ASC');
     return rows.map(rowToMention);
   }
 
   async getByComment(commentId: string): Promise<TicketMentionEntity[]> {
-    const { rows } = await this.db.query(
-      'SELECT * FROM mentions WHERE comment_id = $1',
-      [commentId],
-    );
+    const { rows } = await this.db.query('SELECT * FROM mentions WHERE comment_id = $1', [
+      commentId,
+    ]);
     return rows.map(rowToMention);
   }
 

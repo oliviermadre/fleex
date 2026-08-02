@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+
 import type { StatisticsResponse } from '@fleex/shared';
+
 import * as api from '../services/api';
 
 export type Preset = 'today' | '7d' | '30d' | '90d' | '1y' | 'custom';
@@ -141,7 +143,12 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   setCustomRange: (from, to) => {
-    set({ preset: 'custom', customFrom: from, customTo: to, granularity: autoGranularity({ from, to }) });
+    set({
+      preset: 'custom',
+      customFrom: from,
+      customTo: to,
+      granularity: autoGranularity({ from, to }),
+    });
     get().fetch();
   },
 }));

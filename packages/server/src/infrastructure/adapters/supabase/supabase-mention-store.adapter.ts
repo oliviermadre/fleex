@@ -1,7 +1,9 @@
 import type { MentionStatus } from '@fleex/shared';
+
 import { TicketMentionEntity } from '../../../domain/entities/ticket-mention.entity.js';
-import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type { MentionStorePort } from '../../../application/ports/mention-store.port.js';
 
 interface MentionRow {
   id: string;
@@ -59,19 +61,13 @@ export class SupabaseMentionStore implements MentionStorePort {
 
   async getByIds(ids: string[]): Promise<TicketMentionEntity[]> {
     if (ids.length === 0) return [];
-    const { data, error } = await this.conn.client
-      .from('mentions')
-      .select('*')
-      .in('id', ids);
+    const { data, error } = await this.conn.client.from('mentions').select('*').in('id', ids);
     if (error) throw new Error(`SupabaseMentionStore.getByIds failed: ${error.message}`);
     return (data as MentionRow[]).map(rowToEntity);
   }
 
   async getAll(): Promise<TicketMentionEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('mentions')
-      .select('*')
-      .order('created_at');
+    const { data, error } = await this.conn.client.from('mentions').select('*').order('created_at');
     if (error) throw new Error(`SupabaseMentionStore.getAll failed: ${error.message}`);
     return (data as MentionRow[]).map(rowToEntity);
   }
@@ -106,7 +102,8 @@ export class SupabaseMentionStore implements MentionStorePort {
       .select('*', { count: 'exact', head: true })
       .eq('ticket_id', ticketId)
       .neq('status', 'resolved');
-    if (error) throw new Error(`SupabaseMentionStore.getPendingCountForTicket failed: ${error.message}`);
+    if (error)
+      throw new Error(`SupabaseMentionStore.getPendingCountForTicket failed: ${error.message}`);
     return count ?? 0;
   }
 
@@ -139,10 +136,7 @@ export class SupabaseMentionStore implements MentionStorePort {
   }
 
   async remove(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('mentions')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('mentions').delete().eq('id', id);
     if (error) throw new Error(`SupabaseMentionStore.remove failed: ${error.message}`);
   }
 }

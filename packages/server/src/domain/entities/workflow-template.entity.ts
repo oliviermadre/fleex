@@ -1,6 +1,4 @@
-import type {
-  WorkflowTemplate, WorkflowStep, WorkflowEdge,
-} from '@fleex/shared';
+import type { WorkflowTemplate, WorkflowStep, WorkflowEdge } from '@fleex/shared';
 
 const SLUG_PATTERN = /^[a-z0-9_-]+$/;
 
@@ -31,7 +29,10 @@ export class WorkflowTemplateEntity {
     enabled?: boolean;
   }): WorkflowTemplateEntity {
     WorkflowTemplateEntity.validate({
-      slug: params.slug, steps: params.steps, edges: params.edges, entryStepId: params.entryStepId,
+      slug: params.slug,
+      steps: params.steps,
+      edges: params.edges,
+      entryStepId: params.entryStepId,
     });
     const now = new Date();
     return new WorkflowTemplateEntity(
@@ -50,7 +51,10 @@ export class WorkflowTemplateEntity {
   }
 
   static validate(input: {
-    slug: string; steps: WorkflowStep[]; edges: WorkflowEdge[]; entryStepId: string;
+    slug: string;
+    steps: WorkflowStep[];
+    edges: WorkflowEdge[];
+    entryStepId: string;
   }): void {
     if (!SLUG_PATTERN.test(input.slug)) {
       throw new Error(`Invalid slug: must match ${SLUG_PATTERN}`);

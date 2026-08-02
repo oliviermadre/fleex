@@ -12,6 +12,7 @@
  * unit-testable under vitest/node.
  */
 import { readFile } from 'node:fs/promises';
+
 import { die } from './colors.ts';
 
 export const EXECUTION_MODES = ['claude_code', 'message'] as const;
@@ -171,7 +172,11 @@ export function applyMemberEdits(
         `"${add.ref}" is already a member of this panel. Use --set-member-model ${add.ref}:<model> to change its model.`,
       );
     }
-    members.push({ personaId: add.personaId, order: members.length, modelOverride: add.model ?? 'inherited' });
+    members.push({
+      personaId: add.personaId,
+      order: members.length,
+      modelOverride: add.model ?? 'inherited',
+    });
   }
 
   for (const rm of edits.rm) {
@@ -180,13 +185,17 @@ export function applyMemberEdits(
     members.splice(idx, 1);
   }
   if (members.length === 0) {
-    die('Cannot remove the last member — a panel needs at least one. Add a replacement with --add-member first.');
+    die(
+      'Cannot remove the last member — a panel needs at least one. Add a replacement with --add-member first.',
+    );
   }
 
   for (const sm of edits.setModel) {
     const m = members.find((x) => x.personaId === sm.personaId);
     if (!m) {
-      die(`"${sm.ref}" is not a member of this panel. Use --add-member ${sm.ref}:${sm.model} to add it.`);
+      die(
+        `"${sm.ref}" is not a member of this panel. Use --add-member ${sm.ref}:${sm.model} to add it.`,
+      );
     }
     m.modelOverride = sm.model;
   }

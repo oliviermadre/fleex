@@ -1,17 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import { StepRunEntity } from '../../domain/entities/step-run.entity.js';
-import { EdgeEvaluator } from '../services/edge-evaluator.js';
-import { WorkflowRunNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
-import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
-import type { StepRunStorePort } from '../ports/step-run-store.port.js';
-import type { OrchestratorPort } from '../ports/orchestrator.port.js';
-import type { StepExecutor, StepExecutionInput } from '../services/step-executors/types.js';
-import type { EventBus } from '../event-bus.js';
-import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
-import type { PostCommentUseCase } from './post-comment.js';
-import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
-import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
+
 import type { WorkflowExecutorType, StepOutput, WorkflowStep } from '@fleex/shared';
+
+import { StepRunEntity } from '../../domain/entities/step-run.entity.js';
+import { WorkflowRunNotFoundError, ExecutionCancelledError } from '../../domain/errors.js';
+import { EdgeEvaluator } from '../services/edge-evaluator.js';
+
+import type { EventBus } from '../event-bus.js';
+import type { PostCommentUseCase } from './post-comment.js';
+import type { SubmitDeliverableUseCase } from './submit-deliverable.js';
+import type { WorkflowRunEntity } from '../../domain/entities/workflow-run.entity.js';
+import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
+import type { OrchestratorPort } from '../ports/orchestrator.port.js';
+import type { StepRunStorePort } from '../ports/step-run-store.port.js';
+import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
+import type { StepExecutor, StepExecutionInput } from '../services/step-executors/types.js';
 
 export interface RunWorkflowStepDeps {
   runStore: WorkflowRunStorePort;
@@ -44,15 +47,24 @@ export class RunWorkflowStepUseCase {
     const attempt = (latest?.attempt ?? 0) + 1;
 
     // 2. Create the step_run entity (in-memory, no IO yet)
-    const stepRun = StepRunEntity.create({ id: randomUUID(), workflowRunId: run.id, stepId: step.id, attempt });
+    const stepRun = StepRunEntity.create({
+      id: randomUUID(),
+      workflowRunId: run.id,
+      stepId: step.id,
+      attempt,
+    });
 
     try {
       // 2b. Persist + emit step_started inside try so DB failures route to run.fail()
       stepRun.start();
       await this.deps.stepRunStore.save(stepRun);
       this.deps.eventBus.emit({
-        type: 'workflow.step_started', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, occurredAt: new Date(),
+        type: 'workflow.step_started',
+        workflowRunId: run.id,
+        stepRunId: stepRun.id,
+        stepId: step.id,
+        ticketId: run.ticketId,
+        occurredAt: new Date(),
       });
 
       // 3. Build workflow context (previousOutputs from prior step_runs)
@@ -70,16 +82,23 @@ export class RunWorkflowStepUseCase {
       const outgoingEdges = run.outgoingEdges(step.id).map((e) => {
         const target = run.findStep(e.target);
         return {
-          id: e.id, label: e.label, condition: e.condition,
+          id: e.id,
+          label: e.label,
+          condition: e.condition,
           targetName: target?.name ?? e.target,
         };
       });
 
       const input: StepExecutionInput = {
-        ticketId: run.ticketId, workflowRunId: run.id, stepRunId: stepRun.id, step,
+        ticketId: run.ticketId,
+        workflowRunId: run.id,
+        stepRunId: stepRun.id,
+        step,
         workflowContext: {
-          workflowName: run.templateSnapshot.name, stepName: step.name,
-          outgoingEdges, previousOutputs,
+          workflowName: run.templateSnapshot.name,
+          stepName: step.name,
+          outgoingEdges,
+          previousOutputs,
         },
         // Persist the live executionId the moment the agent starts, so the run /
         // step can be cancelled while still in flight (Terminate, cancel run,
@@ -104,8 +123,12 @@ export class RunWorkflowStepUseCase {
         await this.deps.stepRunStore.save(stepRun);
         await this.deps.runStore.save(run);
         this.deps.eventBus.emit({
-          type: 'workflow.needs_review', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-          ticketId: run.ticketId, occurredAt: new Date(),
+          type: 'workflow.needs_review',
+          workflowRunId: run.id,
+          stepRunId: stepRun.id,
+          stepId: step.id,
+          ticketId: run.ticketId,
+          occurredAt: new Date(),
         });
         return;
       }
@@ -117,8 +140,13 @@ export class RunWorkflowStepUseCase {
       stepRun.complete({ output: result.output, nextEdgeId: nextEdge?.id ?? null, executionId });
       await this.deps.stepRunStore.save(stepRun);
       this.deps.eventBus.emit({
-        type: 'workflow.step_completed', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, nextEdgeId: nextEdge?.id ?? null, occurredAt: new Date(),
+        type: 'workflow.step_completed',
+        workflowRunId: run.id,
+        stepRunId: stepRun.id,
+        stepId: step.id,
+        ticketId: run.ticketId,
+        nextEdgeId: nextEdge?.id ?? null,
+        occurredAt: new Date(),
       });
 
       // 7. Advance or complete
@@ -130,7 +158,10 @@ export class RunWorkflowStepUseCase {
         run.complete();
         await this.deps.runStore.save(run);
         this.deps.eventBus.emit({
-          type: 'workflow.run_completed', workflowRunId: run.id, ticketId: run.ticketId, occurredAt: new Date(),
+          type: 'workflow.run_completed',
+          workflowRunId: run.id,
+          ticketId: run.ticketId,
+          occurredAt: new Date(),
         });
       }
     } catch (err) {
@@ -148,8 +179,12 @@ export class RunWorkflowStepUseCase {
         // this, a Terminate on a step leaves the UI showing "running" until a
         // manual page refresh (the DB is `cancelled`, but nothing was pushed).
         this.deps.eventBus.emit({
-          type: 'workflow.step_cancelled', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-          ticketId: run.ticketId, occurredAt: new Date(),
+          type: 'workflow.step_cancelled',
+          workflowRunId: run.id,
+          stepRunId: stepRun.id,
+          stepId: step.id,
+          ticketId: run.ticketId,
+          occurredAt: new Date(),
         });
         return;
       }
@@ -158,8 +193,13 @@ export class RunWorkflowStepUseCase {
       await this.deps.stepRunStore.save(stepRun);
       await this.deps.runStore.save(run);
       this.deps.eventBus.emit({
-        type: 'workflow.run_failed', workflowRunId: run.id, stepRunId: stepRun.id, stepId: step.id,
-        ticketId: run.ticketId, error: err instanceof Error ? err.message : String(err), occurredAt: new Date(),
+        type: 'workflow.run_failed',
+        workflowRunId: run.id,
+        stepRunId: stepRun.id,
+        stepId: step.id,
+        ticketId: run.ticketId,
+        error: err instanceof Error ? err.message : String(err),
+        occurredAt: new Date(),
       });
     }
   }
@@ -232,7 +272,10 @@ export class RunWorkflowStepUseCase {
     // FK instead of pattern-matching on `agentName`. Deterministic executors
     // (e.g. human_gate) have no execution to stamp.
     if (executionId && (commentId || deliverableId)) {
-      await this.deps.agentEventStore.setExecutionOutputs(executionId, { commentId, deliverableId });
+      await this.deps.agentEventStore.setExecutionOutputs(executionId, {
+        commentId,
+        deliverableId,
+      });
     }
   }
 }

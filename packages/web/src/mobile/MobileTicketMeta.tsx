@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
+
 import { TICKET_PRIORITIES, TICKET_TYPES } from '@fleex/shared';
 import type { Ticket, TicketPriority, TicketType } from '@fleex/shared';
-import { useTicketStore } from '../stores/ticketStore';
+
 import { tint, tintText } from '../lib/tints';
+import { useTicketStore } from '../stores/ticketStore';
 
 /**
  * Bottom sheet for every ticket-level write the desktop meta sidebar offers:
@@ -14,7 +16,10 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
   const archiveTicket = useTicketStore((s) => s.archiveTicket);
   const deleteTicket = useTicketStore((s) => s.deleteTicket);
   const rawBoards = useTicketStore((s) => s.boards);
-  const boards = useMemo(() => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)), [rawBoards]);
+  const boards = useMemo(
+    () => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)),
+    [rawBoards],
+  );
 
   const [newTag, setNewTag] = useState('');
   const [confirm, setConfirm] = useState<'archive' | 'delete' | null>(null);
@@ -37,11 +42,15 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
       return;
     }
     setConfirm(null);
-    run().then(onClose).catch(() => {});
+    run()
+      .then(onClose)
+      .catch(() => {});
   };
 
-  const label = 'mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]';
-  const select = 'w-full appearance-none rounded-lg bg-[var(--theme-bg-secondary)] px-3 py-2.5 text-sm text-[var(--theme-text-primary)]';
+  const label =
+    'mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]';
+  const select =
+    'w-full appearance-none rounded-lg bg-[var(--theme-bg-secondary)] px-3 py-2.5 text-sm text-[var(--theme-text-primary)]';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={onClose}>
@@ -63,7 +72,9 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
               className={select}
             >
               {(TICKET_PRIORITIES as readonly TicketPriority[]).map((p) => (
-                <option key={p} value={p}>{p}</option>
+                <option key={p} value={p}>
+                  {p}
+                </option>
               ))}
             </select>
           </div>
@@ -76,7 +87,9 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
             >
               <option value="">—</option>
               {(TICKET_TYPES as readonly TicketType[]).map((t) => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>
+                  {t}
+                </option>
               ))}
             </select>
           </div>
@@ -100,7 +113,10 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
               className={select}
             >
               {boards.map((b) => (
-                <option key={b.id} value={b.id}>{b.emoji ? `${b.emoji} ` : ''}{b.name}</option>
+                <option key={b.id} value={b.id}>
+                  {b.emoji ? `${b.emoji} ` : ''}
+                  {b.name}
+                </option>
               ))}
             </select>
           </div>
@@ -176,7 +192,9 @@ export function MobileTicketMeta({ ticket, onClose }: { ticket: Ticket; onClose:
           <button
             onClick={() => confirmable('archive', () => archiveTicket(ticket.id))}
             className={`flex-1 rounded-lg border border-[var(--theme-border)] px-3 py-2.5 text-sm font-medium ${
-              confirm === 'archive' ? `${tintText('yellow')} bg-[var(--tint-yellow-bg)]` : 'text-[var(--theme-text-muted)]'
+              confirm === 'archive'
+                ? `${tintText('yellow')} bg-[var(--tint-yellow-bg)]`
+                : 'text-[var(--theme-text-muted)]'
             }`}
           >
             {confirm === 'archive' ? 'Confirmer l’archivage ?' : 'Archiver'}

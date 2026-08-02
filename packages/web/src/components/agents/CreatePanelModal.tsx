@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePanelStore } from '../../stores/panelStore';
+
 import { cn } from '../../lib/cn';
+import { usePanelStore } from '../../stores/panelStore';
 
 interface CreatePanelModalProps {
   open: boolean;
@@ -57,7 +58,10 @@ export function CreatePanelModal({ open, onClose }: CreatePanelModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-md rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -78,7 +82,11 @@ export function CreatePanelModal({ open, onClose }: CreatePanelModalProps) {
               autoFocus
             />
             <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
-              Used in <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">@panel:{name || 'name'}</code> mentions
+              Used in{' '}
+              <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+                @panel:{name || 'name'}
+              </code>{' '}
+              mentions
             </p>
           </div>
 
@@ -109,9 +117,7 @@ export function CreatePanelModal({ open, onClose }: CreatePanelModalProps) {
           </div>
         </div>
 
-        {error && (
-          <p className="mt-3 text-xs text-[var(--theme-danger)]">{error}</p>
-        )}
+        {error && <p className="mt-3 text-xs text-[var(--theme-danger)]">{error}</p>}
 
         <div className="mt-5 flex justify-end gap-2">
           <button

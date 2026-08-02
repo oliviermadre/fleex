@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GetSessionGroupsUseCase } from '../../src/application/use-cases/get-session-groups.js';
-import { SessionGroupingService } from '../../src/domain/services/session-grouping.js';
-import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+
 import type { SessionGroup, Session } from '@fleex/shared';
-import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
+
+import { GetSessionGroupsUseCase } from '../../src/application/use-cases/get-session-groups.js';
+import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
+import { SessionGroupingService } from '../../src/domain/services/session-grouping.js';
+
 import type { PersonaStorePort } from '../../src/application/ports/persona-store.port.js';
+import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
 
 /**
  * Regression test for the sidebar bug where Manual Flow tickets (worktrees with
@@ -80,9 +83,11 @@ describe('GetSessionGroupsUseCase.injectAgentWorktreeInfo', () => {
     ];
 
     const useCase = buildUseCase(ticket);
-    await (useCase as unknown as {
-      injectAgentWorktreeInfo: (g: SessionGroup[]) => Promise<void>;
-    }).injectAgentWorktreeInfo(groups);
+    await (
+      useCase as unknown as {
+        injectAgentWorktreeInfo: (g: SessionGroup[]) => Promise<void>;
+      }
+    ).injectAgentWorktreeInfo(groups);
 
     const wt = groups[0]!.worktrees[0]!;
     expect(wt.agentWorktree).toBeDefined();

@@ -6,8 +6,15 @@
  * the same introspection `fleex documentation` performs — reusing the live
  * command tree means new CLI commands become tools with zero extra wiring.
  */
+import type {
+  ArgSpec,
+  GeneratedTool,
+  GenerateOptions,
+  JsonSchema,
+  JsonSchemaProp,
+  OptSpec,
+} from './types.ts';
 import type { Command, Option, Argument } from 'commander';
-import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaProp, OptSpec } from './types.ts';
 
 /** Top-level groups exposed by default. Infra commands stay off the surface. */
 export const DEFAULT_INCLUDE = ['ticket', 'epic'] as const;
@@ -17,8 +24,21 @@ export const DEFAULT_INCLUDE = ['ticket', 'epic'] as const;
  * user to confirm) since the assistant ingests untrusted page content.
  */
 const MUTATING_LEAVES = new Set([
-  'create', 'new', 'update', 'move', 'delete', 'rm', 'remove',
-  'add', 'link', 'unlink', 'import', 'comment', 'edit', 'archive', 'unarchive',
+  'create',
+  'new',
+  'update',
+  'move',
+  'delete',
+  'rm',
+  'remove',
+  'add',
+  'link',
+  'unlink',
+  'import',
+  'comment',
+  'edit',
+  'archive',
+  'unarchive',
 ]);
 
 /** Options we never expose as tool params (handled specially or noise). */
@@ -67,7 +87,9 @@ function readOptions(cmd: Command): OptSpec[] {
     // Commander marks `<v...>` as variadic, but the common repeatable pattern
     // `.option('--tag <t>', desc, collectFn, [])` is not — its only signal is an
     // array default. Treat either as array-valued.
-    const variadic = Boolean(o.variadic) || Array.isArray((o as unknown as { defaultValue?: unknown }).defaultValue);
+    const variadic =
+      Boolean(o.variadic) ||
+      Array.isArray((o as unknown as { defaultValue?: unknown }).defaultValue);
     specs.push({ key: o.attributeName(), flag, takesValue, variadic });
   }
   return specs;
@@ -95,7 +117,11 @@ function buildSchema(cmd: Command, args: ArgSpec[], options: OptSpec[]): JsonSch
     if (!spec.takesValue) {
       properties[spec.key] = { type: 'boolean', ...(desc ? { description: desc } : {}) };
     } else if (spec.variadic) {
-      properties[spec.key] = { type: 'array', items: { type: 'string' }, ...(desc ? { description: desc } : {}) };
+      properties[spec.key] = {
+        type: 'array',
+        items: { type: 'string' },
+        ...(desc ? { description: desc } : {}),
+      };
     } else {
       properties[spec.key] = { type: 'string', ...(desc ? { description: desc } : {}) };
     }

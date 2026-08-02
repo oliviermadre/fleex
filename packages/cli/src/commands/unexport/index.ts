@@ -1,7 +1,8 @@
-import type { Command } from 'commander';
-import chalk from 'chalk';
 import { unlink, mkdir, writeFile, readdir, rmdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
+
+import chalk from 'chalk';
+
 import type {
   MarketplaceManifest,
   MarketplacePrimitiveEntry,
@@ -9,11 +10,20 @@ import type {
   PrimitiveRef,
 } from '@fleex/shared';
 import { MARKETPLACE_SCHEMA_VERSION } from '@fleex/shared';
-import type { CommandDef } from '../../core/types.ts';
+
 import { c, info, ok, warn, die } from '../../core/colors.ts';
-import { canPrompt, closePrompts, promptYesNo, promptMultiSelect, promptText } from '../../core/prompt.ts';
-import { loadManifest } from '../../core/registry.ts';
 import { computeRemovalClosure, refKey, DIR_BY_KIND } from '../../core/marketplace.ts';
+import {
+  canPrompt,
+  closePrompts,
+  promptYesNo,
+  promptMultiSelect,
+  promptText,
+} from '../../core/prompt.ts';
+import { loadManifest } from '../../core/registry.ts';
+
+import type { CommandDef } from '../../core/types.ts';
+import type { Command } from 'commander';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;
@@ -39,10 +49,14 @@ function parseRef(token: string): PrimitiveRef | null {
 
 const def: CommandDef = {
   name: 'unexport',
-  description: 'Remove primitives from a marketplace repo, keeping the manifest referentially consistent',
+  description:
+    'Remove primitives from a marketplace repo, keeping the manifest referentially consistent',
   setup(cmd: Command) {
     cmd.option('--out <dir>', 'target marketplace directory (its git working copy)');
-    cmd.option('--primitive <kind:slug...>', 'primitives to remove (e.g. persona:jarvis skill:search)');
+    cmd.option(
+      '--primitive <kind:slug...>',
+      'primitives to remove (e.g. persona:jarvis skill:search)',
+    );
     cmd.option('--cascade', 'also remove every primitive that depends on the targets');
     cmd.option('-y, --yes', 'skip confirmation prompts');
   },
@@ -72,7 +86,9 @@ ${SECTION('Examples:')}
       try {
         manifest = loadManifest(outDir);
       } catch (e) {
-        die(`Not a marketplace at ${c.cyan(outDir)}: ${e instanceof Error ? e.message : String(e)}`);
+        die(
+          `Not a marketplace at ${c.cyan(outDir)}: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
 
       // ── Resolve targets: --primitive flags, or interactive multi-select ──
@@ -111,7 +127,8 @@ ${SECTION('Examples:')}
       // ── Compute removal closure (targets + transitive dependents) ──
       const { toRemove, dependents } = computeRemovalClosure(manifest.primitives, targets);
 
-      const fmt = (e: MarketplacePrimitiveEntry) => `${c.cyan(`${e.kind}:${e.slug}`)} ${c.dim(e.displayName)}`;
+      const fmt = (e: MarketplacePrimitiveEntry) =>
+        `${c.cyan(`${e.kind}:${e.slug}`)} ${c.dim(e.displayName)}`;
 
       if (dependents.length > 0) {
         warn(`${dependents.length} other primitive(s) depend on what you're removing:`);
@@ -125,7 +142,9 @@ ${SECTION('Examples:')}
             return;
           }
         } else {
-          die('Refusing to leave dangling dependencies. Re-run with --cascade to remove the dependents.');
+          die(
+            'Refusing to leave dangling dependencies. Re-run with --cascade to remove the dependents.',
+          );
         }
       }
 

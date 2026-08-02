@@ -1,18 +1,28 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { TicketMention, MentionStatus, MentionExecutionMode, AgentExecution, TicketWsMessage, MentionExecutionFailedPayload } from '@fleex/shared';
-import { appWs } from '../../services/websocket';
-import { tint, tintText, tintClasses } from '../../lib/tints';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { useAgentEventStore } from '../../stores/agentEventStore';
-import { useToastStore } from '../../stores/toastStore';
-import { FloatingExecutionPanel } from './ExecutionModal';
+
+import type {
+  TicketMention,
+  MentionStatus,
+  MentionExecutionMode,
+  AgentExecution,
+  TicketWsMessage,
+  MentionExecutionFailedPayload,
+} from '@fleex/shared';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
-import { useTicketStore } from '../../stores/ticketStore';
 import { isMissingRepo } from '../../lib/repoStatus';
-import { Modal } from '../ui/Modal';
-import { Button } from '../ui/Button';
+import { tint, tintText, tintClasses } from '../../lib/tints';
 import * as api from '../../services/api';
+import { appWs } from '../../services/websocket';
+import { useAgentEventStore } from '../../stores/agentEventStore';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useToastStore } from '../../stores/toastStore';
+import { Button } from '../ui/Button';
+import { Modal } from '../ui/Modal';
+
+import { FloatingExecutionPanel } from './ExecutionModal';
 
 function relativeTime(dateStr: string): string {
   const now = Date.now();
@@ -27,7 +37,10 @@ function relativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
-const STATUS_CONFIG: Record<MentionStatus, { label: string; color: string; bg: string; dot: string }> = {
+const STATUS_CONFIG: Record<
+  MentionStatus,
+  { label: string; color: string; bg: string; dot: string }
+> = {
   pending: {
     label: 'Pending',
     color: tintText('yellow'),
@@ -60,7 +73,13 @@ const STATUS_CONFIG: Record<MentionStatus, { label: string; color: string; bg: s
   },
 };
 
-const STATUS_ORDER: MentionStatus[] = ['pending', 'acknowledged', 'waiting_for_info', 'failed', 'resolved'];
+const STATUS_ORDER: MentionStatus[] = [
+  'pending',
+  'acknowledged',
+  'waiting_for_info',
+  'failed',
+  'resolved',
+];
 
 type FilterStatus = MentionStatus | 'all';
 
@@ -87,7 +106,13 @@ function StatusDropdown({
       >
         <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
         {cfg.label}
-        <svg className="ml-0.5 h-2.5 w-2.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg
+          className="ml-0.5 h-2.5 w-2.5 opacity-60"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
@@ -141,7 +166,9 @@ function MentionModeToggle({
 }) {
   const modes: MentionExecutionMode[] = ['talk', 'plan', 'edit'];
   return (
-    <div className={`inline-flex items-center overflow-hidden rounded-full border border-[var(--theme-border)] ${disabled ? 'opacity-50' : ''}`}>
+    <div
+      className={`inline-flex items-center overflow-hidden rounded-full border border-[var(--theme-border)] ${disabled ? 'opacity-50' : ''}`}
+    >
       {modes.map((m) => {
         const cfg = MODE_CONFIG[m];
         return (
@@ -149,7 +176,9 @@ function MentionModeToggle({
             key={m}
             disabled={disabled}
             className={`px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
-              mode === m ? `${cfg.bg} ${cfg.color}` : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]'
+              mode === m
+                ? `${cfg.bg} ${cfg.color}`
+                : 'text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]'
             } ${disabled ? 'cursor-default' : ''}`}
             onClick={() => !disabled && onChange(m)}
             title={`${cfg.label} mode`}
@@ -171,7 +200,8 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
   // Mention held by the guard until the user confirms running with no codebase.
   const [repoGuardMention, setRepoGuardMention] = useState<TicketMention | null>(null);
   const humanMentionName = useSettingsStore(
-    (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
+    (s) =>
+      (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
   );
 
   /** Show the configured human name instead of "user" */
@@ -179,7 +209,10 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     name === 'user' && humanMentionName ? humanMentionName : name;
 
   useEffect(() => {
-    api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
+    api
+      .fetchTicketMentions(ticketId)
+      .then(setMentions)
+      .catch(() => {});
   }, [ticketId]);
 
   // Per-mention startup failures (server emitted mention:execution_failed
@@ -253,7 +286,9 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
   // Execution lookup: match mentions to their executions
   const executionsByTicket = useAgentEventStore((s) => s.executionsByTicket);
   const loadExecutionsForTicket = useAgentEventStore((s) => s.loadExecutionsForTicket);
-  useEffect(() => { loadExecutionsForTicket(ticketId); }, [ticketId, loadExecutionsForTicket]);
+  useEffect(() => {
+    loadExecutionsForTicket(ticketId);
+  }, [ticketId, loadExecutionsForTicket]);
 
   const executionByMention = useMemo(() => {
     const execs = executionsByTicket[ticketId] ?? [];
@@ -268,12 +303,15 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     return map;
   }, [executionsByTicket, ticketId]);
 
-  const openExecution = useCallback((mention: TicketMention) => {
-    const exec = executionByMention.get(mention.id);
-    if (!exec) return;
-    setModalTitle(`${mention.targetAgent} execution`);
-    setModalExecutionId(exec.id);
-  }, [executionByMention]);
+  const openExecution = useCallback(
+    (mention: TicketMention) => {
+      const exec = executionByMention.get(mention.id);
+      if (!exec) return;
+      setModalTitle(`${mention.targetAgent} execution`);
+      setModalExecutionId(exec.id);
+    },
+    [executionByMention],
+  );
 
   const runMentionNow = useCallback(async (mention: TicketMention) => {
     const agentName = mention.targetAgent;
@@ -303,15 +341,18 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
     }
   }, []);
 
-  const handleExecute = useCallback(async (mention: TicketMention) => {
-    // Missing-repo guard-rail: running a mention builds a worktree to work in.
-    // With no repository linked, the run has no codebase — hold and confirm.
-    if (ticket && isMissingRepo(ticket)) {
-      setRepoGuardMention(mention);
-      return;
-    }
-    await runMentionNow(mention);
-  }, [ticket, runMentionNow]);
+  const handleExecute = useCallback(
+    async (mention: TicketMention) => {
+      // Missing-repo guard-rail: running a mention builds a worktree to work in.
+      // With no repository linked, the run has no codebase — hold and confirm.
+      if (ticket && isMissingRepo(ticket)) {
+        setRepoGuardMention(mention);
+        return;
+      }
+      await runMentionNow(mention);
+    },
+    [ticket, runMentionNow],
+  );
 
   const confirmRepoGuardAndRun = useCallback(async () => {
     const mention = repoGuardMention;
@@ -352,7 +393,8 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
         <div className="mb-2 text-2xl opacity-30">@</div>
         <p className="text-sm text-[var(--theme-text-muted)]">No mentions yet</p>
         <p className="mt-1 text-xs text-[var(--theme-text-faint)]">
-          Use <span className="font-mono text-[var(--theme-accent)]">@agent:name</span> in comments to create mentions
+          Use <span className="font-mono text-[var(--theme-accent)]">@agent:name</span> in comments
+          to create mentions
         </p>
       </div>
     );
@@ -427,17 +469,31 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                   </span>
 
                   {/* Arrow */}
-                  <svg className="h-3 w-3 flex-shrink-0 text-[var(--theme-text-faint)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  <svg
+                    className="h-3 w-3 flex-shrink-0 text-[var(--theme-text-faint)]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
                   </svg>
 
                   {/* Target agent */}
-                  <span className={`text-xs font-medium ${m.targetType === 'human' ? tintText('yellow') : tintText('purple')}`}>
+                  <span
+                    className={`text-xs font-medium ${m.targetType === 'human' ? tintText('yellow') : tintText('purple')}`}
+                  >
                     {m.targetType === 'human' ? `@${m.targetAgent}` : m.targetAgent}
                   </span>
 
                   {m.targetType === 'human' && (
-                    <span className={`rounded-full px-1.5 py-px text-[9px] font-medium ${tint('yellow')}`}>
+                    <span
+                      className={`rounded-full px-1.5 py-px text-[9px] font-medium ${tint('yellow')}`}
+                    >
                       human
                     </span>
                   )}
@@ -456,29 +512,41 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                       onClick={() => openExecution(m)}
                       title="View execution"
                     >
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      <svg
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        />
                       </svg>
                     </button>
                   )}
 
                   {/* Play button — only for non-resolved agent mentions */}
-                  {m.targetType === 'agent' && m.status !== 'resolved' && personaByName.has(m.targetAgent) && (
-                    <button
-                      className={`rounded p-0.5 transition-all ${
-                        executing.has(m.targetAgent)
-                          ? `animate-pulse ${tintText('green')}`
-                          : `text-[var(--theme-text-faint)] opacity-0 group-hover:opacity-100 ${tintClasses('green').hoverBg} ${tintClasses('green').hoverText}`
-                      }`}
-                      onClick={() => handleExecute(m)}
-                      disabled={executing.has(m.targetAgent)}
-                      title={`Execute ${m.targetAgent}`}
-                    >
-                      <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </button>
-                  )}
+                  {m.targetType === 'agent' &&
+                    m.status !== 'resolved' &&
+                    personaByName.has(m.targetAgent) && (
+                      <button
+                        className={`rounded p-0.5 transition-all ${
+                          executing.has(m.targetAgent)
+                            ? `animate-pulse ${tintText('green')}`
+                            : `text-[var(--theme-text-faint)] opacity-0 group-hover:opacity-100 ${tintClasses('green').hoverBg} ${tintClasses('green').hoverText}`
+                        }`}
+                        onClick={() => handleExecute(m)}
+                        disabled={executing.has(m.targetAgent)}
+                        title={`Execute ${m.targetAgent}`}
+                      >
+                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </button>
+                    )}
 
                   {/* Delete button (visible on hover) */}
                   <button
@@ -486,8 +554,18 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                     onClick={() => handleDelete(m.id)}
                     title="Delete mention"
                   >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    <svg
+                      className="h-3.5 w-3.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
                     </svg>
                   </button>
 
@@ -504,7 +582,9 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
                       className={`inline-flex max-w-[220px] items-center gap-1 truncate rounded-full px-2 py-0.5 text-[10px] font-medium ${tint('red')}`}
                       title={failures[m.id]!.message}
                     >
-                      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${tintClasses('red').solid}`} />
+                      <span
+                        className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${tintClasses('red').solid}`}
+                      />
                       <span className="truncate">Failed to start</span>
                     </span>
                   )}
@@ -555,9 +635,9 @@ export function TicketMentions({ ticketId }: { ticketId: string }) {
           </h3>
           <p className="mt-2 text-xs leading-relaxed text-[var(--theme-text-secondary)]">
             Exécuter <strong>{repoGuardMention.targetAgent}</strong> démarrera une run{' '}
-            <strong>sans codebase</strong> (pas de worktree) — elle ne pourra pas modifier de
-            code. Lie un repo (via la bannière en haut du ticket) ou exécute quand même si
-            c'est volontaire.
+            <strong>sans codebase</strong> (pas de worktree) — elle ne pourra pas modifier de code.
+            Lie un repo (via la bannière en haut du ticket) ou exécute quand même si c'est
+            volontaire.
           </p>
           <div className="mt-4 flex flex-col gap-2">
             <Button variant="secondary" onClick={() => void confirmRepoGuardAndRun()}>

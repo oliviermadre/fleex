@@ -56,7 +56,10 @@ export class WebSocketManager {
     }, 5000);
 
     ws.onopen = () => {
-      if (this.connectTimeout) { clearTimeout(this.connectTimeout); this.connectTimeout = null; }
+      if (this.connectTimeout) {
+        clearTimeout(this.connectTimeout);
+        this.connectTimeout = null;
+      }
       this.reconnectAttempts = 0;
       this.lastMessageAt = Date.now();
       this.flushQueues();
@@ -113,10 +116,9 @@ export class WebSocketManager {
 
   private scheduleReconnect(): void {
     if (!this.url) return;
-    const delay = Math.min(
-      WS_RECONNECT_INITIAL_MS * Math.pow(2, this.reconnectAttempts),
-      WS_RECONNECT_MAX_MS
-    ) + Math.floor(Math.random() * 1000);
+    const delay =
+      Math.min(WS_RECONNECT_INITIAL_MS * Math.pow(2, this.reconnectAttempts), WS_RECONNECT_MAX_MS) +
+      Math.floor(Math.random() * 1000);
     this.reconnectAttempts++;
     this.reconnectTimer = setTimeout(() => this.doConnect(), delay);
   }

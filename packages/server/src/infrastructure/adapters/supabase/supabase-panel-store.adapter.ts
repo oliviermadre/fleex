@@ -1,7 +1,9 @@
-import { PanelEntity } from '../../../domain/entities/panel.entity.js';
-import type { PanelStorePort } from '../../../application/ports/panel-store.port.js';
-import type { SupabaseConnection } from './connection.js';
 import type { PanelMember } from '@fleex/shared';
+
+import { PanelEntity } from '../../../domain/entities/panel.entity.js';
+
+import type { SupabaseConnection } from './connection.js';
+import type { PanelStorePort } from '../../../application/ports/panel-store.port.js';
 
 interface PanelRow {
   id: string;
@@ -48,10 +50,7 @@ export class SupabasePanelStore implements PanelStorePort {
   constructor(private readonly conn: SupabaseConnection) {}
 
   async getAll(): Promise<PanelEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('panels')
-      .select('*')
-      .order('name');
+    const { data, error } = await this.conn.client.from('panels').select('*').order('name');
     if (error) throw new Error(`SupabasePanelStore.getAll failed: ${error.message}`);
     return (data as PanelRow[]).map(rowToEntity);
   }
@@ -106,10 +105,7 @@ export class SupabasePanelStore implements PanelStorePort {
   }
 
   async remove(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('panels')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('panels').delete().eq('id', id);
     if (error) throw new Error(`SupabasePanelStore.remove failed: ${error.message}`);
   }
 }

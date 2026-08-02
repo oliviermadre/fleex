@@ -1,15 +1,25 @@
 import { describe, it, expect, vi } from 'vitest';
+
 import { migrateRepositoryPatterns } from '../../src/domain/services/repository-pattern-migration.js';
+
 import type { AppConfig, ConfigPort } from '../../src/application/ports/config.port.js';
 
 function fakeConfig(initial: Partial<AppConfig>): ConfigPort & { updates: Partial<AppConfig>[] } {
-  let data: AppConfig = { basePath: '/tmp', defaultShell: '/bin/zsh', repositoryRefreshIntervalMs: 0, ...initial };
+  let data: AppConfig = {
+    basePath: '/tmp',
+    defaultShell: '/bin/zsh',
+    repositoryRefreshIntervalMs: 0,
+    ...initial,
+  };
   const updates: Partial<AppConfig>[] = [];
   return {
     updates,
     init: async () => {},
     get: () => ({ ...data }),
-    update: async (partial) => { updates.push(partial); data = { ...data, ...partial }; },
+    update: async (partial) => {
+      updates.push(partial);
+      data = { ...data, ...partial };
+    },
     getClaudeCommand: () => 'claude',
   };
 }

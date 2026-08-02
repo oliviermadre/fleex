@@ -11,9 +11,7 @@
  * `applyMemberEdits`), and the full `members[]` array is sent in the PATCH.
  */
 import chalk from 'chalk';
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, warn, present, isJsonMode } from '../../../core/colors.ts';
-import { apiBase, apiPatch } from '../../../core/api.ts';
+
 import {
   fetchPanels,
   fetchPersonas,
@@ -24,6 +22,8 @@ import {
   type Panel,
   type Persona,
 } from '../../../core/agentic.ts';
+import { apiBase, apiPatch } from '../../../core/api.ts';
+import { ok, die, warn, present, isJsonMode } from '../../../core/colors.ts';
 import {
   accumulate,
   applyMemberEdits,
@@ -39,6 +39,8 @@ import {
   type MemberSetModel,
   type PanelMemberLike,
 } from '../../../core/update-helpers.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;
@@ -69,12 +71,18 @@ const def: CommandDef = {
     'Update a panel. PATCH semantics: ONLY the fields whose flags you pass are changed. Member edits are incremental (--add-member/--rm-member/--set-member-model) — you never resend the full member list except with --member-order.',
   setup(cmd) {
     cmd.argument('<panel>', `Panel to update: exact name or UUID, as shown by 'fleex panel list'`);
-    cmd.option('--display-name <text>', 'Set the display name (human-facing label shown in the UI)');
+    cmd.option(
+      '--display-name <text>',
+      'Set the display name (human-facing label shown in the UI)',
+    );
     cmd.option(
       '--name <name>',
       `Rename the panel's machine name. Existing references to the old name are NOT rewritten — a warning is printed.`,
     );
-    cmd.option('--description <text>', 'Set the panel description. Pass "" (empty string) to clear it.');
+    cmd.option(
+      '--description <text>',
+      'Set the panel description. Pass "" (empty string) to clear it.',
+    );
     cmd.option(
       '--execution-mode <mode>',
       'Set the execution mode. Allowed values: claude_code | message. Any other value fails before any API call.',
@@ -123,7 +131,10 @@ const def: CommandDef = {
     );
     cmd.option('--enable', 'Enable the panel. Mutually exclusive with --disable.');
     cmd.option('--disable', 'Disable the panel. Mutually exclusive with --enable.');
-    cmd.option('--dry-run', 'Print the exact PATCH payload as JSON and exit WITHOUT writing anything.');
+    cmd.option(
+      '--dry-run',
+      'Print the exact PATCH payload as JSON and exit WITHOUT writing anything.',
+    );
   },
   extraHelp: `\n${SECTION('Examples:')}
   ${DIM('$')} fleex panel update design-crew --add-member catalyst:claude-opus-4-6
@@ -138,7 +149,11 @@ ${SECTION('Notes:')}
 `,
   action: async (arg: string, opts: UpdateOptions) => {
     if (opts.executionMode !== undefined) assertValidExecutionMode(opts.executionMode);
-    assertInlineFileExclusive('orchestrator-prompt', opts.orchestratorPrompt, opts.orchestratorPromptFile);
+    assertInlineFileExclusive(
+      'orchestrator-prompt',
+      opts.orchestratorPrompt,
+      opts.orchestratorPromptFile,
+    );
     const enabled = resolveEnabledFlags(opts.enable, opts.disable);
 
     const addMembers = opts.addMember ?? [];
@@ -171,12 +186,14 @@ ${SECTION('Notes:')}
 
     // Resolve persona refs (members + orchestrator) client-side.
     const needPersonas =
-      hasMemberOps || (opts.orchestratorPersona !== undefined && opts.orchestratorPersona !== 'none');
+      hasMemberOps ||
+      (opts.orchestratorPersona !== undefined && opts.orchestratorPersona !== 'none');
     let personas: Persona[] = [];
     if (needPersonas) personas = await fetchPersonas();
     const resolvePersona = (ref: string): Persona => {
       const persona = resolveFromList(ref, personas, personaHandleName, (x) => x.displayName);
-      if (!persona) die(`Persona "${ref}" not found. Run 'fleex agent list' to see available personas.`);
+      if (!persona)
+        die(`Persona "${ref}" not found. Run 'fleex agent list' to see available personas.`);
       return persona;
     };
 
@@ -187,7 +204,10 @@ ${SECTION('Notes:')}
           ? null
           : resolvePersona(opts.orchestratorPersona).id;
 
-    const orchestratorPrompt = await readTextInput(opts.orchestratorPrompt, opts.orchestratorPromptFile);
+    const orchestratorPrompt = await readTextInput(
+      opts.orchestratorPrompt,
+      opts.orchestratorPromptFile,
+    );
 
     const body: Record<string, unknown> = {};
     if (opts.displayName !== undefined) body.displayName = opts.displayName;

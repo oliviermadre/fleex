@@ -30,8 +30,12 @@ export interface HubEventMessage {
   payload: Record<string, unknown>;
 }
 
-export interface HubPingMessage { kind: 'ping' }
-export interface HubPongMessage { kind: 'pong' }
+export interface HubPingMessage {
+  kind: 'ping';
+}
+export interface HubPongMessage {
+  kind: 'pong';
+}
 
 export type HubMessage = HubHelloMessage | HubEventMessage | HubPingMessage | HubPongMessage;
 

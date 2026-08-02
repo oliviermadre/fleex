@@ -1,10 +1,11 @@
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import fs from 'node:fs';
-import { spawnSync } from 'node:child_process';
+
 import { die, isJsonMode, c } from './colors.ts';
-import { defaultWorkspaceName } from './workspaces.ts';
 import { getSelectedWorkspace, type WorkspaceSource } from './workspace-selection.ts';
+import { defaultWorkspaceName } from './workspaces.ts';
 
 export const FLEEX_HOME = process.env.FLEEX_HOME ?? path.join(os.homedir(), '.fleex');
 export const DEFAULT_REPO_DIR = path.join(FLEEX_HOME, 'repo');
@@ -184,7 +185,10 @@ export function metaFile(ctx: InstanceContext = resolveInstance()): string {
 }
 
 /** Write the instance metadata. Best-effort: never throws. */
-export function writeInstanceMeta(meta: InstanceMeta, ctx: InstanceContext = resolveInstance()): void {
+export function writeInstanceMeta(
+  meta: InstanceMeta,
+  ctx: InstanceContext = resolveInstance(),
+): void {
   try {
     fs.writeFileSync(metaFile(ctx), JSON.stringify(meta));
   } catch {

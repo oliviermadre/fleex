@@ -1,8 +1,10 @@
 import type { Ticket, TicketType } from '@fleex/shared';
 import { TICKET_TYPE_LABELS } from '@fleex/shared';
-import { useTicketStore } from '../../stores/ticketStore';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
+import { useTicketStore } from '../../stores/ticketStore';
+
 import { TYPE_COLORS } from './TicketTypeBadge';
 
 const TYPES: (TicketType | null)[] = ['build', 'fix', 'review', 'ops', 'lead', 'think', null];
@@ -47,9 +49,7 @@ export function TypePickerPopover({ ticket }: { ticket: Ticket }) {
                 key={t ?? '__none'}
                 className={cn(
                   'flex w-full flex-col gap-0.5 px-3 py-1.5 text-left transition-colors hover:bg-[var(--theme-bg-hover)]',
-                  t === ticket.type
-                    ? 'bg-[var(--theme-bg-hover)]'
-                    : '',
+                  t === ticket.type ? 'bg-[var(--theme-bg-hover)]' : '',
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -57,7 +57,12 @@ export function TypePickerPopover({ ticket }: { ticket: Ticket }) {
                   setOpen(false);
                 }}
               >
-                <span className={cn('text-xs font-medium', t ? TYPE_COLORS[t] : 'text-[var(--theme-text-secondary)]')}>
+                <span
+                  className={cn(
+                    'text-xs font-medium',
+                    t ? TYPE_COLORS[t] : 'text-[var(--theme-text-secondary)]',
+                  )}
+                >
                   {t ? TICKET_TYPE_LABELS[t] : 'Task'}
                 </span>
                 <span className="text-[10px] text-[var(--theme-text-faint)]">

@@ -1,8 +1,10 @@
 import { join, normalize, resolve } from 'node:path';
-import type { FastifyInstance } from 'fastify';
-import type { Container } from '../container.js';
+
 import type { ClaudeConfigTreeEntry } from '@fleex/shared';
+
+import type { Container } from '../container.js';
 import type { HostFs } from '../host/types.js';
+import type { FastifyInstance } from 'fastify';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
@@ -20,7 +22,11 @@ function validatePath(relativePath: string, homedir: string): string | null {
   if (relativePath.includes('..')) return null;
 
   // Must start with .claude/ or be exactly .claude.json
-  if (!relativePath.startsWith('.claude/') && relativePath !== '.claude' && relativePath !== '.claude.json') {
+  if (
+    !relativePath.startsWith('.claude/') &&
+    relativePath !== '.claude' &&
+    relativePath !== '.claude.json'
+  ) {
     return null;
   }
 
@@ -129,71 +135,80 @@ export function claudeConfigRoutes(container: Container) {
      * GET /api/claude-config/file?path=<relativePath>
      * Read the content of a file under ~/.claude/ or ~/.claude.json
      */
-    app.get<{ Querystring: { path: string } }>('/api/claude-config/file', async (request, reply) => {
-      const relativePath = request.query.path;
-      const absolute = validatePath(relativePath, container.hostHomedir);
+    app.get<{ Querystring: { path: string } }>(
+      '/api/claude-config/file',
+      async (request, reply) => {
+        const relativePath = request.query.path;
+        const absolute = validatePath(relativePath, container.hostHomedir);
 
-      if (!absolute) {
-        return reply.code(400).send({ error: 'Invalid path' });
-      }
+        if (!absolute) {
+          return reply.code(400).send({ error: 'Invalid path' });
+        }
 
-      const { hostFs } = container;
+        const { hostFs } = container;
 
-      if (!(await hostFs.exists(absolute))) {
-        return reply.code(404).send({ error: 'File not found' });
-      }
+        if (!(await hostFs.exists(absolute))) {
+          return reply.code(404).send({ error: 'File not found' });
+        }
 
-      const stat = await hostFs.stat(absolute);
-      if (stat && stat.size > MAX_FILE_SIZE) {
-        return reply.code(413).send({ error: 'File too large (max 5 MB)' });
-      }
+        const stat = await hostFs.stat(absolute);
+        if (stat && stat.size > MAX_FILE_SIZE) {
+          return reply.code(413).send({ error: 'File too large (max 5 MB)' });
+        }
 
-      const content = await hostFs.readFile(absolute);
-      return { content };
-    });
+        const content = await hostFs.readFile(absolute);
+        return { content };
+      },
+    );
 
     /**
      * PUT /api/claude-config/file
      * Save content to a file under ~/.claude/ or ~/.claude.json
      */
-    app.put<{ Body: { path: string; content: string } }>('/api/claude-config/file', async (request, reply) => {
-      const { path: relativePath, content } = request.body;
-      const absolute = validatePath(relativePath, container.hostHomedir);
+    app.put<{ Body: { path: string; content: string } }>(
+      '/api/claude-config/file',
+      async (request, reply) => {
+        const { path: relativePath, content } = request.body;
+        const absolute = validatePath(relativePath, container.hostHomedir);
 
-      if (!absolute) {
-        return reply.code(400).send({ error: 'Invalid path' });
-      }
+        if (!absolute) {
+          return reply.code(400).send({ error: 'Invalid path' });
+        }
 
-      await container.hostFs.writeFile(absolute, content);
-      return { ok: true };
-    });
+        await container.hostFs.writeFile(absolute, content);
+        return { ok: true };
+      },
+    );
 
     /**
      * POST /api/claude-config/create
      * Create an empty file or directory under ~/.claude/
      */
-    app.post<{ Body: { path: string; type: 'file' | 'directory' } }>('/api/claude-config/create', async (request, reply) => {
-      const { path: relativePath, type } = request.body;
-      const absolute = validatePath(relativePath, container.hostHomedir);
+    app.post<{ Body: { path: string; type: 'file' | 'directory' } }>(
+      '/api/claude-config/create',
+      async (request, reply) => {
+        const { path: relativePath, type } = request.body;
+        const absolute = validatePath(relativePath, container.hostHomedir);
 
-      if (!absolute) {
-        return reply.code(400).send({ error: 'Invalid path' });
-      }
+        if (!absolute) {
+          return reply.code(400).send({ error: 'Invalid path' });
+        }
 
-      const { hostFs } = container;
+        const { hostFs } = container;
 
-      if (await hostFs.exists(absolute)) {
-        return reply.code(409).send({ error: 'Already exists' });
-      }
+        if (await hostFs.exists(absolute)) {
+          return reply.code(409).send({ error: 'Already exists' });
+        }
 
-      if (type === 'directory') {
-        await hostFs.mkdir(absolute);
-      } else {
-        await hostFs.writeFile(absolute, '');
-      }
+        if (type === 'directory') {
+          await hostFs.mkdir(absolute);
+        } else {
+          await hostFs.writeFile(absolute, '');
+        }
 
-      return { ok: true };
-    });
+        return { ok: true };
+      },
+    );
 
     /**
      * DELETE /api/claude-config/file

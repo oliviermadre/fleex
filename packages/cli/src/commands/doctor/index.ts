@@ -1,14 +1,16 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import type { CommandDef } from '../../core/types.ts';
+
+import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
 import { c } from '../../core/colors.ts';
 import { resolveInstance } from '../../core/instance.ts';
 import { SERVICES, loadPorts, type Service } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
 import { MIN_BUN_VERSION, versionGte } from '../../core/version.ts';
-import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
 import { reportWorkspacesConfig } from '../../core/workspaces.ts';
+
+import type { CommandDef } from '../../core/types.ts';
 
 interface ToolStatus {
   installed: boolean;
@@ -78,14 +80,19 @@ const def: CommandDef = {
     } else if (bun.version && versionGte(bun.version, MIN_BUN_VERSION)) {
       line(`${c.green('✓')} bun ${bun.version} (>= ${MIN_BUN_VERSION})`);
     } else {
-      line(`${c.red('✗')} bun ${bun.version} — too old, need >= ${MIN_BUN_VERSION}. Run: ${c.bold('bun upgrade')}`);
+      line(
+        `${c.red('✗')} bun ${bun.version} — too old, need >= ${MIN_BUN_VERSION}. Run: ${c.bold('bun upgrade')}`,
+      );
       allOk = false;
     }
 
     // tmux
     const tmux = probeSimple('tmux', ['-V']);
     if (tmux.installed) line(`${c.green('✓')} tmux ${tmux.version ?? ''}`);
-    else { line(`${c.red('✗')} tmux not found`); allOk = false; }
+    else {
+      line(`${c.red('✗')} tmux not found`);
+      allOk = false;
+    }
 
     // claude — 3 states
     const claude = probeClaudeAuth();
@@ -95,7 +102,9 @@ const def: CommandDef = {
     } else if (claude.authenticated) {
       line(`${c.green('✓')} claude ${claude.version ?? ''} — authenticated`);
     } else {
-      line(`${c.yellow('⚠')} claude ${claude.version ?? ''} — not authenticated. Run: ${c.bold('claude auth login')}`);
+      line(
+        `${c.yellow('⚠')} claude ${claude.version ?? ''} — not authenticated. Run: ${c.bold('claude auth login')}`,
+      );
       allOk = false;
     }
 
@@ -107,16 +116,22 @@ const def: CommandDef = {
       } else if (hooksStatus.settingsCorrupted) {
         if (opts.fix) {
           const res = installClaudeHooks();
-          line(`${c.green('✓')} claude hooks — installed (${res.installed.length} events). Backup: ${res.backupPath ?? 'none'}`);
+          line(
+            `${c.green('✓')} claude hooks — installed (${res.installed.length} events). Backup: ${res.backupPath ?? 'none'}`,
+          );
         } else {
-          line(`${c.red('✗')} claude hooks — settings.json is invalid JSON. Run: ${c.bold('fleex doctor --fix')}`);
+          line(
+            `${c.red('✗')} claude hooks — settings.json is invalid JSON. Run: ${c.bold('fleex doctor --fix')}`,
+          );
           allOk = false;
         }
       } else if (opts.fix) {
         const res = installClaudeHooks();
         line(`${c.green('✓')} claude hooks — installed (${res.installed.length} events)`);
       } else {
-        line(`${c.yellow('⚠')} claude hooks — missing ${hooksStatus.missing.length} event(s). Run: ${c.bold('fleex doctor --fix')}`);
+        line(
+          `${c.yellow('⚠')} claude hooks — missing ${hooksStatus.missing.length} event(s). Run: ${c.bold('fleex doctor --fix')}`,
+        );
         allOk = false;
       }
     }
@@ -133,7 +148,9 @@ const def: CommandDef = {
     } else if (gh.authenticated) {
       line(`${c.green('✓')} gh ${gh.version ?? ''} — authenticated`);
     } else {
-      line(`${c.yellow('⚠')} gh ${gh.version ?? ''} — not authenticated. Run: ${c.bold('gh auth login')}`);
+      line(
+        `${c.yellow('⚠')} gh ${gh.version ?? ''} — not authenticated. Run: ${c.bold('gh auth login')}`,
+      );
       allOk = false;
     }
 
@@ -153,7 +170,9 @@ const def: CommandDef = {
     if (fs.existsSync(path.join(ctx.repoDir, 'node_modules'))) {
       line(`${c.green('✓')} node_modules installed`);
     } else {
-      line(`${c.yellow('○')} node_modules missing — run: ${c.bold(`cd ${ctx.repoDir} && bun install`)}`);
+      line(
+        `${c.yellow('○')} node_modules missing — run: ${c.bold(`cd ${ctx.repoDir} && bun install`)}`,
+      );
     }
 
     // workspaces config — global ~/.fleex/workspaces.json validity, via the
@@ -181,9 +200,16 @@ const def: CommandDef = {
         if (svc === 'desktop') continue;
         let port: number;
         let healthPath: string;
-        if (svc === 'gateway') { port = ports.gateway; healthPath = '/health'; }
-        else if (svc === 'server') { port = ports.server; healthPath = '/health'; }
-        else { port = ports.web; healthPath = '/'; }
+        if (svc === 'gateway') {
+          port = ports.gateway;
+          healthPath = '/health';
+        } else if (svc === 'server') {
+          port = ports.server;
+          healthPath = '/health';
+        } else {
+          port = ports.web;
+          healthPath = '/';
+        }
 
         if (!isRunning(svc, ctx)) {
           line(`${c.dim('○')} ${svc} — not running`);
@@ -212,7 +238,10 @@ const def: CommandDef = {
 
     process.stdout.write('\n');
     if (allOk) process.stdout.write(`  ${c.green(c.bold('All checks passed.'))}\n\n`);
-    else { process.stdout.write(`  ${c.yellow(c.bold('Some checks failed — see above.'))}\n\n`); process.exit(1); }
+    else {
+      process.stdout.write(`  ${c.yellow(c.bold('Some checks failed — see above.'))}\n\n`);
+      process.exit(1);
+    }
   },
 };
 

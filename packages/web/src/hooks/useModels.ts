@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+
 import { FALLBACK_MODELS, type ModelOption } from '@fleex/shared';
+
 import { fetchModels } from '../services/api';
 
 /**

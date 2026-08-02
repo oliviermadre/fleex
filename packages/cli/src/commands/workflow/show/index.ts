@@ -1,5 +1,3 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, die, info } from '../../../core/colors.ts';
 import {
   fetchWorkflows,
   handle,
@@ -7,8 +5,13 @@ import {
   resolveFromList,
   workflowHandleName,
 } from '../../../core/agentic.ts';
+import { c, die, info } from '../../../core/colors.ts';
 
-interface ShowOptions { json?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface ShowOptions {
+  json?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,

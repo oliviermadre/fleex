@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+
 import type { TicketActivity } from '@fleex/shared';
+
 import * as api from '../../services/api';
 
 function describeActivity(a: TicketActivity): string {
@@ -32,7 +34,10 @@ export function TicketActivityTimeline({ ticketId }: { ticketId: string }) {
   const [activities, setActivities] = useState<TicketActivity[]>([]);
 
   useEffect(() => {
-    api.fetchTicketActivity(ticketId).then(setActivities).catch(() => {});
+    api
+      .fetchTicketActivity(ticketId)
+      .then(setActivities)
+      .catch(() => {});
   }, [ticketId]);
 
   if (activities.length === 0) {
@@ -50,18 +55,17 @@ export function TicketActivityTimeline({ ticketId }: { ticketId: string }) {
           <div key={a.id} className="flex items-start gap-2 text-xs">
             <div className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--theme-text-muted)]" />
             <div className="flex-1">
-              <span className="text-[var(--theme-text-secondary)]">
-                {describeActivity(a)}
-              </span>
+              <span className="text-[var(--theme-text-secondary)]">{describeActivity(a)}</span>
               {a.actorName && (
-                <span className="ml-1 text-[var(--theme-text-muted)]">
-                  by {a.actorName}
-                </span>
+                <span className="ml-1 text-[var(--theme-text-muted)]">by {a.actorName}</span>
               )}
             </div>
             <span className="flex-shrink-0 text-[var(--theme-text-faint)]">
               {new Date(a.createdAt).toLocaleString(undefined, {
-                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
               })}
             </span>
           </div>

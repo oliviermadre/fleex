@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
+
 import type { Board, Ticket, TicketStatus } from '@fleex/shared';
-import { useUIStore } from '../../stores/uiStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useWorkflowRunStore } from '../../stores/workflowRunStore';
-import { appWs } from '../../services/websocket';
-import { executeSkill } from '../../services/api';
-import type { InspectorFocus } from '../../stores/listFocusStore';
-import { TicketDeliverables } from '../tickets/TicketDeliverables';
-import { TicketComments } from '../tickets/TicketComments';
-import { StatusChipDropdown } from './StatusChipDropdown';
-import { SmartSessionButton } from '../dashboard/SmartSessionButton';
-import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
-import { SidebarWidthHandle } from '../main-panel/right-sidebar/SidebarWidthHandle';
-import { CommentIcon, DeliverableIcon } from './icons';
+
 import { cn } from '../../lib/cn';
+import { executeSkill } from '../../services/api';
+import { appWs } from '../../services/websocket';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useUIStore } from '../../stores/uiStore';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { SidebarWidthHandle } from '../main-panel/right-sidebar/SidebarWidthHandle';
+import { TicketComments } from '../tickets/TicketComments';
+import { TicketDeliverables } from '../tickets/TicketDeliverables';
+
+import { CommentIcon, DeliverableIcon } from './icons';
+import { StatusChipDropdown } from './StatusChipDropdown';
+
+import type { InspectorFocus } from '../../stores/listFocusStore';
 
 type InspectorTab = 'deliverables' | 'comment';
 
@@ -62,7 +66,9 @@ export function ListFocusInspector({
   const width = useUIStore((s) => s.rightSidebarWidth);
   // Comment-first (review remark 2): the cockpit's primary action is reading /
   // answering the thread; deliverables only take over on a badge click.
-  const [tab, setTab] = useState<InspectorTab>(focus === 'deliverables' ? 'deliverables' : 'comment');
+  const [tab, setTab] = useState<InspectorTab>(
+    focus === 'deliverables' ? 'deliverables' : 'comment',
+  );
 
   // Resolve the ticket's sessions exactly like the cockpit rows and the kanban
   // card, so the header's Smart Session launcher shows the same state.
@@ -134,11 +140,24 @@ export function ListFocusInspector({
                 title="Previous (↑)"
                 className="flex h-4 w-4 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)] disabled:pointer-events-none disabled:opacity-30"
               >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="10,4 6,8 10,12" />
                 </svg>
               </button>
-              {positionLabel && <span className="tabular-nums font-medium text-[var(--theme-text-muted)]">{positionLabel}</span>}
+              {positionLabel && (
+                <span className="tabular-nums font-medium text-[var(--theme-text-muted)]">
+                  {positionLabel}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={onNext}
@@ -146,7 +165,16 @@ export function ListFocusInspector({
                 title="Next (↓)"
                 className="flex h-4 w-4 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)] disabled:pointer-events-none disabled:opacity-30"
               >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="6,4 10,8 6,12" />
                 </svg>
               </button>
@@ -171,7 +199,15 @@ export function ListFocusInspector({
                 title="Close (Esc)"
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
                   <line x1="4" y1="4" x2="12" y2="12" />
                   <line x1="12" y1="4" x2="4" y2="12" />
                 </svg>
@@ -204,10 +240,10 @@ export function ListFocusInspector({
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-[var(--theme-border-subtle)] px-3 pt-2">
-          {([
+          {[
             { key: 'comment' as const, label: 'Comment', icon: <CommentIcon /> },
             { key: 'deliverables' as const, label: 'Deliverables', icon: <DeliverableIcon /> },
-          ]).map((t) => (
+          ].map((t) => (
             <button
               key={t.key}
               type="button"

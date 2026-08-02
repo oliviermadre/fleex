@@ -35,7 +35,8 @@ export function buildSdkOptions(
 
   // Reasoning effort is a direct query() option; fast mode goes through settings.
   if (ctx.effort) base.effort = ctx.effort;
-  if (ctx.fast) base.settings = { ...(base.settings as Record<string, unknown> | undefined), fastMode: true };
+  if (ctx.fast)
+    base.settings = { ...(base.settings as Record<string, unknown> | undefined), fastMode: true };
 
   if (ctx.outputFormat) base.outputFormat = ctx.outputFormat;
 

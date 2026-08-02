@@ -1,6 +1,10 @@
 import type { AgentExecution } from '@fleex/shared';
+
+import type {
+  AgentEventStorePort,
+  CliExecutionUpsert,
+} from '../../application/ports/agent-event-store.port.js';
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../application/ports/agent-event-store.port.js';
 
 /**
  * Write-through in-memory cache over any AgentEventStorePort.
@@ -30,8 +34,9 @@ export class CachedAgentEventStore implements AgentEventStorePort {
 
   async getAllExecutions(): Promise<AgentExecution[]> {
     await this.ensureWarmed();
-    return [...this.executions.values()]
-      .sort((a, b) => (b.startedAt > a.startedAt ? 1 : b.startedAt < a.startedAt ? -1 : 0));
+    return [...this.executions.values()].sort((a, b) =>
+      b.startedAt > a.startedAt ? 1 : b.startedAt < a.startedAt ? -1 : 0,
+    );
   }
 
   async getExecutionsByTicket(ticketId: string): Promise<AgentExecution[]> {
@@ -85,11 +90,24 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     });
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
-    inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
-    commentId?: string; deliverableId?: string;
-  }): Promise<void> {
+  async completeExecution(
+    executionId: string,
+    status: 'completed' | 'failed' | 'interrupted',
+    metrics?: {
+      model?: string;
+      effectiveMode?: string;
+      effort?: string;
+      fast?: boolean;
+      durationMs?: number;
+      costUsd?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
+      commentId?: string;
+      deliverableId?: string;
+    },
+  ): Promise<void> {
     await this.inner.completeExecution(executionId, status, metrics);
     const cached = this.executions.get(executionId);
     if (cached) {
@@ -106,14 +124,19 @@ export class CachedAgentEventStore implements AgentEventStorePort {
         ...(metrics?.inputTokens != null && { inputTokens: metrics.inputTokens }),
         ...(metrics?.outputTokens != null && { outputTokens: metrics.outputTokens }),
         ...(metrics?.cacheReadTokens != null && { cacheReadTokens: metrics.cacheReadTokens }),
-        ...(metrics?.cacheCreationTokens != null && { cacheCreationTokens: metrics.cacheCreationTokens }),
+        ...(metrics?.cacheCreationTokens != null && {
+          cacheCreationTokens: metrics.cacheCreationTokens,
+        }),
         ...(metrics?.commentId != null && { commentId: metrics.commentId }),
         ...(metrics?.deliverableId != null && { deliverableId: metrics.deliverableId }),
       });
     }
   }
 
-  async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
+  async setExecutionOutputs(
+    executionId: string,
+    refs: { commentId?: string; deliverableId?: string },
+  ): Promise<void> {
     await this.inner.setExecutionOutputs(executionId, refs);
     const cached = this.executions.get(executionId);
     if (cached) {
@@ -189,7 +212,9 @@ export class CachedAgentEventStore implements AgentEventStorePort {
     return this.inner.getEventsByExecution(executionId);
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<
+    Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>
+  > {
     return this.inner.getSessionHistory();
   }
 }

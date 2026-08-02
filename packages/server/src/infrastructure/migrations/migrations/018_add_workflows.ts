@@ -18,7 +18,11 @@ const migration: Migration = {
       supabase: 'DEFAULT NOW()',
     });
     const boolType = ctx.dialect({ sqlite: 'INTEGER', pgsql: 'BOOLEAN', supabase: 'BOOLEAN' });
-    const boolTrueDefault = ctx.dialect({ sqlite: 'DEFAULT 1', pgsql: 'DEFAULT TRUE', supabase: 'DEFAULT TRUE' });
+    const boolTrueDefault = ctx.dialect({
+      sqlite: 'DEFAULT 1',
+      pgsql: 'DEFAULT TRUE',
+      supabase: 'DEFAULT TRUE',
+    });
 
     // workflow_templates
     await ctx.exec(`
@@ -54,7 +58,9 @@ const migration: Migration = {
         updated_at ${tsType} NOT NULL ${tsDefault}
       )
     `);
-    await ctx.exec('CREATE INDEX IF NOT EXISTS idx_workflow_runs_ticket_status ON workflow_runs(ticket_id, status)');
+    await ctx.exec(
+      'CREATE INDEX IF NOT EXISTS idx_workflow_runs_ticket_status ON workflow_runs(ticket_id, status)',
+    );
 
     // step_runs
     await ctx.exec(`
@@ -73,16 +79,24 @@ const migration: Migration = {
         created_at ${tsType} NOT NULL ${tsDefault}
       )
     `);
-    await ctx.exec('CREATE INDEX IF NOT EXISTS idx_step_runs_run_step ON step_runs(workflow_run_id, step_id)');
+    await ctx.exec(
+      'CREATE INDEX IF NOT EXISTS idx_step_runs_run_step ON step_runs(workflow_run_id, step_id)',
+    );
 
     // Supabase RLS (cf. CLAUDE.md)
     if (ctx.adapter === 'supabase') {
       await ctx.exec('ALTER TABLE workflow_templates ENABLE ROW LEVEL SECURITY');
-      await ctx.exec(`CREATE POLICY "service_role_workflow_templates" ON workflow_templates FOR ALL USING (true) WITH CHECK (true)`);
+      await ctx.exec(
+        `CREATE POLICY "service_role_workflow_templates" ON workflow_templates FOR ALL USING (true) WITH CHECK (true)`,
+      );
       await ctx.exec('ALTER TABLE workflow_runs ENABLE ROW LEVEL SECURITY');
-      await ctx.exec(`CREATE POLICY "service_role_workflow_runs" ON workflow_runs FOR ALL USING (true) WITH CHECK (true)`);
+      await ctx.exec(
+        `CREATE POLICY "service_role_workflow_runs" ON workflow_runs FOR ALL USING (true) WITH CHECK (true)`,
+      );
       await ctx.exec('ALTER TABLE step_runs ENABLE ROW LEVEL SECURITY');
-      await ctx.exec(`CREATE POLICY "service_role_step_runs" ON step_runs FOR ALL USING (true) WITH CHECK (true)`);
+      await ctx.exec(
+        `CREATE POLICY "service_role_step_runs" ON step_runs FOR ALL USING (true) WITH CHECK (true)`,
+      );
     }
   },
 

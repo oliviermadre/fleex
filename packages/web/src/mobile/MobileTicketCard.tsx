@@ -1,5 +1,7 @@
 import { memo } from 'react';
+
 import type { Ticket, TicketPriority } from '@fleex/shared';
+
 import { tintSolid, tintText } from '../lib/tints';
 
 const PRIORITY_COLOR: Record<TicketPriority, string> = {
@@ -21,7 +23,9 @@ export const MobileTicketCard = memo(function MobileTicketCard({
   const hasSession = ticket.links.some((l) => l.type === 'session');
   const repoLink = ticket.links.find((l) => l.type === 'worktree' || l.type === 'repository');
   const repo = repoLink
-    ? (repoLink.type === 'worktree' ? repoLink.ref.split(':')[0] : repoLink.ref)
+    ? repoLink.type === 'worktree'
+      ? repoLink.ref.split(':')[0]
+      : repoLink.ref
     : null;
 
   return (
@@ -31,7 +35,9 @@ export const MobileTicketCard = memo(function MobileTicketCard({
     >
       <div className="flex items-start gap-2">
         {ticket.priority !== 'none' && (
-          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${PRIORITY_COLOR[ticket.priority]}`} />
+          <span
+            className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${PRIORITY_COLOR[ticket.priority]}`}
+          />
         )}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium leading-snug text-[var(--theme-text-primary)]">

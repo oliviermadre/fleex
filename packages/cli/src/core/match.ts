@@ -10,9 +10,7 @@
 
 /** Outcome of resolving an id/prefix against a list. */
 export type MatchResult<T> =
-  | { kind: 'found'; item: T }
-  | { kind: 'none' }
-  | { kind: 'ambiguous'; matches: T[] };
+  { kind: 'found'; item: T } | { kind: 'none' } | { kind: 'ambiguous'; matches: T[] };
 
 /**
  * Match `input` against `items` by:
@@ -22,7 +20,10 @@ export type MatchResult<T> =
  * Returns `ambiguous` when a prefix matches more than one id so the caller can
  * refuse to act rather than guess. An empty `input` never matches.
  */
-export function matchById<T extends { id: string }>(items: readonly T[], input: string): MatchResult<T> {
+export function matchById<T extends { id: string }>(
+  items: readonly T[],
+  input: string,
+): MatchResult<T> {
   // Tolerate a leading '#' a user may have copied from list output — it never
   // appears in a UUID, so stripping it can't cause a false match.
   const needle = input.trim().replace(/^#/, '');

@@ -1,12 +1,11 @@
-import type { Migration } from './types.js';
 import migration001 from './migrations/001_initial_schema.js';
 import migration002 from './migrations/002_add_skills_table.js';
+import migration008 from './migrations/003_add_files_table.js';
 import migration003 from './migrations/003_add_panels_table.js';
 import migration004 from './migrations/004_add_panel_orchestrator_persona.js';
 import migration005 from './migrations/005_add_execution_mode.js';
 import migration006 from './migrations/006_add_execution_metrics.js';
 import migration007 from './migrations/007_add_execution_model_and_token_breakdown.js';
-import migration008 from './migrations/003_add_files_table.js';
 import migration009 from './migrations/008_add_ticket_archived_at.js';
 import migration010 from './migrations/009_remove_board_repository.js';
 import migration011 from './migrations/010_ticket_groups_and_relationships.js';
@@ -24,6 +23,8 @@ import migration022 from './migrations/021_add_ticket_execution_config.js';
 import migration023 from './migrations/022_add_execution_effort_and_fast.js';
 import migration024 from './migrations/023_add_execution_source.js';
 import migration025 from './migrations/024_add_execution_output_refs.js';
+
+import type { Migration } from './types.js';
 
 /**
  * Ordered array of all migrations.

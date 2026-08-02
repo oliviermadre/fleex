@@ -1,4 +1,5 @@
 import type { PullRequest } from '@fleex/shared';
+
 import { tint, tintClasses, type TintHue } from './tints';
 
 function prHue(pr: Pick<PullRequest, 'state' | 'isDraft'>): TintHue {

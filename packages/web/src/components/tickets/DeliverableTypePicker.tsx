@@ -1,11 +1,13 @@
 import { type ReactNode } from 'react';
+
 import type { TicketDeliverable } from '@fleex/shared';
-import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
-import { useDocumentsStore } from '../../stores/documentsStore';
-import { useToastStore } from '../../stores/toastStore';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { useDocumentsStore } from '../../stores/documentsStore';
+import { useToastStore } from '../../stores/toastStore';
 
 /**
  * Click-to-change deliverable type. Wraps a host-rendered badge (passed as
@@ -75,7 +77,10 @@ export function DeliverableTypePicker({
                   t.id === deliverable.type ? 'bg-[var(--theme-bg-hover)]' : '',
                 )}
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); select(t.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  select(t.id);
+                }}
               >
                 <span
                   className="text-xs font-medium"
@@ -84,7 +89,9 @@ export function DeliverableTypePicker({
                   {t.label}
                 </span>
                 {t.description && (
-                  <span className="text-[10px] text-[var(--theme-text-faint)]">{t.description}</span>
+                  <span className="text-[10px] text-[var(--theme-text-faint)]">
+                    {t.description}
+                  </span>
                 )}
               </button>
             ))}

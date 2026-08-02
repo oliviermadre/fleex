@@ -1,15 +1,14 @@
-import type { Command } from 'commander';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+
 import chalk from 'chalk';
-import type { CommandDef } from '../../../core/types.ts';
+
 import { info, ok, warn, die } from '../../../core/colors.ts';
 import { FLEEX_HOME, resolveInstance } from '../../../core/instance.ts';
-import {
-  parseWorkspacesFile,
-  resolveWorkspace,
-  type Workspace,
-} from '../../../core/workspaces.ts';
+import { parseWorkspacesFile, resolveWorkspace, type Workspace } from '../../../core/workspaces.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
+import type { Command } from 'commander';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;

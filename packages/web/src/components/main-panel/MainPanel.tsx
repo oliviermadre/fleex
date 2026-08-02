@@ -1,33 +1,36 @@
+import { useNavigate } from 'react-router-dom';
+
 import type { Session } from '@fleex/shared';
+
+import { usePanelStore } from '../../stores/panelStore';
+import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { useSessionStore } from '../../stores/sessionStore';
-import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { UnifiedWorktreePanel } from './UnifiedWorktreePanel';
-import { EmptyState } from './EmptyState';
-import { SettingsPanel } from '../settings/SettingsPanel';
+import { useSkillStore } from '../../stores/skillStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUIStore } from '../../stores/uiStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { AgentPersonaView } from '../agents/AgentPersonaView';
+import { PanelDetailView } from '../agents/PanelDetailView';
+import { SkillEditor } from '../agents/SkillEditor';
+import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
+import { AssistantConversation } from '../assistant/AssistantConversation';
+import { ClaudeConfigEditor } from '../claude-config/ClaudeConfigEditor';
+import { DashboardView } from '../dashboard/DashboardView';
+import { DocumentsPage } from '../documents/DocumentsPage';
+import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
+import { ListFocusView } from '../list-focus/ListFocusView';
 import { RepositoryDashboard } from '../repository-dashboard/RepositoryDashboard';
 import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
-import { ClaudeConfigEditor } from '../claude-config/ClaudeConfigEditor';
-import { ScratchpadMainView } from '../scratchpad/ScratchpadMainView';
 import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
-import { useScratchpadStore } from '../../stores/scratchpadStore';
+import { ScratchpadMainView } from '../scratchpad/ScratchpadMainView';
+import { SettingsPanel } from '../settings/SettingsPanel';
 import { KanbanBoard } from '../tickets/KanbanBoard';
 import { TicketDetail } from '../tickets/TicketDetail';
-import { useTicketStore } from '../../stores/ticketStore';
-import { AgentPersonaView } from '../agents/AgentPersonaView';
-import { SkillEditor } from '../agents/SkillEditor';
-import { PanelDetailView } from '../agents/PanelDetailView';
 import { WorkflowEditorView } from '../workflows/WorkflowEditorView';
-import { useSkillStore } from '../../stores/skillStore';
-import { usePanelStore } from '../../stores/panelStore';
-import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
-import { useNavigate } from 'react-router-dom';
-import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
-import { DashboardView } from '../dashboard/DashboardView';
-import { ListFocusView } from '../list-focus/ListFocusView';
-import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
-import { DocumentsPage } from '../documents/DocumentsPage';
-import { AssistantConversation } from '../assistant/AssistantConversation';
+
+import { EmptyState } from './EmptyState';
+import { UnifiedWorktreePanel } from './UnifiedWorktreePanel';
 
 function GroupEmptyCell() {
   return (
@@ -80,7 +83,7 @@ export function MainPanel() {
   const selectWorkflow = useWorkflowTemplateStore((s) => s.selectWorkflow);
   const navigate = useNavigate();
   const splitSession = splitSessionId
-    ? sessions.find((s) => s.id === splitSessionId) ?? null
+    ? (sessions.find((s) => s.id === splitSessionId) ?? null)
     : null;
 
   if (activePanel === 'dashboard') {
@@ -160,7 +163,12 @@ export function MainPanel() {
 
   // Agent worktree view (legacy route)
   if (activePanel === 'sessions' && selectedAgentWorktreeTicketId) {
-    return <UnifiedWorktreePanel entry={{ kind: 'agent', ticketId: selectedAgentWorktreeTicketId }} focused />;
+    return (
+      <UnifiedWorktreePanel
+        entry={{ kind: 'agent', ticketId: selectedAgentWorktreeTicketId }}
+        focused
+      />
+    );
   }
 
   // Ticket-based session view
@@ -175,8 +183,8 @@ export function MainPanel() {
   if (selectedGroupId) {
     const group = layoutGroups.find((g) => g.id === selectedGroupId);
     if (group) {
-      const cellSessions = group.cells.map(
-        (cellId) => (cellId ? sessions.find((s) => s.id === cellId) ?? null : null)
+      const cellSessions = group.cells.map((cellId) =>
+        cellId ? (sessions.find((s) => s.id === cellId) ?? null) : null,
       );
 
       if (group.type === '1x2') {

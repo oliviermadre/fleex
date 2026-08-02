@@ -1,6 +1,9 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
+
 import { FileMetadataEntity } from '../../domain/entities/file-metadata.entity.js';
+
 import type { FileMetaStorePort } from '../../application/ports/file-meta-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { HostFs } from '../host/types.js';
@@ -58,9 +61,16 @@ export class JsonFileMetaStore implements FileMetaStorePort {
       const raw = await this.hostFs.readFile(this.filePath);
       const data = JSON.parse(raw) as SerializedFile[];
       for (const f of data) {
-        this.files.set(f.id, new FileMetadataEntity(
-          f.id, f.originalName, f.mimeType, f.sizeBytes, new Date(f.createdAt),
-        ));
+        this.files.set(
+          f.id,
+          new FileMetadataEntity(
+            f.id,
+            f.originalName,
+            f.mimeType,
+            f.sizeBytes,
+            new Date(f.createdAt),
+          ),
+        );
       }
       this.logger.info('File meta store loaded', { count: this.files.size });
     } catch (err) {
@@ -73,8 +83,11 @@ export class JsonFileMetaStore implements FileMetaStorePort {
   private async syncToDisk(): Promise<void> {
     try {
       const data: SerializedFile[] = Array.from(this.files.values()).map((f) => ({
-        id: f.id, originalName: f.originalName, mimeType: f.mimeType,
-        sizeBytes: f.sizeBytes, createdAt: f.createdAt.toISOString(),
+        id: f.id,
+        originalName: f.originalName,
+        mimeType: f.mimeType,
+        sizeBytes: f.sizeBytes,
+        createdAt: f.createdAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));
     } catch (err) {

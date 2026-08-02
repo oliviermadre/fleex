@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import { useStickToBottom } from '../hooks/useStickToBottom';
+
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
+import { useStickToBottom } from '../hooks/useStickToBottom';
+import { tint, tintText } from '../lib/tints';
 import {
   useAssistantStore,
   type AssistantChatItem,
   type AssistantToolStatus,
 } from '../stores/assistantStore';
-import { tint, tintText } from '../lib/tints';
 
 /**
  * Mobile client for the Fleex assistant — same companion host as the Chrome
@@ -35,7 +36,9 @@ export function MobileAssistant() {
   const sessions = useAssistantStore((s) => s.sessions);
   const workspaces = useAssistantStore((s) => s.workspaces);
   const activeId = useAssistantStore((s) => s.activeId);
-  const items = useAssistantStore((s) => (s.activeId ? s.itemsBySession[s.activeId] ?? EMPTY_ITEMS : EMPTY_ITEMS));
+  const items = useAssistantStore((s) =>
+    s.activeId ? (s.itemsBySession[s.activeId] ?? EMPTY_ITEMS) : EMPTY_ITEMS,
+  );
   const confirmReq = useAssistantStore((s) => s.confirmReqs[0] ?? null);
   const errorMsg = useAssistantStore((s) => s.errorMsg);
   const ensureConnected = useAssistantStore((s) => s.ensureConnected);
@@ -89,12 +92,19 @@ export function MobileAssistant() {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
         <p className="text-2xl">🤖</p>
-        <p className="text-sm font-medium text-[var(--theme-text-primary)]">Assistant injoignable</p>
+        <p className="text-sm font-medium text-[var(--theme-text-primary)]">
+          Assistant injoignable
+        </p>
         <p className="text-xs leading-relaxed text-[var(--theme-text-muted)]">
           Le companion ne répond pas. Sur le laptop, lance{' '}
-          <code className="rounded bg-[var(--theme-bg-secondary)] px-1.5 py-0.5">fleex companion start</code>{' '}
-          (démarré automatiquement par <code className="rounded bg-[var(--theme-bg-secondary)] px-1.5 py-0.5">fleex start</code>),
-          puis vérifie le proxy <code className="rounded bg-[var(--theme-bg-secondary)] px-1.5 py-0.5">/companion</code> — voir docs/mobile.md.
+          <code className="rounded bg-[var(--theme-bg-secondary)] px-1.5 py-0.5">
+            fleex companion start
+          </code>{' '}
+          (démarré automatiquement par{' '}
+          <code className="rounded bg-[var(--theme-bg-secondary)] px-1.5 py-0.5">fleex start</code>
+          ), puis vérifie le proxy{' '}
+          <code className="rounded bg-[var(--theme-bg-secondary)] px-1.5 py-0.5">/companion</code> —
+          voir docs/mobile.md.
         </p>
         <p className="text-[10px] text-[var(--theme-text-faint)]">Reconnexion automatique…</p>
       </div>
@@ -147,8 +157,13 @@ export function MobileAssistant() {
             {items.map((item, i) => {
               if (item.kind === 'user') {
                 return (
-                  <div key={i} className="ml-8 rounded-xl bg-[var(--theme-accent)]/10 p-3 text-sm text-[var(--theme-text-primary)]">
-                    <div className="overflow-x-auto whitespace-pre-wrap break-words">{item.text}</div>
+                  <div
+                    key={i}
+                    className="ml-8 rounded-xl bg-[var(--theme-accent)]/10 p-3 text-sm text-[var(--theme-text-primary)]"
+                  >
+                    <div className="overflow-x-auto whitespace-pre-wrap break-words">
+                      {item.text}
+                    </div>
                   </div>
                 );
               }
@@ -174,15 +189,15 @@ export function MobileAssistant() {
             })}
             {busy && (
               <p className="animate-pulse px-1 text-xs text-[var(--theme-text-faint)]">
-                {activeSession?.status === 'awaiting_input' ? 'En attente de ta confirmation…' : 'Réflexion…'}
+                {activeSession?.status === 'awaiting_input'
+                  ? 'En attente de ta confirmation…'
+                  : 'Réflexion…'}
               </p>
             )}
           </div>
         )}
         {errorMsg && (
-          <p className={`mt-3 rounded-lg border p-2 text-xs ${tint('red')}`}>
-            {errorMsg}
-          </p>
+          <p className={`mt-3 rounded-lg border p-2 text-xs ${tint('red')}`}>{errorMsg}</p>
         )}
       </div>
 
@@ -242,7 +257,10 @@ export function MobileAssistant() {
 
       {/* Session picker sheet */}
       {showSessions && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/50" onClick={() => setShowSessions(false)}>
+        <div
+          className="fixed inset-0 z-40 flex items-end bg-black/50"
+          onClick={() => setShowSessions(false)}
+        >
           <div
             className="max-h-[75dvh] w-full overflow-y-auto rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
@@ -268,7 +286,9 @@ export function MobileAssistant() {
                   >
                     + {w.name}
                     {w.isDefault ? ' ★' : ''}
-                    {w.branch ? <span className="text-[var(--theme-text-faint)]"> ⎇{w.branch}</span> : null}
+                    {w.branch ? (
+                      <span className="text-[var(--theme-text-faint)]"> ⎇{w.branch}</span>
+                    ) : null}
                   </button>
                 ))
               )}
@@ -277,7 +297,9 @@ export function MobileAssistant() {
               Conversations
             </p>
             {sessions.length === 0 ? (
-              <p className="py-4 text-center text-sm text-[var(--theme-text-faint)]">Aucune conversation</p>
+              <p className="py-4 text-center text-sm text-[var(--theme-text-faint)]">
+                Aucune conversation
+              </p>
             ) : (
               sessions.map((s) => (
                 <div key={s.id} className="flex items-center gap-1">
@@ -287,13 +309,19 @@ export function MobileAssistant() {
                       s.id === activeId ? 'bg-[var(--theme-bg-secondary)]' : ''
                     }`}
                   >
-                    <span className="min-w-0 flex-1 truncate text-sm text-[var(--theme-text-primary)]">{s.title}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-[var(--theme-text-primary)]">
+                      {s.title}
+                    </span>
                     {s.workspace && (
                       <span className="shrink-0 rounded-full bg-[var(--theme-bg-hover)] px-2 py-0.5 text-[10px] text-[var(--theme-text-muted)]">
                         {s.workspace}
                       </span>
                     )}
-                    {s.status !== 'idle' && <span className={`shrink-0 animate-pulse text-[10px] ${tintText('yellow')}`}>●</span>}
+                    {s.status !== 'idle' && (
+                      <span className={`shrink-0 animate-pulse text-[10px] ${tintText('yellow')}`}>
+                        ●
+                      </span>
+                    )}
                   </button>
                   <button
                     onClick={() => deleteSession(s.id)}

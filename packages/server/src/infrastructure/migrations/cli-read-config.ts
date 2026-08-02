@@ -18,7 +18,7 @@
  * missing value as "nothing to migrate" and must never be blocked.
  */
 
-const driver = (process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'json');
+const driver = process.env['FLEEX_STORAGE_DRIVER']?.toLowerCase() ?? 'json';
 const DEFAULT_BASE_PATH = '~/projects';
 
 /** Pull basePath out of a parsed app_config blob, honouring the legacy key. */
@@ -53,8 +53,7 @@ async function readBasePath(): Promise<string | null> {
     await conn.init();
     try {
       const row = conn.db.prepare('SELECT data FROM app_config WHERE id = ?').get('singleton') as
-        | { data: string }
-        | undefined;
+        { data: string } | undefined;
       return pick(row ? JSON.parse(row.data) : null) ?? DEFAULT_BASE_PATH;
     } finally {
       conn.close();

@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
+
 import type { RepositoryDashboardData } from '@fleex/shared';
-import { useTicketStore } from '../../stores/ticketStore';
+
 import { useSessionStore } from '../../stores/sessionStore';
+import { useTicketStore } from '../../stores/ticketStore';
+
 import { buildWorktreeRows, type WorktreeRow } from './overview-helpers';
 
 /**
@@ -16,10 +19,23 @@ export function useWorktreeRows(
 ): { active: WorktreeRow[]; orphaned: WorktreeRow[] } {
   const tickets = useTicketStore((s) => s.tickets);
   const sessionGroups = useSessionStore((s) => s.sessionGroups);
-  const sessionGroup = sessionGroups.find((g) => g.repositoryOrg === org && g.repositoryName === name);
-  const pulls = useMemo(() => [...data.openPullRequests, ...data.recentlyMergedPullRequests], [data]);
+  const sessionGroup = sessionGroups.find(
+    (g) => g.repositoryOrg === org && g.repositoryName === name,
+  );
+  const pulls = useMemo(
+    () => [...data.openPullRequests, ...data.recentlyMergedPullRequests],
+    [data],
+  );
   return useMemo(
-    () => buildWorktreeRows(data.worktrees, data.worktreeTickets, data.diffStats, sessionGroup, tickets, pulls),
+    () =>
+      buildWorktreeRows(
+        data.worktrees,
+        data.worktreeTickets,
+        data.diffStats,
+        sessionGroup,
+        tickets,
+        pulls,
+      ),
     [data, sessionGroup, tickets, pulls],
   );
 }

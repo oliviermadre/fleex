@@ -1,9 +1,12 @@
-import type { CommandDef } from '../../../../core/types.ts';
-import { ok } from '../../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../../core/api.ts';
+import { ok } from '../../../../core/colors.ts';
 import { fetchRunDetail, resolveStepRunId } from '../../_shared.ts';
 
-interface RetryOptions { ticket?: string }
+import type { CommandDef } from '../../../../core/types.ts';
+
+interface RetryOptions {
+  ticket?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -12,7 +15,10 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<runId>', 'Workflow run UUID or short id prefix (needs --ticket)');
     cmd.argument('<stepRunId>', 'Step run UUID or short id prefix to retry');
-    cmd.option('--ticket <id>', 'Ticket display ID (#42) or UUID — required to resolve a run prefix');
+    cmd.option(
+      '--ticket <id>',
+      'Ticket display ID (#42) or UUID — required to resolve a run prefix',
+    );
   },
   action: async (runId: string, stepRunId: string, opts: RetryOptions) => {
     const detail = await fetchRunDetail(runId, opts.ticket);

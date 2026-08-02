@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { EFFORT_LEVELS, FALLBACK_MODELS, inferModelCapabilities, isEffortLevel, resolveEffortLevel } from '@fleex/shared';
+
+import {
+  EFFORT_LEVELS,
+  FALLBACK_MODELS,
+  inferModelCapabilities,
+  isEffortLevel,
+  resolveEffortLevel,
+} from '@fleex/shared';
 
 /**
  * The effort ladder grew one rung at a time, so "supports effort" is NOT the same

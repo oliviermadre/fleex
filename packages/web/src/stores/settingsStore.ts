@@ -1,8 +1,15 @@
 import { create } from 'zustand';
-import { API_URL, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, STORAGE_KEY_SETTINGS } from '../lib/constants';
+
+import {
+  API_URL,
+  TERMINAL_FONT_FAMILY,
+  TERMINAL_FONT_SIZE,
+  STORAGE_KEY_SETTINGS,
+} from '../lib/constants';
 import { resolveTemplate, type WorkspaceContext } from '../lib/templateUtils';
-import type { Theme } from '../lib/themes';
 import * as api from '../services/api';
+
+import type { Theme } from '../lib/themes';
 
 export interface PinnedIcon {
   id: string;
@@ -114,7 +121,9 @@ function loadFromStorage(): AppSettings {
     if (!raw) return defaultSettings;
     const parsed = JSON.parse(raw);
     return { ...defaultSettings, ...parsed };
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return defaultSettings;
 }
 
@@ -131,14 +140,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const res = await fetch(`${API_URL}/config`);
       if (res.ok) {
         const data = await res.json();
-        if (data && typeof data === 'object' && (data.basePath || data.repositories || data.pinnedIcons || data.workspaceActions)) {
+        if (
+          data &&
+          typeof data === 'object' &&
+          (data.basePath || data.repositories || data.pinnedIcons || data.workspaceActions)
+        ) {
           const merged = { ...defaultSettings, ...data };
           set({ settings: merged, loaded: true });
           saveToStorage(merged);
           return;
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     set({ settings: loadFromStorage(), loaded: true });
   },
 
@@ -153,32 +168,37 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
       });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   },
 
   setSessionDisplayName: (sessionId, name) => {
     const trimmed = name.trim();
-    api.renameSession(sessionId, trimmed).then(() => {
-      // On success, remove local override — server is now authoritative
-      const current = get().settings;
-      const sessionDisplayNames = { ...current.sessionDisplayNames };
-      delete sessionDisplayNames[sessionId];
-      const updated = { ...current, sessionDisplayNames };
-      set({ settings: updated });
-      saveToStorage(updated);
-    }).catch(() => {
-      // On failure, keep local state as fallback
-      const current = get().settings;
-      const sessionDisplayNames = { ...current.sessionDisplayNames };
-      if (trimmed) {
-        sessionDisplayNames[sessionId] = trimmed;
-      } else {
+    api
+      .renameSession(sessionId, trimmed)
+      .then(() => {
+        // On success, remove local override — server is now authoritative
+        const current = get().settings;
+        const sessionDisplayNames = { ...current.sessionDisplayNames };
         delete sessionDisplayNames[sessionId];
-      }
-      const updated = { ...current, sessionDisplayNames };
-      set({ settings: updated });
-      saveToStorage(updated);
-    });
+        const updated = { ...current, sessionDisplayNames };
+        set({ settings: updated });
+        saveToStorage(updated);
+      })
+      .catch(() => {
+        // On failure, keep local state as fallback
+        const current = get().settings;
+        const sessionDisplayNames = { ...current.sessionDisplayNames };
+        if (trimmed) {
+          sessionDisplayNames[sessionId] = trimmed;
+        } else {
+          delete sessionDisplayNames[sessionId];
+        }
+        const updated = { ...current, sessionDisplayNames };
+        set({ settings: updated });
+        saveToStorage(updated);
+      });
   },
 
   getSessionDisplayName: (sessionId) => {
@@ -194,7 +214,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   setWorktreeOrder: (repoGroupId, order) => {
@@ -207,7 +229,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   setSessionOrder: (worktreeGroupId, order) => {
@@ -220,7 +244,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   executePinnedAction: (icon: PinnedIcon) => {
@@ -231,7 +257,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: icon.actionValue }),
-      }).catch(() => { /* ignore */ });
+      }).catch(() => {
+        /* ignore */
+      });
     }
   },
 
@@ -245,12 +273,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // Materialize it first so {{workspace_path}} points at a real directory.
       try {
         await fetch(`${API_URL}/tickets/${context.ticket_id}/ensure-workspace`, { method: 'POST' });
-      } catch { /* best-effort; still attempt the command below */ }
+      } catch {
+        /* best-effort; still attempt the command below */
+      }
       fetch(`${API_URL}/exec`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: resolved }),
-      }).catch(() => { /* ignore */ });
+      }).catch(() => {
+        /* ignore */
+      });
     }
   },
 
@@ -267,7 +299,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
     return id;
   },
 
@@ -281,7 +315,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   bindLayoutGroupCell: (groupId, cellIndex, sessionId) => {
@@ -299,7 +335,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   getRepoConfig: (org, name) => {
@@ -318,12 +356,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => { /* ignore */ });
+    }).catch(() => {
+      /* ignore */
+    });
   },
 
   addRepositories: async (repos) => {
     const current = get().settings;
-    const merged = [...new Set([...current.repositories.map((r) => r.toLowerCase()), ...repos.map((r) => r.toLowerCase())])].sort();
+    const merged = [
+      ...new Set([
+        ...current.repositories.map((r) => r.toLowerCase()),
+        ...repos.map((r) => r.toLowerCase()),
+      ]),
+    ].sort();
     await api.updateConfig({ repositories: merged });
     const updated = { ...current, repositories: merged };
     set({ settings: updated });

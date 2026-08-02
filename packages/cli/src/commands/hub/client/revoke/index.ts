@@ -1,6 +1,7 @@
-import type { CommandDef } from '../../../../core/types.ts';
 import { c, ok, info, warn, die } from '../../../../core/colors.ts';
 import { readClientsFile, writeClientsFile, readHubState, isAlive } from '../../_state.ts';
+
+import type { CommandDef } from '../../../../core/types.ts';
 
 async function runClientRevoke(name: string): Promise<void> {
   const file = readClientsFile();

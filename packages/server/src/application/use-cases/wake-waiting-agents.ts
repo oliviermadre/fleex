@@ -1,6 +1,6 @@
-import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { ExecuteAgentUseCase } from './execute-agent.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { MentionStorePort } from '../ports/mention-store.port.js';
 
 export class WakeWaitingAgentsUseCase {
   constructor(

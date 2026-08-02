@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
-import { DELIVERABLE_RENDERERS, DELIVERABLE_COLOR_PRESETS, type DeliverableRenderer, type DeliverableTypeColor } from '@fleex/shared';
+
+import {
+  DELIVERABLE_RENDERERS,
+  DELIVERABLE_COLOR_PRESETS,
+  type DeliverableRenderer,
+  type DeliverableTypeColor,
+} from '@fleex/shared';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useToastStore } from '../../stores/toastStore';
@@ -43,7 +50,9 @@ function RendererSelect({
       onChange={(e) => onChange(e.target.value as DeliverableRenderer)}
     >
       {DELIVERABLE_RENDERERS.map((r) => (
-        <option key={r} value={r}>{r}</option>
+        <option key={r} value={r}>
+          {r}
+        </option>
       ))}
     </select>
   );
@@ -79,7 +88,9 @@ function ColorPicker({
     return <BadgePreview label={label} color={color} />;
   }
 
-  const selectedKey = pending && DELIVERABLE_COLOR_PRESETS.find((p) => p.bg === pending.bg && p.text === pending.text)?.key;
+  const selectedKey =
+    pending &&
+    DELIVERABLE_COLOR_PRESETS.find((p) => p.bg === pending.bg && p.text === pending.text)?.key;
 
   return (
     <>
@@ -95,61 +106,71 @@ function ColorPicker({
 
       {open && (
         <FloatingPortal>
-        <div
-          ref={refs.setFloating}
-          style={floatingStyles}
-          {...getFloatingProps()}
-          className="z-[1000] w-64 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] p-3 shadow-xl"
-        >
-          {/* Preview */}
-          <div className="mb-2 flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-[var(--theme-text-faint)]">Preview</span>
-            <BadgePreview label={label} color={pending} />
-          </div>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            {...getFloatingProps()}
+            className="z-[1000] w-64 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] p-3 shadow-xl"
+          >
+            {/* Preview */}
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--theme-text-faint)]">
+                Preview
+              </span>
+              <BadgePreview label={label} color={pending} />
+            </div>
 
-          {/* Swatch grid */}
-          <div className="grid grid-cols-8 gap-1.5">
-            {DELIVERABLE_COLOR_PRESETS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                title={p.label}
-                onClick={() => setPending({ bg: p.bg, text: p.text })}
-                className={`flex h-6 w-6 items-center justify-center rounded ${selectedKey === p.key ? 'ring-2 ring-[var(--theme-accent)]' : 'ring-1 ring-white/10'}`}
-                style={{ backgroundColor: p.bg }}
-              >
-                <span className="text-[10px] font-bold" style={{ color: p.text }}>A</span>
-              </button>
-            ))}
-          </div>
+            {/* Swatch grid */}
+            <div className="grid grid-cols-8 gap-1.5">
+              {DELIVERABLE_COLOR_PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  title={p.label}
+                  onClick={() => setPending({ bg: p.bg, text: p.text })}
+                  className={`flex h-6 w-6 items-center justify-center rounded ${selectedKey === p.key ? 'ring-2 ring-[var(--theme-accent)]' : 'ring-1 ring-white/10'}`}
+                  style={{ backgroundColor: p.bg }}
+                >
+                  <span className="text-[10px] font-bold" style={{ color: p.text }}>
+                    A
+                  </span>
+                </button>
+              ))}
+            </div>
 
-          {/* Actions */}
-          <div className="mt-3 flex items-center justify-between">
-            <button
-              type="button"
-              className="text-[11px] text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
-              onClick={() => { onApply(null); setOpen(false); }}
-            >
-              Default (theme)
-            </button>
-            <div className="flex gap-2">
+            {/* Actions */}
+            <div className="mt-3 flex items-center justify-between">
               <button
                 type="button"
-                className="rounded px-2 py-1 text-[11px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]"
-                onClick={() => setOpen(false)}
+                className="text-[11px] text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
+                onClick={() => {
+                  onApply(null);
+                  setOpen(false);
+                }}
               >
-                Cancel
+                Default (theme)
               </button>
-              <button
-                type="button"
-                className="rounded bg-[var(--theme-accent)] px-2 py-1 text-[11px] font-medium text-[var(--theme-accent-fg)] hover:opacity-90"
-                onClick={() => { onApply(pending); setOpen(false); }}
-              >
-                Apply
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-[11px] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]"
+                  onClick={() => setOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded bg-[var(--theme-accent)] px-2 py-1 text-[11px] font-medium text-[var(--theme-accent-fg)] hover:opacity-90"
+                  onClick={() => {
+                    onApply(pending);
+                    setOpen(false);
+                  }}
+                >
+                  Apply
+                </button>
+              </div>
             </div>
           </div>
-        </div>
         </FloatingPortal>
       )}
     </>
@@ -178,11 +199,15 @@ export function DeliverableTypesTab() {
   const [reassignFrom, setReassignFrom] = useState('');
   const [reassignTo, setReassignTo] = useState('');
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Type ids present on existing deliverables (for the reassign "from" dropdown),
   // including legacy/unknown values not in the configured list.
-  const usedTypeIds = Object.keys(usage).filter((id) => (usage[id] ?? 0) > 0).sort();
+  const usedTypeIds = Object.keys(usage)
+    .filter((id) => (usage[id] ?? 0) > 0)
+    .sort();
   const configuredIds = types.map((t) => t.id);
 
   const handleAdd = async () => {
@@ -191,10 +216,22 @@ export function DeliverableTypesTab() {
       return;
     }
     try {
-      await create({ id: newId.trim(), label: newLabel.trim(), description: newDescription.trim(), renderer: newRenderer, color: newColor });
-      setNewId(''); setNewLabel(''); setNewDescription(''); setNewRenderer('markdown'); setNewColor(null);
+      await create({
+        id: newId.trim(),
+        label: newLabel.trim(),
+        description: newDescription.trim(),
+        renderer: newRenderer,
+        color: newColor,
+      });
+      setNewId('');
+      setNewLabel('');
+      setNewDescription('');
+      setNewRenderer('markdown');
+      setNewColor(null);
       addToast('success', 'Type created');
-    } catch { /* toast handled by api.ts */ }
+    } catch {
+      /* toast handled by api.ts */
+    }
   };
 
   const handleRename = async (id: string) => {
@@ -206,7 +243,9 @@ export function DeliverableTypesTab() {
     try {
       const migrated = await rename(id, next.trim());
       addToast('success', `Renamed to "${next.trim()}" (${migrated} deliverable(s) migrated)`);
-    } catch { /* toast handled by api.ts */ }
+    } catch {
+      /* toast handled by api.ts */
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -214,7 +253,9 @@ export function DeliverableTypesTab() {
     try {
       await remove(id);
       addToast('success', 'Type deleted');
-    } catch { /* toast handled by api.ts */ }
+    } catch {
+      /* toast handled by api.ts */
+    }
   };
 
   const handleReassign = async () => {
@@ -224,20 +265,29 @@ export function DeliverableTypesTab() {
     }
     try {
       const migrated = await reassign(reassignFrom, reassignTo);
-      addToast('success', `${migrated} deliverable(s) moved from "${reassignFrom}" to "${reassignTo}"`);
-      setReassignFrom(''); setReassignTo('');
-    } catch { /* toast handled by api.ts */ }
+      addToast(
+        'success',
+        `${migrated} deliverable(s) moved from "${reassignFrom}" to "${reassignTo}"`,
+      );
+      setReassignFrom('');
+      setReassignTo('');
+    } catch {
+      /* toast handled by api.ts */
+    }
   };
 
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h2 className="text-lg font-semibold text-[var(--theme-text-primary)]">Deliverable Types</h2>
+        <h2 className="text-lg font-semibold text-[var(--theme-text-primary)]">
+          Deliverable Types
+        </h2>
         <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">
           Configure the deliverable types for this workspace. These are honored by the CLI, the API,
-          and the structured output of agent runs. The <code>renderer</code> controls how a deliverable's
-          content is displayed (markdown, or html in an iframe embed). Existing deliverables with a type
-          you remove or rename are left untouched — you can reassign them below.
+          and the structured output of agent runs. The <code>renderer</code> controls how a
+          deliverable's content is displayed (markdown, or html in an iframe embed). Existing
+          deliverables with a type you remove or rename are left untouched — you can reassign them
+          below.
         </p>
       </div>
 
@@ -259,7 +309,10 @@ export function DeliverableTypesTab() {
             {types.map((t) => {
               const count = usage[t.id] ?? 0;
               return (
-                <tr key={t.id} className="border-b border-[var(--theme-border-subtle)] last:border-0">
+                <tr
+                  key={t.id}
+                  className="border-b border-[var(--theme-border-subtle)] last:border-0"
+                >
                   <td className="px-3 py-2 align-middle font-mono text-xs text-[var(--theme-text-secondary)]">
                     {t.id}
                     {t.system && (
@@ -284,7 +337,9 @@ export function DeliverableTypesTab() {
                   </td>
                   <td className="px-3 py-2 align-middle">
                     {t.system ? (
-                      <span className="text-xs text-[var(--theme-text-faint)]">{t.description}</span>
+                      <span className="text-xs text-[var(--theme-text-faint)]">
+                        {t.description}
+                      </span>
                     ) : (
                       <input
                         className={inputCls + ' w-full'}
@@ -311,7 +366,9 @@ export function DeliverableTypesTab() {
                       onApply={(color) => update(t.id, { color })}
                     />
                   </td>
-                  <td className="px-3 py-2 text-right align-middle text-[var(--theme-text-secondary)]">{count}</td>
+                  <td className="px-3 py-2 text-right align-middle text-[var(--theme-text-secondary)]">
+                    {count}
+                  </td>
                   <td className="px-3 py-2 text-right align-middle">
                     {!t.system && (
                       <div className="flex justify-end gap-2">
@@ -326,7 +383,11 @@ export function DeliverableTypesTab() {
                           className="text-xs text-[var(--theme-danger)] hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
                           onClick={() => handleDelete(t.id)}
                           disabled={count > 0}
-                          title={count > 0 ? `In use by ${count} deliverable(s) — reassign them first` : 'Delete type'}
+                          title={
+                            count > 0
+                              ? `In use by ${count} deliverable(s) — reassign them first`
+                              : 'Delete type'
+                          }
                         >
                           Delete
                         </button>
@@ -346,15 +407,29 @@ export function DeliverableTypesTab() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-[11px] text-[var(--theme-text-secondary)]">Id (slug)</label>
-            <Input value={newId} onChange={(e) => setNewId(e.target.value)} placeholder="visual-explainer" />
+            <Input
+              value={newId}
+              onChange={(e) => setNewId(e.target.value)}
+              placeholder="visual-explainer"
+            />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] text-[var(--theme-text-secondary)]">Label</label>
-            <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Visual Explainer" />
+            <Input
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              placeholder="Visual Explainer"
+            />
           </div>
           <div className="flex flex-1 flex-col gap-1">
-            <label className="text-[11px] text-[var(--theme-text-secondary)]">Description (shown to agents)</label>
-            <Input value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Interactive HTML explainer generated by the visual-explainer skill" />
+            <label className="text-[11px] text-[var(--theme-text-secondary)]">
+              Description (shown to agents)
+            </label>
+            <Input
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              placeholder="Interactive HTML explainer generated by the visual-explainer skill"
+            />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] text-[var(--theme-text-secondary)]">Renderer</label>
@@ -362,19 +437,28 @@ export function DeliverableTypesTab() {
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] text-[var(--theme-text-secondary)]">Color</label>
-            <ColorPicker label={newLabel || newId || 'Label'} color={newColor} onApply={setNewColor} />
+            <ColorPicker
+              label={newLabel || newId || 'Label'}
+              color={newColor}
+              onApply={setNewColor}
+            />
           </div>
-          <Button variant="primary" onClick={handleAdd}>Add type</Button>
+          <Button variant="primary" onClick={handleAdd}>
+            Add type
+          </Button>
         </div>
         <p className="mt-2 text-[11px] text-[var(--theme-text-faint)]">
-          Ids must be lowercase slugs (letters, digits, hyphens). Pick the <code>html</code> renderer for
-          self-contained HTML documents (e.g. from the visual-explainer or playground skills).
+          Ids must be lowercase slugs (letters, digits, hyphens). Pick the <code>html</code>{' '}
+          renderer for self-contained HTML documents (e.g. from the visual-explainer or playground
+          skills).
         </p>
       </div>
 
       {/* Bulk reassign */}
       <div className="rounded-lg border border-[var(--theme-border)] p-4">
-        <h3 className="mb-3 text-sm font-semibold text-[var(--theme-text-primary)]">Reassign deliverables</h3>
+        <h3 className="mb-3 text-sm font-semibold text-[var(--theme-text-primary)]">
+          Reassign deliverables
+        </h3>
         <p className="mb-3 text-[11px] text-[var(--theme-text-faint)]">
           Move every deliverable of one type to another — useful before deleting a type, or to fix
           deliverables left on a removed/renamed type.
@@ -382,24 +466,38 @@ export function DeliverableTypesTab() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-[11px] text-[var(--theme-text-secondary)]">From</label>
-            <select className={inputCls} value={reassignFrom} onChange={(e) => setReassignFrom(e.target.value)}>
+            <select
+              className={inputCls}
+              value={reassignFrom}
+              onChange={(e) => setReassignFrom(e.target.value)}
+            >
               <option value="">Select…</option>
               {usedTypeIds.map((id) => (
-                <option key={id} value={id}>{id} ({usage[id]})</option>
+                <option key={id} value={id}>
+                  {id} ({usage[id]})
+                </option>
               ))}
             </select>
           </div>
           <span className="pb-1.5 text-[var(--theme-text-faint)]">→</span>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] text-[var(--theme-text-secondary)]">To</label>
-            <select className={inputCls} value={reassignTo} onChange={(e) => setReassignTo(e.target.value)}>
+            <select
+              className={inputCls}
+              value={reassignTo}
+              onChange={(e) => setReassignTo(e.target.value)}
+            >
               <option value="">Select…</option>
               {configuredIds.map((id) => (
-                <option key={id} value={id}>{id}</option>
+                <option key={id} value={id}>
+                  {id}
+                </option>
               ))}
             </select>
           </div>
-          <Button variant="secondary" onClick={handleReassign}>Move</Button>
+          <Button variant="secondary" onClick={handleReassign}>
+            Move
+          </Button>
         </div>
       </div>
     </div>

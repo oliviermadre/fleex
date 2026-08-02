@@ -1,20 +1,26 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { PostCommentUseCase } from '../../src/application/use-cases/post-comment.js';
-import type { TicketCommentEntity } from '../../src/domain/entities/ticket-comment.entity.js';
-import type { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
+
 import type { CommentStorePort } from '../../src/application/ports/comment-store.port.js';
+import type { LoggerPort } from '../../src/application/ports/logger.port.js';
 import type { MentionStorePort } from '../../src/application/ports/mention-store.port.js';
 import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
-import type { LoggerPort } from '../../src/application/ports/logger.port.js';
+import type { TicketCommentEntity } from '../../src/domain/entities/ticket-comment.entity.js';
+import type { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
 
 // Minimal in-memory doubles — only the methods PostCommentUseCase touches.
 class FakeCommentStore {
   saved: TicketCommentEntity[] = [];
-  async save(comment: TicketCommentEntity): Promise<void> { this.saved.push(comment); }
+  async save(comment: TicketCommentEntity): Promise<void> {
+    this.saved.push(comment);
+  }
 }
 class FakeMentionStore {
   saved: TicketMentionEntity[] = [];
-  async save(mention: TicketMentionEntity): Promise<void> { this.saved.push(mention); }
+  async save(mention: TicketMentionEntity): Promise<void> {
+    this.saved.push(mention);
+  }
 }
 class FakeTicketStore {
   async saveActivity(): Promise<void> {}

@@ -1,5 +1,6 @@
-import { defineConfig, configDefaults } from 'vitest/config';
 import path from 'node:path';
+
+import { defineConfig, configDefaults } from 'vitest/config';
 
 export default defineConfig({
   test: {

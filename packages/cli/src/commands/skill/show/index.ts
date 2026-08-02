@@ -1,5 +1,3 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, die, info } from '../../../core/colors.ts';
 import {
   fetchSkills,
   handle,
@@ -7,8 +5,13 @@ import {
   resolveFromList,
   skillHandleName,
 } from '../../../core/agentic.ts';
+import { c, die, info } from '../../../core/colors.ts';
 
-interface ShowOptions { json?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface ShowOptions {
+  json?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -34,7 +37,12 @@ const def: CommandDef = {
     process.stdout.write(`  ${c.dim('enabled')}  ${s.enabled ? 'yes' : 'no'}\n`);
     if (s.markdownContent) {
       process.stdout.write(`\n  ${c.bold('Content')}\n`);
-      process.stdout.write(s.markdownContent.split('\n').map((l) => `  ${l}`).join('\n') + '\n');
+      process.stdout.write(
+        s.markdownContent
+          .split('\n')
+          .map((l) => `  ${l}`)
+          .join('\n') + '\n',
+      );
     }
     process.stdout.write('\n');
     info(`Trigger with: fleex trigger <ticket> --skill ${skillHandleName(s)}`);

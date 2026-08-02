@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { CreateSessionUseCase } from '../../src/application/use-cases/create-session.js';
-import { SessionNamingService } from '../../src/domain/services/session-naming.js';
 import { sessionIdFromTmuxName } from '../../src/domain/services/session-id.js';
+import { SessionNamingService } from '../../src/domain/services/session-naming.js';
 import {
   FakeTmuxPort,
   FakeSessionStore,
@@ -25,7 +26,12 @@ describe('CreateSessionUseCase', () => {
     config = new FakeConfigPort();
     logger = new FakeLoggerPort();
     useCase = new CreateSessionUseCase(
-      tmux, store, new SessionNamingService(), git, config, logger,
+      tmux,
+      store,
+      new SessionNamingService(),
+      git,
+      config,
+      logger,
     );
   });
 

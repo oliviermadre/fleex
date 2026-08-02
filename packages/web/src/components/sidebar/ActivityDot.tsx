@@ -1,4 +1,5 @@
 import type { ClaudeActivityStatus } from '@fleex/shared';
+
 import { cn } from '../../lib/cn';
 import { tintSolid } from '../../lib/tints';
 

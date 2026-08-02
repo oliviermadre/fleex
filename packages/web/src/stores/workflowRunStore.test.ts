@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import type { WorkflowRun, StepRun } from '@fleex/shared';
 
 // Mock the api module with a factory so the real network layer is never loaded.
@@ -12,18 +13,21 @@ vi.mock('../services/api', () => ({
 }));
 
 import * as api from '../services/api';
+
 import { useWorkflowRunStore } from './workflowRunStore';
 
-function makeRun(
-  id: string,
-  currentStepId: string,
-  status: WorkflowRun['status'],
-): WorkflowRun {
+function makeRun(id: string, currentStepId: string, status: WorkflowRun['status']): WorkflowRun {
   return {
     id,
     ticketId: 't1',
     templateId: 'tmpl1',
-    templateSnapshot: { name: 'Spec Dev PR', emoji: '⚙️', steps: [], edges: [], entryStepId: 'spec' },
+    templateSnapshot: {
+      name: 'Spec Dev PR',
+      emoji: '⚙️',
+      steps: [],
+      edges: [],
+      entryStepId: 'spec',
+    },
     status,
     currentStepId,
     triggeredBy: 'user',

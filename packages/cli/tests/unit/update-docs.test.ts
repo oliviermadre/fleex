@@ -9,14 +9,16 @@
  *  - PATCH semantics are stated in each command description;
  *  - a snapshot of the full `describeCommand` doc (including notes) per command.
  */
-import { describe, it, expect } from 'vitest';
 import { Command, type Option, type Argument } from 'commander';
+import { describe, it, expect } from 'vitest';
+
 import agentUpdate from '../../src/commands/agent/update/index.ts';
-import skillUpdate from '../../src/commands/skill/update/index.ts';
-import panelUpdate from '../../src/commands/panel/update/index.ts';
-import type { CommandDef } from '../../src/core/types.ts';
-import { recordExtraHelp } from '../../src/core/help.ts';
 import { describeCommand, type CommandDoc } from '../../src/commands/documentation/index.ts';
+import panelUpdate from '../../src/commands/panel/update/index.ts';
+import skillUpdate from '../../src/commands/skill/update/index.ts';
+import { recordExtraHelp } from '../../src/core/help.ts';
+
+import type { CommandDef } from '../../src/core/types.ts';
 
 const CASES: Array<{ resource: string; def: CommandDef }> = [
   { resource: 'agent', def: agentUpdate },

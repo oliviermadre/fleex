@@ -1,26 +1,33 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+import { useContextMenuPopover, usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { cn } from '../../lib/cn';
+import { foldAccents } from '../../lib/normalize';
+import {
+  PrimitiveIcon,
+  PRIMITIVE_META,
+  PRIMITIVE_KINDS,
+  type PrimitiveKind,
+} from '../../lib/primitives';
+import { tintClasses, tintSolid } from '../../lib/tints';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { useSkillStore } from '../../stores/skillStore';
-import { usePanelStore } from '../../stores/panelStore';
-import { useUIStore } from '../../stores/uiStore';
-import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import {
   useFrequentLaunchStore,
   buildMostUsedItems,
   type FrequentSource,
 } from '../../stores/frequentLaunchStore';
+import { usePanelStore } from '../../stores/panelStore';
+import { useSkillStore } from '../../stores/skillStore';
+import { useUIStore } from '../../stores/uiStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { Modal } from '../ui/Modal';
+
 import { CreateAgentModal } from './CreateAgentModal';
-import { CreateSkillModal } from './CreateSkillModal';
 import { CreatePanelModal } from './CreatePanelModal';
+import { CreateSkillModal } from './CreateSkillModal';
 import { CreateWorkflowModal } from './CreateWorkflowModal';
 import { ModelBadge } from './ModelBadge';
-import { Modal } from '../ui/Modal';
-import { cn } from '../../lib/cn';
-import { foldAccents } from '../../lib/normalize';
-import { PrimitiveIcon, PRIMITIVE_META, PRIMITIVE_KINDS, type PrimitiveKind } from '../../lib/primitives';
-import { useContextMenuPopover, usePopover, FloatingPortal } from '../../hooks/usePopover';
-import { tintClasses, tintSolid } from '../../lib/tints';
 
 type FilterKey = 'all' | PrimitiveKind;
 
@@ -76,7 +83,11 @@ export function AgentListPanel() {
   const toggleCollapsed = (kind: PrimitiveKind) =>
     setCollapsed((c) => ({ ...c, [kind]: !c[kind] }));
   // Delete is irreversible, so it is always funnelled through a confirm dialog.
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; kind: PrimitiveKind; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    kind: PrimitiveKind;
+    name: string;
+  } | null>(null);
 
   const {
     open: menuOpen,
@@ -128,7 +139,10 @@ export function AgentListPanel() {
     [personas, q],
   );
   const matchedSkills = useMemo(
-    () => skills.filter((s) => !q || foldAccents(`${s.displayName} ${s.name} ${s.commandName}`).includes(q)),
+    () =>
+      skills.filter(
+        (s) => !q || foldAccents(`${s.displayName} ${s.name} ${s.commandName}`).includes(q),
+      ),
     [skills, q],
   );
   const matchedPanels = useMemo(
@@ -153,7 +167,11 @@ export function AgentListPanel() {
   // deleted/renamed primitive drops out automatically.
   const source: FrequentSource = useMemo(
     () => ({
-      skills: skills.map((s) => ({ id: s.id, displayName: s.displayName, commandName: s.commandName })),
+      skills: skills.map((s) => ({
+        id: s.id,
+        displayName: s.displayName,
+        commandName: s.commandName,
+      })),
       templates: templates.map((t) => ({ id: t.id, name: t.name, slug: t.slug, emoji: t.emoji })),
       panels: panels.map((p) => ({ id: p.id, displayName: p.displayName, name: p.name })),
       personas: personas.map((p) => ({ id: p.id, displayName: p.displayName })),
@@ -242,7 +260,9 @@ export function AgentListPanel() {
           <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
             Agentic Catalog
           </span>
-          <span className="text-[10px] font-medium text-[var(--theme-text-faint)]">{totalCount}</span>
+          <span className="text-[10px] font-medium text-[var(--theme-text-faint)]">
+            {totalCount}
+          </span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -251,7 +271,15 @@ export function AgentListPanel() {
             className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
             title="Create a primitive"
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            >
               <line x1="8" y1="3" x2="8" y2="13" />
               <line x1="3" y1="8" x2="13" y2="8" />
             </svg>
@@ -261,7 +289,16 @@ export function AgentListPanel() {
             className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
             title="Collapse panel"
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
               <line x1="6" y1="1.5" x2="6" y2="14.5" />
             </svg>
@@ -297,7 +334,14 @@ export function AgentListPanel() {
         <div className="relative">
           <svg
             className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)]"
-            width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
@@ -314,7 +358,16 @@ export function AgentListPanel() {
               className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
               title="Clear"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -325,7 +378,12 @@ export function AgentListPanel() {
 
       {/* Filter chips */}
       <div className="flex flex-wrap gap-1 px-3 pt-2 pb-1">
-        <FilterChip label="Tous" count={matchedTotal} active={filter === 'all'} onClick={() => setFilter('all')} />
+        <FilterChip
+          label="Tous"
+          count={matchedTotal}
+          active={filter === 'all'}
+          onClick={() => setFilter('all')}
+        />
         {PRIMITIVE_KINDS.map((kind) => (
           <FilterChip
             key={kind}
@@ -401,7 +459,13 @@ export function AgentListPanel() {
                       right={<ModelBadge modelId={persona.model} size="compact" />}
                       onClick={() => selectPrimitive('persona', persona.id)}
                       onContextMenu={(e) => openContextMenu(e, persona.id, 'persona')}
-                      onDelete={() => setDeleteTarget({ id: persona.id, kind: 'persona', name: persona.displayName })}
+                      onDelete={() =>
+                        setDeleteTarget({
+                          id: persona.id,
+                          kind: 'persona',
+                          name: persona.displayName,
+                        })
+                      }
                     />
                   );
                 })}
@@ -417,7 +481,9 @@ export function AgentListPanel() {
             onToggle={() => toggleCollapsed('skill')}
           >
             {matchedSkills.length === 0
-              ? !isSearching && <EmptySection kind="skill" onCreate={() => setSkillModalOpen(true)} />
+              ? !isSearching && (
+                  <EmptySection kind="skill" onCreate={() => setSkillModalOpen(true)} />
+                )
               : matchedSkills.map((skill) => (
                   <PrimitiveRow
                     key={skill.id}
@@ -428,7 +494,9 @@ export function AgentListPanel() {
                     subtitle={`/${skill.commandName}`}
                     onClick={() => selectPrimitive('skill', skill.id)}
                     onContextMenu={(e) => openContextMenu(e, skill.id, 'skill')}
-                    onDelete={() => setDeleteTarget({ id: skill.id, kind: 'skill', name: skill.displayName })}
+                    onDelete={() =>
+                      setDeleteTarget({ id: skill.id, kind: 'skill', name: skill.displayName })
+                    }
                   />
                 ))}
           </Section>
@@ -443,7 +511,9 @@ export function AgentListPanel() {
             onToggle={() => toggleCollapsed('panel')}
           >
             {matchedPanels.length === 0
-              ? !isSearching && <EmptySection kind="panel" onCreate={() => setPanelModalOpen(true)} />
+              ? !isSearching && (
+                  <EmptySection kind="panel" onCreate={() => setPanelModalOpen(true)} />
+                )
               : matchedPanels.map((panel) => (
                   <PrimitiveRow
                     key={panel.id}
@@ -455,7 +525,9 @@ export function AgentListPanel() {
                     right={<ModelBadge modelId={panel.orchestratorModel} size="compact" />}
                     onClick={() => selectPrimitive('panel', panel.id)}
                     onContextMenu={(e) => openContextMenu(e, panel.id, 'panel')}
-                    onDelete={() => setDeleteTarget({ id: panel.id, kind: 'panel', name: panel.displayName })}
+                    onDelete={() =>
+                      setDeleteTarget({ id: panel.id, kind: 'panel', name: panel.displayName })
+                    }
                   />
                 ))}
           </Section>
@@ -470,7 +542,9 @@ export function AgentListPanel() {
             onToggle={() => toggleCollapsed('workflow')}
           >
             {matchedWorkflows.length === 0
-              ? !isSearching && <EmptySection kind="workflow" onCreate={() => setWorkflowModalOpen(true)} />
+              ? !isSearching && (
+                  <EmptySection kind="workflow" onCreate={() => setWorkflowModalOpen(true)} />
+                )
               : matchedWorkflows.map((template) => (
                   <PrimitiveRow
                     key={template.id}
@@ -486,7 +560,9 @@ export function AgentListPanel() {
                     }
                     onClick={() => selectPrimitive('workflow', template.id)}
                     onContextMenu={(e) => openContextMenu(e, template.id, 'workflow')}
-                    onDelete={() => setDeleteTarget({ id: template.id, kind: 'workflow', name: template.name })}
+                    onDelete={() =>
+                      setDeleteTarget({ id: template.id, kind: 'workflow', name: template.name })
+                    }
                   />
                 ))}
           </Section>
@@ -537,8 +613,10 @@ export function AgentListPanel() {
             </div>
             <p className="mt-2 text-xs text-[var(--theme-text-secondary)]">
               Are you sure you want to delete{' '}
-              <span className="font-medium text-[var(--theme-text-primary)]">{deleteTarget.name}</span>? This
-              action is irreversible.
+              <span className="font-medium text-[var(--theme-text-primary)]">
+                {deleteTarget.name}
+              </span>
+              ? This action is irreversible.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
@@ -589,7 +667,11 @@ function FilterChip({
       )}
     >
       {label}
-      <span className={cn('tabular-nums', active ? 'opacity-80' : 'text-[var(--theme-text-faint)]')}>{count}</span>
+      <span
+        className={cn('tabular-nums', active ? 'opacity-80' : 'text-[var(--theme-text-faint)]')}
+      >
+        {count}
+      </span>
     </button>
   );
 }
@@ -683,12 +765,17 @@ function PrimitiveRow({
         {/* Only a running persona pulses (yellow). No pending/blue dot. */}
         {running && (
           <span
-            className={cn('absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full animate-pulse', tintSolid('yellow'))}
+            className={cn(
+              'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full animate-pulse',
+              tintSolid('yellow'),
+            )}
           />
         )}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">{title}</div>
+        <div className="truncate text-sm font-semibold text-[var(--theme-text-primary)]">
+          {title}
+        </div>
         <div className="truncate text-xs text-[var(--theme-text-muted)]">{subtitle}</div>
       </div>
       {right}
@@ -708,7 +795,16 @@ function PrimitiveRow({
           tintClasses('red').hoverText,
         )}
       >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M3 6h18" />
           <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
           <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />

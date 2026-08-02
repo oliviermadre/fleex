@@ -1,5 +1,3 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, die, info } from '../../../core/colors.ts';
 import {
   fetchPanels,
   fetchPersonas,
@@ -8,8 +6,13 @@ import {
   printJson,
   resolveFromList,
 } from '../../../core/agentic.ts';
+import { c, die, info } from '../../../core/colors.ts';
 
-interface ShowOptions { json?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface ShowOptions {
+  json?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -50,7 +53,9 @@ const def: CommandDef = {
     if (p.orchestratorPrompt) {
       const firstLine = p.orchestratorPrompt.split('\n')[0] ?? '';
       const excerpt = firstLine.length > 80 ? `${firstLine.slice(0, 79)}…` : firstLine;
-      process.stdout.write(`  ${c.dim('prompt')}   ${excerpt} ${c.dim('(use --json for the full prompt)')}\n`);
+      process.stdout.write(
+        `  ${c.dim('prompt')}   ${excerpt} ${c.dim('(use --json for the full prompt)')}\n`,
+      );
     }
 
     if (p.members?.length) {

@@ -1,9 +1,10 @@
 import type { Repository } from '@fleex/shared';
-import type { GitPort } from '../ports/git.port.js';
-import type { ConfigPort } from '../ports/config.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
-import type { HostFs } from '../../infrastructure/host/types.js';
+
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+import type { HostFs } from '../../infrastructure/host/types.js';
+import type { ConfigPort } from '../ports/config.port.js';
+import type { GitPort } from '../ports/git.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
 
 export class ListRepositoriesUseCase {
   constructor(

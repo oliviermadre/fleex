@@ -62,11 +62,7 @@ export type AgentEventType =
  * underlying SDK events.
  */
 export type ExecutionKind =
-  | 'persona'
-  | 'skill'
-  | 'panel_member'
-  | 'panel_orchestrator'
-  | 'workflow_step';
+  'persona' | 'skill' | 'panel_member' | 'panel_orchestrator' | 'workflow_step';
 
 /** Observability context window summary surfaced in the execution header. */
 export interface ExecutionStartContext {
@@ -135,7 +131,15 @@ export interface PanelMemberSummary {
 export interface WorkflowStepSummary {
   readonly stepId: string;
   readonly name: string;
-  readonly status: 'pending' | 'queued' | 'running' | 'completed' | 'failed' | 'needs_review' | 'cancelled' | 'skipped';
+  readonly status:
+    | 'pending'
+    | 'queued'
+    | 'running'
+    | 'completed'
+    | 'failed'
+    | 'needs_review'
+    | 'cancelled'
+    | 'skipped';
   readonly isCurrent: boolean;
 }
 

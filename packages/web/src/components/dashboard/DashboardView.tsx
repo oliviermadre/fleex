@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
 import type {
   Ticket,
   TicketLink,
@@ -14,25 +15,31 @@ import type {
   DashboardGitHubIssue,
 } from '@fleex/shared';
 import { TICKET_PRIORITIES, TICKET_STATUS_LABELS } from '@fleex/shared';
+
+import { usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { cn } from '../../lib/cn';
+import { notifyHookStarted } from '../../lib/hookResultToast';
+import { tintText, tintSolid } from '../../lib/tints';
 import { importGitHubIssue, importGitHubPR, executeSkill } from '../../services/api';
-import { useDashboardStore } from '../../stores/dashboardStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useUIStore } from '../../stores/uiStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { useUnreadStore } from '../../stores/unreadStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { cn } from '../../lib/cn';
-import { tintText, tintSolid } from '../../lib/tints';
-import { usePopover, FloatingPortal } from '../../hooks/usePopover';
-import { PrBadge } from '../ui/PrBadge';
-import { notifyHookStarted } from '../../lib/hookResultToast';
-import { SmartSessionButton } from './SmartSessionButton';
-import { ImportTaskButton } from './ImportTaskButton';
-import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
+import { useDashboardStore } from '../../stores/dashboardStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUIStore } from '../../stores/uiStore';
+import { useUnreadStore } from '../../stores/unreadStore';
 import { PriorityIndicator } from '../tickets/PriorityIndicator';
-import { findSessionsForTicketId, findSessionsForPR, hasLocalWorktreeForPR } from './dashboard-helpers';
+import { PriorityPickerPopover } from '../tickets/PriorityPickerPopover';
+import { PrBadge } from '../ui/PrBadge';
+
+import {
+  findSessionsForTicketId,
+  findSessionsForPR,
+  hasLocalWorktreeForPR,
+} from './dashboard-helpers';
+import { ImportTaskButton } from './ImportTaskButton';
+import { SmartSessionButton } from './SmartSessionButton';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,8 +62,18 @@ function getTodayFrench(): string {
   const d = new Date();
   const days = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
   const months = [
-    'janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
-    'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre',
+    'janvier',
+    'fevrier',
+    'mars',
+    'avril',
+    'mai',
+    'juin',
+    'juillet',
+    'aout',
+    'septembre',
+    'octobre',
+    'novembre',
+    'decembre',
   ];
   return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
 }
@@ -64,10 +81,10 @@ function getTodayFrench(): string {
 // Status colors matching the kanban NanoKanban palette
 const STATUS_COLOR: Record<string, string> = {
   backlog: 'var(--theme-text-faint)',
-  todo: '#fb923c',      // orange-400
-  doing: '#60a5fa',     // blue-400
-  reviewing: '#c084fc',  // purple-400
-  done: '#4ade80',      // green-400
+  todo: '#fb923c', // orange-400
+  doing: '#60a5fa', // blue-400
+  reviewing: '#c084fc', // purple-400
+  done: '#4ade80', // green-400
   cancelled: 'rgb(248 113 113 / 0.7)', // red-400/70
 };
 
@@ -76,7 +93,12 @@ const STATUS_PULSE: Record<string, boolean> = {
 };
 
 const INLINE_STATUSES: TicketStatus[] = [
-  'backlog', 'todo', 'doing', 'reviewing', 'done', 'cancelled',
+  'backlog',
+  'todo',
+  'doing',
+  'reviewing',
+  'done',
+  'cancelled',
 ];
 
 // ── Inline keyframes ─────────────────────────────────────────────────────────
@@ -98,13 +120,7 @@ const KEYFRAMES = `
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function SectionShell({
-  children,
-  delay = 0,
-}: {
-  children: React.ReactNode;
-  delay?: number;
-}) {
+function SectionShell({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   return (
     <div
       className="rounded-xl border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-surface)] p-4"
@@ -131,13 +147,14 @@ function SectionHeader({
   toolbar?: React.ReactNode;
 }) {
   return (
-    <div className="-mx-4 -mt-4 mb-3 rounded-t-xl border-b border-[var(--theme-border-subtle)] px-4 py-2.5" style={{ backgroundColor: 'color-mix(in srgb, var(--theme-accent) 8%, var(--theme-bg-surface))' }}>
+    <div
+      className="-mx-4 -mt-4 mb-3 rounded-t-xl border-b border-[var(--theme-border-subtle)] px-4 py-2.5"
+      style={{
+        backgroundColor: 'color-mix(in srgb, var(--theme-accent) 8%, var(--theme-bg-surface))',
+      }}
+    >
       <div className="flex items-center gap-2.5">
-        {icon && (
-          <span className="text-[var(--theme-text-secondary)]">
-            {icon}
-          </span>
-        )}
+        {icon && <span className="text-[var(--theme-text-secondary)]">{icon}</span>}
         <span className="text-sm font-bold uppercase tracking-wider text-[var(--theme-text-primary)]">
           {title}
         </span>
@@ -175,7 +192,8 @@ function SkeletonBlock({ lines = 3 }: { lines?: number }) {
           key={i}
           className="h-10 rounded-lg"
           style={{
-            background: 'linear-gradient(90deg, var(--theme-bg-hover) 25%, var(--theme-bg-surface) 50%, var(--theme-bg-hover) 75%)',
+            background:
+              'linear-gradient(90deg, var(--theme-bg-hover) 25%, var(--theme-bg-surface) 50%, var(--theme-bg-hover) 75%)',
             backgroundSize: '200% 100%',
             animation: 'dashSkeleton 1.5s ease-in-out infinite',
             animationDelay: `${i * 100}ms`,
@@ -211,7 +229,16 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
 
 function GitPrIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="5" cy="4" r="1.5" />
       <circle cx="5" cy="12" r="1.5" />
       <line x1="5" y1="5.5" x2="5" y2="10.5" />
@@ -223,7 +250,16 @@ function GitPrIcon() {
 
 function GitBranchIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="5" cy="3.5" r="1.5" />
       <circle cx="5" cy="12.5" r="1.5" />
       <circle cx="11" cy="6.5" r="1.5" />
@@ -243,7 +279,16 @@ function GitHubIcon({ size = 14 }: { size?: number } = {}) {
 
 function IssueIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="8" cy="8" r="6.5" />
       <circle cx="8" cy="8" r="1" fill="currentColor" />
     </svg>
@@ -252,7 +297,16 @@ function IssueIcon() {
 
 function BugIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <ellipse cx="8" cy="9.5" rx="3.5" ry="4" />
       <path d="M6 6.5a2 2 0 0 1 4 0" />
       <line x1="1.5" y1="8" x2="4.5" y2="8" />
@@ -267,7 +321,16 @@ function BugIcon({ size = 16 }: { size?: number }) {
 
 function ChevronDownIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="4,6 8,10 12,6" />
     </svg>
   );
@@ -275,7 +338,16 @@ function ChevronDownIcon() {
 
 function FilterIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polygon points="1 1 15 1 9 8 9 13 7 15 7 8 1 1" />
     </svg>
   );
@@ -283,7 +355,16 @@ function FilterIcon() {
 
 function SortIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M4 2v12M4 14l-3-3M4 14l3-3" />
       <path d="M12 14V2M12 2l-3 3M12 2l3 3" />
     </svg>
@@ -292,7 +373,16 @@ function SortIcon() {
 
 function CoffeeIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M3 5h8v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z" />
       <path d="M11 6h1a2 2 0 0 1 0 4h-1" />
       <line x1="2" y1="15" x2="12" y2="15" />
@@ -344,9 +434,10 @@ function DashboardItemRow({
   } = usePopover({ placement: 'bottom-start' });
   const updateTicket = useTicketStore.getState().updateTicket;
 
-  const ghUrl = kind === 'issue'
-    ? `https://github.com/${item.org}/${item.name}/issues/${item.number}`
-    : `https://github.com/${item.org}/${item.name}/pull/${item.number}`;
+  const ghUrl =
+    kind === 'issue'
+      ? `https://github.com/${item.org}/${item.name}/issues/${item.number}`
+      : `https://github.com/${item.org}/${item.name}/pull/${item.number}`;
 
   // ── State A: No linked ticket ──
   if (!ticket) {
@@ -356,9 +447,7 @@ function DashboardItemRow({
           {kind === 'issue' ? <IssueIcon /> : <GitPrIcon />}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-sm text-[var(--theme-text-primary)]">
-            {item.title}
-          </span>
+          <span className="truncate text-sm text-[var(--theme-text-primary)]">{item.title}</span>
           <div className="flex items-center gap-2 text-xs text-[var(--theme-text-muted)]">
             <span className="truncate text-[10px] text-[var(--theme-text-faint)]">
               {item.org}/{item.name}
@@ -387,7 +476,9 @@ function DashboardItemRow({
   const boardMap = useTicketStore.getState().boards;
   const board = boardMap.find((b) => b.id === ticket.boardId);
 
-  const repoLink = ticket.links.find((l: TicketLink) => l.type === 'repository' || l.type === 'worktree');
+  const repoLink = ticket.links.find(
+    (l: TicketLink) => l.type === 'repository' || l.type === 'worktree',
+  );
   const repoLabel = repoLink
     ? repoLink.type === 'worktree'
       ? repoLink.ref.split(':')[0]
@@ -403,9 +494,11 @@ function DashboardItemRow({
     const [orgName, branch] = wtLink.ref.split(':');
     if (!orgName || !branch) return null;
     const [org, name] = orgName.split('/');
-    return allPullRequests.find(
-      (pr) => pr.org === org && pr.name === name && pr.headRefName === branch,
-    ) ?? null;
+    return (
+      allPullRequests.find(
+        (pr) => pr.org === org && pr.name === name && pr.headRefName === branch,
+      ) ?? null
+    );
   })();
 
   const statusColor = STATUS_COLOR[ticket.status] ?? '#60a5fa';
@@ -434,10 +527,18 @@ function DashboardItemRow({
       tabIndex={0}
       className="group flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150 hover:bg-[var(--theme-bg-hover)]"
       onClick={() => onNavigate(ticket)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate(ticket); } }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onNavigate(ticket);
+        }
+      }}
     >
       {/* Priority picker + blocked lock */}
-      <div className="flex flex-shrink-0 flex-col items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="flex flex-shrink-0 flex-col items-center gap-1"
+        onClick={(e) => e.stopPropagation()}
+      >
         <PriorityPickerPopover ticket={ticket} />
         <button
           className={cn(
@@ -452,7 +553,14 @@ function DashboardItemRow({
           }}
           title={ticket.blocked ? 'Unblock ticket' : 'Mark as blocked'}
         >
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+          >
             <rect x="3" y="7" width="10" height="8" rx="1.5" />
             <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
           </svg>
@@ -601,7 +709,17 @@ function SectionToolbar({
     <div className="flex items-center gap-1.5">
       {/* Search */}
       <div className="relative">
-        <svg className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)]" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)]"
+          width="12"
+          height="12"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <circle cx="7" cy="7" r="5" />
           <line x1="11" y1="11" x2="14" y2="14" />
         </svg>
@@ -632,51 +750,59 @@ function SectionToolbar({
           </button>
           {filterOpen && (
             <FloatingPortal>
-            <div
-              ref={filterRefs.setFloating}
-              style={filterFloatingStyles}
-              {...getFilterFloatingProps()}
-              className="z-50 min-w-[200px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 shadow-xl"
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Repository</span>
-                {isFilterActive && (
-                  <button
-                    className="text-[10px] text-[var(--theme-accent)] transition-colors hover:underline"
-                    onClick={() => setRepoFilter('all')}
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <button
-                  className={cn(
-                    'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-                    repoFilter === 'all'
-                      ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
-                      : 'text-[var(--theme-text-secondary)]',
+              <div
+                ref={filterRefs.setFloating}
+                style={filterFloatingStyles}
+                {...getFilterFloatingProps()}
+                className="z-50 min-w-[200px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3 shadow-xl"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                    Repository
+                  </span>
+                  {isFilterActive && (
+                    <button
+                      className="text-[10px] text-[var(--theme-accent)] transition-colors hover:underline"
+                      onClick={() => setRepoFilter('all')}
+                    >
+                      Clear
+                    </button>
                   )}
-                  onClick={() => { setRepoFilter('all'); setFilterOpen(false); }}
-                >
-                  Tous
-                </button>
-                {repos.map((r) => (
+                </div>
+                <div className="flex flex-col gap-0.5">
                   <button
-                    key={r}
                     className={cn(
                       'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-                      repoFilter === r
+                      repoFilter === 'all'
                         ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
                         : 'text-[var(--theme-text-secondary)]',
                     )}
-                    onClick={() => { setRepoFilter(r); setFilterOpen(false); }}
+                    onClick={() => {
+                      setRepoFilter('all');
+                      setFilterOpen(false);
+                    }}
                   >
-                    {r}
+                    Tous
                   </button>
-                ))}
+                  {repos.map((r) => (
+                    <button
+                      key={r}
+                      className={cn(
+                        'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                        repoFilter === r
+                          ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
+                          : 'text-[var(--theme-text-secondary)]',
+                      )}
+                      onClick={() => {
+                        setRepoFilter(r);
+                        setFilterOpen(false);
+                      }}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
             </FloatingPortal>
           )}
         </div>
@@ -699,30 +825,33 @@ function SectionToolbar({
         </button>
         {sortOpen && (
           <FloatingPortal>
-          <div
-            ref={sortRefs.setFloating}
-            style={sortFloatingStyles}
-            {...getSortFloatingProps()}
-            className="z-50 min-w-[130px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-1.5 shadow-xl"
-          >
-            {([
-              { value: 'recent' as const, label: 'Recent' },
-              { value: 'oldest' as const, label: 'Ancien' },
-            ]).map((opt) => (
-              <button
-                key={opt.value}
-                className={cn(
-                  'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-                  sortOrder === opt.value
-                    ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
-                    : 'text-[var(--theme-text-secondary)]',
-                )}
-                onClick={() => { setSortOrder(opt.value); setSortOpen(false); }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+            <div
+              ref={sortRefs.setFloating}
+              style={sortFloatingStyles}
+              {...getSortFloatingProps()}
+              className="z-50 min-w-[130px] rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-1.5 shadow-xl"
+            >
+              {[
+                { value: 'recent' as const, label: 'Recent' },
+                { value: 'oldest' as const, label: 'Ancien' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  className={cn(
+                    'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                    sortOrder === opt.value
+                      ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
+                      : 'text-[var(--theme-text-secondary)]',
+                  )}
+                  onClick={() => {
+                    setSortOrder(opt.value);
+                    setSortOpen(false);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </FloatingPortal>
         )}
       </div>
@@ -789,26 +918,29 @@ function GithubSection({
   }, [allTickets]);
 
   // Filter + sort a column's items
-  const filterAndSort = useCallback((items: DashboardItem[]) => {
-    let result = items;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((item) => {
-        if (item.title.toLowerCase().includes(q)) return true;
-        // Also search the linked Fleex ticket title (may differ from GitHub title)
-        const ticket = item.linkedTicketId ? ticketMap.get(item.linkedTicketId) : undefined;
-        return ticket ? ticket.title.toLowerCase().includes(q) : false;
+  const filterAndSort = useCallback(
+    (items: DashboardItem[]) => {
+      let result = items;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        result = result.filter((item) => {
+          if (item.title.toLowerCase().includes(q)) return true;
+          // Also search the linked Fleex ticket title (may differ from GitHub title)
+          const ticket = item.linkedTicketId ? ticketMap.get(item.linkedTicketId) : undefined;
+          return ticket ? ticket.title.toLowerCase().includes(q) : false;
+        });
+      }
+      if (repoFilter !== 'all') {
+        result = result.filter((item) => `${item.org}/${item.name}` === repoFilter);
+      }
+      result = [...result].sort((a, b) => {
+        const diff = new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        return sortOrder === 'recent' ? diff : -diff;
       });
-    }
-    if (repoFilter !== 'all') {
-      result = result.filter((item) => `${item.org}/${item.name}` === repoFilter);
-    }
-    result = [...result].sort((a, b) => {
-      const diff = new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-      return sortOrder === 'recent' ? diff : -diff;
-    });
-    return result;
-  }, [searchQuery, repoFilter, sortOrder, ticketMap]);
+      return result;
+    },
+    [searchQuery, repoFilter, sortOrder, ticketMap],
+  );
 
   const filteredLeft = useMemo(() => filterAndSort(leftItems), [filterAndSort, leftItems]);
   const filteredRight = useMemo(() => filterAndSort(rightItems), [filterAndSort, rightItems]);
@@ -819,7 +951,9 @@ function GithubSection({
 
     const itemSessions = ticket
       ? findSessionsForTicketId(ticket.id, sessionGroups)
-      : isPR(item) ? findSessionsForPR(item, sessions) : [];
+      : isPR(item)
+        ? findSessionsForPR(item, sessions)
+        : [];
 
     return (
       <DashboardItemRow
@@ -845,17 +979,19 @@ function GithubSection({
         icon={icon}
         title={title}
         count={totalCount}
-        toolbar={totalCount > 0 ? (
-          <SectionToolbar
-            repos={repos}
-            repoFilter={repoFilter}
-            setRepoFilter={setRepoFilter}
-            sortOrder={sortOrder}
-            setSortOrder={setSortOrder}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-          />
-        ) : undefined}
+        toolbar={
+          totalCount > 0 ? (
+            <SectionToolbar
+              repos={repos}
+              repoFilter={repoFilter}
+              setRepoFilter={setRepoFilter}
+              sortOrder={sortOrder}
+              setSortOrder={setSortOrder}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+            />
+          ) : undefined
+        }
       />
       {totalCount === 0 ? (
         <EmptyState
@@ -876,9 +1012,7 @@ function GithubSection({
             </div>
             <div className="flex flex-col">
               {filteredLeft.length === 0 ? (
-                <div className="px-3 py-4 text-xs text-[var(--theme-text-faint)]">
-                  Nothing here
-                </div>
+                <div className="px-3 py-4 text-xs text-[var(--theme-text-faint)]">Nothing here</div>
               ) : (
                 filteredLeft.map(renderItem)
               )}
@@ -900,9 +1034,7 @@ function GithubSection({
             </div>
             <div className="flex flex-col">
               {filteredRight.length === 0 ? (
-                <div className="px-3 py-4 text-xs text-[var(--theme-text-faint)]">
-                  Nothing here
-                </div>
+                <div className="px-3 py-4 text-xs text-[var(--theme-text-faint)]">Nothing here</div>
               ) : (
                 filteredRight.map(renderItem)
               )}
@@ -959,9 +1091,7 @@ function SyncToolbar() {
   return (
     <div className="flex items-center gap-3">
       {/* Last sync */}
-      <span className="text-[11px] text-[var(--theme-text-faint)]">
-        Last sync: {syncAge}
-      </span>
+      <span className="text-[11px] text-[var(--theme-text-faint)]">Last sync: {syncAge}</span>
 
       {/* Auto-sync dropdown */}
       <button
@@ -974,7 +1104,16 @@ function SyncToolbar() {
         )}
         {...getSyncReferenceProps({ onClick: (e) => e.stopPropagation() })}
       >
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <circle cx="8" cy="8" r="6" />
           <polyline points="8,4 8,8 11,10" />
         </svg>
@@ -998,7 +1137,10 @@ function SyncToolbar() {
                     ? 'bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
                     : 'text-[var(--theme-text-secondary)]',
                 )}
-                onClick={() => { setAutoSyncInterval(opt.ms); setSyncOpen(false); }}
+                onClick={() => {
+                  setAutoSyncInterval(opt.ms);
+                  setSyncOpen(false);
+                }}
               >
                 {opt.label}
               </button>
@@ -1050,7 +1192,9 @@ export function DashboardView() {
   const personas = useAgentPersonaStore((s) => s.personas);
 
   const visibleTicketIds = useMemo(() => storeTickets.map((t) => t.id), [storeTickets]);
-  useEffect(() => { loadUnreadCounts(visibleTicketIds); }, [loadUnreadCounts, visibleTicketIds]);
+  useEffect(() => {
+    loadUnreadCounts(visibleTicketIds);
+  }, [loadUnreadCounts, visibleTicketIds]);
 
   // Fetch on mount only if no cached data
   useEffect(() => {
@@ -1069,12 +1213,20 @@ export function DashboardView() {
     const allExecs = Object.values(executionsByTicket).flat();
     return [...allExecs]
       .filter((e) => e.status !== 'running')
-      .sort((a, b) => new Date(b.completedAt ?? b.startedAt).getTime() - new Date(a.completedAt ?? a.startedAt).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.completedAt ?? b.startedAt).getTime() -
+          new Date(a.completedAt ?? a.startedAt).getTime(),
+      )
       .slice(0, 10)
       .map((e) => {
         const persona = personas.find((p) => p.id === e.personaId);
         const ticket = storeTickets.find((t) => t.id === e.ticketId);
-        return { ...e, personaName: persona?.displayName ?? persona?.name ?? 'Agent', ticketTitle: ticket?.title ?? `#${ticket?.displayId ?? '?'}` };
+        return {
+          ...e,
+          personaName: persona?.displayName ?? persona?.name ?? 'Agent',
+          ticketTitle: ticket?.title ?? `#${ticket?.displayId ?? '?'}`,
+        };
       });
   }, [executionsByTicket, personas, storeTickets]);
 
@@ -1094,53 +1246,71 @@ export function DashboardView() {
     [data?.myPullRequests, data?.reviewRequests],
   );
 
-  const handleStatusChange = useCallback(async (ticketId: string, newStatus: TicketStatus) => {
-    try {
-      await moveTicket(ticketId, newStatus);
-      fetchDash();
-    } catch {
-      // handled by api layer
-    }
-  }, [moveTicket, fetchDash]);
+  const handleStatusChange = useCallback(
+    async (ticketId: string, newStatus: TicketStatus) => {
+      try {
+        await moveTicket(ticketId, newStatus);
+        fetchDash();
+      } catch {
+        // handled by api layer
+      }
+    },
+    [moveTicket, fetchDash],
+  );
 
-  const handleTicketNavigate = useCallback((ticket: Ticket) => {
-    navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`);
-  }, [navigate]);
+  const handleTicketNavigate = useCallback(
+    (ticket: Ticket) => {
+      navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`);
+    },
+    [navigate],
+  );
 
-  const handleImportIssue = useCallback(async (item: DashboardItem, boardId: string) => {
-    const key = `${item.org}/${item.name}#${item.number}`;
-    if (importingKey) return;
-    setImportingKey(key);
-    try {
-      await importGitHubIssue(item.org, item.name, item.number, boardId);
-      await fetchDash();
-    } catch {
-      // handled by api layer
-    } finally {
-      setImportingKey(null);
-    }
-  }, [importingKey, fetchDash]);
+  const handleImportIssue = useCallback(
+    async (item: DashboardItem, boardId: string) => {
+      const key = `${item.org}/${item.name}#${item.number}`;
+      if (importingKey) return;
+      setImportingKey(key);
+      try {
+        await importGitHubIssue(item.org, item.name, item.number, boardId);
+        await fetchDash();
+      } catch {
+        // handled by api layer
+      } finally {
+        setImportingKey(null);
+      }
+    },
+    [importingKey, fetchDash],
+  );
 
-  const handleImportPR = useCallback(async (item: DashboardItem, boardId: string) => {
-    const key = `${item.org}/${item.name}#${item.number}`;
-    if (importingKey || !isPR(item)) return;
-    setImportingKey(key);
-    try {
-      await importGitHubPR(item.org, item.name, item.number, item.title, item.headRefName, boardId);
-      await fetchDash();
-    } catch {
-      // handled by api layer
-    } finally {
-      setImportingKey(null);
-    }
-  }, [importingKey, fetchDash]);
+  const handleImportPR = useCallback(
+    async (item: DashboardItem, boardId: string) => {
+      const key = `${item.org}/${item.name}#${item.number}`;
+      if (importingKey || !isPR(item)) return;
+      setImportingKey(key);
+      try {
+        await importGitHubPR(
+          item.org,
+          item.name,
+          item.number,
+          item.title,
+          item.headRefName,
+          boardId,
+        );
+        await fetchDash();
+      } catch {
+        // handled by api layer
+      } finally {
+        setImportingKey(null);
+      }
+    },
+    [importingKey, fetchDash],
+  );
 
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: KEYFRAMES }} />
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto bg-[var(--theme-bg-base)]">
         <div className="flex w-full flex-col gap-5 px-6 py-6">
-
           {/* ── Header ── */}
           <div
             className="flex items-center justify-between"
@@ -1148,11 +1318,10 @@ export function DashboardView() {
           >
             <div className="flex flex-col gap-0.5">
               <h1 className="text-lg font-semibold text-[var(--theme-text-primary)]">
-                {getGreeting()}{humanDisplayName ? ` ${humanDisplayName}` : ''}
+                {getGreeting()}
+                {humanDisplayName ? ` ${humanDisplayName}` : ''}
               </h1>
-              <span className="text-xs text-[var(--theme-text-muted)]">
-                {getTodayFrench()}
-              </span>
+              <span className="text-xs text-[var(--theme-text-muted)]">{getTodayFrench()}</span>
             </div>
             <SyncToolbar />
           </div>
@@ -1174,12 +1343,26 @@ export function DashboardView() {
           {/* ── Loaded content ── */}
           {data && (
             <div className="flex flex-col gap-5">
-
               {/* ── AGENT ACTIVITY ── */}
               {(recentActivity.length > 0 || totalUnread > 0) && (
                 <SectionShell delay={0}>
                   <SectionHeader
-                    icon={<span className={tintText('purple')}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" /></svg></span>}
+                    icon={
+                      <span className={tintText('purple')}>
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" />
+                        </svg>
+                      </span>
+                    }
                     title="Agent Activity"
                     count={recentActivity.length}
                     subtitle={totalUnread > 0 ? `${totalUnread} unread` : undefined}
@@ -1194,19 +1377,36 @@ export function DashboardView() {
                             const ticket = storeTickets.find((t) => t.id === a.ticketId);
                             if (ticket) {
                               navigate('/tickets');
-                              setTimeout(() => useTicketStore.getState().selectTicket(ticket.id), 100);
+                              setTimeout(
+                                () => useTicketStore.getState().selectTicket(ticket.id),
+                                100,
+                              );
                             }
                           }}
                         >
-                          <span className={cn(
-                            'h-1.5 w-1.5 flex-shrink-0 rounded-full',
-                            a.status === 'completed' ? tintSolid('green') : a.status === 'failed' ? tintSolid('red') : tintSolid('yellow'),
-                          )} />
-                          <span className={cn('font-medium', tintText('purple'))}>{a.personaName}</span>
-                          <span className="text-[var(--theme-text-muted)]">
-                            {a.status === 'completed' ? 'finished' : a.status === 'failed' ? 'failed' : 'interrupted'}
+                          <span
+                            className={cn(
+                              'h-1.5 w-1.5 flex-shrink-0 rounded-full',
+                              a.status === 'completed'
+                                ? tintSolid('green')
+                                : a.status === 'failed'
+                                  ? tintSolid('red')
+                                  : tintSolid('yellow'),
+                            )}
+                          />
+                          <span className={cn('font-medium', tintText('purple'))}>
+                            {a.personaName}
                           </span>
-                          <span className="min-w-0 truncate text-[var(--theme-text-secondary)]">{a.ticketTitle}</span>
+                          <span className="text-[var(--theme-text-muted)]">
+                            {a.status === 'completed'
+                              ? 'finished'
+                              : a.status === 'failed'
+                                ? 'failed'
+                                : 'interrupted'}
+                          </span>
+                          <span className="min-w-0 truncate text-[var(--theme-text-secondary)]">
+                            {a.ticketTitle}
+                          </span>
                           <span className="ml-auto flex-shrink-0 text-[var(--theme-text-faint)]">
                             {timeAgo(a.completedAt ?? a.startedAt)}
                           </span>
@@ -1262,7 +1462,6 @@ export function DashboardView() {
                 delay={160}
                 emptyMessage="Aucune PR ouverte. Ship it !"
               />
-
             </div>
           )}
         </div>

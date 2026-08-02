@@ -1,4 +1,3 @@
-import type { CommandDef } from '../../../core/types.ts';
 import { c } from '../../../core/colors.ts';
 import {
   COMPANION_PORT,
@@ -7,6 +6,8 @@ import {
   probeCompanion,
   readCompanionPid,
 } from '../../../core/companion.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const def: CommandDef = {
   name: 'status',

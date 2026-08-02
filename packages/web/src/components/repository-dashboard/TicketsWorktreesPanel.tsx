@@ -1,16 +1,19 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
 import type { TicketType } from '@fleex/shared';
-import { useTicketActivityStore } from '../../stores/ticketActivityStore';
-import { ConfirmModal } from '../ui/ConfirmModal';
-import { TrashIcon } from '../ui/TrashIcon';
-import { PrBadge } from '../ui/PrBadge';
-import { PriorityIndicator } from '../tickets/PriorityIndicator';
-import { VERDICT_META } from '../../lib/worktreeVerdict';
+
 import { cn } from '../../lib/cn';
-import { tint, tintText, tintClasses, type TintHue } from '../../lib/tints';
 import { getStatusBadgeClass } from '../../lib/statusColors';
+import { tint, tintText, tintClasses, type TintHue } from '../../lib/tints';
+import { VERDICT_META } from '../../lib/worktreeVerdict';
 import * as api from '../../services/api';
+import { useTicketActivityStore } from '../../stores/ticketActivityStore';
+import { PriorityIndicator } from '../tickets/PriorityIndicator';
+import { ConfirmModal } from '../ui/ConfirmModal';
+import { PrBadge } from '../ui/PrBadge';
+import { TrashIcon } from '../ui/TrashIcon';
+
 import type { WorktreeRow } from './overview-helpers';
 
 interface Props {
@@ -71,31 +74,41 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
   ];
 
   return (
-    <div id="tickets-worktrees-panel" className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]">
+    <div
+      id="tickets-worktrees-panel"
+      className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]"
+    >
       <div className="flex items-center justify-between gap-3 border-b border-[var(--theme-border)] px-5 py-3">
-        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Worktrees</span>
-        {total > 0 && (limited ? (
-          <button type="button" onClick={onSeeAll} className="text-xs text-[var(--theme-accent)] hover:underline">
-            {total} →
-          </button>
-        ) : (
-          <div className="flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-0.5">
-            {SEGMENTS.map((s) => (
-              <button
-                key={s.key}
-                className={cn(
-                  'rounded-md px-3 py-1 text-xs transition-colors',
-                  filter === s.key
-                    ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
-                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
-                )}
-                onClick={() => setFilter(s.key)}
-              >
-                {s.label} {s.count}
-              </button>
-            ))}
-          </div>
-        ))}
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
+          Worktrees
+        </span>
+        {total > 0 &&
+          (limited ? (
+            <button
+              type="button"
+              onClick={onSeeAll}
+              className="text-xs text-[var(--theme-accent)] hover:underline"
+            >
+              {total} →
+            </button>
+          ) : (
+            <div className="flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-0.5">
+              {SEGMENTS.map((s) => (
+                <button
+                  key={s.key}
+                  className={cn(
+                    'rounded-md px-3 py-1 text-xs transition-colors',
+                    filter === s.key
+                      ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
+                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
+                  )}
+                  onClick={() => setFilter(s.key)}
+                >
+                  {s.label} {s.count}
+                </button>
+              ))}
+            </div>
+          ))}
       </div>
 
       {nothingVisible ? (
@@ -106,8 +119,17 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
         <>
           {showBands && visibleActive.length > 0 && (
             <div className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-overlay)] px-5 py-1.5">
-              <span className={cn('text-[10.5px] font-bold uppercase tracking-wider', tintText('green'))}>Active</span>
-              <span className="text-[10.5px] text-[var(--theme-text-faint)]">{rows.active.length}</span>
+              <span
+                className={cn(
+                  'text-[10.5px] font-bold uppercase tracking-wider',
+                  tintText('green'),
+                )}
+              >
+                Active
+              </span>
+              <span className="text-[10.5px] text-[var(--theme-text-faint)]">
+                {rows.active.length}
+              </span>
             </div>
           )}
           {visibleActive.map((row) => {
@@ -118,40 +140,78 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
             const behind = row.diff?.commitsBehind ?? 0;
 
             return (
-              <div key={row.worktree.path} className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0">
+              <div
+                key={row.worktree.path}
+                className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0"
+              >
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
+                    <span className="font-mono text-xs text-[var(--theme-text-muted)]">
+                      #{ticket.displayId}
+                    </span>
                     <PriorityIndicator priority={ticket.priority} size="sm" />
                     {ticket.type && (
-                      <span className={cn('flex-shrink-0 text-[12px] font-medium capitalize', tintText(TYPE_HUE[ticket.type]))}>
+                      <span
+                        className={cn(
+                          'flex-shrink-0 text-[12px] font-medium capitalize',
+                          tintText(TYPE_HUE[ticket.type]),
+                        )}
+                      >
                         {ticket.type}
                       </span>
                     )}
                     <span
                       className="min-w-0 flex-1 cursor-pointer truncate text-[13.5px] font-semibold text-[var(--theme-text-primary)] hover:underline"
-                      onClick={() => navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)}
+                      onClick={() =>
+                        navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)
+                      }
                     >
                       {ticket.title}
                     </span>
                   </div>
                   <div className="mt-1 flex items-center gap-2">
-                    <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">└ {row.worktree.branch}</span>
-                    {ahead > 0 && <span className={cn('font-mono text-[11px]', tintText('green'))}>↑{ahead}</span>}
-                    {behind > 0 && <span className={cn('font-mono text-[11px]', tintText('red'))}>↓{behind}</span>}
+                    <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">
+                      └ {row.worktree.branch}
+                    </span>
+                    {ahead > 0 && (
+                      <span className={cn('font-mono text-[11px]', tintText('green'))}>
+                        ↑{ahead}
+                      </span>
+                    )}
+                    {behind > 0 && (
+                      <span className={cn('font-mono text-[11px]', tintText('red'))}>
+                        ↓{behind}
+                      </span>
+                    )}
                     {row.pr && <PrBadge org={org} name={name} pr={row.pr} />}
-                    <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', tint(VERDICT_META[row.verdict].hue))}>
+                    <span
+                      className={cn(
+                        'rounded-md px-1.5 py-0.5 text-[10.5px]',
+                        tint(VERDICT_META[row.verdict].hue),
+                      )}
+                    >
                       {VERDICT_META[row.verdict].label}
                     </span>
                   </div>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
                   {cost !== undefined && (
-                    <span className={cn('rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tintClasses('pink').bg, tintClasses('pink').text)}>
+                    <span
+                      className={cn(
+                        'rounded-md px-1.5 py-0.5 font-mono text-[10.5px]',
+                        tintClasses('pink').bg,
+                        tintClasses('pink').text,
+                      )}
+                    >
                       ${cost.toFixed(2)}
                     </span>
                   )}
-                  <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', getStatusBadgeClass(ticket.status))}>
+                  <span
+                    className={cn(
+                      'rounded-md px-1.5 py-0.5 text-[10.5px]',
+                      getStatusBadgeClass(ticket.status),
+                    )}
+                  >
                     {ticket.status}
                   </span>
                 </div>
@@ -163,8 +223,17 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
             <div id="orphaned-worktrees">
               {showBands && (
                 <div className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] bg-[var(--theme-bg-overlay)] px-5 py-1.5">
-                  <span className={cn('text-[10.5px] font-bold uppercase tracking-wider', tintText('red'))}>Stale</span>
-                  <span className="text-[10.5px] text-[var(--theme-text-faint)]">{rows.orphaned.length}</span>
+                  <span
+                    className={cn(
+                      'text-[10.5px] font-bold uppercase tracking-wider',
+                      tintText('red'),
+                    )}
+                  >
+                    Stale
+                  </span>
+                  <span className="text-[10.5px] text-[var(--theme-text-faint)]">
+                    {rows.orphaned.length}
+                  </span>
                 </div>
               )}
               {visibleStale.map((row) => {
@@ -172,20 +241,32 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
                 const cost = ticket ? costByTicket[ticket.id] : undefined;
                 const behind = row.diff?.commitsBehind ?? 0;
                 return (
-                  <div key={row.worktree.path} className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0">
+                  <div
+                    key={row.worktree.path}
+                    className="flex items-center gap-2 border-b border-[var(--theme-border-subtle)] px-5 py-3 last:border-0"
+                  >
                     <div className="min-w-0 flex-1">
                       {ticket && (
                         <div className="flex min-w-0 items-center gap-2">
-                          <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
+                          <span className="font-mono text-xs text-[var(--theme-text-muted)]">
+                            #{ticket.displayId}
+                          </span>
                           <PriorityIndicator priority={ticket.priority} size="sm" />
                           {ticket.type && (
-                            <span className={cn('flex-shrink-0 text-[12px] font-medium capitalize', tintText(TYPE_HUE[ticket.type]))}>
+                            <span
+                              className={cn(
+                                'flex-shrink-0 text-[12px] font-medium capitalize',
+                                tintText(TYPE_HUE[ticket.type]),
+                              )}
+                            >
                               {ticket.type}
                             </span>
                           )}
                           <span
                             className="min-w-0 flex-1 cursor-pointer truncate text-[13.5px] font-semibold text-[var(--theme-text-secondary)] hover:underline"
-                            onClick={() => navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)}
+                            onClick={() =>
+                              navigate(`/tickets/board/${ticket.boardId}/ticket/${ticket.id}`)
+                            }
                           >
                             {ticket.title}
                           </span>
@@ -193,20 +274,36 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
                       )}
                       <div className={cn('flex items-center gap-2', ticket && 'mt-1')}>
                         <span className="font-mono text-[12px] text-[var(--theme-text-secondary)]">
-                          {ticket ? '└ ' : ''}{row.worktree.branch}
+                          {ticket ? '└ ' : ''}
+                          {row.worktree.branch}
                         </span>
-                        {behind > 0 && <span className={cn('font-mono text-[11px]', tintText('red'))}>↓{behind}</span>}
+                        {behind > 0 && (
+                          <span className={cn('font-mono text-[11px]', tintText('red'))}>
+                            ↓{behind}
+                          </span>
+                        )}
                         {row.pr && <PrBadge org={org} name={name} pr={row.pr} />}
                       </div>
                     </div>
                     {ticket && (
                       <div className="flex flex-shrink-0 items-center gap-2">
                         {cost !== undefined && (
-                          <span className={cn('rounded-md px-1.5 py-0.5 font-mono text-[10.5px]', tintClasses('pink').bg, tintClasses('pink').text)}>
+                          <span
+                            className={cn(
+                              'rounded-md px-1.5 py-0.5 font-mono text-[10.5px]',
+                              tintClasses('pink').bg,
+                              tintClasses('pink').text,
+                            )}
+                          >
                             ${cost.toFixed(2)}
                           </span>
                         )}
-                        <span className={cn('rounded-md px-1.5 py-0.5 text-[10.5px]', getStatusBadgeClass(ticket.status))}>
+                        <span
+                          className={cn(
+                            'rounded-md px-1.5 py-0.5 text-[10.5px]',
+                            getStatusBadgeClass(ticket.status),
+                          )}
+                        >
                           {ticket.status}
                         </span>
                       </div>
@@ -237,7 +334,8 @@ export function TicketsWorktreesPanel({ org, name, rows, onDeleted, limit, onSee
         message={
           pendingDelete && (
             <span>
-              Delete the worktree for branch <span className="font-mono">{pendingDelete.worktree.branch}</span> at{' '}
+              Delete the worktree for branch{' '}
+              <span className="font-mono">{pendingDelete.worktree.branch}</span> at{' '}
               <span className="font-mono">{pendingDelete.worktree.path}</span>?
             </span>
           )

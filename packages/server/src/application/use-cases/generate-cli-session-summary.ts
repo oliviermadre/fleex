@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
+
 import { CLI_SESSION_SUMMARY_TYPE } from '@fleex/shared';
+
 import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
 import { reconstructTranscript, type TranscriptTurn } from '../utils/cli-session-ingest.js';
+
+import type { EventBus } from '../event-bus.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
-import type { EventBus } from '../event-bus.js';
 import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -12,7 +15,8 @@ const MODEL = 'claude-haiku-4-5-20251001';
 /** Sentinel the model emits when the session is not worth persisting. */
 const SKIP_SENTINEL = 'SKIP';
 
-const SYSTEM_PROMPT = `You are a technical summarizer preserving the decision trail of a manual Claude Code CLI session for developer memory (bus-factor mitigation). The code and PR capture the outcome; your job is to capture WHY — the arbitrations and decisions made along the way, which would otherwise be lost when the session ends.
+const SYSTEM_PROMPT =
+  `You are a technical summarizer preserving the decision trail of a manual Claude Code CLI session for developer memory (bus-factor mitigation). The code and PR capture the outcome; your job is to capture WHY — the arbitrations and decisions made along the way, which would otherwise be lost when the session ends.
 
 You are given the reconstructed user/assistant conversation of one CLI session (tool calls already stripped). Use the session date provided in the input for the header.
 
@@ -64,7 +68,11 @@ export class GenerateCliSessionSummaryUseCase {
     private readonly sdkLimiter: SdkConcurrencyLimiter,
   ) {}
 
-  async execute(params: { sessionId: string; ticketId: string; transcriptPath: string }): Promise<void> {
+  async execute(params: {
+    sessionId: string;
+    ticketId: string;
+    transcriptPath: string;
+  }): Promise<void> {
     const { sessionId, ticketId, transcriptPath } = params;
     const mentionId = `cli:${sessionId}`;
 
@@ -81,7 +89,10 @@ export class GenerateCliSessionSummaryUseCase {
     // nothing to summarize (pure cost guard, not an interest judgment).
     const turns = await reconstructTranscript(transcriptPath);
     if (!turns.some((t) => t.role === 'assistant')) {
-      this.logger.debug('CLI session has no assistant content — skipping summary', { sessionId, ticketId });
+      this.logger.debug('CLI session has no assistant content — skipping summary', {
+        sessionId,
+        ticketId,
+      });
       return;
     }
 
@@ -122,7 +133,10 @@ export class GenerateCliSessionSummaryUseCase {
 
     // The model is the sole judge of interest: SKIP (or nothing) => no deliverable.
     if (!summaryText || summaryText === SKIP_SENTINEL) {
-      this.logger.info('CLI session judged not worth persisting — no summary created', { sessionId, ticketId });
+      this.logger.info('CLI session judged not worth persisting — no summary created', {
+        sessionId,
+        ticketId,
+      });
       return;
     }
 
@@ -137,7 +151,11 @@ export class GenerateCliSessionSummaryUseCase {
       mentionId,
     });
     await this.deliverableStore.save(deliverable);
-    this.logger.info('CLI session summary created', { sessionId, ticketId, deliverableId: deliverable.id });
+    this.logger.info('CLI session summary created', {
+      sessionId,
+      ticketId,
+      deliverableId: deliverable.id,
+    });
     this.eventBus?.emit({
       type: 'deliverable.created',
       deliverableId: deliverable.id,
@@ -169,16 +187,20 @@ export const MAX_TRANSCRIPT_CHARS = 240_000; // the whole conversation (~60-80K 
 /** Render the (budgeted) reconstructed turns into the SDK user prompt. */
 export function buildSessionPrompt(turns: TranscriptTurn[], dateStr: string): string {
   const { head, tail, elided } = fitToBudget(turns);
-  const render = (t: TranscriptTurn) => `**${t.role === 'user' ? 'User' : 'Assistant'}:**\n${t.text}\n`;
+  const render = (t: TranscriptTurn) =>
+    `**${t.role === 'user' ? 'User' : 'Assistant'}:**\n${t.text}\n`;
   const parts: string[] = [
     '# Claude Code CLI session',
     `Session date (use exactly this value in the header): ${dateStr}`,
     '\n## Conversation\n',
   ];
   for (const turn of head) parts.push(render(turn));
-  if (elided > 0) parts.push(`\n_[… ${elided} intermediate turn(s) elided to fit the summary budget …]_\n`);
+  if (elided > 0)
+    parts.push(`\n_[… ${elided} intermediate turn(s) elided to fit the summary budget …]_\n`);
   for (const turn of tail) parts.push(render(turn));
-  parts.push(`\n---\nWrite the CLI session summary now, or output ${SKIP_SENTINEL} if it is not worth persisting.`);
+  parts.push(
+    `\n---\nWrite the CLI session summary now, or output ${SKIP_SENTINEL} if it is not worth persisting.`,
+  );
   return parts.join('\n');
 }
 
@@ -189,8 +211,15 @@ export function buildSessionPrompt(turns: TranscriptTurn[], dateStr: string): st
  * outcome) — the two highest-signal regions for a decision summary — and report
  * how many middle turns were elided so the prompt can flag the gap.
  */
-function fitToBudget(turns: TranscriptTurn[]): { head: TranscriptTurn[]; tail: TranscriptTurn[]; elided: number } {
-  const capped = turns.map((t): TranscriptTurn => ({ role: t.role, text: truncateTurnText(t.text) }));
+function fitToBudget(turns: TranscriptTurn[]): {
+  head: TranscriptTurn[];
+  tail: TranscriptTurn[];
+  elided: number;
+} {
+  const capped = turns.map((t): TranscriptTurn => ({
+    role: t.role,
+    text: truncateTurnText(t.text),
+  }));
   const total = capped.reduce((n, t) => n + t.text.length, 0);
   if (total <= MAX_TRANSCRIPT_CHARS) return { head: capped, tail: [], elided: 0 };
 

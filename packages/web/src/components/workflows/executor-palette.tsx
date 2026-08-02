@@ -1,14 +1,27 @@
 import type { WorkflowExecutorType } from '@fleex/shared';
+
 import { tintClasses } from '../../lib/tints';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
 
-interface IconProps { className?: string }
+interface IconProps {
+  className?: string;
+}
 
 // Persona — single person (canonical persona glyph, see lib/primitives.tsx).
 function PersonIcon({ className }: IconProps) {
   return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="7" r="4" />
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
     </svg>
@@ -17,7 +30,17 @@ function PersonIcon({ className }: IconProps) {
 
 function UsersIcon({ className }: IconProps) {
   return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -29,7 +52,17 @@ function UsersIcon({ className }: IconProps) {
 // Skill — lightning bolt (canonical skill glyph, see lib/primitives.tsx).
 function ZapIcon({ className }: IconProps) {
   return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M13 2 3 14h9l-1 8 10-12h-9z" />
     </svg>
   );
@@ -37,7 +70,17 @@ function ZapIcon({ className }: IconProps) {
 
 function UserCheckIcon({ className }: IconProps) {
   return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <polyline points="16 11 18 13 22 9" />

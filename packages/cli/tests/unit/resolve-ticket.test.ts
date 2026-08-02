@@ -40,7 +40,9 @@ describe('resolveAnyTicketUuid', () => {
   });
 
   it('dies on input that is neither a UUID nor a display id', async () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit'); }) as never);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     await expect(resolveAnyTicketUuid('not-an-id')).rejects.toThrow('exit');
     expect(apiGet).not.toHaveBeenCalled();

@@ -1,6 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
+
 import type { DiffStats, GitRemoteInfo, Worktree } from '@fleex/shared';
+
 import type { GitPort } from '../../application/ports/git.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { ExecFn } from '../host/types.js';
@@ -12,17 +14,11 @@ export class GitCliAdapter implements GitPort {
   ) {}
 
   async getInfo(cwd: string): Promise<GitRemoteInfo> {
-    const { stdout: remoteUrl } = await this.execFn(
-      'git',
-      ['remote', 'get-url', 'origin'],
-      { cwd },
-    );
+    const { stdout: remoteUrl } = await this.execFn('git', ['remote', 'get-url', 'origin'], {
+      cwd,
+    });
 
-    const { stdout: branchOut } = await this.execFn(
-      'git',
-      ['branch', '--show-current'],
-      { cwd },
-    );
+    const { stdout: branchOut } = await this.execFn('git', ['branch', '--show-current'], { cwd });
 
     const remote = remoteUrl.trim();
     const branch = branchOut.trim();
@@ -33,16 +29,12 @@ export class GitCliAdapter implements GitPort {
     let isWorktree = false;
     let mainWorktreePath = cwd;
     try {
-      const { stdout: topLevel } = await this.execFn(
-        'git',
-        ['rev-parse', '--show-toplevel'],
-        { cwd },
-      );
-      const { stdout: commonDir } = await this.execFn(
-        'git',
-        ['rev-parse', '--git-common-dir'],
-        { cwd },
-      );
+      const { stdout: topLevel } = await this.execFn('git', ['rev-parse', '--show-toplevel'], {
+        cwd,
+      });
+      const { stdout: commonDir } = await this.execFn('git', ['rev-parse', '--git-common-dir'], {
+        cwd,
+      });
 
       const commonDirResolved = commonDir.trim();
       if (commonDirResolved !== '.git' && !commonDirResolved.endsWith('/.git')) {
@@ -60,11 +52,9 @@ export class GitCliAdapter implements GitPort {
   }
 
   async listBranches(repoPath: string): Promise<string[]> {
-    const { stdout } = await this.execFn(
-      'git',
-      ['branch', '-a', '--format=%(refname:short)'],
-      { cwd: repoPath },
-    );
+    const { stdout } = await this.execFn('git', ['branch', '-a', '--format=%(refname:short)'], {
+      cwd: repoPath,
+    });
 
     return stdout
       .trim()
@@ -73,11 +63,9 @@ export class GitCliAdapter implements GitPort {
   }
 
   async listWorktrees(repoPath: string): Promise<Worktree[]> {
-    const { stdout } = await this.execFn(
-      'git',
-      ['worktree', 'list', '--porcelain'],
-      { cwd: repoPath },
-    );
+    const { stdout } = await this.execFn('git', ['worktree', 'list', '--porcelain'], {
+      cwd: repoPath,
+    });
 
     const worktrees: Worktree[] = [];
     const blocks = stdout.split('\n\n').filter((b) => b.trim().length > 0);
@@ -152,11 +140,9 @@ export class GitCliAdapter implements GitPort {
 
   async getDefaultBranch(repoPath: string): Promise<string> {
     try {
-      const { stdout } = await this.execFn(
-        'git',
-        ['symbolic-ref', 'refs/remotes/origin/HEAD'],
-        { cwd: repoPath },
-      );
+      const { stdout } = await this.execFn('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], {
+        cwd: repoPath,
+      });
       return stdout.trim().replace('refs/remotes/origin/', '');
     } catch {
       // Fallback: check for common default branch names
@@ -205,11 +191,10 @@ export class GitCliAdapter implements GitPort {
     let additions = 0;
     let deletions = 0;
     try {
-      const { stdout } = await this.execFn(
-        'git',
-        ['diff', '--shortstat', `${base}...${branch}`],
-        { cwd: repoPath, timeout },
-      );
+      const { stdout } = await this.execFn('git', ['diff', '--shortstat', `${base}...${branch}`], {
+        cwd: repoPath,
+        timeout,
+      });
       const stat = stdout.trim();
       const filesMatch = /(\d+)\s+file/.exec(stat);
       const insertMatch = /(\d+)\s+insertion/.exec(stat);
@@ -227,10 +212,10 @@ export class GitCliAdapter implements GitPort {
   async getDiffSummary(repoPath: string, branch: string, baseBranch?: string): Promise<string> {
     const base = baseBranch ?? `origin/${await this.getDefaultBranch(repoPath)}`;
     try {
-      const { stdout } = await this.execFn(
-        'git', ['diff', '--stat', `${base}...${branch}`],
-        { cwd: repoPath, timeout: 10_000 },
-      );
+      const { stdout } = await this.execFn('git', ['diff', '--stat', `${base}...${branch}`], {
+        cwd: repoPath,
+        timeout: 10_000,
+      });
       return stdout.trim();
     } catch {
       this.logger.debug('Failed to get diff summary', { repoPath, branch, base });
@@ -238,11 +223,17 @@ export class GitCliAdapter implements GitPort {
     }
   }
 
-  async getLogOneline(repoPath: string, branch: string, baseBranch?: string, limit = 50): Promise<string> {
+  async getLogOneline(
+    repoPath: string,
+    branch: string,
+    baseBranch?: string,
+    limit = 50,
+  ): Promise<string> {
     const base = baseBranch ?? `origin/${await this.getDefaultBranch(repoPath)}`;
     try {
       const { stdout } = await this.execFn(
-        'git', ['log', '--oneline', `${base}...${branch}`, `-${limit}`],
+        'git',
+        ['log', '--oneline', `${base}...${branch}`, `-${limit}`],
         { cwd: repoPath, timeout: 10_000 },
       );
       return stdout.trim();

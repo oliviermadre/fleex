@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+
 import { getProxiedImageSrc } from '../../lib/image';
 
 // ── Lightbox (shared by thumbnail & placeholder) ─────────────────────────────
@@ -54,9 +55,7 @@ export function ImageLightbox({ src, alt, open, onClose }: ImageLightboxProps) {
           className="max-w-full max-h-[85vh] rounded-md object-contain shadow-2xl"
         />
 
-        {alt && (
-          <p className="text-xs text-white/70 mt-2 px-4 text-center">{alt}</p>
-        )}
+        {alt && <p className="text-xs text-white/70 mt-2 px-4 text-center">{alt}</p>}
       </div>
     </div>,
     document.body,
@@ -108,8 +107,18 @@ export function ImagePlaceholder({ src, alt, index }: ImagePlaceholderProps) {
         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--theme-bg-overlay)] text-[var(--theme-accent)] text-xs font-medium cursor-pointer hover:ring-1 hover:ring-[var(--theme-accent)] transition align-baseline"
         onClick={() => setOpen(true)}
       >
-        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        <svg
+          className="w-3 h-3 flex-shrink-0"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+          />
         </svg>
         {label}
       </button>

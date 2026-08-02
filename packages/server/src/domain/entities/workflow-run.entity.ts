@@ -1,6 +1,4 @@
-import type {
-  WorkflowRun, WorkflowRunStatus, WorkflowTemplateSnapshot,
-} from '@fleex/shared';
+import type { WorkflowRun, WorkflowRunStatus, WorkflowTemplateSnapshot } from '@fleex/shared';
 
 const ACTIVE_STATUSES: WorkflowRunStatus[] = ['running', 'needs_review'];
 

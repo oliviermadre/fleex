@@ -8,14 +8,23 @@
  * Dependencies (LLM, executor, confirmation) are injected so the loop is fully
  * unit-testable without network or a running Fleex stack.
  */
-import type Anthropic from '@anthropic-ai/sdk';
 import { buildArgv } from '@fleex/mcp';
 import type { GeneratedTool } from '@fleex/mcp';
+
 import { indexTools } from './tools.ts';
+
+import type Anthropic from '@anthropic-ai/sdk';
 
 export type AssistantEvent =
   | { type: 'text'; text: string }
-  | { type: 'tool_call'; id: string; name: string; input: Record<string, unknown>; argv: string[]; mutating: boolean }
+  | {
+      type: 'tool_call';
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      argv: string[];
+      mutating: boolean;
+    }
   | { type: 'tool_result'; id: string; name: string; ok: boolean; text: string }
   | { type: 'tool_denied'; id: string; name: string }
   | { type: 'done'; stopReason: string | null };
@@ -27,10 +36,18 @@ export type LlmComplete = (
 ) => Promise<{ content: Anthropic.ContentBlock[]; stopReason: string | null }>;
 
 /** Runs one tool against the CLI and returns a flattened result. */
-export type ExecFn = (tool: GeneratedTool, input: Record<string, unknown>) => Promise<{ ok: boolean; text: string }>;
+export type ExecFn = (
+  tool: GeneratedTool,
+  input: Record<string, unknown>,
+) => Promise<{ ok: boolean; text: string }>;
 
 /** Asks the user to approve a mutating tool call. Resolves true to proceed. */
-export type ConfirmFn = (req: { id: string; name: string; input: Record<string, unknown>; argv: string[] }) => Promise<boolean>;
+export type ConfirmFn = (req: {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+  argv: string[];
+}) => Promise<boolean>;
 
 export interface RunAssistantOptions {
   llm: LlmComplete;
@@ -62,8 +79,9 @@ export async function runAssistant(opts: RunAssistantOptions): Promise<Anthropic
   const maxIterations = opts.maxIterations ?? 8;
 
   for (let i = 0; i < maxIterations; i++) {
-    const { content, stopReason } = await llm({ system, messages, tools: anthropicTools }, (delta) =>
-      onEvent({ type: 'text', text: delta }),
+    const { content, stopReason } = await llm(
+      { system, messages, tools: anthropicTools },
+      (delta) => onEvent({ type: 'text', text: delta }),
     );
     messages.push({ role: 'assistant', content });
 
@@ -79,8 +97,19 @@ export async function runAssistant(opts: RunAssistantOptions): Promise<Anthropic
       const input = (call.input ?? {}) as Record<string, unknown>;
 
       if (!tool) {
-        toolResults.push({ type: 'tool_result', tool_use_id: call.id, content: `Unknown tool: ${call.name}`, is_error: true });
-        onEvent({ type: 'tool_result', id: call.id, name: call.name, ok: false, text: `Unknown tool: ${call.name}` });
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: call.id,
+          content: `Unknown tool: ${call.name}`,
+          is_error: true,
+        });
+        onEvent({
+          type: 'tool_result',
+          id: call.id,
+          name: call.name,
+          ok: false,
+          text: `Unknown tool: ${call.name}`,
+        });
         continue;
       }
 
@@ -89,12 +118,30 @@ export async function runAssistant(opts: RunAssistantOptions): Promise<Anthropic
         argv = buildArgv(tool, input, { workspace, json: true });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        toolResults.push({ type: 'tool_result', tool_use_id: call.id, content: `Invalid arguments: ${msg}`, is_error: true });
-        onEvent({ type: 'tool_result', id: call.id, name: call.name, ok: false, text: `Invalid arguments: ${msg}` });
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: call.id,
+          content: `Invalid arguments: ${msg}`,
+          is_error: true,
+        });
+        onEvent({
+          type: 'tool_result',
+          id: call.id,
+          name: call.name,
+          ok: false,
+          text: `Invalid arguments: ${msg}`,
+        });
         continue;
       }
 
-      onEvent({ type: 'tool_call', id: call.id, name: call.name, input, argv, mutating: tool.mutating });
+      onEvent({
+        type: 'tool_call',
+        id: call.id,
+        name: call.name,
+        input,
+        argv,
+        mutating: tool.mutating,
+      });
 
       // Gate: mutating calls require explicit user approval.
       if (tool.mutating) {
@@ -112,7 +159,12 @@ export async function runAssistant(opts: RunAssistantOptions): Promise<Anthropic
       }
 
       const res = await exec(tool, input);
-      toolResults.push({ type: 'tool_result', tool_use_id: call.id, content: res.text || (res.ok ? 'OK' : 'failed'), is_error: !res.ok });
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: call.id,
+        content: res.text || (res.ok ? 'OK' : 'failed'),
+        is_error: !res.ok,
+      });
       onEvent({ type: 'tool_result', id: call.id, name: call.name, ok: res.ok, text: res.text });
     }
 

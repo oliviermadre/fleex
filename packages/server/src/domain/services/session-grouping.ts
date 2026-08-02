@@ -1,4 +1,5 @@
 import type { SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
+
 import type { SessionEntity } from '../entities.js';
 import type { RepoPathResolver } from './repo-path-resolver.js';
 import type { TicketStorePort } from '../../application/ports/ticket-store.port.js';
@@ -45,7 +46,13 @@ export class SessionGroupingService {
                   firstName = firstRepo.ref.substring(si + 1);
                 }
               }
-              info = { ticketId: ticket.id, title: ticket.title, repoCount: repoLinks.length, firstOrg, firstName };
+              info = {
+                ticketId: ticket.id,
+                title: ticket.title,
+                repoCount: repoLinks.length,
+                firstOrg,
+                firstName,
+              };
             } else {
               info = null;
             }
@@ -118,7 +125,9 @@ export class SessionGroupingService {
       const [org, name] = repoKey.split('/') as [string, string];
       const worktrees: WorktreeSessionGroup[] = [];
       for (const [label, labelSessions] of labelMap) {
-        const tId = labelSessions[0] ? sessionTickets.get(labelSessions[0].id)?.ticketId : undefined;
+        const tId = labelSessions[0]
+          ? sessionTickets.get(labelSessions[0].id)?.ticketId
+          : undefined;
         worktrees.push({
           branch: label,
           path: labelSessions[0]?.cwd ?? '',

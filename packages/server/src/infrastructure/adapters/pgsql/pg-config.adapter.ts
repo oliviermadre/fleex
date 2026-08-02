@@ -1,10 +1,13 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR, CONFIG_FILE } from '@fleex/shared';
-import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
-import type { PgConnection } from './connection.js';
-import type { ExecFn, HostFs } from '../../host/types.js';
-import { resolveClaudeCommand } from '../resolve-claude-command.js';
+
 import { applyBasePathEnvOverride } from '../config-env.js';
+import { resolveClaudeCommand } from '../resolve-claude-command.js';
+
+import type { PgConnection } from './connection.js';
+import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
+import type { ExecFn, HostFs } from '../../host/types.js';
 
 export class PgConfigAdapter implements ConfigPort {
   private config: AppConfig;
@@ -49,10 +52,9 @@ export class PgConfigAdapter implements ConfigPort {
   }
 
   private async loadFromDb(): Promise<void> {
-    const { rows } = await this.connection.query(
-      'SELECT data FROM app_config WHERE id = $1',
-      ['singleton'],
-    );
+    const { rows } = await this.connection.query('SELECT data FROM app_config WHERE id = $1', [
+      'singleton',
+    ]);
 
     if (rows.length > 0) {
       this.applyData(rows[0].data as Record<string, unknown>);

@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach } from 'vitest';
+
 import { MentionTypeBadge } from './MentionTypeBadge';
 
 /**
@@ -19,8 +20,11 @@ describe('MentionTypeBadge', () => {
     ['agent', 'A'],
     ['ticket', 'T'],
     ['human', 'H'],
-  ] as const)('renders the mnemonic letter for %s and reveals the type on hover', (type, letter) => {
-    render(<MentionTypeBadge type={type} />);
-    expect(screen.getByTitle(type).textContent).toBe(letter);
-  });
+  ] as const)(
+    'renders the mnemonic letter for %s and reveals the type on hover',
+    (type, letter) => {
+      render(<MentionTypeBadge type={type} />);
+      expect(screen.getByTitle(type).textContent).toBe(letter);
+    },
+  );
 });

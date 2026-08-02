@@ -1,6 +1,7 @@
 import { SkillEntity } from '../../../domain/entities/skill.entity.js';
-import type { SkillStorePort } from '../../../application/ports/skill-store.port.js';
+
 import type { SqliteConnection } from './connection.js';
+import type { SkillStorePort } from '../../../application/ports/skill-store.port.js';
 
 interface SkillRow {
   id: string;
@@ -18,16 +19,13 @@ export class SqliteSkillStoreAdapter implements SkillStorePort {
   constructor(private readonly conn: SqliteConnection) {}
 
   async getAll(): Promise<SkillEntity[]> {
-    const rows = this.conn.db
-      .prepare('SELECT * FROM skills ORDER BY name ASC')
-      .all() as SkillRow[];
+    const rows = this.conn.db.prepare('SELECT * FROM skills ORDER BY name ASC').all() as SkillRow[];
     return rows.map((r) => this.toEntity(r));
   }
 
   async getById(id: string): Promise<SkillEntity | null> {
-    const row = this.conn.db
-      .prepare('SELECT * FROM skills WHERE id = ?')
-      .get(id) as SkillRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM skills WHERE id = ?').get(id) as
+      SkillRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 

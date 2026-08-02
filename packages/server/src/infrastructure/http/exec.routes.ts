@@ -1,5 +1,5 @@
-import type { FastifyInstance } from 'fastify';
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function execRoutes(container: Container) {
   return async function (app: FastifyInstance) {

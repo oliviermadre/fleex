@@ -1,13 +1,23 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { RepositoryDashboard } from './RepositoryDashboard';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
 
+import { RepositoryDashboard } from './RepositoryDashboard';
+
 const data = {
-  org: 'acme', name: 'app',
-  openIssues: [], recentlyClosedIssues: [], openPullRequests: [], recentlyMergedPullRequests: [],
-  worktrees: [], worktreeTickets: [], diffStats: {}, githubUser: 'me', isClonedLocally: true,
+  org: 'acme',
+  name: 'app',
+  openIssues: [],
+  recentlyClosedIssues: [],
+  openPullRequests: [],
+  recentlyMergedPullRequests: [],
+  worktrees: [],
+  worktreeTickets: [],
+  diffStats: {},
+  githubUser: 'me',
+  isClonedLocally: true,
 };
 
 describe('RepositoryDashboard tabs', () => {
@@ -22,7 +32,11 @@ describe('RepositoryDashboard tabs', () => {
   afterEach(cleanup);
 
   it('renders the tabs with Overview as default', () => {
-    render(<MemoryRouter><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <RepositoryDashboard repoKey="acme/app" />
+      </MemoryRouter>,
+    );
     for (const label of ['Overview', 'Pull Requests', 'Issues', 'Config']) {
       expect(screen.getByText(label)).toBeTruthy();
     }
@@ -31,14 +45,22 @@ describe('RepositoryDashboard tabs', () => {
   });
 
   it('switches to the Worktrees tab', () => {
-    render(<MemoryRouter><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <RepositoryDashboard repoKey="acme/app" />
+      </MemoryRouter>,
+    );
     const tab = screen.getAllByText('Worktrees').find((el) => el.closest('button'));
     fireEvent.click(tab!);
     expect(screen.getByText('No active worktrees')).toBeTruthy(); // full panel empty state
   });
 
   it('switches tabs', () => {
-    render(<MemoryRouter><RepositoryDashboard repoKey="acme/app" /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <RepositoryDashboard repoKey="acme/app" />
+      </MemoryRouter>,
+    );
     fireEvent.click(screen.getByText('Config'));
     expect(screen.getByText('Post-checkout hook')).toBeTruthy();
   });

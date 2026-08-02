@@ -1,7 +1,8 @@
-import type { FastifyRequest, FastifyReply } from 'fastify';
 import { ApiTokenEntity } from '../../domain/entities/api-token.entity.js';
 import { ApiTokenInvalidError } from '../../domain/errors.js';
+
 import type { Container } from '../container.js';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -10,7 +11,10 @@ declare module 'fastify' {
 }
 
 export function createAgentAuthHook(container: Container) {
-  return async function agentAuthHook(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
+  return async function agentAuthHook(
+    request: FastifyRequest,
+    _reply: FastifyReply,
+  ): Promise<void> {
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new ApiTokenInvalidError();

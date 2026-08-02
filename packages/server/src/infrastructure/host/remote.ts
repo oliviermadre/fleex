@@ -13,7 +13,12 @@ export function remoteExec(gatewayUrl: string): ExecFn {
         maxBuffer: options?.maxBuffer,
       }),
     });
-    const data = await res.json() as { stdout: string; stderr: string; exitCode: number; error?: string };
+    const data = (await res.json()) as {
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+      error?: string;
+    };
     if (data.error) throw new Error(data.error);
     if (data.exitCode !== 0) {
       const err = new Error(data.stderr || `Command failed: ${command} ${args.join(' ')}`) as any;
@@ -39,7 +44,12 @@ export function remoteShellExec(gatewayUrl: string): ShellExecFn {
         timeout: options?.timeout,
       }),
     });
-    const data = await res.json() as { stdout: string; stderr: string; exitCode: number; error?: string };
+    const data = (await res.json()) as {
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+      error?: string;
+    };
     if (data.error) throw new Error(data.error);
     // Shell exec: don't throw on non-zero exit — callers handle stderr
     return { stdout: data.stdout, stderr: data.stderr };

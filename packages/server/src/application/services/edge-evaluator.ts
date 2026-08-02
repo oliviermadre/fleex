@@ -2,7 +2,9 @@ import type { WorkflowEdge, StepOutput, EdgeOperator } from '@fleex/shared';
 
 export const EdgeEvaluator = {
   resolve(output: StepOutput, edges: WorkflowEdge[]): WorkflowEdge | null {
-    const conditional = edges.filter((e) => e.condition && !e.isDefault).sort((a, b) => a.id.localeCompare(b.id));
+    const conditional = edges
+      .filter((e) => e.condition && !e.isDefault)
+      .sort((a, b) => a.id.localeCompare(b.id));
     const defaults = edges.filter((e) => e.isDefault).sort((a, b) => a.id.localeCompare(b.id));
 
     for (const edge of conditional) {
@@ -43,17 +45,23 @@ function matches(actual: unknown, op: EdgeOperator, value: string | string[]): b
     // eq/neq coerce actual to string to match the always-string `value`
     // (mirrors `in` and `gt`/`lt` behavior — agents may emit numbers/bools that
     // routing edges compare against string literals like `"high"` or `"10"`)
-    case 'eq':       return typeof value === 'string' && String(actual) === value;
-    case 'neq':      return typeof value === 'string' && String(actual) !== value;
-    case 'in':       return Array.isArray(value) && value.includes(String(actual));
+    case 'eq':
+      return typeof value === 'string' && String(actual) === value;
+    case 'neq':
+      return typeof value === 'string' && String(actual) !== value;
+    case 'in':
+      return Array.isArray(value) && value.includes(String(actual));
     case 'gt': {
-      const a = Number(actual), v = Number(value as string);
+      const a = Number(actual),
+        v = Number(value as string);
       return Number.isFinite(a) && Number.isFinite(v) && a > v;
     }
     case 'lt': {
-      const a = Number(actual), v = Number(value as string);
+      const a = Number(actual),
+        v = Number(value as string);
       return Number.isFinite(a) && Number.isFinite(v) && a < v;
     }
-    case 'contains': return typeof actual === 'string' && typeof value === 'string' && actual.includes(value);
+    case 'contains':
+      return typeof actual === 'string' && typeof value === 'string' && actual.includes(value);
   }
 }

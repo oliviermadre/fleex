@@ -1,4 +1,5 @@
 import type { AgentExecution } from '@fleex/shared';
+
 import type { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
 
 /** Params for `upsertCliExecution` — a fully-computed CLI session execution row. */
@@ -38,22 +39,26 @@ export interface AgentEventStorePort {
 
   appendEvent(event: AgentEventEntity): Promise<void>;
 
-  completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string;
-    effectiveMode?: string;
-    effort?: string;
-    fast?: boolean;
-    durationMs?: number;
-    costUsd?: number;
-    inputTokens?: number;
-    outputTokens?: number;
-    cacheReadTokens?: number;
-    cacheCreationTokens?: number;
-    /** Comment produced by this run (persona/skill/panel path, known at completion). */
-    commentId?: string;
-    /** Deliverable produced by this run (persona/skill/panel path, known at completion). */
-    deliverableId?: string;
-  }): Promise<void>;
+  completeExecution(
+    executionId: string,
+    status: 'completed' | 'failed' | 'interrupted',
+    metrics?: {
+      model?: string;
+      effectiveMode?: string;
+      effort?: string;
+      fast?: boolean;
+      durationMs?: number;
+      costUsd?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
+      /** Comment produced by this run (persona/skill/panel path, known at completion). */
+      commentId?: string;
+      /** Deliverable produced by this run (persona/skill/panel path, known at completion). */
+      deliverableId?: string;
+    },
+  ): Promise<void>;
 
   /**
    * Link an already-completed execution to the artifacts it produced. Used by the
@@ -61,7 +66,10 @@ export interface AgentEventStorePort {
    * (returning only its structured output) and the orchestrator persists the
    * comment/deliverable afterwards. No-op if `executionId` doesn't exist.
    */
-  setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void>;
+  setExecutionOutputs(
+    executionId: string,
+    refs: { commentId?: string; deliverableId?: string },
+  ): Promise<void>;
 
   updateSessionId(executionId: string, sdkSessionId: string): Promise<void>;
 
@@ -77,7 +85,9 @@ export interface AgentEventStorePort {
   markInterruptedExecutions(): Promise<string[]>;
 
   /** Returns a map of "personaId:ticketId" → sdkSessionId from latest executions. */
-  getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>>;
+  getSessionHistory(): Promise<
+    Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>
+  >;
 
   getEventsByExecution(executionId: string): Promise<AgentEventEntity[]>;
 

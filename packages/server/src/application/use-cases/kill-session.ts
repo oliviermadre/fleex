@@ -1,7 +1,8 @@
 import { SessionNotFoundError } from '../../domain/errors.js';
-import type { TmuxPort } from '../ports/tmux.port.js';
-import type { SessionStorePort } from '../ports/session-store.port.js';
+
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { SessionStorePort } from '../ports/session-store.port.js';
+import type { TmuxPort } from '../ports/tmux.port.js';
 
 export class KillSessionUseCase {
   constructor(

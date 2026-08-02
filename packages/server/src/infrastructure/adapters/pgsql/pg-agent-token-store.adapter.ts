@@ -1,6 +1,7 @@
 import { ApiTokenEntity } from '../../../domain/entities/api-token.entity.js';
-import type { AgentTokenStorePort } from '../../../application/ports/agent-token-store.port.js';
+
 import type { PgConnection } from './connection.js';
+import type { AgentTokenStorePort } from '../../../application/ports/agent-token-store.port.js';
 
 export class PgAgentTokenStore implements AgentTokenStorePort {
   constructor(private readonly db: PgConnection) {}
@@ -11,10 +12,9 @@ export class PgAgentTokenStore implements AgentTokenStorePort {
   }
 
   async getByHash(hash: string): Promise<ApiTokenEntity | null> {
-    const { rows } = await this.db.query(
-      'SELECT * FROM api_tokens WHERE hashed_secret = $1',
-      [hash],
-    );
+    const { rows } = await this.db.query('SELECT * FROM api_tokens WHERE hashed_secret = $1', [
+      hash,
+    ]);
     return rows.length > 0 ? rowToToken(rows[0]) : null;
   }
 

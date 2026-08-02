@@ -1,10 +1,17 @@
 import { useState } from 'react';
+
+import { cn } from '../../lib/cn';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import type { SessionLayoutGroup, SessionLayoutType } from '../../stores/settingsStore';
-import { cn } from '../../lib/cn';
 
-function CellGrid({ group, selectedGroupId, activeGroupCellIndex, onCellClick }: {
+import type { SessionLayoutGroup, SessionLayoutType } from '../../stores/settingsStore';
+
+function CellGrid({
+  group,
+  selectedGroupId,
+  activeGroupCellIndex,
+  onCellClick,
+}: {
   group: SessionLayoutGroup;
   selectedGroupId: string | null;
   activeGroupCellIndex: number | null;
@@ -37,7 +44,7 @@ function CellGrid({ group, selectedGroupId, activeGroupCellIndex, onCellClick }:
                   ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
                   : cellSessionId
                     ? `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] bg-[var(--theme-bg-hover)]`
-                    : `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] border-dashed bg-transparent`
+                    : `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] border-dashed bg-transparent`,
               )}
               title={label ?? 'Empty — click then shift-click a session to bind'}
               onClick={(e) => {
@@ -45,9 +52,7 @@ function CellGrid({ group, selectedGroupId, activeGroupCellIndex, onCellClick }:
                 onCellClick(group.id, i);
               }}
             >
-              <span className="text-[var(--theme-text-muted)] truncate">
-                {label ?? ''}
-              </span>
+              <span className="text-[var(--theme-text-muted)] truncate">{label ?? ''}</span>
             </button>
           );
         })}
@@ -70,7 +75,7 @@ function CellGrid({ group, selectedGroupId, activeGroupCellIndex, onCellClick }:
                 ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)]'
                 : cellSessionId
                   ? `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] bg-[var(--theme-bg-hover)]`
-                  : `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] border-dashed bg-transparent`
+                  : `border-[var(--theme-${isGroupSelected ? 'accent' : 'border-input'})] border-dashed bg-transparent`,
             )}
             title={label ?? 'Empty — click then shift-click a session to bind'}
             onClick={(e) => {
@@ -78,9 +83,7 @@ function CellGrid({ group, selectedGroupId, activeGroupCellIndex, onCellClick }:
               onCellClick(group.id, i);
             }}
           >
-            <span className="text-[var(--theme-text-muted)] truncate">
-              {label ?? ''}
-            </span>
+            <span className="text-[var(--theme-text-muted)] truncate">{label ?? ''}</span>
           </button>
         );
       })}
@@ -135,7 +138,15 @@ export function GroupedSessions() {
             onClick={() => setShowCreateMenu(true)}
             title="Create grouped session layout"
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
               <line x1="8" y1="3" x2="8" y2="13" />
               <line x1="3" y1="8" x2="13" y2="8" />
             </svg>
@@ -157,7 +168,15 @@ export function GroupedSessions() {
           onClick={() => setShowCreateMenu(!showCreateMenu)}
           title="Create grouped session layout"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
             <line x1="8" y1="3" x2="8" y2="13" />
             <line x1="3" y1="8" x2="13" y2="8" />
           </svg>
@@ -203,7 +222,7 @@ export function GroupedSessions() {
                 'group/grouped flex items-center gap-2 rounded px-2 py-1.5 transition-colors cursor-pointer',
                 isSelected
                   ? 'bg-[var(--theme-accent-muted)] border-l-2 border-[var(--theme-accent)]'
-                  : 'hover:bg-[var(--theme-bg-hover)] border-l-2 border-transparent'
+                  : 'hover:bg-[var(--theme-bg-hover)] border-l-2 border-transparent',
               )}
               onClick={() => handleGroupClick(group.id)}
             >
@@ -224,11 +243,21 @@ export function GroupedSessions() {
 
               {/* Delete button */}
               <button
-                className={cn('hidden shrink-0 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors group-hover/grouped:flex cursor-pointer', 'hover:text-[var(--tint-red-text)]')}
+                className={cn(
+                  'hidden shrink-0 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors group-hover/grouped:flex cursor-pointer',
+                  'hover:text-[var(--tint-red-text)]',
+                )}
                 onClick={(e) => handleDelete(e, group.id)}
                 title="Delete group"
               >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <line x1="4" y1="4" x2="12" y2="12" />
                   <line x1="12" y1="4" x2="4" y2="12" />
                 </svg>

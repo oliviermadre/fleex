@@ -1,14 +1,16 @@
 import { useState, useMemo, useCallback } from 'react';
+
 import type { GitHubIssue, GitHubLabel, Ticket } from '@fleex/shared';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
-import { useTicketStore } from '../../stores/ticketStore';
-import { Button } from '../ui/Button';
-import { SmartSessionButton } from '../dashboard/SmartSessionButton';
-import { ImportTaskButton } from '../dashboard/ImportTaskButton';
-import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
+
 import { cn } from '../../lib/cn';
 import { importGitHubIssue, executeSkill } from '../../services/api';
+import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
+import { ImportTaskButton } from '../dashboard/ImportTaskButton';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { Button } from '../ui/Button';
 
 interface Props {
   org: string;
@@ -49,7 +51,11 @@ const SEGMENTS: { key: IssueSegment; label: string }[] = [
   { key: 'closed', label: 'Closed' },
 ];
 
-function filterIssues(open: GitHubIssue[], closed: GitHubIssue[], segment: IssueSegment): GitHubIssue[] {
+function filterIssues(
+  open: GitHubIssue[],
+  closed: GitHubIssue[],
+  segment: IssueSegment,
+): GitHubIssue[] {
   const base = segment === 'open' ? open : segment === 'closed' ? closed : [...open, ...closed];
   return [...base].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
@@ -72,19 +78,22 @@ export function IssuesSection({ org, name, openIssues, closedIssues, loading }: 
     return map;
   }, [tickets]);
 
-  const handleImportIssue = useCallback(async (issue: GitHubIssue, boardId: string) => {
-    const key = `${org}/${name}#${issue.number}`;
-    if (importingKey) return;
-    setImportingKey(key);
-    try {
-      await importGitHubIssue(org, name, issue.number, boardId);
-      await fetchDashboard(org, name);
-    } catch {
-      // handled by api layer
-    } finally {
-      setImportingKey(null);
-    }
-  }, [importingKey, org, name, fetchDashboard]);
+  const handleImportIssue = useCallback(
+    async (issue: GitHubIssue, boardId: string) => {
+      const key = `${org}/${name}#${issue.number}`;
+      if (importingKey) return;
+      setImportingKey(key);
+      try {
+        await importGitHubIssue(org, name, issue.number, boardId);
+        await fetchDashboard(org, name);
+      } catch {
+        // handled by api layer
+      } finally {
+        setImportingKey(null);
+      }
+    },
+    [importingKey, org, name, fetchDashboard],
+  );
 
   const filtered = useMemo(
     () => filterIssues(openIssues, closedIssues, segment),
@@ -98,7 +107,12 @@ export function IssuesSection({ org, name, openIssues, closedIssues, loading }: 
       <div className="flex items-center gap-3">
         <div className="flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-0.5">
           {SEGMENTS.map((s) => {
-            const count = s.key === 'all' ? openIssues.length + closedIssues.length : s.key === 'open' ? openIssues.length : closedIssues.length;
+            const count =
+              s.key === 'all'
+                ? openIssues.length + closedIssues.length
+                : s.key === 'open'
+                  ? openIssues.length
+                  : closedIssues.length;
             return (
               <button
                 key={s.key}
@@ -130,7 +144,9 @@ export function IssuesSection({ org, name, openIssues, closedIssues, loading }: 
             />
           ))
         ) : filtered.length === 0 ? (
-          <div className="py-8 text-center text-sm text-[var(--theme-text-muted)]">No issues match</div>
+          <div className="py-8 text-center text-sm text-[var(--theme-text-muted)]">
+            No issues match
+          </div>
         ) : (
           filtered.map((row) => {
             const ref = `${org}/${name}#${row.number}`;
@@ -148,11 +164,15 @@ export function IssuesSection({ org, name, openIssues, closedIssues, loading }: 
                     className="flex min-w-0 cursor-pointer items-center gap-2"
                     onClick={() => window.open(issueUrl, '_blank')}
                   >
-                    <span className="font-mono text-xs text-[var(--theme-text-muted)]">#{row.number}</span>
+                    <span className="font-mono text-xs text-[var(--theme-text-muted)]">
+                      #{row.number}
+                    </span>
                     <span
                       className={cn(
                         'truncate text-sm font-semibold',
-                        isOpen ? 'text-[var(--theme-text-primary)]' : 'text-[var(--theme-text-secondary)]',
+                        isOpen
+                          ? 'text-[var(--theme-text-primary)]'
+                          : 'text-[var(--theme-text-secondary)]',
                       )}
                     >
                       {row.title}
@@ -167,7 +187,9 @@ export function IssuesSection({ org, name, openIssues, closedIssues, loading }: 
                   </div>
                   <span className="text-[11px] text-[var(--theme-text-muted)]">
                     {row.author} · {formatRelativeTime(row.createdAt)} ago
-                    {row.commentsCount > 0 ? ` · ${row.commentsCount} comment${row.commentsCount === 1 ? '' : 's'}` : ''}
+                    {row.commentsCount > 0
+                      ? ` · ${row.commentsCount} comment${row.commentsCount === 1 ? '' : 's'}`
+                      : ''}
                   </span>
                 </div>
 

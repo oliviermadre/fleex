@@ -1,9 +1,11 @@
-import type { FastifyInstance } from 'fastify';
 import type { CreateSessionRequest } from '@fleex/shared';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function sessionRoutes(container: Container) {
-  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) =>
+    container.eventBus.emit(...events);
 
   return async function (app: FastifyInstance) {
     app.get('/api/sessions', async () => {

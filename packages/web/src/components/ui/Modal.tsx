@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+
 import { cn } from '../../lib/cn';
 
 interface ModalProps {
@@ -42,12 +43,12 @@ export function Modal({ open, onClose, children, className, maxWidth = 'max-w-lg
       <div
         className={cn(
           `w-full ${maxWidth} rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-6 shadow-2xl`,
-          className
+          className,
         )}
       >
         {children}
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }

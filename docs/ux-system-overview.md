@@ -28,6 +28,7 @@ multiple AI coding agents (Claude sessions) across multiple machines simultaneou
 ### The Problem It Solves
 
 A developer might have:
+
 - 3 Claude coding agents running on their home PC
 - 2 agents on a work laptop
 - Each agent working in a separate git worktree on a different ticket
@@ -54,10 +55,10 @@ browser tab.**
 
 ### Who Uses It
 
-| User Type       | What They Do                                                   |
-|-----------------|----------------------------------------------------------------|
-| **Developer**   | Monitors agents, assigns tickets, reviews output, manages repos |
-| **AI Agent**    | Polls for work, claims tickets, posts updates, delivers results |
+| User Type     | What They Do                                                    |
+| ------------- | --------------------------------------------------------------- |
+| **Developer** | Monitors agents, assigns tickets, reviews output, manages repos |
+| **AI Agent**  | Polls for work, claims tickets, posts updates, delivers results |
 
 ---
 
@@ -106,11 +107,11 @@ browser tab.**
 
 ### What Each Piece Does
 
-| Component          | Role                                                                |
-|--------------------|---------------------------------------------------------------------|
-| **Web UI**         | Browser-based dashboard — the user's primary interface               |
-| **Central Server** | Coordination hub: API, auth, database, routes requests to gateways   |
-| **PostgreSQL**     | Stores all persistent data (users, sessions, tickets, boards, etc.)  |
+| Component          | Role                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| **Web UI**         | Browser-based dashboard — the user's primary interface                                                   |
+| **Central Server** | Coordination hub: API, auth, database, routes requests to gateways                                       |
+| **PostgreSQL**     | Stores all persistent data (users, sessions, tickets, boards, etc.)                                      |
 | **Host Gateway**   | Small service running on each developer machine, providing local access to tmux, git, and the filesystem |
 
 ### Gateway Connection Model
@@ -129,6 +130,7 @@ means they work even behind NAT, firewalls, or VPNs — no port forwarding requi
 ```
 
 **Gateway lifecycle:**
+
 1. Gateway starts → loads or creates identity file (`~/.fleex/gateway.json`)
 2. Registers with central server (sends ID + secret)
 3. Opens persistent WebSocket tunnel
@@ -213,12 +215,12 @@ User (authenticated developer)
 
 A gateway represents **one physical or virtual machine** running the gateway service.
 
-| Property    | Description                                        |
-|-------------|----------------------------------------------------|
-| Name        | User-chosen label (e.g., "Home PC")                |
-| Hostname    | System hostname (auto-detected)                    |
-| Status      | `online` or `offline`                              |
-| Last Seen   | Timestamp of last heartbeat                        |
+| Property  | Description                         |
+| --------- | ----------------------------------- |
+| Name      | User-chosen label (e.g., "Home PC") |
+| Hostname  | System hostname (auto-detected)     |
+| Status    | `online` or `offline`               |
+| Last Seen | Timestamp of last heartbeat         |
 
 **States:**
 
@@ -248,23 +250,23 @@ in Settings > Gateways. The gateway provides access to everything on that machin
 A session is a **tmux terminal session** running on a gateway. It can be either a
 Claude AI agent or a plain shell.
 
-| Property          | Description                                           |
-|-------------------|-------------------------------------------------------|
-| Display Name      | User-friendly label                                   |
+| Property          | Description                                             |
+| ----------------- | ------------------------------------------------------- |
+| Display Name      | User-friendly label                                     |
 | tmux Name         | Internal tmux identifier (e.g., `fleex_feat-login-a3f`) |
-| Type              | `claude` (AI agent) or `shell` (plain terminal)       |
-| Status            | `running`, `dead`, or `unknown`                       |
-| Current Directory | Working directory path                                |
-| Repository        | Org + name if inside a repo (e.g., `myorg/frontend`)  |
-| Worktree Branch   | Git branch if inside a worktree                       |
-| Gateway           | Which machine it's running on                         |
+| Type              | `claude` (AI agent) or `shell` (plain terminal)         |
+| Status            | `running`, `dead`, or `unknown`                         |
+| Current Directory | Working directory path                                  |
+| Repository        | Org + name if inside a repo (e.g., `myorg/frontend`)    |
+| Worktree Branch   | Git branch if inside a worktree                         |
+| Gateway           | Which machine it's running on                           |
 
 **Claude-specific properties** (live, not persisted):
 
-| Property              | Description                                        |
-|-----------------------|----------------------------------------------------|
-| Claude Activity       | What the agent is doing right now                  |
-| Foreground Process    | Currently running command                          |
+| Property           | Description                       |
+| ------------------ | --------------------------------- |
+| Claude Activity    | What the agent is doing right now |
+| Foreground Process | Currently running command         |
 
 **Claude Activity States:**
 
@@ -289,6 +291,7 @@ These activity states are **critical for the UX** — they tell the user whether
 needs attention (waiting for approval), is busy (working/executing), or is free (idle).
 
 **Managed vs. unmanaged sessions:**
+
 - **Managed** (tmux name starts with `fleex_`): Created by Fleex, tracked and grouped
 - **Unmanaged**: Pre-existing tmux sessions discovered on the machine
 
@@ -301,11 +304,11 @@ all sessions working on `myorg/frontend` on branch `feat/login` appear together.
 
 A kanban board for organizing work. Optionally linked to a repository.
 
-| Property      | Description                                    |
-|---------------|------------------------------------------------|
-| Name          | Board title (e.g., "Frontend Tasks")           |
-| Emoji         | Visual icon (default: clipboard)               |
-| Repository    | Optional org/name link                         |
+| Property   | Description                          |
+| ---------- | ------------------------------------ |
+| Name       | Board title (e.g., "Frontend Tasks") |
+| Emoji      | Visual icon (default: clipboard)     |
+| Repository | Optional org/name link               |
 
 A board contains tickets organized into **five columns**:
 
@@ -328,19 +331,19 @@ A board contains tickets organized into **five columns**:
 
 A work item on a board. The core unit of work assignment between humans and agents.
 
-| Property         | Description                                         |
-|------------------|-----------------------------------------------------|
-| Title            | Short description of the work                       |
-| Description      | Full details, acceptance criteria                   |
-| Status           | `backlog` → `todo` → `doing` → `reviewing` → `done`|
-| Priority         | `none`, `low`, `medium`, `high`                     |
-| Assignee         | Human name or agent name                            |
-| Tags             | Freeform labels                                     |
-| Blocked          | Boolean — is this ticket blocked?                   |
-| Favorite         | Boolean — pinned by user                            |
-| Due Date         | Optional deadline                                   |
-| Links            | Connections to sessions, PRs, repos, worktrees      |
-| GitHub Metadata  | Synced state from linked GitHub issue                |
+| Property        | Description                                         |
+| --------------- | --------------------------------------------------- |
+| Title           | Short description of the work                       |
+| Description     | Full details, acceptance criteria                   |
+| Status          | `backlog` → `todo` → `doing` → `reviewing` → `done` |
+| Priority        | `none`, `low`, `medium`, `high`                     |
+| Assignee        | Human name or agent name                            |
+| Tags            | Freeform labels                                     |
+| Blocked         | Boolean — is this ticket blocked?                   |
+| Favorite        | Boolean — pinned by user                            |
+| Due Date        | Optional deadline                                   |
+| Links           | Connections to sessions, PRs, repos, worktrees      |
+| GitHub Metadata | Synced state from linked GitHub issue               |
 
 **Ticket status flow:**
 
@@ -357,13 +360,13 @@ name is set as assignee.
 
 **Links** connect tickets to other system entities:
 
-| Link Type     | Example                                      |
-|---------------|----------------------------------------------|
-| `session`     | Link to the tmux session working on this      |
-| `worktree`    | Link to the git worktree created for this     |
-| `github_pr`   | Link to a pull request                        |
-| `github_issue`| Link to a GitHub issue                        |
-| `repository`  | Link to a repository                          |
+| Link Type      | Example                                   |
+| -------------- | ----------------------------------------- |
+| `session`      | Link to the tmux session working on this  |
+| `worktree`     | Link to the git worktree created for this |
+| `github_pr`    | Link to a pull request                    |
+| `github_issue` | Link to a GitHub issue                    |
+| `repository`   | Link to a repository                      |
 
 ---
 
@@ -372,13 +375,13 @@ name is set as assignee.
 A message on a ticket, posted by a human or an agent.
 
 | Property           | Description                                      |
-|--------------------|--------------------------------------------------|
+| ------------------ | ------------------------------------------------ |
 | Author Type        | `user` or `agent`                                |
 | Author Name        | Who wrote it                                     |
 | Body               | Text content (supports `@agent:Name` mentions)   |
 | Visibility         | `public` (everyone) or `private` (select agents) |
-| Private Recipients | Agent names who can see a private comment         |
-| Thread Parent      | Optional parent comment for threading             |
+| Private Recipients | Agent names who can see a private comment        |
+| Thread Parent      | Optional parent comment for threading            |
 
 **Visibility model:** Comments can be **private** to specific agents. This lets a user
 send instructions to one agent without cluttering the view for others.
@@ -389,12 +392,12 @@ send instructions to one agent without cluttering the view for others.
 
 An `@agent:Name` reference inside a comment. Creates a notification for the target agent.
 
-| Property       | Description                                          |
-|----------------|------------------------------------------------------|
-| Target Agent   | Agent being mentioned                                |
-| Source Agent   | Who mentioned them                                   |
-| Status         | `pending` → `acknowledged` → `resolved`              |
-| Resolution     | Optional link to a reply comment or deliverable       |
+| Property     | Description                                     |
+| ------------ | ----------------------------------------------- |
+| Target Agent | Agent being mentioned                           |
+| Source Agent | Who mentioned them                              |
+| Status       | `pending` → `acknowledged` → `resolved`         |
+| Resolution   | Optional link to a reply comment or deliverable |
 
 **Mention lifecycle:**
 
@@ -414,14 +417,14 @@ An `@agent:Name` reference inside a comment. Creates a notification for the targ
 
 A structured output from an agent, attached to a ticket.
 
-| Property    | Description                                            |
-|-------------|--------------------------------------------------------|
-| Agent Name  | Which agent produced it                                |
-| Type        | Category: `analysis`, `code`, `documentation`, etc.    |
-| Title       | Short label                                            |
-| Content     | Full text content                                      |
-| Version     | Auto-incremented on edits                              |
-| Status      | `draft` or `final`                                     |
+| Property   | Description                                         |
+| ---------- | --------------------------------------------------- |
+| Agent Name | Which agent produced it                             |
+| Type       | Category: `analysis`, `code`, `documentation`, etc. |
+| Title      | Short label                                         |
+| Content    | Full text content                                   |
+| Version    | Auto-incremented on edits                           |
+| Status     | `draft` or `final`                                  |
 
 Deliverables are **distinct from comments** — they represent structured work products
 rather than conversational messages.
@@ -432,10 +435,10 @@ rather than conversational messages.
 
 A free-form markdown note, either global or per-repository.
 
-| Scope           | Description                                        |
-|-----------------|----------------------------------------------------|
-| Global          | One shared notepad for everything                  |
-| Per-repository  | One notepad per org/repo (e.g., `myorg/frontend`)  |
+| Scope          | Description                                       |
+| -------------- | ------------------------------------------------- |
+| Global         | One shared notepad for everything                 |
+| Per-repository | One notepad per org/repo (e.g., `myorg/frontend`) |
 
 Features: live preview, checkbox tracking, auto-save.
 
@@ -445,11 +448,11 @@ Features: live preview, checkbox tracking, auto-save.
 
 A personal access token for authenticating agents against the API.
 
-| Property    | Description                                  |
-|-------------|----------------------------------------------|
-| Name        | User-chosen label                            |
-| Prefix      | First 8 chars shown for identification       |
-| Last Used   | Timestamp of most recent API call            |
+| Property  | Description                            |
+| --------- | -------------------------------------- |
+| Name      | User-chosen label                      |
+| Prefix    | First 8 chars shown for identification |
+| Last Used | Timestamp of most recent API call      |
 
 The full token is only shown once at creation. It's used in the `Authorization: Bearer`
 header when agents call the API.
@@ -695,16 +698,16 @@ The nav bar is a vertical icon strip, collapsible with `Cmd+B`:
 └────────┘              └─────────────────┘
 ```
 
-| Position | Panel        | Hotkey | Badge                              |
-|----------|-------------|--------|-------------------------------------|
-| 1        | Sessions     | `⌥1`  | Count of running sessions           |
-| 2        | Repositories | `⌥2`  | Count of discovered repos           |
-| 3        | Tickets      | `⌥3`  | Count of active (non-done) tickets  |
-| 4        | Claude Config| `⌥4`  | —                                   |
-| 5        | Scratchpads  | `⌥6`  | —                                   |
-| 6        | Cluster      | `⌥7`  | —                                   |
-| Bottom   | Settings     | `⌥0`  | —                                   |
-| Bottom   | Collapse     | `⌘B`  | —                                   |
+| Position | Panel         | Hotkey | Badge                              |
+| -------- | ------------- | ------ | ---------------------------------- |
+| 1        | Sessions      | `⌥1`   | Count of running sessions          |
+| 2        | Repositories  | `⌥2`   | Count of discovered repos          |
+| 3        | Tickets       | `⌥3`   | Count of active (non-done) tickets |
+| 4        | Claude Config | `⌥4`   | —                                  |
+| 5        | Scratchpads   | `⌥6`   | —                                  |
+| 6        | Cluster       | `⌥7`   | —                                  |
+| Bottom   | Settings      | `⌥0`   | —                                  |
+| Bottom   | Collapse      | `⌘B`   | —                                  |
 
 When `Alt` is held, hotkey badges appear on each nav item.
 
@@ -712,15 +715,15 @@ When `Alt` is held, hotkey badges appear on each nav item.
 
 Shows a contextual list or tree depending on the active panel:
 
-| Active Panel  | Content Panel Shows                                       |
-|---------------|-----------------------------------------------------------|
-| Sessions      | Grouped session list (by repo/branch), pinned icons       |
-| Repositories  | Repository list                                           |
-| Tickets       | Board selector, filters, search                           |
-| Claude Config | File tree of Claude config files                          |
-| Scratchpads   | List of scratchpads (global + per-repo)                   |
-| Cluster       | *(empty — cluster uses full main panel)*                  |
-| Settings      | Settings tab navigation                                   |
+| Active Panel  | Content Panel Shows                                 |
+| ------------- | --------------------------------------------------- |
+| Sessions      | Grouped session list (by repo/branch), pinned icons |
+| Repositories  | Repository list                                     |
+| Tickets       | Board selector, filters, search                     |
+| Claude Config | File tree of Claude config files                    |
+| Scratchpads   | List of scratchpads (global + per-repo)             |
+| Cluster       | _(empty — cluster uses full main panel)_            |
+| Settings      | Settings tab navigation                             |
 
 ### Main Panel (Right Column)
 
@@ -755,7 +758,7 @@ Settings     →  Settings form for the active tab
 ```
 
 | Tab              | Purpose                                                     |
-|------------------|-------------------------------------------------------------|
+| ---------------- | ----------------------------------------------------------- |
 | General          | Base path for repository discovery                          |
 | Appearance       | Theme and visual preferences                                |
 | Repositories     | Glob patterns for finding repos on disk                     |
@@ -768,12 +771,12 @@ Settings     →  Settings form for the active tab
 
 These float above the main layout:
 
-| Overlay               | Trigger           | Description                        |
-|-----------------------|--------------------|------------------------------------|
-| Command Palette       | `⌘K` or `⌘/`     | Quick-search across all entities   |
-| Floating Scratchpad   | `Alt+Shift+P`     | Scratchpad overlay on main panel   |
-| Create Session Modal  | "New Session" btn  | Form to create a new tmux session  |
-| Floating Session      | Detach action      | Terminal overlay floating on screen |
+| Overlay              | Trigger           | Description                         |
+| -------------------- | ----------------- | ----------------------------------- |
+| Command Palette      | `⌘K` or `⌘/`      | Quick-search across all entities    |
+| Floating Scratchpad  | `Alt+Shift+P`     | Scratchpad overlay on main panel    |
+| Create Session Modal | "New Session" btn | Form to create a new tmux session   |
+| Floating Session     | Detach action     | Terminal overlay floating on screen |
 
 ### Session View Modes
 
@@ -830,18 +833,18 @@ When a ticket is selected, the main panel shows its full detail:
 
 ### Kanban Board Interactions
 
-| Interaction        | Action                                                  |
-|--------------------|---------------------------------------------------------|
-| Drag ticket        | Move between columns (changes status)                   |
-| Click ticket       | Open ticket detail in main panel                        |
-| Quick create       | Add ticket from title or GitHub issue URL               |
-| Filter by repo     | Show only tickets linked to a specific repo             |
-| Filter by priority | Show only tickets with selected priority                |
-| Filter by session  | Show tickets that have/don't have a linked session      |
-| Filter by tag      | Show tickets with specific tags                         |
-| Filter favorites   | Show only favorited tickets                             |
-| Search             | Full-text search across ticket titles/descriptions      |
-| Board selector     | Switch between boards or view "All boards"              |
+| Interaction        | Action                                             |
+| ------------------ | -------------------------------------------------- |
+| Drag ticket        | Move between columns (changes status)              |
+| Click ticket       | Open ticket detail in main panel                   |
+| Quick create       | Add ticket from title or GitHub issue URL          |
+| Filter by repo     | Show only tickets linked to a specific repo        |
+| Filter by priority | Show only tickets with selected priority           |
+| Filter by session  | Show tickets that have/don't have a linked session |
+| Filter by tag      | Show tickets with specific tags                    |
+| Filter favorites   | Show only favorited tickets                        |
+| Search             | Full-text search across ticket titles/descriptions |
+| Board selector     | Switch between boards or view "All boards"         |
 
 ---
 
@@ -924,24 +927,24 @@ When a ticket is selected, the main panel shows its full detail:
 
 ### Key Relationships Summary
 
-| From           | To           | Cardinality | Notes                                     |
-|----------------|-------------|-------------|-------------------------------------------|
-| User           | Gateway     | 1 : N       | One user can have multiple machines        |
-| User           | Board       | 1 : N       | Each user has their own boards             |
-| User           | API Token   | 1 : N       | Multiple tokens for different agents       |
-| User           | Scratchpad  | 1 : N       | Global + per-repo notes                    |
-| Gateway        | Session     | 1 : N       | Sessions run on a specific machine         |
-| Board          | Ticket      | 1 : N       | Tickets belong to one board                |
-| Ticket         | Comment     | 1 : N       | Conversation thread on a ticket            |
-| Ticket         | Mention     | 1 : N       | Agent mentions extracted from comments     |
-| Ticket         | Deliverable | 1 : N       | Structured outputs from agents             |
-| Ticket         | Activity    | 1 : N       | Immutable audit trail                      |
-| Comment        | Mention     | 1 : N       | One comment can mention multiple agents    |
-| Comment        | Comment     | 1 : N       | Threaded replies (parent_id)               |
-| Mention        | Deliverable | 1 : 1       | Resolution link (optional)                 |
-| Mention        | Comment     | 1 : 1       | Resolution link (optional)                 |
-| Ticket         | Session     | N : N       | Via TicketLink (soft reference)            |
-| Board          | Repository  | 1 : 1       | Optional association                       |
+| From    | To          | Cardinality | Notes                                   |
+| ------- | ----------- | ----------- | --------------------------------------- |
+| User    | Gateway     | 1 : N       | One user can have multiple machines     |
+| User    | Board       | 1 : N       | Each user has their own boards          |
+| User    | API Token   | 1 : N       | Multiple tokens for different agents    |
+| User    | Scratchpad  | 1 : N       | Global + per-repo notes                 |
+| Gateway | Session     | 1 : N       | Sessions run on a specific machine      |
+| Board   | Ticket      | 1 : N       | Tickets belong to one board             |
+| Ticket  | Comment     | 1 : N       | Conversation thread on a ticket         |
+| Ticket  | Mention     | 1 : N       | Agent mentions extracted from comments  |
+| Ticket  | Deliverable | 1 : N       | Structured outputs from agents          |
+| Ticket  | Activity    | 1 : N       | Immutable audit trail                   |
+| Comment | Mention     | 1 : N       | One comment can mention multiple agents |
+| Comment | Comment     | 1 : N       | Threaded replies (parent_id)            |
+| Mention | Deliverable | 1 : 1       | Resolution link (optional)              |
+| Mention | Comment     | 1 : 1       | Resolution link (optional)              |
+| Ticket  | Session     | N : N       | Via TicketLink (soft reference)         |
+| Board   | Repository  | 1 : 1       | Optional association                    |
 
 ### State Machines Summary
 
@@ -969,22 +972,22 @@ CLAUDE ACTIVITY:     idle ──► working ──► executing
 
 ## Appendix: Keyboard Shortcuts
 
-| Shortcut        | Action                              |
-|-----------------|-------------------------------------|
-| `⌥1`           | Switch to Sessions panel             |
-| `⌥2`           | Switch to Repositories panel         |
-| `⌥3`           | Switch to Tickets panel              |
-| `⌥4`           | Switch to Claude Config panel        |
-| `⌥6`           | Switch to Scratchpads panel          |
-| `⌥7`           | Switch to Cluster panel              |
-| `⌥0`           | Switch to Settings panel             |
-| `⌘B`           | Toggle nav bar collapse/expand       |
-| `⌘K` / `⌘/`   | Open command palette                 |
-| `Alt+Shift+P`  | Toggle floating scratchpad           |
-| `Alt+Shift+V`  | Toggle scratchpad preview            |
+| Shortcut      | Action                         |
+| ------------- | ------------------------------ |
+| `⌥1`          | Switch to Sessions panel       |
+| `⌥2`          | Switch to Repositories panel   |
+| `⌥3`          | Switch to Tickets panel        |
+| `⌥4`          | Switch to Claude Config panel  |
+| `⌥6`          | Switch to Scratchpads panel    |
+| `⌥7`          | Switch to Cluster panel        |
+| `⌥0`          | Switch to Settings panel       |
+| `⌘B`          | Toggle nav bar collapse/expand |
+| `⌘K` / `⌘/`   | Open command palette           |
+| `Alt+Shift+P` | Toggle floating scratchpad     |
+| `Alt+Shift+V` | Toggle scratchpad preview      |
 
 ---
 
-*This document reflects the system as of its current implementation. It is intended
+_This document reflects the system as of its current implementation. It is intended
 to give a UX designer complete understanding of the domain, components, and workflows
-without needing to read source code.*
+without needing to read source code._

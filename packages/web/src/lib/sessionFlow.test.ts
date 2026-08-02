@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+
 import { TICKET_STATUS } from '@fleex/shared';
 import type { WorktreeSessionGroup } from '@fleex/shared';
+
 import { worktreeFlow, isActiveTicketStatus } from './sessionFlow';
 
 function wt(opts: { status?: string; sessions?: number; agent?: boolean }): WorktreeSessionGroup {
@@ -28,7 +30,7 @@ describe('worktreeFlow', () => {
 
   it('returns null when the worktree is not shown in any flow', () => {
     expect(worktreeFlow(wt({ status: TICKET_STATUS.DONE, sessions: 0 }))).toBeNull(); // done, no sessions
-    expect(worktreeFlow(wt({ agent: false, sessions: 2 }))).toBeNull();               // no agentWorktree
+    expect(worktreeFlow(wt({ agent: false, sessions: 2 }))).toBeNull(); // no agentWorktree
   });
 });
 

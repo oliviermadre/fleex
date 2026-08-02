@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import type {
   AgentPersona,
   CreateAgentPersonaRequest,
@@ -6,6 +7,7 @@ import type {
   AgentExecutionResult,
   PersonaWsMessage,
 } from '@fleex/shared';
+
 import * as api from '../services/api';
 
 type PersonaTab = 'config' | 'soul' | 'identity' | 'memory' | 'events';

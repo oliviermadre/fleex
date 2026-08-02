@@ -7,8 +7,5 @@ import { useToastStore } from '../stores/toastStore';
 export function notifyHookStarted(hookStarted?: boolean): void {
   if (!hookStarted) return;
 
-  useToastStore.getState().addToast(
-    'info',
-    'Post-checkout hook running...',
-  );
+  useToastStore.getState().addToast('info', 'Post-checkout hook running...');
 }

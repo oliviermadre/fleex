@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+
 import { clampRightSidebarWidth, useUIStore } from '../../../stores/uiStore';
 
 interface Props {

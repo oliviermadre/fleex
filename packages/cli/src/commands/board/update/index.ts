@@ -1,9 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, present } from '../../../core/colors.ts';
 import { apiBase, apiPatch } from '../../../core/api.ts';
+import { ok, die, present } from '../../../core/colors.ts';
 import { resolveBoard, type Board } from '../_shared.ts';
 
-interface UpdateOptions { name?: string; emoji?: string }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface UpdateOptions {
+  name?: string;
+  emoji?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -28,7 +32,9 @@ const def: CommandDef = {
     }
     if (opts.emoji !== undefined) body.emoji = opts.emoji;
     const updated = await apiPatch<Board>(`${apiBase()}/api/boards/${board.id}`, body);
-    present(updated, () => ok(`Updated board ${updated.emoji ?? ''} ${updated.name} (${updated.id})`));
+    present(updated, () =>
+      ok(`Updated board ${updated.emoji ?? ''} ${updated.name} (${updated.id})`),
+    );
   },
 };
 

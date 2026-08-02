@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
+
+import { cn } from '../../lib/cn';
+import { tint } from '../../lib/tints';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
+
 import { DashboardHeader } from './DashboardHeader';
 import { IssuesSection } from './IssuesSection';
 import { OverviewTab } from './OverviewTab';
-import { WorktreesTab } from './WorktreesTab';
 import { PullRequestsSection } from './PullRequestsSection';
 import { RepoConfigPanel } from './RepoConfigPanel';
-import { cn } from '../../lib/cn';
-import { tint } from '../../lib/tints';
+import { WorktreesTab } from './WorktreesTab';
 
 type Tab = 'overview' | 'worktrees' | 'pulls' | 'issues' | 'config';
 
@@ -55,10 +57,25 @@ export function RepositoryDashboard({ repoKey }: Props) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <DashboardHeader org={org} name={name} worktreeCount={worktreeCount} isCloned={data?.isClonedLocally !== false} />
+      <DashboardHeader
+        org={org}
+        name={name}
+        worktreeCount={worktreeCount}
+        isCloned={data?.isClonedLocally !== false}
+      />
       {data?.isClonedLocally === false && (
         <div className={cn('flex items-center gap-2 border-b px-4 py-2 text-xs', tint('yellow'))}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="flex-shrink-0"
+          >
             <circle cx="8" cy="8" r="6" />
             <line x1="8" y1="5" x2="8" y2="8.5" />
             <circle cx="8" cy="11" r="0.5" fill="currentColor" />
@@ -98,8 +115,8 @@ export function RepositoryDashboard({ repoKey }: Props) {
         ))}
       </div>
       <div className="flex-1 overflow-y-auto p-6">
-        {activeTab === 'overview' && (
-          data ? (
+        {activeTab === 'overview' &&
+          (data ? (
             <OverviewTab
               org={org}
               name={name}
@@ -111,16 +128,16 @@ export function RepositoryDashboard({ repoKey }: Props) {
             <div className="flex flex-col gap-5">
               <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-4">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="h-[104px] animate-pulse rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]" />
+                  <div
+                    key={i}
+                    className="h-[104px] animate-pulse rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]"
+                  />
                 ))}
               </div>
               <div className="h-40 animate-pulse rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-surface)]" />
             </div>
-          )
-        )}
-        {activeTab === 'worktrees' && data && (
-          <WorktreesTab org={org} name={name} data={data} />
-        )}
+          ))}
+        {activeTab === 'worktrees' && data && <WorktreesTab org={org} name={name} data={data} />}
         {activeTab === 'pulls' && (
           <PullRequestsSection
             org={org}
@@ -142,9 +159,7 @@ export function RepositoryDashboard({ repoKey }: Props) {
             loading={isLoading}
           />
         )}
-        {activeTab === 'config' && (
-          <RepoConfigPanel org={org} name={name} />
-        )}
+        {activeTab === 'config' && <RepoConfigPanel org={org} name={name} />}
       </div>
     </div>
   );
