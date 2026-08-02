@@ -14,10 +14,12 @@ interface PtyResizeMessage {
   rows: number;
 }
 
-interface PtyWsData {
+export interface PtyWsData {
   initialized: boolean;
   proc: ReturnType<typeof Bun.spawn> | null;
   terminal: any;
+  /** Token presented at upgrade time, re-checked when the token file changes. */
+  authToken: string;
 }
 
 function resolveTmuxPath(): string {
@@ -30,7 +32,7 @@ function resolveTmuxPath(): string {
 
 const TMUX_PATH = resolveTmuxPath();
 
-export function handlePtyOpen(ws: ServerWebSocket<PtyWsData>) {
+export function handlePtyOpen(_ws: ServerWebSocket<PtyWsData>) {
   logInfo('[pty] WebSocket connected, waiting for init message');
 }
 

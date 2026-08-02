@@ -18,6 +18,7 @@ import { runStatus } from '../status/_impl.ts';
 import { launchDesktop } from '../desktop/_impl.ts';
 import { ensureCompanion } from '../companion/start/_impl.ts';
 import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
+import { ensureGatewayToken, GATEWAY_TOKEN_FILE } from '../../core/gateway-token.ts';
 
 export interface StartOptions {
   port?: string;
@@ -100,12 +101,26 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
     ctx,
   );
 
+  // Shared bearer token for the gateway. The gateway executes arbitrary shell
+  // commands, so it authenticates every request; both processes must agree on
+  // the same secret. Generated once, then reused across restarts.
+  let gatewayToken: string;
+  try {
+    gatewayToken = ensureGatewayToken();
+  } catch (e) {
+    die(
+      `Cannot provision the gateway token at ${GATEWAY_TOKEN_FILE}: ` +
+        `${e instanceof Error ? e.message : String(e)}\n  Run: ${c.bold('fleex doctor --fix')}`,
+    );
+  }
+
   // Spawn each service detached, captured in its own log file.
   const env = { ...process.env };
 
   const gatewayProc = spawnService('gateway', ctx.repoDir, {
     ...env,
     GATEWAY_PORT: String(ports.gateway),
+    GATEWAY_TOKEN: gatewayToken,
     FLEEX_CENTRAL_URL: `http://localhost:${ports.server}`,
   }, ['run', 'dev:gateway']);
   savePid('gateway', gatewayProc.pid!, ctx);
@@ -114,6 +129,7 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
     ...env,
     PORT: String(ports.server),
     HOST_GATEWAY_URL: `http://localhost:${ports.gateway}`,
+    GATEWAY_TOKEN: gatewayToken,
     FLEEX_STORAGE_DRIVER: process.env.FLEEX_STORAGE_DRIVER ?? 'json',
   }, ['run', 'dev:server']);
   savePid('server', serverProc.pid!, ctx);

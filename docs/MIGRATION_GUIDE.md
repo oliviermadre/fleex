@@ -125,6 +125,7 @@ A default local user is seeded automatically:
 | `PORT` | No | `3000` | HTTP port for the Fastify server |
 | `DATABASE_URL` | For Postgres | — | PostgreSQL connection URL. If omitted, JSON file storage is used |
 | `HOST_GATEWAY_URL` | No | `http://localhost:3001` | URL of the default host gateway |
+| `GATEWAY_TOKEN` | No | from `~/.fleex/gateway.token` | Shared bearer token sent to the gateway. Auto-generated on first start |
 | `HOST_HOMEDIR` | No | OS homedir | Override the home directory path on the gateway host |
 | `GITHUB_CLIENT_ID` | For GitHub SSO | — | GitHub OAuth App client ID |
 | `GITHUB_CLIENT_SECRET` | For GitHub SSO | — | GitHub OAuth App client secret |
@@ -145,9 +146,30 @@ A default local user is seeded automatically:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `GATEWAY_PORT` | No | `3001` | HTTP port for the gateway |
+| `GATEWAY_BIND` | No | `127.0.0.1` | Interface to bind. **Anything other than loopback exposes arbitrary command execution to the network** |
+| `GATEWAY_TOKEN` | No | from `~/.fleex/gateway.token` | Shared bearer token. Auto-generated on first start |
+| `FLEEX_GATEWAY_TOKEN_FILE` | No | `~/.fleex/gateway.token` | Override the token file path |
 | `FLEEX_CENTRAL_URL` | For registration | — | Central server URL (e.g. `https://fleex.example.com`) |
 | `GATEWAY_NAME` | No | hostname | Human-readable name for this gateway |
 | `GATEWAY_TUNNEL` | No | `true` | Set to `false` to disable the reverse WebSocket tunnel |
+
+#### Security
+
+The gateway is a remote shell. `/exec` runs arbitrary commands as the user who
+started it, `/fs` reads and deletes arbitrary paths, and `/pty` attaches live
+tmux sessions — including the terminals of running agents. Consequently:
+
+- It binds `127.0.0.1` by default. Setting `GATEWAY_BIND` to anything else
+  hands a root-equivalent shell to every machine that can reach the port.
+- Every route except `GET /health` requires `Authorization: Bearer <token>`.
+  **The token is worth shell access** — treat it like an SSH private key. It is
+  stored `0600` in `~/.fleex/gateway.token`; `fleex doctor` checks it, and
+  `fleex doctor --fix` regenerates it.
+- Any request carrying an `Origin` header is refused with `403`. Only browsers
+  send `Origin`, and no browser page has any business talking to the gateway.
+- Removing the token file revokes access within ~2 seconds and closes live
+  `/pty` sockets. Run `fleex restart` afterwards so the server picks up the new
+  token.
 
 ---
 

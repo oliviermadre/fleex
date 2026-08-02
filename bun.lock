@@ -34,6 +34,14 @@
         "electron": "^35.0.0",
       },
     },
+    "packages/host-gateway": {
+      "name": "@fleex/host-gateway",
+      "devDependencies": {
+        "@types/bun": "^1.3.14",
+        "@types/node": "^22.0.0",
+        "typescript": "^5.7.0",
+      },
+    },
     "packages/mcp": {
       "name": "@fleex/mcp",
       "version": "0.1.0",
@@ -312,6 +320,8 @@
     "@fleex/cli": ["@fleex/cli@workspace:packages/cli"],
 
     "@fleex/desktop": ["@fleex/desktop@workspace:packages/desktop"],
+
+    "@fleex/host-gateway": ["@fleex/host-gateway@workspace:packages/host-gateway"],
 
     "@fleex/mcp": ["@fleex/mcp@workspace:packages/mcp"],
 

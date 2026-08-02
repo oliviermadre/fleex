@@ -4,7 +4,7 @@ import { logInfo, logDebug } from './logger';
 
 const execFileAsync = promisify(execFile);
 
-interface ExecRequest {
+export interface ExecRequest {
   command: string;
   args: string[];
   cwd?: string;
