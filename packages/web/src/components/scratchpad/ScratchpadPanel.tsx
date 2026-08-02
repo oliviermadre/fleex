@@ -48,14 +48,14 @@ export function ScratchpadPanel() {
     }
   }, [open, storeKey]);
 
-  // Flush save on close
-  const prevOpenRef = useRef(open);
+  // Flush save on close. AppLayout only mounts this panel while it's open, so
+  // closing unmounts us — the cleanup is the close hook. Switching repo keys
+  // flushes the previous scratchpad for the same reason.
   useEffect(() => {
-    if (prevOpenRef.current && !open) {
+    return () => {
       flushSave(storeKey);
-    }
-    prevOpenRef.current = open;
-  }, [open, storeKey, flushSave]);
+    };
+  }, [storeKey, flushSave]);
 
   // Close on Escape
   useEffect(() => {

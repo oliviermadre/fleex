@@ -23,18 +23,20 @@ function renderBody(body: string) {
   );
 }
 
+// The markdown pipeline is lazy, so the chip only exists after its chunk
+// resolves — findBy* rather than getBy*.
 describe('CommentMarkdown — mention chips', () => {
-  it('renders a @workflow:slug mention as a chip, not a link', () => {
+  it('renders a @workflow:slug mention as a chip, not a link', async () => {
     renderBody('run @workflow:deploy please');
-    const chip = screen.getByText('@workflow:deploy');
+    const chip = await screen.findByText('@workflow:deploy');
     // A chip is a span — an <a> would navigate to a dead #fleex-… href.
     expect(chip.closest('a')).toBeNull();
     expect(screen.queryByRole('link')).toBeNull();
   });
 
-  it('renders a @skill:name mention as a chip, not a link (existing types intact)', () => {
+  it('renders a @skill:name mention as a chip, not a link (existing types intact)', async () => {
     renderBody('run @skill:review please');
-    const chip = screen.getByText('@skill:review');
+    const chip = await screen.findByText('@skill:review');
     expect(chip.closest('a')).toBeNull();
   });
 });

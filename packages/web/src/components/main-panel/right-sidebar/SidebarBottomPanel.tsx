@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSidebarTerminalsStore } from '../../../stores/sidebarTerminalsStore';
-import { useTerminal } from '../../../hooks/useTerminal';
 import * as api from '../../../services/api';
+
+// Lazy: keeps @xterm/xterm out of the initial payload even though this panel is
+// reachable from the eager UnifiedWorktreePanel. Only fetched once a sidebar
+// terminal session actually exists (see the `activeSession` guard below).
+const SidebarTerminalView = lazy(() =>
+  import('./SidebarTerminalView').then((m) => ({ default: m.SidebarTerminalView }))
+);
 
 interface Props {
   /** Parent tmux session tab whose sidebar terminals we host. */
@@ -131,7 +137,9 @@ export function SidebarBottomPanel({ parentSessionId, ticketDisplayId, cwd }: Pr
       </div>
       <div className="flex-1 min-h-0 relative">
         {activeSession ? (
-          <SidebarTerminalView key={activeSession.id} sessionId={activeSession.id} />
+          <Suspense fallback={<div className="absolute inset-0 bg-[var(--theme-bg-base)]" />}>
+            <SidebarTerminalView key={activeSession.id} sessionId={activeSession.id} />
+          </Suspense>
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
             <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className="text-[var(--theme-text-faint)]">
@@ -159,8 +167,3 @@ export function SidebarBottomPanel({ parentSessionId, ticketDisplayId, cwd }: Pr
   );
 }
 
-function SidebarTerminalView({ sessionId }: { sessionId: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  useTerminal(sessionId, containerRef);
-  return <div ref={containerRef} className="xterm-container absolute inset-0" />;
-}

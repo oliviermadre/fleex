@@ -8,6 +8,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
+import { floatingPositionRegistry } from './floatingPositionRegistry';
 import type { Session } from '@fleex/shared';
 
 const MIN_WIDTH = 480;
@@ -15,8 +16,6 @@ const MIN_HEIGHT = 300;
 const DEFAULT_WIDTH = 800;
 const DEFAULT_HEIGHT = 500;
 
-// Position registry for spatial keyboard navigation between floating overlays
-export const floatingPositionRegistry = new Map<string, { x: number; y: number; width: number; height: number }>();
 
 /** Resolve the navigation URL for a floating session based on its worktree context. */
 function getSessionNavigationUrl(sessionId: string): string {

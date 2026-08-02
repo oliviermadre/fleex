@@ -1,39 +1,33 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { AppLayout } from './components/layout/AppLayout';
-import { CreateTaskModal } from './components/modals/CreateTaskModal';
-import { CommandPalette } from './components/command-palette/CommandPalette';
 import { ToastContainer } from './components/ui/ToastContainer';
-import { NotificationToasts } from './components/notifications/NotificationToasts';
-import { VersionBanner } from './components/ui/VersionBanner';
-import { RouterSync } from './router/RouterSync';
 import { useTheme } from './hooks/useTheme';
 import { useTerminalFont } from './hooks/useTerminalFont';
 import { useMobileMode } from './mobile/useMobileMode';
-import { MobileApp } from './mobile/MobileApp';
+
+// One shell per platform, so a phone never downloads the desktop tree and vice
+// versa. useTheme/useTerminalFont still run before the branch — since they now
+// write to terminalAppearance instead of terminalManager, that costs nothing.
+const DesktopShell = lazy(() =>
+  import('./components/layout/DesktopShell').then((m) => ({ default: m.DesktopShell }))
+);
+const MobileApp = lazy(() =>
+  import('./mobile/MobileApp').then((m) => ({ default: m.MobileApp }))
+);
 
 export function App() {
   useTheme();
   useTerminalFont();
   const isMobile = useMobileMode();
 
-  if (isMobile) {
-    return (
-      <BrowserRouter>
-        <MobileApp />
-        <ToastContainer />
-      </BrowserRouter>
-    );
-  }
-
   return (
     <BrowserRouter>
-      <RouterSync />
-      <AppLayout />
-      <CreateTaskModal />
-      <CommandPalette />
+      {/* Bare surface, not a spinner: this is almost always a cache hit and a
+          flash of loading UI would be the only thing anyone ever noticed. */}
+      <Suspense fallback={<div className="h-dvh w-full bg-[var(--theme-bg-base)]" />}>
+        {isMobile ? <MobileApp /> : <DesktopShell />}
+      </Suspense>
       <ToastContainer />
-      <NotificationToasts />
-      <VersionBanner />
     </BrowserRouter>
   );
 }

@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
+import { LazyMarkdown } from '../markdown/LazyMarkdown';
 import { Button } from '../ui/Button';
 import { useDraft } from '../../hooks/useDraft';
 import { tintClasses } from '../../lib/tints';
@@ -52,9 +50,7 @@ export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }
         </div>
         {question && (
           <div className="needs-review-markdown mt-2 max-h-[460px] overflow-y-auto pr-1 text-xs text-[var(--theme-text-primary)]">
-            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-              {question}
-            </Markdown>
+            <LazyMarkdown content={question} preset="basic" />
           </div>
         )}
       </div>

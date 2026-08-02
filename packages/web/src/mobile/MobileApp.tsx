@@ -7,6 +7,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { MobileBoard } from './MobileBoard';
 import { MobileTicketDetail } from './MobileTicketDetail';
 import { MobileAssistant } from './MobileAssistant';
+import { warmMarkdown } from '../components/markdown/LazyMarkdown';
 
 type MobileView = 'board' | 'assistant';
 
@@ -23,6 +24,9 @@ export function MobileApp() {
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   useEffect(() => {
     loadSettings();
+    // Opening a ticket is one tap away — fetch the markdown chunk while idle so
+    // the Suspense fallback never actually shows.
+    warmMarkdown();
   }, [loadSettings]);
 
   const ticket = useTicketStore((s) =>

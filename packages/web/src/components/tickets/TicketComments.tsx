@@ -2,10 +2,8 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, mem
 import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage, ConversationMode, EffortLevel, StepRun, WorkflowStep, WorkflowRun, MentionExecutionFailedPayload } from '@fleex/shared';
 import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
 import { tint, tintText, tintClasses } from '../../lib/tints';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
 import type { Components } from 'react-markdown';
+import { LazyMarkdown } from '../markdown/LazyMarkdown';
 import { appWs } from '../../services/websocket';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useAgentEventStore } from '../../stores/agentEventStore';
@@ -190,10 +188,6 @@ function DeliverableChip({ deliverable, onOpen }: {
 }
 
 // ── Comment Markdown Renderer ──
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const commentRehypePlugins: any[] = [[rehypeHighlight, { detect: true }]];
-const commentRemarkPlugins = [remarkGfm];
 
 export const CommentMarkdown = memo(function CommentMarkdown({
   body,
@@ -433,13 +427,7 @@ export const CommentMarkdown = memo(function CommentMarkdown({
   return (
     <>
       <ImageGalleryStrip images={images} />
-      <Markdown
-        remarkPlugins={commentRemarkPlugins}
-        rehypePlugins={commentRehypePlugins}
-        components={components}
-      >
-        {processed}
-      </Markdown>
+      <LazyMarkdown content={processed} components={components} preset="basic" />
     </>
   );
 });

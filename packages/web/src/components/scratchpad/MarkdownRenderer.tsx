@@ -1,10 +1,6 @@
 import { memo, useMemo, useState, Children } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Components } from 'react-markdown';
+import { LazyMarkdown } from '../markdown/LazyMarkdown';
 import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { useColorMode } from '../../hooks/useActiveTheme';
@@ -83,28 +79,6 @@ function parseSegments(content: string): Segment[] {
   flushText();
   return segments;
 }
-
-// ── rehype plugins config ─────────────────────────────────────────────────────
-
-// detect: true → rehype-highlight adds the `hljs` class even to code blocks
-// without a language specifier, so we can reliably distinguish block vs inline
-// code in the `code` component override.
-const remarkPlugins = [remarkGfm];
-
-const sanitizeSchema = {
-  ...defaultSchema,
-  attributes: {
-    ...defaultSchema.attributes,
-    img: [...(defaultSchema.attributes?.img ?? []), 'width', 'height'],
-  },
-  tagNames: [
-    ...(defaultSchema.tagNames ?? []),
-    ...['details', 'summary'].filter((t) => !defaultSchema.tagNames?.includes(t)),
-  ],
-};
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const rehypePlugins: any[] = [rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeHighlight, { detect: true }]];
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -409,9 +383,7 @@ function MarkdownSection({
   return (
     <>
       <ImageGalleryStrip images={images} />
-      <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
-        {processed}
-      </Markdown>
+      <LazyMarkdown content={processed} components={components} preset="safe-html" />
     </>
   );
 }

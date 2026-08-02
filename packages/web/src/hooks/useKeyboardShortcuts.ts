@@ -8,7 +8,7 @@ import { useScratchpadStore } from '../stores/scratchpadStore';
 import * as api from '../services/api';
 import { worktreeFlow, SESSION_FLOW_ORDER } from '../lib/sessionFlow';
 import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
-import { floatingPositionRegistry } from '../components/main-panel/FloatingSessionOverlay';
+import { floatingPositionRegistry } from '../components/main-panel/floatingPositionRegistry';
 
 export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
