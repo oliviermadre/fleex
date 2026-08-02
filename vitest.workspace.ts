@@ -6,4 +6,5 @@ export default defineWorkspace([
   'packages/cli/vitest.config.ts',
   'packages/mcp/vitest.config.ts',
   'packages/sidepanel-host/vitest.config.ts',
+  'scripts/vitest.config.ts',
 ]);

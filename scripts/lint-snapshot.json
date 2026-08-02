@@ -1,0 +1,693 @@
+{
+  "total": 648,
+  "files": {
+    "packages/cli/src/core/api.ts": {
+      "@typescript-eslint/no-explicit-any": 5
+    },
+    "packages/cli/src/core/marketplace-diff.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/cli/src/core/types.ts": {
+      "@typescript-eslint/no-explicit-any": 1
+    },
+    "packages/cli/tests/unit/documentation-notes.test.ts": {
+      "no-control-regex": 1
+    },
+    "packages/cli/tests/unit/update-docs.test.ts": {
+      "@typescript-eslint/no-unused-vars": 2,
+      "no-control-regex": 1
+    },
+    "packages/host-gateway/src/exec.ts": {
+      "@typescript-eslint/no-explicit-any": 2
+    },
+    "packages/host-gateway/src/fs.ts": {
+      "@typescript-eslint/no-explicit-any": 1,
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/host-gateway/src/main.ts": {
+      "@typescript-eslint/no-explicit-any": 3
+    },
+    "packages/host-gateway/src/pty.ts": {
+      "@typescript-eslint/no-explicit-any": 1,
+      "@typescript-eslint/no-unused-vars": 3
+    },
+    "packages/server/src/application/services/overlay-manager.ts": {
+      "@typescript-eslint/no-unused-vars": 2
+    },
+    "packages/server/src/application/use-cases/execute-agent.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/src/application/use-cases/process-hook-event.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/src/application/use-cases/run-panel.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/src/application/utils/resolve-file-references.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/src/domain/services/diff-stats-cache.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/src/infrastructure/adapters/pgsql/pg-ticket-group-store.adapter.ts": {
+      "@typescript-eslint/no-explicit-any": 8
+    },
+    "packages/server/src/infrastructure/adapters/tmux-cli.adapter.ts": {
+      "@typescript-eslint/no-explicit-any": 3
+    },
+    "packages/server/src/infrastructure/container.ts": {
+      "@typescript-eslint/no-misused-promises": 1
+    },
+    "packages/server/src/infrastructure/database/db.ts": {
+      "@typescript-eslint/no-explicit-any": 2
+    },
+    "packages/server/src/infrastructure/host/remote.ts": {
+      "@typescript-eslint/no-explicit-any": 3
+    },
+    "packages/server/src/infrastructure/http/agent-api.routes.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/src/infrastructure/http/claude-config.routes.ts": {
+      "@typescript-eslint/no-unused-vars": 2
+    },
+    "packages/server/src/infrastructure/http/exec.routes.ts": {
+      "@typescript-eslint/no-explicit-any": 1
+    },
+    "packages/server/src/infrastructure/http/repositories.routes.ts": {
+      "@typescript-eslint/no-explicit-any": 1,
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/src/infrastructure/http/tickets.routes.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/src/infrastructure/http/workflow-template.routes.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/src/infrastructure/migrations/cli-migrate.ts": {
+      "@typescript-eslint/no-unused-vars": 2
+    },
+    "packages/server/src/infrastructure/ws/unified-ws.ts": {
+      "@typescript-eslint/no-floating-promises": 3,
+      "@typescript-eslint/no-misused-promises": 4,
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/tests/unit/cwd-guard.test.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/tests/unit/domain-event-listener.test.ts": {
+      "@typescript-eslint/no-unused-vars": 2
+    },
+    "packages/server/tests/unit/event-bus.test.ts": {
+      "@typescript-eslint/no-unused-vars": 3
+    },
+    "packages/server/tests/unit/generate-cli-session-summary.test.ts": {
+      "import-x/order": 1
+    },
+    "packages/server/tests/unit/import-slack-message.test.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/server/tests/unit/session-entity.test.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/components/agents/AgentConfigTab.tsx": {
+      "@typescript-eslint/no-floating-promises": 5,
+      "jsx-a11y/label-has-associated-control": 5
+    },
+    "packages/web/src/components/agents/AgentEventsTab.tsx": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/components/agents/AgentListPanel.tsx": {
+      "@typescript-eslint/no-floating-promises": 13,
+      "jsx-a11y/click-events-have-key-events": 1
+    },
+    "packages/web/src/components/agents/AgentMarkdownTab.tsx": {
+      "@typescript-eslint/no-misused-promises": 1
+    },
+    "packages/web/src/components/agents/AgentPersonaView.tsx": {
+      "@typescript-eslint/no-floating-promises": 2,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/interactive-supports-focus": 1
+    },
+    "packages/web/src/components/agents/CreateAgentModal.tsx": {
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/label-has-associated-control": 3,
+      "jsx-a11y/no-autofocus": 1,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/agents/CreatePanelModal.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/label-has-associated-control": 3,
+      "jsx-a11y/no-autofocus": 1,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/agents/CreateSkillModal.tsx": {
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/label-has-associated-control": 3,
+      "jsx-a11y/no-autofocus": 1,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/agents/CreateWorkflowModal.tsx": {
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/label-has-associated-control": 4,
+      "jsx-a11y/no-autofocus": 1,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/agents/PanelDetailView.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/label-has-associated-control": 6
+    },
+    "packages/web/src/components/agents/SkillEditor.tsx": {
+      "@typescript-eslint/no-floating-promises": 4,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/interactive-supports-focus": 1,
+      "jsx-a11y/label-has-associated-control": 4
+    },
+    "packages/web/src/components/analytics/AuditTrailView.tsx": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/components/analytics/StatisticsView.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/assistant/AssistantConversation.tsx": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/components/assistant/AssistantSidebar.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-autofocus": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/claude-config/ClaudeConfigTree.tsx": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/components/claude-config/MonacoWrapper.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/command-palette/CommandPalette.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/dashboard/DashboardView.tsx": {
+      "@typescript-eslint/no-floating-promises": 8,
+      "@typescript-eslint/no-misused-promises": 1,
+      "@typescript-eslint/no-unused-vars": 10,
+      "jsx-a11y/click-events-have-key-events": 4,
+      "jsx-a11y/no-static-element-interactions": 4
+    },
+    "packages/web/src/components/dashboard/ImportTaskButton.tsx": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/components/dashboard/SmartSessionButton.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/no-autofocus": 1,
+      "jsx-a11y/role-supports-aria-props": 1
+    },
+    "packages/web/src/components/documents/DocumentRow.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/documents/DocumentsFilterSidebar.tsx": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/components/documents/DocumentsPage.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/execution-log/ExecutionLogPage.tsx": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/components/layout/AppLayout.tsx": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/components/layout/ResizeHandle.tsx": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/list-focus/ActivityBadge.test.tsx": {
+      "@typescript-eslint/no-floating-promises": 4
+    },
+    "packages/web/src/components/list-focus/ListFocusInspector.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/list-focus/ListFocusRow.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/list-focus/ListFocusView.tsx": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/components/list-focus/StatusChipDropdown.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/main-panel/AgentEventStream.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/main-panel/AgentExecutionsPanel.tsx": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/components/main-panel/FloatingSessionOverlay.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "@typescript-eslint/no-unused-vars": 1,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 8,
+      "react-hooks/exhaustive-deps": 1
+    },
+    "packages/web/src/components/main-panel/MainPanel.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/main-panel/UnifiedWorktreePanel.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "import-x/order": 1,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/main-panel/right-sidebar/SidebarBottomPanel.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/interactive-supports-focus": 1
+    },
+    "packages/web/src/components/main-panel/right-sidebar/SidebarSplitHandle.tsx": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/main-panel/right-sidebar/SidebarTopPanel.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/interactive-supports-focus": 1
+    },
+    "packages/web/src/components/main-panel/right-sidebar/SidebarWidthHandle.tsx": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/main-panel/tab-engine/TabBar.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/main-panel/tab-engine/WorktreeHeader.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/main-panel/tab-engine/kinds/TerminalTabContent.tsx": {
+      "@typescript-eslint/no-explicit-any": 1,
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/components/main-panel/tab-engine/useTabEngine.ts": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "packages/web/src/components/modals/CreateTaskModal.tsx": {
+      "@typescript-eslint/no-floating-promises": 2,
+      "@typescript-eslint/no-unused-vars": 2,
+      "jsx-a11y/label-has-associated-control": 2,
+      "jsx-a11y/no-autofocus": 2
+    },
+    "packages/web/src/components/notifications/NotificationNavItem.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/notifications/NotificationToasts.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/overlay-sync/OverlaySyncModal.tsx": {
+      "@typescript-eslint/no-floating-promises": 2,
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/components/repositories/AddRepositoriesModal.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/label-has-associated-control": 1
+    },
+    "packages/web/src/components/repository-dashboard/IssuesSection.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/repository-dashboard/OverviewTab.tsx": {
+      "@typescript-eslint/no-unused-vars": 1,
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/repository-dashboard/PullRequestsSection.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/repository-dashboard/RepoConfigPanel.tsx": {
+      "jsx-a11y/label-has-associated-control": 1
+    },
+    "packages/web/src/components/repository-dashboard/RepositoryDashboard.tsx": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/components/repository-dashboard/TicketsWorktreesPanel.tsx": {
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/scratchpad/MarkdownRenderer.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/scratchpad/ScratchpadContent.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/scratchpad/ScratchpadMainView.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/scratchpad/ScratchpadPanel.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/scratchpad/ScratchpadsContent.tsx": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/components/settings/AppearanceTab.tsx": {
+      "@typescript-eslint/no-floating-promises": 8,
+      "jsx-a11y/label-has-associated-control": 2,
+      "jsx-a11y/no-autofocus": 1
+    },
+    "packages/web/src/components/settings/DeliverableTypesTab.tsx": {
+      "@typescript-eslint/no-floating-promises": 3,
+      "jsx-a11y/label-has-associated-control": 7
+    },
+    "packages/web/src/components/settings/SettingsPanel.tsx": {
+      "@typescript-eslint/no-floating-promises": 2,
+      "jsx-a11y/label-has-associated-control": 8
+    },
+    "packages/web/src/components/settings/ThemeColorEditor.tsx": {
+      "jsx-a11y/label-has-associated-control": 1
+    },
+    "packages/web/src/components/shared/ImageThumbnail.tsx": {
+      "jsx-a11y/click-events-have-key-events": 3,
+      "jsx-a11y/no-noninteractive-element-interactions": 1,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/shared/MermaidDiagram.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/sidebar/ContentPanel.tsx": {
+      "@typescript-eslint/no-floating-promises": 4
+    },
+    "packages/web/src/components/sidebar/GroupedSessions.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/sidebar/RepoItem.tsx": {
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/interactive-supports-focus": 2
+    },
+    "packages/web/src/components/sidebar/RepositoriesContent.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/sidebar/RepositoryGroup.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/interactive-supports-focus": 1
+    },
+    "packages/web/src/components/sidebar/SessionGroups.tsx": {
+      "@typescript-eslint/no-unused-vars": 2
+    },
+    "packages/web/src/components/sidebar/SessionItem.tsx": {
+      "@typescript-eslint/no-floating-promises": 2,
+      "jsx-a11y/click-events-have-key-events": 2
+    },
+    "packages/web/src/components/sidebar/SystemGroup.tsx": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/components/sidebar/WorktreeGroup.tsx": {
+      "@typescript-eslint/no-floating-promises": 3,
+      "@typescript-eslint/no-unused-vars": 3
+    },
+    "packages/web/src/components/tickets/ArchivedTicketsModal.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/tickets/BoardActionsDropdown.tsx": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/components/tickets/DeliverableFormModal.tsx": {
+      "jsx-a11y/label-has-associated-control": 4,
+      "jsx-a11y/no-autofocus": 1
+    },
+    "packages/web/src/components/tickets/DeliverableReadingOverlay.tsx": {
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/tickets/DeliverableTypePicker.tsx": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/components/tickets/DueDatePickerPopover.tsx": {
+      "@typescript-eslint/no-floating-promises": 2,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/tickets/EpicBanner.tsx": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/components/tickets/EpicDetailView.tsx": {
+      "@typescript-eslint/no-floating-promises": 4,
+      "@typescript-eslint/no-unused-vars": 1,
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/label-has-associated-control": 3,
+      "jsx-a11y/no-autofocus": 3,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/tickets/EpicPicker.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/label-has-associated-control": 1,
+      "react-hooks/exhaustive-deps": 2
+    },
+    "packages/web/src/components/tickets/ExecutionModal.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/no-static-element-interactions": 6
+    },
+    "packages/web/src/components/tickets/FilterDropdown.tsx": {
+      "jsx-a11y/label-has-associated-control": 8
+    },
+    "packages/web/src/components/tickets/FloatingDeliverablePanel.tsx": {
+      "jsx-a11y/no-static-element-interactions": 7
+    },
+    "packages/web/src/components/tickets/InlineCardCreator.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/tickets/KanbanBoard.tsx": {
+      "@typescript-eslint/no-floating-promises": 2,
+      "@typescript-eslint/no-unused-vars": 2
+    },
+    "packages/web/src/components/tickets/KanbanCard.tsx": {
+      "@typescript-eslint/no-floating-promises": 3,
+      "jsx-a11y/click-events-have-key-events": 5,
+      "jsx-a11y/no-static-element-interactions": 5
+    },
+    "packages/web/src/components/tickets/KanbanHeader.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "@typescript-eslint/no-unused-vars": 2,
+      "jsx-a11y/no-autofocus": 1
+    },
+    "packages/web/src/components/tickets/PriorityPickerPopover.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/tickets/RoadmapView.tsx": {
+      "@typescript-eslint/no-floating-promises": 2,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/tickets/TicketComments.tsx": {
+      "@typescript-eslint/no-floating-promises": 4,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1,
+      "react-hooks/exhaustive-deps": 1
+    },
+    "packages/web/src/components/tickets/TicketDeliverables.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/tickets/TicketDetail.tsx": {
+      "@typescript-eslint/no-floating-promises": 3,
+      "react-hooks/exhaustive-deps": 2
+    },
+    "packages/web/src/components/tickets/TicketMentions.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/tickets/TicketMetaSidebar.tsx": {
+      "@typescript-eslint/no-floating-promises": 11,
+      "@typescript-eslint/no-unused-vars": 3,
+      "jsx-a11y/label-has-associated-control": 14,
+      "jsx-a11y/no-autofocus": 3,
+      "react-hooks/exhaustive-deps": 1
+    },
+    "packages/web/src/components/tickets/TicketPickerModal.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "@typescript-eslint/no-misused-promises": 1,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/components/tickets/TicketTypeBadge.tsx": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/components/tickets/TicketsContentPanel.tsx": {
+      "@typescript-eslint/no-floating-promises": 3,
+      "jsx-a11y/label-has-associated-control": 9,
+      "jsx-a11y/no-autofocus": 1
+    },
+    "packages/web/src/components/tickets/TypePickerPopover.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/components/ui/Autocomplete.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "packages/web/src/components/ui/DataTable.tsx": {
+      "jsx-a11y/no-noninteractive-tabindex": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/ui/Modal.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/ui/NameInputModal.tsx": {
+      "jsx-a11y/no-autofocus": 1
+    },
+    "packages/web/src/components/ui/TagInput.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/workflows/EditorStepNode.tsx": {
+      "@typescript-eslint/no-unused-vars": 1,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/workflows/StepConfigPanel.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "packages/web/src/components/workflows/StepRunNode.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "packages/web/src/components/workflows/WorkflowEditorView.tsx": {
+      "@typescript-eslint/no-misused-promises": 1,
+      "@typescript-eslint/no-unused-vars": 4
+    },
+    "packages/web/src/hooks/useAgentPersonas.ts": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/hooks/useClaudeUsage.ts": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "@typescript-eslint/no-misused-promises": 1
+    },
+    "packages/web/src/hooks/useFileUpload.ts": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/hooks/useFloatingResize.ts": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "packages/web/src/hooks/useKeyboardShortcuts.ts": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "react-hooks/exhaustive-deps": 1
+    },
+    "packages/web/src/hooks/useModels.ts": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/hooks/usePullRequestPolling.ts": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/hooks/useRepositoryDashboard.ts": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/hooks/useSkills.ts": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/hooks/useTerminal.ts": {
+      "@typescript-eslint/no-unused-vars": 2
+    },
+    "packages/web/src/hooks/useTickets.ts": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/hooks/useVersionCheck.ts": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "@typescript-eslint/no-misused-promises": 1
+    },
+    "packages/web/src/hooks/useWorktreeContext.ts": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "react-hooks/exhaustive-deps": 1
+    },
+    "packages/web/src/mobile/MobileApp.tsx": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/mobile/MobileAssistant.tsx": {
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/mobile/MobileBoard.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/no-autofocus": 1,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/mobile/MobileConversation.tsx": {
+      "@typescript-eslint/no-floating-promises": 3,
+      "jsx-a11y/click-events-have-key-events": 4,
+      "jsx-a11y/label-has-associated-control": 2,
+      "jsx-a11y/no-static-element-interactions": 4
+    },
+    "packages/web/src/mobile/MobileDeliverables.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/no-autofocus": 1,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/mobile/MobileTicketDetail.tsx": {
+      "@typescript-eslint/no-floating-promises": 1,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-autofocus": 2,
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "packages/web/src/mobile/MobileTicketMeta.tsx": {
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/label-has-associated-control": 5,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/mobile/MobileTicketRepos.tsx": {
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/no-static-element-interactions": 2
+    },
+    "packages/web/src/notifications/renderers.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/router/RouterSync.sync.test.tsx": {
+      "@typescript-eslint/no-misused-promises": 1
+    },
+    "packages/web/src/router/RouterSync.tsx": {
+      "@typescript-eslint/no-floating-promises": 3,
+      "@typescript-eslint/no-unused-vars": 4,
+      "react-hooks/exhaustive-deps": 1
+    },
+    "packages/web/src/services/api.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/services/terminalManager.ts": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/stores/auditTrailStore.ts": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/stores/claudeConfigStore.ts": {
+      "@typescript-eslint/no-floating-promises": 1
+    },
+    "packages/web/src/stores/executionLogStore.ts": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/stores/repositoryDashboardStore.ts": {
+      "@typescript-eslint/no-floating-promises": 2
+    },
+    "packages/web/src/stores/scratchpadStore.ts": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/stores/sessionStore.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/stores/settingsStore.ts": {
+      "@typescript-eslint/no-misused-promises": 1
+    },
+    "packages/web/src/stores/statisticsStore.ts": {
+      "@typescript-eslint/no-floating-promises": 3
+    },
+    "packages/web/src/stores/ticketGroupStore.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/stores/ticketStore.ts": {
+      "@typescript-eslint/no-floating-promises": 5,
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/stores/unreadStore.ts": {
+      "@typescript-eslint/no-unused-vars": 1
+    },
+    "packages/web/src/stores/workflowRunStore.ts": {
+      "@typescript-eslint/no-floating-promises": 2
+    }
+  }
+}

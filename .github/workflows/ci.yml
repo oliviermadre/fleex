@@ -21,8 +21,16 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Type check
+      - name: Lint & type check
         run: bun run lint
+
+      # A ratchet only tightens if the improved snapshot is actually committed.
+      # `bun run lint` rewrites the snapshots in place when violation counts drop,
+      # so a dirty snapshot here means someone fixed code but left the ceiling high.
+      - name: Snapshots up to date
+        run: |
+          git diff --exit-code scripts/lint-snapshot.json scripts/raw-palette-snapshot.json \
+            || (echo "::error::Violations were fixed but the snapshots were not committed. Run 'bun run lint' and commit scripts/*-snapshot.json." && exit 1)
 
       - name: Build
         run: bun run build
