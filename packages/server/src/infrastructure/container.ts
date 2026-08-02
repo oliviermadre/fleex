@@ -37,6 +37,10 @@ import type { SupabaseUserStore } from './adapters/supabase/supabase-user-store.
 import type { SupabaseSessionManager } from './adapters/supabase/supabase-session-manager.adapter.js';
 import { CreateSessionFromTicketUseCase } from '../application/use-cases/create-session-from-ticket.js';
 import { DetectMergeUseCase } from '../application/use-cases/detect-merge.js';
+import { CreateTicketUseCase } from '../application/use-cases/create-ticket.js';
+import { UpdateTicketUseCase } from '../application/use-cases/update-ticket.js';
+import { MoveTicketUseCase } from '../application/use-cases/move-ticket.js';
+import { DeleteTicketUseCase } from '../application/use-cases/delete-ticket.js';
 import { RenameSessionUseCase } from '../application/use-cases/rename-session.js';
 import { ImportGitHubIssueUseCase } from '../application/use-cases/import-github-issue.js';
 import { ImportSlackMessageUseCase } from '../application/use-cases/import-slack-message.js';
@@ -213,8 +217,8 @@ export async function createContainer() {
 
   const createSession = new CreateSessionUseCase(tmux, sessionStore_, namingService, git, config, logger);
   const renameSession = new RenameSessionUseCase(tmux, sessionStore_, namingService, logger);
+  const killSession = new KillSessionUseCase(tmux, sessionStore_, logger);
   const createWorktreeUC = new CreateWorktreeUseCase(git, logger, bareCloneManager, overlayManager, resolver);
-  const detectMerge = new DetectMergeUseCase(ticketStore_, logger);
   const createSessionFromTicket = new CreateSessionFromTicketUseCase(
     ticketStore_, createSession, createWorktreeUC, git, config, logger, resolver,
   );
@@ -269,6 +273,18 @@ export async function createContainer() {
   //     broadcasts only — never side-effects, never re-audited, never re-published.
   const eventBus = new EventBus();
   const remoteEventBus = new EventBus();
+
+  // Ticket write use-cases — the single path to create/update/move/delete a
+  // ticket, shared by the web routes and the agent API (which used to duplicate
+  // the logic and drift). Built here because they all need the bus.
+  const createTicket = new CreateTicketUseCase(ticketStore_, eventBus);
+  const updateTicket = new UpdateTicketUseCase(ticketStore_, eventBus);
+  const moveTicket = new MoveTicketUseCase(ticketStore_, eventBus);
+  const deleteTicket = new DeleteTicketUseCase(
+    ticketStore_, commentStore, fileStore, fileMetaStore, sessionStore_,
+    killSession, git, resolver, eventBus, logger,
+  );
+  const detectMerge = new DetectMergeUseCase(ticketStore_, logger, eventBus);
 
   // Per-workspace deliverable-type backoffice (CRUD + usage + reassignment).
   const manageDeliverableTypes = new ManageDeliverableTypesUseCase(config, deliverableStore, logger, eventBus);
@@ -489,7 +505,7 @@ export async function createContainer() {
     createSession,
     renameSession,
     listSessions: new ListSessionsUseCase(sessionStore_, tmux, logger),
-    killSession: new KillSessionUseCase(tmux, sessionStore_, logger),
+    killSession,
     getSessionGroups,
     discoverSessions,
     processHookEvent,
@@ -500,6 +516,10 @@ export async function createContainer() {
     agentTokenStore,
     ticketStore: ticketStore_,
     detectMerge,
+    createTicket,
+    updateTicket,
+    moveTicket,
+    deleteTicket,
     createSessionFromTicket,
     importGitHubIssue,
     importSlackMessage,

@@ -219,12 +219,11 @@ async function main() {
     return container.hostFs.exists(barePath);
   });
 
-  // Wire merge detection for ticket auto-complete
+  // Wire merge detection for ticket auto-complete.
+  // The `ticket.moved` emission (which drives mention auto-resolution via
+  // DomainEventListener.handleTicketMovedToDone) belongs to the use case.
   container.repositoryRefreshScheduler.setOnMergedPRs(async (mergedPRs, repoKey) => {
-    const movedIds = await container.detectMerge.execute(mergedPRs, repoKey);
-    for (const id of movedIds) {
-      container.eventBus.emit({ type: 'ticket.moved', ticketId: id, fromStatus: '', toStatus: 'done', occurredAt: new Date() });
-    }
+    await container.detectMerge.execute(mergedPRs, repoKey);
   });
 
   // Serve frontend static files in production
