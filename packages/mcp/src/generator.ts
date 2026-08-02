@@ -70,6 +70,22 @@ const HIDDEN_OPTION_LONGS = new Set(['--help', '--workspace', '--json']);
  */
 const CONFIRM_OPTION_ATTRS = new Set(['force', 'yes']);
 
+/**
+ * A confirmation-skip flag is identified by name AND stated intent, because
+ * `--force` does not always mean "skip the prompt": `marketplace add --force`
+ * means "re-clone if it already exists". Treating that as a confirmation flag
+ * would strip it from the schema and then re-inject it on every approved call,
+ * silently re-cloning an existing marketplace every time.
+ *
+ * The description is where the command author states what the flag does, so it
+ * is the honest signal. A CLI-wide test asserts that every `--force`/`--yes`
+ * says so, turning the one fail-open case — a new flag phrased differently —
+ * into a loud failure instead of a silently ungated tool.
+ */
+function isConfirmOption(o: Option): boolean {
+  return CONFIRM_OPTION_ATTRS.has(o.attributeName()) && /confirm/i.test(o.description ?? '');
+}
+
 function camelCase(name: string): string {
   return name.replace(/[-_\s]+([a-zA-Z0-9])/g, (_, c: string) => c.toUpperCase());
 }
@@ -107,7 +123,7 @@ function readOptions(cmd: Command): OptSpec[] {
   for (const o of cmd.options as Option[]) {
     if (o.negate) continue; // `--no-x` is covered by the positive `--x` boolean
     if (o.long && HIDDEN_OPTION_LONGS.has(o.long)) continue;
-    if (CONFIRM_OPTION_ATTRS.has(o.attributeName())) continue; // host-controlled
+    if (isConfirmOption(o)) continue; // host-controlled
     const flag = o.long ?? o.short;
     if (!flag) continue;
     const takesValue = Boolean(o.required || o.optional);
@@ -136,7 +152,7 @@ function buildSchema(cmd: Command, args: ArgSpec[], options: OptSpec[]): JsonSch
 
   for (const o of cmd.options as Option[]) {
     if (o.negate || (o.long && HIDDEN_OPTION_LONGS.has(o.long))) continue;
-    if (CONFIRM_OPTION_ATTRS.has(o.attributeName())) continue; // host-controlled
+    if (isConfirmOption(o)) continue; // host-controlled
     const spec = options.find((s) => s.flag === (o.long ?? o.short));
     if (!spec) continue;
     const desc = o.description || undefined;
@@ -173,7 +189,7 @@ export function generateTools(root: Command, opts: GenerateOptions = {}): Genera
     const options = readOptions(cmd);
     // Read the raw option list: confirm flags are filtered out of `options` on
     // purpose, but the executor still needs to know which flag to inject.
-    const confirmOpt = (cmd.options as Option[]).find((o) => !o.negate && CONFIRM_OPTION_ATTRS.has(o.attributeName()));
+    const confirmOpt = (cmd.options as Option[]).find((o) => !o.negate && isConfirmOption(o));
     const confirmFlag = confirmOpt?.long ?? confirmOpt?.short;
     const timeoutMs = TOOL_TIMEOUTS_MS[rel.join(' ')];
     tools.push({

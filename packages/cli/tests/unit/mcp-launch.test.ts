@@ -60,10 +60,20 @@ describe('buildMcpLaunch', () => {
     expect(buildMcpLaunch({ assumeYes: true }, ctx).envOverrides.FLEEX_MCP_ASSUME_YES).toBe('1');
   });
 
-  it('honours the confirmation bypass set through the environment', () => {
-    const base = { FLEEX_MCP_ASSUME_YES: '1' } as NodeJS.ProcessEnv;
-    const { envOverrides } = buildMcpLaunch({}, { ...ctx, baseEnv: base });
-    expect(envOverrides.FLEEX_MCP_ASSUME_YES).toBe('1');
+  it('never rewrites the bypass value the server is responsible for parsing', () => {
+    // Regression: the launcher used to re-emit any non-empty FLEEX_MCP_ASSUME_YES
+    // as '1'. Since '0' is a truthy string, `FLEEX_MCP_ASSUME_YES=0` — the most
+    // natural way to say "off" — silently turned the bypass ON. Two parsers for
+    // one security flag, and the looser one won.
+    //
+    // The launcher now sets the variable only for --assume-yes; anything already
+    // in the environment reaches the child untouched by inheritance, so the
+    // strict predicate in server.ts is the only thing that decides.
+    for (const raw of ['0', 'false', 'off', 'no', '1', 'true', 'yes']) {
+      const base = { FLEEX_MCP_ASSUME_YES: raw } as NodeJS.ProcessEnv;
+      const { envOverrides } = buildMcpLaunch({}, { ...ctx, baseEnv: base });
+      expect('FLEEX_MCP_ASSUME_YES' in envOverrides, `env value ${raw}`).toBe(false);
+    }
   });
 
   it('an explicit flag still wins over the env (flag > env > default)', () => {

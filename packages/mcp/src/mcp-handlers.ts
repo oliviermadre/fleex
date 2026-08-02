@@ -77,8 +77,12 @@ export async function callToolResult(
     return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
   }
   const assumeYes = ctx.assumeYes ?? false;
-  // Refuse rather than run: without `assumeYes` the CLI would block on its own
-  // readline prompt until the exec timeout kills it, which reads as a hang.
+  // Refuse rather than run. Neither CLI outcome is usable from here: commands
+  // guarded by `canPrompt()` exit telling the caller to "re-run with -f", which
+  // the model cannot do now that the flag is out of the schema, while
+  // `ticket delete` and `ticket deliverable delete` open a raw readline on a
+  // stdin nobody will ever write to and hang until the timeout. Saying so up
+  // front is the only accurate answer, and it starts no process at all.
   if (!assumeYes && tool.confirmFlag) {
     return {
       content: [{
