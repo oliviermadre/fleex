@@ -27,9 +27,15 @@
 /**
  * Terminal state of the previous run of a lineage. Drives `resolveSessionDefault`.
  *
- * `interrupted` and `cancelled` are deliberately distinct: the former is the
- * machine giving up (timeout, server restart), the latter a human deciding to
- * stop. They warrant opposite defaults.
+ * `interrupted` and `cancelled` are deliberately distinct, but NOT along the
+ * machine/human axis one would expect:
+ *   interrupted — the run stopped without settling: timeout, server restart,
+ *                 or a Terminate on a mention/skill (`cancelExecution` writes
+ *                 `interrupted` + `reason: 'cancelled'`; the DB status enum has
+ *                 no `cancelled`).
+ *   cancelled   — a workflow *step run* was thrown away: Retry-while-running,
+ *                 or cancelling the whole run.
+ * They warrant opposite defaults; see `resolveSessionDefault` for why.
  */
 export type LineageRunStatus = 'failed' | 'interrupted' | 'completed' | 'cancelled' | 'none';
 

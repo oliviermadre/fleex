@@ -70,10 +70,16 @@ describe('resolveSessionDefault', () => {
     expect(resolveSessionDefault('none')).toBe('fresh');
   });
 
-  // WHY: a human hitting Terminate has decided to stop. Treating that like a
-  // machine timeout would silently re-open the very run they killed.
-  it('treats a human cancel and a machine interruption as opposites', () => {
-    expect(resolveSessionDefault('cancelled')).not.toBe(resolveSessionDefault('interrupted'));
+  // WHY: `cancelled` is NOT "a human hit Terminate" — a Terminate on a mention
+  // or a skill records `interrupted` (see `cancelExecution`), and must resume:
+  // the usual reason to kill a mention by hand is a wrong conversation mode
+  // spotted after launch, and the user wants the transcript back once fixed.
+  // `cancelled` only ever comes from a workflow step run (Retry-while-running,
+  // or cancelling the run), where the attempt itself is what's being thrown
+  // away. Do not "harmonise" these two: they encode opposite intents.
+  it('keeps a killed workflow attempt and a stopped mention on opposite defaults', () => {
+    expect(resolveSessionDefault('cancelled')).toBe('fresh');
+    expect(resolveSessionDefault('interrupted')).toBe('resume');
   });
 });
 

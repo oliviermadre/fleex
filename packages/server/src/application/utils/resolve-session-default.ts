@@ -9,16 +9,32 @@ import type { LineageRunStatus, SessionMode } from './session-lineage.js';
  * |----------------|---------|--------------------------------------------------|
  * | failed         | resume  | max_turns / usage limit / crash — the work is     |
  * |                |         | unfinished; restarting cold reburns the turns.    |
- * | interrupted    | resume  | timeout or server restart: a machine event, not   |
- * |                |         | a decision.                                       |
+ * | interrupted    | resume  | timeout, server restart — AND a Terminate on a    |
+ * |                |         | mention or skill. See the note below: that is     |
+ * |                |         | deliberate, not an oversight.                     |
  * | completed      | fresh   | the run went all the way through. Relaunching is  |
  * |                |         | a new intent, not a continuation — and an agent   |
  * |                |         | handed its own previous answer defends it instead |
  * |                |         | of redoing the work.                              |
- * | cancelled      | fresh   | a human explicitly stopped it, typically because  |
- * |                |         | it was stuck or looping. Re-injecting the context |
- * |                |         | of that loop reproduces it.                       |
+ * | cancelled      | fresh   | workflow step runs only (`StepRunEntity.cancel`): |
+ * |                |         | Retry-while-running, or cancelling the whole run. |
+ * |                |         | Both mean "this attempt is going nowhere" — the   |
+ * |                |         | next attempt must start cold or it reproduces the |
+ * |                |         | loop it was killed for.                           |
  * | none           | fresh   | nothing to resume.                                |
+ *
+ * Why a Terminate on a *mention* resumes (ticket #454, confirmed with the
+ * product owner): the dominant reason to stop a mention by hand is a
+ * mis-configuration noticed after launch — the ticket was left in `plan` when
+ * `edit` was wanted. The user fixes the setting and re-mentions, expecting the
+ * agent to pick up where it was, with the correction. Starting cold there
+ * throws away context the user never intended to discard. `cancelExecution()`
+ * accordingly records `interrupted` (with `reason: 'cancelled'` for audit),
+ * and `agent_event_executions.status` has no `cancelled` value at all.
+ *
+ * A workflow step is the opposite: you Retry a step because *that attempt* is
+ * bad, so the second attempt must not inherit it. The asymmetry is intentional
+ * — same gesture, different primitive, different intent.
  *
  * MUST stay the only implementation. The web client reads the resolved value
  * from the API and never re-derives it — duplicating this rule client-side is
