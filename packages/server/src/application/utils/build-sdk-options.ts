@@ -31,6 +31,11 @@ export function buildSdkOptions(
     model: ctx.model,
     systemPrompt: ctx.systemPrompt,
     ...(cliPath ? { pathToClaudeCodeExecutable: cliPath } : {}),
+    // Resuming is orthogonal to the permission profile: it restores the prior
+    // transcript, it does not widen what the agent may do. It used to live in
+    // the `edit` branch only, which silently dropped every resume in `plan`
+    // (the DEFAULT conversation mode) and `talk` — see ticket #454.
+    ...(ctx.resume ? { resume: ctx.resume } : {}),
   };
 
   // Reasoning effort is a direct query() option; fast mode goes through settings.
@@ -78,7 +83,6 @@ export function buildSdkOptions(
         settingSources: ['user', 'project'],
         maxTurns: 150,
         ...(ctx.cwd ? { cwd: ctx.cwd } : {}),
-        ...(ctx.resume ? { resume: ctx.resume } : {}),
       };
   }
 }

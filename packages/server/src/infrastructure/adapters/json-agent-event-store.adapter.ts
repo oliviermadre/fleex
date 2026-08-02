@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../application/ports/agent-event-store.port.js';
+import type { AgentEventStorePort, CliExecutionUpsert, SessionHistoryRow } from '../../application/ports/agent-event-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { HostFs } from '../host/types.js';
 
@@ -158,6 +158,11 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     return events;
   }
 
+  async getExecutionById(executionId: string): Promise<AgentExecution | null> {
+    const entry = this.index.find((e) => e.id === executionId);
+    return entry ? this.indexToExecution(entry) : null;
+  }
+
   async getExecutionsByTicket(ticketId: string): Promise<AgentExecution[]> {
     return this.index
       .filter((e) => e.ticketId === ticketId)
@@ -223,19 +228,17 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     return mentionIds;
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
-    const sorted = [...this.index]
+  async getSessionHistory(): Promise<SessionHistoryRow[]> {
+    return [...this.index]
       .filter((e) => e.sdkSessionId)
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-
-    const result = new Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>();
-    for (const entry of sorted) {
-      const key = `${entry.personaId}:${entry.ticketId}`;
-      if (!result.has(key)) {
-        result.set(key, { sdkSessionId: entry.sdkSessionId!, personaId: entry.personaId, ticketId: entry.ticketId });
-      }
-    }
-    return result;
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+      .map((entry) => ({
+        sdkSessionId: entry.sdkSessionId!,
+        personaId: entry.personaId,
+        ticketId: entry.ticketId,
+        mentionId: entry.mentionId,
+        status: entry.status,
+      }));
   }
 
   private indexToExecution(entry: ExecutionIndex): AgentExecution {

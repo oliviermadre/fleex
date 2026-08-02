@@ -21,6 +21,14 @@ export interface StepExecutionInput {
     previousOutputs: Record<string, Record<string, unknown>>;
   };
   /**
+   * SDK session of the previous, *failed* attempt of this step — set by
+   * `RunWorkflowStepUseCase` so a Retry continues the transcript instead of
+   * restarting the agent cold. Undefined on a first attempt, and after an
+   * attempt that finished (we only resume where the machine stopped without
+   * having finished). Executors with no agent behind them ignore it.
+   */
+  resumeSessionId?: string;
+  /**
    * Invoked by the executor as soon as the underlying agent execution has
    * started and its `executionId` is known — i.e. while the step is still
    * running, not at completion. Lets the orchestrator persist

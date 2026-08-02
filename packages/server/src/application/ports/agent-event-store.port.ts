@@ -18,6 +18,23 @@ export interface CliExecutionUpsert {
   cacheCreationTokens: number | null;
 }
 
+/**
+ * One session-bearing execution, as returned by `getSessionHistory`.
+ *
+ * Adapters return raw rows on purpose: mapping a row onto a session *lineage*
+ * requires interpreting the overloaded `mentionId` column (bare uuid = mention,
+ * `skill:<id>` = skill, `workflow:<id>` = workflow step), and that rule lives in
+ * exactly one place — `lineageKeyForExecution` — instead of being re-implemented
+ * in four SQL dialects.
+ */
+export interface SessionHistoryRow {
+  sdkSessionId: string;
+  personaId: string;
+  ticketId: string;
+  mentionId: string;
+  status: 'running' | 'completed' | 'failed' | 'interrupted';
+}
+
 export interface AgentEventStorePort {
   startExecution(params: {
     executionId: string;
@@ -76,10 +93,25 @@ export interface AgentEventStorePort {
   /** Mark all 'running' executions as 'interrupted'. Returns affected mention IDs. */
   markInterruptedExecutions(): Promise<string[]>;
 
-  /** Returns a map of "personaId:ticketId" → sdkSessionId from latest executions. */
-  getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>>;
+  /**
+   * Every execution that carries an SDK session id, most recent first.
+   *
+   * Returns rows rather than a pre-keyed map so the caller can bucket them per
+   * *lineage* (see `session-lineage.ts`). The previous map was keyed on
+   * `personaId:ticketId` with no regard for the kind of execution, so after a
+   * restart the most recent run of ANY kind won — letting a persona mention
+   * resume a skill's or a workflow step's session on the same ticket.
+   */
+  getSessionHistory(): Promise<SessionHistoryRow[]>;
 
   getEventsByExecution(executionId: string): Promise<AgentEventEntity[]>;
+
+  /**
+   * Single execution by primary key. Used to walk `step_run.executionId →
+   * execution.sdkSessionId` when retrying a failed workflow step, which is what
+   * lets the retry resume instead of restarting cold.
+   */
+  getExecutionById(executionId: string): Promise<AgentExecution | null>;
 
   getExecutionsByTicket(ticketId: string): Promise<AgentExecution[]>;
 

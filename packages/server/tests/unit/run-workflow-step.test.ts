@@ -20,7 +20,12 @@ const makeRun = () => WorkflowRunEntity.create({
 const makeArtifactStubs = () => ({
   submitDeliverable: { execute: vi.fn().mockResolvedValue({ id: 'd-1' }) },
   postComment: { execute: vi.fn().mockResolvedValue({ comment: { id: 'c-1' }, createdMentions: [] }) },
-  agentEventStore: { setExecutionOutputs: vi.fn() },
+  agentEventStore: { setExecutionOutputs: vi.fn(), getExecutionById: vi.fn().mockResolvedValue(null) },
+});
+
+/** A previous attempt of a step, as `getLatestForStep` would return it. */
+const previousAttempt = (status: string, executionId: string | null) => ({
+  attempt: 1, status, executionId,
 });
 
 describe('RunWorkflowStepUseCase', () => {
@@ -321,5 +326,76 @@ describe('RunWorkflowStepUseCase', () => {
     // The executionId was persisted while the step was still running (before the
     // completion save), i.e. at least one save saw the live id.
     expect(executionIdAtStart).toContain('exec-live');
+  });
+
+  // ── Resume on retry (ticket #454) ─────────────────────────────────────────
+  //
+  // The reported bug: a step that dies on max_turns and is retried via the Retry
+  // button restarts the agent cold, so it redoes the work it had already done
+  // before running out of turns. The fix chains `step_run.executionId →
+  // execution.sdkSessionId` — no schema change, because `stepRun.fail()` leaves
+  // `executionId` intact.
+
+  const runRetry = async (latest: unknown, artifacts: ReturnType<typeof makeArtifactStubs>) => {
+    const run = makeRun();
+    const agentExecutor = { execute: vi.fn().mockResolvedValue({
+      output: { schemaFields: {}, result: 'ok' }, executionId: 'exec-2',
+    }) };
+    const uc = new RunWorkflowStepUseCase({
+      runStore: { getById: vi.fn().mockResolvedValue(run), save: vi.fn() } as never,
+      stepRunStore: {
+        save: vi.fn(),
+        getLatestForStep: vi.fn().mockResolvedValue(latest),
+        getByWorkflowRun: vi.fn().mockResolvedValue([]),
+      } as never,
+      orchestrator: { runStep: vi.fn() } as never,
+      eventBus: { emit: vi.fn() } as never,
+      executors: { agent: agentExecutor as never, skill: {} as never, panel: {} as never, human_gate: {} as never },
+      submitDeliverable: artifacts.submitDeliverable as never,
+      postComment: artifacts.postComment as never,
+      agentEventStore: artifacts.agentEventStore as never,
+    });
+    await uc.execute({ workflowRunId: 'run-1', stepId: 'a' });
+    return agentExecutor.execute.mock.calls[0]![0] as { resumeSessionId?: string };
+  };
+
+  it('resumes the failed attempt session so a retry continues instead of redoing the work', async () => {
+    const artifacts = makeArtifactStubs();
+    artifacts.agentEventStore.getExecutionById.mockResolvedValue({ id: 'exec-1', sdkSessionId: 'sess-abc' });
+
+    const input = await runRetry(previousAttempt('failed', 'exec-1'), artifacts);
+
+    expect(artifacts.agentEventStore.getExecutionById).toHaveBeenCalledWith('exec-1');
+    expect(input.resumeSessionId).toBe('sess-abc');
+  });
+
+  // WHY: terminal-state rule. Re-running a step whose last attempt *finished* is
+  // a new piece of work — replaying the finished transcript would have the agent
+  // answer the previous request again.
+  it('does NOT resume when the previous attempt completed', async () => {
+    const artifacts = makeArtifactStubs();
+    artifacts.agentEventStore.getExecutionById.mockResolvedValue({ id: 'exec-1', sdkSessionId: 'sess-abc' });
+
+    const input = await runRetry(previousAttempt('completed', 'exec-1'), artifacts);
+
+    expect(artifacts.agentEventStore.getExecutionById).not.toHaveBeenCalled();
+    expect(input.resumeSessionId).toBeUndefined();
+  });
+
+  it('does NOT resume on a first attempt', async () => {
+    const artifacts = makeArtifactStubs();
+    const input = await runRetry(null, artifacts);
+    expect(input.resumeSessionId).toBeUndefined();
+  });
+
+  // WHY: a step can fail before the SDK ever returns a session (subprocess crash
+  // at startup, or a deterministic executor). Passing `undefined` through must
+  // degrade to a cold start, never to a crash or a bogus resume handle.
+  it('starts cold when the failed attempt left no resumable session', async () => {
+    const artifacts = makeArtifactStubs();
+    artifacts.agentEventStore.getExecutionById.mockResolvedValue({ id: 'exec-1', sdkSessionId: null });
+
+    expect((await runRetry(previousAttempt('failed', 'exec-1'), artifacts)).resumeSessionId).toBeUndefined();
+    expect((await runRetry(previousAttempt('failed', null), artifacts)).resumeSessionId).toBeUndefined();
   });
 });

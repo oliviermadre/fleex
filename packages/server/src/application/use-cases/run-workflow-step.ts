@@ -75,8 +75,16 @@ export class RunWorkflowStepUseCase {
         };
       });
 
+      // 3b. Resolve the session this attempt may resume. Terminal-state rule:
+      //     only a *failed* previous attempt is picked back up — a completed or
+      //     cancelled one starts cold. `stepRun.fail()` leaves `executionId`
+      //     intact (unlike a fresh attempt), which is what makes this chain
+      //     work without any schema change.
+      const resumeSessionId = await this.resolveResumeSession(latest);
+
       const input: StepExecutionInput = {
         ticketId: run.ticketId, workflowRunId: run.id, stepRunId: stepRun.id, step,
+        resumeSessionId,
         workflowContext: {
           workflowName: run.templateSnapshot.name, stepName: step.name,
           outgoingEdges, previousOutputs,
@@ -162,6 +170,24 @@ export class RunWorkflowStepUseCase {
         ticketId: run.ticketId, error: err instanceof Error ? err.message : String(err), occurredAt: new Date(),
       });
     }
+  }
+
+  /**
+   * The SDK session a new attempt of a step may resume.
+   *
+   * Walks `step_run.executionId → agent_event_executions.sdk_session_id`. No new
+   * column: the step run already stores the execution it produced, and the
+   * execution already stores its SDK session — the link just was never followed,
+   * so every Retry restarted the agent from zero (ticket #454).
+   *
+   * Returns `undefined` unless the previous attempt actually *failed*: retrying
+   * a step whose last attempt completed (a re-run from the top) is a fresh piece
+   * of work, and there is no session to resume before the first attempt.
+   */
+  private async resolveResumeSession(latest: StepRunEntity | null): Promise<string | undefined> {
+    if (latest?.status !== 'failed' || !latest.executionId) return undefined;
+    const execution = await this.deps.agentEventStore.getExecutionById(latest.executionId);
+    return execution?.sdkSessionId ?? undefined;
   }
 
   /**

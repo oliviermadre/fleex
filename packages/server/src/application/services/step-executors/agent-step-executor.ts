@@ -28,6 +28,7 @@ export class AgentStepExecutor implements StepExecutor {
       outputFormat,
       workflowContextPrompt,
       mode,
+      resumeSessionId: input.resumeSessionId,
       onExecutionStarted: input.onExecutionStarted,
     });
 
