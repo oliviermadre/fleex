@@ -9,16 +9,28 @@ export interface DomainEvent {
 
 // ── Ticket events ──
 
+/**
+ * Where the action behind a ticket event came from. Carried on the event so the
+ * audit trail records *who* acted, not just *what* changed.
+ */
+export type TicketEventSource = 'web' | 'api' | 'cli' | 'merge-detector' | 'workflow' | 'system';
+
 export interface TicketCreatedEvent extends DomainEvent {
   type: 'ticket.created';
   ticketId: string;
   boardId: string;
+  source?: TicketEventSource;
+  /** Set when the action originates from an agent execution. */
+  executionId?: string;
 }
 
 export interface TicketUpdatedEvent extends DomainEvent {
   type: 'ticket.updated';
   ticketId: string;
   changes: Record<string, { from: unknown; to: unknown }>;
+  source?: TicketEventSource;
+  /** Set when the action originates from an agent execution. */
+  executionId?: string;
 }
 
 export interface TicketMovedEvent extends DomainEvent {
@@ -26,11 +38,17 @@ export interface TicketMovedEvent extends DomainEvent {
   ticketId: string;
   fromStatus: string;
   toStatus: string;
+  source?: TicketEventSource;
+  /** Set when the action originates from an agent execution. */
+  executionId?: string;
 }
 
 export interface TicketDeletedEvent extends DomainEvent {
   type: 'ticket.deleted';
   ticketId: string;
+  source?: TicketEventSource;
+  /** Set when the action originates from an agent execution. */
+  executionId?: string;
 }
 
 // Semantic ticket events — emitted instead of a generic `ticket.updated`

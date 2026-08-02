@@ -108,4 +108,43 @@ describe('EventBus', () => {
 
     expect(handler).toHaveBeenCalledTimes(2);
   });
+
+  // Emitters are fire-and-forget: callers never await `emit()`, so one broken
+  // subscriber must not silently starve the others (a failing audit-log write
+  // would otherwise cancel the WS broadcast and every side-effect after it).
+  it('should keep dispatching to the remaining handlers after one throws', () => {
+    const bus = new EventBus();
+    bus.onError(vi.fn());
+
+    const throwsSync = vi.fn(() => { throw new Error('sync boom'); });
+    const rejectsAsync = vi.fn(() => Promise.reject(new Error('async boom')));
+    const healthy = vi.fn();
+
+    bus.on('ticket.created', throwsSync);
+    bus.on('ticket.created', rejectsAsync);
+    bus.on('ticket.created', healthy);
+
+    expect(() => bus.emit({
+      type: 'ticket.created', ticketId: 't1', boardId: 'b1', occurredAt: new Date(),
+    })).not.toThrow();
+
+    expect(rejectsAsync).toHaveBeenCalledOnce();
+    expect(healthy).toHaveBeenCalledOnce();
+  });
+
+  it('should report both sync throws and rejected promises to the error handler', async () => {
+    const bus = new EventBus();
+    const onError = vi.fn();
+    bus.onError(onError);
+
+    bus.on('ticket.created', () => { throw new Error('sync boom'); });
+    bus.on('ticket.created', () => Promise.reject(new Error('async boom')));
+
+    bus.emit({ type: 'ticket.created', ticketId: 't1', boardId: 'b1', occurredAt: new Date() });
+    await new Promise((r) => setTimeout(r, 0)); // let the rejection settle
+
+    expect(onError).toHaveBeenCalledTimes(2);
+    expect(onError.mock.calls.map(([, err]) => (err as Error).message).sort())
+      .toEqual(['async boom', 'sync boom']);
+  });
 });

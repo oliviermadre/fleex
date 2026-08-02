@@ -3,11 +3,22 @@ import type { PullRequest } from '@fleex/shared';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { EventBus } from '../event-bus.js';
 
+/**
+ * Auto-close tickets whose PR just got merged.
+ *
+ * Emits `ticket.moved` itself: the auto-resolution of the ticket's mentions
+ * hangs off that event via DomainEventListener → AutoReviewWorkflow. Wiring it
+ * from the caller instead meant the real `fromStatus` was lost (it was persisted
+ * as `''` in the audit log) and nothing prevented the emission from being
+ * dropped. Keep it here, and keep it covered by tests.
+ */
 export class DetectMergeUseCase {
   constructor(
     private readonly ticketStore: TicketStorePort,
     private readonly logger: LoggerPort,
+    private readonly eventBus: EventBus,
   ) {}
 
   async execute(mergedPRs: PullRequest[], repoKey: string): Promise<string[]> {
@@ -35,6 +46,9 @@ export class DetectMergeUseCase {
       for (const ticket of allMatches.values()) {
         if (ticket.status === 'done' || ticket.status === 'cancelled') continue;
 
+        // Captured before moveTo() mutates it — the event carries the real
+        // origin status, not a placeholder.
+        const fromStatus = ticket.status;
         const diff = ticket.moveTo('done');
         if (Object.keys(diff).length === 0) continue;
 
@@ -61,6 +75,29 @@ export class DetectMergeUseCase {
           source: 'api',
           actorName: 'merge-detector',
         }));
+
+        // Link first: moving to done triggers mention auto-resolution and
+        // summary generation, and the PR link should already be in the trail
+        // by the time those run.
+        if (!hasPRLink) {
+          this.eventBus.emit({
+            type: 'ticket.linkAdded',
+            ticketId: ticket.id,
+            linkType: 'github_pr',
+            ref: `${repoKey}#${pr.number}`,
+            label: `PR #${pr.number}`,
+            occurredAt: new Date(),
+          });
+        }
+
+        this.eventBus.emit({
+          type: 'ticket.moved',
+          ticketId: ticket.id,
+          fromStatus,
+          toStatus: 'done',
+          source: 'merge-detector',
+          occurredAt: new Date(),
+        });
 
         movedTicketIds.push(ticket.id);
         this.logger.info('Ticket auto-moved to done via merge', {

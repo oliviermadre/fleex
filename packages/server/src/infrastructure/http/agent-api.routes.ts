@@ -1,14 +1,22 @@
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
-import type { TicketStatus } from '@fleex/shared';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { TicketStatus, UpdateTicketRequest } from '@fleex/shared';
 import { TICKET_STATUSES } from '@fleex/shared';
 import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { BoardNotFoundError, TicketNotFoundError } from '../../domain/errors.js';
+import { TicketNotFoundError } from '../../domain/errors.js';
+import type { TicketActor } from '../../application/use-cases/ticket-actor.js';
 import type { Container } from '../container.js';
 
 export function agentApiRoutes(container: Container) {
   const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+
+  // Ticket writes on this API always come from an authenticated agent.
+  const agentActor = (request: FastifyRequest): TicketActor => ({
+    source: 'api',
+    actorType: 'agent',
+    actorName: request.agent?.name,
+  });
 
   return async function (app: FastifyInstance) {
 
@@ -52,72 +60,36 @@ export function agentApiRoutes(container: Container) {
       '/tickets',
       async (request, reply) => {
         const { boardId, title, description, status, priority, tags } = request.body;
-        const board = await container.ticketStore.getBoardById(boardId);
-        if (!board) throw new BoardNotFoundError(boardId);
-
-        const targetStatus = status ?? 'backlog';
-        const existing = await container.ticketStore.getTicketsByStatus(boardId, targetStatus);
-        const minPos = existing.length > 0
-          ? existing.reduce((min, t) => Math.min(min, t.position), Infinity)
-          : 1;
-
-        const ticket = TicketEntity.create({
-          id: randomUUID(),
+        const ticket = await container.createTicket.execute({
           boardId,
-          displayId: 0, // assigned by createTicket() below
           title,
           description,
-          status: targetStatus,
+          status,
           priority: priority as TicketEntity['priority'],
-          position: minPos - 1,
           tags,
+          actor: agentActor(request),
         });
-
-        await container.ticketStore.createTicket(ticket);
-        await container.ticketStore.saveActivity(TicketActivityEntity.create({
-          id: randomUUID(),
-          ticketId: ticket.id,
-          action: 'created',
-          source: 'api',
-          actorType: 'agent',
-          actorName: request.agent?.name,
-        }));
-
-        const dto = ticket.toDTO();
-        emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
-        return reply.code(201).send(dto);
+        return reply.code(201).send(ticket.toDTO());
       },
     );
 
     // Update ticket
     app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>('/tickets/:id', async (request) => {
-      const ticket = await container.ticketStore.getTicketById(request.params.id);
-      if (!ticket) throw new TicketNotFoundError(request.params.id);
-
-      const diff = ticket.update(request.body as Parameters<TicketEntity['update']>[0]);
-      await container.ticketStore.saveTicket(ticket);
-
-      if (Object.keys(diff).length > 0) {
-        await container.ticketStore.saveActivity(TicketActivityEntity.create({
-          id: randomUUID(),
-          ticketId: ticket.id,
-          action: 'updated',
-          changes: diff,
-          source: 'api',
-          actorType: 'agent',
-          actorName: request.agent?.name,
-        }));
-      }
-
-      const dto = ticket.toDTO();
-      emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
-      return dto;
+      const ticket = await container.updateTicket.execute({
+        ticketId: request.params.id,
+        changes: request.body as UpdateTicketRequest,
+        actor: agentActor(request),
+      });
+      return ticket.toDTO();
     });
 
-    // Delete ticket
+    // Delete ticket — goes through the use case so agent-side deletions reclaim
+    // worktrees, sessions, files and the workspace folder like the web ones do.
     app.delete<{ Params: { id: string } }>('/tickets/:id', async (request, reply) => {
-      await container.ticketStore.removeTicket(request.params.id);
-      emit({ type: 'ticket.deleted', ticketId: request.params.id, occurredAt: new Date() });
+      await container.deleteTicket.execute({
+        ticketId: request.params.id,
+        actor: agentActor(request),
+      });
       return reply.code(204).send();
     });
 
@@ -214,32 +186,18 @@ export function agentApiRoutes(container: Container) {
       return dto;
     });
 
-    // Complete ticket
+    // Complete ticket (toggles done ⇄ doing)
     app.patch<{ Params: { id: string } }>('/tickets/:id/complete', async (request) => {
-      const ticket = await container.ticketStore.getTicketById(request.params.id);
-      if (!ticket) throw new TicketNotFoundError(request.params.id);
+      const current = await container.ticketStore.getTicketById(request.params.id);
+      if (!current) throw new TicketNotFoundError(request.params.id);
 
-      const fromStatus = ticket.status;
-      const targetStatus: TicketStatus = ticket.status === 'done' ? 'doing' : 'done';
-      const diff = ticket.moveTo(targetStatus);
-      await container.ticketStore.saveTicket(ticket);
-
-      if (Object.keys(diff).length > 0) {
-        await container.ticketStore.saveActivity(TicketActivityEntity.create({
-          id: randomUUID(),
-          ticketId: ticket.id,
-          action: 'moved',
-          changes: diff,
-          source: 'api',
-          actorType: 'agent',
-          actorName: request.agent?.name,
-        }));
-      }
-
-      const dto = ticket.toDTO();
-      emit({ type: 'ticket.moved', ticketId: ticket.id, fromStatus, toStatus: targetStatus, occurredAt: new Date() });
-
-      return dto;
+      const targetStatus: TicketStatus = current.status === 'done' ? 'doing' : 'done';
+      const ticket = await container.moveTicket.execute({
+        ticketId: request.params.id,
+        toStatus: targetStatus,
+        actor: agentActor(request),
+      });
+      return ticket.toDTO();
     });
 
     // Next ticket for agent
