@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
+import { buildWorkspaceContext } from '@fleex/shared';
 import type { Ticket, WorktreeSessionGroup } from '@fleex/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { buildWorkspaceContext } from '../../lib/templateUtils';
 import { OverlaySyncModal } from './OverlaySyncModal';
 
 interface Props {

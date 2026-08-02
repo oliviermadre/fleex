@@ -1,4 +1,4 @@
-import type { PipeFunction } from './types';
+import type { PipeFunction } from './types.js';
 
 export const substr: PipeFunction = {
   name: 'substr',

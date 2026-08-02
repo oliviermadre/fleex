@@ -211,3 +211,57 @@ export class SlackImportError extends DomainError {
     super(message, slackCode);
   }
 }
+
+// ── Declared action errors ──
+// Raised by RunActionUseCase; mapped to HTTP codes in http/error-handler.ts.
+
+export class ActionNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Action not found: ${id}`, 'ACTION_NOT_FOUND');
+  }
+}
+
+export class ActionDisabledError extends DomainError {
+  constructor(id: string) {
+    super(`Action is disabled: ${id}`, 'ACTION_DISABLED');
+  }
+}
+
+/**
+ * One run at a time per action id. Without this a held-down click turns a
+ * one-shot button into a fork bomb.
+ */
+export class ActionAlreadyRunningError extends DomainError {
+  constructor(id: string) {
+    super(`Action is already running: ${id}`, 'ACTION_ALREADY_RUNNING');
+  }
+}
+
+/** `kind: 'url'` is resolved and opened by the browser — it has nothing to run. */
+export class ActionNotExecutableError extends DomainError {
+  constructor(id: string) {
+    super(`Action is not server-executable: ${id}`, 'ACTION_NOT_EXECUTABLE');
+  }
+}
+
+export class ActionInvalidParamsError extends DomainError {
+  constructor(
+    message: string,
+    public readonly details?: { param: string; reason: string }[],
+  ) {
+    super(message, 'ACTION_INVALID_PARAMS');
+  }
+}
+
+/** A workspace-scoped action was invoked without the ticket it needs. */
+export class ActionMissingContextError extends DomainError {
+  constructor(message: string) {
+    super(message, 'ACTION_MISSING_CONTEXT');
+  }
+}
+
+export class ActionTimeoutError extends DomainError {
+  constructor(id: string, timeoutMs: number, public readonly runId: string) {
+    super(`Action timed out after ${timeoutMs}ms: ${id}`, 'ACTION_TIMEOUT');
+  }
+}

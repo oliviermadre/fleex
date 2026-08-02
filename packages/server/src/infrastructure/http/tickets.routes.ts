@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { TicketStatus, TicketType, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, DeliverableType, DeliverableStatus } from '@fleex/shared';
@@ -9,6 +9,7 @@ import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
 import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+import { ensureTicketWorkspace } from '../../application/services/ensure-ticket-workspace.js';
 import { deriveTicketUpdateEvents } from '../../domain/services/ticket-audit-events.js';
 import { deriveTicketAgentActivity, deriveActivitySince } from '../../domain/services/ticket-agent-activity.js';
 import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
@@ -763,13 +764,10 @@ export function ticketRoutes(container: Container) {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
-      const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
-      const workspacePath = container.resolver.workspacePath(workspaceId);
-      mkdirSync(workspacePath, { recursive: true });
-      const manifestPath = join(workspacePath, '.fleex.json');
-      if (!existsSync(manifestPath)) {
-        writeFileSync(manifestPath, JSON.stringify({ ticketId: ticket.id }, null, 2));
-      }
+      const { workspacePath } = ensureTicketWorkspace(container.resolver, {
+        id: ticket.id,
+        title: ticket.title,
+      });
       return reply.send({ workspacePath });
     });
 

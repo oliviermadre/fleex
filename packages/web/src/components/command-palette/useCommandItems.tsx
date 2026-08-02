@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
+import { buildWorkspaceContext } from '@fleex/shared';
 import { useSessionStore } from '../../stores/sessionStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { globalActions, workspaceActions as selectWorkspaceActions, useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { buildWorkspaceContext } from '../../lib/templateUtils';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { ClaudeIcon, TerminalIcon, PlusIcon } from '../sidebar/icons';
 import * as api from '../../services/api';
@@ -23,13 +23,14 @@ export function useCommandItems(query: string): CommandItem[] {
   const closeCommandPalette = useUIStore((s) => s.closeCommandPalette);
   const toggleScratchpad = useUIStore((s) => s.toggleScratchpad);
 
-  const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
-  const workspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
+  const actions = useSettingsStore((s) => s.settings.actions);
   const basePath = useSettingsStore((s) => s.settings.basePath);
   const addLayoutGroup = useSettingsStore((s) => s.addLayoutGroup);
-  const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
-  const executeWorkspaceAction = useSettingsStore((s) => s.executeWorkspaceAction);
+  const executeAction = useSettingsStore((s) => s.executeAction);
   const sessionDisplayNames = useSettingsStore((s) => s.settings.sessionDisplayNames);
+
+  const pinnedIcons = useMemo(() => globalActions(actions), [actions]);
+  const workspaceActions = useMemo(() => selectWorkspaceActions(actions), [actions]);
 
   const ticketItems = useTicketStore((s) => s.tickets);
   const selectTicket = useTicketStore((s) => s.selectTicket);
@@ -139,7 +140,7 @@ export function useCommandItems(query: string): CommandItem[] {
         category: 'pinned',
         categoryLabel: 'Pinned Actions',
         icon: renderIcon(icon, 16),
-        onExecute: () => { executePinnedAction(icon); closeCommandPalette(); },
+        onExecute: () => { executeAction(icon); closeCommandPalette(); },
       });
     }
 
@@ -168,7 +169,7 @@ export function useCommandItems(query: string): CommandItem[] {
             categoryLabel: 'Workspace Actions',
             icon: action.icon ? renderIcon(action, 16) : null,
             keywords: `workspace ${ticket.title}`,
-            onExecute: () => { executeWorkspaceAction(action, context); closeCommandPalette(); },
+            onExecute: () => { executeAction(action, context); closeCommandPalette(); },
           });
         }
       }
@@ -225,7 +226,7 @@ export function useCommandItems(query: string): CommandItem[] {
     selectSession, selectGroup, setActivePanel, openCreateModal, closeCommandPalette,
     toggleScratchpad, pinnedIcons, workspaceActions, basePath,
     addLayoutGroup, addSessionToGroup, setSessionGroups,
-    executePinnedAction, executeWorkspaceAction,
+    executeAction,
     ticketItems, selectTicket,
   ]);
 

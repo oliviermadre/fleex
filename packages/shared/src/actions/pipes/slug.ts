@@ -1,4 +1,4 @@
-import type { PipeFunction } from './types';
+import type { PipeFunction } from './types.js';
 
 export const slug: PipeFunction = {
   name: 'slug',
