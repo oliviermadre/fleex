@@ -2,7 +2,6 @@ import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
-import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
@@ -44,6 +43,8 @@ import { fileRoutes } from './infrastructure/http/files.routes.js';
 import { ticketGroupRoutes } from './infrastructure/http/ticket-groups.routes.js';
 import { authRoutes } from './infrastructure/http/auth.routes.js';
 import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
+import { registerSecurity } from './infrastructure/http/security.plugin.js';
+import { isLoopbackHost } from './infrastructure/http/origin-policy.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
 import { hookRoutes } from './infrastructure/http/hook.routes.js';
@@ -73,7 +74,9 @@ async function main() {
   await container.discoverSessions.execute();
 
   const app = Fastify({ logger: false });
-  await app.register(cors, { origin: true, credentials: true });
+  // helmet → cors → cross-site guard. Registered first so the root onRequest
+  // hook also covers /auth/* and /api/hook, which bypass the auth preHandler.
+  await registerSecurity(app, container.logger);
   await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
   await app.register(websocket);
 
@@ -241,8 +244,15 @@ async function main() {
   }
 
   const port = parseInt(process.env['PORT'] ?? '3000', 10);
-  await app.listen({ port, host: '0.0.0.0' });
-  container.logger.info(`Fleex server started on port ${port}`);
+  const host = process.env['FLEEX_HOST'] ?? '127.0.0.1';
+  if (!isLoopbackHost(host)) {
+    container.logger.warn(
+      `fleex is listening on ${host} — every machine on your network can reach it. ` +
+        'This is NOT the supported way to access fleex remotely; see docs/mobile.md.',
+    );
+  }
+  await app.listen({ port, host });
+  container.logger.info(`Fleex server started on ${host}:${port}`);
 
   // Verify gateway connectivity
   try {

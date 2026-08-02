@@ -3,7 +3,9 @@ import { requirePorts } from './ports.ts';
 
 export function apiBase(): string {
   const ports = requirePorts();
-  return `http://localhost:${ports.server}`;
+  // 127.0.0.1, not localhost: the server binds the loopback v4 address, and on
+  // macOS `localhost` can resolve ::1 first.
+  return `http://127.0.0.1:${ports.server}`;
 }
 
 async function parseErrorMessage(res: Response): Promise<string> {

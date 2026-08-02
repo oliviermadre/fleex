@@ -32,6 +32,7 @@ import {
   findWorkspaceServerPort,
   instanceBranch,
 } from './instance-discovery.ts';
+import { corsHeaders, isRequestAllowed, parseAllowlist } from './origin-policy.ts';
 
 interface PageRef { url?: string; title?: string; content: string }
 interface WsData { id: string }
@@ -71,6 +72,7 @@ async function listWorkspacesEnriched() {
 type ServerEvent = AssistantEvent | { type: 'error'; message: string };
 
 const PORT = Number(process.env.FLEEX_SIDEPANEL_PORT ?? 4399);
+const HOST = process.env.FLEEX_SIDEPANEL_HOST ?? '127.0.0.1';
 const MODEL = process.env.FLEEX_SIDEPANEL_MODEL ?? DEFAULT_MODEL;
 
 // Shared, built once. The llm is built per-turn from the session's model
@@ -85,11 +87,7 @@ const baseExecOpts: ExecOptions = {
   prefixArgs: process.env.FLEEX_MCP_PREFIX ? process.env.FLEEX_MCP_PREFIX.split(' ').filter(Boolean) : undefined,
 };
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+const allowlist = parseAllowlist(process.env.FLEEX_ALLOWED_ORIGINS);
 
 // One client at a time in practice, but support several sockets defensively.
 const sockets = new Set<ServerWebSocket<WsData>>();
@@ -248,37 +246,43 @@ function asString(v: unknown): string | undefined {
 
 Bun.serve<WsData>({
   port: PORT,
+  hostname: HOST,
   async fetch(req, server) {
     const url = new URL(req.url);
-    if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
+    const cors = corsHeaders(req, allowlist);
+    if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
     if (url.pathname === '/health') {
       // hasApiKey lets `fleex companion` detect a booted-but-keyless host (e.g.
       // started before ANTHROPIC_API_KEY landed in ~/.fleex/config) and restart
       // it instead of silently reusing one that can't talk to Claude.
       return Response.json(
         { ok: true, tools: tools.length, hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY) },
-        { headers: CORS },
+        { headers: cors },
       );
     }
-    if (url.pathname === '/workspaces') return Response.json(await listWorkspacesEnriched(), { headers: CORS });
+    if (url.pathname === '/workspaces') return Response.json(await listWorkspacesEnriched(), { headers: cors });
     if (url.pathname === '/models') {
       // Canonical model list (shared with the web app). The host default is
       // marked so the panel can label its "Default" option.
-      return Response.json({ models: FALLBACK_MODELS, default: MODEL }, { headers: CORS });
+      return Response.json({ models: FALLBACK_MODELS, default: MODEL }, { headers: cors });
     }
     if (url.pathname === '/theme') {
       // Return the selected workspace's configured theme (from its app_config),
       // resolved branch-agnostically against its running server.
       const ws = url.searchParams.get('workspace') ?? undefined;
       const serverPort = await findWorkspaceServerPort(ws);
-      if (!serverPort) return Response.json({}, { headers: CORS });
-      return Response.json(await fetchThemeConfig(serverPort), { headers: CORS });
+      if (!serverPort) return Response.json({}, { headers: cors });
+      return Response.json(await fetchThemeConfig(serverPort), { headers: cors });
     }
     if (url.pathname === '/chat') {
+      // Refuse the upgrade before it happens: /chat drives the assistant, and
+      // an attacker holding the socket would approve their own tool
+      // confirmations.
+      if (!isRequestAllowed(req, allowlist)) return new Response('Forbidden', { status: 403 });
       const ok = server.upgrade(req, { data: { id: crypto.randomUUID() } satisfies WsData });
       return ok ? undefined : new Response('WebSocket upgrade failed', { status: 400 });
     }
-    return new Response('Not Found', { status: 404, headers: CORS });
+    return new Response('Not Found', { status: 404, headers: cors });
   },
   websocket: {
     open(ws) {
@@ -412,4 +416,4 @@ if (process.env.FLEEX_SIDEPANEL_DEV === '1') {
   }
 }
 
-process.stderr.write(`fleex-sidepanel-host listening on http://localhost:${PORT} (${tools.length} tools, ${store.list().length} sessions)\n`);
+process.stderr.write(`fleex-sidepanel-host listening on http://${HOST}:${PORT} (${tools.length} tools, ${store.list().length} sessions)\n`);
