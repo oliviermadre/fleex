@@ -20,6 +20,8 @@ import { cn } from '../../lib/cn';
 import { foldAccents } from '../../lib/normalize';
 import { PrimitiveIcon, PRIMITIVE_META, PRIMITIVE_KINDS, type PrimitiveKind } from '../../lib/primitives';
 import { useContextMenuPopover, usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { useCapabilities } from '../../hooks/useCapabilities';
+import { workflowsUnavailableTooltip } from '../../lib/capabilityMessages';
 import { tintClasses, tintSolid } from '../../lib/tints';
 
 type FilterKey = 'all' | PrimitiveKind;
@@ -58,6 +60,10 @@ export function AgentListPanel() {
   const removeWorkflow = useWorkflowTemplateStore((s) => s.remove);
   const statsStats = useFrequentLaunchStore((s) => s.stats);
   const loadStats = useFrequentLaunchStore((s) => s.load);
+  // Storage drivers without workflow support keep the group visible but inert,
+  // so the absence is explained rather than silently missing.
+  const { workflowsAvailable, storageDriver } = useCapabilities();
+  const workflowsTooltip = workflowsUnavailableTooltip(storageDriver);
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
@@ -199,6 +205,7 @@ export function AgentListPanel() {
   };
 
   const openCreateFor = (kind: PrimitiveKind) => {
+    if (kind === 'workflow' && !workflowsAvailable) return;
     setCreateOpen(false);
     if (kind === 'persona') setModalOpen(true);
     else if (kind === 'skill') setSkillModalOpen(true);
@@ -278,16 +285,21 @@ export function AgentListPanel() {
             {...getCreateFloatingProps()}
             className="z-50 min-w-[160px] rounded border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
           >
-            {PRIMITIVE_KINDS.map((kind) => (
-              <button
-                key={kind}
-                onClick={() => openCreateFor(kind)}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]"
-              >
-                <PrimitiveIcon kind={kind} size={15} />
-                New {PRIMITIVE_META[kind].label}
-              </button>
-            ))}
+            {PRIMITIVE_KINDS.map((kind) => {
+              const unavailable = kind === 'workflow' && !workflowsAvailable;
+              return (
+                <button
+                  key={kind}
+                  onClick={() => openCreateFor(kind)}
+                  disabled={unavailable}
+                  title={unavailable ? workflowsTooltip : undefined}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                >
+                  <PrimitiveIcon kind={kind} size={15} />
+                  New {PRIMITIVE_META[kind].label}
+                </button>
+              );
+            })}
           </div>
         </FloatingPortal>
       )}
@@ -326,7 +338,9 @@ export function AgentListPanel() {
       {/* Filter chips */}
       <div className="flex flex-wrap gap-1 px-3 pt-2 pb-1">
         <FilterChip label="Tous" count={matchedTotal} active={filter === 'all'} onClick={() => setFilter('all')} />
-        {PRIMITIVE_KINDS.map((kind) => (
+        {/* The workflow chip is dropped entirely when the driver has no workflow
+            support — filtering on an always-empty kind is pure noise. */}
+        {PRIMITIVE_KINDS.filter((kind) => kind !== 'workflow' || workflowsAvailable).map((kind) => (
           <FilterChip
             key={kind}
             label={PRIMITIVE_META[kind].pluralLabel}
@@ -468,15 +482,28 @@ export function AgentListPanel() {
             count={counts.workflow}
             collapsed={!isSearching && collapsed.workflow}
             onToggle={() => toggleCollapsed('workflow')}
+            disabled={!workflowsAvailable}
+            disabledTitle={workflowsTooltip}
           >
             {matchedWorkflows.length === 0
-              ? !isSearching && <EmptySection kind="workflow" onCreate={() => setWorkflowModalOpen(true)} />
+              ? !isSearching && (
+                  <EmptySection
+                    kind="workflow"
+                    onCreate={() => setWorkflowModalOpen(true)}
+                    disabled={!workflowsAvailable}
+                    disabledTitle={workflowsTooltip}
+                  />
+                )
               : matchedWorkflows.map((template) => (
                   <PrimitiveRow
                     key={template.id}
                     kind="workflow"
                     selected={selectedWorkflowId === template.id}
-                    disabled={!template.enabled}
+                    disabled={!template.enabled || !workflowsAvailable}
+                    // No driver support → the row is inert: no navigation, no
+                    // context menu (deleting a workflow needs the same store).
+                    inert={!workflowsAvailable}
+                    inertTitle={workflowsTooltip}
                     title={template.name}
                     subtitle={`@workflow:${template.slug}`}
                     right={
@@ -603,21 +630,27 @@ function Section({
   count,
   collapsed,
   onToggle,
+  disabled = false,
+  disabledTitle,
   children,
 }: {
   kind: PrimitiveKind;
   count: number;
   collapsed: boolean;
   onToggle: () => void;
+  /** Feature unsupported by the server: the group is shown, dimmed and inert. */
+  disabled?: boolean;
+  disabledTitle?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div>
+    <div className={cn(disabled && 'opacity-50')} title={disabled ? disabledTitle : undefined}>
       <button
         onClick={onToggle}
+        disabled={disabled}
         aria-expanded={!collapsed}
-        title={collapsed ? 'Expand group' : 'Collapse group'}
-        className="flex w-full items-center justify-between px-4 pt-4 pb-1 text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-text-muted)]"
+        title={disabled ? disabledTitle : collapsed ? 'Expand group' : 'Collapse group'}
+        className="flex w-full items-center justify-between px-4 pt-4 pb-1 text-[var(--theme-text-faint)] transition-colors hover:text-[var(--theme-text-muted)] disabled:cursor-not-allowed disabled:hover:text-[var(--theme-text-faint)]"
       >
         <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
           <svg
@@ -647,6 +680,8 @@ function PrimitiveRow({
   kind,
   selected,
   disabled = false,
+  inert = false,
+  inertTitle,
   running = false,
   title,
   subtitle,
@@ -658,6 +693,9 @@ function PrimitiveRow({
   kind: PrimitiveKind;
   selected: boolean;
   disabled?: boolean;
+  /** Feature unsupported by the server: no navigation, no context menu. */
+  inert?: boolean;
+  inertTitle?: string;
   running?: boolean;
   title: string;
   subtitle: string;
@@ -674,9 +712,12 @@ function PrimitiveRow({
           ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)]'
           : 'border-transparent hover:bg-[var(--theme-bg-hover)]',
         disabled && 'opacity-50',
+        'disabled:cursor-not-allowed disabled:hover:bg-transparent',
       )}
+      disabled={inert}
+      title={inert ? inertTitle : undefined}
       onClick={onClick}
-      onContextMenu={onContextMenu}
+      onContextMenu={inert ? (e) => e.preventDefault() : onContextMenu}
     >
       <span className="relative shrink-0">
         <PrimitiveIcon kind={kind} size={18} />
@@ -704,7 +745,8 @@ function PrimitiveRow({
           onDelete();
         }}
         className={cn(
-          'hidden shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors group-hover:flex',
+          'hidden shrink-0 items-center justify-center rounded p-0.5 text-[var(--theme-text-faint)] transition-colors',
+          inert ? 'group-hover:hidden' : 'group-hover:flex',
           tintClasses('red').hoverText,
         )}
       >
@@ -721,7 +763,18 @@ function PrimitiveRow({
 }
 
 /** Per-type empty state with the referential glyph + a create shortcut. */
-function EmptySection({ kind, onCreate }: { kind: PrimitiveKind; onCreate: () => void }) {
+function EmptySection({
+  kind,
+  onCreate,
+  disabled = false,
+  disabledTitle,
+}: {
+  kind: PrimitiveKind;
+  onCreate: () => void;
+  /** Feature unsupported by the server: the create shortcut is inert. */
+  disabled?: boolean;
+  disabledTitle?: string;
+}) {
   const meta = PRIMITIVE_META[kind];
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-4 py-6 text-center text-[var(--theme-text-muted)]">
@@ -729,7 +782,12 @@ function EmptySection({ kind, onCreate }: { kind: PrimitiveKind; onCreate: () =>
         <PrimitiveIcon kind={kind} size={26} tinted={false} />
       </span>
       <p className="text-xs">No {meta.pluralLabel.toLowerCase()} yet</p>
-      <button onClick={onCreate} className="text-xs text-[var(--theme-accent)] hover:underline">
+      <button
+        onClick={onCreate}
+        disabled={disabled}
+        title={disabled ? disabledTitle : undefined}
+        className="text-xs text-[var(--theme-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline"
+      >
         Create your first {meta.label.toLowerCase()}
       </button>
     </div>

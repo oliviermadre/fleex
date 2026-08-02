@@ -12,6 +12,8 @@ import { sessionRoutes } from './infrastructure/http/sessions.routes.js';
 import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
 import { healthRoutes } from './infrastructure/http/health.routes.js';
 import { versionRoutes } from './infrastructure/http/version.routes.js';
+import { capabilitiesRoutes } from './infrastructure/http/capabilities.routes.js';
+import { resolveCapabilities } from './application/capabilities.js';
 import { configRoutes } from './infrastructure/http/config.routes.js';
 import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
 import { execRoutes } from './infrastructure/http/exec.routes.js';
@@ -94,6 +96,7 @@ async function main() {
   await app.register(repositoryRoutes(container));
   await app.register(healthRoutes(container));
   await app.register(versionRoutes());
+  await app.register(capabilitiesRoutes(container));
   await app.register(configRoutes(container));
   await app.register(deliverableTypesRoutes(container));
   await app.register(execRoutes(container));
@@ -118,34 +121,31 @@ async function main() {
   const modelService = new ModelService(container.logger);
   await app.register(modelsRoutes(modelService));
 
-  // Workflow template routes (requires workflowTemplateStore — available on sqlite/supabase)
-  if (container.workflowTemplateStore) {
-    await app.register(workflowTemplateRoutes({ templateStore: container.workflowTemplateStore }));
-  } else {
-    container.logger.warn('workflowTemplateStore not available — /api/workflows/templates routes skipped');
+  // Workflow routes are registered unconditionally. When the storage driver has no
+  // workflow stores, a preHandler answers 503 FEATURE_UNAVAILABLE — an absent route
+  // would 404, which clients cannot tell apart from a mistyped URL.
+  const capabilities = resolveCapabilities(container);
+  if (!capabilities.features.workflows) {
+    container.logger.warn('Workflows unavailable on this storage driver — /api/workflows/* will answer 503', {
+      driver: capabilities.storageDriver,
+    });
   }
 
-  // Workflow run routes (requires run/step stores + all use cases)
-  if (
-    container.workflowRunStore &&
-    container.stepRunStore &&
-    container.createWorkflowRun &&
-    container.resolveHumanGate &&
-    container.retryStep &&
-    container.cancelWorkflowRun
-  ) {
-    await app.register(workflowRunRoutes({
-      runStore: container.workflowRunStore,
-      stepRunStore: container.stepRunStore,
-      createWorkflowRun: container.createWorkflowRun,
-      resolveHumanGate: container.resolveHumanGate,
-      retryStep: container.retryStep,
-      cancelWorkflowRun: container.cancelWorkflowRun,
-      authorNameResolver: () => 'workflow-trigger',
-    }));
-  } else {
-    container.logger.warn('workflowRunStore or use cases not available — /api/workflows/runs routes skipped');
-  }
+  await app.register(workflowTemplateRoutes({
+    templateStore: container.workflowTemplateStore,
+    capabilities,
+  }));
+
+  await app.register(workflowRunRoutes({
+    runStore: container.workflowRunStore,
+    stepRunStore: container.stepRunStore,
+    createWorkflowRun: container.createWorkflowRun,
+    resolveHumanGate: container.resolveHumanGate,
+    retryStep: container.retryStep,
+    cancelWorkflowRun: container.cancelWorkflowRun,
+    authorNameResolver: () => 'workflow-trigger',
+    capabilities,
+  }));
 
   // Agent API with auth
   const authHook = createAgentAuthHook(container);

@@ -15,6 +15,7 @@ import {
   type AssistantToolStatus,
 } from '../../stores/assistantStore';
 import { AssistantStatusDot } from './AssistantSidebar';
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { MentionTypeIcon } from '../../lib/primitives';
 import { cn } from '../../lib/cn';
 import { tint, tintText, tintClasses, tintSolid } from '../../lib/tints';
@@ -89,6 +90,7 @@ export function AssistantConversation() {
   );
   const allTickets = useTicketStore((s) => s.tickets);
   const fetchTickets = useTicketStore((s) => s.fetchTickets);
+  const { workflowsAvailable } = useCapabilities();
 
   useEffect(() => {
     if (!panelsLoaded) loadPanels();
@@ -115,15 +117,19 @@ export function AssistantConversation() {
     for (const skill of skills) {
       if (skill.enabled) opts.push({ insertText: `@skill:${skill.commandName}`, label: skill.displayName || skill.commandName, type: 'skill' });
     }
-    for (const wf of workflowTemplates) {
-      if (wf.enabled) opts.push({ insertText: `@workflow:${wf.slug}`, label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name, type: 'workflow' });
+    // Workflows are dropped (not disabled) when the driver can't run them — a
+    // dead row in an autocomplete is noise, not signal.
+    if (workflowsAvailable) {
+      for (const wf of workflowTemplates) {
+        if (wf.enabled) opts.push({ insertText: `@workflow:${wf.slug}`, label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name, type: 'workflow' });
+      }
     }
     if (humanMentionName) opts.push({ insertText: `@${humanMentionName}`, label: humanMentionName, type: 'human' });
     for (const t of allTickets) {
       opts.push({ insertText: `@ticket:${t.displayId}`, label: `#${t.displayId} ${t.title}`, type: 'ticket' });
     }
     return opts;
-  }, [personas, panels, skills, workflowTemplates, humanMentionName, allTickets]);
+  }, [personas, panels, skills, workflowTemplates, workflowsAvailable, humanMentionName, allTickets]);
 
   const filteredOptions = useMemo(() => {
     if (!acOpen) return [];

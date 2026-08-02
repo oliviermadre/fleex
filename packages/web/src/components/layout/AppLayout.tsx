@@ -10,6 +10,7 @@ import { useTicketActivity } from '../../hooks/useTicketActivity';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useAgentPersonas } from '../../hooks/useAgentPersonas';
 import { useSkills } from '../../hooks/useSkills';
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
@@ -57,10 +58,14 @@ export function AppLayout() {
   }, [loadSettings, fetchRepositories, loadDeliverableTypes]);
 
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
+  const { workflowsAvailable } = useCapabilities();
 
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
-  // Hide the content panel when editing a workflow so the editor takes the full viewport width
-  const editingWorkflow = activePanel === 'agents' && !!selectedWorkflowId;
+  // Hide the content panel when editing a workflow so the editor takes the full
+  // viewport width. On a driver without workflow support the route renders an
+  // explanation instead of an editor, so the panel stays — otherwise a deep link
+  // would strand the user on a full-screen dead end with nothing to click.
+  const editingWorkflow = activePanel === 'agents' && !!selectedWorkflowId && workflowsAvailable;
   const hideContentPanel = activePanel === 'dashboard' || activePanel === 'cluster' || activePanel === 'tickets' || activePanel === 'list-focus' || activePanel === 'execution-log' || activePanel === 'documents' || editingWorkflow;
   const effectiveContentWidth = hideContentPanel
     ? 0

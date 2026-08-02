@@ -290,6 +290,8 @@ export async function createContainer() {
     runPanel,
     generateTicketSummary,
     logger,
+    postComment,
+    storageDriver: driver,
   });
   domainEventListener.register();
 
@@ -466,6 +468,7 @@ export async function createContainer() {
 
   return {
     logger,
+    storageDriver: driver,
     gatewayUrl,
     execFn,
     shellExecFn,

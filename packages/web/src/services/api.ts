@@ -37,6 +37,7 @@ import type {
   OverlaySyncApplyResponse,
   OverlaySyncRemoveRequest,
   OverlaySyncRemoveResponse,
+  ServerCapabilities,
 } from '@fleex/shared';
 import { API_URL } from '../lib/constants';
 import { useToastStore } from '../stores/toastStore';
@@ -1023,4 +1024,15 @@ export async function overlaySyncRemove(
     method: 'POST',
     body: JSON.stringify(req),
   });
+}
+
+// ── Server capabilities ─────────────────────────────────────────────────────
+
+/**
+ * Which features the server can actually serve, given its storage driver.
+ * Fetched once at boot (see capabilitiesStore) so the UI can explain a missing
+ * feature instead of letting the user hit a bare 404/503.
+ */
+export async function fetchCapabilities(): Promise<ServerCapabilities> {
+  return request<ServerCapabilities>('/capabilities');
 }

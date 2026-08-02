@@ -14,6 +14,7 @@ import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useFrequentLaunchStore, buildFrequentItems } from '../../stores/frequentLaunchStore';
 import { useToastStore } from '../../stores/toastStore';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { PrimitiveIcon, PRIMITIVE_META } from '../../lib/primitives';
 import { cn } from '../../lib/cn';
 import { foldAccents } from '../../lib/normalize';
@@ -506,6 +507,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   const templates = useWorkflowTemplateStore((s) => s.templates);
   const refreshTemplates = useWorkflowTemplateStore((s) => s.refresh);
   const startRun = useWorkflowRunStore((s) => s.start);
+  const { workflowsAvailable } = useCapabilities();
   const enabledTemplates = templates.filter((t) => t.enabled);
 
   const panels = usePanelStore((s) => s.panels);
@@ -626,7 +628,9 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
       }))
     : [];
 
-  const workflowItems: LaunchItem[] = ticketId && handleStartWorkflow
+  // A disabled row in a launcher is noise, not signal: when the driver has no
+  // workflow support they are left out of the list entirely.
+  const workflowItems: LaunchItem[] = ticketId && handleStartWorkflow && workflowsAvailable
     ? enabledTemplates.map((t) => ({
         key: `workflow:${t.id}`,
         kind: 'workflow' as const,

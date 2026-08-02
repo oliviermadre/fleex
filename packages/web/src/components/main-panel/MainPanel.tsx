@@ -18,6 +18,7 @@ import { AgentPersonaView } from '../agents/AgentPersonaView';
 import { SkillEditor } from '../agents/SkillEditor';
 import { PanelDetailView } from '../agents/PanelDetailView';
 import { WorkflowEditorView } from '../workflows/WorkflowEditorView';
+import { WorkflowsUnavailableState } from '../workflows/WorkflowsUnavailableState';
 import { useSkillStore } from '../../stores/skillStore';
 import { usePanelStore } from '../../stores/panelStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
@@ -28,6 +29,7 @@ import { ListFocusView } from '../list-focus/ListFocusView';
 import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
 import { DocumentsPage } from '../documents/DocumentsPage';
 import { AssistantConversation } from '../assistant/AssistantConversation';
+import { useCapabilities } from '../../hooks/useCapabilities';
 
 function GroupEmptyCell() {
   return (
@@ -78,6 +80,7 @@ export function MainPanel() {
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
   const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
   const selectWorkflow = useWorkflowTemplateStore((s) => s.selectWorkflow);
+  const { workflowsAvailable } = useCapabilities();
   const navigate = useNavigate();
   const splitSession = splitSessionId
     ? sessions.find((s) => s.id === splitSessionId) ?? null
@@ -128,6 +131,11 @@ export function MainPanel() {
       return <SkillEditor />;
     }
     if (selectedWorkflowId) {
+      // The driver has no workflow support: explain it in place. Never redirect
+      // silently — a deep link to /agents/workflow/:id must say why it's dead.
+      if (!workflowsAvailable) {
+        return <WorkflowsUnavailableState />;
+      }
       const template = workflowTemplates.find((t) => t.id === selectedWorkflowId);
       if (template) {
         return (
