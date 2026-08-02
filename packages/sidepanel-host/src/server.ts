@@ -26,7 +26,8 @@ import { createClient, createLlm, createExec, DEFAULT_MODEL } from './anthropic.
 import { FALLBACK_MODELS } from '@fleex/shared';
 import { buildSystemPrompt, formatPageContext } from './system-prompt.ts';
 import { listWorkspaces, resolveWorkspace } from './workspaces.ts';
-import { SessionStore, type TranscriptItem } from './sessions.ts';
+import { SessionStore, isToolAutoApproved, type TranscriptItem } from './sessions.ts';
+import { applyConfirm, applySetAutoApprove, disarmForPage, type PendingConfirm } from './auto-approve.ts';
 import {
   findRunningInstance,
   findWorkspaceServerPort,
@@ -67,8 +68,11 @@ async function listWorkspacesEnriched() {
   );
 }
 
-/** Events streamed to the client: assistant events plus a server-level error. */
-type ServerEvent = AssistantEvent | { type: 'error'; message: string };
+/** Events streamed to the client: assistant events plus server-level notices. */
+type ServerEvent =
+  | AssistantEvent
+  | { type: 'error'; message: string }
+  | { type: 'auto_approve_disarmed'; reason: 'page_attached' };
 
 const PORT = Number(process.env.FLEEX_SIDEPANEL_PORT ?? 4399);
 const MODEL = process.env.FLEEX_SIDEPANEL_MODEL ?? DEFAULT_MODEL;
@@ -94,7 +98,7 @@ const CORS = {
 // One client at a time in practice, but support several sockets defensively.
 const sockets = new Set<ServerWebSocket<WsData>>();
 // Pending tool confirmations, keyed by tool_use id (unique per call).
-const pendingConfirms = new Map<string, (approved: boolean) => void>();
+const pendingConfirms = new Map<string, PendingConfirm>();
 // Page attached but not yet consumed, keyed by session id.
 const pendingPages = new Map<string, PageRef>();
 
@@ -178,7 +182,9 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
         break;
       case 'tool_call': {
         flushAssistant();
-        const item: TranscriptItem = { tool: { name: e.name, argv: e.argv, status: 'running' } };
+        const item: TranscriptItem = {
+          tool: { name: e.name, argv: e.argv, status: 'running', ...(e.autoApproved ? { autoApproved: true } : {}) },
+        };
         session.transcript.push(item);
         toolItems.set(e.id, item as Extract<TranscriptItem, { tool: unknown }>);
         store.save(sessionId);
@@ -212,10 +218,14 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
     new Promise<boolean>((resolve) => {
       store.setStatus(sessionId, 'awaiting_input');
       broadcastSessions();
-      pendingConfirms.set(req.id, (approved) => {
-        store.setStatus(sessionId, 'working');
-        broadcastSessions();
-        resolve(approved);
+      pendingConfirms.set(req.id, {
+        sessionId,
+        name: req.name,
+        resolve: (approved) => {
+          store.setStatus(sessionId, 'working');
+          broadcastSessions();
+          resolve(approved);
+        },
       });
       for (const ws of sockets) send(ws, { type: 'confirm_request', sessionId, id: req.id, name: req.name, argv: req.argv, input: req.input });
     });
@@ -231,6 +241,9 @@ async function handleUserTurn(sessionId: string, text: string): Promise<void> {
       messages: session.messages,
       onEvent,
       workspace,
+      // Read through the live session the store owns, so an "always allow"
+      // clicked on the first call of this turn covers the remaining ones.
+      isAutoApproved: (name) => isToolAutoApproved(session.autoApprove, name),
     });
   } catch (e) {
     broadcastEvent(sessionId, { type: 'error', message: e instanceof Error ? e.message : String(e) });
@@ -359,16 +372,24 @@ Bun.serve<WsData>({
           if (id && content) {
             pendingPages.set(id, { content, url: asString(msg.url), title: asString(msg.title) });
             send(ws, { type: 'page_attached', sessionId: id, title: asString(msg.title) ?? asString(msg.url) ?? 'page' });
+            // Untrusted page content just entered this conversation: any
+            // standing approval granted before it is void.
+            if (disarmForPage(id, store)) {
+              broadcastSessions();
+              broadcastEvent(id, { type: 'auto_approve_disarmed', reason: 'page_attached' });
+            }
           }
           break;
         }
         case 'confirm': {
-          const id = asString(msg.id) ?? '';
-          const resolver = pendingConfirms.get(id);
-          if (resolver) {
-            pendingConfirms.delete(id);
-            resolver(msg.approved === true);
-          }
+          const outcome = applyConfirm(msg, pendingConfirms, store);
+          if (!outcome) break;
+          if (outcome.allowlistChanged) broadcastSessions();
+          outcome.pending.resolve(outcome.approved);
+          break;
+        }
+        case 'set_auto_approve': {
+          if (applySetAutoApprove(msg, store)) broadcastSessions();
           break;
         }
         default:
@@ -378,7 +399,7 @@ Bun.serve<WsData>({
     close(ws) {
       sockets.delete(ws);
       // Client gone — unwind any awaiting confirmations as denied.
-      for (const resolve of pendingConfirms.values()) resolve(false);
+      for (const p of pendingConfirms.values()) p.resolve(false);
       pendingConfirms.clear();
     },
   },

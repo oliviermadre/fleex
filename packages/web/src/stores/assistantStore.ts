@@ -17,6 +17,12 @@ export const ASSISTANT_BASE = '/companion';
 
 export type AssistantSessionStatus = 'idle' | 'working' | 'awaiting_input';
 
+/** Mutating commands this conversation runs without asking again. */
+export interface AssistantAutoApprove {
+  all: boolean;
+  tools: string[];
+}
+
 export interface AssistantSession {
   id: string;
   title: string;
@@ -27,6 +33,8 @@ export interface AssistantSession {
   createdAt: string;
   /** Absent on sessions persisted by an older companion. */
   lastMessageAt?: string;
+  /** Absent when served by an older companion — treat as nothing approved. */
+  autoApprove?: AssistantAutoApprove;
 }
 
 export interface AssistantWorkspace {
@@ -40,7 +48,21 @@ export type AssistantToolStatus = 'running' | 'ok' | 'fail' | 'denied';
 export type AssistantChatItem =
   | { kind: 'user'; text: string }
   | { kind: 'assistant'; text: string }
-  | { kind: 'tool'; id?: string; name: string; argv: string[]; status: AssistantToolStatus; text?: string };
+  | {
+      kind: 'tool';
+      id?: string;
+      name: string;
+      argv: string[];
+      status: AssistantToolStatus;
+      text?: string;
+      /** Ran without a confirmation — surfaced in the transcript for audit. */
+      autoApproved?: boolean;
+    };
+
+/** `fleex_ticket_create` → `ticket create`, for labels a human can read. */
+export function toolLabel(name: string): string {
+  return name.replace(/^fleex_/, '').replace(/_/g, ' ');
+}
 
 export interface AssistantConfirmRequest {
   sessionId: string;
@@ -58,6 +80,8 @@ interface AssistantState {
   confirmReqs: AssistantConfirmRequest[];
   errorMsg: string | null;
   workspaces: AssistantWorkspace[];
+  /** Set when the server disarmed auto-approval on its own; null = nothing to say. */
+  autoApproveNotice: string | null;
 
   /** Connect once and keep the socket for the app's lifetime (idempotent). */
   ensureConnected: () => void;
@@ -67,7 +91,10 @@ interface AssistantState {
   renameSession: (id: string, title: string) => void;
   setModel: (id: string, model: string | undefined) => void;
   sendUser: (text: string) => void;
-  answerConfirm: (id: string, approved: boolean) => void;
+  /** `always` upgrades an approval into a standing one for this conversation. */
+  answerConfirm: (id: string, approved: boolean, always?: 'tool' | 'session') => void;
+  setAutoApprove: (sessionId: string, next: AssistantAutoApprove) => void;
+  clearAutoApproveNotice: () => void;
   clearError: () => void;
 }
 
@@ -108,8 +135,21 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
         const items = transcript.map((t): AssistantChatItem => {
           const o = t as Record<string, unknown>;
           if (o.tool) {
-            const tool = o.tool as { name: string; argv: string[]; status: AssistantToolStatus; text?: string };
-            return { kind: 'tool', name: tool.name, argv: tool.argv ?? [], status: tool.status, text: tool.text };
+            const tool = o.tool as {
+              name: string;
+              argv: string[];
+              status: AssistantToolStatus;
+              text?: string;
+              autoApproved?: boolean;
+            };
+            return {
+              kind: 'tool',
+              name: tool.name,
+              argv: tool.argv ?? [],
+              status: tool.status,
+              text: tool.text,
+              autoApproved: tool.autoApproved === true,
+            };
           }
           return { kind: o.role === 'user' ? 'user' : 'assistant', text: (o.text as string) ?? '' };
         });
@@ -138,6 +178,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
           name: msg.name as string,
           argv: (msg.argv as string[]) ?? [],
           status: 'running',
+          autoApproved: msg.autoApproved === true,
         });
         break;
       case 'tool_result':
@@ -169,6 +210,12 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
         }));
         break;
       }
+      case 'auto_approve_disarmed':
+        set({
+          autoApproveNotice:
+            "Auto-approbation désactivée : une page web a été jointe à la conversation.",
+        });
+        break;
       case 'error':
         if (!sessionId || sessionId === get().activeId) {
           set({ errorMsg: msg.message as string });
@@ -221,6 +268,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
     confirmReqs: [],
     errorMsg: null,
     workspaces: [],
+    autoApproveNotice: null,
 
     ensureConnected: () => {
       if (started) return;
@@ -277,11 +325,19 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
       sendMsg({ type: 'user', sessionId: activeId, text: trimmed });
     },
 
-    answerConfirm: (id, approved) => {
+    answerConfirm: (id, approved, always) => {
       if (!get().confirmReqs.some((r) => r.id === id)) return;
-      sendMsg({ type: 'confirm', id, approved });
+      // The server derives WHICH session/tool `always` applies to from its own
+      // pending-confirm entry, so we only send the scope.
+      sendMsg({ type: 'confirm', id, approved, ...(always ? { always } : {}) });
       set((s) => ({ confirmReqs: s.confirmReqs.filter((r) => r.id !== id) }));
     },
+
+    setAutoApprove: (sessionId, next) => {
+      sendMsg({ type: 'set_auto_approve', id: sessionId, all: next.all, tools: next.tools });
+    },
+
+    clearAutoApproveNotice: () => set({ autoApproveNotice: null }),
 
     clearError: () => set({ errorMsg: null }),
   };

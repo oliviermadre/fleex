@@ -3,6 +3,7 @@ import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import {
   useAssistantStore,
+  toolLabel,
   type AssistantChatItem,
   type AssistantToolStatus,
 } from '../stores/assistantStore';
@@ -44,6 +45,7 @@ export function MobileAssistant() {
   const deleteSession = useAssistantStore((s) => s.deleteSession);
   const sendUser = useAssistantStore((s) => s.sendUser);
   const answerConfirm = useAssistantStore((s) => s.answerConfirm);
+  const setAutoApprove = useAssistantStore((s) => s.setAutoApprove);
 
   const [showSessions, setShowSessions] = useState(false);
   const [draft, setDraft] = useState('');
@@ -119,6 +121,16 @@ export function MobileAssistant() {
           )}
           <span className="shrink-0 text-xs text-[var(--theme-text-faint)]">▾</span>
         </button>
+        {/* Standing approvals — visible while armed, tap to revoke them all */}
+        {activeSession?.autoApprove && (activeSession.autoApprove.all || activeSession.autoApprove.tools.length > 0) && (
+          <button
+            onClick={() => setAutoApprove(activeSession.id, { all: false, tools: [] })}
+            className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium ${tint('yellow')}`}
+            title="Auto-approbation active — appuyer pour désactiver"
+          >
+            ⚡ {activeSession.autoApprove.all ? 'tout' : activeSession.autoApprove.tools.length}
+          </button>
+        )}
         <button
           onClick={() => createSession()}
           className="shrink-0 rounded-md bg-[var(--theme-accent)] px-3 py-2 text-sm font-semibold text-[var(--theme-accent-fg)]"
@@ -165,6 +177,11 @@ export function MobileAssistant() {
                   key={i}
                   className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2 font-mono text-[11px]"
                 >
+                  {item.autoApproved && (
+                    <span className={`mr-1 ${tintText('yellow')}`} title="Auto-approuvé">
+                      ⚡
+                    </span>
+                  )}
                   <span className={`mr-2 ${badge.className}`}>{badge.label}</span>
                   <span className="break-all text-[var(--theme-text-secondary)]">
                     fleex {item.argv.join(' ')}
@@ -222,18 +239,27 @@ export function MobileAssistant() {
             <pre className="mb-3 overflow-x-auto rounded-lg bg-[var(--theme-bg-secondary)] p-3 font-mono text-[11px] leading-relaxed text-[var(--theme-text-primary)]">
               fleex {confirmReq.argv.join(' ')}
             </pre>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => answerConfirm(confirmReq.id, false)}
+                  className="flex-1 rounded-lg bg-[var(--theme-bg-hover)] px-4 py-3 text-sm font-medium text-[var(--theme-text-primary)]"
+                >
+                  Refuser
+                </button>
+                <button
+                  onClick={() => answerConfirm(confirmReq.id, true)}
+                  className="flex-1 rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)]"
+                >
+                  Approuver
+                </button>
+              </div>
+              {/* Standing approval for this command name only, this conversation only */}
               <button
-                onClick={() => answerConfirm(confirmReq.id, false)}
-                className="flex-1 rounded-lg bg-[var(--theme-bg-hover)] px-4 py-3 text-sm font-medium text-[var(--theme-text-primary)]"
+                onClick={() => answerConfirm(confirmReq.id, true, 'tool')}
+                className={`rounded-lg border px-4 py-3 text-sm font-medium ${tint('yellow')}`}
               >
-                Refuser
-              </button>
-              <button
-                onClick={() => answerConfirm(confirmReq.id, true)}
-                className="flex-1 rounded-lg bg-[var(--theme-accent)] px-4 py-3 text-sm font-semibold text-[var(--theme-accent-fg)]"
-              >
-                Approuver
+                ⚡ Toujours autoriser «&nbsp;{toolLabel(confirmReq.name)}&nbsp;»
               </button>
             </div>
           </div>
