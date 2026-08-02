@@ -1,11 +1,29 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
+import { ErrorBoundary } from './components/errors/ErrorBoundary';
+import { installGlobalErrorHandlers, reportClientError } from './services/errorReporter';
 import './index.css';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+// Catches what error boundaries structurally cannot: event handlers, async
+// callbacks, and unhandled promise rejections.
+installGlobalErrorHandlers();
+
+ReactDOM.createRoot(document.getElementById('root')!, {
+  // Fires for errors NO boundary caught. With the root boundary below this
+  // should stay empty — if it ever logs, a boundary is missing somewhere.
+  onUncaughtError: (error, errorInfo) => {
+    reportClientError({
+      error,
+      source: 'react.uncaught',
+      componentStack: errorInfo.componentStack ?? undefined,
+    });
+  },
+}).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary name="root" variant="root">
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );
 

@@ -72,6 +72,13 @@ interface SessionState {
   sessionGroups: SessionGroup[];
   selectedGroupId: string | null;
   activeGroupCellIndex: number | null;
+  /**
+   * Why the session list is empty, when it is empty because loading failed.
+   * `null` means "no known failure" — an empty list is then genuinely empty.
+   * Without this the sidebar renders the same way in both cases, which is the
+   * silent failure this ticket is about.
+   */
+  sessionsLoadError: string | null;
   setSessions: (sessions: Session[]) => void;
   setSessionGroups: (groups: SessionGroup[]) => void;
   selectTicketTab: (ticketId: string | null, tabKey?: string | null) => void;
@@ -87,6 +94,7 @@ interface SessionState {
   updateSessionStatus: (id: string, status: SessionStatus) => void;
   selectGroup: (id: string | null) => void;
   setActiveGroupCellIndex: (index: number | null) => void;
+  setSessionsLoadError: (message: string | null) => void;
 }
 
 /** Extract sessionId from a tab key like 's:uuid' */
@@ -105,6 +113,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   sessionGroups: [],
   selectedGroupId: null,
   activeGroupCellIndex: null,
+  sessionsLoadError: null,
 
   setSessions: (sessions) => set({ sessions: preserveRecentlyAdded(filterKilledFromList(sessions)) }),
 
@@ -242,4 +251,6 @@ export const useSessionStore = create<SessionState>((set) => ({
   }),
 
   setActiveGroupCellIndex: (index) => set({ activeGroupCellIndex: index }),
+
+  setSessionsLoadError: (message) => set({ sessionsLoadError: message }),
 }));

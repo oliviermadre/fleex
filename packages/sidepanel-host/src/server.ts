@@ -246,6 +246,103 @@ function asString(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
+/** Extracted from the `message` handler so it can be wrapped in a try/catch. */
+function dispatchMessage(ws: ServerWebSocket<WsData>, msg: Record<string, unknown>): void {
+  switch (msg.type) {
+    case 'list_sessions':
+      send(ws, { type: 'sessions', sessions: store.list() });
+      break;
+    case 'new_session': {
+      const s = store.create({ workspace: asString(msg.workspace), model: asString(msg.model) });
+      broadcastSessions();
+      send(ws, { type: 'session_created', id: s.id });
+      break;
+    }
+    case 'open_session': {
+      const id = asString(msg.id);
+      const s = id ? store.get(id) : undefined;
+      if (s) send(ws, { type: 'session_history', id: s.id, transcript: s.transcript });
+      break;
+    }
+    case 'rename_session': {
+      const id = asString(msg.id);
+      const title = asString(msg.title);
+      if (id && title !== undefined) {
+        store.rename(id, title);
+        broadcastSessions();
+      }
+      break;
+    }
+    case 'delete_session': {
+      const id = asString(msg.id);
+      if (id) {
+        store.delete(id);
+        pendingPages.delete(id);
+        broadcastSessions();
+      }
+      break;
+    }
+    case 'set_workspace': {
+      const id = asString(msg.id);
+      const s = id ? store.get(id) : undefined;
+      if (s) {
+        s.workspace = asString(msg.workspace);
+        store.save(s.id);
+        broadcastSessions();
+      }
+      break;
+    }
+    case 'set_model': {
+      const id = asString(msg.id);
+      const s = id ? store.get(id) : undefined;
+      if (s) {
+        s.model = asString(msg.model);
+        store.save(s.id);
+        broadcastSessions();
+      }
+      break;
+    }
+    case 'user': {
+      const id = asString(msg.sessionId);
+      const text = asString(msg.text);
+      if (id && text) void handleUserTurn(id, text);
+      break;
+    }
+    case 'page': {
+      const id = asString(msg.sessionId);
+      const content = asString(msg.content);
+      if (id && content) {
+        pendingPages.set(id, { content, url: asString(msg.url), title: asString(msg.title) });
+        send(ws, { type: 'page_attached', sessionId: id, title: asString(msg.title) ?? asString(msg.url) ?? 'page' });
+      }
+      break;
+    }
+    case 'confirm': {
+      const id = asString(msg.id) ?? '';
+      const resolver = pendingConfirms.get(id);
+      if (resolver) {
+        pendingConfirms.delete(id);
+        resolver(msg.approved === true);
+      }
+      break;
+    }
+    default:
+      send(ws, { type: 'error', message: `Unknown message type: ${String(msg.type)}` });
+  }
+}
+
+// This process owns every open sidepanel conversation. Node/Bun's default is to
+// die on an uncaught throw or rejection, which would silently drop all of them —
+// so log and keep serving instead. (Same idiom as the Fleex server's handler,
+// minus its final rethrow: here survival is the whole point.)
+process.on('uncaughtException', (err: Error) => {
+  process.stderr.write(`fleex-sidepanel-host: uncaught exception (${err.stack ?? err.message})\n`);
+});
+process.on('unhandledRejection', (reason: unknown) => {
+  const detail = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
+  process.stderr.write(`fleex-sidepanel-host: unhandled rejection (${detail})\n`);
+});
+
 Bun.serve<WsData>({
   port: PORT,
   async fetch(req, server) {
@@ -293,86 +390,14 @@ Bun.serve<WsData>({
         send(ws, { type: 'error', message: 'Invalid JSON' });
         return;
       }
-      switch (msg.type) {
-        case 'list_sessions':
-          send(ws, { type: 'sessions', sessions: store.list() });
-          break;
-        case 'new_session': {
-          const s = store.create({ workspace: asString(msg.workspace), model: asString(msg.model) });
-          broadcastSessions();
-          send(ws, { type: 'session_created', id: s.id });
-          break;
-        }
-        case 'open_session': {
-          const id = asString(msg.id);
-          const s = id ? store.get(id) : undefined;
-          if (s) send(ws, { type: 'session_history', id: s.id, transcript: s.transcript });
-          break;
-        }
-        case 'rename_session': {
-          const id = asString(msg.id);
-          const title = asString(msg.title);
-          if (id && title !== undefined) {
-            store.rename(id, title);
-            broadcastSessions();
-          }
-          break;
-        }
-        case 'delete_session': {
-          const id = asString(msg.id);
-          if (id) {
-            store.delete(id);
-            pendingPages.delete(id);
-            broadcastSessions();
-          }
-          break;
-        }
-        case 'set_workspace': {
-          const id = asString(msg.id);
-          const s = id ? store.get(id) : undefined;
-          if (s) {
-            s.workspace = asString(msg.workspace);
-            store.save(s.id);
-            broadcastSessions();
-          }
-          break;
-        }
-        case 'set_model': {
-          const id = asString(msg.id);
-          const s = id ? store.get(id) : undefined;
-          if (s) {
-            s.model = asString(msg.model);
-            store.save(s.id);
-            broadcastSessions();
-          }
-          break;
-        }
-        case 'user': {
-          const id = asString(msg.sessionId);
-          const text = asString(msg.text);
-          if (id && text) void handleUserTurn(id, text);
-          break;
-        }
-        case 'page': {
-          const id = asString(msg.sessionId);
-          const content = asString(msg.content);
-          if (id && content) {
-            pendingPages.set(id, { content, url: asString(msg.url), title: asString(msg.title) });
-            send(ws, { type: 'page_attached', sessionId: id, title: asString(msg.title) ?? asString(msg.url) ?? 'page' });
-          }
-          break;
-        }
-        case 'confirm': {
-          const id = asString(msg.id) ?? '';
-          const resolver = pendingConfirms.get(id);
-          if (resolver) {
-            pendingConfirms.delete(id);
-            resolver(msg.approved === true);
-          }
-          break;
-        }
-        default:
-          send(ws, { type: 'error', message: `Unknown message type: ${String(msg.type)}` });
+      try {
+        dispatchMessage(ws, msg);
+      } catch (e) {
+        // One bad message must not escape to the process: this host holds every
+        // open conversation, so a throw here would drop all of them at once.
+        const detail = e instanceof Error ? e.message : String(e);
+        process.stderr.write(`fleex-sidepanel-host: message handler failed (${detail})\n`);
+        send(ws, { type: 'error', message: detail });
       }
     },
     close(ws) {
