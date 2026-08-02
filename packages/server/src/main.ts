@@ -7,6 +7,7 @@ import multipart from '@fastify/multipart';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { createContainer } from './infrastructure/container.js';
+import { fleexServerFactory } from './infrastructure/http/server-factory.js';
 import { migrateRepositoryPatterns } from './domain/services/repository-pattern-migration.js';
 import { sessionRoutes } from './infrastructure/http/sessions.routes.js';
 import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
@@ -72,7 +73,7 @@ async function main() {
   // Discover existing fleex_ tmux sessions
   await container.discoverSessions.execute();
 
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, serverFactory: fleexServerFactory });
   await app.register(cors, { origin: true, credentials: true });
   await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
   await app.register(websocket);
