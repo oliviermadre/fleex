@@ -2,6 +2,7 @@ import type { CommentVisibility } from '@fleex/shared';
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
 import type { CommentStorePort } from '../../../application/ports/comment-store.port.js';
 import type { SupabaseConnection } from './connection.js';
+import { chunkIds } from './supabase-chunk.js';
 
 interface CommentRow {
   id: string;
@@ -52,20 +53,24 @@ export class SupabaseCommentStore implements CommentStorePort {
     // Bulk callers (unread-counts for the cockpit view) can match far more, so
     // paginate explicitly — otherwise counts silently truncate (bug #400).
     // The secondary `id` order makes pagination stable across equal timestamps.
+    // `.in()` lands in the query string, which Supabase's proxy caps at ~8 KB —
+    // so the ID list is chunked before paginating each chunk (#509).
     const PAGE = 1000;
     const rows: CommentRow[] = [];
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await this.conn.client
-        .from('comments')
-        .select('*')
-        .in('ticket_id', ticketIds)
-        .order('created_at', { ascending: true })
-        .order('id', { ascending: true })
-        .range(from, from + PAGE - 1);
-      if (error) throw new Error(`SupabaseCommentStore.getByTicketIds failed: ${error.message}`);
-      const page = data as CommentRow[];
-      rows.push(...page);
-      if (page.length < PAGE) break;
+    for (const chunk of chunkIds(ticketIds)) {
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await this.conn.client
+          .from('comments')
+          .select('*')
+          .in('ticket_id', chunk)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw new Error(`SupabaseCommentStore.getByTicketIds failed: ${error.message}`);
+        const page = data as CommentRow[];
+        rows.push(...page);
+        if (page.length < PAGE) break;
+      }
     }
     return rows.map(rowToEntity);
   }
