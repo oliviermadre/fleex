@@ -110,13 +110,17 @@ export function asFullValueReference(value: unknown): ParsedReference | null {
   return parseReferencePath(only[1] ?? '', only[0]);
 }
 
-export function containsReference(value: unknown): boolean {
-  return typeof value === 'string' && REFERENCE_PATTERN.test(resetRegex(value));
-}
+/**
+ * Deliberately a *separate*, non-global regex. Reusing `REFERENCE_PATTERN` here
+ * would be a trap: `.test` advances its `lastIndex`, and `matchAll` copies that
+ * index into the regex it iterates with — so one `containsReference` call would
+ * silently make the next `findReferences` skip the first reference of a string.
+ * Keeping the mutating method off the shared instance is what makes this module
+ * stateless, which every caller assumes.
+ */
+const SINGLE_REFERENCE_PATTERN = /\{\{[^{}]*\}\}/;
 
-// `REFERENCE_PATTERN` is a global regex — `.test` advances `lastIndex`, so reset
-// before reuse to keep `containsReference` stateless.
-function resetRegex(value: string): string {
-  REFERENCE_PATTERN.lastIndex = 0;
-  return value;
+/** Whether the value holds a reference at all. Does not parse — never throws. */
+export function containsReference(value: unknown): boolean {
+  return typeof value === 'string' && SINGLE_REFERENCE_PATTERN.test(value);
 }

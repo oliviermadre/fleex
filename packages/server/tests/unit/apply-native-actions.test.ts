@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { NativeAction } from '@fleex/shared';
-import { ApplyNativeActionsUseCase } from '../../src/application/use-cases/apply-native-actions.js';
+import {
+  ApplyNativeActionsUseCase,
+  NativeActionsPartialFailure,
+} from '../../src/application/use-cases/apply-native-actions.js';
 import { ApplyTicketMutationUseCase } from '../../src/application/use-cases/apply-ticket-mutation.js';
 import { NativeOperationRegistry } from '../../src/application/services/native-operations/registry.js';
 import { TicketEntity } from '../../src/domain/entities/ticket.entity.js';
@@ -309,6 +312,23 @@ describe('ApplyNativeActionsUseCase', () => {
 
       expect(createTicket.execute).not.toHaveBeenCalled();
     });
+
+    it('rejects a second create before the first one writes anything', async () => {
+      // The dangerous shape: the leading create satisfies the placement rule, so
+      // a check that only looked at the *first* create would let it commit a
+      // ticket and reject the duplicate afterwards — the exact partial write the
+      // validate-everything-first ordering exists to prevent.
+      const { run, createTicket } = harness();
+      createTicket.execute.mockResolvedValue(created());
+
+      await expect(run([
+        action('ticket.create', { boardId: 'b-2', title: 'First' }),
+        action('ticket.set_priority', { priority: 'high' }),
+        action('ticket.create', { boardId: 'b-2', title: 'Second' }),
+      ])).rejects.toThrow(/only one "Create ticket"/);
+
+      expect(createTicket.execute).not.toHaveBeenCalled();
+    });
   });
 
   describe('ticket.post_comment', () => {
@@ -345,5 +365,61 @@ describe('ApplyNativeActionsUseCase', () => {
 
       expect(postComment.execute).toHaveBeenCalledWith(expect.objectContaining({ ticketId: 't-new' }));
     });
+  });
+
+  describe('failure after a write has committed', () => {
+    it('reports the mutation that landed instead of claiming nothing happened', async () => {
+      // Effects run after the single write, so they are outside its atomicity.
+      // If the comment blows up, the status change is already durable — saying
+      // "0 actions applied" would describe a ticket that was touched as one that
+      // was not, and any recovery branch downstream would act on a false premise.
+      const { run, postComment, ticketStore } = harness();
+      postComment.execute.mockRejectedValue(new Error('comment backend down'));
+
+      const error = await run([
+        action('ticket.set_status', { status: 'doing' }),
+        action('ticket.post_comment', { body: 'note' }),
+      ]).catch((e: unknown) => e);
+
+      expect(ticketStore.saveTicket).toHaveBeenCalledOnce(); // the write did happen
+      expect(error).toBeInstanceOf(NativeActionsPartialFailure);
+      expect((error as NativeActionsPartialFailure).message).toMatch(/comment backend down/);
+      expect((error as NativeActionsPartialFailure).committed).toMatchObject({
+        ticketId: 't-1', actionsApplied: 1, changed: expect.arrayContaining(['status']),
+      });
+    });
+
+    it('leaves a failure that committed nothing as a plain error', async () => {
+      // Wrapping it would imply a partial write that never happened.
+      const { run } = harness();
+      const error = await run([action('ticket.set_status', { status: 'nope' })])
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(NativeActionsPartialFailure);
+    });
+
+    it('counts only the actions that committed, not the ones that were requested', async () => {
+      const { run, postComment } = harness();
+      postComment.execute.mockRejectedValue(new Error('nope'));
+
+      const error = await run([
+        action('ticket.set_status', { status: 'doing' }),
+        action('ticket.set_priority', { priority: 'high' }),
+        action('ticket.post_comment', { body: 'a' }),
+      ]).catch((e: unknown) => e) as NativeActionsPartialFailure;
+
+      expect(error.committed.actionsApplied).toBe(2);
+    });
+  });
+
+  it('reports every action as applied on the happy path', async () => {
+    const { run } = harness();
+    const result = await run([
+      action('ticket.set_status', { status: 'doing' }),
+      action('ticket.set_priority', { priority: 'high' }),
+      action('ticket.post_comment', { body: 'a' }),
+    ]);
+    expect(result.actionsApplied).toBe(3);
   });
 });

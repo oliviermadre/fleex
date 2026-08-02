@@ -329,6 +329,7 @@ export {
   validateNativeSteps,
   validateResolvedParams,
   nativeReferenceSuggestions,
+  allowsEmbeddedReference,
 } from './native-operations/validate.js';
 
 export type {

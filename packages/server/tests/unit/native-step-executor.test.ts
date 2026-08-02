@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { NativeAction } from '@fleex/shared';
 import { NativeStepExecutor } from '../../src/application/services/step-executors/native-step-executor.js';
+import { NativeActionsPartialFailure } from '../../src/application/use-cases/apply-native-actions.js';
 
 const makeInput = (overrides: Partial<{
   actions: NativeAction[];
@@ -106,6 +107,37 @@ describe('NativeStepExecutor', () => {
     expect(result.output.result).toBe('ko');
     expect(fields.error).toMatch(/has not completed/);
     expect(fields.actionsApplied).toBe(0);
+  });
+
+  it('still publishes changedFields when it fails, so an edge can route on it', async () => {
+    // `EdgeEvaluator`'s `contains` needs a string; leaving the field out would
+    // make a failure branch compare against `undefined` instead of "".
+    const applyNativeActions = { execute: vi.fn().mockRejectedValue(new Error('boom')) };
+    const exec = new NativeStepExecutor(applyNativeActions as never);
+
+    const fields = (await exec.execute(makeInput() as never)).output.schemaFields as Record<string, unknown>;
+    expect(fields.changedFields).toBe('');
+  });
+
+  it('reports the mutation that already committed when a later action fails', async () => {
+    // The step is only atomic up to its single write. When an effect fails
+    // afterwards, saying "0 applied" would hide a ticket that really was
+    // changed — a downstream recovery branch would then act on a false premise.
+    const applyNativeActions = {
+      execute: vi.fn().mockRejectedValue(new NativeActionsPartialFailure('comment backend down', {
+        ticketId: 't-1', actionsApplied: 1, changed: ['status'],
+      })),
+    };
+    const exec = new NativeStepExecutor(applyNativeActions as never);
+
+    const result = await exec.execute(makeInput() as never);
+    const fields = result.output.schemaFields as Record<string, unknown>;
+
+    expect(result.output.result).toBe('ko');
+    expect(fields.actionsApplied).toBe(1);
+    expect(fields.changed).toEqual(['status']);
+    expect(fields.changedFields).toBe('status');
+    expect(fields.error).toMatch(/comment backend down/);
   });
 
   it('rejects a step with no action rather than reporting a successful no-op', async () => {

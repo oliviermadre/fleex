@@ -40,6 +40,22 @@ export interface ApplyNativeActionsResult {
   createdTicketDisplayId?: number;
 }
 
+/**
+ * Raised when a step fails *after* something already committed.
+ *
+ * A native step is atomic up to its single ticket write, but `ticket.create` and
+ * effects sit outside that guarantee. When one of them fails, reporting
+ * "0 actions applied" would describe a mutation that happened as one that did
+ * not — the one failure mode a deterministic node cannot afford. So the error
+ * carries what actually landed.
+ */
+export class NativeActionsPartialFailure extends Error {
+  constructor(message: string, readonly committed: ApplyNativeActionsResult) {
+    super(message);
+    this.name = 'NativeActionsPartialFailure';
+  }
+}
+
 /** Native steps are attributed to the workflow, not to a human. */
 const NATIVE_ACTOR: Omit<TicketMutationActor, 'actorName'> = {
   actorType: 'agent',
@@ -98,7 +114,18 @@ export class ApplyNativeActionsUseCase {
 
     assertNoFieldConflicts(resolved.map((r) => r.descriptor));
 
-    const createIndex = resolved.findIndex((r) => r.action.operationId === NATIVE_OP_CREATE_TICKET);
+    // Both checks must happen *here*, before the create below writes anything.
+    // Counting rather than taking the first index is what makes that true: with
+    // `[create, …, create]` the placement check alone passes, the first create
+    // commits a ticket, and only then does planning reject the second — leaving
+    // exactly the partial write this whole ordering exists to prevent.
+    const createIndexes = resolved
+      .map((r, i) => (r.action.operationId === NATIVE_OP_CREATE_TICKET ? i : -1))
+      .filter((i) => i >= 0);
+    if (createIndexes.length > 1) {
+      throw new Error('native step: only one "Create ticket" action is allowed');
+    }
+    const createIndex = createIndexes[0] ?? -1;
     if (createIndex > 0) {
       throw new Error('native step: "Create ticket" must be the first action');
     }
@@ -107,61 +134,79 @@ export class ApplyNativeActionsUseCase {
     let subject = subjectTicket;
     let createdTicketId: string | undefined;
     let createdTicketDisplayId: number | undefined;
-
-    if (createIndex === 0) {
-      const first = resolved[0];
-      if (!first) throw new Error('native step: missing create action');
-      const plan = first.impl.plan({ params: first.params, ticket: null });
-      if (plan.kind !== 'create') throw new Error('native step: ticket.create must plan a create');
-      subject = await this.deps.createTicket.execute({ ...plan.input, actor });
-      createdTicketId = subject.id;
-      createdTicketDisplayId = subject.displayId;
-    }
-
-    // ── 4. Plan the remaining actions against the (possibly new) subject ─────
-    const rest = createIndex === 0 ? resolved.slice(1) : resolved;
-    const plans: OpPlan[] = rest.map((r) => r.impl.plan({ params: r.params, ticket: subject }));
-
-    let move: { status: TicketStatus } | undefined;
-    let fields: TicketFieldPatch = {};
-    const effects: Extract<OpPlan, { kind: 'effect' }>[] = [];
-
-    for (const plan of plans) {
-      if (plan.kind === 'move') move = { status: plan.status };
-      else if (plan.kind === 'field') fields = { ...fields, ...plan.patch };
-      else if (plan.kind === 'effect') effects.push(plan);
-      else throw new Error('native step: only the first action may create a ticket');
-    }
-
-    // ── 5. One write covering the move and every field change ───────────────
     let changed: string[] = [];
-    const hasFields = Object.keys(fields).length > 0;
-    if (move || hasFields) {
-      const result = await this.deps.applyTicketMutation.applyTo(subject, {
-        move,
-        fields: hasFields ? fields : undefined,
-        actor,
-      });
-      changed = result.changed;
-    }
+    // Counted as things actually commit, never assumed from `actions.length`,
+    // so the number stays truthful on the failure path too.
+    let actionsApplied = 0;
 
-    // ── 6. Effects — after the write, so they are not part of its atomicity ──
-    const effectCtx: NativeEffectContext = {
+    const progress = (): ApplyNativeActionsResult => ({
       ticketId: subject.id,
-      actor: { ...actor, workflowName: input.workflowName },
-      deps: { postComment: this.deps.postComment },
-    };
-    for (const effect of effects) {
-      await effect.run(effectCtx);
-    }
-
-    return {
-      ticketId: subject.id,
-      actionsApplied: actions.length,
+      actionsApplied,
       changed,
       ...(createdTicketId ? { createdTicketId } : {}),
       ...(createdTicketDisplayId !== undefined ? { createdTicketDisplayId } : {}),
-    };
+    });
+
+    try {
+      if (createIndex === 0) {
+        const first = resolved[0];
+        if (!first) throw new Error('native step: missing create action');
+        const plan = first.impl.plan({ params: first.params, ticket: null });
+        if (plan.kind !== 'create') throw new Error('native step: ticket.create must plan a create');
+        subject = await this.deps.createTicket.execute({ ...plan.input, actor });
+        createdTicketId = subject.id;
+        createdTicketDisplayId = subject.displayId;
+        actionsApplied += 1;
+      }
+
+      // ── 4. Plan the remaining actions against the (possibly new) subject ───
+      const rest = createIndex === 0 ? resolved.slice(1) : resolved;
+      const plans: OpPlan[] = rest.map((r) => r.impl.plan({ params: r.params, ticket: subject }));
+
+      let move: { status: TicketStatus } | undefined;
+      let fields: TicketFieldPatch = {};
+      const effects: Extract<OpPlan, { kind: 'effect' }>[] = [];
+
+      for (const plan of plans) {
+        if (plan.kind === 'move') move = { status: plan.status };
+        else if (plan.kind === 'field') fields = { ...fields, ...plan.patch };
+        else if (plan.kind === 'effect') effects.push(plan);
+        else throw new Error('native step: only the first action may create a ticket');
+      }
+
+      // ── 5. One write covering the move and every field change ─────────────
+      const hasFields = Object.keys(fields).length > 0;
+      if (move || hasFields) {
+        const result = await this.deps.applyTicketMutation.applyTo(subject, {
+          move,
+          fields: hasFields ? fields : undefined,
+          actor,
+        });
+        changed = result.changed;
+      }
+      actionsApplied += rest.length - effects.length;
+
+      // ── 6. Effects — after the write, so they are not part of its atomicity ─
+      const effectCtx: NativeEffectContext = {
+        ticketId: subject.id,
+        actor: { ...actor, workflowName: input.workflowName },
+        deps: { postComment: this.deps.postComment },
+      };
+      for (const effect of effects) {
+        await effect.run(effectCtx);
+        actionsApplied += 1;
+      }
+    } catch (err) {
+      // Nothing committed yet ⇒ the plain error is the whole truth. Otherwise
+      // wrap it so the caller can report the mutation that did land.
+      if (actionsApplied === 0) throw err;
+      throw new NativeActionsPartialFailure(
+        err instanceof Error ? err.message : String(err),
+        progress(),
+      );
+    }
+
+    return progress();
   }
 }
 

@@ -4,6 +4,7 @@ import type {
 } from '@fleex/shared';
 import {
   NATIVE_OPERATIONS, getNativeOperation, nativeReferenceSuggestions, validateNativeSteps,
+  allowsEmbeddedReference,
 } from '@fleex/shared';
 import { TagInput } from '../ui/TagInput';
 
@@ -182,6 +183,23 @@ interface ParamFieldProps {
   onChange: (value: unknown) => void;
 }
 
+/**
+ * What the reference picker writes back into a parameter.
+ *
+ * Appending is only correct where a reference may sit inside surrounding text.
+ * On a typed param (enum, number, date…) the reference *is* the whole value, so
+ * picking one replaces what is there — appending would build a value this
+ * validator rejects at save time.
+ */
+export function insertReferenceToken(
+  value: unknown,
+  token: string,
+  paramType: NativeOperationParam['type'],
+): string {
+  const current = typeof value === 'string' ? value : '';
+  return allowsEmbeddedReference(paramType) && current !== '' ? `${current}${token}` : token;
+}
+
 function ParamField({ param, value, suggestions, onChange }: ParamFieldProps) {
   const canReference = param.allowReference !== false;
   // A referenced value is a string like "{{ output.priority }}", which no
@@ -196,9 +214,7 @@ function ParamField({ param, value, suggestions, onChange }: ParamFieldProps) {
     </span>
   );
 
-  const insert = (token: string) => {
-    onChange(typeof value === 'string' && value.trim() !== '' && isReferenced ? `${value}${token}` : token);
-  };
+  const insert = (token: string) => onChange(insertReferenceToken(value, token, param.type));
 
   const picker = canReference
     ? <ReferencePicker suggestions={suggestions} onInsert={insert} />

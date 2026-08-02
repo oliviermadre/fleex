@@ -172,7 +172,7 @@ function validateParam(ctx: ParamValidationCtx): void {
   }
 
   const fullValue = asFullValueReference(value);
-  if (!fullValue && !isTextual(param.type)) {
+  if (!fullValue && !allowsEmbeddedReference(param.type)) {
     errors.push(
       `${label}: "${param.label}" is ${param.type} — a reference must be the whole value ` +
         `(e.g. "{{ output.${param.name} }}"), not embedded in text`,
@@ -292,7 +292,13 @@ function expectedSchemaType(type: NativeOperationParam['type']): JsonSchemaPrope
   }
 }
 
-function isTextual(type: NativeOperationParam['type']): boolean {
+/**
+ * Whether a reference may sit *inside* surrounding text on this param type.
+ * Exported because the editor's reference picker has to obey the same rule: on a
+ * param that only accepts a whole-value reference, appending a token to what is
+ * already there would build a value this very validator rejects.
+ */
+export function allowsEmbeddedReference(type: NativeOperationParam['type']): boolean {
   return type === 'string' || type === 'text';
 }
 
