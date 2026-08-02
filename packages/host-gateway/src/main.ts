@@ -5,6 +5,9 @@ import { handlePtyMessage, handlePtyOpen, handlePtyClose } from './pty';
 import { logAlways, getVerbosity } from './logger';
 
 const PORT = parseInt(process.env['GATEWAY_PORT'] ?? '3001', 10);
+// /exec, /fs and /pty are unauthenticated: binding anywhere but the loopback
+// hands arbitrary code execution to the whole network.
+const HOST = process.env['GATEWAY_HOST'] ?? '127.0.0.1';
 
 // ── HTTP + WebSocket server ──
 
@@ -16,6 +19,7 @@ interface PtyWsData {
 
 Bun.serve<PtyWsData>({
   port: PORT,
+  hostname: HOST,
 
   async fetch(req, server) {
     const url = new URL(req.url);
@@ -75,4 +79,10 @@ Bun.serve<PtyWsData>({
 });
 
 const verbLabel = getVerbosity() >= 2 ? ' (debug)' : getVerbosity() >= 1 ? ' (verbose)' : '';
-logAlways(`Host gateway listening on http://localhost:${PORT}${verbLabel}`);
+if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+  logAlways(
+    `WARNING: host gateway is listening on ${HOST} — /exec, /fs and /pty are unauthenticated ` +
+      'and now reachable from your network.',
+  );
+}
+logAlways(`Host gateway listening on http://${HOST}:${PORT}${verbLabel}`);

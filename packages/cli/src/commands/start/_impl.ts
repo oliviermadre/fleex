@@ -106,14 +106,14 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   const gatewayProc = spawnService('gateway', ctx.repoDir, {
     ...env,
     GATEWAY_PORT: String(ports.gateway),
-    FLEEX_CENTRAL_URL: `http://localhost:${ports.server}`,
+    FLEEX_CENTRAL_URL: `http://127.0.0.1:${ports.server}`,
   }, ['run', 'dev:gateway']);
   savePid('gateway', gatewayProc.pid!, ctx);
 
   const serverProc = spawnService('server', ctx.repoDir, {
     ...env,
     PORT: String(ports.server),
-    HOST_GATEWAY_URL: `http://localhost:${ports.gateway}`,
+    HOST_GATEWAY_URL: `http://127.0.0.1:${ports.gateway}`,
     FLEEX_STORAGE_DRIVER: process.env.FLEEX_STORAGE_DRIVER ?? 'json',
   }, ['run', 'dev:server']);
   savePid('server', serverProc.pid!, ctx);
@@ -121,14 +121,14 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   const webProc = spawnService('web', ctx.repoDir, {
     ...env,
     VITE_DEV_PORT: String(ports.web),
-    VITE_PROXY_TARGET: `http://localhost:${ports.server}`,
+    VITE_PROXY_TARGET: `http://127.0.0.1:${ports.server}`,
   }, ['run', 'dev:web']);
   savePid('web', webProc.pid!, ctx);
 
   info('Waiting for services to become healthy...');
   let healthy = await waitForService(
     'gateway',
-    `http://localhost:${ports.gateway}/health`,
+    `http://127.0.0.1:${ports.gateway}/health`,
     gatewayProc.pid!,
     logFile('gateway', ctx),
     15,
@@ -136,7 +136,7 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   if (healthy) {
     healthy = await waitForService(
       'server',
-      `http://localhost:${ports.server}/health`,
+      `http://127.0.0.1:${ports.server}/health`,
       serverProc.pid!,
       logFile('server', ctx),
       15,
@@ -145,7 +145,7 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   if (healthy) {
     healthy = await waitForService(
       'web',
-      `http://localhost:${ports.web}/`,
+      `http://127.0.0.1:${ports.web}/`,
       webProc.pid!,
       logFile('web', ctx),
       15,
