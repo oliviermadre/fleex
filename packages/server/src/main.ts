@@ -1,54 +1,7 @@
-import { existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import Fastify from 'fastify';
-import cors from '@fastify/cors';
-import multipart from '@fastify/multipart';
-import websocket from '@fastify/websocket';
-import fastifyStatic from '@fastify/static';
 import { createContainer } from './infrastructure/container.js';
 import { migrateRepositoryPatterns } from './domain/services/repository-pattern-migration.js';
-import { sessionRoutes } from './infrastructure/http/sessions.routes.js';
-import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
-import { healthRoutes } from './infrastructure/http/health.routes.js';
-import { versionRoutes } from './infrastructure/http/version.routes.js';
-import { configRoutes } from './infrastructure/http/config.routes.js';
-import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
-import { execRoutes } from './infrastructure/http/exec.routes.js';
-import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
-import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
-import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
-import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
-import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
-import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
-import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes.js';
-import { agentMentionsRoutes } from './infrastructure/http/agent-mentions.routes.js';
-import { agentDeliverablesRoutes } from './infrastructure/http/agent-deliverables.routes.js';
-import { agentContextRoutes } from './infrastructure/http/agent-context.routes.js';
-import { agentWorktreesRoutes } from './infrastructure/http/agent-worktrees.routes.js';
-import { agentActivityRoutes } from './infrastructure/http/agent-activity.routes.js';
-import { createAgentAuthHook } from './infrastructure/http/agent-auth.hook.js';
-import { registerErrorHandler } from './infrastructure/http/error-handler.js';
-import { agentWsPlugin } from './infrastructure/ws/agent-ws.js';
-import { unifiedWsPlugin } from './infrastructure/ws/unified-ws.js';
+import { buildApp } from './infrastructure/http/build-app.js';
 import { WsHeartbeat } from './infrastructure/ws/ws-heartbeat.js';
-import { personaRoutes } from './infrastructure/http/persona.routes.js';
-import { skillRoutes } from './infrastructure/http/skill.routes.js';
-import { panelRoutes } from './infrastructure/http/panel.routes.js';
-import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
-import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.routes.js';
-import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
-import { dashboardRoutes } from './infrastructure/http/dashboard.routes.js';
-import { githubImageProxyRoutes } from './infrastructure/http/github-image-proxy.routes.js';
-import { fileRoutes } from './infrastructure/http/files.routes.js';
-import { ticketGroupRoutes } from './infrastructure/http/ticket-groups.routes.js';
-import { authRoutes } from './infrastructure/http/auth.routes.js';
-import { createAuthMiddleware } from './infrastructure/http/auth-middleware.js';
-import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
-import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
-import { hookRoutes } from './infrastructure/http/hook.routes.js';
-import { modelsRoutes } from './infrastructure/http/models.routes.js';
-import { overlaySyncRoutes } from './infrastructure/http/overlay-sync.routes.js';
 import { ModelService } from './application/services/model.service.js';
 
 async function main() {
@@ -72,98 +25,9 @@ async function main() {
   // Discover existing fleex_ tmux sessions
   await container.discoverSessions.execute();
 
-  const app = Fastify({ logger: false });
-  await app.register(cors, { origin: true, credentials: true });
-  await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
-  await app.register(websocket);
-
-  registerErrorHandler(app);
-
-  // Auth routes (public — no middleware)
-  await app.register(authRoutes(container));
-
-  // Claude Code hook ingress — public (localhost-only enforced inside the route)
-  await app.register(hookRoutes(container));
-
-  // Auth middleware for all subsequent routes
-  const authMiddleware = createAuthMiddleware(container);
-  app.addHook('preHandler', authMiddleware);
-
-  // Register HTTP routes
-  await app.register(sessionRoutes(container));
-  await app.register(repositoryRoutes(container));
-  await app.register(healthRoutes(container));
-  await app.register(versionRoutes());
-  await app.register(configRoutes(container));
-  await app.register(deliverableTypesRoutes(container));
-  await app.register(execRoutes(container));
-  await app.register(claudeConfigRoutes(container));
-  await app.register(scratchpadRoutes(container));
-  await app.register(claudeUsageRoutes(container));
-  await app.register(agentTokenRoutes(container));
-  await app.register(ticketRoutes(container));
-  await app.register(personaRoutes(container));
-  await app.register(skillRoutes(container));
-  await app.register(panelRoutes(container));
-  await app.register(agentEventsRoutes(container));
-  await app.register(domainEventLogRoutes(container));
-  await app.register(statisticsRoutes(container));
-  await app.register(dashboardRoutes(container));
-  await app.register(githubImageProxyRoutes(container));
-  await app.register(fileRoutes(container));
-  await app.register(ticketGroupRoutes(container));
-  await app.register(overlaySyncRoutes(container));
-
-  // Anthropic model discovery (cached server-side)
-  const modelService = new ModelService(container.logger);
-  await app.register(modelsRoutes(modelService));
-
-  // Workflow template routes (requires workflowTemplateStore — available on sqlite/supabase)
-  if (container.workflowTemplateStore) {
-    await app.register(workflowTemplateRoutes({ templateStore: container.workflowTemplateStore }));
-  } else {
-    container.logger.warn('workflowTemplateStore not available — /api/workflows/templates routes skipped');
-  }
-
-  // Workflow run routes (requires run/step stores + all use cases)
-  if (
-    container.workflowRunStore &&
-    container.stepRunStore &&
-    container.createWorkflowRun &&
-    container.resolveHumanGate &&
-    container.retryStep &&
-    container.cancelWorkflowRun
-  ) {
-    await app.register(workflowRunRoutes({
-      runStore: container.workflowRunStore,
-      stepRunStore: container.stepRunStore,
-      createWorkflowRun: container.createWorkflowRun,
-      resolveHumanGate: container.resolveHumanGate,
-      retryStep: container.retryStep,
-      cancelWorkflowRun: container.cancelWorkflowRun,
-      authorNameResolver: () => 'workflow-trigger',
-    }));
-  } else {
-    container.logger.warn('workflowRunStore or use cases not available — /api/workflows/runs routes skipped');
-  }
-
-  // Agent API with auth
-  const authHook = createAgentAuthHook(container);
-  await app.register(async function (v1) {
-    v1.addHook('preHandler', authHook);
-    await v1.register(agentApiRoutes(container));
-    await v1.register(agentCommentsRoutes(container));
-    await v1.register(agentMentionsRoutes(container));
-    await v1.register(agentDeliverablesRoutes(container));
-    await v1.register(agentContextRoutes(container));
-    await v1.register(agentWorktreesRoutes(container));
-    await v1.register(agentActivityRoutes(container));
-  }, { prefix: '/api/agents/v1' });
-
-  // Register WebSocket handlers
   const heartbeat = new WsHeartbeat();
-  await app.register(unifiedWsPlugin(container, container.jsonlFileWatcher, heartbeat));
-  await app.register(agentWsPlugin(container, heartbeat));
+  const modelService = new ModelService(container.logger);
+  const app = await buildApp({ container, heartbeat, modelService, serveStatic: true });
 
   // Auto-resolve repository patterns at startup if needed
   {
@@ -226,19 +90,6 @@ async function main() {
       container.eventBus.emit({ type: 'ticket.moved', ticketId: id, fromStatus: '', toStatus: 'done', occurredAt: new Date() });
     }
   });
-
-  // Serve frontend static files in production
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-  const webDistPath = join(__dirname, '../../web/dist');
-  if (existsSync(webDistPath)) {
-    await app.register(fastifyStatic, { root: webDistPath, prefix: '/' });
-    app.setNotFoundHandler((req, reply) => {
-      if (req.method === 'GET' && !req.url.startsWith('/api') && !req.url.startsWith('/ws') && !req.url.startsWith('/health')) {
-        return reply.sendFile('index.html');
-      }
-      return reply.code(404).send({ error: 'Not found' });
-    });
-  }
 
   const port = parseInt(process.env['PORT'] ?? '3000', 10);
   await app.listen({ port, host: '0.0.0.0' });
