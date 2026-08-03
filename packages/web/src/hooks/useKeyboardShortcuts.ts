@@ -1,14 +1,16 @@
 import { useEffect, useMemo } from 'react';
+
 import type { Session, WorktreeSessionGroup } from '@fleex/shared';
-import { useUIStore } from '../stores/uiStore';
-import { useSessionStore } from '../stores/sessionStore';
-import { useSettingsStore } from '../stores/settingsStore';
+
+import { floatingPositionRegistry } from '../components/main-panel/floatingPositionRegistry';
+import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
+import { worktreeFlow, SESSION_FLOW_ORDER } from '../lib/sessionFlow';
+import * as api from '../services/api';
 import { useClaudeConfigStore } from '../stores/claudeConfigStore';
 import { useScratchpadStore } from '../stores/scratchpadStore';
-import * as api from '../services/api';
-import { worktreeFlow, SESSION_FLOW_ORDER } from '../lib/sessionFlow';
-import { SYSTEM_GROUP_ID } from '../components/sidebar/SystemGroup';
-import { floatingPositionRegistry } from '../components/main-panel/FloatingSessionOverlay';
+import { useSessionStore } from '../stores/sessionStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { useUIStore } from '../stores/uiStore';
 
 export function useKeyboardShortcuts() {
   const toggleNav = useUIStore((s) => s.toggleNav);
@@ -52,29 +54,41 @@ export function useKeyboardShortcuts() {
   // SessionGroups: System shells → Manual → Agentic → Done.
   // Collapsed sections are skipped.
   const orderedWorktrees = useMemo(() => {
-    const entries: Array<{ key: string; sessions: string[]; ticketId?: string; agentTicketId?: string }> = [];
+    const entries: Array<{
+      key: string;
+      sessions: string[];
+      ticketId?: string;
+      agentTicketId?: string;
+    }> = [];
 
     // 1. System sessions first (ungrouped)
     const systemGroup = sessionGroups.find(
-      (g) => g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped'
+      (g) => g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped',
     );
     if (systemGroup) {
-      const allSystemSessions = systemGroup.worktrees.flatMap((wt: WorktreeSessionGroup) => wt.sessions);
+      const allSystemSessions = systemGroup.worktrees.flatMap(
+        (wt: WorktreeSessionGroup) => wt.sessions,
+      );
       const sysSessOrder = sessionOrder[SYSTEM_GROUP_ID];
-      const sortedSystemSessions = sysSessOrder && sysSessOrder.length > 0
-        ? [...allSystemSessions].sort((a, b) => {
-            const orderMap = new Map(sysSessOrder.map((id, i) => [id, i]));
-            return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
-          })
-        : allSystemSessions;
+      const sortedSystemSessions =
+        sysSessOrder && sysSessOrder.length > 0
+          ? [...allSystemSessions].sort((a, b) => {
+              const orderMap = new Map(sysSessOrder.map((id, i) => [id, i]));
+              return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
+            })
+          : allSystemSessions;
       if (sortedSystemSessions.length > 0) {
-        entries.push({ key: SYSTEM_GROUP_ID, ticketId: 'system', sessions: sortedSystemSessions.map((s: Session) => s.id) });
+        entries.push({
+          key: SYSTEM_GROUP_ID,
+          ticketId: 'system',
+          sessions: sortedSystemSessions.map((s: Session) => s.id),
+        });
       }
     }
 
     // Repo groups sorted
     const repoSessionGroups = sessionGroups.filter(
-      (g) => !(g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped')
+      (g) => !(g.repositoryOrg === '_ungrouped' && g.repositoryName === '_ungrouped'),
     );
 
     const sortedGroups = [...repoSessionGroups].sort((a, b) => {
@@ -86,28 +100,40 @@ export function useKeyboardShortcuts() {
     });
 
     // Helper to add worktrees from a group
-    const addWorktrees = (group: typeof sortedGroups[0], filter: (wt: typeof group.worktrees[0]) => boolean) => {
+    const addWorktrees = (
+      group: (typeof sortedGroups)[0],
+      filter: (wt: (typeof group.worktrees)[0]) => boolean,
+    ) => {
       const repoId = `${group.repositoryOrg}/${group.repositoryName}`;
       const wtOrder = worktreeOrder[repoId];
-      const sortedWts = wtOrder && wtOrder.length > 0
-        ? [...group.worktrees].sort((a, b) => {
-            const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
-            return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
-          })
-        : [...group.worktrees].sort((a, b) => a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()));
+      const sortedWts =
+        wtOrder && wtOrder.length > 0
+          ? [...group.worktrees].sort((a, b) => {
+              const orderMap = new Map(wtOrder.map((id, i) => [id, i]));
+              return (orderMap.get(a.branch) ?? Infinity) - (orderMap.get(b.branch) ?? Infinity);
+            })
+          : [...group.worktrees].sort((a, b) =>
+              a.branch.toLowerCase().localeCompare(b.branch.toLowerCase()),
+            );
 
       for (const wt of sortedWts) {
         if (!filter(wt)) continue;
         const wtGroupId = `${repoId}:${wt.branch}`;
         const sessOrder = sessionOrder[wtGroupId];
-        const sortedSessions = sessOrder && sessOrder.length > 0
-          ? [...wt.sessions].sort((a, b) => {
-              const orderMap = new Map(sessOrder.map((id, i) => [id, i]));
-              return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
-            })
-          : wt.sessions;
+        const sortedSessions =
+          sessOrder && sessOrder.length > 0
+            ? [...wt.sessions].sort((a, b) => {
+                const orderMap = new Map(sessOrder.map((id, i) => [id, i]));
+                return (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity);
+              })
+            : wt.sessions;
         if (sortedSessions.length > 0 || wt.agentWorktree) {
-          entries.push({ key: wtGroupId, ticketId: wt.ticketId ?? wt.agentWorktree?.ticketId, sessions: sortedSessions.map((s: Session) => s.id), agentTicketId: wt.agentWorktree?.ticketId });
+          entries.push({
+            key: wtGroupId,
+            ticketId: wt.ticketId ?? wt.agentWorktree?.ticketId,
+            sessions: sortedSessions.map((s: Session) => s.id),
+            agentTicketId: wt.agentWorktree?.ticketId,
+          });
         }
       }
     };
@@ -128,7 +154,15 @@ export function useKeyboardShortcuts() {
     }
 
     return entries;
-  }, [sessionGroups, repoOrder, worktreeOrder, sessionOrder, manualFlowCollapsed, agenticFlowCollapsed, doneFlowCollapsed]);
+  }, [
+    sessionGroups,
+    repoOrder,
+    worktreeOrder,
+    sessionOrder,
+    manualFlowCollapsed,
+    agenticFlowCollapsed,
+    doneFlowCollapsed,
+  ]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -152,11 +186,19 @@ export function useKeyboardShortcuts() {
         if (e.code === 'KeyT') {
           e.preventDefault();
           const cwd = basePath || '~';
-          api.createSession({ cwd, type: 'shell' }).then((session) => {
-            addSessionToGroup(session);
-            selectSession(session.id);
-            api.fetchSessionGroups().then(setSessionGroups).catch(() => {});
-          }).catch(() => { /* silently fail */ });
+          api
+            .createSession({ cwd, type: 'shell' })
+            .then((session) => {
+              addSessionToGroup(session);
+              selectSession(session.id);
+              api
+                .fetchSessionGroups()
+                .then(setSessionGroups)
+                .catch(() => {});
+            })
+            .catch(() => {
+              /* silently fail */
+            });
           return;
         }
       }
@@ -213,7 +255,12 @@ export function useKeyboardShortcuts() {
       }
 
       // Cmd+Shift+Arrow: spatial navigation between floating overlays
-      if (meta && e.shiftKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && focusedFloatingPanelId) {
+      if (
+        meta &&
+        e.shiftKey &&
+        ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) &&
+        focusedFloatingPanelId
+      ) {
         if (floatingSessionIds.length > 1) {
           const currentRect = floatingPositionRegistry.get(focusedFloatingPanelId);
           if (currentRect) {
@@ -267,7 +314,12 @@ export function useKeyboardShortcuts() {
       }
 
       // Cmd+Shift+Left/Right: cycle focus in grouped panes
-      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedGroupId) {
+      if (
+        meta &&
+        e.shiftKey &&
+        (e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+        selectedGroupId
+      ) {
         e.preventDefault();
         const group = layoutGroups.find((g) => g.id === selectedGroupId);
         if (group) {
@@ -276,7 +328,10 @@ export function useKeyboardShortcuts() {
             const next = activeGroupCellIndex === null ? 0 : (activeGroupCellIndex + 1) % cellCount;
             setActiveGroupCellIndex(next);
           } else {
-            const prev = activeGroupCellIndex === null ? cellCount - 1 : (activeGroupCellIndex - 1 + cellCount) % cellCount;
+            const prev =
+              activeGroupCellIndex === null
+                ? cellCount - 1
+                : (activeGroupCellIndex - 1 + cellCount) % cellCount;
             setActiveGroupCellIndex(prev);
           }
         }
@@ -284,21 +339,34 @@ export function useKeyboardShortcuts() {
       }
 
       // Cmd+Shift+Left/Right: toggle focus between split panes
-      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && splitSessionId) {
+      if (
+        meta &&
+        e.shiftKey &&
+        (e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+        splitSessionId
+      ) {
         e.preventDefault();
         setFocusedPane(focusedPane === 'primary' ? 'split' : 'primary');
         return;
       }
 
       // Cmd+Shift+Left/Right: navigate sessions within the current worktree (tab bar order, loops)
-      if (meta && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selectedSessionId) {
+      if (
+        meta &&
+        e.shiftKey &&
+        (e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+        selectedSessionId
+      ) {
         e.preventDefault();
-        const currentWorktree = orderedWorktrees.find((wt) => wt.sessions.includes(selectedSessionId));
+        const currentWorktree = orderedWorktrees.find((wt) =>
+          wt.sessions.includes(selectedSessionId),
+        );
         if (currentWorktree && currentWorktree.sessions.length > 1) {
           const currentIdx = currentWorktree.sessions.indexOf(selectedSessionId);
-          const nextIdx = e.key === 'ArrowLeft'
-            ? (currentIdx - 1 + currentWorktree.sessions.length) % currentWorktree.sessions.length
-            : (currentIdx + 1) % currentWorktree.sessions.length;
+          const nextIdx =
+            e.key === 'ArrowLeft'
+              ? (currentIdx - 1 + currentWorktree.sessions.length) % currentWorktree.sessions.length
+              : (currentIdx + 1) % currentWorktree.sessions.length;
           const nextId = currentWorktree.sessions[nextIdx];
           if (nextId) selectSession(nextId);
         }
@@ -317,12 +385,19 @@ export function useKeyboardShortcuts() {
           ? orderedWorktrees.findIndex((wt) => wt.ticketId === currentTicketId)
           : -1;
         if (currentIndex === -1 && selectedAgentWorktreeTicketId) {
-          currentIndex = orderedWorktrees.findIndex((wt) => wt.agentTicketId === selectedAgentWorktreeTicketId);
+          currentIndex = orderedWorktrees.findIndex(
+            (wt) => wt.agentTicketId === selectedAgentWorktreeTicketId,
+          );
         }
 
-        const nextIndex = e.key === 'ArrowUp'
-          ? (currentIndex <= 0 ? orderedWorktrees.length - 1 : currentIndex - 1)
-          : (currentIndex >= orderedWorktrees.length - 1 ? 0 : currentIndex + 1);
+        const nextIndex =
+          e.key === 'ArrowUp'
+            ? currentIndex <= 0
+              ? orderedWorktrees.length - 1
+              : currentIndex - 1
+            : currentIndex >= orderedWorktrees.length - 1
+              ? 0
+              : currentIndex + 1;
 
         const nextWorktree = orderedWorktrees[nextIndex];
         if (nextWorktree?.ticketId) {
@@ -336,5 +411,35 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleNav, openCreateModal, openCommandPalette, setActivePanel, toggleScratchpad, scratchpadOpen, togglePreview, activePanel, claudeConfigSaveFile, orderedWorktrees, lastActiveTabByWorktree, selectedSessionId, selectedAgentWorktreeTicketId, setSelectedAgentWorktreeTicketId, selectedGroupId, splitSessionId, focusedPane, selectSession, closeSplit, setFocusedPane, activeGroupCellIndex, setActiveGroupCellIndex, layoutGroups, basePath, addSessionToGroup, setSessionGroups, focusedFloatingPanelId, floatingSessionIds, bringToFront]);
+  }, [
+    toggleNav,
+    openCreateModal,
+    openCommandPalette,
+    setActivePanel,
+    toggleScratchpad,
+    scratchpadOpen,
+    togglePreview,
+    activePanel,
+    claudeConfigSaveFile,
+    orderedWorktrees,
+    lastActiveTabByWorktree,
+    selectedSessionId,
+    selectedAgentWorktreeTicketId,
+    setSelectedAgentWorktreeTicketId,
+    selectedGroupId,
+    splitSessionId,
+    focusedPane,
+    selectSession,
+    closeSplit,
+    setFocusedPane,
+    activeGroupCellIndex,
+    setActiveGroupCellIndex,
+    layoutGroups,
+    basePath,
+    addSessionToGroup,
+    setSessionGroups,
+    focusedFloatingPanelId,
+    floatingSessionIds,
+    bringToFront,
+  ]);
 }

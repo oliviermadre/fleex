@@ -1,11 +1,13 @@
-import path from 'node:path';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 
 export interface McpStartOptions {
   /** Workspace the MCP tools target (forwarded as FLEEX_WORKSPACE → --workspace). */
   workspace?: string;
   /** Comma-separated top-level command groups to expose (FLEEX_MCP_INCLUDE). */
   include?: string;
+  /** Let destructive tools skip the CLI confirmation prompt (FLEEX_MCP_ASSUME_YES). */
+  assumeYes?: boolean;
 }
 
 /** Filesystem anchors the launcher resolves against — overridable in tests. */
@@ -45,6 +47,15 @@ export function buildMcpLaunch(opts: McpStartOptions, ctx: McpLaunchContext): Mc
 
   const include = opts.include ?? base.FLEEX_MCP_INCLUDE;
   if (include) envOverrides.FLEEX_MCP_INCLUDE = include;
+
+  // Opt-in only: without it the server refuses tools that would block on the
+  // CLI's confirmation prompt, rather than silently forcing them through.
+  // Set solely by the flag. A value already in the environment reaches the child
+  // by inheritance (see runMcpStart), so `server.ts` stays the ONE place that
+  // decides what counts as "on". Re-emitting it here meant two parsers for one
+  // security flag, and the looser one won: `FLEEX_MCP_ASSUME_YES=0` is a truthy
+  // string, so it was normalised to '1' and turned the bypass on.
+  if (opts.assumeYes) envOverrides.FLEEX_MCP_ASSUME_YES = '1';
 
   // Re-invoke this exact CLI for tool execution unless the caller overrode it.
   envOverrides.FLEEX_MCP_BIN = base.FLEEX_MCP_BIN ?? ctx.execPath;

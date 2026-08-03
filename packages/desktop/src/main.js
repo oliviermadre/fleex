@@ -1,7 +1,10 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, nativeImage } = require('electron');
-const path = require('path');
-const os = require('os');
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const { app, BrowserWindow, Menu, ipcMain, shell, nativeImage, dialog } = require('electron');
+
+const { isExternalUrl, fallbackPage } = require('./shell-helpers');
 
 // ── Configuration ────────────────────────────────────────────────────────────
 // When launched by `fleex start --desktop`, the CLI passes the server port.
@@ -10,18 +13,6 @@ app.setName('Fleex');
 
 const serverPort = process.env['FLEEX_SERVER_PORT'] || '3000';
 const serverUrl = `http://localhost:${serverPort}`;
-
-function isExternalUrl(url) {
-  try {
-    const parsed = new URL(url);
-    // Any local Fleex instance (any port) is internal — workspace switching
-    // navigates the window between instance web ports.
-    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') return false;
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
 
 const TITLEBAR_HEIGHT = 38;
 
@@ -68,9 +59,17 @@ function scanRunningInstances() {
       const ports = JSON.parse(fs.readFileSync(path.join(dir, 'ports.json'), 'utf8'));
       const pid = parseInt(fs.readFileSync(path.join(dir, 'server.pid'), 'utf8').trim(), 10);
       if (typeof ports.web !== 'number' || !Number.isFinite(pid) || pid <= 0) continue;
-      try { process.kill(pid, 0); } catch { continue; } // not alive
+      try {
+        process.kill(pid, 0);
+      } catch {
+        continue;
+      } // not alive
       let meta = {};
-      try { meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8')); } catch { /* optional */ }
+      try {
+        meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+      } catch {
+        /* optional */
+      }
       out.push({
         slug,
         workspace: meta.workspace || slug,
@@ -92,7 +91,9 @@ function currentWebPort() {
   try {
     const u = new URL(mainWindow.webContents.getURL());
     if (u.port) return parseInt(u.port, 10);
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   return parseInt(serverPort, 10);
 }
 
@@ -148,11 +149,27 @@ function updateNavMenuState() {
 }
 
 function buildApplicationMenu() {
+  // These three are declared separately so the object literals get a contextual
+  // type: inside a spread ternary they would widen `role` to `string`, which
+  // Electron's MenuItemConstructorOptions (a string-literal union) rejects.
+
+  /** @type {import('electron').MenuItemConstructorOptions[]} */
+  const appMenu = isMac ? [{ role: 'appMenu' }] : [];
+
+  /** @type {import('electron').MenuItemConstructorOptions[]} */
+  const fileSubmenu = isMac ? [{ role: 'close' }] : [{ role: 'quit' }];
+
+  /** @type {import('electron').MenuItemConstructorOptions[]} */
+  const editExtras = isMac
+    ? [{ role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' }]
+    : [{ role: 'delete' }, { type: 'separator' }, { role: 'selectAll' }];
+
+  /** @type {import('electron').MenuItemConstructorOptions[]} */
   const template = [
-    ...(isMac ? [{ role: 'appMenu' }] : []),
+    ...appMenu,
     {
       label: 'File',
-      submenu: [isMac ? { role: 'close' } : { role: 'quit' }],
+      submenu: fileSubmenu,
     },
     {
       label: 'Edit',
@@ -163,9 +180,7 @@ function buildApplicationMenu() {
         { role: 'cut' },
         { role: 'copy' },
         { role: 'paste' },
-        ...(isMac
-          ? [{ role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' }]
-          : [{ role: 'delete' }, { type: 'separator' }, { role: 'selectAll' }]),
+        ...editExtras,
       ],
     },
     {
@@ -189,7 +204,12 @@ function buildApplicationMenu() {
         // secondaries Cmd+←/Cmd+→ are handled in the preload so they keep their
         // edit meaning inside text fields / terminals.
         { id: 'nav-back', label: 'Back', accelerator: isMac ? 'Cmd+[' : 'Alt+Left', click: goBack },
-        { id: 'nav-forward', label: 'Forward', accelerator: isMac ? 'Cmd+]' : 'Alt+Right', click: goForward },
+        {
+          id: 'nav-forward',
+          label: 'Forward',
+          accelerator: isMac ? 'Cmd+]' : 'Alt+Right',
+          click: goForward,
+        },
       ],
     },
     { role: 'windowMenu' },
@@ -239,6 +259,142 @@ function wireBrowserParity(win) {
   });
 }
 
+// ── Crash & load resilience ──────────────────────────────────────────────────
+// Without any of this, the two common failure modes are both a silent white
+// window: the server is not up yet when `loadURL` fires, or the renderer dies.
+
+/** Backoff between load retries; its length is the number of attempts. */
+const LOAD_RETRY_DELAYS_MS = [1000, 2000, 4000, 4000, 4000];
+
+let loadRetryCount = 0;
+let loadRetryTimer = null;
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Replaces the blank window with something that says what went wrong. Rendered
+ * from a data: URL so it works even when nothing can be fetched.
+ */
+function showLoadErrorPage(win, targetUrl, description, retryNote) {
+  if (win.isDestroyed()) return;
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Fleex</title></head>
+<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#1a1a2e;color:#e4e4e7;font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:460px;padding:32px;text-align:center">
+    <div style="font-size:32px;margin-bottom:12px">⚠</div>
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px">Cannot reach the Fleex server</div>
+    <div style="color:#a1a1aa;margin-bottom:16px">${escapeHtml(targetUrl)}</div>
+    <div style="color:#a1a1aa;font-size:12px">${escapeHtml(description || 'Connection failed')}</div>
+    <div style="color:#71717a;font-size:12px;margin-top:16px">${escapeHtml(retryNote || 'Start the server, then reopen Fleex.')}</div>
+  </div>
+</body></html>`;
+  win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
+
+function wireCrashHandling(win) {
+  const wc = win.webContents;
+
+  // A data: URL here is our own error page — resetting on it would loop.
+  wc.on('did-finish-load', () => {
+    if (!wc.getURL().startsWith('data:')) loadRetryCount = 0;
+  });
+
+  wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    // ERR_ABORTED: a navigation superseded by another one, not a failure.
+    if (errorCode === -3) return;
+
+    const target = validatedURL && !validatedURL.startsWith('data:') ? validatedURL : serverUrl;
+    console.error('[fleex] load failed', { target, errorCode, errorDescription });
+
+    if (loadRetryCount >= LOAD_RETRY_DELAYS_MS.length) {
+      showLoadErrorPage(win, target, errorDescription, 'Gave up after 5 attempts.');
+      dialog
+        .showMessageBox(win, {
+          type: 'error',
+          title: 'Fleex',
+          message: 'Cannot reach the Fleex server',
+          detail: `${target}\n${errorDescription}`,
+          buttons: ['Retry', 'Quit'],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        .then(({ response }) => {
+          if (response !== 0 || win.isDestroyed()) return app.quit();
+          loadRetryCount = 0;
+          win.loadURL(target);
+        })
+        .catch(() => {});
+      return;
+    }
+
+    const delay = LOAD_RETRY_DELAYS_MS[loadRetryCount];
+    loadRetryCount += 1;
+    showLoadErrorPage(
+      win,
+      target,
+      errorDescription,
+      `Retrying in ${delay / 1000}s (attempt ${loadRetryCount} of ${LOAD_RETRY_DELAYS_MS.length})…`,
+    );
+
+    clearTimeout(loadRetryTimer);
+    loadRetryTimer = setTimeout(() => {
+      if (!win.isDestroyed()) win.loadURL(target);
+    }, delay);
+  });
+
+  wc.on('render-process-gone', (_event, details) => {
+    console.error('[fleex] renderer process gone', details);
+    if (win.isDestroyed()) return;
+    dialog
+      .showMessageBox(win, {
+        type: 'error',
+        title: 'Fleex',
+        message: 'The Fleex window crashed.',
+        detail: `Reason: ${details && details.reason ? details.reason : 'unknown'}`,
+        buttons: ['Reload', 'Quit'],
+        defaultId: 0,
+        cancelId: 1,
+      })
+      .then(({ response }) => {
+        if (win.isDestroyed()) return;
+        if (response === 0) {
+          loadRetryCount = 0;
+          win.loadURL(serverUrl);
+        } else {
+          app.quit();
+        }
+      })
+      .catch(() => {});
+  });
+
+  // A blocked UI thread often recovers on its own — offer, do not force.
+  win.on('unresponsive', () => {
+    console.error('[fleex] window unresponsive');
+    if (win.isDestroyed()) return;
+    dialog
+      .showMessageBox(win, {
+        type: 'warning',
+        title: 'Fleex',
+        message: 'Fleex is not responding.',
+        detail: 'A long render can block the UI thread; it may recover on its own.',
+        buttons: ['Wait', 'Reload'],
+        defaultId: 0,
+        cancelId: 0,
+      })
+      .then(({ response }) => {
+        if (response === 1 && !win.isDestroyed()) win.webContents.reload();
+      })
+      .catch(() => {});
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     icon: iconPath,
@@ -257,7 +413,21 @@ function createWindow() {
     },
   });
 
+  // Wired before the first load so a server that is not up yet is caught.
+  wireCrashHandling(mainWindow);
+
   mainWindow.loadURL(serverUrl);
+
+  // Graceful fallback: if the Fleex web UI can't be reached (e.g. the .dmg was
+  // double-clicked with no stack running yet), show a friendly "Waiting for
+  // Fleex" page with a Retry button instead of a raw Chromium error. -3 is
+  // ERR_ABORTED (normal during navigation) — ignore it, and ignore data: loads
+  // to avoid re-triggering on the fallback page itself.
+  mainWindow.webContents.on('did-fail-load', (_e, errorCode, _desc, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return;
+    if (typeof validatedURL === 'string' && validatedURL.startsWith('data:')) return;
+    mainWindow.loadURL(fallbackPage(serverUrl));
+  });
 
   wireBrowserParity(mainWindow);
 
@@ -410,8 +580,10 @@ function createWindow() {
     // port; the renderer builds the switcher and navigates on selection.
     const instances = scanRunningInstances();
     const curPort = currentWebPort();
-    const curWs = (instances.find((i) => i.webPort === curPort) || {}).workspace
-      || process.env['FLEEX_WORKSPACE'] || '';
+    const curWs =
+      (instances.find((i) => i.webPort === curPort) || {}).workspace ||
+      process.env['FLEEX_WORKSPACE'] ||
+      '';
     const instancesJson = JSON.stringify(instances);
     const currentPortJson = JSON.stringify(curPort);
     const currentWsJson = JSON.stringify(curWs);
@@ -681,6 +853,16 @@ function createWindow() {
 }
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
+
+// Electron's default for an uncaught exception in the main process is a fatal
+// error dialog and exit. A background failure — a broken IPC reply, a stale
+// window handle — should not close a window full of running agents.
+process.on('uncaughtException', (err) => {
+  console.error('[fleex] uncaught exception in main process', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[fleex] unhandled rejection in main process', reason);
+});
 
 app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) {

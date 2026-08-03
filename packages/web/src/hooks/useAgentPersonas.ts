@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
+
 import type { PersonaWsMessage } from '@fleex/shared';
+
 import { appWs } from '../services/websocket';
 import { useAgentPersonaStore } from '../stores/agentPersonaStore';
 

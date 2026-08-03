@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { buildMcpLaunch, type McpLaunchContext } from '../../src/commands/mcp/start/_impl.ts';
 
 const ctx: McpLaunchContext = {
@@ -51,6 +52,29 @@ describe('buildMcpLaunch', () => {
     expect(envOverrides.FLEEX_MCP_PREFIX).toBe('');
     expect(envOverrides.FLEEX_WORKSPACE).toBe('from-env');
     expect(envOverrides.FLEEX_MCP_INCLUDE).toBe('ticket');
+  });
+
+  it('keeps the confirmation bypass off unless explicitly asked for', () => {
+    // The server refuses prompt-blocking tools by default; enabling the bypass
+    // hands approval authority to the MCP client, so it must be a conscious act.
+    expect('FLEEX_MCP_ASSUME_YES' in buildMcpLaunch({}, ctx).envOverrides).toBe(false);
+    expect(buildMcpLaunch({ assumeYes: true }, ctx).envOverrides.FLEEX_MCP_ASSUME_YES).toBe('1');
+  });
+
+  it('never rewrites the bypass value the server is responsible for parsing', () => {
+    // Regression: the launcher used to re-emit any non-empty FLEEX_MCP_ASSUME_YES
+    // as '1'. Since '0' is a truthy string, `FLEEX_MCP_ASSUME_YES=0` — the most
+    // natural way to say "off" — silently turned the bypass ON. Two parsers for
+    // one security flag, and the looser one won.
+    //
+    // The launcher now sets the variable only for --assume-yes; anything already
+    // in the environment reaches the child untouched by inheritance, so the
+    // strict predicate in server.ts is the only thing that decides.
+    for (const raw of ['0', 'false', 'off', 'no', '1', 'true', 'yes']) {
+      const base = { FLEEX_MCP_ASSUME_YES: raw } as NodeJS.ProcessEnv;
+      const { envOverrides } = buildMcpLaunch({}, { ...ctx, baseEnv: base });
+      expect('FLEEX_MCP_ASSUME_YES' in envOverrides, `env value ${raw}`).toBe(false);
+    }
   });
 
   it('an explicit flag still wins over the env (flag > env > default)', () => {

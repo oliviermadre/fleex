@@ -1,8 +1,10 @@
 import type { Ticket, TicketPriority } from '@fleex/shared';
-import { PriorityIndicator } from './PriorityIndicator';
-import { useTicketStore } from '../../stores/ticketStore';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
+import { useTicketStore } from '../../stores/ticketStore';
+
+import { PriorityIndicator } from './PriorityIndicator';
 
 const PRIORITIES: TicketPriority[] = ['high', 'medium', 'low', 'none'];
 

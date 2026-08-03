@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+
 import { ActivityBadge } from './ActivityBadge';
 
 /**
@@ -105,8 +106,6 @@ describe('ActivityBadge', () => {
       'whitespace-nowrap',
     );
     const idle = render(<ActivityBadge activity="idle" lastActivityAt={ago(11 * HOUR)} />);
-    expect(idle.container.querySelector('.rounded-full')?.className).toContain(
-      'whitespace-nowrap',
-    );
+    expect(idle.container.querySelector('.rounded-full')?.className).toContain('whitespace-nowrap');
   });
 });

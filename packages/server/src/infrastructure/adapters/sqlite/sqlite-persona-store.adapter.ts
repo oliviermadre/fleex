@@ -1,6 +1,7 @@
 import { AgentPersonaEntity } from '../../../domain/entities/agent-persona.entity.js';
-import type { PersonaStorePort } from '../../../application/ports/persona-store.port.js';
+
 import type { SqliteConnection } from './connection.js';
+import type { PersonaStorePort } from '../../../application/ports/persona-store.port.js';
 
 interface PersonaRow {
   id: string;
@@ -27,16 +28,14 @@ export class SqlitePersonaStoreAdapter implements PersonaStorePort {
   }
 
   async getById(id: string): Promise<AgentPersonaEntity | null> {
-    const row = this.conn.db
-      .prepare('SELECT * FROM agent_personas WHERE id = ?')
-      .get(id) as PersonaRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM agent_personas WHERE id = ?').get(id) as
+      PersonaRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 
   async getByName(name: string): Promise<AgentPersonaEntity | null> {
-    const row = this.conn.db
-      .prepare('SELECT * FROM agent_personas WHERE name = ?')
-      .get(name) as PersonaRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM agent_personas WHERE name = ?').get(name) as
+      PersonaRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 

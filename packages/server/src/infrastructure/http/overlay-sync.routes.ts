@@ -1,4 +1,3 @@
-import type { FastifyInstance } from 'fastify';
 import type {
   OverlaySyncApplyRequest,
   OverlaySyncPreviewRequest,
@@ -6,7 +5,9 @@ import type {
   OverlaySyncScanRequest,
   OverlaySyncScanResponse,
 } from '@fleex/shared';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 /**
  * Overlay sync: capture a worktree's gitignored files into the per-repo

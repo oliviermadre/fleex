@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+
 import { useUIStore } from '../../stores/uiStore';
 
 const NAV_COLLAPSED_WIDTH = 55;
@@ -35,7 +36,7 @@ export function ResizeHandle() {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [setContentPanelWidth]
+    [setContentPanelWidth],
   );
 
   return (

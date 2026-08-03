@@ -1,8 +1,9 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
-import { resolveEpic } from '../_shared.ts';
+import { ok } from '../../../core/colors.ts';
 import { resolveBoard } from '../../board/_shared.ts';
+import { resolveEpic } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const def: CommandDef = {
   workspaceAware: true,

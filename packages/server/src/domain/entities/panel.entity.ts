@@ -65,10 +65,13 @@ export class PanelEntity {
     if (changes.description !== undefined) this.description = changes.description;
     if (changes.executionMode !== undefined) this.executionMode = changes.executionMode;
     if (changes.members !== undefined) this.members = changes.members;
-    if (changes.orchestratorPrompt !== undefined) this.orchestratorPrompt = changes.orchestratorPrompt;
+    if (changes.orchestratorPrompt !== undefined)
+      this.orchestratorPrompt = changes.orchestratorPrompt;
     if (changes.orchestratorModel !== undefined) this.orchestratorModel = changes.orchestratorModel;
-    if (changes.orchestratorPersonaId !== undefined) this.orchestratorPersonaId = changes.orchestratorPersonaId;
-    if (changes.defaultMemberModel !== undefined) this.defaultMemberModel = changes.defaultMemberModel;
+    if (changes.orchestratorPersonaId !== undefined)
+      this.orchestratorPersonaId = changes.orchestratorPersonaId;
+    if (changes.defaultMemberModel !== undefined)
+      this.defaultMemberModel = changes.defaultMemberModel;
     if (changes.enabled !== undefined) this.enabled = changes.enabled;
     this.updatedAt = new Date();
   }

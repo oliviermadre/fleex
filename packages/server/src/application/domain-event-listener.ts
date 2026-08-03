@@ -1,19 +1,21 @@
-import type { EventBus } from './event-bus.js';
 import { BroadcastRegistrar, type BroadcastFn } from './broadcast-registrar.js';
-import type { PersonaStorePort } from './ports/persona-store.port.js';
-import type { SkillStorePort } from './ports/skill-store.port.js';
-import type { TicketStorePort } from './ports/ticket-store.port.js';
-import type { MentionStorePort } from './ports/mention-store.port.js';
+
+import type { EventBus } from './event-bus.js';
 import type { CommentStorePort } from './ports/comment-store.port.js';
 import type { DeliverableStorePort } from './ports/deliverable-store.port.js';
 import type { LoggerPort } from './ports/logger.port.js';
-import type { AutoReviewWorkflowUseCase } from './use-cases/auto-review-workflow.js';
-import type { ExecuteAgentUseCase } from './use-cases/execute-agent.js';
-import type { WakeWaitingAgentsUseCase } from './use-cases/wake-waiting-agents.js';
-import type { RunPanelUseCase } from './use-cases/run-panel.js';
-import type { GenerateTicketSummaryUseCase } from './use-cases/generate-ticket-summary.js';
+import type { MentionStorePort } from './ports/mention-store.port.js';
+import type { PersonaStorePort } from './ports/persona-store.port.js';
+import type { SkillStorePort } from './ports/skill-store.port.js';
+import type { TicketStorePort } from './ports/ticket-store.port.js';
 import type { WorkflowTemplateStorePort } from './ports/workflow-template-store.port.js';
+import type { AutoReviewWorkflowUseCase } from './use-cases/auto-review-workflow.js';
 import type { CreateWorkflowRunUseCase } from './use-cases/create-workflow-run.js';
+import type { ExecuteAgentUseCase } from './use-cases/execute-agent.js';
+import type { GenerateTicketSummaryUseCase } from './use-cases/generate-ticket-summary.js';
+import type { PostCommentUseCase } from './use-cases/post-comment.js';
+import type { RunPanelUseCase } from './use-cases/run-panel.js';
+import type { WakeWaitingAgentsUseCase } from './use-cases/wake-waiting-agents.js';
 import type {
   CommentPostedEvent,
   CommentUpdatedEvent,
@@ -42,6 +44,9 @@ export interface DomainEventListenerDeps {
   logger: LoggerPort;
   workflowTemplateStore?: WorkflowTemplateStorePort | null;
   createWorkflowRun?: CreateWorkflowRunUseCase | null;
+  /** Used to explain, in the ticket, why a @workflow: mention could not run. */
+  postComment?: PostCommentUseCase;
+  storageDriver?: string;
 }
 
 /**
@@ -72,7 +77,10 @@ export class DomainEventListener {
   }
 
   /** Called after Phase B wiring to attach workflow deps (which are initialized after the listener) */
-  setWorkflowDeps(deps: { workflowTemplateStore: WorkflowTemplateStorePort | null; createWorkflowRun: CreateWorkflowRunUseCase | null }): void {
+  setWorkflowDeps(deps: {
+    workflowTemplateStore: WorkflowTemplateStorePort | null;
+    createWorkflowRun: CreateWorkflowRunUseCase | null;
+  }): void {
     this.deps.workflowTemplateStore = deps.workflowTemplateStore;
     this.deps.createWorkflowRun = deps.createWorkflowRun;
   }
@@ -119,10 +127,18 @@ export class DomainEventListener {
     // ── Cross-cutting: Auto-review workflow ──
     bus.on('comment.posted', (e) => this.handleCommentPostedWorkflow(e as CommentPostedEvent));
     bus.on('comment.updated', (e) => this.handleCommentUpdatedWorkflow(e as CommentUpdatedEvent));
-    bus.on('mention.resolved', (e) => this.handleMentionResolvedWorkflow(e as MentionResolvedEvent));
-    bus.on('mention.waiting_for_info', (e) => this.handleMentionWaitingWorkflow(e as MentionWaitingForInfoEvent));
-    bus.on('deliverable.created', (e) => this.handleDeliverableWorkflow(e as DeliverableCreatedEvent));
-    bus.on('deliverable.updated', (e) => this.handleDeliverableUpdatedWorkflow(e as DeliverableUpdatedEvent));
+    bus.on('mention.resolved', (e) =>
+      this.handleMentionResolvedWorkflow(e as MentionResolvedEvent),
+    );
+    bus.on('mention.waiting_for_info', (e) =>
+      this.handleMentionWaitingWorkflow(e as MentionWaitingForInfoEvent),
+    );
+    bus.on('deliverable.created', (e) =>
+      this.handleDeliverableWorkflow(e as DeliverableCreatedEvent),
+    );
+    bus.on('deliverable.updated', (e) =>
+      this.handleDeliverableUpdatedWorkflow(e as DeliverableUpdatedEvent),
+    );
 
     // ── Cross-cutting: Auto-resolve all mentions when ticket → done ──
     bus.on('ticket.moved', (e) => this.handleTicketMovedToDone(e as TicketMovedEvent));
@@ -130,11 +146,15 @@ export class DomainEventListener {
 
     // ── Cross-cutting: Auto-generate ticket summary on close ──
     bus.on('ticket.moved', (e) => this.handleTicketClosedForSummary(e as TicketMovedEvent));
-    bus.on('ticket.updated', (e) => this.handleTicketUpdatedClosedForSummary(e as TicketUpdatedEvent));
+    bus.on('ticket.updated', (e) =>
+      this.handleTicketUpdatedClosedForSummary(e as TicketUpdatedEvent),
+    );
 
     // ── Cross-cutting: Wake waiting agents on new content ──
     bus.on('comment.posted', (e) => this.handleWakeWaitingOnComment(e as CommentPostedEvent));
-    bus.on('deliverable.created', (e) => this.handleWakeWaitingOnDeliverable(e as DeliverableCreatedEvent));
+    bus.on('deliverable.created', (e) =>
+      this.handleWakeWaitingOnDeliverable(e as DeliverableCreatedEvent),
+    );
 
     // ── Cross-cutting: Auto-resolve human mentions when human posts ──
     bus.on('comment.posted', (e) => this.handleAutoResolveHumanMentions(e as CommentPostedEvent));
@@ -164,17 +184,19 @@ export class DomainEventListener {
   private async handleAutoTriggerPanel(event: MentionCreatedEvent): Promise<void> {
     if (event.targetType !== 'panel') return;
 
-    this.deps.runPanel.execute({
-      panelName: event.targetAgent,
-      ticketId: event.ticketId,
-      mentionId: event.mentionId,
-    }).catch((err) => {
-      this.deps.logger.error('Panel auto-trigger failed', {
+    this.deps.runPanel
+      .execute({
         panelName: event.targetAgent,
         ticketId: event.ticketId,
-        error: err instanceof Error ? err.message : String(err),
+        mentionId: event.mentionId,
+      })
+      .catch((err) => {
+        this.deps.logger.error('Panel auto-trigger failed', {
+          panelName: event.targetAgent,
+          ticketId: event.ticketId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
-    });
   }
 
   // ── Auto-trigger skill execution ──
@@ -199,20 +221,20 @@ export class DomainEventListener {
     if (!mention) return;
 
     const comment = await this.deps.commentStore.getById(mention.commentId);
-    const commentBody = comment
-      ? comment.body.replace(/@skill:[a-zA-Z0-9_-]+/g, '').trim()
-      : '';
+    const commentBody = comment ? comment.body.replace(/@skill:[a-zA-Z0-9_-]+/g, '').trim() : '';
 
-    this.deps.executeAgent.executeForSkill(skill.id, event.ticketId, {
-      commentBody: commentBody || undefined,
-      mentionId: event.mentionId,
-    }).catch((err) => {
-      this.deps.logger.error('Skill auto-trigger failed', {
-        skillName: event.targetAgent,
-        ticketId: event.ticketId,
-        error: err instanceof Error ? err.message : String(err),
+    this.deps.executeAgent
+      .executeForSkill(skill.id, event.ticketId, {
+        commentBody: commentBody || undefined,
+        mentionId: event.mentionId,
+      })
+      .catch((err) => {
+        this.deps.logger.error('Skill auto-trigger failed', {
+          skillName: event.targetAgent,
+          ticketId: event.ticketId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
-    });
   }
 
   // ── Auto-trigger workflow run ──
@@ -220,11 +242,15 @@ export class DomainEventListener {
   private async handleAutoTriggerWorkflow(event: MentionCreatedEvent): Promise<void> {
     if (event.targetType !== 'workflow') return;
 
-    // workflow stores may be null on unsupported adapters
+    // Workflow stores may be null on unsupported adapters. Tell the user in the
+    // ticket instead of only warning server-side — otherwise they sit waiting for
+    // an agent that will never come.
     if (!this.deps.workflowTemplateStore || !this.deps.createWorkflowRun) {
       this.deps.logger.warn('Workflow mention received but workflow stores not configured', {
-        slug: event.targetAgent, ticketId: event.ticketId,
+        slug: event.targetAgent,
+        ticketId: event.ticketId,
       });
+      await this.reportWorkflowUnavailable(event);
       return;
     }
 
@@ -240,24 +266,58 @@ export class DomainEventListener {
     }
 
     // Fire and forget — create the workflow run
-    this.deps.createWorkflowRun.execute({
-      ticketId: event.ticketId,
-      templateId: template.id,
-      triggeredBy: event.sourceAgent,
-      triggeredFrom: `mention:${event.mentionId}`,
-    }).then(async () => {
-      // Resolve the mention after the run is created
-      const mention = await this.deps.mentionStore.getById(event.mentionId);
-      if (mention && mention.status !== 'resolved') {
-        mention.resolve();
-        await this.deps.mentionStore.save(mention);
-      }
-    }).catch((err) => {
-      this.deps.logger.error('Workflow auto-trigger failed', {
-        slug: event.targetAgent, ticketId: event.ticketId,
+    this.deps.createWorkflowRun
+      .execute({
+        ticketId: event.ticketId,
+        templateId: template.id,
+        triggeredBy: event.sourceAgent,
+        triggeredFrom: `mention:${event.mentionId}`,
+      })
+      .then(async () => {
+        // Resolve the mention after the run is created
+        const mention = await this.deps.mentionStore.getById(event.mentionId);
+        if (mention && mention.status !== 'resolved') {
+          mention.resolve();
+          await this.deps.mentionStore.save(mention);
+        }
+      })
+      .catch((err) => {
+        this.deps.logger.error('Workflow auto-trigger failed', {
+          slug: event.targetAgent,
+          ticketId: event.ticketId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+  }
+
+  /**
+   * A workflow was mentioned on a driver that cannot run workflows. Say so in the
+   * ticket and resolve the mention, so nothing is left hanging in "waiting" forever.
+   */
+  private async reportWorkflowUnavailable(event: MentionCreatedEvent): Promise<void> {
+    const driver = this.deps.storageDriver ?? 'unknown';
+    try {
+      await this.deps.postComment?.execute({
+        ticketId: event.ticketId,
+        authorType: 'agent',
+        authorName: `workflow:${event.targetAgent}`,
+        body:
+          `⚠️ Le workflow \`@workflow:${event.targetAgent}\` n'a pas pu démarrer : ` +
+          `les workflows ne sont pas disponibles sur le driver de stockage \`${driver}\`.`,
+      });
+    } catch (err) {
+      this.deps.logger.error('Failed to report workflow unavailability', {
+        slug: event.targetAgent,
+        ticketId: event.ticketId,
         error: err instanceof Error ? err.message : String(err),
       });
-    });
+    }
+
+    const mention = await this.deps.mentionStore.getById(event.mentionId);
+    if (mention && mention.status !== 'resolved') {
+      mention.resolve();
+      await this.deps.mentionStore.save(mention);
+    }
   }
 
   // ── Comment posted workflow: handle mentions for auto-review ──
@@ -368,7 +428,10 @@ export class DomainEventListener {
   }
 
   private async handleWakeWaitingOnDeliverable(event: DeliverableCreatedEvent): Promise<void> {
-    await this.deps.wakeWaitingAgents.execute(event.ticketId, event.agentName ? [event.agentName] : []);
+    await this.deps.wakeWaitingAgents.execute(
+      event.ticketId,
+      event.agentName ? [event.agentName] : [],
+    );
   }
 
   // ── Auto-generate ticket summary on close ──
@@ -376,30 +439,34 @@ export class DomainEventListener {
   private handleTicketClosedForSummary(event: TicketMovedEvent): void {
     if (event.fromStatus === event.toStatus) return; // no-op move (reorder) → pas de régénération du summary
     if (event.toStatus === 'done' || event.toStatus === 'cancelled') {
-      this.deps.generateTicketSummary.execute({
-        ticketId: event.ticketId,
-        status: event.toStatus as 'done' | 'cancelled',
-      }).catch((err) => {
-        this.deps.logger.error('Ticket summary generation failed', {
+      this.deps.generateTicketSummary
+        .execute({
           ticketId: event.ticketId,
-          error: err instanceof Error ? err.message : String(err),
+          status: event.toStatus as 'done' | 'cancelled',
+        })
+        .catch((err) => {
+          this.deps.logger.error('Ticket summary generation failed', {
+            ticketId: event.ticketId,
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
-      });
     }
   }
 
   private handleTicketUpdatedClosedForSummary(event: TicketUpdatedEvent): void {
     const statusChange = event.changes['status'];
     if (statusChange && (statusChange.to === 'done' || statusChange.to === 'cancelled')) {
-      this.deps.generateTicketSummary.execute({
-        ticketId: event.ticketId,
-        status: statusChange.to as 'done' | 'cancelled',
-      }).catch((err) => {
-        this.deps.logger.error('Ticket summary generation failed', {
+      this.deps.generateTicketSummary
+        .execute({
           ticketId: event.ticketId,
-          error: err instanceof Error ? err.message : String(err),
+          status: statusChange.to as 'done' | 'cancelled',
+        })
+        .catch((err) => {
+          this.deps.logger.error('Ticket summary generation failed', {
+            ticketId: event.ticketId,
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
-      });
     }
   }
 

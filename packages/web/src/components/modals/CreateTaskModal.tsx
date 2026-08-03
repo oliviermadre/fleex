@@ -1,15 +1,17 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+
 import type { Ticket, DashboardPullRequest, BoardWithCounts } from '@fleex/shared';
-import { Modal } from '../ui/Modal';
-import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
-import { useUIStore } from '../../stores/uiStore';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useRepositoryStore } from '../../stores/repositoryStore';
-import * as api from '../../services/api';
+
 import { cn } from '../../lib/cn';
 import { tint, tintSolid, tintText } from '../../lib/tints';
+import * as api from '../../services/api';
+import { useRepositoryStore } from '../../stores/repositoryStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUIStore } from '../../stores/uiStore';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
+import { Modal } from '../ui/Modal';
 
 type TaskMode = 'ticket' | 'my-prs' | 'review' | 'new';
 
@@ -61,7 +63,9 @@ export function CreateTaskModal() {
   const [taskTitle, setTaskTitle] = useState('');
   const [selectedBoardId, setSelectedBoardId] = useState('');
   const repos = useRepositoryStore((s) => s.repositories);
+  const fetchRepositories = useRepositoryStore((s) => s.fetchRepositories);
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
+  const [loadingRepos, setLoadingRepos] = useState(false);
 
   // Load data when modal opens
   useEffect(() => {
@@ -72,7 +76,8 @@ export function CreateTaskModal() {
     }
     // Load dashboard PRs
     setLoadingPRs(true);
-    api.fetchDashboard()
+    api
+      .fetchDashboard()
       .then((data) => {
         setMyPRs(data.myPullRequests);
         setReviewPRs(data.reviewRequests);
@@ -80,6 +85,29 @@ export function CreateTaskModal() {
       .catch(() => {})
       .finally(() => setLoadingPRs(false));
   }, [open, fetchTickets, boards, selectedBoardId]);
+
+  // Refresh the repository list on every open. Kept separate from the effect
+  // above, whose deps make it re-run on every board change. The list is
+  // otherwise loaded once at app boot, so repos added since (from the
+  // Repositories panel, the CLI, or another window) would never show up here.
+  useEffect(() => {
+    if (!open) return;
+    setLoadingRepos(true);
+    void fetchRepositories().finally(() => setLoadingRepos(false));
+  }, [open, fetchRepositories]);
+
+  // Drop selections for repos that are no longer tracked: a ticket linked to an
+  // untracked repo is filtered out of the sidebar, so its session would be
+  // created but invisible.
+  useEffect(() => {
+    if (!open) return;
+    setSelectedRepos((prev) => {
+      if (prev.size === 0) return prev;
+      const tracked = new Set(repos.map((r) => `${r.org}/${r.name}`));
+      const next = new Set([...prev].filter((key) => tracked.has(key)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [open, repos]);
 
   // Reset on close
   useEffect(() => {
@@ -94,7 +122,6 @@ export function CreateTaskModal() {
       setCreating(false);
     }
   }, [open]);
-
 
   // Filtered tickets for search
   const filteredTickets = useMemo(() => {
@@ -137,7 +164,10 @@ export function CreateTaskModal() {
         } else {
           // Create a new ticket for this PR
           const boardId = selectedBoardId || boards[0]?.id;
-          if (!boardId) { setError('No board available'); return; }
+          if (!boardId) {
+            setError('No board available');
+            return;
+          }
           const tag = mode === 'review' ? 'review' : undefined;
           const repoKey = `${selectedPR.org}/${selectedPR.name}`;
           const ticket = await createTicket({
@@ -146,9 +176,19 @@ export function CreateTaskModal() {
             status: 'todo',
             tags: tag ? [tag] : [],
             links: [
-              { type: 'github_pr', ref: prRef, label: `#${selectedPR.number}`, url: `https://github.com/${selectedPR.org}/${selectedPR.name}/pull/${selectedPR.number}` },
+              {
+                type: 'github_pr',
+                ref: prRef,
+                label: `#${selectedPR.number}`,
+                url: `https://github.com/${selectedPR.org}/${selectedPR.name}/pull/${selectedPR.number}`,
+              },
               { type: 'repository', ref: repoKey, label: selectedPR.name, url: null },
-              { type: 'worktree', ref: `${repoKey}:${selectedPR.headRefName}`, label: selectedPR.headRefName, url: null },
+              {
+                type: 'worktree',
+                ref: `${repoKey}:${selectedPR.headRefName}`,
+                label: selectedPR.headRefName,
+                url: null,
+              },
             ],
           });
           ticketId = ticket.id;
@@ -157,7 +197,10 @@ export function CreateTaskModal() {
         // New task
         if (!taskTitle.trim()) return;
         const boardId = selectedBoardId || boards[0]?.id;
-        if (!boardId) { setError('No board available'); return; }
+        if (!boardId) {
+          setError('No board available');
+          return;
+        }
         const repoLinks = [...selectedRepos].map((key) => {
           const name = key.split('/')[1] ?? key;
           return { type: 'repository' as const, ref: key, label: name, url: null as string | null };
@@ -190,7 +233,21 @@ export function CreateTaskModal() {
       setError(err instanceof Error ? err.message : 'Failed to create task');
       setCreating(false);
     }
-  }, [mode, selectedTicketId, selectedPR, taskTitle, selectedBoardId, selectedRepos, boards, tickets, createTicket, openSessionFromTicket, setActivePanel, selectTicketTab, closeModal]);
+  }, [
+    mode,
+    selectedTicketId,
+    selectedPR,
+    taskTitle,
+    selectedBoardId,
+    selectedRepos,
+    boards,
+    tickets,
+    createTicket,
+    openSessionFromTicket,
+    setActivePanel,
+    selectTicketTab,
+    closeModal,
+  ]);
 
   // Cmd+Enter to submit
   useEffect(() => {
@@ -205,11 +262,13 @@ export function CreateTaskModal() {
     return () => window.removeEventListener('keydown', handler);
   }, [open, handleSubmit]);
 
-  const isDisabled = creating || (
-    mode === 'ticket' ? !selectedTicketId :
-    mode === 'my-prs' || mode === 'review' ? !selectedPR :
-    !taskTitle.trim() || selectedRepos.size === 0
-  );
+  const isDisabled =
+    creating ||
+    (mode === 'ticket'
+      ? !selectedTicketId
+      : mode === 'my-prs' || mode === 'review'
+        ? !selectedPR
+        : !taskTitle.trim() || selectedRepos.size === 0);
 
   return (
     <Modal open={open} onClose={closeModal} maxWidth="max-w-3xl">
@@ -248,7 +307,9 @@ export function CreateTaskModal() {
             />
             <div className="max-h-[260px] overflow-y-auto">
               {filteredTickets.length === 0 ? (
-                <p className="py-8 text-center text-xs text-[var(--theme-text-muted)]">No tickets found</p>
+                <p className="py-8 text-center text-xs text-[var(--theme-text-muted)]">
+                  No tickets found
+                </p>
               ) : (
                 filteredTickets.map((t) => (
                   <button
@@ -262,12 +323,16 @@ export function CreateTaskModal() {
                     onClick={() => setSelectedTicketId(t.id)}
                     onDoubleClick={handleSubmit}
                   >
-                    <span className={cn(
-                      'inline-block w-1.5 h-1.5 rounded-full flex-shrink-0',
-                      t.status === 'doing' ? tintSolid('blue') :
-                      t.status === 'todo' ? tintSolid('orange') :
-                      'bg-[var(--theme-text-faint)]',
-                    )} />
+                    <span
+                      className={cn(
+                        'inline-block w-1.5 h-1.5 rounded-full flex-shrink-0',
+                        t.status === 'doing'
+                          ? tintSolid('blue')
+                          : t.status === 'todo'
+                            ? tintSolid('orange')
+                            : 'bg-[var(--theme-text-faint)]',
+                      )}
+                    />
                     <span className="truncate flex-1">{t.title}</span>
                     <span className="text-[10px] text-[var(--theme-text-faint)]">{t.status}</span>
                   </button>
@@ -281,14 +346,18 @@ export function CreateTaskModal() {
         {mode === 'my-prs' && (
           <div>
             {loadingPRs ? (
-              <p className="py-8 text-center text-xs text-[var(--theme-text-muted)]">Loading PRs...</p>
+              <p className="py-8 text-center text-xs text-[var(--theme-text-muted)]">
+                Loading PRs...
+              </p>
             ) : myPRs.length === 0 ? (
               <p className="py-8 text-center text-xs text-[var(--theme-text-muted)]">No open PRs</p>
             ) : (
               <div className="max-h-[300px] overflow-y-auto">
                 {myPRs.map((pr) => {
                   const prRef = `${pr.org}/${pr.name}#${pr.number}`;
-                  const hasTicket = tickets.some((t) => t.links.some((l) => l.type === 'github_pr' && l.ref === prRef));
+                  const hasTicket = tickets.some((t) =>
+                    t.links.some((l) => l.type === 'github_pr' && l.ref === prRef),
+                  );
                   return (
                     <button
                       key={prRef}
@@ -301,13 +370,26 @@ export function CreateTaskModal() {
                       onClick={() => setSelectedPR(pr)}
                       onDoubleClick={handleSubmit}
                     >
-                      <span className="text-[var(--theme-text-faint)] text-xs w-8 flex-shrink-0">#{pr.number}</span>
+                      <span className="text-[var(--theme-text-faint)] text-xs w-8 flex-shrink-0">
+                        #{pr.number}
+                      </span>
                       <span className="truncate flex-1">{pr.title}</span>
-                      <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">{pr.org}/{pr.name}</span>
+                      <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">
+                        {pr.org}/{pr.name}
+                      </span>
                       {hasTicket && (
-                        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium flex-shrink-0', tint('green'))}>has ticket</span>
+                        <span
+                          className={cn(
+                            'rounded border px-1.5 py-0.5 text-[9px] font-medium flex-shrink-0',
+                            tint('green'),
+                          )}
+                        >
+                          has ticket
+                        </span>
                       )}
-                      <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">{timeAgo(pr.updatedAt)}</span>
+                      <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">
+                        {timeAgo(pr.updatedAt)}
+                      </span>
                     </button>
                   );
                 })}
@@ -320,14 +402,20 @@ export function CreateTaskModal() {
         {mode === 'review' && (
           <div>
             {loadingPRs ? (
-              <p className="py-8 text-center text-xs text-[var(--theme-text-muted)]">Loading PRs...</p>
+              <p className="py-8 text-center text-xs text-[var(--theme-text-muted)]">
+                Loading PRs...
+              </p>
             ) : reviewPRs.length === 0 ? (
-              <p className="py-8 text-center text-xs text-[var(--theme-text-muted)]">No PRs to review</p>
+              <p className="py-8 text-center text-xs text-[var(--theme-text-muted)]">
+                No PRs to review
+              </p>
             ) : (
               <div className="max-h-[300px] overflow-y-auto">
                 {reviewPRs.map((pr) => {
                   const prRef = `${pr.org}/${pr.name}#${pr.number}`;
-                  const hasTicket = tickets.some((t) => t.links.some((l) => l.type === 'github_pr' && l.ref === prRef));
+                  const hasTicket = tickets.some((t) =>
+                    t.links.some((l) => l.type === 'github_pr' && l.ref === prRef),
+                  );
                   return (
                     <button
                       key={prRef}
@@ -340,14 +428,29 @@ export function CreateTaskModal() {
                       onClick={() => setSelectedPR(pr)}
                       onDoubleClick={handleSubmit}
                     >
-                      <span className="text-[var(--theme-text-faint)] text-xs w-8 flex-shrink-0">#{pr.number}</span>
+                      <span className="text-[var(--theme-text-faint)] text-xs w-8 flex-shrink-0">
+                        #{pr.number}
+                      </span>
                       <span className="truncate flex-1">{pr.title}</span>
-                      <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">{pr.author}</span>
-                      <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">{pr.org}/{pr.name}</span>
+                      <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">
+                        {pr.author}
+                      </span>
+                      <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">
+                        {pr.org}/{pr.name}
+                      </span>
                       {hasTicket && (
-                        <span className={cn('rounded border px-1.5 py-0.5 text-[9px] font-medium flex-shrink-0', tint('green'))}>has ticket</span>
+                        <span
+                          className={cn(
+                            'rounded border px-1.5 py-0.5 text-[9px] font-medium flex-shrink-0',
+                            tint('green'),
+                          )}
+                        >
+                          has ticket
+                        </span>
                       )}
-                      <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">{timeAgo(pr.updatedAt)}</span>
+                      <span className="text-[10px] text-[var(--theme-text-faint)] flex-shrink-0">
+                        {timeAgo(pr.updatedAt)}
+                      </span>
                     </button>
                   );
                 })}
@@ -361,7 +464,9 @@ export function CreateTaskModal() {
           <div className="space-y-4">
             {/* Task title */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">Task name</label>
+              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">
+                Task name
+              </label>
               <Input
                 autoFocus
                 className="w-full py-2"
@@ -373,14 +478,18 @@ export function CreateTaskModal() {
 
             {/* Board selector */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">Board</label>
+              <label className="mb-1 block text-xs font-medium text-[var(--theme-text-secondary)]">
+                Board
+              </label>
               <select
                 className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-2 text-sm text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]"
                 value={selectedBoardId}
                 onChange={(e) => setSelectedBoardId(e.target.value)}
               >
                 {boards.map((b) => (
-                  <option key={b.id} value={b.id}>{b.emoji} {b.name}</option>
+                  <option key={b.id} value={b.id}>
+                    {b.emoji} {b.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -391,33 +500,44 @@ export function CreateTaskModal() {
                 Repositories ({selectedRepos.size} selected)
               </label>
               <div className="max-h-[160px] overflow-y-auto rounded-md border border-[var(--theme-border)] p-1">
-                {[...repos].sort((a, b) => a.org.localeCompare(b.org) || a.name.localeCompare(b.name)).map((r) => {
-                  const key = `${r.org}/${r.name}`;
-                  const selected = selectedRepos.has(key);
-                  return (
-                    <button
-                      key={key}
-                      className={cn(
-                        'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors',
-                        selected
-                          ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'
-                          : 'text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-hover)]',
-                      )}
-                      onClick={() => toggleRepo(key)}
-                    >
-                      <span className={cn(
-                        'flex h-4 w-4 items-center justify-center rounded border text-[10px] flex-shrink-0',
-                        selected
-                          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
-                          : 'border-[var(--theme-border-input)]',
-                      )}>
-                        {selected && '✓'}
-                      </span>
-                      <span className="text-[var(--theme-text-faint)] text-xs">{r.org}/</span>
-                      <span className="font-medium">{r.name}</span>
-                    </button>
-                  );
-                })}
+                {repos.length === 0 && (
+                  <p className="px-2 py-3 text-center text-xs text-[var(--theme-text-muted)]">
+                    {loadingRepos
+                      ? 'Loading repositories...'
+                      : 'No repositories tracked — add one from the Repositories panel'}
+                  </p>
+                )}
+                {[...repos]
+                  .sort((a, b) => a.org.localeCompare(b.org) || a.name.localeCompare(b.name))
+                  .map((r) => {
+                    const key = `${r.org}/${r.name}`;
+                    const selected = selectedRepos.has(key);
+                    return (
+                      <button
+                        key={key}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors',
+                          selected
+                            ? 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]'
+                            : 'text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-hover)]',
+                        )}
+                        onClick={() => toggleRepo(key)}
+                      >
+                        <span
+                          className={cn(
+                            'flex h-4 w-4 items-center justify-center rounded border text-[10px] flex-shrink-0',
+                            selected
+                              ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
+                              : 'border-[var(--theme-border-input)]',
+                          )}
+                        >
+                          {selected && '✓'}
+                        </span>
+                        <span className="text-[var(--theme-text-faint)] text-xs">{r.org}/</span>
+                        <span className="font-medium">{r.name}</span>
+                      </button>
+                    );
+                  })}
               </div>
             </div>
           </div>
@@ -425,19 +545,14 @@ export function CreateTaskModal() {
       </div>
 
       {/* Error */}
-      {error && (
-        <p className={`mt-3 text-xs ${tintText('red')}`}>{error}</p>
-      )}
+      {error && <p className={`mt-3 text-xs ${tintText('red')}`}>{error}</p>}
 
       {/* Actions */}
       <div className="mt-4 flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={closeModal}>Cancel</Button>
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={isDisabled}
-          onClick={handleSubmit}
-        >
+        <Button variant="ghost" size="sm" onClick={closeModal}>
+          Cancel
+        </Button>
+        <Button variant="primary" size="sm" disabled={isDisabled} onClick={handleSubmit}>
           {creating ? 'Creating...' : mode === 'ticket' ? 'Open Session' : 'Create & Start'}
           {!creating && <span className="ml-2 text-[10px] opacity-60">⌘↵</span>}
         </Button>

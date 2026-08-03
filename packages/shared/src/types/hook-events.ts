@@ -18,19 +18,10 @@ export type HookEventType =
   | 'preToolUse';
 
 /** Whitelisted Notification.notification_type values that map to `waiting`. */
-export type NotificationKind =
-  | 'permission_prompt'
-  | 'idle_prompt'
-  | 'elicitation_dialog';
+export type NotificationKind = 'permission_prompt' | 'idle_prompt' | 'elicitation_dialog';
 
 /** Semantic session status derived from hooks. */
-export type SessionHookStatus =
-  | 'unknown'
-  | 'working'
-  | 'waiting'
-  | 'complete'
-  | 'error'
-  | 'idle';
+export type SessionHookStatus = 'unknown' | 'working' | 'waiting' | 'complete' | 'error' | 'idle';
 
 /** Sub-classification of `waiting` for richer UI feedback. */
 export type WaitingReason =
@@ -81,9 +72,7 @@ export interface HookStatusUpdate {
  *   - sessionEnd                                      → idle
  *   - sessionStart                                    → null (observability only)
  */
-export function mapHookEventToStatus(
-  event: HookEventPayload,
-): HookStatusUpdate | null {
+export function mapHookEventToStatus(event: HookEventPayload): HookStatusUpdate | null {
   switch (event.event) {
     case 'userPromptSubmit':
       return { status: 'working' };

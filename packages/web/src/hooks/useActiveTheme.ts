@@ -1,5 +1,5 @@
-import { useSettingsStore } from '../stores/settingsStore';
 import { resolveTheme, isLightTheme, type Theme } from '../lib/themes';
+import { useSettingsStore } from '../stores/settingsStore';
 
 /**
  * The fully-resolved active Fleex theme (built-in or custom). Use when a

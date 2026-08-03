@@ -1,4 +1,5 @@
 import type { TicketDeliverable } from '@fleex/shared';
+
 import { API_URL } from '../lib/constants';
 
 async function request<T>(path: string): Promise<T> {

@@ -1,20 +1,23 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import type { TicketGroup, Ticket, TicketStatus } from '@fleex/shared';
+
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
+import type { TicketGroup, Ticket, TicketStatus } from '@fleex/shared';
 import type { DomainEventLog } from '@fleex/shared';
 import type { BoardWithCounts } from '@fleex/shared';
-import { useTicketGroupStore } from '../../stores/ticketGroupStore';
-import { useTicketStore } from '../../stores/ticketStore';
+
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { cn } from '../../lib/cn';
+import { STATUS_COLORS } from '../../lib/statusColors';
+import { tintClasses } from '../../lib/tints';
 import { fetchEvents } from '../../services/api';
+import { useTicketGroupStore } from '../../stores/ticketGroupStore';
+import { useTicketStore } from '../../stores/ticketStore';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+
 import { EpicProgressBar } from './EpicProgressBar';
 import { NanoRoadmap } from './NanoRoadmap';
 import { PriorityIndicator } from './PriorityIndicator';
-import { cn } from '../../lib/cn';
-import { tintClasses } from '../../lib/tints';
-import { STATUS_COLORS } from '../../lib/statusColors';
 
 export function EpicDetailView() {
   const epicId = useTicketGroupStore((s) => s.selectedEpicDetailId);
@@ -53,7 +56,10 @@ export function EpicDetailView() {
 
   if (!group) return null;
 
-  const handleRoadmapChange = async (newStatus: 'active' | 'done' | 'cancelled' | 'archived', newTimeframe: 'now' | 'next' | 'later') => {
+  const handleRoadmapChange = async (
+    newStatus: 'active' | 'done' | 'cancelled' | 'archived',
+    newTimeframe: 'now' | 'next' | 'later',
+  ) => {
     await updateGroup(group.id, { groupStatus: newStatus, timeframe: newTimeframe });
   };
 
@@ -66,12 +72,24 @@ export function EpicDetailView() {
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       {/* Header */}
-      <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
+      <div
+        className="flex items-center gap-3 border-b border-[var(--theme-border)] px-4"
+        style={{ height: 'var(--header-height)' }}
+      >
         <button
           className="flex items-center gap-1 rounded-md px-2 py-1 text-sm text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
           onClick={handleBack}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="10,3 5,8 10,13" />
           </svg>
           Back
@@ -106,10 +124,7 @@ export function EpicDetailView() {
           {/* Tab content */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {activeTab === 'description' && (
-              <EpicDescriptionEditor
-                groupId={group.id}
-                description={group.description}
-              />
+              <EpicDescriptionEditor groupId={group.id} description={group.description} />
             )}
 
             {activeTab === 'tickets' && (
@@ -122,21 +137,33 @@ export function EpicDetailView() {
               </div>
             )}
 
-            {activeTab === 'activity' && (
-              <EpicActivityLog groupId={epicId!} />
-            )}
+            {activeTab === 'activity' && <EpicActivityLog groupId={epicId!} />}
           </div>
         </div>
 
         {/* Sidebar */}
-        <div className={cn('flex flex-shrink-0 flex-col border-l border-[var(--theme-border)]', sidebarCollapsed ? 'w-10' : 'w-[280px]')}>
+        <div
+          className={cn(
+            'flex flex-shrink-0 flex-col border-l border-[var(--theme-border)]',
+            sidebarCollapsed ? 'w-10' : 'w-[280px]',
+          )}
+        >
           {/* Toggle button */}
           <button
             onClick={() => setSidebarCollapsed((c) => !c)}
             className="flex w-full shrink-0 items-center justify-center border-b border-[var(--theme-border)] py-2 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
             title={sidebarCollapsed ? 'Expand panel' : 'Collapse panel'}
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
               <line x1="10" y1="1.5" x2="10" y2="14.5" />
             </svg>
@@ -147,7 +174,9 @@ export function EpicDetailView() {
             <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-4">
               {/* Status (NanoRoadmap) */}
               <div>
-                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Status</label>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                  Status
+                </label>
                 <NanoRoadmap
                   groupStatus={group.groupStatus}
                   timeframe={group.timeframe}
@@ -157,7 +186,9 @@ export function EpicDetailView() {
 
               {/* Progress */}
               <div>
-                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Progress</label>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+                  Progress
+                </label>
                 <EpicProgressBar tickets={epicTickets} />
               </div>
 
@@ -193,7 +224,10 @@ export function EpicDetailView() {
 
                 {/* Delete */}
                 <button
-                  className={cn('w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors', tintClasses('red').hoverBg)}
+                  className={cn(
+                    'w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors',
+                    tintClasses('red').hoverBg,
+                  )}
                   onClick={handleDelete}
                 >
                   Delete Epic
@@ -229,12 +263,14 @@ function EpicActivityLog({ groupId }: { groupId: string }) {
     Promise.all([
       fetchEvents({ eventType: 'ticketGroup.', limit: 200 }),
       fetchEvents({ eventType: 'ticketRelationship.', limit: 200 }),
-    ]).then(([groupEvents, relEvents]) => {
-      const all = [...groupEvents, ...relEvents]
-        .filter((e) => e.payload.groupId === groupId || e.payload.parentId === groupId)
-        .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
-      setEvents(all);
-    }).finally(() => setLoading(false));
+    ])
+      .then(([groupEvents, relEvents]) => {
+        const all = [...groupEvents, ...relEvents]
+          .filter((e) => e.payload.groupId === groupId || e.payload.parentId === groupId)
+          .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+        setEvents(all);
+      })
+      .finally(() => setLoading(false));
   }, [groupId]);
 
   if (loading) {
@@ -256,7 +292,10 @@ function EpicActivityLog({ groupId }: { groupId: string }) {
   return (
     <div className="overflow-y-auto epic-picker-scroll">
       {events.map((event) => (
-        <div key={event.id} className="flex items-start gap-3 border-b border-[var(--theme-border)] px-4 py-3">
+        <div
+          key={event.id}
+          className="flex items-start gap-3 border-b border-[var(--theme-border)] px-4 py-3"
+        >
           <div className="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full bg-[var(--theme-accent)]" />
           <div className="min-w-0 flex-1">
             <div className="text-sm text-[var(--theme-text-primary)]">
@@ -310,7 +349,9 @@ function EditableName({ value, onSave }: { value: string; onSave: (v: string) =>
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
-  useEffect(() => { setDraft(value); }, [value]);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
 
   const commit = () => {
     const trimmed = draft.trim();
@@ -336,7 +377,10 @@ function EditableName({ value, onSave }: { value: string; onSave: (v: string) =>
       className="rounded border border-[var(--theme-accent)] bg-transparent px-1 py-0.5 text-sm font-semibold text-[var(--theme-text-primary)] focus:outline-none"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') setEditing(false);
+      }}
       onBlur={commit}
     />
   );
@@ -346,7 +390,9 @@ function EditableEmoji({ value, onSave }: { value: string; onSave: (v: string) =
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
-  useEffect(() => { setDraft(value); }, [value]);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
 
   const commit = () => {
     const trimmed = draft.trim();
@@ -372,7 +418,10 @@ function EditableEmoji({ value, onSave }: { value: string; onSave: (v: string) =
       className="w-10 rounded border border-[var(--theme-accent)] bg-transparent px-1 py-0.5 text-center text-lg focus:outline-none"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') setEditing(false);
+      }}
       onBlur={commit}
     />
   );
@@ -388,7 +437,10 @@ function EpicDescriptionEditor({ groupId, description }: { groupId: string; desc
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { setText(description); textRef.current = description; }, [description]);
+  useEffect(() => {
+    setText(description);
+    textRef.current = description;
+  }, [description]);
 
   const flushDebounce = useCallback(() => {
     if (debounceRef.current) {
@@ -398,17 +450,25 @@ function EpicDescriptionEditor({ groupId, description }: { groupId: string; desc
     }
   }, [groupId, updateGroup]);
 
-  const handleChange = useCallback((value: string) => {
-    setText(value);
-    textRef.current = value;
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      debounceRef.current = undefined;
-      updateGroup(groupId, { description: value });
-    }, 600);
-  }, [groupId, updateGroup]);
+  const handleChange = useCallback(
+    (value: string) => {
+      setText(value);
+      textRef.current = value;
+      clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = undefined;
+        updateGroup(groupId, { description: value });
+      }, 600);
+    },
+    [groupId, updateGroup],
+  );
 
-  useEffect(() => () => { clearTimeout(debounceRef.current); }, []);
+  useEffect(
+    () => () => {
+      clearTimeout(debounceRef.current);
+    },
+    [],
+  );
 
   const fileUpload = useFileUpload({
     textareaRef,
@@ -417,18 +477,21 @@ function EpicDescriptionEditor({ groupId, description }: { groupId: string; desc
     onFlushDebounce: flushDebounce,
   });
 
-  const handleToggleCheckbox = useCallback((lineIndex: number) => {
-    const lines = textRef.current.split('\n');
-    const line = lines[lineIndex];
-    if (!line) return;
-    if (line.includes('[ ]')) {
-      lines[lineIndex] = line.replace('[ ]', '[x]');
-    } else if (/\[[xX]\]/.test(line)) {
-      lines[lineIndex] = line.replace(/\[[xX]\]/, '[ ]');
-    }
-    const next = lines.join('\n');
-    handleChange(next);
-  }, [handleChange]);
+  const handleToggleCheckbox = useCallback(
+    (lineIndex: number) => {
+      const lines = textRef.current.split('\n');
+      const line = lines[lineIndex];
+      if (!line) return;
+      if (line.includes('[ ]')) {
+        lines[lineIndex] = line.replace('[ ]', '[x]');
+      } else if (/\[[xX]\]/.test(line)) {
+        lines[lineIndex] = line.replace(/\[[xX]\]/, '[ ]');
+      }
+      const next = lines.join('\n');
+      handleChange(next);
+    },
+    [handleChange],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -476,7 +539,17 @@ function EpicDescriptionEditor({ groupId, description }: { groupId: string; desc
               className="absolute bottom-2 right-2 rounded p-1 text-[var(--theme-text-muted)] opacity-50 transition-opacity hover:text-[var(--theme-accent)] hover:opacity-100"
               title="Attach file"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
               </svg>
             </button>
@@ -488,10 +561,12 @@ function EpicDescriptionEditor({ groupId, description }: { groupId: string; desc
           </div>
         )}
         {mode !== 'write' && (
-          <div className={cn(
-            'overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3',
-            mode === 'split' ? 'w-1/2' : 'w-full',
-          )}>
+          <div
+            className={cn(
+              'overflow-y-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-3',
+              mode === 'split' ? 'w-1/2' : 'w-full',
+            )}
+          >
             {text.trim() ? (
               <MarkdownRenderer content={text} onToggleCheckbox={handleToggleCheckbox} />
             ) : (
@@ -506,7 +581,15 @@ function EpicDescriptionEditor({ groupId, description }: { groupId: string; desc
 
 // ── Tickets Tab ──
 
-function TicketsTab({ epicId, boardIds, epicTickets }: { epicId: string; boardIds: string[]; epicTickets: Ticket[] }) {
+function TicketsTab({
+  epicId,
+  boardIds,
+  epicTickets,
+}: {
+  epicId: string;
+  boardIds: string[];
+  epicTickets: Ticket[];
+}) {
   const [showPicker, setShowPicker] = useState(false);
   const removeTicketFromGroup = useTicketGroupStore((s) => s.removeTicketFromGroup);
   const setSelectedEpicDetail = useTicketGroupStore((s) => s.setSelectedEpicDetail);
@@ -596,7 +679,12 @@ function TicketsTab({ epicId, boardIds, epicTickets }: { epicId: string; boardId
                     {group.boardLabel}
                   </span>
                 )}
-                <span className={cn('ml-3 flex-shrink-0 text-xs font-medium', COLUMN_TITLE_COLOR[ticket.status])}>
+                <span
+                  className={cn(
+                    'ml-3 flex-shrink-0 text-xs font-medium',
+                    COLUMN_TITLE_COLOR[ticket.status],
+                  )}
+                >
                   {TICKET_STATUS_LABELS[ticket.status]}
                 </span>
                 <button
@@ -604,7 +692,15 @@ function TicketsTab({ epicId, boardIds, epicTickets }: { epicId: string; boardId
                   onClick={() => removeTicketFromGroup(epicId, ticket.id)}
                   title="Remove from epic"
                 >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
                     <line x1="4" y1="4" x2="12" y2="12" />
                     <line x1="12" y1="4" x2="4" y2="12" />
                   </svg>
@@ -636,10 +732,20 @@ function TicketsTab({ epicId, boardIds, epicTickets }: { epicId: string; boardId
 // ── Ticket Picker Modal ──
 
 const STATUS_SORT_ORDER: Record<string, number> = {
-  backlog: 0, todo: 1, doing: 2, reviewing: 3, done: 4, cancelled: 5,
+  backlog: 0,
+  todo: 1,
+  doing: 2,
+  reviewing: 3,
+  done: 4,
+  cancelled: 5,
 };
 
-function TicketPickerModal({ epicId, boardIds, epicTicketIds, onClose }: {
+function TicketPickerModal({
+  epicId,
+  boardIds,
+  epicTicketIds,
+  onClose,
+}: {
   epicId: string;
   boardIds: string[];
   epicTicketIds: Set<string>;
@@ -660,7 +766,8 @@ function TicketPickerModal({ epicId, boardIds, epicTicketIds, onClose }: {
       .filter((t) => boardIdSet.has(t.boardId) && !t.archivedAt)
       .filter((t) => !search || t.title.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => {
-        const statusDiff = (STATUS_SORT_ORDER[a.status] ?? 99) - (STATUS_SORT_ORDER[b.status] ?? 99);
+        const statusDiff =
+          (STATUS_SORT_ORDER[a.status] ?? 99) - (STATUS_SORT_ORDER[b.status] ?? 99);
         if (statusDiff !== 0) return statusDiff;
         return a.title.localeCompare(b.title);
       });
@@ -688,22 +795,41 @@ function TicketPickerModal({ epicId, boardIds, epicTicketIds, onClose }: {
         await addTicketToGroup(epicId, ticketId);
       }
     } finally {
-      setToggling((s) => { const n = new Set(s); n.delete(ticketId); return n; });
+      setToggling((s) => {
+        const n = new Set(s);
+        n.delete(ticketId);
+        return n;
+      });
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={onClose}
+    >
       <div
         className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-base)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex flex-shrink-0 items-center gap-3 border-b border-[var(--theme-border)] px-4 py-3">
-          <span className="text-sm font-semibold text-[var(--theme-text-primary)]">Manage tickets</span>
+          <span className="text-sm font-semibold text-[var(--theme-text-primary)]">
+            Manage tickets
+          </span>
           <div className="flex-1" />
           <div className="relative">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--theme-text-muted)]">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--theme-text-muted)]"
+            >
               <circle cx="7" cy="7" r="5" />
               <line x1="10.5" y1="10.5" x2="14" y2="14" />
             </svg>
@@ -720,7 +846,15 @@ function TicketPickerModal({ epicId, boardIds, epicTicketIds, onClose }: {
             className="rounded p-1 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]"
             onClick={onClose}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
               <line x1="4" y1="4" x2="12" y2="12" />
               <line x1="12" y1="4" x2="4" y2="12" />
             </svg>
@@ -748,7 +882,9 @@ function TicketPickerModal({ epicId, boardIds, epicTicketIds, onClose }: {
                 {/* Ticket name */}
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <PriorityIndicator priority={ticket.priority} />
-                  <span className="truncate text-sm text-[var(--theme-text-primary)]">{ticket.title}</span>
+                  <span className="truncate text-sm text-[var(--theme-text-primary)]">
+                    {ticket.title}
+                  </span>
                 </div>
                 {/* Status */}
                 <div className="w-24 flex-shrink-0">
@@ -759,7 +895,10 @@ function TicketPickerModal({ epicId, boardIds, epicTicketIds, onClose }: {
                 {/* Epics */}
                 <div className="flex w-40 flex-shrink-0 flex-wrap gap-1">
                   {(ticketEpicLabels[ticket.id] ?? []).map((label) => (
-                    <span key={label} className="truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-secondary)]">
+                    <span
+                      key={label}
+                      className="truncate rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-secondary)]"
+                    >
                       {label}
                     </span>
                   ))}
@@ -775,10 +914,12 @@ function TicketPickerModal({ epicId, boardIds, epicTicketIds, onClose }: {
                     onClick={() => handleToggle(ticket.id)}
                     disabled={isLoading}
                   >
-                    <span className={cn(
-                      'absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform',
-                      isIn ? 'left-[18px]' : 'left-0.5',
-                    )} />
+                    <span
+                      className={cn(
+                        'absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform',
+                        isIn ? 'left-[18px]' : 'left-0.5',
+                      )}
+                    />
                   </button>
                 </div>
               </div>
@@ -808,26 +949,48 @@ function EpicBoardsPicker({
   onAdd: (boardId: string) => void;
   onRemove: (boardId: string) => void;
 }) {
-  const { open: showDropdown, setOpen: setShowDropdown, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ placement: 'bottom-start' });
+  const {
+    open: showDropdown,
+    setOpen: setShowDropdown,
+    refs,
+    floatingStyles,
+    getReferenceProps,
+    getFloatingProps,
+  } = usePopover({ placement: 'bottom-start' });
 
   const associatedBoards = boards.filter((b) => group.boardIds.includes(b.id));
   const unassociatedBoards = boards.filter((b) => !group.boardIds.includes(b.id));
 
   return (
     <div className="mb-4">
-      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">Boards</label>
+      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+        Boards
+      </label>
       <div className="space-y-1">
         {associatedBoards.map((board) => (
-          <div key={board.id} className="group flex items-center gap-1.5 rounded px-1.5 py-1 transition-colors hover:bg-[var(--theme-bg-hover)]">
+          <div
+            key={board.id}
+            className="group flex items-center gap-1.5 rounded px-1.5 py-1 transition-colors hover:bg-[var(--theme-bg-hover)]"
+          >
             <span className="text-xs">{board.emoji}</span>
-            <span className="flex-1 truncate text-xs text-[var(--theme-text-primary)]">{board.name}</span>
+            <span className="flex-1 truncate text-xs text-[var(--theme-text-primary)]">
+              {board.name}
+            </span>
             {associatedBoards.length > 1 && (
               <button
                 className="flex-shrink-0 rounded p-0.5 text-[var(--theme-text-faint)] opacity-0 transition-opacity hover:text-[var(--theme-danger)] group-hover:opacity-100"
                 onClick={() => onRemove(board.id)}
                 title="Remove board from epic"
               >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
                   <line x1="4" y1="4" x2="12" y2="12" />
                   <line x1="12" y1="4" x2="4" y2="12" />
                 </svg>

@@ -23,16 +23,16 @@ export interface ThemeColors {
 }
 
 export interface SyntaxThemeColors {
-  keyword: string;      // if, for, class, function
-  string: string;       // "hello world"
-  number: string;       // 123, 0.45
-  comment: string;      // // comments
-  operator: string;     // =, +, -
-  function: string;     // function names
-  variable: string;     // variable names
-  type: string;         // int, string, boolean
-  constant: string;     // true, false, null
-  regex: string;        // /pattern/g
+  keyword: string; // if, for, class, function
+  string: string; // "hello world"
+  number: string; // 123, 0.45
+  comment: string; // // comments
+  operator: string; // =, +, -
+  function: string; // function names
+  variable: string; // variable names
+  type: string; // int, string, boolean
+  constant: string; // true, false, null
+  regex: string; // /pattern/g
 }
 
 export interface TerminalThemeOverrides {
@@ -87,16 +87,16 @@ export const THEME_EMBER: Theme = {
     ...ZINC_DARK_NEUTRALS,
   },
   syntax: {
-    keyword: '#f97316',     // orange-500 - warm like ember
-    string: '#84cc16',      // lime-500
-    number: '#fbbf24',      // amber-400
-    comment: '#82828b',     // matches textMuted
-    operator: '#D77655',    // accent color
-    function: '#f59e0b',    // amber-500
-    variable: '#fafafa',    // textPrimary
-    type: '#fb923c',        // orange-400
-    constant: '#ef4444',    // red-500
-    regex: '#f472b6',       // pink-400
+    keyword: '#f97316', // orange-500 - warm like ember
+    string: '#84cc16', // lime-500
+    number: '#fbbf24', // amber-400
+    comment: '#82828b', // matches textMuted
+    operator: '#D77655', // accent color
+    function: '#f59e0b', // amber-500
+    variable: '#fafafa', // textPrimary
+    type: '#fb923c', // orange-400
+    constant: '#ef4444', // red-500
+    regex: '#f472b6', // pink-400
   },
   terminal: {
     background: '#09090b',
@@ -119,16 +119,16 @@ export const THEME_OCEAN: Theme = {
     ...ZINC_DARK_NEUTRALS,
   },
   syntax: {
-    keyword: '#60a5fa',     // blue-400 - ocean blue
-    string: '#34d399',      // emerald-400
-    number: '#fbbf24',      // amber-400
-    comment: '#82828b',     // matches textMuted
-    operator: '#3b82f6',    // accent color
-    function: '#a78bfa',    // violet-400
-    variable: '#fafafa',    // textPrimary
-    type: '#22d3ee',        // cyan-400
-    constant: '#f472b6',    // pink-400
-    regex: '#fb7185',       // rose-400
+    keyword: '#60a5fa', // blue-400 - ocean blue
+    string: '#34d399', // emerald-400
+    number: '#fbbf24', // amber-400
+    comment: '#82828b', // matches textMuted
+    operator: '#3b82f6', // accent color
+    function: '#a78bfa', // violet-400
+    variable: '#fafafa', // textPrimary
+    type: '#22d3ee', // cyan-400
+    constant: '#f472b6', // pink-400
+    regex: '#fb7185', // rose-400
   },
   terminal: {
     background: '#09090b',
@@ -151,16 +151,16 @@ export const THEME_VERDANT: Theme = {
     ...ZINC_DARK_NEUTRALS,
   },
   syntax: {
-    keyword: '#4ade80',     // green-400 - verdant green
-    string: '#84cc16',      // lime-500
-    number: '#fbbf24',      // amber-400
-    comment: '#82828b',     // matches textMuted
-    operator: '#22c55e',    // accent color
-    function: '#a3e635',    // lime-400
-    variable: '#fafafa',    // textPrimary
-    type: '#10b981',        // emerald-500
-    constant: '#ef4444',    // red-500
-    regex: '#f472b6',       // pink-400
+    keyword: '#4ade80', // green-400 - verdant green
+    string: '#84cc16', // lime-500
+    number: '#fbbf24', // amber-400
+    comment: '#82828b', // matches textMuted
+    operator: '#22c55e', // accent color
+    function: '#a3e635', // lime-400
+    variable: '#fafafa', // textPrimary
+    type: '#10b981', // emerald-500
+    constant: '#ef4444', // red-500
+    regex: '#f472b6', // pink-400
   },
   terminal: {
     background: '#09090b',
@@ -197,16 +197,16 @@ export const THEME_LIGHT: Theme = {
     danger: '#b91c1c', // ≥ 4.5:1 as text on light surfaces
   },
   syntax: {
-    keyword: '#7c3aed',     // violet-600
-    string: '#059669',      // emerald-600
-    number: '#dc2626',      // red-600
-    comment: '#696971',     // matches textMuted
-    operator: '#374151',    // gray-700
-    function: '#2563eb',    // blue-600
-    variable: '#1f2937',    // gray-800
-    type: '#0891b2',        // cyan-600
-    constant: '#be185d',    // pink-600
-    regex: '#c026d3',       // fuchsia-600
+    keyword: '#7c3aed', // violet-600
+    string: '#059669', // emerald-600
+    number: '#dc2626', // red-600
+    comment: '#696971', // matches textMuted
+    operator: '#374151', // gray-700
+    function: '#2563eb', // blue-600
+    variable: '#1f2937', // gray-800
+    type: '#0891b2', // cyan-600
+    constant: '#be185d', // pink-600
+    regex: '#c026d3', // fuchsia-600
   },
   terminal: {
     background: '#f4f4f5',
@@ -243,16 +243,16 @@ export const THEME_DARK: Theme = {
     danger: '#ef4444',
   },
   syntax: {
-    keyword: '#c4b5fd',     // violet-300
-    string: '#86efac',      // green-300
-    number: '#fdba74',      // orange-300
-    comment: '#8695ad',     // matches textMuted
-    operator: '#a78bfa',    // accent color
-    function: '#7dd3fc',    // sky-300
-    variable: '#f1f5f9',    // textPrimary
-    type: '#67e8f9',        // cyan-300
-    constant: '#f472b6',    // pink-400
-    regex: '#f9a8d4',       // pink-300
+    keyword: '#c4b5fd', // violet-300
+    string: '#86efac', // green-300
+    number: '#fdba74', // orange-300
+    comment: '#8695ad', // matches textMuted
+    operator: '#a78bfa', // accent color
+    function: '#7dd3fc', // sky-300
+    variable: '#f1f5f9', // textPrimary
+    type: '#67e8f9', // cyan-300
+    constant: '#f472b6', // pink-400
+    regex: '#f9a8d4', // pink-300
   },
   terminal: {
     background: '#0f172a',
@@ -289,16 +289,16 @@ export const THEME_MATRIX: Theme = {
     danger: '#ef4444',
   },
   syntax: {
-    keyword: '#4ade80',     // green-400 - matrix green
-    string: '#a3e635',      // lime-400
-    number: '#22c55e',      // green-500
-    comment: '#16a34a',     // matches textMuted
-    operator: '#22c55e',    // accent color
-    function: '#84cc16',    // lime-500
-    variable: '#4ade80',    // textPrimary
-    type: '#10b981',        // emerald-500
-    constant: '#16a34a',    // green-600
-    regex: '#eab308',       // yellow-500
+    keyword: '#4ade80', // green-400 - matrix green
+    string: '#a3e635', // lime-400
+    number: '#22c55e', // green-500
+    comment: '#16a34a', // matches textMuted
+    operator: '#22c55e', // accent color
+    function: '#84cc16', // lime-500
+    variable: '#4ade80', // textPrimary
+    type: '#10b981', // emerald-500
+    constant: '#16a34a', // green-600
+    regex: '#eab308', // yellow-500
   },
   terminal: {
     background: '#000000',
@@ -335,16 +335,16 @@ export const THEME_SUMMER: Theme = {
     danger: '#b91c1c', // ≥ 4.5:1 as text on light surfaces
   },
   syntax: {
-    keyword: '#0ea5e9',     // sky-500 - summer sky blue
-    string: '#16a34a',      // green-600
-    number: '#dc2626',      // red-600
-    comment: '#78716c',     // matches textMuted
-    operator: '#57534e',    // stone-600
-    function: '#7c2d12',    // orange-800
-    variable: '#1c1917',    // textPrimary
-    type: '#0891b2',        // cyan-600
-    constant: '#be185d',    // pink-600
-    regex: '#a21caf',       // fuchsia-700
+    keyword: '#0ea5e9', // sky-500 - summer sky blue
+    string: '#16a34a', // green-600
+    number: '#dc2626', // red-600
+    comment: '#78716c', // matches textMuted
+    operator: '#57534e', // stone-600
+    function: '#7c2d12', // orange-800
+    variable: '#1c1917', // textPrimary
+    type: '#0891b2', // cyan-600
+    constant: '#be185d', // pink-600
+    regex: '#a21caf', // fuchsia-700
   },
   terminal: {
     background: '#fffbeb',
@@ -381,16 +381,16 @@ export const THEME_FALL: Theme = {
     danger: '#ef4444',
   },
   syntax: {
-    keyword: '#f59e0b',     // amber-500 - fall orange
-    string: '#84cc16',      // lime-500
-    number: '#fbbf24',      // amber-400
-    comment: '#aa8878',     // matches textMuted
-    operator: '#d97706',    // accent color
-    function: '#fb923c',    // orange-400
-    variable: '#fef3c7',    // textPrimary
-    type: '#22d3ee',        // cyan-400
-    constant: '#ef4444',    // red-500
-    regex: '#f472b6',       // pink-400
+    keyword: '#f59e0b', // amber-500 - fall orange
+    string: '#84cc16', // lime-500
+    number: '#fbbf24', // amber-400
+    comment: '#aa8878', // matches textMuted
+    operator: '#d97706', // accent color
+    function: '#fb923c', // orange-400
+    variable: '#fef3c7', // textPrimary
+    type: '#22d3ee', // cyan-400
+    constant: '#ef4444', // red-500
+    regex: '#f472b6', // pink-400
   },
   terminal: {
     background: '#1c1210',
@@ -427,16 +427,16 @@ export const THEME_LATTE: Theme = {
     danger: '#d20f39',
   },
   syntax: {
-    keyword: '#8839ef',     // Catppuccin Latte Mauve
-    string: '#40a02b',      // Catppuccin Latte Green
-    number: '#fe640b',      // Catppuccin Latte Peach
-    comment: '#62657a',     // matches textMuted
-    operator: '#04a5e5',    // Catppuccin Latte Sapphire
-    function: '#1e66f5',    // Catppuccin Latte Blue
-    variable: '#4c4f69',    // textPrimary
-    type: '#179299',        // Catppuccin Latte Teal
-    constant: '#e64553',    // Catppuccin Latte Red
-    regex: '#ea76cb',       // Catppuccin Latte Pink
+    keyword: '#8839ef', // Catppuccin Latte Mauve
+    string: '#40a02b', // Catppuccin Latte Green
+    number: '#fe640b', // Catppuccin Latte Peach
+    comment: '#62657a', // matches textMuted
+    operator: '#04a5e5', // Catppuccin Latte Sapphire
+    function: '#1e66f5', // Catppuccin Latte Blue
+    variable: '#4c4f69', // textPrimary
+    type: '#179299', // Catppuccin Latte Teal
+    constant: '#e64553', // Catppuccin Latte Red
+    regex: '#ea76cb', // Catppuccin Latte Pink
   },
   terminal: {
     background: '#eff1f5',
@@ -526,18 +526,9 @@ export function applyTheme(theme: Theme): void {
   }
 
   // Computed glass variables (semi-transparent backgrounds for liquidglass effect)
-  root.style.setProperty(
-    '--theme-glass-surface',
-    hexToRgba(theme.colors.bgSurface, 0.55),
-  );
-  root.style.setProperty(
-    '--theme-glass-surface-dense',
-    hexToRgba(theme.colors.bgSurface, 0.92),
-  );
-  root.style.setProperty(
-    '--theme-glass-overlay',
-    hexToRgba(theme.colors.bgOverlay, 0.55),
-  );
+  root.style.setProperty('--theme-glass-surface', hexToRgba(theme.colors.bgSurface, 0.55));
+  root.style.setProperty('--theme-glass-surface-dense', hexToRgba(theme.colors.bgSurface, 0.92));
+  root.style.setProperty('--theme-glass-overlay', hexToRgba(theme.colors.bgOverlay, 0.55));
 
   // Decorative tint tokens (badges, tags, dots…) — derived from the theme's
   // luminance so custom themes are covered automatically. See lib/tints.ts.

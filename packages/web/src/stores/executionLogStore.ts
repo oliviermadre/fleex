@@ -1,9 +1,11 @@
 import { create } from 'zustand';
+
 import type { ExecutionLogEntry, AgentEvent } from '@fleex/shared';
 import { EXECUTION_LOG_REFRESH_MS } from '@fleex/shared';
+
+import { PAGE_SIZE_EXECUTIONS } from '../lib/constants';
 import * as api from '../services/api';
 import { appWs } from '../services/websocket';
-import { PAGE_SIZE_EXECUTIONS } from '../lib/constants';
 
 export type ExecutionTypeFilter = 'all' | 'agent' | 'panel' | 'skill' | 'workflow';
 
@@ -78,7 +80,8 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
   },
 
   loadMore: async () => {
-    const { typeFilter, searchQuery, liveEntries, historyEntries, historyCount, loadingMore } = get();
+    const { typeFilter, searchQuery, liveEntries, historyEntries, historyCount, loadingMore } =
+      get();
     if (loadingMore) return;
     if (historyEntries.length >= historyCount) return;
     set({ loadingMore: true });
@@ -137,16 +140,14 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
 
       set((state) => {
         // Find in live entries and move to history
-        const liveIdx = state.liveEntries.findIndex(
-          (e) => e.id === event.executionId,
-        );
+        const liveIdx = state.liveEntries.findIndex((e) => e.id === event.executionId);
         if (liveIdx === -1) return state;
 
         const entry = state.liveEntries[liveIdx]!;
         const completedAt = event.createdAt;
         const durationMs = completedAt
           ? new Date(completedAt).getTime() - new Date(entry.startedAt).getTime()
-          : entry.durationMs ?? null;
+          : (entry.durationMs ?? null);
 
         const updated: ExecutionLogEntry = {
           ...entry,
@@ -155,9 +156,7 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
           durationMs,
         };
 
-        const newLive = state.liveEntries.filter(
-          (_, i) => i !== liveIdx,
-        );
+        const newLive = state.liveEntries.filter((_, i) => i !== liveIdx);
         const newHistory = [updated, ...state.historyEntries];
 
         return {
@@ -169,7 +168,9 @@ export const useExecutionLogStore = create<ExecutionLogState>((set, get) => ({
       });
 
       // Background reload to get full server-side enriched data (tokens, cost, model, etc.)
-      setTimeout(() => { get().load({ silent: true }); }, EXECUTION_LOG_REFRESH_MS);
+      setTimeout(() => {
+        get().load({ silent: true });
+      }, EXECUTION_LOG_REFRESH_MS);
     }
   },
 

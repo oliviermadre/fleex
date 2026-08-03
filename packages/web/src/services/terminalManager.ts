@@ -1,11 +1,24 @@
-import { Terminal } from '@xterm/xterm';
+import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
-import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { TERMINAL_THEME, TERMINAL_ANSI_LIGHT, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, TERMINAL_SCROLLBACK } from '../lib/constants';
+import { Terminal } from '@xterm/xterm';
+
+import {
+  TERMINAL_THEME,
+  TERMINAL_ANSI_LIGHT,
+  TERMINAL_FONT_FAMILY,
+  TERMINAL_FONT_SIZE,
+  TERMINAL_SCROLLBACK,
+} from '../lib/constants';
 import { isLightTheme, type Theme } from '../lib/themes';
+
 import { AsmClipboardProvider } from './clipboardProvider';
+import {
+  getTerminalAppearance,
+  subscribeTerminalAppearance,
+  type TerminalAppearance,
+} from './terminalAppearance';
 
 interface TerminalInstance {
   terminal: Terminal;
@@ -67,18 +80,18 @@ class TerminalManager {
 
       // Priority 1: xterm.js native selection (user gesture → clipboard works)
       if (terminal.hasSelection()) {
-        navigator.clipboard.writeText(terminal.getSelection()).catch(
-          (err) => console.warn('[FLEEX:Clipboard] failed to copy xterm selection', err),
-        );
+        navigator.clipboard
+          .writeText(terminal.getSelection())
+          .catch((err) => console.warn('[FLEEX:Clipboard] failed to copy xterm selection', err));
         return false;
       }
 
       // Priority 2: pending OSC 52 text that failed auto-write
       const pending = clipboardProvider.consumePendingText();
       if (pending) {
-        navigator.clipboard.writeText(pending).catch(
-          (err) => console.warn('[FLEEX:Clipboard] failed to copy pending OSC52 text', err),
-        );
+        navigator.clipboard
+          .writeText(pending)
+          .catch((err) => console.warn('[FLEEX:Clipboard] failed to copy pending OSC52 text', err));
         return false;
       }
 
@@ -219,8 +232,18 @@ class TerminalManager {
       instance.terminal.options.fontSize = fontSize;
       instance.terminal.options.fontWeight = fontWeight;
       instance.terminal.options.fontWeightBold = fontWeightBold;
-      try { instance.fitAddon.fit(); } catch { /* ignore */ }
+      try {
+        instance.fitAddon.fit();
+      } catch {
+        /* ignore */
+      }
     }
+  }
+
+  /** Apply an appearance snapshot from terminalAppearance (theme may be unset yet). */
+  applyAppearance(appearance: TerminalAppearance): void {
+    if (appearance.theme) this.updateTheme(appearance.theme);
+    this.updateFont(appearance.fontFamily, appearance.fontSize, appearance.fontThicken);
   }
 
   /**
@@ -235,7 +258,11 @@ class TerminalManager {
     if (floating) {
       // Dispose WebGL so the canvas renderer respects allowTransparency
       if (instance.webglAddon) {
-        try { instance.webglAddon.dispose(); } catch { /* ignore */ }
+        try {
+          instance.webglAddon.dispose();
+        } catch {
+          /* ignore */
+        }
         instance.webglAddon = null;
       }
       // Set transparent background (rgba format — xterm doesn't parse 8-digit hex)
@@ -254,7 +281,11 @@ class TerminalManager {
     }
 
     // Re-fit after renderer change
-    try { instance.fitAddon.fit(); } catch { /* ignore */ }
+    try {
+      instance.fitAddon.fit();
+    } catch {
+      /* ignore */
+    }
   }
 
   private async loadWebGL(instance: TerminalInstance): Promise<void> {
@@ -276,3 +307,9 @@ class TerminalManager {
 }
 
 export const terminalManager = new TerminalManager();
+
+// This module is lazy-loaded (see LazyTerminalTabContent / AppLayout), so it may
+// arrive long after useTheme()/useTerminalFont() first ran. Replay whatever the
+// hooks already recorded, then keep following it.
+terminalManager.applyAppearance(getTerminalAppearance());
+subscribeTerminalAppearance((appearance) => terminalManager.applyAppearance(appearance));

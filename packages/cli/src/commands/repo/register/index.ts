@@ -1,6 +1,7 @@
-import type { CommandDef } from '../../../core/types.ts';
 import { info, ok, warn } from '../../../core/colors.ts';
 import { getConfig, parseRepo, putConfig } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const def: CommandDef = {
   workspaceAware: true,

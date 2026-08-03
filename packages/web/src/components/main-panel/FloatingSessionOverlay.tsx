@@ -1,22 +1,23 @@
 import { memo, useRef, useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { useTerminal } from '../../hooks/useTerminal';
-import { useTerminalStore } from '../../stores/terminalStore';
-import { terminalManager } from '../../services/terminalManager';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { useUIStore } from '../../stores/uiStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
+
 import type { Session } from '@fleex/shared';
+
+import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
+import { useTerminal } from '../../hooks/useTerminal';
+import { terminalManager } from '../../services/terminalManager';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useTerminalStore } from '../../stores/terminalStore';
+import { useUIStore } from '../../stores/uiStore';
+
+import { floatingPositionRegistry } from './floatingPositionRegistry';
 
 const MIN_WIDTH = 480;
 const MIN_HEIGHT = 300;
 const DEFAULT_WIDTH = 800;
 const DEFAULT_HEIGHT = 500;
-
-// Position registry for spatial keyboard navigation between floating overlays
-export const floatingPositionRegistry = new Map<string, { x: number; y: number; width: number; height: number }>();
 
 /** Resolve the navigation URL for a floating session based on its worktree context. */
 function getSessionNavigationUrl(sessionId: string): string {
@@ -70,24 +71,23 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   }
 
   const [pathCopied, setPathCopied] = useState(false);
-  const handleCopyPath = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!session) return;
-    try {
-      await navigator.clipboard.writeText(session.cwd);
-      setPathCopied(true);
-      setTimeout(() => setPathCopied(false), 1200);
-    } catch (err) {
-      console.warn('[Fleex] Copy path failed', err);
-    }
-  }, [session]);
+  const handleCopyPath = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!session) return;
+      try {
+        await navigator.clipboard.writeText(session.cwd);
+        setPathCopied(true);
+        setTimeout(() => setPathCopied(false), 1200);
+      } catch (err) {
+        console.warn('[Fleex] Copy path failed', err);
+      }
+    },
+    [session],
+  );
 
-  const connectionStatus = useTerminalStore(
-    (s) => s.connectionStatus[sessionId] ?? 'disconnected',
-  );
-  const displayName = useSettingsStore(
-    (s) => s.settings.sessionDisplayNames[sessionId],
-  );
+  const connectionStatus = useTerminalStore((s) => s.connectionStatus[sessionId] ?? 'disconnected');
+  const displayName = useSettingsStore((s) => s.settings.sessionDisplayNames[sessionId]);
 
   // Enable floating mode (transparent bg, no WebGL) and focus terminal
   useEffect(() => {
@@ -122,34 +122,39 @@ export const TerminalOverlay = memo(function TerminalOverlay({
       width: size.width,
       height: size.height,
     });
-    return () => { floatingPositionRegistry.delete(sessionId); };
+    return () => {
+      floatingPositionRegistry.delete(sessionId);
+    };
   }, [sessionId, effectivePos.x, effectivePos.y, size.width, size.height]);
 
   // Title bar drag handlers
-  const handleTitleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    dragRef.current = {
-      dragging: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      startPosX: effectivePos.x,
-      startPosY: effectivePos.y,
-    };
-    const handleMove = (me: MouseEvent) => {
-      if (!dragRef.current.dragging) return;
-      const rawX = dragRef.current.startPosX + (me.clientX - dragRef.current.startX);
-      const rawY = dragRef.current.startPosY + (me.clientY - dragRef.current.startY);
-      setPosition(clampPosition(rawX, rawY, size.width, size.height));
-    };
-    const handleUp = () => {
-      dragRef.current.dragging = false;
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-  }, [effectivePos, size]);
+  const handleTitleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      dragRef.current = {
+        dragging: true,
+        startX: e.clientX,
+        startY: e.clientY,
+        startPosX: effectivePos.x,
+        startPosY: effectivePos.y,
+      };
+      const handleMove = (me: MouseEvent) => {
+        if (!dragRef.current.dragging) return;
+        const rawX = dragRef.current.startPosX + (me.clientX - dragRef.current.startX);
+        const rawY = dragRef.current.startPosY + (me.clientY - dragRef.current.startY);
+        setPosition(clampPosition(rawX, rawY, size.width, size.height));
+      };
+      const handleUp = () => {
+        dragRef.current.dragging = false;
+        window.removeEventListener('mousemove', handleMove);
+        window.removeEventListener('mouseup', handleUp);
+      };
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('mouseup', handleUp);
+    },
+    [effectivePos, size],
+  );
 
   // Double-click title bar: navigate to session view and reattach
   const handleTitleDoubleClick = useCallback(() => {
@@ -164,7 +169,8 @@ export const TerminalOverlay = memo(function TerminalOverlay({
 
   // Resolve display status — hookStatus takes precedence over the legacy claudeActivity (JSONL).
   // `waiting/idle` (Claude at rest awaiting next prompt) renders neutrally rather than as alarm.
-  const hookStatus = session.hookStatus && session.hookStatus !== 'unknown' ? session.hookStatus : null;
+  const hookStatus =
+    session.hookStatus && session.hookStatus !== 'unknown' ? session.hookStatus : null;
   const legacyActivity = session.claudeActivity ?? 'idle';
   const activity: string =
     hookStatus === 'waiting' && session.hookWaitingReason === 'idle'
@@ -285,7 +291,8 @@ export const TerminalOverlay = memo(function TerminalOverlay({
 
           <span
             style={{
-              color: ticketDisplayId != null ? 'var(--theme-text-muted)' : 'var(--theme-text-primary)',
+              color:
+                ticketDisplayId != null ? 'var(--theme-text-muted)' : 'var(--theme-text-primary)',
               fontSize: 12,
               fontWeight: ticketDisplayId != null ? 400 : 600,
               overflow: 'hidden',
@@ -317,7 +324,10 @@ export const TerminalOverlay = memo(function TerminalOverlay({
           )}
 
           <button
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             style={{
               width: 20,
               height: 20,
@@ -371,11 +381,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
         )}
 
         {/* Terminal area */}
-        <div
-          ref={containerRef}
-          className="xterm-container"
-          style={{ flex: 1, minHeight: 0 }}
-        />
+        <div ref={containerRef} className="xterm-container" style={{ flex: 1, minHeight: 0 }} />
 
         {/* Status bar */}
         <div
@@ -421,18 +427,38 @@ export const TerminalOverlay = memo(function TerminalOverlay({
               padding: 0,
             }}
             onMouseEnter={(e) => {
-              if (!pathCopied) (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-secondary)';
+              if (!pathCopied)
+                (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-secondary)';
             }}
             onMouseLeave={(e) => {
-              if (!pathCopied) (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-muted)';
+              if (!pathCopied)
+                (e.currentTarget as HTMLElement).style.color = 'var(--theme-text-muted)';
             }}
           >
             {pathCopied ? (
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <polyline points="13,4 6,11 3,8" />
               </svg>
             ) : (
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <rect x="5" y="5" width="9" height="9" rx="1.5" />
                 <path d="M3 11V3a1 1 0 0 1 1-1h7" />
               </svg>
@@ -453,14 +479,57 @@ export const TerminalOverlay = memo(function TerminalOverlay({
           />
           <span style={{ flexShrink: 0 }}>{connectionStatus}</span>
         </div>
-
       </div>
 
       {/* Edge resize handles */}
-      <div style={{ position: 'absolute', top: effectivePos.y - 3, left: effectivePos.x + 8, width: size.width - 16, height: 6, cursor: 'n-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('n')} />
-      <div style={{ position: 'absolute', top: effectivePos.y + size.height - 3, left: effectivePos.x + 8, width: size.width - 16, height: 6, cursor: 's-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('s')} />
-      <div style={{ position: 'absolute', top: effectivePos.y + 8, left: effectivePos.x - 3, width: 6, height: size.height - 16, cursor: 'w-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('w')} />
-      <div style={{ position: 'absolute', top: effectivePos.y + 8, left: effectivePos.x + size.width - 3, width: 6, height: size.height - 16, cursor: 'e-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('e')} />
+      <div
+        style={{
+          position: 'absolute',
+          top: effectivePos.y - 3,
+          left: effectivePos.x + 8,
+          width: size.width - 16,
+          height: 6,
+          cursor: 'n-resize',
+          pointerEvents: 'auto',
+        }}
+        onMouseDown={handleResizeMouseDown('n')}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: effectivePos.y + size.height - 3,
+          left: effectivePos.x + 8,
+          width: size.width - 16,
+          height: 6,
+          cursor: 's-resize',
+          pointerEvents: 'auto',
+        }}
+        onMouseDown={handleResizeMouseDown('s')}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: effectivePos.y + 8,
+          left: effectivePos.x - 3,
+          width: 6,
+          height: size.height - 16,
+          cursor: 'w-resize',
+          pointerEvents: 'auto',
+        }}
+        onMouseDown={handleResizeMouseDown('w')}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: effectivePos.y + 8,
+          left: effectivePos.x + size.width - 3,
+          width: 6,
+          height: size.height - 16,
+          cursor: 'e-resize',
+          pointerEvents: 'auto',
+        }}
+        onMouseDown={handleResizeMouseDown('e')}
+      />
 
       {/* Corner resize handles */}
       {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
@@ -485,7 +554,12 @@ export const TerminalOverlay = memo(function TerminalOverlay({
               fill="none"
               style={{ position: 'absolute', bottom: 1, right: 1 }}
             >
-              <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="var(--theme-border)" strokeWidth="1.5" strokeLinecap="round" />
+              <path
+                d="M9 1L1 9M9 5L5 9M9 9L9 9"
+                stroke="var(--theme-border)"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
             </svg>
           )}
         </div>

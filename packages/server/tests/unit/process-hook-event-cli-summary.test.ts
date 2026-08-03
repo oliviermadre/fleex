@@ -1,11 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
+
 import type { HookEventPayload } from '@fleex/shared';
-import { ProcessHookEventUseCase } from '../../src/application/use-cases/process-hook-event.js';
+
 import { EventBus } from '../../src/application/event-bus.js';
-import type { SessionStorePort } from '../../src/application/ports/session-store.port.js';
+import { ProcessHookEventUseCase } from '../../src/application/use-cases/process-hook-event.js';
+
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
-import type { IngestCliSessionUseCase, IngestCliSessionResult } from '../../src/application/use-cases/ingest-cli-session.js';
+import type { SessionStorePort } from '../../src/application/ports/session-store.port.js';
 import type { GenerateCliSessionSummaryUseCase } from '../../src/application/use-cases/generate-cli-session-summary.js';
+import type {
+  IngestCliSessionUseCase,
+  IngestCliSessionResult,
+} from '../../src/application/use-cases/ingest-cli-session.js';
 
 const logger = { info() {}, warn() {}, error() {}, debug() {} } as unknown as LoggerPort;
 
@@ -26,7 +32,13 @@ function makeUseCase(
   const ingest = { execute: vi.fn(async () => ingestResult) } as unknown as IngestCliSessionUseCase;
   const summarySpy = vi.fn(summaryExecute);
   const summary = { execute: summarySpy } as unknown as GenerateCliSessionSummaryUseCase;
-  const useCase = new ProcessHookEventUseCase(sessionStore, new EventBus(), logger, ingest, summary);
+  const useCase = new ProcessHookEventUseCase(
+    sessionStore,
+    new EventBus(),
+    logger,
+    ingest,
+    summary,
+  );
   return { useCase, summarySpy };
 }
 
@@ -53,10 +65,9 @@ describe('ProcessHookEventUseCase — CLI session summary wiring', () => {
   });
 
   it('never lets a summary failure break the hook (best-effort, non-blocking)', async () => {
-    const { useCase, summarySpy } = makeUseCase(
-      { ingested: true, ticketId: 'T1' },
-      async () => { throw new Error('sdk exploded'); },
-    );
+    const { useCase, summarySpy } = makeUseCase({ ingested: true, ticketId: 'T1' }, async () => {
+      throw new Error('sdk exploded');
+    });
 
     // Must resolve normally despite the summary throwing.
     await expect(useCase.execute(sessionEndEvent())).resolves.toBeDefined();

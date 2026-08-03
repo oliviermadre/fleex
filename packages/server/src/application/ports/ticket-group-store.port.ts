@@ -1,5 +1,6 @@
-import type { TicketGroupEntity } from '../../domain/entities/ticket-group.entity.js';
 import type { TicketGroupMembership, TicketRelationship } from '@fleex/shared';
+
+import type { TicketGroupEntity } from '../../domain/entities/ticket-group.entity.js';
 
 export interface TicketGroupStorePort {
   // ── Ticket Groups (Epics) ──

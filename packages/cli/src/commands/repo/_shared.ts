@@ -1,5 +1,5 @@
-import { die } from '../../core/colors.ts';
 import { apiBase, apiGet, apiPut } from '../../core/api.ts';
+import { die } from '../../core/colors.ts';
 
 export interface Repository {
   org: string;
@@ -63,7 +63,10 @@ export function parseRepo(input: string): { org: string; name: string; slug: str
  * Resolve a repo from either a positional arg or the `--repo` option.
  * At least one must be provided.
  */
-export function resolveRepoArg(positional: string | undefined, repoOpt: string | undefined): {
+export function resolveRepoArg(
+  positional: string | undefined,
+  repoOpt: string | undefined,
+): {
   org: string;
   name: string;
   slug: string;

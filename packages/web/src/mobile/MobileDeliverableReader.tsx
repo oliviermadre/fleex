@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
+
 import type { TicketDeliverable } from '@fleex/shared';
-import { useUnreadStore } from '../stores/unreadStore';
+
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
 import { tint } from '../lib/tints';
+import { useUnreadStore } from '../stores/unreadStore';
 
 /** Full-screen markdown reader for a deliverable; marks it seen on open. */
 export function MobileDeliverableReader({
@@ -46,9 +48,7 @@ export function MobileDeliverableReader({
         </div>
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-            deliverable.status === 'final'
-              ? tint('green')
-              : tint('yellow')
+            deliverable.status === 'final' ? tint('green') : tint('yellow')
           }`}
         >
           {deliverable.status}

@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
-import type { Container } from '../container.js';
+
 import {
   getGitHubConfig,
   getGoogleConfig,
@@ -10,13 +9,15 @@ import {
   type OAuthProviderConfig,
 } from '../auth/oauth-providers.js';
 
+import { buildCookie, isSecureRequest } from './cookies.js';
+
+import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
+
 const SESSION_COOKIE = 'fleex_session';
 const STATE_COOKIE = 'fleex_oauth_state';
-const COOKIE_OPTS = 'Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000'; // 30 days
-
-function setCookie(name: string, value: string, opts = COOKIE_OPTS): string {
-  return `${name}=${value}; ${opts}`;
-}
+const SESSION_MAX_AGE = 2592000; // 30 days
+const STATE_MAX_AGE = 600;
 
 export function authRoutes(container: Container) {
   return async function (app: FastifyInstance) {
@@ -72,7 +73,14 @@ export function authRoutes(container: Container) {
       if (sessionId) {
         await sessionManager.destroy(sessionId);
       }
-      reply.header('Set-Cookie', setCookie(SESSION_COOKIE, '', 'Path=/; HttpOnly; Max-Age=0'));
+      reply.header(
+        'Set-Cookie',
+        buildCookie(SESSION_COOKIE, '', {
+          maxAge: 0,
+          sameSite: 'Strict',
+          secure: isSecureRequest(request),
+        }),
+      );
       return { ok: true };
     });
 
@@ -97,7 +105,7 @@ export function authRoutes(container: Container) {
       fetchUser: (token: string) => Promise<import('../auth/oauth-providers.js').OAuthUserInfo>,
     ) {
       // Step 1: Redirect to provider
-      fastify.get(`/auth/${provider}`, async (_request, reply) => {
+      fastify.get(`/auth/${provider}`, async (request, reply) => {
         const state = randomBytes(16).toString('hex');
         const params = new URLSearchParams({
           client_id: config.clientId,
@@ -107,7 +115,17 @@ export function authRoutes(container: Container) {
           response_type: 'code',
         });
 
-        reply.header('Set-Cookie', setCookie(STATE_COOKIE, state, 'Path=/; HttpOnly; SameSite=Lax; Max-Age=600'));
+        // Stays SameSite=Lax on purpose. The provider redirects back with a
+        // cross-site top-level navigation; under Strict this cookie would not
+        // be sent, the anti-replay check would fail, and login would break.
+        reply.header(
+          'Set-Cookie',
+          buildCookie(STATE_COOKIE, state, {
+            maxAge: STATE_MAX_AGE,
+            sameSite: 'Lax',
+            secure: isSecureRequest(request),
+          }),
+        );
         return reply.redirect(`${config.authorizeUrl}?${params.toString()}`);
       });
 
@@ -147,9 +165,20 @@ export function authRoutes(container: Container) {
             const sessionId = await sessionManager!.create(user.id);
 
             // Set session cookie and redirect to app
-            reply.header('Set-Cookie', setCookie(SESSION_COOKIE, sessionId));
+            const secure = isSecureRequest(request);
+            reply.header(
+              'Set-Cookie',
+              buildCookie(SESSION_COOKIE, sessionId, {
+                maxAge: SESSION_MAX_AGE,
+                sameSite: 'Strict',
+                secure,
+              }),
+            );
             // Clear state cookie
-            reply.header('Set-Cookie', setCookie(STATE_COOKIE, '', 'Path=/; HttpOnly; Max-Age=0'));
+            reply.header(
+              'Set-Cookie',
+              buildCookie(STATE_COOKIE, '', { maxAge: 0, sameSite: 'Lax', secure }),
+            );
             return reply.redirect('/');
           } catch (err) {
             logger.error('OAuth callback failed', {

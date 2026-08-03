@@ -1,7 +1,8 @@
-import type { Command } from 'commander';
-import chalk from 'chalk';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, dirname, basename, join } from 'node:path';
+
+import chalk from 'chalk';
+
 import type {
   AgentPersona,
   Skill,
@@ -14,10 +15,9 @@ import type {
   PrimitiveRef,
 } from '@fleex/shared';
 import { MARKETPLACE_SCHEMA_VERSION } from '@fleex/shared';
-import type { CommandDef } from '../../core/types.ts';
+
 import { apiBase, apiGet } from '../../core/api.ts';
 import { c, info, ok, warn, die } from '../../core/colors.ts';
-import { canPrompt, closePrompts, promptMultiSelect, promptText } from '../../core/prompt.ts';
 import {
   deriveSkillDeps,
   derivePanelDeps,
@@ -28,6 +28,10 @@ import {
   toMarketplaceSkill,
   toMarketplaceWorkflow,
 } from '../../core/marketplace.ts';
+import { canPrompt, closePrompts, promptMultiSelect, promptText } from '../../core/prompt.ts';
+
+import type { CommandDef } from '../../core/types.ts';
+import type { Command } from 'commander';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;
@@ -73,7 +77,8 @@ async function loadExisting(manifestPath: string): Promise<MarketplaceManifest |
 const def: CommandDef = {
   workspaceAware: true,
   name: 'export',
-  description: 'Export agentic primitives (personas, skills, panels, workflows) into a marketplace repo',
+  description:
+    'Export agentic primitives (personas, skills, panels, workflows) into a marketplace repo',
   setup(cmd: Command) {
     cmd.option('--out <dir>', 'target marketplace directory (its git working copy)');
     cmd.option('--name <name>', 'marketplace name written to marketplace.json');
@@ -82,7 +87,10 @@ const def: CommandDef = {
     cmd.option('--skill <commandNames...>', 'skill command names to export');
     cmd.option('--panel <slugs...>', 'panel names to export');
     cmd.option('--workflow <slugs...>', 'workflow slugs to export');
-    cmd.option('--include-memory', 'include persona memoryMd (personal state, excluded by default)');
+    cmd.option(
+      '--include-memory',
+      'include persona memoryMd (personal state, excluded by default)',
+    );
   },
   extraHelp: `\n${SECTION('What it does:')}
   Writes selected primitives as portable JSON (slug-based, no UUIDs) plus a
@@ -109,8 +117,7 @@ ${SECTION('Examples:')}
       const includeMemory = Boolean(opts.includeMemory);
 
       // ── Selection: flags, or interactive numbered multi-select ──
-      const useFlags =
-        opts.all || opts.persona || opts.skill || opts.panel || opts.workflow;
+      const useFlags = opts.all || opts.persona || opts.skill || opts.panel || opts.workflow;
       let selPersonas: AgentPersona[];
       let selSkills: Skill[];
       let selPanels: Panel[];
@@ -120,15 +127,35 @@ ${SECTION('Examples:')}
         selPersonas = opts.all ? personas : pickByFlag(personas, (p) => p.name, opts.persona ?? []);
         selSkills = opts.all ? skills : pickByFlag(skills, (s) => s.commandName, opts.skill ?? []);
         selPanels = opts.all ? panels : pickByFlag(panels, (p) => p.name, opts.panel ?? []);
-        selWorkflows = opts.all ? workflows : pickByFlag(workflows, (w) => w.slug, opts.workflow ?? []);
+        selWorkflows = opts.all
+          ? workflows
+          : pickByFlag(workflows, (w) => w.slug, opts.workflow ?? []);
       } else {
         if (!canPrompt()) {
-          die('No selection given and no interactive terminal. Use --all or --persona/--skill/--panel/--workflow.');
+          die(
+            'No selection given and no interactive terminal. Use --all or --persona/--skill/--panel/--workflow.',
+          );
         }
-        selPersonas = await promptMultiSelect('Personas', personas, (p) => `${p.name} ${c.dim(p.displayName)}`);
-        selSkills = await promptMultiSelect('Skills', skills, (s) => `${s.commandName} ${c.dim(s.displayName)}`);
-        selPanels = await promptMultiSelect('Panels', panels, (p) => `${p.name} ${c.dim(p.displayName)}`);
-        selWorkflows = await promptMultiSelect('Workflows', workflows, (w) => `${w.slug} ${c.dim(w.name)}`);
+        selPersonas = await promptMultiSelect(
+          'Personas',
+          personas,
+          (p) => `${p.name} ${c.dim(p.displayName)}`,
+        );
+        selSkills = await promptMultiSelect(
+          'Skills',
+          skills,
+          (s) => `${s.commandName} ${c.dim(s.displayName)}`,
+        );
+        selPanels = await promptMultiSelect(
+          'Panels',
+          panels,
+          (p) => `${p.name} ${c.dim(p.displayName)}`,
+        );
+        selWorkflows = await promptMultiSelect(
+          'Workflows',
+          workflows,
+          (w) => `${w.slug} ${c.dim(w.name)}`,
+        );
       }
 
       // ── Convert + derive dependencies (per-item, skip on dangling refs) ──
@@ -138,12 +165,26 @@ ${SECTION('Examples:')}
 
       for (const p of selPersonas) {
         const content = toMarketplacePersona(p, { includeMemory });
-        built.push({ kind: 'persona', slug: p.name, displayName: p.displayName, path: filePathFor('persona', p.name), dependencies: [], content });
+        built.push({
+          kind: 'persona',
+          slug: p.name,
+          displayName: p.displayName,
+          path: filePathFor('persona', p.name),
+          dependencies: [],
+          content,
+        });
       }
       for (const s of selSkills) {
         try {
           const content = toMarketplaceSkill(s, idToName);
-          built.push({ kind: 'skill', slug: s.commandName, displayName: s.displayName, path: filePathFor('skill', s.commandName), dependencies: deriveSkillDeps(content), content });
+          built.push({
+            kind: 'skill',
+            slug: s.commandName,
+            displayName: s.displayName,
+            path: filePathFor('skill', s.commandName),
+            dependencies: deriveSkillDeps(content),
+            content,
+          });
         } catch (e) {
           skip('skill', s.commandName, e);
         }
@@ -151,14 +192,28 @@ ${SECTION('Examples:')}
       for (const p of selPanels) {
         try {
           const content = toMarketplacePanel(p, idToName);
-          built.push({ kind: 'panel', slug: p.name, displayName: p.displayName, path: filePathFor('panel', p.name), dependencies: derivePanelDeps(content), content });
+          built.push({
+            kind: 'panel',
+            slug: p.name,
+            displayName: p.displayName,
+            path: filePathFor('panel', p.name),
+            dependencies: derivePanelDeps(content),
+            content,
+          });
         } catch (e) {
           skip('panel', p.name, e);
         }
       }
       for (const w of selWorkflows) {
         const content = toMarketplaceWorkflow(w);
-        built.push({ kind: 'workflow', slug: w.slug, displayName: w.name, path: filePathFor('workflow', w.slug), dependencies: deriveWorkflowDeps(content), content });
+        built.push({
+          kind: 'workflow',
+          slug: w.slug,
+          displayName: w.name,
+          path: filePathFor('workflow', w.slug),
+          dependencies: deriveWorkflowDeps(content),
+          content,
+        });
       }
 
       if (built.length === 0) {

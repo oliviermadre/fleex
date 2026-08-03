@@ -1,8 +1,10 @@
 import { existsSync } from 'node:fs';
+
 import { computeSessionCost, detectFleexTicket } from '../utils/cli-session-ingest.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
+
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 
 export interface IngestCliSessionResult {
   ingested: boolean;
@@ -30,7 +32,11 @@ export class IngestCliSessionUseCase {
     private readonly logger: LoggerPort,
   ) {}
 
-  async execute(params: { sessionId: string; transcriptPath: string; cwd: string }): Promise<IngestCliSessionResult> {
+  async execute(params: {
+    sessionId: string;
+    transcriptPath: string;
+    cwd: string;
+  }): Promise<IngestCliSessionResult> {
     const { sessionId, transcriptPath, cwd } = params;
     if (!sessionId || !transcriptPath || !cwd) return { ingested: false, reason: 'missing-params' };
     if (!existsSync(transcriptPath)) return { ingested: false, reason: 'no-transcript' };
@@ -44,13 +50,15 @@ export class IngestCliSessionUseCase {
     if (!ticket) return { ingested: false, reason: 'other-workspace' };
 
     const c = await computeSessionCost(transcriptPath);
-    if (c.entrypoint !== 'cli') return { ingested: false, reason: `entrypoint:${c.entrypoint ?? 'none'}` };
+    if (c.entrypoint !== 'cli')
+      return { ingested: false, reason: `entrypoint:${c.entrypoint ?? 'none'}` };
 
     const startedAt = c.startedAt ?? c.completedAt ?? new Date().toISOString();
     const completedAt = c.completedAt ?? startedAt;
-    const durationMs = c.startedAt && c.completedAt
-      ? new Date(c.completedAt).getTime() - new Date(c.startedAt).getTime()
-      : null;
+    const durationMs =
+      c.startedAt && c.completedAt
+        ? new Date(c.completedAt).getTime() - new Date(c.startedAt).getTime()
+        : null;
 
     await this.agentEventStore.upsertCliExecution({
       executionId: `cli:${sessionId}`,

@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { JsonMentionStore } from '../../src/infrastructure/adapters/json-mention-store.adapter.js';
+
 import { TicketMentionEntity } from '../../src/domain/entities/ticket-mention.entity.js';
-import type { HostFs } from '../../src/infrastructure/host/types.js';
+import { JsonMentionStore } from '../../src/infrastructure/adapters/json-mention-store.adapter.js';
+
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
+import type { HostFs } from '../../src/infrastructure/host/types.js';
 
 // In-memory HostFs: getPendingForAgent never touches disk, and save() only needs
 // writeFile to be a no-op, so a minimal stub is enough to exercise the real query.

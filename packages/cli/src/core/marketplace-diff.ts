@@ -1,4 +1,5 @@
 import type { MarketplacePrimitiveContent } from '@fleex/shared';
+
 import { c } from './colors.ts';
 
 // Recursively sort object keys (arrays keep order) for stable comparison.

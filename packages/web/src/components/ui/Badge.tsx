@@ -1,5 +1,6 @@
-import { cn } from '../../lib/cn';
 import type { SessionType } from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
 
 interface BadgeProps {
@@ -14,7 +15,7 @@ export function Badge({ type, className }: BadgeProps) {
         'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
         type === 'shell' && tint('green'),
         type === 'claude' && 'bg-[var(--theme-accent-muted)] text-[var(--theme-accent)]',
-        className
+        className,
       )}
     >
       {type === 'shell' ? 'Shell' : 'Claude Code'}

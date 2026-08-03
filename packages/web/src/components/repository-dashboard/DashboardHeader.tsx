@@ -1,8 +1,8 @@
-import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
-import { RefreshControl } from '../ui/RefreshControl';
-import { GitHubIcon } from '../sidebar/icons';
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
+import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
+import { GitHubIcon } from '../sidebar/icons';
+import { RefreshControl } from '../ui/RefreshControl';
 
 interface Props {
   org: string;
@@ -20,7 +20,10 @@ export function DashboardHeader({ org, name, worktreeCount, isCloned }: Props) {
   const rateLimitWarning = useRepositoryDashboardStore((s) => s.rateLimitWarning);
 
   return (
-    <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
+    <div
+      className="flex items-center justify-between border-b border-[var(--theme-border)] px-3"
+      style={{ height: 'var(--header-height)' }}
+    >
       <div className="flex items-center gap-2">
         <h1 className="text-sm font-semibold font-mono text-[var(--theme-text-primary)]">
           {org}/{name}

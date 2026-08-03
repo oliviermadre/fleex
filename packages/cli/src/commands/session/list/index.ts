@@ -1,6 +1,7 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, info, present } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
+import { c, info, present } from '../../../core/colors.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 import type { Session } from '../_shared.ts';
 
 const def: CommandDef = {
@@ -16,8 +17,12 @@ const def: CommandDef = {
         return;
       }
       process.stdout.write('\n');
-      process.stdout.write(`  ${c.bold('ID         TYPE    STATUS   NAME                      CWD')}\n`);
-      process.stdout.write('  ──────────  ──────  ───────  ────────────────────────  ──────────────────\n');
+      process.stdout.write(
+        `  ${c.bold('ID         TYPE    STATUS   NAME                      CWD')}\n`,
+      );
+      process.stdout.write(
+        '  ──────────  ──────  ───────  ────────────────────────  ──────────────────\n',
+      );
       for (const s of sessions) {
         const id = s.id.slice(0, 8).padEnd(10);
         const type = (s.type ?? '-').padEnd(6);

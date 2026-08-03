@@ -1,8 +1,10 @@
 import type { ExecutionMode } from '@fleex/shared';
+
 import { AgentPersonaNotFoundError, AgentPersonaNameConflictError } from '../../domain/errors.js';
-import type { PersonaStorePort } from '../ports/persona-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
+
 import type { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
+import type { LoggerPort } from '../ports/logger.port.js';
+import type { PersonaStorePort } from '../ports/persona-store.port.js';
 
 export class UpdatePersonaUseCase {
   constructor(

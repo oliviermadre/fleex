@@ -1,10 +1,13 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, warn, info, die, c } from '../../../core/colors.ts';
 import { apiBase, apiDelete } from '../../../core/api.ts';
+import { ok, warn, info, die, c } from '../../../core/colors.ts';
 import { canPrompt, promptYesNo, closePrompts } from '../../../core/prompt.ts';
 import { resolveEpic } from '../_shared.ts';
 
-interface DeleteOptions { force?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface DeleteOptions {
+  force?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -24,7 +27,9 @@ const def: CommandDef = {
       if (!canPrompt()) {
         die(`Refusing to delete epic "${label}" without confirmation. Re-run with -f to force.`);
       }
-      warn(`Deleting epic "${label}" removes the grouping (its tickets are kept). This cannot be undone.`);
+      warn(
+        `Deleting epic "${label}" removes the grouping (its tickets are kept). This cannot be undone.`,
+      );
       const confirmed = await promptYesNo(`Delete epic "${label}"?`, false);
       closePrompts();
       if (!confirmed) {

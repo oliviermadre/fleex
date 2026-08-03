@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import type { TicketUnreadCounts } from '@fleex/shared';
 
 vi.mock('../services/api', () => ({
@@ -6,6 +7,7 @@ vi.mock('../services/api', () => ({
 }));
 
 import * as api from '../services/api';
+
 import { useUnreadStore } from './unreadStore';
 
 describe('unreadStore.loadUnreadCounts', () => {
@@ -32,8 +34,20 @@ describe('unreadStore.loadUnreadCounts', () => {
 
   it('replaces the map and recomputes the global total from the response', async () => {
     vi.mocked(api.fetchUnreadCounts).mockResolvedValue([
-      { ticketId: 'a', totalComments: 6, totalDeliverables: 2, unreadComments: 3, unreadDeliverables: 1 },
-      { ticketId: 'b', totalComments: 1, totalDeliverables: 0, unreadComments: 0, unreadDeliverables: 0 },
+      {
+        ticketId: 'a',
+        totalComments: 6,
+        totalDeliverables: 2,
+        unreadComments: 3,
+        unreadDeliverables: 1,
+      },
+      {
+        ticketId: 'b',
+        totalComments: 1,
+        totalDeliverables: 0,
+        unreadComments: 0,
+        unreadDeliverables: 0,
+      },
     ] satisfies TicketUnreadCounts[]);
 
     await useUnreadStore.getState().loadUnreadCounts(['a', 'b']);

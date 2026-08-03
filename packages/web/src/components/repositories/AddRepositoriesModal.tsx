@@ -1,12 +1,14 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+
 import type { RepoDiscovery } from '@fleex/shared';
-import { Modal } from '../ui/Modal';
-import { Button } from '../ui/Button';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
-import * as api from '../../services/api';
+
 import { cn } from '../../lib/cn';
 import { tintClasses, tintText } from '../../lib/tints';
+import * as api from '../../services/api';
+import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { Button } from '../ui/Button';
+import { Modal } from '../ui/Modal';
 
 const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 
@@ -20,7 +22,17 @@ function formatRelativeTime(dateStr: string): string {
   return `${Math.floor(diff / 60000)}m ago`;
 }
 
-function Toggle({ on, disabled, label, onChange }: { on: boolean; disabled?: boolean; label: string; onChange?: () => void }) {
+function Toggle({
+  on,
+  disabled,
+  label,
+  onChange,
+}: {
+  on: boolean;
+  disabled?: boolean;
+  label: string;
+  onChange?: () => void;
+}) {
   return (
     <button
       type="button"
@@ -35,17 +47,28 @@ function Toggle({ on, disabled, label, onChange }: { on: boolean; disabled?: boo
         disabled && 'cursor-not-allowed opacity-50',
       )}
     >
-      <span className={cn(
-        'absolute top-[2.5px] h-[14px] w-[14px] rounded-full bg-white transition-[left] duration-150',
-        on ? 'left-[17px]' : 'left-[3px]',
-      )} />
+      <span
+        className={cn(
+          'absolute top-[2.5px] h-[14px] w-[14px] rounded-full bg-white transition-[left] duration-150',
+          on ? 'left-[17px]' : 'left-[3px]',
+        )}
+      />
     </button>
   );
 }
 
 function SearchIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="11" cy="11" r="7" />
       <path d="m21 21-4.35-4.35" />
     </svg>
@@ -68,11 +91,20 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
 
   const loadDiscovery = useCallback(() => {
     setDiscoveryError(false);
-    api.fetchGithubDiscovery().then(setDiscovery).catch(() => setDiscoveryError(true));
+    api
+      .fetchGithubDiscovery()
+      .then(setDiscovery)
+      .catch(() => setDiscoveryError(true));
   }, []);
 
   useEffect(() => {
-    if (open) { loadDiscovery(); setSelection(new Set()); setQuery(''); setFreeform(''); setFreeformHint(null); }
+    if (open) {
+      loadDiscovery();
+      setSelection(new Set());
+      setQuery('');
+      setFreeform('');
+      setFreeformHint(null);
+    }
   }, [open, loadDiscovery]);
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -83,7 +115,9 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
     return discovery.owners
       .map((owner) => ({
         ...owner,
-        repos: owner.repos.filter((repo) => repo.nameWithOwner.toLowerCase().includes(normalizedQuery)),
+        repos: owner.repos.filter((repo) =>
+          repo.nameWithOwner.toLowerCase().includes(normalizedQuery),
+        ),
       }))
       .filter((owner) => owner.repos.length > 0);
   }, [discovery, normalizedQuery]);
@@ -93,27 +127,33 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
     [filteredOwners],
   );
 
-  const toggle = useCallback((repo: string) => {
-    const key = repo.toLowerCase();
-    if (trackedSet.has(key)) return;
-    setSelection((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, [trackedSet]);
+  const toggle = useCallback(
+    (repo: string) => {
+      const key = repo.toLowerCase();
+      if (trackedSet.has(key)) return;
+      setSelection((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    },
+    [trackedSet],
+  );
 
-  const selectAll = useCallback((owner: RepoDiscovery['owners'][number]) => {
-    setSelection((prev) => {
-      const next = new Set(prev);
-      for (const repo of owner.repos) {
-        const key = repo.nameWithOwner.toLowerCase();
-        if (!trackedSet.has(key)) next.add(key);
-      }
-      return next;
-    });
-  }, [trackedSet]);
+  const selectAll = useCallback(
+    (owner: RepoDiscovery['owners'][number]) => {
+      setSelection((prev) => {
+        const next = new Set(prev);
+        for (const repo of owner.repos) {
+          const key = repo.nameWithOwner.toLowerCase();
+          if (!trackedSet.has(key)) next.add(key);
+        }
+        return next;
+      });
+    },
+    [trackedSet],
+  );
 
   const handleVerify = useCallback(async () => {
     const repo = freeform.trim().toLowerCase();
@@ -152,9 +192,10 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
 
   const selectionCount = selection.size;
   const selectionList = useMemo(() => [...selection], [selection]);
-  const recap = selectionCount === 0
-    ? 'Select repos to track'
-    : `${selectionCount} repo${selectionCount === 1 ? '' : 's'} to add · ${selectionList.slice(0, 3).join(', ')}${selectionCount > 3 ? `, +${selectionCount - 3} more` : ''}`;
+  const recap =
+    selectionCount === 0
+      ? 'Select repos to track'
+      : `${selectionCount} repo${selectionCount === 1 ? '' : 's'} to add · ${selectionList.slice(0, 3).join(', ')}${selectionCount > 3 ? `, +${selectionCount - 3} more` : ''}`;
 
   const isFreeformValid = REPO_RE.test(freeform.trim());
 
@@ -166,17 +207,24 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
       <div>
         <h2 className="text-sm font-semibold text-[var(--theme-text-primary)]">Add repositories</h2>
         <p className="mt-1 text-xs text-[var(--theme-text-secondary)]">
-          Organizations detected via <code>gh</code> — {totalOwners} orgs, {totalRepos} accessible repos
+          Organizations detected via <code>gh</code> — {totalOwners} orgs, {totalRepos} accessible
+          repos
         </p>
       </div>
 
       {discoveryError ? (
         <div className="mt-6 flex flex-col items-center gap-3 py-10 text-center">
-          <p className="text-sm text-[var(--theme-text-secondary)]">GitHub CLI not authenticated or unavailable</p>
-          <Button size="sm" onClick={loadDiscovery}>Retry</Button>
+          <p className="text-sm text-[var(--theme-text-secondary)]">
+            GitHub CLI not authenticated or unavailable
+          </p>
+          <Button size="sm" onClick={loadDiscovery}>
+            Retry
+          </Button>
         </div>
       ) : !discovery ? (
-        <div className="mt-6 py-10 text-center text-sm text-[var(--theme-text-secondary)]">Loading…</div>
+        <div className="mt-6 py-10 text-center text-sm text-[var(--theme-text-secondary)]">
+          Loading…
+        </div>
       ) : (
         <>
           <div className="mt-4 flex items-center gap-2">
@@ -203,16 +251,27 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
 
           <div className="mt-3 max-h-[50vh] overflow-y-auto rounded-md border border-[var(--theme-border)]">
             {filteredOwners.length === 0 ? (
-              <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">No repositories match your search.</div>
+              <div className="py-8 text-center text-sm text-[var(--theme-text-secondary)]">
+                No repositories match your search.
+              </div>
             ) : (
               filteredOwners.map((owner) => {
-                const ownerTrackedCount = owner.repos.filter((r) => trackedSet.has(r.nameWithOwner.toLowerCase())).length;
+                const ownerTrackedCount = owner.repos.filter((r) =>
+                  trackedSet.has(r.nameWithOwner.toLowerCase()),
+                ).length;
                 return (
-                  <div key={owner.login} className="border-b border-[var(--theme-border)] last:border-b-0">
+                  <div
+                    key={owner.login}
+                    className="border-b border-[var(--theme-border)] last:border-b-0"
+                  >
                     <div className="flex items-center justify-between bg-[var(--theme-bg-overlay)] px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--theme-text-primary)]">{owner.login}</span>
-                        <span className="text-xs text-[var(--theme-text-muted)]">{ownerTrackedCount}/{owner.repos.length} tracked</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--theme-text-primary)]">
+                          {owner.login}
+                        </span>
+                        <span className="text-xs text-[var(--theme-text-muted)]">
+                          {ownerTrackedCount}/{owner.repos.length} tracked
+                        </span>
                       </div>
                       <button
                         type="button"
@@ -232,18 +291,27 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
                             key={repo.nameWithOwner}
                             className={cn(
                               'flex items-center justify-between px-3 py-2',
-                              isSelected && cn('border', tintClasses('purple').borderColor, tintClasses('purple').bg),
+                              isSelected &&
+                                cn(
+                                  'border',
+                                  tintClasses('purple').borderColor,
+                                  tintClasses('purple').bg,
+                                ),
                             )}
                           >
                             <div>
-                              <div className="font-mono text-xs text-[var(--theme-text-primary)]">{repo.nameWithOwner}</div>
+                              <div className="font-mono text-xs text-[var(--theme-text-primary)]">
+                                {repo.nameWithOwner}
+                              </div>
                               <div className="text-[11px] text-[var(--theme-text-muted)]">
                                 {repo.visibility} · updated {formatRelativeTime(repo.updatedAt)}
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
                               {isTracked && (
-                                <span className={cn('text-[11px]', tintText('green'))}>already tracked</span>
+                                <span className={cn('text-[11px]', tintText('green'))}>
+                                  already tracked
+                                </span>
                               )}
                               <Toggle
                                 on={isTracked || isSelected}
@@ -270,7 +338,10 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
               <input
                 type="text"
                 value={freeform}
-                onChange={(e) => { setFreeform(e.target.value); setFreeformHint(null); }}
+                onChange={(e) => {
+                  setFreeform(e.target.value);
+                  setFreeformHint(null);
+                }}
                 placeholder="owner/repo — e.g. anthropics/claude-code"
                 className={cn(
                   'flex-1 rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-1.5 text-sm text-[var(--theme-text-primary)]',
@@ -278,16 +349,17 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
                   'focus:border-[var(--theme-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--theme-accent)]',
                 )}
               />
-              <Button
-                size="sm"
-                disabled={!isFreeformValid || verifying}
-                onClick={handleVerify}
-              >
+              <Button size="sm" disabled={!isFreeformValid || verifying} onClick={handleVerify}>
                 Verify & add
               </Button>
             </div>
             {freeformHint && (
-              <p className={cn('mt-1.5 text-xs', freeformHint === 'already tracked' ? tintText('green') : tintText('red'))}>
+              <p
+                className={cn(
+                  'mt-1.5 text-xs',
+                  freeformHint === 'already tracked' ? tintText('green') : tintText('red'),
+                )}
+              >
                 {freeformHint}
               </p>
             )}
@@ -298,7 +370,9 @@ export function AddRepositoriesModal({ open, onClose }: { open: boolean; onClose
       <div className="mt-5 flex items-center justify-between border-t border-[var(--theme-border)] pt-4">
         <span className="text-xs text-[var(--theme-text-secondary)]">{recap}</span>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             variant="primary"
             size="sm"

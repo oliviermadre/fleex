@@ -1,5 +1,5 @@
-import type { EventBus } from './event-bus.js';
 import type { BroadcastRegistrar } from './broadcast-registrar.js';
+import type { EventBus } from './event-bus.js';
 
 /**
  * Remote listener — reacts to domain events received from the hub (i.e.

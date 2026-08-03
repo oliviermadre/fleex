@@ -1,25 +1,33 @@
 import { useMemo, useState } from 'react';
+
 import type { Ticket, TicketLink, BoardWithCounts } from '@fleex/shared';
-import { TICKET_STATUS, SLACK_IMPORT_PENDING_TAG, SLACK_IMPORT_FAILED_TAG, isSlackImportTag } from '@fleex/shared';
-import { PriorityPickerPopover } from './PriorityPickerPopover';
-import { TypePickerPopover } from './TypePickerPopover';
-import { DueDateBadge } from './DueDateBadge';
-import { ActivityPill } from './ActivityPill';
-import { CostBadge } from './CostBadge';
-import { SmartSessionButton } from '../dashboard/SmartSessionButton';
-import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useUnreadStore } from '../../stores/unreadStore';
-import { useTicketActivityStore } from '../../stores/ticketActivityStore';
-import { useTicketGroupStore } from '../../stores/ticketGroupStore';
-import { executeSkill } from '../../services/api';
+import {
+  TICKET_STATUS,
+  SLACK_IMPORT_PENDING_TAG,
+  SLACK_IMPORT_FAILED_TAG,
+  isSlackImportTag,
+} from '@fleex/shared';
+
 import { cn } from '../../lib/cn';
-import { tint, tintText, tintClasses } from '../../lib/tints';
-import { PrBadge } from '../ui/PrBadge';
 import { parseGithubPrRef } from '../../lib/prRef';
 import { isMissingRepo, isRepoOptional } from '../../lib/repoStatus';
+import { tint, tintText, tintClasses } from '../../lib/tints';
+import { executeSkill } from '../../services/api';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useTicketActivityStore } from '../../stores/ticketActivityStore';
+import { useTicketGroupStore } from '../../stores/ticketGroupStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUnreadStore } from '../../stores/unreadStore';
+import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { MissingRepoIcon, RepositoriesIcon } from '../sidebar/icons';
+import { PrBadge } from '../ui/PrBadge';
+
+import { ActivityPill } from './ActivityPill';
+import { CostBadge } from './CostBadge';
+import { DueDateBadge } from './DueDateBadge';
+import { PriorityPickerPopover } from './PriorityPickerPopover';
+import { TypePickerPopover } from './TypePickerPopover';
 
 const PRIORITY_BORDER: Record<string, string> = {
   none: 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
@@ -101,7 +109,8 @@ export function KanbanCard({
   );
 
   const timeInColumn = formatTimeAgo(ticket.statusChangedAt);
-  const isCompleted = ticket.status === TICKET_STATUS.DONE || ticket.status === TICKET_STATUS.CANCELLED;
+  const isCompleted =
+    ticket.status === TICKET_STATUS.DONE || ticket.status === TICKET_STATUS.CANCELLED;
   // "Forgotten repo" warning: a ticket that should carry a repository link but
   // doesn't (and isn't flagged intentionally code-less). We stay silent on
   // completed tickets — a missing repo no longer matters once work is closed.
@@ -121,7 +130,9 @@ export function KanbanCard({
   // Async Slack-import lifecycle (carried as reserved tags so it survives reload).
   const isSlackImportPending = ticket.tags.includes(SLACK_IMPORT_PENDING_TAG);
   const isSlackImportFailed = ticket.tags.includes(SLACK_IMPORT_FAILED_TAG);
-  const slackThreaded = ticket.links.some((l: TicketLink) => l.type === 'slack_message' && l.label === 'Slack thread');
+  const slackThreaded = ticket.links.some(
+    (l: TicketLink) => l.type === 'slack_message' && l.label === 'Slack thread',
+  );
   // Reserved lifecycle tags are status, not user tags — keep them out of the chip row.
   const displayTags = ticket.tags.filter((t: string) => !isSlackImportTag(t));
 
@@ -211,7 +222,14 @@ export function KanbanCard({
               }}
               title={ticket.blocked ? 'Unblock ticket' : 'Mark as blocked'}
             >
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75">
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+              >
                 <rect x="3" y="7" width="10" height="8" rx="1.5" />
                 <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
               </svg>
@@ -224,7 +242,10 @@ export function KanbanCard({
               'flex-shrink-0 rounded p-0.5 transition-all',
               ticket.favorite
                 ? cn('opacity-100', tintClasses('yellow').solidText)
-                : cn('opacity-0 group-hover:opacity-60 text-[var(--theme-text-faint)] hover:opacity-100', tintClasses('yellow').hoverText),
+                : cn(
+                    'opacity-0 group-hover:opacity-60 text-[var(--theme-text-faint)] hover:opacity-100',
+                    tintClasses('yellow').hoverText,
+                  ),
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -232,12 +253,18 @@ export function KanbanCard({
             }}
             title={ticket.favorite ? 'Remove from favorites' : 'Add to favorites'}
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill={ticket.favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill={ticket.favorite ? 'currentColor' : 'none'}
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
             </svg>
           </button>
         </div>
-
       </div>
 
       {/* ── TITLE ZONE ── hero element, full width */}
@@ -250,16 +277,35 @@ export function KanbanCard({
       {/* ── SLACK IMPORT STATUS ── background synthesis is slow; show progress / retry */}
       {isSlackImportPending && (
         <div className="flex items-center gap-1.5 px-3 pb-1.5 text-[11px] text-[var(--theme-accent)]">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin flex-shrink-0">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="animate-spin flex-shrink-0"
+          >
             <circle cx="8" cy="8" r="6" strokeDasharray="30" strokeDashoffset="10" />
           </svg>
           <span>Summarizing Slack {slackThreaded ? 'thread' : 'message'}…</span>
         </div>
       )}
       {isSlackImportFailed && (
-        <div className="flex items-center gap-2 px-3 pb-1.5 text-[11px]" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="flex items-center gap-2 px-3 pb-1.5 text-[11px]"
+          onClick={(e) => e.stopPropagation()}
+        >
           <span className="inline-flex items-center gap-1 text-[var(--theme-danger)]">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" className="flex-shrink-0">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              className="flex-shrink-0"
+            >
               <circle cx="8" cy="8" r="6.5" />
               <path d="M8 4.5v4M8 11h.01" />
             </svg>
@@ -294,7 +340,8 @@ export function KanbanCard({
           {prLinks.map((pr: TicketLink) => {
             const parsed = parseGithubPrRef(pr.ref);
             if (!parsed) return null;
-            const state = (prStates?.[pr.ref]?.toLowerCase() ?? 'open') as 'open' | 'merged' | 'closed';
+            const state = (prStates?.[pr.ref]?.toLowerCase() ?? 'open') as
+              'open' | 'merged' | 'closed';
             return (
               <PrBadge
                 key={pr.id}
@@ -325,10 +372,24 @@ export function KanbanCard({
             {/* Agentic activity (running / waiting) — persists across the board */}
             <ActivityPill activity={activity} detail={activityDetail} />
             {/* Assignee */}
-            {ticket.assignee && (
-              ticket.assignee === 'user' ? (
-                <span className={cn('inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium', tint('yellow'))} title="Me">
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+            {ticket.assignee &&
+              (ticket.assignee === 'user' ? (
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                    tint('yellow'),
+                  )}
+                  title="Me"
+                >
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    className="flex-shrink-0"
+                  >
                     <rect x="2" y="3" width="12" height="10" rx="1.5" />
                     <circle cx="8" cy="7" r="1.5" />
                     <path d="M5 12c0-1.5 1.3-2.5 3-2.5s3 1 3 2.5" />
@@ -336,8 +397,22 @@ export function KanbanCard({
                   <span className="max-w-[50px] truncate">Me</span>
                 </span>
               ) : (
-                <span className={cn('inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium', tint('purple'))} title={`Agent: ${ticket.assignee}`}>
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                    tint('purple'),
+                  )}
+                  title={`Agent: ${ticket.assignee}`}
+                >
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    className="flex-shrink-0"
+                  >
                     <rect x="3" y="5" width="10" height="8" rx="1.5" />
                     <path d="M5.5 8.5h1M9.5 8.5h1" />
                     <path d="M6 11h4" />
@@ -346,8 +421,7 @@ export function KanbanCard({
                   </svg>
                   <span className="max-w-[50px] truncate">{ticket.assignee}</span>
                 </span>
-              )
-            )}
+              ))}
             <div className="flex-1" />
           </div>
 
@@ -367,19 +441,53 @@ export function KanbanCard({
         {/* Bottom-left: Comments + Deliverables counts */}
         <span className="flex-1 flex items-center gap-2">
           <button
-            className={cn('inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity', unread.unreadComments > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]')}
-            title={unread.unreadComments > 0 ? `${unread.unreadComments} unread / ${unread.totalComments} comments` : `${unread.totalComments} comments`}
-            onClick={(e) => { e.stopPropagation(); selectTicket(ticket.id); setTicketTab('comments'); }}
+            className={cn(
+              'inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity',
+              unread.unreadComments > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]',
+            )}
+            title={
+              unread.unreadComments > 0
+                ? `${unread.unreadComments} unread / ${unread.totalComments} comments`
+                : `${unread.totalComments} comments`
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              selectTicket(ticket.id);
+              setTicketTab('comments');
+            }}
           >
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" /></svg>
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v7a1.5 1.5 0 01-1.5 1.5H5l-3 2.5V3.5z" />
+            </svg>
             {unread.totalComments}
           </button>
           <button
-            className={cn('inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity', unread.unreadDeliverables > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]')}
-            title={unread.unreadDeliverables > 0 ? `${unread.unreadDeliverables} unseen / ${unread.totalDeliverables} deliverables` : `${unread.totalDeliverables} deliverables`}
-            onClick={(e) => { e.stopPropagation(); selectTicket(ticket.id); setTicketTab('deliverables'); }}
+            className={cn(
+              'inline-flex items-center gap-0.5 cursor-pointer hover:opacity-70 transition-opacity',
+              unread.unreadDeliverables > 0 ? tintText('red') : 'text-[var(--theme-text-muted)]',
+            )}
+            title={
+              unread.unreadDeliverables > 0
+                ? `${unread.unreadDeliverables} unseen / ${unread.totalDeliverables} deliverables`
+                : `${unread.totalDeliverables} deliverables`
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              selectTicket(ticket.id);
+              setTicketTab('deliverables');
+            }}
           >
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="1.5" width="10" height="13" rx="1.5" /><path d="M5.5 5h5M5.5 8h5M5.5 11h3" /></svg>
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <rect x="3" y="1.5" width="10" height="13" rx="1.5" />
+              <path d="M5.5 5h5M5.5 8h5M5.5 11h3" />
+            </svg>
             {unread.totalDeliverables}
           </button>
           {/* Linked repositories — mirrors the comment/deliverable counters.
@@ -387,7 +495,12 @@ export function KanbanCard({
               muted when intentionally code-less or the ticket is closed);
               ≥1 → repo icon + count. Hover lists the repos. */}
           <span
-            className={cn('inline-flex items-center gap-0.5', repoCount === 0 && missingRepo ? tintText('orange') : 'text-[var(--theme-text-muted)]')}
+            className={cn(
+              'inline-flex items-center gap-0.5',
+              repoCount === 0 && missingRepo
+                ? tintText('orange')
+                : 'text-[var(--theme-text-muted)]',
+            )}
             title={repoTooltip}
           >
             {repoCount > 0 ? <RepositoriesIcon size={12} /> : <MissingRepoIcon size={12} />}
@@ -396,12 +509,13 @@ export function KanbanCard({
         </span>
 
         {/* Center: Display ID */}
-        <span className="flex-shrink-0 text-[var(--theme-text-muted)]">
-          #{ticket.displayId}
-        </span>
+        <span className="flex-shrink-0 text-[var(--theme-text-muted)]">#{ticket.displayId}</span>
 
         {/* Bottom-right: Due date + Time in column */}
-        <span className="flex-1 text-right flex items-center justify-end gap-1.5" title={`In this column since ${new Date(ticket.statusChangedAt).toLocaleString(undefined, { hour12: false })}`}>
+        <span
+          className="flex-1 text-right flex items-center justify-end gap-1.5"
+          title={`In this column since ${new Date(ticket.statusChangedAt).toLocaleString(undefined, { hour12: false })}`}
+        >
           <DueDateBadge dueDate={ticket.dueDate} status={ticket.status} size="sm" />
           {timeInColumn}
           {isCompleted && (
@@ -413,7 +527,16 @@ export function KanbanCard({
               }}
               title="Archive ticket"
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <rect x="2" y="3" width="20" height="5" rx="1" />
                 <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
                 <path d="M10 12h4" />

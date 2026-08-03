@@ -1,7 +1,7 @@
 import type { SessionEntity } from '../../domain/entities.js';
-import type { TmuxPort, TmuxSessionInfo } from '../ports/tmux.port.js';
-import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { SessionStorePort } from '../ports/session-store.port.js';
+import type { TmuxPort, TmuxSessionInfo } from '../ports/tmux.port.js';
 
 export class ListSessionsUseCase {
   constructor(

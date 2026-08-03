@@ -1,14 +1,23 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import type { CommandDef } from '../../core/types.ts';
+
+import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
 import { c } from '../../core/colors.ts';
+import {
+  GATEWAY_TOKEN_FILE,
+  generateGatewayToken,
+  inspectGatewayToken,
+  readGatewayToken,
+  writeGatewayToken,
+} from '../../core/gateway-token.ts';
 import { resolveInstance } from '../../core/instance.ts';
 import { SERVICES, loadPorts, type Service } from '../../core/ports.ts';
 import { isRunning } from '../../core/process.ts';
 import { MIN_BUN_VERSION, versionGte } from '../../core/version.ts';
-import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
 import { reportWorkspacesConfig } from '../../core/workspaces.ts';
+
+import type { CommandDef } from '../../core/types.ts';
 
 interface ToolStatus {
   installed: boolean;
@@ -78,14 +87,19 @@ const def: CommandDef = {
     } else if (bun.version && versionGte(bun.version, MIN_BUN_VERSION)) {
       line(`${c.green('✓')} bun ${bun.version} (>= ${MIN_BUN_VERSION})`);
     } else {
-      line(`${c.red('✗')} bun ${bun.version} — too old, need >= ${MIN_BUN_VERSION}. Run: ${c.bold('bun upgrade')}`);
+      line(
+        `${c.red('✗')} bun ${bun.version} — too old, need >= ${MIN_BUN_VERSION}. Run: ${c.bold('bun upgrade')}`,
+      );
       allOk = false;
     }
 
     // tmux
     const tmux = probeSimple('tmux', ['-V']);
     if (tmux.installed) line(`${c.green('✓')} tmux ${tmux.version ?? ''}`);
-    else { line(`${c.red('✗')} tmux not found`); allOk = false; }
+    else {
+      line(`${c.red('✗')} tmux not found`);
+      allOk = false;
+    }
 
     // claude — 3 states
     const claude = probeClaudeAuth();
@@ -95,7 +109,9 @@ const def: CommandDef = {
     } else if (claude.authenticated) {
       line(`${c.green('✓')} claude ${claude.version ?? ''} — authenticated`);
     } else {
-      line(`${c.yellow('⚠')} claude ${claude.version ?? ''} — not authenticated. Run: ${c.bold('claude auth login')}`);
+      line(
+        `${c.yellow('⚠')} claude ${claude.version ?? ''} — not authenticated. Run: ${c.bold('claude auth login')}`,
+      );
       allOk = false;
     }
 
@@ -107,16 +123,22 @@ const def: CommandDef = {
       } else if (hooksStatus.settingsCorrupted) {
         if (opts.fix) {
           const res = installClaudeHooks();
-          line(`${c.green('✓')} claude hooks — installed (${res.installed.length} events). Backup: ${res.backupPath ?? 'none'}`);
+          line(
+            `${c.green('✓')} claude hooks — installed (${res.installed.length} events). Backup: ${res.backupPath ?? 'none'}`,
+          );
         } else {
-          line(`${c.red('✗')} claude hooks — settings.json is invalid JSON. Run: ${c.bold('fleex doctor --fix')}`);
+          line(
+            `${c.red('✗')} claude hooks — settings.json is invalid JSON. Run: ${c.bold('fleex doctor --fix')}`,
+          );
           allOk = false;
         }
       } else if (opts.fix) {
         const res = installClaudeHooks();
         line(`${c.green('✓')} claude hooks — installed (${res.installed.length} events)`);
       } else {
-        line(`${c.yellow('⚠')} claude hooks — missing ${hooksStatus.missing.length} event(s). Run: ${c.bold('fleex doctor --fix')}`);
+        line(
+          `${c.yellow('⚠')} claude hooks — missing ${hooksStatus.missing.length} event(s). Run: ${c.bold('fleex doctor --fix')}`,
+        );
         allOk = false;
       }
     }
@@ -133,7 +155,9 @@ const def: CommandDef = {
     } else if (gh.authenticated) {
       line(`${c.green('✓')} gh ${gh.version ?? ''} — authenticated`);
     } else {
-      line(`${c.yellow('⚠')} gh ${gh.version ?? ''} — not authenticated. Run: ${c.bold('gh auth login')}`);
+      line(
+        `${c.yellow('⚠')} gh ${gh.version ?? ''} — not authenticated. Run: ${c.bold('gh auth login')}`,
+      );
       allOk = false;
     }
 
@@ -153,7 +177,9 @@ const def: CommandDef = {
     if (fs.existsSync(path.join(ctx.repoDir, 'node_modules'))) {
       line(`${c.green('✓')} node_modules installed`);
     } else {
-      line(`${c.yellow('○')} node_modules missing — run: ${c.bold(`cd ${ctx.repoDir} && bun install`)}`);
+      line(
+        `${c.yellow('○')} node_modules missing — run: ${c.bold(`cd ${ctx.repoDir} && bun install`)}`,
+      );
     }
 
     // workspaces config — global ~/.fleex/workspaces.json validity, via the
@@ -172,18 +198,92 @@ const def: CommandDef = {
       }
     }
 
+    const ports = loadPorts(ctx);
+
+    // gateway token — the gateway runs arbitrary shell commands, so this file
+    // is the only thing standing between any local process and a root-equivalent
+    // shell. Never print the token itself, only its path and state.
+    let tokenReport = inspectGatewayToken();
+    const display = GATEWAY_TOKEN_FILE.replace(process.env.HOME ?? '~', '~');
+    if (opts.fix && tokenReport.state !== 'ok') {
+      // A valid token is never rotated: the running server still holds it.
+      if (tokenReport.state === 'bad-perms') {
+        fs.chmodSync(GATEWAY_TOKEN_FILE, 0o600);
+      } else {
+        writeGatewayToken(generateGatewayToken());
+      }
+      tokenReport = inspectGatewayToken();
+      line(`${c.green('✓')} gateway token — fixed (${display}, 0600)`);
+      line(`  ${c.dim(`Run '${c.bold('fleex restart')}' so the server picks up the new token.`)}`);
+    } else if (tokenReport.state === 'ok') {
+      line(`${c.green('✓')} gateway token — present (${display}, 0600)`);
+    } else if (tokenReport.state === 'bad-perms') {
+      const mode = (tokenReport.mode ?? 0).toString(8).padStart(4, '0');
+      line(
+        `${c.yellow('⚠')} gateway token — file mode is ${mode}, expected 0600. Run: ${c.bold('fleex doctor --fix')}`,
+      );
+      allOk = false;
+    } else if (tokenReport.state === 'malformed') {
+      line(
+        `${c.red('✗')} gateway token — malformed (expected 64 hex chars). Run: ${c.bold('fleex doctor --fix')}`,
+      );
+      allOk = false;
+    } else {
+      line(`${c.red('✗')} gateway token — missing. Run: ${c.bold('fleex doctor --fix')}`);
+      allOk = false;
+    }
+
+    // Online probe: a token on disk proves nothing if the running gateway was
+    // started with a different one (typically a rotation without a restart).
+    const gatewayToken = readGatewayToken();
+    if (ports && gatewayToken && isRunning('gateway', ctx)) {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 2000);
+        const res = await fetch(`http://localhost:${ports.gateway}/health`, {
+          headers: { Authorization: `Bearer ${gatewayToken}` },
+          signal: ctrl.signal,
+        });
+        clearTimeout(tid);
+        const body = (await res.json().catch(() => ({}))) as { authenticated?: boolean };
+        if (res.ok && body.authenticated) {
+          line(
+            `${c.green('✓')} gateway token — accepted by the running gateway (:${ports.gateway})`,
+          );
+        } else {
+          // /health answers 200 even unauthenticated, so the status code alone
+          // says nothing — `authenticated` is what tells them apart.
+          const detail = res.ok ? 'token mismatch' : `HTTP ${res.status}`;
+          line(
+            `${c.red('✗')} gateway token — rejected by the running gateway (${detail}). Run: ${c.bold('fleex restart')}`,
+          );
+          allOk = false;
+        }
+      } catch {
+        line(
+          `${c.yellow('⚠')} gateway token — could not reach the running gateway on :${ports.gateway}`,
+        );
+      }
+    }
+
     // Services
     process.stdout.write('\n');
-    const ports = loadPorts(ctx);
     if (ports) {
       line(`${c.bold(`Services [${ctx.instanceSlug}]:`)}`);
       for (const svc of SERVICES as readonly Service[]) {
         if (svc === 'desktop') continue;
         let port: number;
         let healthPath: string;
-        if (svc === 'gateway') { port = ports.gateway; healthPath = '/health'; }
-        else if (svc === 'server') { port = ports.server; healthPath = '/health'; }
-        else { port = ports.web; healthPath = '/'; }
+        if (svc === 'gateway') {
+          port = ports.gateway;
+          healthPath = '/health';
+        } else if (svc === 'server') {
+          port = ports.server;
+          healthPath = '/health';
+        } else {
+          port = ports.web;
+          healthPath = '/';
+        }
 
         if (!isRunning(svc, ctx)) {
           line(`${c.dim('○')} ${svc} — not running`);
@@ -193,7 +293,7 @@ const def: CommandDef = {
         try {
           const ctrl = new AbortController();
           const tid = setTimeout(() => ctrl.abort(), 2000);
-          const res = await fetch(`http://localhost:${port}${healthPath}`, { signal: ctrl.signal });
+          const res = await fetch(`http://127.0.0.1:${port}${healthPath}`, { signal: ctrl.signal });
           clearTimeout(tid);
           code = String(res.status);
           if (res.status >= 200 && res.status < 300) {
@@ -212,7 +312,10 @@ const def: CommandDef = {
 
     process.stdout.write('\n');
     if (allOk) process.stdout.write(`  ${c.green(c.bold('All checks passed.'))}\n\n`);
-    else { process.stdout.write(`  ${c.yellow(c.bold('Some checks failed — see above.'))}\n\n`); process.exit(1); }
+    else {
+      process.stdout.write(`  ${c.yellow(c.bold('Some checks failed — see above.'))}\n\n`);
+      process.exit(1);
+    }
   },
 };
 

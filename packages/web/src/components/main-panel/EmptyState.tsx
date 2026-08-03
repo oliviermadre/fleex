@@ -7,7 +7,15 @@ export function EmptyState() {
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 text-[var(--theme-text-muted)]">
-      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
+      <svg
+        width="48"
+        height="48"
+        viewBox="0 0 48 48"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        className="text-[var(--theme-text-faint)]"
+      >
         <rect x="6" y="8" width="36" height="32" rx="4" />
         <line x1="6" y1="16" x2="42" y2="16" />
         <circle cx="12" cy="12" r="1.5" fill="currentColor" />

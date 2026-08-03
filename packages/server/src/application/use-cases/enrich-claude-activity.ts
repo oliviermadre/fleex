@@ -1,9 +1,11 @@
 import type { ClaudeActivityStatus } from '@fleex/shared';
-import type { ClaudeStatePort } from '../ports/claude-state.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
+
+import { determineClaudeActivity } from '../../domain/services/claude-activity-determiner.js';
+
 import type { SessionEntity } from '../../domain/entities.js';
 import type { ClaudeMessage } from '../../domain/types/claude-message.js';
-import { determineClaudeActivity } from '../../domain/services/claude-activity-determiner.js';
+import type { ClaudeStatePort } from '../ports/claude-state.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
 
 export class EnrichClaudeActivityUseCase {
   constructor(
@@ -18,9 +20,7 @@ export class EnrichClaudeActivityUseCase {
   async execute(sessions: SessionEntity[]): Promise<Map<string, ClaudeActivityStatus>> {
     const result = new Map<string, ClaudeActivityStatus>();
 
-    const claudeSessions = sessions.filter(
-      (s) => s.status === 'running',
-    );
+    const claudeSessions = sessions.filter((s) => s.status === 'running');
 
     if (claudeSessions.length === 0) return result;
 

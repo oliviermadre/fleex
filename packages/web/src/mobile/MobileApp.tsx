@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
-import { useWebSocket } from '../hooks/useWebSocket';
-import { useTickets } from '../hooks/useTickets';
+
+import { warmMarkdown } from '../components/markdown/LazyMarkdown';
 import { useAgentPersonas } from '../hooks/useAgentPersonas';
-import { useTicketStore } from '../stores/ticketStore';
+import { useTickets } from '../hooks/useTickets';
+import { useWebSocket } from '../hooks/useWebSocket';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useTicketStore } from '../stores/ticketStore';
+
+import { MobileAssistant } from './MobileAssistant';
 import { MobileBoard } from './MobileBoard';
 import { MobileTicketDetail } from './MobileTicketDetail';
-import { MobileAssistant } from './MobileAssistant';
 
 type MobileView = 'board' | 'assistant';
 
@@ -23,10 +26,13 @@ export function MobileApp() {
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   useEffect(() => {
     loadSettings();
+    // Opening a ticket is one tap away — fetch the markdown chunk while idle so
+    // the Suspense fallback never actually shows.
+    warmMarkdown();
   }, [loadSettings]);
 
   const ticket = useTicketStore((s) =>
-    s.selectedTicketId ? s.tickets.find((t) => t.id === s.selectedTicketId) ?? null : null,
+    s.selectedTicketId ? (s.tickets.find((t) => t.id === s.selectedTicketId) ?? null) : null,
   );
 
   const [view, setView] = useState<MobileView>('board');

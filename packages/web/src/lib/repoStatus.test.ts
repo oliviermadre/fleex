@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
 import type { Ticket, TicketLink } from '@fleex/shared';
+
 import {
   NO_REPO_TAG,
   ticketHasRepo,
@@ -57,7 +59,9 @@ describe('ticketHasRepo', () => {
   // worktree link alone (or any other link type) must NOT count as "has repo",
   // otherwise the guard-rail would stay silent on a ticket that can't run code.
   it('is true only when a repository link is present', () => {
-    expect(ticketHasRepo(makeTicket({ links: [link({ type: 'repository', ref: 'org/a' })] }))).toBe(true);
+    expect(ticketHasRepo(makeTicket({ links: [link({ type: 'repository', ref: 'org/a' })] }))).toBe(
+      true,
+    );
   });
 
   it('is false with no links at all', () => {
@@ -68,7 +72,10 @@ describe('ticketHasRepo', () => {
     expect(
       ticketHasRepo(
         makeTicket({
-          links: [link({ type: 'worktree', ref: 'org/a:branch' }), link({ type: 'github_issue', ref: 'org/a#1' })],
+          links: [
+            link({ type: 'worktree', ref: 'org/a:branch' }),
+            link({ type: 'github_issue', ref: 'org/a#1' }),
+          ],
         }),
       ),
     ).toBe(false);
@@ -95,7 +102,9 @@ describe('isMissingRepo', () => {
   });
 
   it('is false when a repository link exists', () => {
-    expect(isMissingRepo(makeTicket({ links: [link({ type: 'repository', ref: 'org/a' })] }))).toBe(false);
+    expect(isMissingRepo(makeTicket({ links: [link({ type: 'repository', ref: 'org/a' })] }))).toBe(
+      false,
+    );
   });
 
   it('is false when the ticket is explicitly flagged no-repo (deliberate no-code)', () => {
@@ -167,13 +176,20 @@ describe('topReposForBoard', () => {
   const NOW = Date.parse('2026-07-18T00:00:00.000Z');
   const daysAgo = (n: number) => new Date(NOW - n * DAY).toISOString();
   const repoLinkedAt = (ref: string, iso: string) =>
-    makeTicket({ id: `${ref}@${iso}`, boardId: 'b1', links: [link({ type: 'repository', ref, createdAt: iso })] });
+    makeTicket({
+      id: `${ref}@${iso}`,
+      boardId: 'b1',
+      links: [link({ type: 'repository', ref, createdAt: iso })],
+    });
 
   it('ranks a more recently linked repo above an older one at equal count', () => {
     // WHY: the whole point of the change — recency must reorder repos that would
     // otherwise tie on raw count, so the repo used yesterday beats the one used
     // months ago.
-    const recentVsOld = [repoLinkedAt('org/recent', daysAgo(1)), repoLinkedAt('org/old', daysAgo(120))];
+    const recentVsOld = [
+      repoLinkedAt('org/recent', daysAgo(1)),
+      repoLinkedAt('org/old', daysAgo(120)),
+    ];
     expect(topReposForBoard(recentVsOld, 'b1', { now: NOW })).toEqual(['org/recent', 'org/old']);
   });
 
@@ -208,7 +224,10 @@ describe('topReposForBoard', () => {
   it('treats a missing/invalid link date as fresh rather than dropping the repo', () => {
     // WHY: a data glitch (unparseable createdAt) must never silently bury an
     // otherwise-relevant repo — it is weighted as "just now" and still ranked.
-    const withBadDate = [repoLinkedAt('org/valid', daysAgo(90)), repoLinkedAt('org/glitch', 'not-a-date')];
+    const withBadDate = [
+      repoLinkedAt('org/valid', daysAgo(90)),
+      repoLinkedAt('org/glitch', 'not-a-date'),
+    ];
     const ranked = topReposForBoard(withBadDate, 'b1', { now: NOW });
     expect(ranked).toContain('org/glitch');
     expect(ranked[0]).toBe('org/glitch'); // full weight (age 0) beats the 90-day-old one

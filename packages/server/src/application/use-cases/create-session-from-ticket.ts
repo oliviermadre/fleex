@@ -1,16 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { TicketNotFoundError } from '../../domain/errors.js';
+
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
-import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
+import { TicketNotFoundError } from '../../domain/errors.js';
+import {
+  buildTicketBranchName,
+  buildTicketWorkspaceId,
+} from '../../domain/services/branch-utils.js';
+
 import type { CreateSessionUseCase } from './create-session.js';
 import type { CreateWorktreeUseCase } from './create-worktree.js';
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { GitPort } from '../ports/git.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 
 export class CreateSessionFromTicketUseCase {
   constructor(
@@ -34,13 +39,15 @@ export class CreateSessionFromTicketUseCase {
     if (STARTABLE_STATUSES.includes(ticket.status as (typeof STARTABLE_STATUSES)[number])) {
       const moveDiff = ticket.moveTo('doing');
       if (Object.keys(moveDiff).length > 0) {
-        await this.ticketStore.saveActivity(TicketActivityEntity.create({
-          id: randomUUID(),
-          ticketId: ticket.id,
-          action: 'moved',
-          changes: moveDiff,
-          source: 'web',
-        }));
+        await this.ticketStore.saveActivity(
+          TicketActivityEntity.create({
+            id: randomUUID(),
+            ticketId: ticket.id,
+            action: 'moved',
+            changes: moveDiff,
+            source: 'web',
+          }),
+        );
       }
     }
 
@@ -50,7 +57,10 @@ export class CreateSessionFromTicketUseCase {
     for (const link of repoLinks) {
       const slashIdx = link.ref.indexOf('/');
       if (slashIdx > 0) {
-        repos.push({ org: link.ref.substring(0, slashIdx), name: link.ref.substring(slashIdx + 1) });
+        repos.push({
+          org: link.ref.substring(0, slashIdx),
+          name: link.ref.substring(slashIdx + 1),
+        });
       }
     }
 
@@ -61,7 +71,10 @@ export class CreateSessionFromTicketUseCase {
     if (worktreeLink) {
       // Extract branch from worktree link (format: "org/repo:branch" or label)
       const colonIdx = worktreeLink.ref.indexOf(':');
-      branchName = colonIdx > 0 ? worktreeLink.ref.substring(colonIdx + 1) : (worktreeLink.label || worktreeLink.ref);
+      branchName =
+        colonIdx > 0
+          ? worktreeLink.ref.substring(colonIdx + 1)
+          : worktreeLink.label || worktreeLink.ref;
     } else {
       branchName = buildTicketBranchName(ticket.title, ticket.id);
     }
@@ -84,7 +97,7 @@ export class CreateSessionFromTicketUseCase {
       writeFileSync(manifestPath, JSON.stringify({ ticketId: ticket.id }, null, 2));
     }
 
-    let cwd = workspacePath;
+    const cwd = workspacePath;
 
     for (const repo of repos) {
       const wtPath = this.resolver.workspaceRepoPath(workspaceId, repo.name);
@@ -102,7 +115,9 @@ export class CreateSessionFromTicketUseCase {
         ticket.addLink('worktree', actualPath, branchName, null, randomUUID());
       } catch (err) {
         this.logger.warn('Failed to create worktree for ticket', {
-          ticketId, repo: `${repo.org}/${repo.name}`, branch: branchName,
+          ticketId,
+          repo: `${repo.org}/${repo.name}`,
+          branch: branchName,
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -132,17 +147,18 @@ export class CreateSessionFromTicketUseCase {
     ticket.addLink('session', session.id, session.tmuxName, null, randomUUID());
 
     await this.ticketStore.saveTicket(ticket);
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
-      ticketId: ticket.id,
-      action: 'linked',
-      changes: { session: { from: null, to: session.id } },
-      source: 'web',
-    }));
+    await this.ticketStore.saveActivity(
+      TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId: ticket.id,
+        action: 'linked',
+        changes: { session: { from: null, to: session.id } },
+        source: 'web',
+      }),
+    );
 
     this.logger.info('Session created from ticket', { ticketId, sessionId: session.id });
 
     return { sessionId: session.id };
   }
-
 }

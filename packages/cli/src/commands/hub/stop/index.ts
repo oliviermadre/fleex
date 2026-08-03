@@ -1,6 +1,7 @@
-import type { CommandDef } from '../../../core/types.ts';
 import { info, ok, warn } from '../../../core/colors.ts';
 import { readHubState, isAlive, clearHubState } from '../_state.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 async function runHubStop(): Promise<void> {
   const state = readHubState();
@@ -24,7 +25,11 @@ async function runHubStop(): Promise<void> {
   // Give the process a moment to exit, then escalate if needed.
   await new Promise((r) => setTimeout(r, 300));
   if (isAlive(state.pid)) {
-    try { process.kill(state.pid, 'SIGKILL'); } catch { /* ignore */ }
+    try {
+      process.kill(state.pid, 'SIGKILL');
+    } catch {
+      /* ignore */
+    }
   }
 
   clearHubState();

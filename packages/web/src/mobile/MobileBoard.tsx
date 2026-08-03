@@ -1,10 +1,13 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+
 import { TICKET_STATUSES, TICKET_STATUS_LABELS } from '@fleex/shared';
 import type { TicketStatus } from '@fleex/shared';
+
+import { tintSolid } from '../lib/tints';
 import { useTicketStore } from '../stores/ticketStore';
+
 import { MobileTicketCard } from './MobileTicketCard';
 import { setMobileOverride } from './useMobileMode';
-import { tintSolid } from '../lib/tints';
 
 const STATUS_DOT: Record<TicketStatus, string> = {
   backlog: tintSolid('gray'),
@@ -46,7 +49,6 @@ export function MobileBoard() {
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollLeft = DEFAULT_COLUMN_INDEX * el.clientWidth;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const goToColumn = useCallback((idx: number) => {
@@ -102,7 +104,8 @@ export function MobileBoard() {
           {boards.length > 1 && <option value="__all__">Tous les boards</option>}
           {boards.map((b) => (
             <option key={b.id} value={b.id}>
-              {b.emoji ? `${b.emoji} ` : ''}{b.name}
+              {b.emoji ? `${b.emoji} ` : ''}
+              {b.name}
             </option>
           ))}
         </select>
@@ -184,7 +187,10 @@ export function MobileBoard() {
         </button>
       )}
       {adding && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/50" onClick={() => setAdding(false)}>
+        <div
+          className="fixed inset-0 z-40 flex items-end bg-black/50"
+          onClick={() => setAdding(false)}
+        >
           <div
             className="w-full rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}

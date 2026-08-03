@@ -1,6 +1,7 @@
-import type { FastifyInstance } from 'fastify';
-import type { Container } from '../container.js';
 import { GetStatisticsUseCase } from '../../application/use-cases/get-statistics.js';
+
+import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function statisticsRoutes(container: Container) {
   const getStatistics = new GetStatisticsUseCase(
@@ -14,6 +15,7 @@ export function statisticsRoutes(container: Container) {
     container.skillStore,
     container.domainEventLogStore,
     container.workflowRunStore,
+    container.logger,
   );
 
   return async function (app: FastifyInstance) {
@@ -26,7 +28,8 @@ export function statisticsRoutes(container: Container) {
       };
     }>('/api/statistics', async (request) => {
       const now = new Date();
-      const from = request.query.from ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const from =
+        request.query.from ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const to = request.query.to ?? now.toISOString();
       const granularity = (['day', 'week', 'month'] as const).includes(
         request.query.granularity as 'day' | 'week' | 'month',

@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream';
-import type { FileStorePort } from '../../../application/ports/file-store.port.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type { FileStorePort } from '../../../application/ports/file-store.port.js';
 
 const BUCKET = 'files';
 
@@ -36,27 +37,21 @@ export class SupabaseFileStoreAdapter implements FileStorePort {
   }
 
   async getBuffer(id: string): Promise<Buffer | null> {
-    const { data, error } = await this.conn.client.storage
-      .from(BUCKET)
-      .download(id);
+    const { data, error } = await this.conn.client.storage.from(BUCKET).download(id);
     if (error || !data) return null;
     const arrayBuffer = await data.arrayBuffer();
     return Buffer.from(arrayBuffer);
   }
 
   async getStream(id: string): Promise<Readable | null> {
-    const { data, error } = await this.conn.client.storage
-      .from(BUCKET)
-      .download(id);
+    const { data, error } = await this.conn.client.storage.from(BUCKET).download(id);
     if (error || !data) return null;
     const arrayBuffer = await data.arrayBuffer();
     return Readable.from(Buffer.from(arrayBuffer));
   }
 
   async getSignedUrl(id: string): Promise<string> {
-    const { data, error } = await this.conn.client.storage
-      .from(BUCKET)
-      .createSignedUrl(id, 3600);
+    const { data, error } = await this.conn.client.storage.from(BUCKET).createSignedUrl(id, 3600);
     if (error || !data?.signedUrl) {
       throw new Error(`SupabaseFileStore.getSignedUrl failed: ${error?.message ?? 'no URL'}`);
     }
@@ -64,9 +59,7 @@ export class SupabaseFileStoreAdapter implements FileStorePort {
   }
 
   async remove(id: string): Promise<void> {
-    const { error } = await this.conn.client.storage
-      .from(BUCKET)
-      .remove([id]);
+    const { error } = await this.conn.client.storage.from(BUCKET).remove([id]);
     if (error) throw new Error(`SupabaseFileStore.remove failed: ${error.message}`);
   }
 }

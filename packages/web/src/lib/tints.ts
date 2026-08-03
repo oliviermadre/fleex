@@ -29,16 +29,7 @@
  */
 
 export type TintHue =
-  | 'red'
-  | 'orange'
-  | 'yellow'
-  | 'green'
-  | 'teal'
-  | 'blue'
-  | 'indigo'
-  | 'purple'
-  | 'pink'
-  | 'gray';
+  'red' | 'orange' | 'yellow' | 'green' | 'teal' | 'blue' | 'indigo' | 'purple' | 'pink' | 'gray';
 
 export const TINT_HUES: TintHue[] = [
   'red',
@@ -66,30 +57,130 @@ export interface TintTokens {
 
 /** Light palette — text 700 (800 where 700 missed 4.5:1), base 500. */
 export const LIGHT_TINTS: Record<TintHue, TintTokens> = {
-  red:    { text: '#b91c1c', bg: 'rgba(239, 68, 68, 0.10)',   border: 'rgba(239, 68, 68, 0.30)',   solid: '#dc2626' },
-  orange: { text: '#9a3412', bg: 'rgba(249, 115, 22, 0.10)',  border: 'rgba(249, 115, 22, 0.30)',  solid: '#c2410c' },
-  yellow: { text: '#854d0e', bg: 'rgba(234, 179, 8, 0.10)',   border: 'rgba(234, 179, 8, 0.30)',   solid: '#a16207' },
-  green:  { text: '#166534', bg: 'rgba(34, 197, 94, 0.10)',   border: 'rgba(34, 197, 94, 0.30)',   solid: '#15803d' },
-  teal:   { text: '#0f766e', bg: 'rgba(20, 184, 166, 0.10)',  border: 'rgba(20, 184, 166, 0.30)',  solid: '#0f766e' },
-  blue:   { text: '#1d4ed8', bg: 'rgba(59, 130, 246, 0.10)',  border: 'rgba(59, 130, 246, 0.30)',  solid: '#2563eb' },
-  indigo: { text: '#4338ca', bg: 'rgba(99, 102, 241, 0.10)',  border: 'rgba(99, 102, 241, 0.30)',  solid: '#4f46e5' },
-  purple: { text: '#7e22ce', bg: 'rgba(168, 85, 247, 0.10)',  border: 'rgba(168, 85, 247, 0.30)',  solid: '#9333ea' },
-  pink:   { text: '#be185d', bg: 'rgba(236, 72, 153, 0.10)',  border: 'rgba(236, 72, 153, 0.30)',  solid: '#db2777' },
-  gray:   { text: '#52525b', bg: 'rgba(113, 113, 122, 0.10)', border: 'rgba(113, 113, 122, 0.30)', solid: '#71717a' },
+  red: {
+    text: '#b91c1c',
+    bg: 'rgba(239, 68, 68, 0.10)',
+    border: 'rgba(239, 68, 68, 0.30)',
+    solid: '#dc2626',
+  },
+  orange: {
+    text: '#9a3412',
+    bg: 'rgba(249, 115, 22, 0.10)',
+    border: 'rgba(249, 115, 22, 0.30)',
+    solid: '#c2410c',
+  },
+  yellow: {
+    text: '#854d0e',
+    bg: 'rgba(234, 179, 8, 0.10)',
+    border: 'rgba(234, 179, 8, 0.30)',
+    solid: '#a16207',
+  },
+  green: {
+    text: '#166534',
+    bg: 'rgba(34, 197, 94, 0.10)',
+    border: 'rgba(34, 197, 94, 0.30)',
+    solid: '#15803d',
+  },
+  teal: {
+    text: '#0f766e',
+    bg: 'rgba(20, 184, 166, 0.10)',
+    border: 'rgba(20, 184, 166, 0.30)',
+    solid: '#0f766e',
+  },
+  blue: {
+    text: '#1d4ed8',
+    bg: 'rgba(59, 130, 246, 0.10)',
+    border: 'rgba(59, 130, 246, 0.30)',
+    solid: '#2563eb',
+  },
+  indigo: {
+    text: '#4338ca',
+    bg: 'rgba(99, 102, 241, 0.10)',
+    border: 'rgba(99, 102, 241, 0.30)',
+    solid: '#4f46e5',
+  },
+  purple: {
+    text: '#7e22ce',
+    bg: 'rgba(168, 85, 247, 0.10)',
+    border: 'rgba(168, 85, 247, 0.30)',
+    solid: '#9333ea',
+  },
+  pink: {
+    text: '#be185d',
+    bg: 'rgba(236, 72, 153, 0.10)',
+    border: 'rgba(236, 72, 153, 0.30)',
+    solid: '#db2777',
+  },
+  gray: {
+    text: '#52525b',
+    bg: 'rgba(113, 113, 122, 0.10)',
+    border: 'rgba(113, 113, 122, 0.30)',
+    solid: '#71717a',
+  },
 };
 
 /** Dark palette — text 300, base 400. */
 export const DARK_TINTS: Record<TintHue, TintTokens> = {
-  red:    { text: '#fca5a5', bg: 'rgba(248, 113, 113, 0.15)', border: 'rgba(248, 113, 113, 0.25)', solid: '#f87171' },
-  orange: { text: '#fdba74', bg: 'rgba(251, 146, 60, 0.15)',  border: 'rgba(251, 146, 60, 0.25)',  solid: '#fb923c' },
-  yellow: { text: '#fde047', bg: 'rgba(250, 204, 21, 0.15)',  border: 'rgba(250, 204, 21, 0.25)',  solid: '#facc15' },
-  green:  { text: '#86efac', bg: 'rgba(74, 222, 128, 0.15)',  border: 'rgba(74, 222, 128, 0.25)',  solid: '#4ade80' },
-  teal:   { text: '#5eead4', bg: 'rgba(45, 212, 191, 0.15)',  border: 'rgba(45, 212, 191, 0.25)',  solid: '#2dd4bf' },
-  blue:   { text: '#93c5fd', bg: 'rgba(96, 165, 250, 0.15)',  border: 'rgba(96, 165, 250, 0.25)',  solid: '#60a5fa' },
-  indigo: { text: '#a5b4fc', bg: 'rgba(129, 140, 248, 0.15)', border: 'rgba(129, 140, 248, 0.25)', solid: '#818cf8' },
-  purple: { text: '#d8b4fe', bg: 'rgba(192, 132, 252, 0.15)', border: 'rgba(192, 132, 252, 0.25)', solid: '#c084fc' },
-  pink:   { text: '#f9a8d4', bg: 'rgba(244, 114, 182, 0.15)', border: 'rgba(244, 114, 182, 0.25)', solid: '#f472b6' },
-  gray:   { text: '#d4d4d8', bg: 'rgba(161, 161, 170, 0.15)', border: 'rgba(161, 161, 170, 0.25)', solid: '#a1a1aa' },
+  red: {
+    text: '#fca5a5',
+    bg: 'rgba(248, 113, 113, 0.15)',
+    border: 'rgba(248, 113, 113, 0.25)',
+    solid: '#f87171',
+  },
+  orange: {
+    text: '#fdba74',
+    bg: 'rgba(251, 146, 60, 0.15)',
+    border: 'rgba(251, 146, 60, 0.25)',
+    solid: '#fb923c',
+  },
+  yellow: {
+    text: '#fde047',
+    bg: 'rgba(250, 204, 21, 0.15)',
+    border: 'rgba(250, 204, 21, 0.25)',
+    solid: '#facc15',
+  },
+  green: {
+    text: '#86efac',
+    bg: 'rgba(74, 222, 128, 0.15)',
+    border: 'rgba(74, 222, 128, 0.25)',
+    solid: '#4ade80',
+  },
+  teal: {
+    text: '#5eead4',
+    bg: 'rgba(45, 212, 191, 0.15)',
+    border: 'rgba(45, 212, 191, 0.25)',
+    solid: '#2dd4bf',
+  },
+  blue: {
+    text: '#93c5fd',
+    bg: 'rgba(96, 165, 250, 0.15)',
+    border: 'rgba(96, 165, 250, 0.25)',
+    solid: '#60a5fa',
+  },
+  indigo: {
+    text: '#a5b4fc',
+    bg: 'rgba(129, 140, 248, 0.15)',
+    border: 'rgba(129, 140, 248, 0.25)',
+    solid: '#818cf8',
+  },
+  purple: {
+    text: '#d8b4fe',
+    bg: 'rgba(192, 132, 252, 0.15)',
+    border: 'rgba(192, 132, 252, 0.25)',
+    solid: '#c084fc',
+  },
+  pink: {
+    text: '#f9a8d4',
+    bg: 'rgba(244, 114, 182, 0.15)',
+    border: 'rgba(244, 114, 182, 0.25)',
+    solid: '#f472b6',
+  },
+  gray: {
+    text: '#d4d4d8',
+    bg: 'rgba(161, 161, 170, 0.15)',
+    border: 'rgba(161, 161, 170, 0.25)',
+    solid: '#a1a1aa',
+  },
 };
 
 export interface TintClassSet {

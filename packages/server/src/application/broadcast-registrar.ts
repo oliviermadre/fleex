@@ -1,10 +1,10 @@
 import type { EventBus } from './event-bus.js';
+import type { CommentStorePort } from './ports/comment-store.port.js';
+import type { DeliverableStorePort } from './ports/deliverable-store.port.js';
+import type { MentionStorePort } from './ports/mention-store.port.js';
 import type { PersonaStorePort } from './ports/persona-store.port.js';
 import type { SkillStorePort } from './ports/skill-store.port.js';
 import type { TicketStorePort } from './ports/ticket-store.port.js';
-import type { MentionStorePort } from './ports/mention-store.port.js';
-import type { CommentStorePort } from './ports/comment-store.port.js';
-import type { DeliverableStorePort } from './ports/deliverable-store.port.js';
 import type { AnyDomainEvent } from '../domain/events.js';
 
 export type BroadcastFn = (type: string, data: unknown) => void;
@@ -105,11 +105,17 @@ export class BroadcastRegistrar {
     bus.on('mention.created', (e) => this.broadcastMentionEntity(e, 'mention:created'));
     bus.on('mention.acknowledged', (e) => this.broadcastMentionEntity(e, 'mention:acknowledged'));
     bus.on('mention.resolved', (e) => this.broadcastMentionEntity(e, 'mention:resolved'));
-    bus.on('mention.waiting_for_info', (e) => this.broadcastMentionEntity(e, 'mention:waiting_for_info'));
+    bus.on('mention.waiting_for_info', (e) =>
+      this.broadcastMentionEntity(e, 'mention:waiting_for_info'),
+    );
     bus.on('mention.woken_up', (e) => this.broadcastMentionEntity(e, 'mention:updated'));
     bus.on('mention.deleted', (e) => {
       if (e.type === 'mention.deleted') {
-        this.ticketBroadcast('mention:deleted', { id: e.mentionId, ticketId: e.ticketId, commentId: e.commentId });
+        this.ticketBroadcast('mention:deleted', {
+          id: e.mentionId,
+          ticketId: e.ticketId,
+          commentId: e.commentId,
+        });
       }
     });
     bus.on('mention.execution_failed', async (e) => {
@@ -135,7 +141,10 @@ export class BroadcastRegistrar {
     bus.on('deliverable.updated', (e) => this.broadcastDeliverableEntity(e, 'deliverable:updated'));
     bus.on('deliverable.deleted', (e) => {
       if (e.type === 'deliverable.deleted') {
-        this.ticketBroadcast('deliverable:deleted', { deliverableId: e.deliverableId, ticketId: e.ticketId });
+        this.ticketBroadcast('deliverable:deleted', {
+          deliverableId: e.deliverableId,
+          ticketId: e.ticketId,
+        });
       }
     });
 
@@ -250,7 +259,9 @@ export class BroadcastRegistrar {
 
   private async broadcastTicketEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
     if (!('ticketId' in event)) return;
-    const ticket = await this.deps.ticketStore.getTicketById((event as { ticketId: string }).ticketId);
+    const ticket = await this.deps.ticketStore.getTicketById(
+      (event as { ticketId: string }).ticketId,
+    );
     if (ticket) this.ticketBroadcast(wsType, ticket.toDTO());
   }
 
@@ -262,25 +273,33 @@ export class BroadcastRegistrar {
 
   private async broadcastCommentEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
     if (!('commentId' in event)) return;
-    const comment = await this.deps.commentStore.getById((event as { commentId: string }).commentId);
+    const comment = await this.deps.commentStore.getById(
+      (event as { commentId: string }).commentId,
+    );
     if (comment) this.ticketBroadcast(wsType, comment.toDTO());
   }
 
   private async broadcastMentionEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
     if (!('mentionId' in event)) return;
-    const mention = await this.deps.mentionStore.getById((event as { mentionId: string }).mentionId);
+    const mention = await this.deps.mentionStore.getById(
+      (event as { mentionId: string }).mentionId,
+    );
     if (mention) this.ticketBroadcast(wsType, mention.toDTO());
   }
 
   private async broadcastDeliverableEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
     if (!('deliverableId' in event)) return;
-    const deliverable = await this.deps.deliverableStore.getById((event as { deliverableId: string }).deliverableId);
+    const deliverable = await this.deps.deliverableStore.getById(
+      (event as { deliverableId: string }).deliverableId,
+    );
     if (deliverable) this.ticketBroadcast(wsType, deliverable.toDTO());
   }
 
   private async broadcastPersonaEntity(event: AnyDomainEvent, wsType: string): Promise<void> {
     if (!('personaId' in event)) return;
-    const persona = await this.deps.personaStore.getById((event as { personaId: string }).personaId);
+    const persona = await this.deps.personaStore.getById(
+      (event as { personaId: string }).personaId,
+    );
     if (persona) this.personaBroadcast(wsType, persona.toDTO());
   }
 

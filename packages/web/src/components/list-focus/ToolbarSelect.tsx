@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
+
+import type { ReactNode } from 'react';
 
 /**
  * Cockpit toolbar dropdown (#400, review passes 3–4). Same popover recipe as
@@ -122,12 +123,23 @@ export function ToolbarMultiSelect<V extends string>({
                     )}
                   >
                     {checked && (
-                      <svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        width="8"
+                        height="8"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <polyline points="3,8 6.5,12 13,4" />
                       </svg>
                     )}
                   </span>
-                  {o.icon && <span className="flex w-4 shrink-0 items-center justify-center">{o.icon}</span>}
+                  {o.icon && (
+                    <span className="flex w-4 shrink-0 items-center justify-center">{o.icon}</span>
+                  )}
                   {o.label}
                 </button>
               );

@@ -1,12 +1,18 @@
-import { join } from 'node:path';
-import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { appendFile, readFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
+
 import { AgentEventEntity } from '../../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../../application/ports/agent-event-store.port.js';
+
 import type { PgConnection } from './connection.js';
+import type {
+  AgentEventStorePort,
+  CliExecutionUpsert,
+} from '../../../application/ports/agent-event-store.port.js';
 
 export class PgAgentEventStore implements AgentEventStorePort {
   private readonly eventsDir: string;
@@ -34,8 +40,16 @@ export class PgAgentEventStore implements AgentEventStorePort {
       `INSERT INTO agent_event_executions
         (execution_id, persona_id, ticket_id, mention_id, event_count, status, started_at, model, effort, fast_mode)
        VALUES ($1, $2, $3, $4, 0, 'running', $5, $6, $7, $8)`,
-      [params.executionId, params.personaId, params.ticketId, params.mentionId, new Date().toISOString(),
-       params.model ?? null, params.effort ?? null, params.fast ?? null],
+      [
+        params.executionId,
+        params.personaId,
+        params.ticketId,
+        params.mentionId,
+        new Date().toISOString(),
+        params.model ?? null,
+        params.effort ?? null,
+        params.fast ?? null,
+      ],
     );
   }
 
@@ -50,11 +64,24 @@ export class PgAgentEventStore implements AgentEventStorePort {
     );
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
-    inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
-    commentId?: string; deliverableId?: string;
-  }): Promise<void> {
+  async completeExecution(
+    executionId: string,
+    status: 'completed' | 'failed' | 'interrupted',
+    metrics?: {
+      model?: string;
+      effectiveMode?: string;
+      effort?: string;
+      fast?: boolean;
+      durationMs?: number;
+      costUsd?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
+      commentId?: string;
+      deliverableId?: string;
+    },
+  ): Promise<void> {
     await this.db.query(
       `UPDATE agent_event_executions SET status = $1, completed_at = $2,
        model = COALESCE($3, model), effective_mode = COALESCE($4, effective_mode),
@@ -64,15 +91,30 @@ export class PgAgentEventStore implements AgentEventStorePort {
        cache_read_tokens = COALESCE($11, cache_read_tokens), cache_creation_tokens = COALESCE($12, cache_creation_tokens),
        comment_id = COALESCE($13, comment_id), deliverable_id = COALESCE($14, deliverable_id)
        WHERE execution_id = $15`,
-      [status, new Date().toISOString(), metrics?.model ?? null, metrics?.effectiveMode ?? null,
-       metrics?.effort ?? null, metrics?.fast ?? null,
-       metrics?.durationMs ?? null, metrics?.costUsd ?? null, metrics?.inputTokens ?? null,
-       metrics?.outputTokens ?? null, metrics?.cacheReadTokens ?? null, metrics?.cacheCreationTokens ?? null,
-       metrics?.commentId ?? null, metrics?.deliverableId ?? null, executionId],
+      [
+        status,
+        new Date().toISOString(),
+        metrics?.model ?? null,
+        metrics?.effectiveMode ?? null,
+        metrics?.effort ?? null,
+        metrics?.fast ?? null,
+        metrics?.durationMs ?? null,
+        metrics?.costUsd ?? null,
+        metrics?.inputTokens ?? null,
+        metrics?.outputTokens ?? null,
+        metrics?.cacheReadTokens ?? null,
+        metrics?.cacheCreationTokens ?? null,
+        metrics?.commentId ?? null,
+        metrics?.deliverableId ?? null,
+        executionId,
+      ],
     );
   }
 
-  async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
+  async setExecutionOutputs(
+    executionId: string,
+    refs: { commentId?: string; deliverableId?: string },
+  ): Promise<void> {
     await this.db.query(
       `UPDATE agent_event_executions SET
        comment_id = COALESCE($1, comment_id), deliverable_id = COALESCE($2, deliverable_id)
@@ -94,9 +136,21 @@ export class PgAgentEventStore implements AgentEventStorePort {
          input_tokens = EXCLUDED.input_tokens, output_tokens = EXCLUDED.output_tokens,
          cache_read_tokens = EXCLUDED.cache_read_tokens,
          cache_creation_tokens = EXCLUDED.cache_creation_tokens, source = 'cli'`,
-      [p.executionId, p.ticketId, p.mentionId, p.startedAt, p.completedAt, p.sdkSessionId,
-       p.model, p.durationMs, p.costUsd, p.inputTokens, p.outputTokens, p.cacheReadTokens,
-       p.cacheCreationTokens],
+      [
+        p.executionId,
+        p.ticketId,
+        p.mentionId,
+        p.startedAt,
+        p.completedAt,
+        p.sdkSessionId,
+        p.model,
+        p.durationMs,
+        p.costUsd,
+        p.inputTokens,
+        p.outputTokens,
+        p.cacheReadTokens,
+        p.cacheCreationTokens,
+      ],
     );
   }
 
@@ -110,10 +164,16 @@ export class PgAgentEventStore implements AgentEventStorePort {
       if (!line.trim()) continue;
       try {
         const dto = JSON.parse(line);
-        events.push(new AgentEventEntity(
-          dto.id, dto.executionId, dto.eventType,
-          dto.data, dto.sequence, new Date(dto.createdAt),
-        ));
+        events.push(
+          new AgentEventEntity(
+            dto.id,
+            dto.executionId,
+            dto.eventType,
+            dto.data,
+            dto.sequence,
+            new Date(dto.createdAt),
+          ),
+        );
       } catch {
         // Skip malformed lines
       }
@@ -162,7 +222,9 @@ export class PgAgentEventStore implements AgentEventStorePort {
     return rows.map((r: Record<string, unknown>) => r.mention_id as string);
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<
+    Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>
+  > {
     const { rows } = await this.db.query(
       `SELECT persona_id, ticket_id, sdk_session_id
        FROM agent_event_executions

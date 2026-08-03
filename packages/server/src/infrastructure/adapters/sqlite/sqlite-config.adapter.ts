@@ -1,10 +1,13 @@
 import { join } from 'node:path';
-import { FLEEX_DIR, CONFIG_FILE } from '@fleex/shared';
-import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
-import type { SqliteConnection } from './connection.js';
-import type { ExecFn, HostFs } from '../../host/types.js';
-import { resolveClaudeCommand } from '../resolve-claude-command.js';
+
+import { FLEEX_DIR, CONFIG_FILE, migrateActionsConfig } from '@fleex/shared';
+
 import { applyBasePathEnvOverride } from '../config-env.js';
+import { resolveClaudeCommand } from '../resolve-claude-command.js';
+
+import type { SqliteConnection } from './connection.js';
+import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
+import type { ExecFn, HostFs } from '../../host/types.js';
 
 export class SqliteConfigAdapter implements ConfigPort {
   private config: AppConfig;
@@ -54,7 +57,12 @@ export class SqliteConfigAdapter implements ConfigPort {
       .get('singleton') as { data: string } | undefined;
 
     if (row) {
-      this.applyData(JSON.parse(row.data));
+      // applyData is sync, so the write-back for a legacy→actions fold has to
+      // happen here rather than inside it.
+      if (this.applyData(JSON.parse(row.data))) {
+        this.resolveTilde();
+        await this.syncToDb();
+      }
     } else {
       // Auto-migrate from config.json if it exists
       await this.migrateFromJson();
@@ -77,14 +85,18 @@ export class SqliteConfigAdapter implements ConfigPort {
     }
   }
 
-  private applyData(data: Record<string, unknown>): void {
+  /** Returns true when the stored shape was rewritten and needs persisting. */
+  private applyData(data: Record<string, unknown>): boolean {
     // Migrate old key
     if ('repositoriesBasePath' in data && !('basePath' in data)) {
       data['basePath'] = data['repositoriesBasePath'];
     }
     delete data['repositoriesBasePath'];
     delete data['claudeCommand'];
+    // Fold legacy pinnedIcons/workspaceActions into the `actions` registry.
+    const migrated = migrateActionsConfig(data);
     this.config = { ...this.config, ...(data as Partial<AppConfig>) };
+    return migrated;
   }
 
   private resolveTilde(): void {
@@ -96,9 +108,7 @@ export class SqliteConfigAdapter implements ConfigPort {
   private async syncToDb(): Promise<void> {
     const now = new Date().toISOString();
     this.connection.db
-      .prepare(
-        'INSERT OR REPLACE INTO app_config (id, data, updated_at) VALUES (?, ?, ?)',
-      )
+      .prepare('INSERT OR REPLACE INTO app_config (id, data, updated_at) VALUES (?, ?, ?)')
       .run('singleton', JSON.stringify(this.config), now);
   }
 }

@@ -1,4 +1,5 @@
-import type { FastifyInstance } from 'fastify';
+import type { ServerCapabilities } from '@fleex/shared';
+
 import {
   WorkflowRunAlreadyActiveError,
   WorkflowTemplateNotFoundError,
@@ -6,12 +7,16 @@ import {
   StepRunNotFoundError,
   InvalidGateOutcomeError,
 } from '../../domain/errors.js';
-import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
+
+import { registerWorkflowGuard } from './feature-guard.js';
+
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
+import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
+import type { CancelWorkflowRunUseCase } from '../../application/use-cases/cancel-workflow-run.js';
 import type { CreateWorkflowRunUseCase } from '../../application/use-cases/create-workflow-run.js';
 import type { ResolveHumanGateUseCase } from '../../application/use-cases/resolve-human-gate.js';
 import type { RetryStepUseCase } from '../../application/use-cases/retry-step.js';
-import type { CancelWorkflowRunUseCase } from '../../application/use-cases/cancel-workflow-run.js';
+import type { FastifyInstance } from 'fastify';
 
 // ── Manual validation helpers ──────────────────────────────────────────────
 
@@ -31,7 +36,9 @@ interface CreateRunBody {
   triggeredFrom?: string;
 }
 
-function parseCreateRunBody(body: unknown): { ok: true; data: CreateRunBody } | { ok: false; error: string } {
+function parseCreateRunBody(
+  body: unknown,
+): { ok: true; data: CreateRunBody } | { ok: false; error: string } {
   if (!isObject(body)) return { ok: false, error: 'body must be an object' };
   if (!isString(body['ticketId']) || body['ticketId'].length === 0) {
     return { ok: false, error: 'ticketId must be a non-empty string' };
@@ -57,7 +64,9 @@ interface ResolveGateBody {
   notes?: string;
 }
 
-function parseResolveGateBody(body: unknown): { ok: true; data: ResolveGateBody } | { ok: false; error: string } {
+function parseResolveGateBody(
+  body: unknown,
+): { ok: true; data: ResolveGateBody } | { ok: false; error: string } {
   if (!isObject(body)) return { ok: false, error: 'body must be an object' };
   if (!isString(body['outcome']) || body['outcome'].length === 0) {
     return { ok: false, error: 'outcome must be a non-empty string' };
@@ -86,15 +95,39 @@ interface WorkflowRunRouteDeps {
   authorNameResolver: () => string;
 }
 
-export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
+/** Same shape, but every workflow dependency may be absent on an unsupported driver. */
+interface WorkflowRunRouteInput {
+  runStore: WorkflowRunStorePort | null;
+  stepRunStore: StepRunStorePort | null;
+  createWorkflowRun: CreateWorkflowRunUseCase | null;
+  resolveHumanGate: ResolveHumanGateUseCase | null;
+  retryStep: RetryStepUseCase | null;
+  cancelWorkflowRun: CancelWorkflowRunUseCase | null;
+  authorNameResolver: () => string;
+  capabilities: ServerCapabilities;
+}
+
+export function workflowRunRoutes(routeDeps: WorkflowRunRouteInput) {
+  // Safe cast: registerWorkflowGuard answers 503 before any handler below runs when
+  // the driver lacks the workflow stores/use-cases, so none of these are ever null here.
+  const deps = routeDeps as unknown as WorkflowRunRouteDeps;
+
   return async function (app: FastifyInstance) {
+    registerWorkflowGuard(app, routeDeps.capabilities);
+
     // GET /api/workflows/runs?ticketId=X — list runs for a ticket
-    app.get<{ Querystring: { ticketId?: string } }>('/api/workflows/runs', async (request, reply) => {
-      const { ticketId } = request.query;
-      if (!ticketId) return reply.code(400).send({ error: 'MISSING_QUERY_PARAM', message: 'ticketId is required' });
-      const runs = await deps.runStore.getByTicket(ticketId);
-      return runs.map((r) => r.toDTO());
-    });
+    app.get<{ Querystring: { ticketId?: string } }>(
+      '/api/workflows/runs',
+      async (request, reply) => {
+        const { ticketId } = request.query;
+        if (!ticketId)
+          return reply
+            .code(400)
+            .send({ error: 'MISSING_QUERY_PARAM', message: 'ticketId is required' });
+        const runs = await deps.runStore.getByTicket(ticketId);
+        return runs.map((r) => r.toDTO());
+      },
+    );
 
     // GET /api/workflows/runs/:id — get one run + its step_runs
     app.get<{ Params: { id: string } }>('/api/workflows/runs/:id', async (request, reply) => {
@@ -146,7 +179,8 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
       '/api/workflows/runs/:id/steps/:stepRunId/resolve',
       async (request, reply) => {
         const parsed = parseResolveGateBody(request.body);
-        if (!parsed.ok) return reply.code(400).send({ error: 'INVALID_BODY', message: parsed.error });
+        if (!parsed.ok)
+          return reply.code(400).send({ error: 'INVALID_BODY', message: parsed.error });
 
         try {
           await deps.resolveHumanGate.execute({
@@ -158,7 +192,10 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
           return reply.code(204).send();
         } catch (err) {
           if (err instanceof WorkflowRunNotFoundError || err instanceof StepRunNotFoundError) {
-            return reply.code(404).send({ error: (err as WorkflowRunNotFoundError | StepRunNotFoundError).code, message: err.message });
+            return reply.code(404).send({
+              error: (err as WorkflowRunNotFoundError | StepRunNotFoundError).code,
+              message: err.message,
+            });
           }
           if (err instanceof InvalidGateOutcomeError) {
             return reply.code(400).send({ error: err.code, message: err.message });
@@ -180,7 +217,10 @@ export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
           return reply.code(204).send();
         } catch (err) {
           if (err instanceof WorkflowRunNotFoundError || err instanceof StepRunNotFoundError) {
-            return reply.code(404).send({ error: (err as WorkflowRunNotFoundError | StepRunNotFoundError).code, message: err.message });
+            return reply.code(404).send({
+              error: (err as WorkflowRunNotFoundError | StepRunNotFoundError).code,
+              message: err.message,
+            });
           }
           throw err;
         }

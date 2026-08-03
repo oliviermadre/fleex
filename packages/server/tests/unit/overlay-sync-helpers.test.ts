@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
 import type { OverlaySyncFileNode, OverlaySyncDirNode } from '@fleex/shared';
+
 import {
   isDenylistedDir,
   isSafeRelPath,
@@ -104,7 +106,10 @@ describe('buildTree', () => {
   it('inserts collapsed directory markers with their flags', () => {
     const tree = buildTree(
       [file('.env')],
-      [{ relPath: 'node_modules', denylisted: true }, { relPath: 'logs', truncated: true }],
+      [
+        { relPath: 'node_modules', denylisted: true },
+        { relPath: 'logs', truncated: true },
+      ],
     );
     const denylisted = tree.find((n) => n.name === 'node_modules') as OverlaySyncDirNode;
     expect(denylisted.type).toBe('dir');

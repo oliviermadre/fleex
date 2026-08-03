@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Button } from '../ui/Button';
+
 import { useDraft } from '../../hooks/useDraft';
+import { Button } from '../ui/Button';
 
 interface Props {
   runId: string;
@@ -10,9 +11,11 @@ interface Props {
 }
 
 export function HumanGateResolvePanel({ runId, stepRunId, outcomes, onResolve }: Props) {
-  const { draft: notes, setDraft: setNotes, clearDraft } = useDraft(
-    `human_gate_note_${runId}_${stepRunId}`,
-  );
+  const {
+    draft: notes,
+    setDraft: setNotes,
+    clearDraft,
+  } = useDraft(`human_gate_note_${runId}_${stepRunId}`);
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 

@@ -1,6 +1,6 @@
-import type { RunWorkflowStepUseCase } from '../use-cases/run-workflow-step.js';
-import type { OrchestratorPort } from '../ports/orchestrator.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { OrchestratorPort } from '../ports/orchestrator.port.js';
+import type { RunWorkflowStepUseCase } from '../use-cases/run-workflow-step.js';
 
 /**
  * Dispatches workflow steps. Each step is fired independently — there is NO
@@ -23,7 +23,8 @@ export class WorkflowOrchestrator implements OrchestratorPort {
   runStep(workflowRunId: string, stepId: string): void {
     void this.runStepUseCase.execute({ workflowRunId, stepId }).catch((err) => {
       this.logger.error('Workflow step execution crashed', {
-        workflowRunId, stepId,
+        workflowRunId,
+        stepId,
         error: err instanceof Error ? err.message : String(err),
       });
     });

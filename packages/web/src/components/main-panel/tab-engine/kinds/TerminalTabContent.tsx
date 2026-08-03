@@ -1,8 +1,10 @@
 import { useRef, useEffect } from 'react';
+
 import { useTerminal } from '../../../../hooks/useTerminal';
 import { terminalManager } from '../../../../services/terminalManager';
 import { useUIStore } from '../../../../stores/uiStore';
 import { FloatingSessionHint } from '../../FloatingSessionHint';
+
 import type { TabContentProps } from '../types';
 
 /**

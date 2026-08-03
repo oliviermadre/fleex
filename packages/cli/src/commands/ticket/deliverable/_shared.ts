@@ -1,12 +1,10 @@
 import { readFileSync } from 'node:fs';
-import {
-  DELIVERABLE_TYPES,
-  DELIVERABLE_STATUSES,
-  isDeliverableStatus,
-} from '@fleex/shared';
+
+import { DELIVERABLE_TYPES, DELIVERABLE_STATUSES, isDeliverableStatus } from '@fleex/shared';
 import type { DeliverableTypeDef, DeliverableStatus, TicketDeliverable } from '@fleex/shared';
-import { die } from '../../../core/colors.ts';
+
 import { apiBase, apiCall } from '../../../core/api.ts';
+import { die } from '../../../core/colors.ts';
 
 /**
  * Fetch the workspace's configured deliverable type ids from the server. Falls
@@ -14,7 +12,10 @@ import { apiBase, apiCall } from '../../../core/api.ts';
  */
 async function fetchDeliverableTypeIds(): Promise<string[]> {
   try {
-    const view = await apiCall<{ types: DeliverableTypeDef[] }>('GET', `${apiBase()}/api/deliverable-types`);
+    const view = await apiCall<{ types: DeliverableTypeDef[] }>(
+      'GET',
+      `${apiBase()}/api/deliverable-types`,
+    );
     const ids = view?.types?.map((t) => t.id) ?? [];
     return ids.length > 0 ? ids : DELIVERABLE_TYPES;
   } catch {
@@ -44,7 +45,10 @@ export function assertValidStatus(s: string): asserts s is DeliverableStatus {
  * (or zero, when `allowEmpty` is true) must be provided. Files are read as-is
  * (UTF-8) so callers can ship Markdown or HTML without server-side conversion.
  */
-export function resolveContent(opts: { content?: string; file?: string }, allowEmpty = false): string | undefined {
+export function resolveContent(
+  opts: { content?: string; file?: string },
+  allowEmpty = false,
+): string | undefined {
   if (opts.content !== undefined && opts.file !== undefined) {
     die('Use either --content or --file, not both.');
   }

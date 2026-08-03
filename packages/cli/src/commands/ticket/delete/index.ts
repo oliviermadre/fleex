@@ -1,8 +1,10 @@
 import readline from 'node:readline/promises';
-import type { CommandDef } from '../../../core/types.ts';
-import { c, info, ok } from '../../../core/colors.ts';
+
 import { apiBase, apiGet, apiDelete } from '../../../core/api.ts';
+import { c, info, ok } from '../../../core/colors.ts';
 import { resolveTicketId } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface DeleteOptions {
   board?: string;
@@ -26,7 +28,9 @@ const def: CommandDef = {
     if (!opts.force) {
       const t = await apiGet<{ displayId: number; title: string }>(`${base}/api/tickets/${uuid}`);
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      const ans = await rl.question(`${c.yellow('[fleex]')} Delete ticket #${t.displayId} "${t.title}"? [y/N] `);
+      const ans = await rl.question(
+        `${c.yellow('[fleex]')} Delete ticket #${t.displayId} "${t.title}"? [y/N] `,
+      );
       rl.close();
       if (!/^[yY]/.test(ans.trim())) {
         info('Cancelled.');

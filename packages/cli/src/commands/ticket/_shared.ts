@@ -1,24 +1,31 @@
-import { die, err, c } from '../../core/colors.ts';
 import { apiBase, apiGet } from '../../core/api.ts';
+import { die, err, c } from '../../core/colors.ts';
 
-export const VALID_STATUSES = ['backlog', 'todo', 'doing', 'reviewing', 'done', 'cancelled'] as const;
+export const VALID_STATUSES = [
+  'backlog',
+  'todo',
+  'doing',
+  'reviewing',
+  'done',
+  'cancelled',
+] as const;
 export const VALID_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;
 export const VALID_TYPES = ['build', 'fix', 'review', 'ops', 'lead', 'think'] as const;
 
 export function assertValidStatus(s: string): void {
-  if (!VALID_STATUSES.includes(s as typeof VALID_STATUSES[number])) {
+  if (!VALID_STATUSES.includes(s as (typeof VALID_STATUSES)[number])) {
     die(`Invalid status: ${s} (valid: ${VALID_STATUSES.join(', ')})`);
   }
 }
 
 export function assertValidPriority(p: string): void {
-  if (!VALID_PRIORITIES.includes(p as typeof VALID_PRIORITIES[number])) {
+  if (!VALID_PRIORITIES.includes(p as (typeof VALID_PRIORITIES)[number])) {
     die(`Invalid priority: ${p} (valid: ${VALID_PRIORITIES.join(', ')})`);
   }
 }
 
 export function assertValidType(t: string): void {
-  if (!VALID_TYPES.includes(t as typeof VALID_TYPES[number])) {
+  if (!VALID_TYPES.includes(t as (typeof VALID_TYPES)[number])) {
     die(`Invalid type: ${t} (valid: ${VALID_TYPES.join(', ')})`);
   }
 }
@@ -75,7 +82,9 @@ export function parseGithubRef(
 ): { ref: string; org: string; name: string; number: number; url: string } {
   const m = input.match(/^([^/]+)\/([^#/]+)#(\d+)$/);
   if (!m) {
-    die(`Invalid reference "${input}" (expected format org/name#number, e.g. odys-travel/odys-api#123)`);
+    die(
+      `Invalid reference "${input}" (expected format org/name#number, e.g. odys-travel/odys-api#123)`,
+    );
   }
   const [, org, name, num] = m as RegExpMatchArray;
   return {
@@ -94,12 +103,14 @@ export function parseGithubRef(
  * (e.g. a `/pull/` URL or a non-github host). Returns the canonical
  * `org/name#number` ref and a normalized issue URL, mirroring `parseGithubRef`.
  */
-export function parseGithubIssueUrl(
-  input: string,
-): { ref: string; org: string; name: string; number: number; url: string } {
-  const m = input.match(
-    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)(?:[/?#].*)?$/,
-  );
+export function parseGithubIssueUrl(input: string): {
+  ref: string;
+  org: string;
+  name: string;
+  number: number;
+  url: string;
+} {
+  const m = input.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)(?:[/?#].*)?$/);
   if (!m) {
     die(`Invalid GitHub issue URL "${input}" (expected https://github.com/org/name/issues/N)`);
   }
@@ -121,12 +132,14 @@ export function parseGithubIssueUrl(
  * isn't a GitHub *pull* URL (e.g. an `/issues/` URL or a non-github host).
  * Returns the canonical `org/name#number` ref and a normalized PR URL.
  */
-export function parseGithubPrUrl(
-  input: string,
-): { ref: string; org: string; name: string; number: number; url: string } {
-  const m = input.match(
-    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:[/?#].*)?$/,
-  );
+export function parseGithubPrUrl(input: string): {
+  ref: string;
+  org: string;
+  name: string;
+  number: number;
+  url: string;
+} {
+  const m = input.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:[/?#].*)?$/);
   if (!m) {
     die(`Invalid GitHub PR URL "${input}" (expected https://github.com/org/name/pull/N)`);
   }
@@ -172,7 +185,11 @@ export function normalizeDueDate(input: string): string {
   return new Date(ms).toISOString();
 }
 
-interface Board { id: string; name: string; emoji?: string }
+interface Board {
+  id: string;
+  name: string;
+  emoji?: string;
+}
 interface Ticket {
   id: string;
   displayId: number;
@@ -199,7 +216,9 @@ export async function resolveTicketId(input: string, boardId?: string): Promise<
   const did = parseInt(cleaned, 10);
 
   const base = apiBase();
-  const url = boardId ? `${base}/api/tickets?boardId=${encodeURIComponent(boardId)}` : `${base}/api/tickets`;
+  const url = boardId
+    ? `${base}/api/tickets?boardId=${encodeURIComponent(boardId)}`
+    : `${base}/api/tickets`;
   const tickets = await apiGet<Ticket[]>(url);
   const matches = tickets.filter((t) => t.displayId === did);
 
@@ -208,7 +227,9 @@ export async function resolveTicketId(input: string, boardId?: string): Promise<
 
   // Multiple matches — fetch boards to print a helpful disambiguation
   const boards = await apiGet<Board[]>(`${base}/api/boards`);
-  err(`There are ${matches.length} tickets with the id ${cleaned}, consider using the --board flag`);
+  err(
+    `There are ${matches.length} tickets with the id ${cleaned}, consider using the --board flag`,
+  );
   process.stderr.write(`${c.blue('[fleex]')} Tickets found:\n`);
   for (const t of matches) {
     const b = boards.find((x) => x.id === t.boardId);

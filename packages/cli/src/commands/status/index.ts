@@ -1,5 +1,6 @@
-import type { CommandDef } from '../../core/types.ts';
 import { runStatus } from './_impl.ts';
+
+import type { CommandDef } from '../../core/types.ts';
 
 const def: CommandDef = {
   name: 'status',

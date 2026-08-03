@@ -48,14 +48,18 @@ const migration: Migration = {
 
     // ── Indexes ──
     if (ctx.adapter !== 'json') {
-      await ctx.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_command_name ON skills(command_name)');
+      await ctx.exec(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_command_name ON skills(command_name)',
+      );
       await ctx.exec('CREATE INDEX IF NOT EXISTS idx_skills_persona_id ON skills(persona_id)');
     }
 
     // ── Supabase RLS ──
     if (ctx.adapter === 'supabase') {
       await ctx.exec('ALTER TABLE skills ENABLE ROW LEVEL SECURITY');
-      await ctx.exec(`CREATE POLICY "service_role_skills" ON skills FOR ALL USING (true) WITH CHECK (true)`);
+      await ctx.exec(
+        `CREATE POLICY "service_role_skills" ON skills FOR ALL USING (true) WITH CHECK (true)`,
+      );
     }
   },
 

@@ -29,7 +29,10 @@ function opt(name, fallback) {
 }
 
 const base = (opt('--base', process.env.AUDIT_BASE) || '').replace(/\/$/, '');
-const themes = opt('--themes', 'light,verdant').split(',').map((s) => s.trim()).filter(Boolean);
+const themes = opt('--themes', 'light,verdant')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 const outRoot = opt('--out', process.env.AUDIT_OUT || './theme-audit-out');
 
 if (!base) {
@@ -71,10 +74,14 @@ for (const theme of themes) {
     const gray = isGrayPair(p);
     if (gray && p.ratio >= 3) {
       warnings++;
-      console.log(`  WARN  ${p.ratio.toFixed(2)}:1 (assumed faint) ${p.color} on ${p.bg} — "${p.text}" [${p.screens}]`);
+      console.log(
+        `  WARN  ${p.ratio.toFixed(2)}:1 (assumed faint) ${p.color} on ${p.bg} — "${p.text}" [${p.screens}]`,
+      );
     } else {
       failures++;
-      console.log(`  FAIL  ${p.ratio.toFixed(2)}:1 ${p.color} on ${p.bg} — "${p.text}" [${p.screens}]`);
+      console.log(
+        `  FAIL  ${p.ratio.toFixed(2)}:1 ${p.color} on ${p.bg} — "${p.text}" [${p.screens}]`,
+      );
     }
   }
 }

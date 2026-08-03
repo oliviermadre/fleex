@@ -1,15 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+
 import type { Session } from '@fleex/shared';
 import { CONFIRM_KILL_TIMEOUT_MS } from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
+import { tintText, tintClasses } from '../../lib/tints';
+import * as api from '../../services/api';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
-import { ClaudeIcon, TerminalIcon, getProcessIcon } from './icons';
+
 import { ActivityDot } from './ActivityDot';
-import { cn } from '../../lib/cn';
-import * as api from '../../services/api';
-import { tintText, tintClasses } from '../../lib/tints';
+import { ClaudeIcon, TerminalIcon, getProcessIcon } from './icons';
 
 function GroupBindIndicator() {
   return (
@@ -34,10 +37,9 @@ export function SessionItem({ session }: Props) {
   const isSelected = selectedSessionId === session.id;
   const isSplit = splitSessionId === session.id;
   const inSplitMode = splitSessionId !== null;
-  const isFocusedInSplit = inSplitMode && (
-    (isSelected && focusedPane === 'primary') ||
-    (isSplit && focusedPane === 'split')
-  );
+  const isFocusedInSplit =
+    inSplitMode &&
+    ((isSelected && focusedPane === 'primary') || (isSplit && focusedPane === 'split'));
 
   const floatingSessionIds = useUIStore((s) => s.floatingSessionIds);
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
@@ -57,22 +59,25 @@ export function SessionItem({ session }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const killTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const handleKill = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirmKill) {
-      setConfirmKill(true);
-      killTimerRef.current = setTimeout(() => setConfirmKill(false), CONFIRM_KILL_TIMEOUT_MS);
-      return;
-    }
-    clearTimeout(killTimerRef.current);
-    removeSession(session.id);
-    try {
-      await api.killSession(session.id);
-    } catch {
-      // ignore
-    }
-    setConfirmKill(false);
-  }, [confirmKill, session.id, removeSession]);
+  const handleKill = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!confirmKill) {
+        setConfirmKill(true);
+        killTimerRef.current = setTimeout(() => setConfirmKill(false), CONFIRM_KILL_TIMEOUT_MS);
+        return;
+      }
+      clearTimeout(killTimerRef.current);
+      removeSession(session.id);
+      try {
+        await api.killSession(session.id);
+      } catch {
+        // ignore
+      }
+      setConfirmKill(false);
+    },
+    [confirmKill, session.id, removeSession],
+  );
 
   const displayName = session.displayName || displayNames[session.id] || session.tmuxName;
 
@@ -84,8 +89,12 @@ export function SessionItem({ session }: Props) {
   const iconColor = isRunning
     ? isClaude
       ? 'text-[var(--theme-accent)]'
-      : isHighlighted ? tintText('green') : tintClasses('green').solidText
-    : isHighlighted ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-faint)]';
+      : isHighlighted
+        ? tintText('green')
+        : tintClasses('green').solidText
+    : isHighlighted
+      ? 'text-[var(--theme-text-secondary)]'
+      : 'text-[var(--theme-text-faint)]';
 
   const startEditing = useCallback(() => {
     setEditValue(displayName);
@@ -123,20 +132,20 @@ export function SessionItem({ session }: Props) {
         cancelEdit();
       }
     },
-    [commitEdit, cancelEdit]
+    [commitEdit, cancelEdit],
   );
 
   return (
     <button
       className={cn(
         'group/session flex w-full items-center gap-2 px-3 py-1.5 text-left transition-all duration-200 border-l-3',
-        (isSelected || isSplit)
+        isSelected || isSplit
           ? isFocusedInSplit
             ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-text-primary)]'
             : inSplitMode
               ? 'border-[var(--theme-border)] bg-[var(--theme-bg-hover)] text-[var(--theme-text-muted)] opacity-60'
               : 'border-[var(--theme-accent)] bg-[var(--theme-accent-muted)] text-[var(--theme-text-primary)]'
-          : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]'
+          : 'border-transparent text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]',
       )}
       onClick={(e) => {
         // Shift+click while a group cell is active: bind session to that cell
@@ -173,12 +182,23 @@ export function SessionItem({ session }: Props) {
       >
         {(() => {
           const ProcessIcon = getProcessIcon(session.foregroundProcess);
-          const fgIsShell = !!session.foregroundProcess && ['zsh', 'bash', 'fish'].includes(session.foregroundProcess.split(' ')[0] ?? '');
-          const IconComponent = ProcessIcon || (fgIsShell ? TerminalIcon : (isClaude ? ClaudeIcon : TerminalIcon));
+          const fgIsShell =
+            !!session.foregroundProcess &&
+            ['zsh', 'bash', 'fish'].includes(session.foregroundProcess.split(' ')[0] ?? '');
+          const IconComponent =
+            ProcessIcon || (fgIsShell ? TerminalIcon : isClaude ? ClaudeIcon : TerminalIcon);
           const isClaudeIcon = IconComponent === ClaudeIcon;
           const color = isClaudeIcon
-            ? (isRunning ? 'text-[var(--theme-accent)]' : isHighlighted ? 'text-[var(--theme-text-secondary)]' : 'text-[var(--theme-text-faint)]')
-            : (isRunning ? (isHighlighted ? tintText('green') : tintClasses('green').solidText) : iconColor);
+            ? isRunning
+              ? 'text-[var(--theme-accent)]'
+              : isHighlighted
+                ? 'text-[var(--theme-text-secondary)]'
+                : 'text-[var(--theme-text-faint)]'
+            : isRunning
+              ? isHighlighted
+                ? tintText('green')
+                : tintClasses('green').solidText
+              : iconColor;
           return <IconComponent size={14} className={color} />;
         })()}
         {isClaude && isRunning && session.claudeActivity && (
@@ -199,13 +219,14 @@ export function SessionItem({ session }: Props) {
         <span className="min-w-0 flex-1 truncate text-[11px] leading-4">
           {displayName}
           {session.foregroundProcess && (
-            <span className="text-[var(--theme-text-faint)] text-[10px]"> ({session.foregroundProcess.split(' ')[0]})</span>
+            <span className="text-[var(--theme-text-faint)] text-[10px]">
+              {' '}
+              ({session.foregroundProcess.split(' ')[0]})
+            </span>
           )}
         </span>
       )}
-      {hasActiveGroupCell && (
-        <GroupBindIndicator />
-      )}
+      {hasActiveGroupCell && <GroupBindIndicator />}
       {/* Pop-out button: appears on hover, toggles floating overlay */}
       <span
         role="button"
@@ -214,7 +235,7 @@ export function SessionItem({ session }: Props) {
           'shrink-0 items-center justify-center rounded transition-colors',
           isFloating
             ? 'flex text-[var(--theme-accent)]'
-            : 'hidden group-hover/session:flex text-[var(--theme-text-muted)] hover:text-[var(--theme-accent)]'
+            : 'hidden group-hover/session:flex text-[var(--theme-text-muted)] hover:text-[var(--theme-accent)]',
         )}
         onClick={(e) => {
           e.stopPropagation();
@@ -223,7 +244,16 @@ export function SessionItem({ session }: Props) {
         onDoubleClick={(e) => e.stopPropagation()}
         title={isFloating ? 'Re-attach to main panel' : 'Detach to floating overlay'}
       >
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <rect x="2" y="2" width="9" height="9" rx="1.5" />
           <path d="M13 7V3h-4" />
           <line x1="13" y1="3" x2="7" y2="9" />
@@ -236,20 +266,34 @@ export function SessionItem({ session }: Props) {
           'hidden shrink-0 items-center justify-center rounded transition-colors group-hover/session:flex',
           confirmKill
             ? cn(tintText('red'), tintClasses('red').hoverText)
-            : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]'
+            : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]',
         )}
         onClick={handleKill}
         onDoubleClick={(e) => e.stopPropagation()}
         title={confirmKill ? 'Click again to confirm kill' : 'Kill session'}
       >
         {confirmKill ? (
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <circle cx="8" cy="8" r="6" />
             <line x1="5.5" y1="5.5" x2="10.5" y2="10.5" />
             <line x1="10.5" y1="5.5" x2="5.5" y2="10.5" />
           </svg>
         ) : (
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <line x1="4" y1="4" x2="12" y2="12" />
             <line x1="12" y1="4" x2="4" y2="12" />
           </svg>

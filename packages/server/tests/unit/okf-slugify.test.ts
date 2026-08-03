@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { slugify, slugifyOr, assignSlugs } from '../../src/scripts/okf/slugify.js';
 
 describe('slugify', () => {
@@ -34,7 +35,11 @@ describe('assignSlugs', () => {
       { id: 'a1', name: 'Alpha' },
       { id: 'b2', name: 'Beta' },
     ];
-    const map = assignSlugs(items, (i) => i.id, (i) => i.name);
+    const map = assignSlugs(
+      items,
+      (i) => i.id,
+      (i) => i.name,
+    );
     expect(map.get('a1')).toBe('alpha');
     expect(map.get('b2')).toBe('beta');
   });
@@ -44,7 +49,11 @@ describe('assignSlugs', () => {
       { id: 'deadbeef-1', name: 'Same Name' },
       { id: 'feedface-2', name: 'Same Name' },
     ];
-    const map = assignSlugs(items, (i) => i.id, (i) => i.name);
+    const map = assignSlugs(
+      items,
+      (i) => i.id,
+      (i) => i.name,
+    );
     expect(map.get('deadbeef-1')).toBe('same-name-deadbeef');
     expect(map.get('feedface-2')).toBe('same-name-feedface');
   });

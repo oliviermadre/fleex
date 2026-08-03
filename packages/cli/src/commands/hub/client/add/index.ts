@@ -1,4 +1,3 @@
-import type { CommandDef } from '../../../../core/types.ts';
 import { c, ok, info, die } from '../../../../core/colors.ts';
 import {
   HUB_CLIENTS_FILE,
@@ -8,6 +7,8 @@ import {
   readHubState,
   writeClientsFile,
 } from '../../_state.ts';
+
+import type { CommandDef } from '../../../../core/types.ts';
 
 const NAME_RE = /^[a-zA-Z0-9_.-]{1,64}$/;
 

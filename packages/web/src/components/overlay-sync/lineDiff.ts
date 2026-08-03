@@ -32,7 +32,11 @@ function alignByIndex(a: string[], b: string[]): DiffRow[] {
   for (let i = 0; i < max; i++) {
     const left = i < a.length ? a[i]! : null;
     const right = i < b.length ? b[i]! : null;
-    rows.push({ left, right, type: left === right ? 'same' : left === null ? 'add' : right === null ? 'del' : 'del' });
+    rows.push({
+      left,
+      right,
+      type: left === right ? 'same' : left === null ? 'add' : right === null ? 'del' : 'del',
+    });
   }
   return rows;
 }

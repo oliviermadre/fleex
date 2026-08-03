@@ -1,7 +1,8 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { c, statusColor } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
+import { c, statusColor } from '../../../core/colors.ts';
 import { resolveEpicId } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface Epic {
   id: string;
@@ -18,7 +19,10 @@ interface Epic {
   updatedAt?: string;
 }
 
-interface Board { id: string; name?: string }
+interface Board {
+  id: string;
+  name?: string;
+}
 
 interface Ticket {
   displayId: number;
@@ -84,7 +88,9 @@ const def: CommandDef = {
         const colored = statusColor(t.status)(t.status.padEnd(11));
         const prio = (t.priority ?? '-').padEnd(8);
         const type = (t.type ?? '-').padEnd(8);
-        process.stdout.write(`    #${String(t.displayId).padEnd(5)} ${colored} ${prio} ${type} ${t.title}\n`);
+        process.stdout.write(
+          `    #${String(t.displayId).padEnd(5)} ${colored} ${prio} ${type} ${t.title}\n`,
+        );
       }
     }
     process.stdout.write('\n');

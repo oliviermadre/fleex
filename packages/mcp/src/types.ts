@@ -47,7 +47,10 @@ export interface GeneratedTool {
   commandPath: string[];
   description: string;
   inputSchema: JsonSchema;
-  /** True for create/update/move/delete/... — the host should gate these. */
+  /**
+   * True unless the leaf is a known read command — the host should gate these.
+   * Deliberately fail-closed: a command nobody classified is treated as a write.
+   */
   mutating: boolean;
   /** True when the command accepts `--workspace`; injected by the host. */
   workspaceAware: boolean;
@@ -57,6 +60,8 @@ export interface GeneratedTool {
    * never blocks on stdin — human confirmation already happens at the host.
    */
   confirmFlag?: string;
+  /** Per-command execution budget (ms). Absent ⇒ the executor's default. */
+  timeoutMs?: number;
   /** Ordered positional arguments (drives argv reconstruction). */
   arguments: ArgSpec[];
   /** Options (drives argv reconstruction). */

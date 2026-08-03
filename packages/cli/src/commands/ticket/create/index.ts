@@ -1,7 +1,14 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, present } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
-import { assertValidStatus, assertValidPriority, assertValidType, normalizeDueDate, resolveBoardId } from '../_shared.ts';
+import { ok, die, present } from '../../../core/colors.ts';
+import {
+  assertValidStatus,
+  assertValidPriority,
+  assertValidType,
+  normalizeDueDate,
+  resolveBoardId,
+} from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface CreateOptions {
   board?: string;
@@ -27,7 +34,12 @@ const def: CommandDef = {
     cmd.option('--status <status>', 'Initial status (default: backlog)');
     cmd.option('--type <type>', 'Type: build | fix | review | ops | lead | think');
     cmd.option('--due <date>', 'Due date (YYYY-MM-DD or ISO 8601)');
-    cmd.option('--tag <tag>', 'Tag (repeatable)', (val: string, prev: string[] = []) => [...prev, val], [] as string[]);
+    cmd.option(
+      '--tag <tag>',
+      'Tag (repeatable)',
+      (val: string, prev: string[] = []) => [...prev, val],
+      [] as string[],
+    );
   },
   action: async (opts: CreateOptions) => {
     if (!opts.title) die('Missing required --title');
@@ -45,8 +57,13 @@ const def: CommandDef = {
     if (opts.tag && opts.tag.length > 0) body.tags = opts.tag;
 
     const base = apiBase();
-    const result = await apiPost<{ displayId: number; title: string; status: string }>(`${base}/api/tickets`, body);
-    present(result, () => ok(`Created ticket #${result.displayId}: ${result.title} (${result.status})`));
+    const result = await apiPost<{ displayId: number; title: string; status: string }>(
+      `${base}/api/tickets`,
+      body,
+    );
+    present(result, () =>
+      ok(`Created ticket #${result.displayId}: ${result.title} (${result.status})`),
+    );
   },
 };
 

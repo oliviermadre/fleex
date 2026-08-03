@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
+
+import * as api from '../../../services/api';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSidebarTerminalsStore } from '../../../stores/sidebarTerminalsStore';
-import { useTerminal } from '../../../hooks/useTerminal';
-import * as api from '../../../services/api';
+
+// Lazy: keeps @xterm/xterm out of the initial payload even though this panel is
+// reachable from the eager UnifiedWorktreePanel. Only fetched once a sidebar
+// terminal session actually exists (see the `activeSession` guard below).
+const SidebarTerminalView = lazy(() =>
+  import('./SidebarTerminalView').then((m) => ({ default: m.SidebarTerminalView })),
+);
 
 interface Props {
   /** Parent tmux session tab whose sidebar terminals we host. */
@@ -38,7 +45,7 @@ export function SidebarBottomPanel({ parentSessionId, ticketDisplayId, cwd }: Pr
   }, [allSessions, reconcile]);
 
   const sessionsById = useMemo(() => {
-    const map = new Map<string, typeof allSessions[number]>();
+    const map = new Map<string, (typeof allSessions)[number]>();
     for (const s of allSessions) map.set(s.id, s);
     return map;
   }, [allSessions]);
@@ -72,7 +79,7 @@ export function SidebarBottomPanel({ parentSessionId, ticketDisplayId, cwd }: Pr
     [parentSessionId, removeTerminal, removeSession],
   );
 
-  const activeSession = activeId ? sessionsById.get(activeId) ?? null : null;
+  const activeSession = activeId ? (sessionsById.get(activeId) ?? null) : null;
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -92,7 +99,15 @@ export function SidebarBottomPanel({ parentSessionId, ticketDisplayId, cwd }: Pr
                   : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]'
               }`}
             >
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 opacity-70">
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                className="flex-shrink-0 opacity-70"
+              >
                 <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
                 <path d="M4 6l2 2-2 2M7.5 10h4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -105,7 +120,15 @@ export function SidebarBottomPanel({ parentSessionId, ticketDisplayId, cwd }: Pr
                   className="hidden cursor-pointer items-center justify-center rounded text-[var(--theme-text-faint)] hover:bg-[var(--theme-bg-overlay)] hover:text-[var(--theme-text-primary)] group-hover/sidebar-tab:flex absolute inset-0"
                   title="Close terminal"
                 >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
                     <line x1="4" y1="4" x2="12" y2="12" />
                     <line x1="12" y1="4" x2="4" y2="12" />
                   </svg>
@@ -123,7 +146,15 @@ export function SidebarBottomPanel({ parentSessionId, ticketDisplayId, cwd }: Pr
           title="New sidebar terminal"
           className="ml-1 inline-flex items-center justify-center w-6 h-6 rounded text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-hover)] flex-shrink-0"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          >
             <line x1="8" y1="3" x2="8" y2="13" />
             <line x1="3" y1="8" x2="13" y2="8" />
           </svg>
@@ -131,22 +162,38 @@ export function SidebarBottomPanel({ parentSessionId, ticketDisplayId, cwd }: Pr
       </div>
       <div className="flex-1 min-h-0 relative">
         {activeSession ? (
-          <SidebarTerminalView key={activeSession.id} sessionId={activeSession.id} />
+          <Suspense fallback={<div className="absolute inset-0 bg-[var(--theme-bg-base)]" />}>
+            <SidebarTerminalView key={activeSession.id} sessionId={activeSession.id} />
+          </Suspense>
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
-            <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className="text-[var(--theme-text-faint)]">
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              className="text-[var(--theme-text-faint)]"
+            >
               <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
               <path d="M4 6l2 2-2 2M7.5 10h4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <div className="text-xs text-[var(--theme-text-muted)]">
-              No terminal yet
-            </div>
+            <div className="text-xs text-[var(--theme-text-muted)]">No terminal yet</div>
             <button
               type="button"
               onClick={handleCreate}
               className="inline-flex items-center gap-1.5 rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-[var(--theme-accent-fg)] transition-opacity hover:opacity-90"
             >
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
                 <line x1="8" y1="3" x2="8" y2="13" />
                 <line x1="3" y1="8" x2="13" y2="8" />
               </svg>
@@ -157,10 +204,4 @@ export function SidebarBottomPanel({ parentSessionId, ticketDisplayId, cwd }: Pr
       </div>
     </div>
   );
-}
-
-function SidebarTerminalView({ sessionId }: { sessionId: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  useTerminal(sessionId, containerRef);
-  return <div ref={containerRef} className="xterm-container absolute inset-0" />;
 }

@@ -12,11 +12,7 @@ import type { TicketTab } from '../stores/ticketStore';
  *   /tickets/board/{boardSlug}/ticket/{ticketId}[/{tab}]
  * (the `description` tab is the default and is omitted, matching storeToUrl).
  */
-export function ticketLink(
-  ticketId: string,
-  tab?: TicketTab,
-  boardId?: string | null,
-): string {
+export function ticketLink(ticketId: string, tab?: TicketTab, boardId?: string | null): string {
   const boardSlug = boardId ?? 'all';
   const base = `/tickets/board/${boardSlug}/ticket/${ticketId}`;
   return tab && tab !== 'description' ? `${base}/${tab}` : base;

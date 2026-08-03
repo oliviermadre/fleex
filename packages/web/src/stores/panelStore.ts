@@ -1,10 +1,7 @@
 import { create } from 'zustand';
-import type {
-  Panel,
-  CreatePanelRequest,
-  UpdatePanelRequest,
-  PanelWsMessage,
-} from '@fleex/shared';
+
+import type { Panel, CreatePanelRequest, UpdatePanelRequest, PanelWsMessage } from '@fleex/shared';
+
 import * as api from '../services/api';
 
 interface PanelState {

@@ -1,17 +1,23 @@
 import { useState, useRef, useMemo } from 'react';
-import { NameInputModal } from '../ui/NameInputModal';
+
 import type { TicketPriority } from '@fleex/shared';
 import { TICKET_PRIORITIES, isSlackMessageUrl, isSlackImportTag } from '@fleex/shared';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { useUIStore } from '../../stores/uiStore';
-import { PriorityIndicator } from './PriorityIndicator';
+
 import { cn } from '../../lib/cn';
 import { tintClasses } from '../../lib/tints';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUIStore } from '../../stores/uiStore';
+import { NameInputModal } from '../ui/NameInputModal';
+
+import { PriorityIndicator } from './PriorityIndicator';
 
 export function TicketsContentPanel() {
   const rawBoards = useTicketStore((s) => s.boards);
-  const boards = useMemo(() => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)), [rawBoards]);
+  const boards = useMemo(
+    () => [...rawBoards].sort((a, b) => a.name.localeCompare(b.name)),
+    [rawBoards],
+  );
   const tickets = useTicketStore((s) => s.tickets);
   const selectedBoardId = useTicketStore((s) => s.selectedBoardId);
   const selectBoard = useTicketStore((s) => s.selectBoard);
@@ -140,15 +146,28 @@ export function TicketsContentPanel() {
         onClose={() => setShowCreateBoard(false)}
       />
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
-        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Tickets</span>
+      <div
+        className="flex items-center justify-between border-b border-[var(--theme-border)] px-4"
+        style={{ height: 'var(--header-height)' }}
+      >
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
+          Tickets
+        </span>
         <div className="flex items-center gap-1">
           <button
             className="rounded p-1 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
             onClick={handleCreateBoard}
             title="Create board"
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            >
               <line x1="8" y1="3" x2="8" y2="13" />
               <line x1="3" y1="8" x2="13" y2="8" />
             </svg>
@@ -158,7 +177,16 @@ export function TicketsContentPanel() {
             className="flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
             title="Collapse panel"
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
               <line x1="6" y1="1.5" x2="6" y2="14.5" />
             </svg>
@@ -179,7 +207,9 @@ export function TicketsContentPanel() {
           >
             {boards.length > 1 && <option value="__all__">All boards</option>}
             {boards.map((b) => (
-              <option key={b.id} value={b.id}>{b.emoji} {b.name}</option>
+              <option key={b.id} value={b.id}>
+                {b.emoji} {b.name}
+              </option>
             ))}
           </select>
 
@@ -194,7 +224,10 @@ export function TicketsContentPanel() {
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleFinishRename();
-                    if (e.key === 'Escape') { setRenamingBoardId(null); setRenameValue(''); }
+                    if (e.key === 'Escape') {
+                      setRenamingBoardId(null);
+                      setRenameValue('');
+                    }
                   }}
                   onBlur={handleFinishRename}
                 />
@@ -208,7 +241,10 @@ export function TicketsContentPanel() {
                   </button>
                   {boards.length > 1 && (
                     <button
-                      className={cn('rounded px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-danger)]', tintClasses('red').hoverBg)}
+                      className={cn(
+                        'rounded px-1.5 py-0.5 text-[10px] text-[var(--theme-text-muted)] transition-colors hover:text-[var(--theme-danger)]',
+                        tintClasses('red').hoverBg,
+                      )}
                       onClick={() => {
                         if (confirm(`Delete board "${selectedBoard.name}"?`)) {
                           deleteBoard(selectedBoard.id);
@@ -234,15 +270,27 @@ export function TicketsContentPanel() {
             className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2.5 py-1.5 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
             placeholder="Ticket title, GitHub issue or Slack message URL..."
             value={quickTitle}
-            onChange={(e) => { setQuickTitle(e.target.value); setQuickError(null); }}
+            onChange={(e) => {
+              setQuickTitle(e.target.value);
+              setQuickError(null);
+            }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); handleQuickCreate(); }
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleQuickCreate();
+              }
             }}
             disabled={quickImporting}
           />
           {GITHUB_ISSUE_RE.test(quickTitle.trim()) && !quickImporting && !quickError && (
             <div className="flex items-center gap-1.5 pt-1 text-[10px] text-[var(--theme-text-muted)]">
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-secondary)]">
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className="text-[var(--theme-text-secondary)]"
+              >
                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
               </svg>
               <span>Will import from GitHub</span>
@@ -253,7 +301,15 @@ export function TicketsContentPanel() {
           )}
           {quickImporting && (
             <div className="flex items-center gap-1.5 pt-1 text-[10px] text-[var(--theme-accent)]">
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="animate-spin"
+              >
                 <circle cx="8" cy="8" r="6" strokeDasharray="30" strokeDashoffset="10" />
               </svg>
               <span>Importing from GitHub...</span>
@@ -267,7 +323,17 @@ export function TicketsContentPanel() {
             Search
           </label>
           <div className="relative">
-            <svg className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--theme-text-muted)]" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--theme-text-muted)]"
+              width="10"
+              height="10"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <circle cx="7" cy="7" r="5" />
               <line x1="10.5" y1="10.5" x2="14" y2="14" />
             </svg>
@@ -301,7 +367,9 @@ export function TicketsContentPanel() {
             {/* Repository */}
             {repos.length > 0 && (
               <div>
-                <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">Repository</label>
+                <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">
+                  Repository
+                </label>
                 <select
                   className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
                   value={filters.repo ?? ''}
@@ -309,7 +377,9 @@ export function TicketsContentPanel() {
                 >
                   <option value="">All</option>
                   {repos.map((r) => (
-                    <option key={r} value={r}>{r}</option>
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -317,7 +387,9 @@ export function TicketsContentPanel() {
 
             {/* Priority */}
             <div>
-              <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">Priority</label>
+              <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">
+                Priority
+              </label>
               <div className="flex flex-wrap gap-1">
                 <button
                   className={cn(
@@ -350,13 +422,17 @@ export function TicketsContentPanel() {
 
             {/* Has session */}
             <div>
-              <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">Session</label>
+              <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">
+                Session
+              </label>
               <div className="flex gap-1">
-                {([
-                  { label: 'All', value: null },
-                  { label: 'With session', value: true },
-                  { label: 'Without', value: false },
-                ] as const).map((opt) => (
+                {(
+                  [
+                    { label: 'All', value: null },
+                    { label: 'With session', value: true },
+                    { label: 'Without', value: false },
+                  ] as const
+                ).map((opt) => (
                   <button
                     key={String(opt.value)}
                     className={cn(
@@ -375,12 +451,16 @@ export function TicketsContentPanel() {
 
             {/* Favorite */}
             <div>
-              <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">Favorite</label>
+              <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">
+                Favorite
+              </label>
               <div className="flex gap-1">
-                {([
-                  { label: 'All', value: null },
-                  { label: '\u2605 Favorites', value: true },
-                ] as const).map((opt) => (
+                {(
+                  [
+                    { label: 'All', value: null },
+                    { label: '\u2605 Favorites', value: true },
+                  ] as const
+                ).map((opt) => (
                   <button
                     key={String(opt.value)}
                     className={cn(
@@ -400,7 +480,9 @@ export function TicketsContentPanel() {
             {/* Tags */}
             {tags.length > 0 && (
               <div>
-                <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">Tag</label>
+                <label className="mb-0.5 block text-[10px] text-[var(--theme-text-muted)]">
+                  Tag
+                </label>
                 <select
                   className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
                   value={filters.tag ?? ''}
@@ -408,7 +490,9 @@ export function TicketsContentPanel() {
                 >
                   <option value="">All</option>
                   {tags.map((t) => (
-                    <option key={t} value={t}>{t}</option>
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
                   ))}
                 </select>
               </div>

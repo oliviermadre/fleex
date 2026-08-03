@@ -1,4 +1,5 @@
 import { memo, useEffect, useId, useState } from 'react';
+
 import type { ReactNode } from 'react';
 
 type ColorMode = 'light' | 'dark';
@@ -31,9 +32,7 @@ interface MermaidDiagramProps {
 }
 
 type RenderState =
-  | { status: 'loading' }
-  | { status: 'success'; svg: string }
-  | { status: 'error'; message: string };
+  { status: 'loading' } | { status: 'success'; svg: string } | { status: 'error'; message: string };
 
 /**
  * Mermaid is ~550KB. It is loaded with a dynamic import() so it stays out of
@@ -62,7 +61,10 @@ function cleanupOrphans(id: string): void {
   }
 }
 
-export const MermaidDiagram = memo(function MermaidDiagram({ code, colorMode }: MermaidDiagramProps) {
+export const MermaidDiagram = memo(function MermaidDiagram({
+  code,
+  colorMode,
+}: MermaidDiagramProps) {
   const id = useDiagramId();
   const [state, setState] = useState<RenderState>({ status: 'loading' });
   const [showSource, setShowSource] = useState(false);

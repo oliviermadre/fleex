@@ -1,9 +1,12 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
+import { ok } from '../../../core/colors.ts';
 import { resolveTicketId } from '../_shared.ts';
 
-interface CommentOptions { board?: string }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface CommentOptions {
+  board?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,

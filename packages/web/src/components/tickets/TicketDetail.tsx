@@ -1,23 +1,34 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { TicketComment, TicketDeliverable, TicketMention, TicketWsMessage } from '@fleex/shared';
+
+import type {
+  TicketComment,
+  TicketDeliverable,
+  TicketMention,
+  TicketWsMessage,
+} from '@fleex/shared';
+
+import { useCapabilities } from '../../hooks/useCapabilities';
+import { useFileUpload } from '../../hooks/useFileUpload';
+import { workflowsUnavailableTooltip } from '../../lib/capabilityMessages';
+import * as api from '../../services/api';
 import { appWs } from '../../services/websocket';
-import { useTicketStore, type TicketTab } from '../../stores/ticketStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useTicketStore, type TicketTab } from '../../stores/ticketStore';
 import { useUnreadStore } from '../../stores/unreadStore';
-import { TicketDetailHeader } from './TicketDetailHeader';
-import { TicketMetaSidebar } from './TicketMetaSidebar';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
+import { SmartSessionButton } from '../dashboard/SmartSessionButton';
+import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
+import { WorkflowsUnavailableState } from '../workflows/WorkflowsUnavailableState';
+
+import { MissingRepoBanner } from './MissingRepoBanner';
 import { TicketActivityTimeline } from './TicketActivityTimeline';
 import { TicketComments } from './TicketComments';
 import { TicketDeliverables } from './TicketDeliverables';
+import { TicketDetailHeader } from './TicketDetailHeader';
 import { TicketMentions } from './TicketMentions';
-import { MissingRepoBanner } from './MissingRepoBanner';
-import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
-import * as api from '../../services/api';
-import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
-import { SmartSessionButton } from '../dashboard/SmartSessionButton';
-import { useFileUpload } from '../../hooks/useFileUpload';
-import { useWorkflowRunStore } from '../../stores/workflowRunStore';
-import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
+import { TicketMetaSidebar } from './TicketMetaSidebar';
 
 type DescriptionMode = 'write' | 'preview' | 'split';
 
@@ -47,6 +58,10 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
     void useWorkflowRunStore.getState().loadForTicket(ticketId);
   }, [ticketId]);
 
+  // Storage drivers without workflow support keep the tab visible but inert, so
+  // the feature reads as "unavailable here" rather than as if it never existed.
+  const { workflowsAvailable, storageDriver } = useCapabilities();
+
   // Track initial description to know if it changed when leaving
   const initialDescRef = useRef('');
   const descriptionRef = useRef('');
@@ -63,9 +78,18 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
 
   // Fetch comment, deliverable & mention counts
   useEffect(() => {
-    api.fetchTicketComments(ticketId).then((c) => setCommentCount(c.length)).catch(() => {});
-    api.fetchTicketDeliverables(ticketId).then((d) => setDeliverableCount(d.length)).catch(() => {});
-    api.fetchTicketMentions(ticketId).then((m) => setMentionCount(m.length)).catch(() => {});
+    api
+      .fetchTicketComments(ticketId)
+      .then((c) => setCommentCount(c.length))
+      .catch(() => {});
+    api
+      .fetchTicketDeliverables(ticketId)
+      .then((d) => setDeliverableCount(d.length))
+      .catch(() => {});
+    api
+      .fetchTicketMentions(ticketId)
+      .then((m) => setMentionCount(m.length))
+      .catch(() => {});
   }, [ticketId]);
 
   // Track deliverable & mention counts via WebSocket
@@ -114,7 +138,9 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
             });
           }
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     });
     return unsub;
   }, [ticketId, incrementUnread]);
@@ -203,7 +229,7 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
   );
 
   const ticketSessions = useMemo(
-    () => ticket ? findSessionsForTicketId(ticket.id, sessionGroups) : [],
+    () => (ticket ? findSessionsForTicketId(ticket.id, sessionGroups) : []),
     [ticket?.id, sessionGroups],
   );
 
@@ -217,20 +243,26 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
     );
   }
 
-  const commentLabel = commentCount > 0
-    ? `Comments (${unread.unreadComments > 0 ? `${unread.unreadComments} new` : commentCount})`
-    : 'Comments';
-  const deliverableLabel = deliverableCount > 0
-    ? `Deliverables (${unread.unreadDeliverables > 0 ? `${unread.unreadDeliverables} new` : deliverableCount})`
-    : 'Deliverables';
+  const commentLabel =
+    commentCount > 0
+      ? `Comments (${unread.unreadComments > 0 ? `${unread.unreadComments} new` : commentCount})`
+      : 'Comments';
+  const deliverableLabel =
+    deliverableCount > 0
+      ? `Deliverables (${unread.unreadDeliverables > 0 ? `${unread.unreadDeliverables} new` : deliverableCount})`
+      : 'Deliverables';
 
-  const mainTabs: { key: TicketTab; label: string }[] = [
+  const mainTabs: { key: TicketTab; label: string; disabled?: boolean }[] = [
     { key: 'description', label: 'Description' },
     { key: 'comments', label: commentLabel },
     { key: 'mentions', label: `Mentions${mentionCount > 0 ? ` (${mentionCount})` : ''}` },
     { key: 'deliverables', label: deliverableLabel },
     { key: 'activity', label: 'Activity' },
-    ...(hasWorkflowRuns ? [{ key: 'workflow' as TicketTab, label: 'Workflow' }] : []),
+    // Shown as soon as the ticket has runs — or, when the driver can't run
+    // workflows at all, shown disabled so the gap is explained on hover.
+    ...(hasWorkflowRuns || !workflowsAvailable
+      ? [{ key: 'workflow' as TicketTab, label: 'Workflow', disabled: !workflowsAvailable }]
+      : []),
   ];
 
   return (
@@ -267,7 +299,9 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
             {mainTabs.map((tab) => (
               <button
                 key={tab.key}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                disabled={tab.disabled}
+                title={tab.disabled ? workflowsUnavailableTooltip(storageDriver) : undefined}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   mainTab === tab.key
                     ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-text-primary)]'
                     : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
@@ -331,7 +365,17 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
                       className="absolute bottom-2 right-2 rounded p-1 text-[var(--theme-text-muted)] opacity-50 hover:opacity-100 hover:text-[var(--theme-accent)] transition-opacity"
                       title="Attach file"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
                       </svg>
                     </button>
@@ -354,7 +398,9 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
                         onToggleCheckbox={handleDescToggleCheckbox}
                       />
                     ) : (
-                      <p className="text-sm italic text-[var(--theme-text-muted)]">Nothing to preview</p>
+                      <p className="text-sm italic text-[var(--theme-text-muted)]">
+                        Nothing to preview
+                      </p>
                     )}
                   </div>
                 )}
@@ -362,19 +408,13 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
             )}
 
             {/* Comments tab */}
-            {mainTab === 'comments' && (
-              <TicketComments ticketId={ticketId} />
-            )}
+            {mainTab === 'comments' && <TicketComments ticketId={ticketId} />}
 
             {/* Mentions tab */}
-            {mainTab === 'mentions' && (
-              <TicketMentions ticketId={ticketId} />
-            )}
+            {mainTab === 'mentions' && <TicketMentions ticketId={ticketId} />}
 
             {/* Deliverables tab */}
-            {mainTab === 'deliverables' && (
-              <TicketDeliverables ticketId={ticketId} />
-            )}
+            {mainTab === 'deliverables' && <TicketDeliverables ticketId={ticketId} />}
 
             {/* Activity tab */}
             {mainTab === 'activity' && (
@@ -383,10 +423,15 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
               </div>
             )}
 
-            {/* Workflow tab */}
+            {/* Workflow tab — a direct URL (…/ticket/:id/workflow) still lands
+                here, so the panel itself explains an unsupported driver. */}
             {mainTab === 'workflow' && (
               <div className="flex-1 overflow-hidden">
-                <TicketWorkflowTab ticketId={ticketId} />
+                {workflowsAvailable ? (
+                  <TicketWorkflowTab ticketId={ticketId} />
+                ) : (
+                  <WorkflowsUnavailableState compact />
+                )}
               </div>
             )}
           </div>
@@ -395,7 +440,6 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
         {/* Meta sidebar */}
         <TicketMetaSidebar ticket={ticket} embedded={embedded} />
       </div>
-
     </div>
   );
 }

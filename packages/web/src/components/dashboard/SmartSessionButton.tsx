@@ -1,24 +1,28 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+
 import type { Session } from '@fleex/shared';
-import { StatusDot } from '../ui/StatusDot';
-import { deriveDisplayStatus, aggregateBranchStatus } from '../../lib/deriveStatus';
-import type { DisplayStatus } from '../../lib/deriveStatus';
-import { useUIStore } from '../../stores/uiStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useSkillStore } from '../../stores/skillStore';
-import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
-import { useWorkflowRunStore } from '../../stores/workflowRunStore';
-import { usePanelStore } from '../../stores/panelStore';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { useFrequentLaunchStore, buildFrequentItems } from '../../stores/frequentLaunchStore';
-import { useToastStore } from '../../stores/toastStore';
+
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
-import { PrimitiveIcon, PRIMITIVE_META } from '../../lib/primitives';
 import { cn } from '../../lib/cn';
+import { deriveDisplayStatus, aggregateBranchStatus } from '../../lib/deriveStatus';
 import { foldAccents } from '../../lib/normalize';
+import { PrimitiveIcon, PRIMITIVE_META } from '../../lib/primitives';
 import { tintClasses } from '../../lib/tints';
 import * as api from '../../services/api';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useFrequentLaunchStore, buildFrequentItems } from '../../stores/frequentLaunchStore';
+import { usePanelStore } from '../../stores/panelStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useSkillStore } from '../../stores/skillStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useToastStore } from '../../stores/toastStore';
+import { useUIStore } from '../../stores/uiStore';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { StatusDot } from '../ui/StatusDot';
+
+import type { DisplayStatus } from '../../lib/deriveStatus';
 
 interface SmartSessionButtonProps {
   sessions: Session[];
@@ -39,7 +43,16 @@ interface SmartSessionButtonProps {
 
 function FleexIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
       <polyline points="6,6 10,8 6,10" />
     </svg>
@@ -48,7 +61,16 @@ function FleexIcon() {
 
 function ChevronDownIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="4,6 8,10 12,6" />
     </svg>
   );
@@ -174,7 +196,19 @@ function GroupHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-function LaunchRow({ item, index, active, marker, onHover }: { item: LaunchItem; index: number; active: boolean; marker?: React.ReactNode; onHover?: () => void }) {
+function LaunchRow({
+  item,
+  index,
+  active,
+  marker,
+  onHover,
+}: {
+  item: LaunchItem;
+  index: number;
+  active: boolean;
+  marker?: React.ReactNode;
+  onHover?: () => void;
+}) {
   return (
     <button
       role="menuitem"
@@ -189,7 +223,9 @@ function LaunchRow({ item, index, active, marker, onHover }: { item: LaunchItem;
     >
       {marker ?? item.icon}
       <span className="truncate text-[var(--theme-text-primary)]">{item.displayName}</span>
-      <span className="ml-auto shrink-0 pl-2 text-[9px] font-mono text-[var(--theme-text-faint)]">{item.token}</span>
+      <span className="ml-auto shrink-0 pl-2 text-[9px] font-mono text-[var(--theme-text-faint)]">
+        {item.token}
+      </span>
     </button>
   );
 }
@@ -327,7 +363,9 @@ function LauncherPanel({
         {/* Sessions group */}
         {sessions.length > 0 && (
           <>
-            <div className="px-3 pb-1 pt-2 text-[9px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">Sessions</div>
+            <div className="px-3 pb-1 pt-2 text-[9px] font-bold uppercase tracking-wider text-[var(--theme-text-faint)]">
+              Sessions
+            </div>
             {sessions.map((session) => {
               const derived = deriveDisplayStatus(session);
               return (
@@ -340,8 +378,12 @@ function LauncherPanel({
                   }}
                 >
                   <StatusDot status={derived.status} size="sm" />
-                  <span className="truncate text-[var(--theme-text-primary)]">{session.displayName}</span>
-                  <span className={cn('ml-auto whitespace-nowrap', derived.textColor)}>{derived.label}</span>
+                  <span className="truncate text-[var(--theme-text-primary)]">
+                    {session.displayName}
+                  </span>
+                  <span className={cn('ml-auto whitespace-nowrap', derived.textColor)}>
+                    {derived.label}
+                  </span>
                 </button>
               );
             })}
@@ -369,7 +411,12 @@ function LauncherPanel({
         {/* Filter chips */}
         {hasTicketId && counts.all > 0 && (
           <div className="flex flex-wrap gap-1 border-t border-[var(--theme-border)] px-2 pb-1 pt-2">
-            <FilterChip label="Tous" count={counts.all} active={filter === 'all'} onClick={() => setFilter('all')} />
+            <FilterChip
+              label="Tous"
+              count={counts.all}
+              active={filter === 'all'}
+              onClick={() => setFilter('all')}
+            />
             {CHIP_ORDER.filter((c) => counts[c.kind] > 0).map((c) => (
               <FilterChip
                 key={c.kind}
@@ -436,7 +483,17 @@ function LauncherPanel({
   );
 }
 
-function FilterChip({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
+function FilterChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={(e) => {
@@ -457,12 +514,28 @@ function FilterChip({ label, count, active, onClick }: { label: string; count: n
   );
 }
 
-export function SmartSessionButton({ sessions, creating: externalCreating, onCreateSession: externalOnCreateSession, disabled, size = 'sm', ticketId, onExecuteSkill, alwaysShowMenu }: SmartSessionButtonProps) {
+export function SmartSessionButton({
+  sessions,
+  creating: externalCreating,
+  onCreateSession: externalOnCreateSession,
+  disabled,
+  size = 'sm',
+  ticketId,
+  onExecuteSkill,
+  alwaysShowMenu,
+}: SmartSessionButtonProps) {
   const addFloatingSession = useUIStore((s) => s.addFloatingSession);
   const openSessionFromTicket = useTicketStore((s) => s.openSessionFromTicket);
   const skills = useSkillStore((s) => s.skills);
   const addToast = useToastStore((s) => s.addToast);
-  const { open: dropdownOpen, setOpen: setDropdownOpen, refs, floatingStyles, getReferenceProps, getFloatingProps } = usePopover({ maxHeight: LAUNCHER_MAX_HEIGHT });
+  const {
+    open: dropdownOpen,
+    setOpen: setDropdownOpen,
+    refs,
+    floatingStyles,
+    getReferenceProps,
+    getFloatingProps,
+  } = usePopover({ maxHeight: LAUNCHER_MAX_HEIGHT });
   const [internalCreating, setInternalCreating] = useState(false);
   // Transient acknowledgement while a workflow/skill/panel/persona launch is in flight.
   const [launching, setLaunching] = useState(false);
@@ -506,6 +579,7 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   const templates = useWorkflowTemplateStore((s) => s.templates);
   const refreshTemplates = useWorkflowTemplateStore((s) => s.refresh);
   const startRun = useWorkflowRunStore((s) => s.start);
+  const { workflowsAvailable } = useCapabilities();
   const enabledTemplates = templates.filter((t) => t.enabled);
 
   const panels = usePanelStore((s) => s.panels);
@@ -520,7 +594,9 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
   const frequentStats = useFrequentLaunchStore((s) => s.stats);
   const loadFrequent = useFrequentLaunchStore((s) => s.load);
 
-  useEffect(() => { void refreshTemplates(); }, [refreshTemplates]);
+  useEffect(() => {
+    void refreshTemplates();
+  }, [refreshTemplates]);
 
   // Panels & personas are global, small lists — load once (guarded) when a
   // ticket-scoped button mounts so the trigger/chips/counts are accurate.
@@ -614,53 +690,59 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
     : undefined;
 
   // ── Build the launchable item groups (ticket-scoped only) ──
-  const skillItems: LaunchItem[] = ticketId && handleExecuteSkill
-    ? enabledSkills.map((s) => ({
-        key: `skill:${s.id}`,
-        kind: 'skill' as const,
-        displayName: s.displayName,
-        token: `@skill:${s.commandName}`,
-        icon: KIND_ICON.skill,
-        search: normalize(`${s.displayName} ${s.name} ${s.commandName}`),
-        onLaunch: () => void handleExecuteSkill(s.id),
-      }))
-    : [];
+  const skillItems: LaunchItem[] =
+    ticketId && handleExecuteSkill
+      ? enabledSkills.map((s) => ({
+          key: `skill:${s.id}`,
+          kind: 'skill' as const,
+          displayName: s.displayName,
+          token: `@skill:${s.commandName}`,
+          icon: KIND_ICON.skill,
+          search: normalize(`${s.displayName} ${s.name} ${s.commandName}`),
+          onLaunch: () => void handleExecuteSkill(s.id),
+        }))
+      : [];
 
-  const workflowItems: LaunchItem[] = ticketId && handleStartWorkflow
-    ? enabledTemplates.map((t) => ({
-        key: `workflow:${t.id}`,
-        kind: 'workflow' as const,
-        displayName: t.name,
-        token: `@workflow:${t.slug}`,
-        icon: KIND_ICON.workflow,
-        search: normalize(`${t.name} ${t.slug}`),
-        onLaunch: () => void handleStartWorkflow(t.id),
-      }))
-    : [];
+  // A disabled row in a launcher is noise, not signal: when the driver has no
+  // workflow support they are left out of the list entirely.
+  const workflowItems: LaunchItem[] =
+    ticketId && handleStartWorkflow && workflowsAvailable
+      ? enabledTemplates.map((t) => ({
+          key: `workflow:${t.id}`,
+          kind: 'workflow' as const,
+          displayName: t.name,
+          token: `@workflow:${t.slug}`,
+          icon: KIND_ICON.workflow,
+          search: normalize(`${t.name} ${t.slug}`),
+          onLaunch: () => void handleStartWorkflow(t.id),
+        }))
+      : [];
 
-  const panelItems: LaunchItem[] = ticketId && handleExecutePanel
-    ? enabledPanels.map((p) => ({
-        key: `panel:${p.id}`,
-        kind: 'panel' as const,
-        displayName: p.displayName,
-        token: `@panel:${p.name}`,
-        icon: KIND_ICON.panel,
-        search: normalize(`${p.displayName} ${p.name}`),
-        onLaunch: () => void handleExecutePanel(p.id, p.displayName),
-      }))
-    : [];
+  const panelItems: LaunchItem[] =
+    ticketId && handleExecutePanel
+      ? enabledPanels.map((p) => ({
+          key: `panel:${p.id}`,
+          kind: 'panel' as const,
+          displayName: p.displayName,
+          token: `@panel:${p.name}`,
+          icon: KIND_ICON.panel,
+          search: normalize(`${p.displayName} ${p.name}`),
+          onLaunch: () => void handleExecutePanel(p.id, p.displayName),
+        }))
+      : [];
 
-  const personaItems: LaunchItem[] = ticketId && handleLaunchPersona
-    ? personas.map((p) => ({
-        key: `persona:${p.id}`,
-        kind: 'persona' as const,
-        displayName: p.displayName,
-        token: `@agent:${p.name}`,
-        icon: KIND_ICON.persona,
-        search: normalize(`${p.displayName} ${p.name}`),
-        onLaunch: () => void handleLaunchPersona(p.name, p.displayName),
-      }))
-    : [];
+  const personaItems: LaunchItem[] =
+    ticketId && handleLaunchPersona
+      ? personas.map((p) => ({
+          key: `persona:${p.id}`,
+          kind: 'persona' as const,
+          displayName: p.displayName,
+          token: `@agent:${p.name}`,
+          icon: KIND_ICON.persona,
+          search: normalize(`${p.displayName} ${p.name}`),
+          onLaunch: () => void handleLaunchPersona(p.name, p.displayName),
+        }))
+      : [];
 
   const itemsByKind: Record<LaunchKind, LaunchItem[]> = {
     skill: skillItems,
@@ -689,8 +771,17 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
     [...skillItems, ...workflowItems, ...panelItems].map((i) => [i.key, i]),
   );
   const frequentItems: LaunchItem[] = buildFrequentItems(frequentStats, {
-    skills: enabledSkills.map((s) => ({ id: s.id, displayName: s.displayName, commandName: s.commandName })),
-    templates: enabledTemplates.map((t) => ({ id: t.id, name: t.name, slug: t.slug, emoji: t.emoji })),
+    skills: enabledSkills.map((s) => ({
+      id: s.id,
+      displayName: s.displayName,
+      commandName: s.commandName,
+    })),
+    templates: enabledTemplates.map((t) => ({
+      id: t.id,
+      name: t.name,
+      slug: t.slug,
+      emoji: t.emoji,
+    })),
     panels: enabledPanels.map((p) => ({ id: p.id, displayName: p.displayName, name: p.name })),
   })
     .map((f) => itemsByKey.get(f.key))
@@ -759,7 +850,10 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
         <div className="relative flex-shrink-0">
           <button
             ref={refs.setReference}
-            className={cn(shell(OPEN_THEME), (disabled || creating) && 'pointer-events-none opacity-50')}
+            className={cn(
+              shell(OPEN_THEME),
+              (disabled || creating) && 'pointer-events-none opacity-50',
+            )}
             {...getReferenceProps({ onClick: (e) => e.stopPropagation() })}
             disabled={disabled || creating}
           >
@@ -779,7 +873,10 @@ export function SmartSessionButton({ sessions, creating: externalCreating, onCre
 
     return (
       <button
-        className={cn(shell(OPEN_THEME), (disabled || creating) && 'pointer-events-none opacity-50')}
+        className={cn(
+          shell(OPEN_THEME),
+          (disabled || creating) && 'pointer-events-none opacity-50',
+        )}
         onClick={(e) => {
           e.stopPropagation();
           onCreateSession();

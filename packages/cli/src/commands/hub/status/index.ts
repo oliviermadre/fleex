@@ -1,6 +1,7 @@
-import type { CommandDef } from '../../../core/types.ts';
 import { c, info, warn } from '../../../core/colors.ts';
 import { readHubState, isAlive, clearHubState } from '../_state.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface HubHealth {
   ok: boolean;
@@ -63,15 +64,23 @@ async function runHubStatus(): Promise<void> {
   process.stdout.write(`  ${c.cyan('URL'.padEnd(20))} ${state.url}\n`);
   process.stdout.write(`  ${c.cyan('Uptime'.padEnd(20))} ${formatDuration(uptime)}\n`);
   if (health) {
-    process.stdout.write(`  ${c.cyan('Authorized clients'.padEnd(20))} ${health.authorizedClients ?? 0}\n`);
-    process.stdout.write(`  ${c.cyan('Clients connected'.padEnd(20))} ${health.connectedServers ?? 0}\n`);
-    process.stdout.write(`  ${c.cyan('Events forwarded'.padEnd(20))} ${health.eventsForwarded ?? 0}\n`);
+    process.stdout.write(
+      `  ${c.cyan('Authorized clients'.padEnd(20))} ${health.authorizedClients ?? 0}\n`,
+    );
+    process.stdout.write(
+      `  ${c.cyan('Clients connected'.padEnd(20))} ${health.connectedServers ?? 0}\n`,
+    );
+    process.stdout.write(
+      `  ${c.cyan('Events forwarded'.padEnd(20))} ${health.eventsForwarded ?? 0}\n`,
+    );
     if (health.servers && health.servers.length > 0) {
       process.stdout.write('\n');
       process.stdout.write(`  ${c.bold('Connected servers:')}\n`);
       for (const s of health.servers) {
         const since = formatDuration(Date.now() - s.connectedAt);
-        process.stdout.write(`    ${c.dim('•')} ${c.bold(s.clientName)} ${c.dim(`(${s.serverId ?? 'no-id'}, pid ${s.pid ?? '?'}, ${s.hostname ?? '?'}, ${since})`)}\n`);
+        process.stdout.write(
+          `    ${c.dim('•')} ${c.bold(s.clientName)} ${c.dim(`(${s.serverId ?? 'no-id'}, pid ${s.pid ?? '?'}, ${s.hostname ?? '?'}, ${since})`)}\n`,
+        );
       }
     }
   } else {

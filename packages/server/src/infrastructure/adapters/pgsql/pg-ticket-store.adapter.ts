@@ -1,10 +1,20 @@
-import type { TicketStatus, TicketLinkType, TicketLink, TicketPriority, TicketType, GitHubIssueMetadata, ConversationMode } from '@fleex/shared';
+import type {
+  TicketStatus,
+  TicketLinkType,
+  TicketLink,
+  TicketPriority,
+  TicketType,
+  GitHubIssueMetadata,
+  ConversationMode,
+} from '@fleex/shared';
 import { isEffortLevel } from '@fleex/shared';
+
 import { BoardEntity } from '../../../domain/entities/board.entity.js';
-import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../../domain/entities/ticket-activity.entity.js';
-import type { TicketStorePort } from '../../../application/ports/ticket-store.port.js';
+import { TicketEntity } from '../../../domain/entities/ticket.entity.js';
+
 import type { PgConnection } from './connection.js';
+import type { TicketStorePort } from '../../../application/ports/ticket-store.port.js';
 
 const MAX_ACTIVITY_ENTRIES = 5000;
 
@@ -86,7 +96,6 @@ export class PgTicketStore implements TicketStorePort {
     ticket.displayId = rows[0].display_id as number;
   }
 
-
   async getAllTickets(): Promise<TicketEntity[]> {
     const { rows } = await this.db.query('SELECT * FROM tickets WHERE archived_at IS NULL');
     return rows.map(rowToTicket);
@@ -100,7 +109,9 @@ export class PgTicketStore implements TicketStorePort {
   async getTicketByDisplayId(displayId: number): Promise<TicketEntity | null> {
     // No `archived_at IS NULL` filter — display ids are globally unique and this
     // lookup must reach archived tickets (used by `ticket unarchive`).
-    const { rows } = await this.db.query('SELECT * FROM tickets WHERE display_id = $1', [displayId]);
+    const { rows } = await this.db.query('SELECT * FROM tickets WHERE display_id = $1', [
+      displayId,
+    ]);
     return rows.length > 0 ? rowToTicket(rows[0]) : null;
   }
 
@@ -121,10 +132,9 @@ export class PgTicketStore implements TicketStorePort {
   }
 
   async getTicketsLinkedTo(type: TicketLinkType, ref: string): Promise<TicketEntity[]> {
-    const { rows } = await this.db.query(
-      `SELECT * FROM tickets WHERE links @> $1::jsonb`,
-      [JSON.stringify([{ type, ref }])],
-    );
+    const { rows } = await this.db.query(`SELECT * FROM tickets WHERE links @> $1::jsonb`, [
+      JSON.stringify([{ type, ref }]),
+    ]);
     return rows.map(rowToTicket);
   }
 

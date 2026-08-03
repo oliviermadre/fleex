@@ -1,6 +1,7 @@
 import { ApiTokenEntity } from '../../../domain/entities/api-token.entity.js';
-import type { AgentTokenStorePort } from '../../../application/ports/agent-token-store.port.js';
+
 import type { SqliteConnection } from './connection.js';
+import type { AgentTokenStorePort } from '../../../application/ports/agent-token-store.port.js';
 
 interface TokenRow {
   id: string;

@@ -1,4 +1,4 @@
-import type { DeliverableTypeDef } from '@fleex/shared';
+import type { ActionDef, DeliverableTypeDef } from '@fleex/shared';
 
 export interface RepoConfig {
   postCheckoutHook?: string; // multiline shell script, empty = disabled
@@ -27,6 +27,12 @@ export interface AppConfig {
    * default preset (see DEFAULT_DELIVERABLE_TYPES in @fleex/shared).
    */
   deliverableTypes?: DeliverableTypeDef[];
+  /**
+   * Declared action registry — the only thing `POST /api/actions/:id/run` can
+   * execute. Supersedes the legacy `pinnedIcons` / `workspaceActions` arrays
+   * (folded in by `migrateActionsConfig` when the config is loaded).
+   */
+  actions?: ActionDef[];
 }
 
 export interface ConfigPort {

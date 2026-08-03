@@ -14,7 +14,7 @@ exécutions. Les terminaux CLI, dashboards et éditeurs restent sur desktop.
 ## Setup (une fois)
 
 1. Note le port **web** affiché par `fleex start` (ligne `Allocated ports —
-   gateway:… server:… web:…`).
+gateway:… server:… web:…`).
 
 2. Sur le laptop, expose le port web en HTTPS sur le tailnet :
 
@@ -41,6 +41,22 @@ tailnet. Seuls tes appareils Tailscale peuvent atteindre le serveur.
 ⚠️ N'utilise **pas** `tailscale funnel` (exposition à l'Internet public) sans
 activer l'auth SSO de Fleex (`GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` +
 `DATABASE_URL`).
+
+### Pourquoi ce parcours marche sans configuration
+
+Les services écoutent sur `127.0.0.1` uniquement. `tailscale serve` est le seul
+chemin d'entrée, et il préserve l'en-tête `Host` — le serveur autorise une
+origine dès lors qu'elle correspond à l'hôte par lequel la requête est arrivée
+(voir [security.md](./security.md)). Ton nom `*.ts.net` est donc accepté
+automatiquement, sans variable d'environnement, tandis qu'une page hébergée sur
+un autre tailnet est rejetée.
+
+Deux conséquences si tu montes ton propre proxy à la place de
+`tailscale serve` :
+
+- il doit **transmettre le `Host` d'origine** (pas de réécriture) ;
+- sinon, déclare l'origine explicitement :
+  `FLEEX_ALLOWED_ORIGINS=https://mon-proxy.example`.
 
 ## Ce que couvre la vue mobile (v1)
 
@@ -97,6 +113,7 @@ puis `bun run start`, sans passer par `fleex start`), rien ne proxie
 ```bash
 tailscale serve --bg --https=443 --set-path=/companion http://localhost:4399
 ```
+
 </details>
 
 ## Dépannage

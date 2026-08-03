@@ -1,14 +1,17 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
+
 import type { Session, SessionGroup, WorktreeSessionGroup } from '@fleex/shared';
+
 import { worktreeFlow } from '../../lib/sessionFlow';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
-import { RepositoryGroup, type FlowType } from './RepositoryGroup';
-import { SystemGroup } from './SystemGroup';
+import { HotkeyBadge } from '../ui/HotkeyBadge';
+
 import { GroupedSessions } from './GroupedSessions';
 import { PlusIcon } from './icons';
-import { HotkeyBadge } from '../ui/HotkeyBadge';
+import { RepositoryGroup, type FlowType } from './RepositoryGroup';
+import { SystemGroup } from './SystemGroup';
 
 function isSystemGroup(org: string, name: string): boolean {
   return org === '_ungrouped' && name === '_ungrouped';
@@ -43,9 +46,15 @@ function partitionByFlow(groups: SessionGroup[]): {
   let doneWorktreeCount = 0;
 
   for (const group of groups) {
-    const manualWorktrees = group.worktrees.filter((wt: WorktreeSessionGroup) => worktreeFlow(wt) === 'manual');
-    const agenticWorktrees = group.worktrees.filter((wt: WorktreeSessionGroup) => worktreeFlow(wt) === 'agentic');
-    const doneWorktrees = group.worktrees.filter((wt: WorktreeSessionGroup) => worktreeFlow(wt) === 'done');
+    const manualWorktrees = group.worktrees.filter(
+      (wt: WorktreeSessionGroup) => worktreeFlow(wt) === 'manual',
+    );
+    const agenticWorktrees = group.worktrees.filter(
+      (wt: WorktreeSessionGroup) => worktreeFlow(wt) === 'agentic',
+    );
+    const doneWorktrees = group.worktrees.filter(
+      (wt: WorktreeSessionGroup) => worktreeFlow(wt) === 'done',
+    );
 
     if (manualWorktrees.length > 0) {
       manualGroups.push({ ...group, worktrees: manualWorktrees });
@@ -71,7 +80,12 @@ function partitionByFlow(groups: SessionGroup[]): {
   };
 }
 
-function SectionDivider({ label, count, collapsed, onToggle }: {
+function SectionDivider({
+  label,
+  count,
+  collapsed,
+  onToggle,
+}: {
   label: string;
   count?: number;
   collapsed?: boolean;
@@ -135,17 +149,13 @@ export function SessionGroups() {
 
   // Extract system sessions (ungrouped) and repo groups separately
   const systemSessions: Session[] = useMemo(() => {
-    const ungrouped = sessionGroups.find((g) =>
-      isSystemGroup(g.repositoryOrg, g.repositoryName)
-    );
+    const ungrouped = sessionGroups.find((g) => isSystemGroup(g.repositoryOrg, g.repositoryName));
     if (!ungrouped) return [];
     return ungrouped.worktrees.flatMap((wt: WorktreeSessionGroup) => wt.sessions);
   }, [sessionGroups]);
 
   const repoGroups = useMemo(() => {
-    return sessionGroups.filter(
-      (g) => !isSystemGroup(g.repositoryOrg, g.repositoryName)
-    );
+    return sessionGroups.filter((g) => !isSystemGroup(g.repositoryOrg, g.repositoryName));
   }, [sessionGroups]);
 
   // Partition into manual / agentic / done flow
@@ -160,25 +170,28 @@ export function SessionGroups() {
 
   const sortedManualGroups = useMemo(
     () => sortGroups(manualGroups, repoOrder),
-    [manualGroups, repoOrder]
+    [manualGroups, repoOrder],
   );
 
   const sortedAgenticGroups = useMemo(
     () => sortGroups(agenticGroups, repoOrder),
-    [agenticGroups, repoOrder]
+    [agenticGroups, repoOrder],
   );
 
   const sortedDoneGroups = useMemo(
     () => sortGroups(doneGroups, repoOrder),
-    [doneGroups, repoOrder]
+    [doneGroups, repoOrder],
   );
 
-  const handleDragStart = useCallback((groupId: string) => (e: React.DragEvent) => {
-    draggedIdRef.current = groupId;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-repo-group', groupId);
-    (e.currentTarget as HTMLElement).style.opacity = '0.4';
-  }, []);
+  const handleDragStart = useCallback(
+    (groupId: string) => (e: React.DragEvent) => {
+      draggedIdRef.current = groupId;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/x-repo-group', groupId);
+      (e.currentTarget as HTMLElement).style.opacity = '0.4';
+    },
+    [],
+  );
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     draggedIdRef.current = null;
@@ -186,40 +199,49 @@ export function SessionGroups() {
     (e.currentTarget as HTMLElement).style.opacity = '';
   }, []);
 
-  const handleDragOver = useCallback((groupId: string) => (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('application/x-repo-group')) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+  const handleDragOver = useCallback(
+    (groupId: string) => (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes('application/x-repo-group')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
 
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    setDropEdge(e.clientY < midY ? 'top' : 'bottom');
-    setDragOverId(groupId);
-  }, []);
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      setDropEdge(e.clientY < midY ? 'top' : 'bottom');
+      setDragOverId(groupId);
+    },
+    [],
+  );
 
-  const handleDragLeave = useCallback((groupId: string) => (e: React.DragEvent) => {
-    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-    if (dragOverId === groupId) setDragOverId(null);
-  }, [dragOverId]);
+  const handleDragLeave = useCallback(
+    (groupId: string) => (e: React.DragEvent) => {
+      if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+      if (dragOverId === groupId) setDragOverId(null);
+    },
+    [dragOverId],
+  );
 
-  const handleDrop = useCallback((targetId: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    const draggedId = e.dataTransfer.getData('application/x-repo-group');
-    setDragOverId(null);
-    if (!draggedId || draggedId === targetId) return;
+  const handleDrop = useCallback(
+    (targetId: string) => (e: React.DragEvent) => {
+      e.preventDefault();
+      const draggedId = e.dataTransfer.getData('application/x-repo-group');
+      setDragOverId(null);
+      if (!draggedId || draggedId === targetId) return;
 
-    const ids = sortedManualGroups.map((g) => `${g.repositoryOrg}/${g.repositoryName}`);
-    const fromIdx = ids.indexOf(draggedId);
-    if (fromIdx === -1) return;
+      const ids = sortedManualGroups.map((g) => `${g.repositoryOrg}/${g.repositoryName}`);
+      const fromIdx = ids.indexOf(draggedId);
+      if (fromIdx === -1) return;
 
-    ids.splice(fromIdx, 1);
-    let toIdx = ids.indexOf(targetId);
-    if (toIdx === -1) return;
-    if (dropEdge === 'bottom') toIdx += 1;
-    ids.splice(toIdx, 0, draggedId);
+      ids.splice(fromIdx, 1);
+      let toIdx = ids.indexOf(targetId);
+      if (toIdx === -1) return;
+      if (dropEdge === 'bottom') toIdx += 1;
+      ids.splice(toIdx, 0, draggedId);
 
-    setRepoOrder(ids);
-  }, [sortedManualGroups, dropEdge, setRepoOrder]);
+      setRepoOrder(ids);
+    },
+    [sortedManualGroups, dropEdge, setRepoOrder],
+  );
 
   const renderRepoGroup = (group: SessionGroup, dimmed = false, flowType?: FlowType) => {
     const groupId = `${group.repositoryOrg}/${group.repositoryName}`;
@@ -261,7 +283,8 @@ export function SessionGroups() {
             collapsed={manualFlowCollapsed}
             onToggle={toggleManualFlow}
           />
-          {!manualFlowCollapsed && sortedManualGroups.map((g) => renderRepoGroup(g, false, 'manual'))}
+          {!manualFlowCollapsed &&
+            sortedManualGroups.map((g) => renderRepoGroup(g, false, 'manual'))}
         </>
       )}
 
@@ -274,7 +297,8 @@ export function SessionGroups() {
             collapsed={agenticFlowCollapsed}
             onToggle={toggleAgenticFlow}
           />
-          {!agenticFlowCollapsed && sortedAgenticGroups.map((g) => renderRepoGroup(g, true, 'agentic'))}
+          {!agenticFlowCollapsed &&
+            sortedAgenticGroups.map((g) => renderRepoGroup(g, true, 'agentic'))}
         </>
       )}
 

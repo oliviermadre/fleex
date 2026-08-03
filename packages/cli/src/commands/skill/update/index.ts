@@ -7,9 +7,7 @@
  * truth the agent sees. Do not reword casually — tests lock the wording.
  */
 import chalk from 'chalk';
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, warn, present, isJsonMode } from '../../../core/colors.ts';
-import { apiBase, apiPatch } from '../../../core/api.ts';
+
 import {
   fetchPersonas,
   fetchSkills,
@@ -19,12 +17,16 @@ import {
   skillHandleName,
   type Skill,
 } from '../../../core/agentic.ts';
+import { apiBase, apiPatch } from '../../../core/api.ts';
+import { ok, die, warn, present, isJsonMode } from '../../../core/colors.ts';
 import {
   assertInlineFileExclusive,
   dieNoUpdates,
   readTextInput,
   resolveEnabledFlags,
 } from '../../../core/update-helpers.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;
@@ -68,13 +70,19 @@ const def: CommandDef = {
       'Rename the slash command (invoked as /<command-name>). Existing references to the old name are NOT rewritten — a warning is printed.',
     );
     cmd.option('--name <text>', 'Set the internal skill name');
-    cmd.option('--display-name <text>', 'Set the display name (human-facing label shown in the UI)');
+    cmd.option(
+      '--display-name <text>',
+      'Set the display name (human-facing label shown in the UI)',
+    );
     cmd.option('--enable', 'Enable the skill. Mutually exclusive with --disable.');
     cmd.option(
       '--disable',
       'Disable the skill (it stops being offered to agents). Mutually exclusive with --enable.',
     );
-    cmd.option('--dry-run', 'Print the exact PATCH payload as JSON and exit WITHOUT writing anything.');
+    cmd.option(
+      '--dry-run',
+      'Print the exact PATCH payload as JSON and exit WITHOUT writing anything.',
+    );
   },
   extraHelp: `\n${SECTION('Examples:')}
   ${DIM('$')} fleex skill update review --prompt-file /tmp/prompt.md
@@ -108,7 +116,10 @@ ${SECTION('Notes:')}
     if (opts.persona !== undefined) {
       const personas = await fetchPersonas();
       const p = resolveFromList(opts.persona, personas, personaHandleName, (x) => x.displayName);
-      if (!p) die(`Persona "${opts.persona}" not found. Run 'fleex agent list' to see available personas.`);
+      if (!p)
+        die(
+          `Persona "${opts.persona}" not found. Run 'fleex agent list' to see available personas.`,
+        );
       personaId = p.id;
     }
 

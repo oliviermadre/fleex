@@ -1,7 +1,9 @@
 import type { SessionType, SessionStatus, SessionHookStatus, WaitingReason } from '@fleex/shared';
+
 import { SessionEntity } from '../../../domain/entities.js';
-import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
 
 interface SessionRow {
   id: string;
@@ -73,17 +75,12 @@ export class SupabaseSessionStore implements SessionStorePort {
   }
 
   async remove(sessionId: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('sessions')
-      .delete()
-      .eq('id', sessionId);
+    const { error } = await this.conn.client.from('sessions').delete().eq('id', sessionId);
     if (error) throw new Error(`SupabaseSessionStore.remove failed: ${error.message}`);
   }
 
   async getAll(): Promise<SessionEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('sessions')
-      .select('*');
+    const { data, error } = await this.conn.client.from('sessions').select('*');
     if (error) throw new Error(`SupabaseSessionStore.getAll failed: ${error.message}`);
     return (data as SessionRow[]).map(rowToEntity);
   }
@@ -109,10 +106,7 @@ export class SupabaseSessionStore implements SessionStorePort {
   }
 
   async getByCwd(cwd: string): Promise<SessionEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('sessions')
-      .select('*')
-      .eq('cwd', cwd);
+    const { data, error } = await this.conn.client.from('sessions').select('*').eq('cwd', cwd);
     if (error) throw new Error(`SupabaseSessionStore.getByCwd failed: ${error.message}`);
     return (data as SessionRow[]).map(rowToEntity);
   }

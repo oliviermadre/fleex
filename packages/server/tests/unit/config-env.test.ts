@@ -1,6 +1,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
+
+import {
+  applyBasePathEnvOverride,
+  BASE_PATH_ENV,
+} from '../../src/infrastructure/adapters/config-env.js';
+
 import type { AppConfig } from '../../src/application/ports/config.port.js';
-import { applyBasePathEnvOverride, BASE_PATH_ENV } from '../../src/infrastructure/adapters/config-env.js';
 
 function cfg(basePath: string): AppConfig {
   return { basePath, defaultShell: '/bin/zsh', repositoryRefreshIntervalMs: 0 };

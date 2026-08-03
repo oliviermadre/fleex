@@ -1,6 +1,8 @@
 import { readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+
 import type { SessionGroup, WorktreeSessionGroup, WorktreeDiffStats } from '@fleex/shared';
+
 import type { GitPort } from '../../application/ports/git.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 

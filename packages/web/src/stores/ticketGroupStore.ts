@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import type {
   TicketGroup,
   TicketGroupMembership,
@@ -8,10 +9,16 @@ import type {
   TicketGroupWsMessage,
   Ticket,
 } from '@fleex/shared';
+
 import * as api from '../services/api';
 
 export type EpicDetailTab = 'description' | 'tickets' | 'deliverables' | 'activity';
-export const VALID_EPIC_DETAIL_TABS: EpicDetailTab[] = ['description', 'tickets', 'deliverables', 'activity'];
+export const VALID_EPIC_DETAIL_TABS: EpicDetailTab[] = [
+  'description',
+  'tickets',
+  'deliverables',
+  'activity',
+];
 
 interface TicketGroupState {
   // ── Data ──
@@ -180,9 +187,7 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
     await api.addBoardToTicketGroup(groupId, boardId);
     set((s) => ({
       groups: s.groups.map((g) =>
-        g.id === groupId
-          ? { ...g, boardIds: [...new Set([...g.boardIds, boardId])] }
-          : g,
+        g.id === groupId ? { ...g, boardIds: [...new Set([...g.boardIds, boardId])] } : g,
       ),
     }));
   },
@@ -191,9 +196,7 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
     await api.removeBoardFromTicketGroup(groupId, boardId);
     set((s) => ({
       groups: s.groups.map((g) =>
-        g.id === groupId
-          ? { ...g, boardIds: g.boardIds.filter((id) => id !== boardId) }
-          : g,
+        g.id === groupId ? { ...g, boardIds: g.boardIds.filter((id) => id !== boardId) } : g,
       ),
     }));
   },
@@ -223,7 +226,9 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
   removeChild: async (parentId, childId) => {
     await api.removeTicketChild(parentId, childId);
     set((s) => ({
-      relationships: s.relationships.filter((r) => !(r.parentId === parentId && r.childId === childId)),
+      relationships: s.relationships.filter(
+        (r) => !(r.parentId === parentId && r.childId === childId),
+      ),
       childrenMap: {
         ...s.childrenMap,
         [parentId]: (s.childrenMap[parentId] ?? []).filter((id) => id !== childId),
@@ -304,9 +309,7 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
         const { groupId, boardId } = msg.data as { groupId: string; boardId: string };
         set((s) => ({
           groups: s.groups.map((g) =>
-            g.id === groupId
-              ? { ...g, boardIds: [...new Set([...g.boardIds, boardId])] }
-              : g,
+            g.id === groupId ? { ...g, boardIds: [...new Set([...g.boardIds, boardId])] } : g,
           ),
         }));
         break;
@@ -315,9 +318,7 @@ export const useTicketGroupStore = create<TicketGroupState>((set, get) => ({
         const { groupId, boardId } = msg.data as { groupId: string; boardId: string };
         set((s) => ({
           groups: s.groups.map((g) =>
-            g.id === groupId
-              ? { ...g, boardIds: g.boardIds.filter((id) => id !== boardId) }
-              : g,
+            g.id === groupId ? { ...g, boardIds: g.boardIds.filter((id) => id !== boardId) } : g,
           ),
         }));
         break;

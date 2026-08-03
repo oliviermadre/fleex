@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
-import { useSettingsStore } from '../stores/settingsStore';
+
 import { resolveTheme, applyTheme } from '../lib/themes';
-import { terminalManager } from '../services/terminalManager';
+import { setTerminalTheme } from '../services/terminalAppearance';
+import { useSettingsStore } from '../stores/settingsStore';
 
 export function useTheme() {
   const activeThemeId = useSettingsStore((s) => s.settings.activeThemeId);
@@ -10,6 +11,6 @@ export function useTheme() {
   useEffect(() => {
     const theme = resolveTheme(activeThemeId, customThemes);
     applyTheme(theme);
-    terminalManager.updateTheme(theme);
+    setTerminalTheme(theme);
   }, [activeThemeId, customThemes]);
 }

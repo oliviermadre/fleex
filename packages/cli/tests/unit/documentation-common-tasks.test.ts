@@ -10,8 +10,9 @@
  * These tests encode that intent: the PR-attach recipe MUST be discoverable at
  * the top of both the markdown and text renderings.
  */
-import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
+import { describe, it, expect } from 'vitest';
+
 import { renderMarkdown, renderText } from '../../src/commands/documentation/index.ts';
 
 const root = new Command('fleex').description('Fleex CLI');

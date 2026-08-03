@@ -1,6 +1,7 @@
-import type { CommandDef } from '../../../core/types.ts';
 import { ok, warn } from '../../../core/colors.ts';
 import { stopCompanion } from '../../../core/companion.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const def: CommandDef = {
   name: 'stop',

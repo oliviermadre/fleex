@@ -1,17 +1,22 @@
 import { WebSocket } from 'ws';
+
 import type { PtyHandle, TerminalDimensions } from '@fleex/shared';
-import type { PtyPort } from '../../application/ports/pty.port.js';
+
 import type { LoggerPort } from '../../application/ports/logger.port.js';
+import type { PtyPort } from '../../application/ports/pty.port.js';
 
 export class RemotePtyAdapter implements PtyPort {
   constructor(
     private readonly gatewayUrl: string,
+    private readonly token: string,
     private readonly logger: LoggerPort,
   ) {}
 
   spawnAttach(tmuxSessionName: string, dims: TerminalDimensions): PtyHandle {
     const wsUrl = this.gatewayUrl.replace(/^http/, 'ws') + '/pty';
-    const ws = new WebSocket(wsUrl);
+    // The gateway authenticates the upgrade itself. `ws` (Node) can carry the
+    // header — a browser cannot, which is exactly the point.
+    const ws = new WebSocket(wsUrl, { headers: { Authorization: `Bearer ${this.token}` } });
 
     let alive = true;
     const dataCallbacks: Array<(data: Buffer) => void> = [];
@@ -19,11 +24,13 @@ export class RemotePtyAdapter implements PtyPort {
 
     ws.on('open', () => {
       // Send JSON init message
-      ws.send(JSON.stringify({
-        tmuxSessionName,
-        cols: dims.cols,
-        rows: dims.rows,
-      }));
+      ws.send(
+        JSON.stringify({
+          tmuxSessionName,
+          cols: dims.cols,
+          rows: dims.rows,
+        }),
+      );
     });
 
     ws.on('message', (data: Buffer | string, isBinary: boolean) => {
@@ -57,6 +64,22 @@ export class RemotePtyAdapter implements PtyPort {
         }
       }
     });
+
+    // A refused upgrade never reaches 'open': surface the status explicitly,
+    // otherwise a 401 looks like a generic socket error. Bun does not implement
+    // this event and warns when it is registered, so skip it there — under Bun
+    // the 'error' handler below is what fires.
+    if (!process.versions.bun) {
+      ws.on('unexpected-response', (_req, res) => {
+        this.logger.error('Remote PTY upgrade refused by the gateway', {
+          status: res.statusCode,
+          hint:
+            res.statusCode === 401
+              ? "Gateway rejected the token. Run 'fleex doctor' then 'fleex restart'."
+              : undefined,
+        });
+      });
+    }
 
     ws.on('error', (err) => {
       this.logger.error('Remote PTY WebSocket error', { error: String(err) });

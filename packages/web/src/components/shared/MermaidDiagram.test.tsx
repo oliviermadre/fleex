@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from './MermaidDiagram';
 
 // ── Mermaid mock ──────────────────────────────────────────────────────────────

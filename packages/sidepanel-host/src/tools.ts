@@ -4,8 +4,9 @@
  * The JSON Schema produced by @fleex/mcp maps directly onto an Anthropic tool
  * definition's `input_schema`, so no re-derivation is needed.
  */
-import type Anthropic from '@anthropic-ai/sdk';
 import type { GeneratedTool } from '@fleex/mcp';
+
+import type Anthropic from '@anthropic-ai/sdk';
 
 export function toAnthropicTools(tools: GeneratedTool[]): Anthropic.Tool[] {
   return tools.map((t) => ({

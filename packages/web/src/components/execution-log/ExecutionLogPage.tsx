@@ -1,10 +1,12 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useExecutionLogStore, type ExecutionTypeFilter } from '../../stores/executionLogStore';
-import { appWs } from '../../services/websocket';
-import { ExecutionRow } from './ExecutionRow';
+
 import { cn } from '../../lib/cn';
-import { tintText, tintSolid, tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
+import { tintText, tintSolid, tintClasses } from '../../lib/tints';
+import { appWs } from '../../services/websocket';
+import { useExecutionLogStore, type ExecutionTypeFilter } from '../../stores/executionLogStore';
+
+import { ExecutionRow } from './ExecutionRow';
 
 // Filter tabs reuse the primitives referential for glyph + hue ('agent' is the
 // log-side name for a persona run), so they stay coherent with the sidebar.
@@ -42,14 +44,19 @@ export function ExecutionLogPage() {
     // Subscribe + register on every mount (idempotent via cleanup), so the
     // StrictMode double-mount still ends with exactly one live subscription.
     subscribeAll();
-    const unsubAgent = appWs.onChannel('agent-events', (msg) => { handleWsEvent(msg); });
+    const unsubAgent = appWs.onChannel('agent-events', (msg) => {
+      handleWsEvent(msg);
+    });
     // Load only once per component instance so StrictMode doesn't fire two
     // identical HTTP fetches on mount.
     if (!didInitRef.current) {
       didInitRef.current = true;
       load();
     }
-    return () => { unsubAgent(); unsubscribeAll(); };
+    return () => {
+      unsubAgent();
+      unsubscribeAll();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -58,7 +65,9 @@ export function ExecutionLogPage() {
       const val = e.target.value;
       setSearchQuery(val);
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => { load(); }, 300);
+      debounceRef.current = setTimeout(() => {
+        load();
+      }, 300);
     },
     [setSearchQuery, load],
   );
@@ -72,22 +81,44 @@ export function ExecutionLogPage() {
         {/* Title row */}
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={cn('flex h-8 w-8 items-center justify-center rounded-lg', tintClasses('green').bg)}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className={tintText('green')}>
+            <div
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-lg',
+                tintClasses('green').bg,
+              )}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className={tintText('green')}
+              >
                 <polygon points="5,3 19,12 5,21" />
               </svg>
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-[var(--theme-text-primary)]">Execution Log</h1>
-              <p className="text-xs text-[var(--theme-text-muted)]">Live & historical runs of agents, panels, skills and workflows</p>
+              <h1 className="text-lg font-semibold text-[var(--theme-text-primary)]">
+                Execution Log
+              </h1>
+              <p className="text-xs text-[var(--theme-text-muted)]">
+                Live & historical runs of agents, panels, skills and workflows
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3 text-sm">
             {liveCount > 0 && (
               <span className="flex items-center gap-1.5">
                 <span className="relative flex h-2 w-2">
-                  <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', tintSolid('green'))} />
-                  <span className={cn('relative inline-flex h-2 w-2 rounded-full', tintSolid('green'))} />
+                  <span
+                    className={cn(
+                      'absolute inline-flex h-full w-full animate-ping rounded-full opacity-75',
+                      tintSolid('green'),
+                    )}
+                  />
+                  <span
+                    className={cn('relative inline-flex h-2 w-2 rounded-full', tintSolid('green'))}
+                  />
                 </span>
                 <span className={cn('font-medium', tintText('green'))}>{liveCount} live</span>
               </span>
@@ -103,10 +134,17 @@ export function ExecutionLogPage() {
           <div className="relative max-w-md flex-1">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)]"
-              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
               type="text"
@@ -117,10 +155,23 @@ export function ExecutionLogPage() {
             />
             {searchQuery && (
               <button
-                onClick={() => { setSearchQuery(''); load(); }}
+                onClick={() => {
+                  setSearchQuery('');
+                  load();
+                }}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
               >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 2l8 8M10 2l-8 8" /></svg>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M2 2l8 8M10 2l-8 8" />
+                </svg>
               </button>
             )}
           </div>
@@ -143,12 +194,14 @@ export function ExecutionLogPage() {
                 >
                   {kind && <PrimitiveIcon kind={kind} size={14} />}
                   <span>{label}</span>
-                  <span className={cn(
-                    'ml-0.5 rounded-full px-1.5 text-[10px] font-semibold',
-                    active
-                      ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
-                      : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-faint)]',
-                  )}>
+                  <span
+                    className={cn(
+                      'ml-0.5 rounded-full px-1.5 text-[10px] font-semibold',
+                      active
+                        ? 'bg-[var(--theme-accent)] text-[var(--theme-accent-fg)]'
+                        : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-faint)]',
+                    )}
+                  >
                     {count}
                   </span>
                 </button>
@@ -160,14 +213,25 @@ export function ExecutionLogPage() {
 
       {/* ── Content ── */}
       <div className="flex-1 overflow-y-auto">
-        <style dangerouslySetInnerHTML={{ __html: `@keyframes execLogSkeleton { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }` }} />
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `@keyframes execLogSkeleton { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`,
+          }}
+        />
 
         {/* Live section */}
         <div className="px-6 pt-5">
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
             <span className="relative flex h-2 w-2">
-              <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', tintSolid('green'))} />
-              <span className={cn('relative inline-flex h-2 w-2 rounded-full', tintSolid('green'))} />
+              <span
+                className={cn(
+                  'absolute inline-flex h-full w-full animate-ping rounded-full opacity-75',
+                  tintSolid('green'),
+                )}
+              />
+              <span
+                className={cn('relative inline-flex h-2 w-2 rounded-full', tintSolid('green'))}
+              />
             </span>
             LIVE · {loading ? '…' : liveCount}
           </div>

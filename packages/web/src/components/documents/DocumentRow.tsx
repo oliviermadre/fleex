@@ -1,10 +1,12 @@
-import type { TicketDeliverable } from '@fleex/shared';
 import { useNavigate } from 'react-router-dom';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useUIStore } from '../../stores/uiStore';
-import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+
+import type { TicketDeliverable } from '@fleex/shared';
+
 import { cn } from '../../lib/cn';
 import { tint, tintClasses } from '../../lib/tints';
+import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUIStore } from '../../stores/uiStore';
 
 // Theme-accent fallback used when a type has no configured colour.
 const ACCENT_BADGE = 'bg-[var(--theme-accent)]/15 text-[var(--theme-accent)]';
@@ -42,12 +44,13 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
   const typeColorCfg = useDeliverableTypesStore((s) => s.colorFor)(deliverable.type);
 
   const ticket = tickets.find((t) => t.id === deliverable.ticketId);
-  const statusColor =
-    deliverable.status === 'final'
-      ? tint('green')
-      : tint('yellow');
+  const statusColor = deliverable.status === 'final' ? tint('green') : tint('yellow');
 
-  const snippet = deliverable.content.split('\n').filter((l) => l.trim()).slice(0, 1).join('');
+  const snippet = deliverable.content
+    .split('\n')
+    .filter((l) => l.trim())
+    .slice(0, 1)
+    .join('');
 
   const handleOpenTicket = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -82,7 +85,9 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
 
       {/* Agent */}
       <div className="flex flex-[1.5] items-center gap-1.5">
-        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${tintClasses('purple').bg} ${tintClasses('purple').text}`}>
+        <span
+          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${tintClasses('purple').bg} ${tintClasses('purple').text}`}
+        >
           {getInitials(deliverable.agentName)}
         </span>
         <span className="truncate text-xs text-[var(--theme-text-secondary)]">
@@ -98,8 +103,19 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
       {/* Type badge */}
       <div className="flex-[0.8]">
         <span
-          className={cn('whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium', !typeColorCfg && ACCENT_BADGE)}
-          style={typeColorCfg ? { backgroundColor: typeColorCfg.bg, color: typeColorCfg.text, boxShadow: `0 0 0 1px ${typeColorCfg.border}` } : undefined}
+          className={cn(
+            'whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium',
+            !typeColorCfg && ACCENT_BADGE,
+          )}
+          style={
+            typeColorCfg
+              ? {
+                  backgroundColor: typeColorCfg.bg,
+                  color: typeColorCfg.text,
+                  boxShadow: `0 0 0 1px ${typeColorCfg.border}`,
+                }
+              : undefined
+          }
         >
           {typeLabel}
         </span>
@@ -124,7 +140,16 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
           onClick={handleOpenDocument}
           title="Open document"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <polyline points="14 2 14 8 20 8" />
           </svg>
@@ -135,7 +160,16 @@ export function DocumentRow({ deliverable }: { deliverable: TicketDeliverable })
             onClick={handleOpenTicket}
             title="Open ticket"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
               <polyline points="15 3 21 3 21 9" />
               <line x1="10" y1="14" x2="21" y2="3" />

@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+
 import type { TicketUnreadCounts, TicketReadCursors } from '@fleex/shared';
+
 import * as api from '../services/api';
 
 interface UnreadState {
@@ -34,13 +36,23 @@ interface UnreadState {
   isDeliverableSeen: (ticketId: string, deliverableId: string) => boolean;
 
   /** Optimistically increment unread counts when WS events arrive */
-  incrementUnread: (ticketId: string, field: 'unreadComments' | 'unreadDeliverables', delta?: number) => void;
+  incrementUnread: (
+    ticketId: string,
+    field: 'unreadComments' | 'unreadDeliverables',
+    delta?: number,
+  ) => void;
 
   /** Get unread counts for a specific ticket (0 if not tracked) */
   getUnread: (ticketId: string) => TicketUnreadCounts;
 }
 
-const EMPTY_UNREAD: TicketUnreadCounts = { ticketId: '', totalComments: 0, totalDeliverables: 0, unreadComments: 0, unreadDeliverables: 0 };
+const EMPTY_UNREAD: TicketUnreadCounts = {
+  ticketId: '',
+  totalComments: 0,
+  totalDeliverables: 0,
+  unreadComments: 0,
+  unreadDeliverables: 0,
+};
 
 export const useUnreadStore = create<UnreadState>((set, get) => ({
   unreadByTicket: {},
@@ -101,7 +113,8 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
         unread[ticketId] = { ...unread[ticketId], unreadComments: 0 };
       }
       const total = Object.values(unread).reduce(
-        (sum, c) => sum + c.unreadComments + c.unreadDeliverables, 0
+        (sum, c) => sum + c.unreadComments + c.unreadDeliverables,
+        0,
       );
       return {
         cursorsByTicket: { ...state.cursorsByTicket, [ticketId]: updated },
@@ -130,7 +143,8 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
         };
       }
       const total = Object.values(unread).reduce(
-        (sum, c) => sum + c.unreadComments + c.unreadDeliverables, 0
+        (sum, c) => sum + c.unreadComments + c.unreadDeliverables,
+        0,
       );
       return {
         seenDeliverablesByTicket: { ...state.seenDeliverablesByTicket, [ticketId]: current },
@@ -145,13 +159,24 @@ export const useUnreadStore = create<UnreadState>((set, get) => ({
     return seen ? seen.has(deliverableId) : false;
   },
 
-  incrementUnread: (ticketId: string, field: 'unreadComments' | 'unreadDeliverables', delta = 1) => {
+  incrementUnread: (
+    ticketId: string,
+    field: 'unreadComments' | 'unreadDeliverables',
+    delta = 1,
+  ) => {
     set((state) => {
       const unread = { ...state.unreadByTicket };
-      const existing = unread[ticketId] ?? { ticketId, totalComments: 0, totalDeliverables: 0, unreadComments: 0, unreadDeliverables: 0 };
+      const existing = unread[ticketId] ?? {
+        ticketId,
+        totalComments: 0,
+        totalDeliverables: 0,
+        unreadComments: 0,
+        unreadDeliverables: 0,
+      };
       unread[ticketId] = { ...existing, [field]: Math.max(0, existing[field] + delta) };
       const total = Object.values(unread).reduce(
-        (sum, c) => sum + c.unreadComments + c.unreadDeliverables, 0,
+        (sum, c) => sum + c.unreadComments + c.unreadDeliverables,
+        0,
       );
       return { unreadByTicket: unread, totalUnread: total };
     });

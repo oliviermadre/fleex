@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { composeWorkflowContextPrompt } from '../../src/application/utils/compose-workflow-context.js';
 
 describe('composeWorkflowContextPrompt', () => {
@@ -9,13 +10,27 @@ describe('composeWorkflowContextPrompt', () => {
       outputSchema: {
         type: 'object',
         properties: {
-          path: { type: 'string', enum: ['standard','hotfix','doc_only'], description: 'Routing path' },
+          path: {
+            type: 'string',
+            enum: ['standard', 'hotfix', 'doc_only'],
+            description: 'Routing path',
+          },
         },
         required: ['path'],
       },
       outgoingEdges: [
-        { id: 'e1', label: 'standard', condition: { field: 'path', operator: 'eq', value: 'standard' }, targetName: 'Product Spec' },
-        { id: 'e2', label: 'hotfix', condition: { field: 'path', operator: 'eq', value: 'hotfix' }, targetName: 'Development' },
+        {
+          id: 'e1',
+          label: 'standard',
+          condition: { field: 'path', operator: 'eq', value: 'standard' },
+          targetName: 'Product Spec',
+        },
+        {
+          id: 'e2',
+          label: 'hotfix',
+          condition: { field: 'path', operator: 'eq', value: 'hotfix' },
+          targetName: 'Development',
+        },
       ],
       previousOutputs: {},
     });
@@ -29,7 +44,8 @@ describe('composeWorkflowContextPrompt', () => {
 
   it('renders previousOutputs when present', () => {
     const out = composeWorkflowContextPrompt({
-      workflowName: 'X', stepName: 'Y',
+      workflowName: 'X',
+      stepName: 'Y',
       outputSchema: undefined,
       outgoingEdges: [],
       previousOutputs: { triage: { path: 'standard', priority: 'high' } },
@@ -40,9 +56,12 @@ describe('composeWorkflowContextPrompt', () => {
 
   it('injects stepPrompt after the step identification when provided', () => {
     const out = composeWorkflowContextPrompt({
-      workflowName: 'Auto Review', stepName: 'Review PR',
+      workflowName: 'Auto Review',
+      stepName: 'Review PR',
       stepPrompt: 'Focus on security issues and backward compatibility.',
-      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+      outputSchema: undefined,
+      outgoingEdges: [],
+      previousOutputs: {},
     });
     // The prompt must appear, and after the step identification line so the
     // agent reads its custom instruction in context, before output/branching.
@@ -54,12 +73,19 @@ describe('composeWorkflowContextPrompt', () => {
 
   it('omits stepPrompt when undefined or blank (treated as absent)', () => {
     const baseline = composeWorkflowContextPrompt({
-      workflowName: 'X', stepName: 'Y',
-      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+      workflowName: 'X',
+      stepName: 'Y',
+      outputSchema: undefined,
+      outgoingEdges: [],
+      previousOutputs: {},
     });
     const blank = composeWorkflowContextPrompt({
-      workflowName: 'X', stepName: 'Y', stepPrompt: '   ',
-      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+      workflowName: 'X',
+      stepName: 'Y',
+      stepPrompt: '   ',
+      outputSchema: undefined,
+      outgoingEdges: [],
+      previousOutputs: {},
     });
     expect(blank).toBe(baseline);
   });
@@ -67,16 +93,23 @@ describe('composeWorkflowContextPrompt', () => {
   it('passes markdown in stepPrompt through unescaped', () => {
     const md = '## Be careful\n- check `null` cases';
     const out = composeWorkflowContextPrompt({
-      workflowName: 'X', stepName: 'Y', stepPrompt: md,
-      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+      workflowName: 'X',
+      stepName: 'Y',
+      stepPrompt: md,
+      outputSchema: undefined,
+      outgoingEdges: [],
+      previousOutputs: {},
     });
     expect(out).toContain(md);
   });
 
   it('handles no outgoing edges (terminal step)', () => {
     const out = composeWorkflowContextPrompt({
-      workflowName: 'X', stepName: 'Final',
-      outputSchema: undefined, outgoingEdges: [], previousOutputs: {},
+      workflowName: 'X',
+      stepName: 'Final',
+      outputSchema: undefined,
+      outgoingEdges: [],
+      previousOutputs: {},
     });
     expect(out).toContain('terminal');
   });

@@ -1,15 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import type { Skill, WorkflowTemplate, Panel, AgentPersona } from '@fleex/shared';
-import { SmartSessionButton } from './SmartSessionButton';
+
 import * as api from '../../services/api';
-import { useToastStore } from '../../stores/toastStore';
-import { useSkillStore } from '../../stores/skillStore';
-import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
-import { useWorkflowRunStore } from '../../stores/workflowRunStore';
-import { usePanelStore } from '../../stores/panelStore';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useFrequentLaunchStore } from '../../stores/frequentLaunchStore';
+import { usePanelStore } from '../../stores/panelStore';
+import { useSkillStore } from '../../stores/skillStore';
+import { useToastStore } from '../../stores/toastStore';
+import { useWorkflowRunStore } from '../../stores/workflowRunStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+
+import { SmartSessionButton } from './SmartSessionButton';
 
 /**
  * These tests pin the *intent* of the fix: launching an action from the
@@ -99,9 +102,22 @@ beforeEach(() => {
   useWorkflowRunStore.setState({ start: vi.fn().mockResolvedValue({}) });
   // Panels / personas / frequents are loaded lazily on first open — stub the
   // loaders and seed empty state so no network is hit and Fréquents stays hidden.
-  usePanelStore.setState({ panels: [], loaded: true, loadPanels: vi.fn().mockResolvedValue(undefined) });
-  useAgentPersonaStore.setState({ personas: [], loaded: true, loadPersonas: vi.fn().mockResolvedValue(undefined) });
-  useFrequentLaunchStore.setState({ stats: null, loadedAt: Date.now(), loading: false, load: vi.fn().mockResolvedValue(undefined) });
+  usePanelStore.setState({
+    panels: [],
+    loaded: true,
+    loadPanels: vi.fn().mockResolvedValue(undefined),
+  });
+  useAgentPersonaStore.setState({
+    personas: [],
+    loaded: true,
+    loadPersonas: vi.fn().mockResolvedValue(undefined),
+  });
+  useFrequentLaunchStore.setState({
+    stats: null,
+    loadedAt: Date.now(),
+    loading: false,
+    load: vi.fn().mockResolvedValue(undefined),
+  });
 });
 
 afterEach(() => {
@@ -211,11 +227,17 @@ describe('SmartSessionButton — launch feedback', () => {
 
   describe('panel', () => {
     beforeEach(() => {
-      usePanelStore.setState({ panels: [panel], loaded: true, loadPanels: vi.fn().mockResolvedValue(undefined) });
+      usePanelStore.setState({
+        panels: [panel],
+        loaded: true,
+        loadPanels: vi.fn().mockResolvedValue(undefined),
+      });
     });
 
     it('launches the panel on the current ticket and shows a success toast', async () => {
-      const executePanel = vi.spyOn(api, 'executePanel').mockResolvedValue({ status: 'started', panelId: 'pn1', ticketId: 't1' });
+      const executePanel = vi
+        .spyOn(api, 'executePanel')
+        .mockResolvedValue({ status: 'started', panelId: 'pn1', ticketId: 't1' });
       render(<SmartSessionButton sessions={[]} ticketId="t1" />);
       await openDropdown();
 
@@ -246,7 +268,11 @@ describe('SmartSessionButton — launch feedback', () => {
 
   describe('persona', () => {
     beforeEach(() => {
-      useAgentPersonaStore.setState({ personas: [persona], loaded: true, loadPersonas: vi.fn().mockResolvedValue(undefined) });
+      useAgentPersonaStore.setState({
+        personas: [persona],
+        loaded: true,
+        loadPersonas: vi.fn().mockResolvedValue(undefined),
+      });
     });
 
     it('launches a persona by posting an @agent mention on the ticket', async () => {
@@ -283,9 +309,20 @@ describe('SmartSessionButton — launch feedback', () => {
 describe('SmartSessionButton — launcher panel', () => {
   beforeEach(() => {
     useSkillStore.setState({ skills: [skill] });
-    useWorkflowTemplateStore.setState({ templates: [template], refresh: vi.fn().mockResolvedValue(undefined) });
-    usePanelStore.setState({ panels: [panel], loaded: true, loadPanels: vi.fn().mockResolvedValue(undefined) });
-    useAgentPersonaStore.setState({ personas: [persona], loaded: true, loadPersonas: vi.fn().mockResolvedValue(undefined) });
+    useWorkflowTemplateStore.setState({
+      templates: [template],
+      refresh: vi.fn().mockResolvedValue(undefined),
+    });
+    usePanelStore.setState({
+      panels: [panel],
+      loaded: true,
+      loadPanels: vi.fn().mockResolvedValue(undefined),
+    });
+    useAgentPersonaStore.setState({
+      personas: [persona],
+      loaded: true,
+      loadPersonas: vi.fn().mockResolvedValue(undefined),
+    });
   });
 
   it('shows a filter chip per type with the count of enabled items, "Tous" being the sum', async () => {
@@ -321,8 +358,27 @@ describe('SmartSessionButton — launcher panel', () => {
   it('renders a Fréquents section fed by the run stats, without personas', async () => {
     useFrequentLaunchStore.setState({
       stats: {
-        skillLeaderboard: [{ skillId: 's1', skillName: 'prepare', skillDisplayName: 'Prepare', executionCount: 7, completedCount: 7, failedCount: 0 }],
-        workflowLeaderboard: [{ workflowId: 'w1', workflowName: 'deploy', workflowDisplayName: 'Deploy', executionCount: 12, completedCount: 12, failedCount: 0, avgDurationMs: null }],
+        skillLeaderboard: [
+          {
+            skillId: 's1',
+            skillName: 'prepare',
+            skillDisplayName: 'Prepare',
+            executionCount: 7,
+            completedCount: 7,
+            failedCount: 0,
+          },
+        ],
+        workflowLeaderboard: [
+          {
+            workflowId: 'w1',
+            workflowName: 'deploy',
+            workflowDisplayName: 'Deploy',
+            executionCount: 12,
+            completedCount: 12,
+            failedCount: 0,
+            avgDurationMs: null,
+          },
+        ],
         panelLeaderboard: [],
       },
       loadedAt: Date.now(),
@@ -343,9 +399,39 @@ describe('SmartSessionButton — launcher panel', () => {
     // section still tells you WHAT each favourite is on hover.
     useFrequentLaunchStore.setState({
       stats: {
-        skillLeaderboard: [{ skillId: 's1', skillName: 'prepare', skillDisplayName: 'Prepare', executionCount: 7, completedCount: 7, failedCount: 0 }],
-        workflowLeaderboard: [{ workflowId: 'w1', workflowName: 'deploy', workflowDisplayName: 'Deploy', executionCount: 12, completedCount: 12, failedCount: 0, avgDurationMs: null }],
-        panelLeaderboard: [{ panelId: 'pn1', panelName: 'archi-committee', panelDisplayName: 'Archi Committee', executionCount: 3, completedCount: 3, failedCount: 0, avgDurationMs: null, avgRespondedMembers: null }],
+        skillLeaderboard: [
+          {
+            skillId: 's1',
+            skillName: 'prepare',
+            skillDisplayName: 'Prepare',
+            executionCount: 7,
+            completedCount: 7,
+            failedCount: 0,
+          },
+        ],
+        workflowLeaderboard: [
+          {
+            workflowId: 'w1',
+            workflowName: 'deploy',
+            workflowDisplayName: 'Deploy',
+            executionCount: 12,
+            completedCount: 12,
+            failedCount: 0,
+            avgDurationMs: null,
+          },
+        ],
+        panelLeaderboard: [
+          {
+            panelId: 'pn1',
+            panelName: 'archi-committee',
+            panelDisplayName: 'Archi Committee',
+            executionCount: 3,
+            completedCount: 3,
+            failedCount: 0,
+            avgDurationMs: null,
+            avgRespondedMembers: null,
+          },
+        ],
       },
       loadedAt: Date.now(),
       loading: false,
@@ -384,7 +470,16 @@ describe('SmartSessionButton — launcher panel', () => {
   it('hides the Fréquents section once a search query is typed', async () => {
     useFrequentLaunchStore.setState({
       stats: {
-        skillLeaderboard: [{ skillId: 's1', skillName: 'prepare', skillDisplayName: 'Prepare', executionCount: 7, completedCount: 7, failedCount: 0 }],
+        skillLeaderboard: [
+          {
+            skillId: 's1',
+            skillName: 'prepare',
+            skillDisplayName: 'Prepare',
+            executionCount: 7,
+            completedCount: 7,
+            failedCount: 0,
+          },
+        ],
         workflowLeaderboard: [],
         panelLeaderboard: [],
       },
@@ -406,9 +501,20 @@ describe('SmartSessionButton — launcher panel', () => {
 
   it('launches the highlighted item from the keyboard (ArrowDown then Enter)', async () => {
     // Only a skill present, so the first navigable row is unambiguous.
-    useWorkflowTemplateStore.setState({ templates: [], refresh: vi.fn().mockResolvedValue(undefined) });
-    usePanelStore.setState({ panels: [], loaded: true, loadPanels: vi.fn().mockResolvedValue(undefined) });
-    useAgentPersonaStore.setState({ personas: [], loaded: true, loadPersonas: vi.fn().mockResolvedValue(undefined) });
+    useWorkflowTemplateStore.setState({
+      templates: [],
+      refresh: vi.fn().mockResolvedValue(undefined),
+    });
+    usePanelStore.setState({
+      panels: [],
+      loaded: true,
+      loadPanels: vi.fn().mockResolvedValue(undefined),
+    });
+    useAgentPersonaStore.setState({
+      personas: [],
+      loaded: true,
+      loadPersonas: vi.fn().mockResolvedValue(undefined),
+    });
     const onExecuteSkill = vi.fn().mockResolvedValue(undefined);
     render(<SmartSessionButton sessions={[]} ticketId="t1" onExecuteSkill={onExecuteSkill} />);
     await openDropdown();

@@ -1,9 +1,11 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
-import type { CommandDef } from '../../core/types.ts';
+
 import { die } from '../../core/colors.ts';
 import { resolveInstance, ensureDirs, logFile } from '../../core/instance.ts';
+
+import type { CommandDef } from '../../core/types.ts';
 
 const def: CommandDef = {
   workspaceAware: true,

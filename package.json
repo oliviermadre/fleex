@@ -9,7 +9,9 @@
     "packages/desktop",
     "packages/cli",
     "packages/mcp",
-    "packages/sidepanel-host"
+    "packages/sidepanel-host",
+    "packages/host-gateway",
+    "packages/event-hub"
   ],
   "scripts": {
     "dev": "trap 'kill 0' INT; bun run dev:gateway & bun run dev:server & bun run dev:web & wait",
@@ -20,15 +22,37 @@
     "start": "NODE_ENV=production node packages/server/dist/main.js",
     "start:gateway": "cd packages/host-gateway && bun run src/main.ts",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:bun": "cd packages/server && bunx --bun vitest run --config vitest.bun.config.ts",
-    "lint": "node scripts/check-raw-palette.mjs && tsc -b packages/shared && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json && tsc --noEmit -p packages/mcp/tsconfig.json && tsc --noEmit -p packages/sidepanel-host/tsconfig.json",
+    "test:gateway": "cd packages/host-gateway && bun test",
+    "lint": "bun run lint:format && bun run lint:palette && bun run lint:eslint && bun run lint:types",
+    "lint:format": "prettier --check .",
+    "lint:palette": "node scripts/check-raw-palette.mjs",
+    "lint:eslint": "node scripts/check-lint-ratchet.mjs",
+    "lint:types": "tsc -b packages/shared && tsc --noEmit -p packages/server/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json && tsc --noEmit -p packages/mcp/tsconfig.json && tsc --noEmit -p packages/sidepanel-host/tsconfig.json && tsc --noEmit -p packages/host-gateway/tsconfig.json && tsc --noEmit -p packages/event-hub/tsconfig.json && tsc --noEmit -p packages/desktop/tsconfig.json && tsc --noEmit -p extension/tsconfig.json",
+    "lint:baseline": "node scripts/check-lint-ratchet.mjs --write",
+    "lint:ratchet:ci": "node scripts/check-lint-ratchet.mjs --against .ci/main-lint-snapshot.json --renames .ci/renames.txt",
+    "format": "prettier --write .",
+    "prepare": "node scripts/setup-git-hooks.mjs",
     "audit:theme": "node scripts/theme-audit/run.mjs",
     "dev:desktop": "FLEEX_SERVER_PORT=${PORT:-3000} electron packages/desktop"
   },
   "devDependencies": {
+    "@eslint/js": "^9",
+    "@types/node": "^22.0.0",
+    "eslint": "^9",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import-x": "^4.17.1",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.8.0",
+    "prettier": "^3.9.6",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.65.0",
     "vitest": "^3.0.0",
-    "@types/node": "^22.0.0"
+    "@types/chrome": "^0.0.287",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "3.2.4"
   }
 }

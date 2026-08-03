@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
+
 import { clampRightSidebarWidth, useUIStore } from '../../../stores/uiStore';
-import { SidebarTopPanel } from './SidebarTopPanel';
+
 import { SidebarBottomPanel } from './SidebarBottomPanel';
 import { SidebarSplitHandle } from './SidebarSplitHandle';
+import { SidebarTopPanel } from './SidebarTopPanel';
 import { SidebarWidthHandle } from './SidebarWidthHandle';
 
 const COLLAPSED_WIDTH = 55;
@@ -65,7 +67,10 @@ export function SessionRightSidebar({
         className="flex flex-col bg-[var(--theme-bg-surface)] border-l border-white/[0.06] flex-shrink-0 overflow-hidden"
         style={{ width: `${width}px` }}
       >
-        <div className="flex flex-col min-h-0 overflow-hidden" style={{ flexBasis: `${ratio * 100}%`, flexGrow: 0, flexShrink: 0 }}>
+        <div
+          className="flex flex-col min-h-0 overflow-hidden"
+          style={{ flexBasis: `${ratio * 100}%`, flexGrow: 0, flexShrink: 0 }}
+        >
           <SidebarTopPanel
             parentSessionId={parentSessionId}
             repoKeys={repoKeys}
@@ -117,7 +122,16 @@ function CollapsedSidebar({ onExpand }: { onExpand: () => void }) {
         title="Scratchpads"
         className="flex w-full flex-col items-center justify-center gap-1 py-2.5 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
       >
-        <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11z" />
           <path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" strokeWidth="1" />
         </svg>
@@ -131,7 +145,16 @@ function CollapsedSidebar({ onExpand }: { onExpand: () => void }) {
         title="Auxiliary terminals"
         className="flex w-full flex-col items-center justify-center gap-1 py-2.5 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
       >
-        <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
           <polyline points="4.5,6.5 7,9 4.5,11.5" />
           <line x1="9" y1="11.5" x2="11.5" y2="11.5" />

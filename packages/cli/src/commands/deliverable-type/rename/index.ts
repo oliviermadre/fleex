@@ -1,7 +1,8 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, present, c } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
+import { ok, die, present, c } from '../../../core/colors.ts';
 import { resolveDeliverableType, type DeliverableTypesView } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface RenamedView extends DeliverableTypesView {
   migrated: number;
@@ -20,9 +21,14 @@ const def: CommandDef = {
     const newId = newIdArg.trim();
     if (!newId) die('New deliverable type id cannot be empty.');
 
-    const view = await apiPost<RenamedView>(`${apiBase()}/api/deliverable-types/${type.id}/rename`, { newId });
+    const view = await apiPost<RenamedView>(
+      `${apiBase()}/api/deliverable-types/${type.id}/rename`,
+      { newId },
+    );
     present(view, () =>
-      ok(`Renamed ${c.bold(type.id)} → ${c.bold(newId)} (${view.migrated} deliverable(s) migrated)`),
+      ok(
+        `Renamed ${c.bold(type.id)} → ${c.bold(newId)} (${view.migrated} deliverable(s) migrated)`,
+      ),
     );
   },
 };

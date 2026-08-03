@@ -1,9 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
+
 import type { Skill } from '@fleex/shared';
-import { useSkillStore } from '../../stores/skillStore';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useSkillStore } from '../../stores/skillStore';
 
 const TABS = [
   { key: 'config' as const, label: 'Config' },
@@ -181,9 +183,22 @@ export function SkillEditor() {
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-primary)]">
       {/* Header */}
-      <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
+      <div
+        className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3"
+        style={{ height: 'var(--header-height)' }}
+      >
         <div className="flex items-center gap-1.5 min-w-0">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-text-secondary)]">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0 text-[var(--theme-text-secondary)]"
+          >
             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
           </svg>
           <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)] truncate">
@@ -191,12 +206,14 @@ export function SkillEditor() {
           </span>
         </div>
 
-        <span className={cn(
-          'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
-          skill.enabled
-            ? tint('green')
-            : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)]',
-        )}>
+        <span
+          className={cn(
+            'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
+            skill.enabled
+              ? tint('green')
+              : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-muted)]',
+          )}
+        >
           {skill.enabled ? 'Enabled' : 'Disabled'}
         </span>
 

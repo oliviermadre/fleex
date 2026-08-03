@@ -1,6 +1,7 @@
 import type { RepositoryStats, RepoDailyCost } from '@fleex/shared';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
+
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 
 const DAY_MS = 86_400_000;
 
@@ -16,10 +17,13 @@ export class GetRepositoryStatsUseCase {
   async execute(org: string, name: string, days = 30, now = new Date()): Promise<RepositoryStats> {
     const ref = `${org}/${name}`;
     const refs = [...new Set([ref, ref.toLowerCase()])];
-    const ticketLists = await Promise.all(refs.map((r) => this.ticketStore.getTicketsLinkedTo('repository', r)));
+    const ticketLists = await Promise.all(
+      refs.map((r) => this.ticketStore.getTicketsLinkedTo('repository', r)),
+    );
     const tickets = [...new Map(ticketLists.flat().map((t) => [t.id, t])).values()];
 
-    const startOfUtcDay = (ms: number) => new Date(new Date(ms).toISOString().slice(0, 10)).getTime();
+    const startOfUtcDay = (ms: number) =>
+      new Date(new Date(ms).toISOString().slice(0, 10)).getTime();
 
     const windowStartDay = startOfUtcDay(now.getTime() - (days - 1) * DAY_MS);
     const windowEnd = now.getTime();

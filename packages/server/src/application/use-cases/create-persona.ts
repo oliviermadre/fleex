@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
+
 import type { ExecutionMode } from '@fleex/shared';
+
 import { AgentPersonaEntity } from '../../domain/entities/agent-persona.entity.js';
 import { AgentPersonaNameConflictError } from '../../domain/errors.js';
-import type { PersonaStorePort } from '../ports/persona-store.port.js';
+
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { PersonaStorePort } from '../ports/persona-store.port.js';
 
 export class CreatePersonaUseCase {
   constructor(

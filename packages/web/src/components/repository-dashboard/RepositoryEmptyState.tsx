@@ -1,7 +1,15 @@
 export function RepositoryEmptyState() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 text-[var(--theme-text-muted)]">
-      <svg width="48" height="48" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" className="text-[var(--theme-text-faint)]">
+      <svg
+        width="48"
+        height="48"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+        className="text-[var(--theme-text-faint)]"
+      >
         <circle cx="5" cy="3.5" r="1.5" />
         <circle cx="11" cy="3.5" r="1.5" />
         <circle cx="8" cy="12.5" r="1.5" />

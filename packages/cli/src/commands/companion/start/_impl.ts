@@ -1,9 +1,8 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
-import { FLEEX_HOME } from '../../../core/instance.ts';
+
 import { info, ok, warn, c } from '../../../core/colors.ts';
-import { waitForService, killByPort } from '../../../core/process.ts';
 import {
   COMPANION_PORT,
   buildCompanionLaunch,
@@ -14,6 +13,8 @@ import {
   probeCompanion,
   stopCompanion,
 } from '../../../core/companion.ts';
+import { FLEEX_HOME } from '../../../core/instance.ts';
+import { waitForService, killByPort } from '../../../core/process.ts';
 
 export interface CompanionStartOptions {
   /** Suppress the "already running" line (used by `fleex start`'s idempotent call). */
@@ -38,7 +39,9 @@ export async function ensureCompanion(opts: CompanionStartOptions = {}): Promise
     // hasApiKey === false only on a build that reports the field (newer hosts).
     // Undefined (older host) → leave it; we can't tell, don't churn it.
     if (health.hasApiKey === false && haveKey) {
-      warn('Companion is running without an Anthropic key — restarting it to pick up ~/.fleex/config.');
+      warn(
+        'Companion is running without an Anthropic key — restarting it to pick up ~/.fleex/config.',
+      );
       await stopCompanion();
     } else {
       if (!opts.quiet) ok(`Companion already running on http://localhost:${COMPANION_PORT}`);
@@ -95,7 +98,7 @@ export async function ensureCompanion(opts: CompanionStartOptions = {}): Promise
   info(`Starting companion from ${c.dim(repoDir)} ...`);
   const healthy = await waitForService(
     'companion',
-    `http://localhost:${COMPANION_PORT}/health`,
+    `http://127.0.0.1:${COMPANION_PORT}/health`,
     child.pid,
     logPath,
     15,

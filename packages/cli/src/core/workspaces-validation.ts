@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
 import type { Workspace } from './workspaces.ts';
 
 /**
@@ -57,11 +58,13 @@ const singleDefaultRule: WorkspacesRule = {
   check(ctx) {
     const defaults = ctx.workspaces.filter((w) => w.is_default);
     if (defaults.length > 1) {
-      return [{
-        rule: 'single-default',
-        level: 'error',
-        message: `only one default workspace is allowed (found: ${defaults.map((w) => w.name).join(', ')}).`,
-      }];
+      return [
+        {
+          rule: 'single-default',
+          level: 'error',
+          message: `only one default workspace is allowed (found: ${defaults.map((w) => w.name).join(', ')}).`,
+        },
+      ];
     }
     return [];
   },
@@ -193,6 +196,8 @@ export function makeRuleContext(workspaces: Workspace[]): RuleContext {
  * Pass `['config']` for the fast pre-command guard; omit for doctor's full sweep.
  */
 export function runRules(ctx: RuleContext, kinds?: RuleKind[]): ValidationIssue[] {
-  const selected = kinds ? WORKSPACES_RULES.filter((r) => kinds.includes(r.kind)) : WORKSPACES_RULES;
+  const selected = kinds
+    ? WORKSPACES_RULES.filter((r) => kinds.includes(r.kind))
+    : WORKSPACES_RULES;
   return selected.flatMap((r) => r.check(ctx));
 }

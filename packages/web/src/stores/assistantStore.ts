@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import { useSettingsStore } from './settingsStore';
 
 /**
@@ -206,14 +207,16 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
           argv: (msg.argv as string[]) ?? [],
         };
         set((s) => ({
-          confirmReqs: s.confirmReqs.some((r) => r.id === req.id) ? s.confirmReqs : [...s.confirmReqs, req],
+          confirmReqs: s.confirmReqs.some((r) => r.id === req.id)
+            ? s.confirmReqs
+            : [...s.confirmReqs, req],
         }));
         break;
       }
       case 'auto_approve_disarmed':
         set({
           autoApproveNotice:
-            "Auto-approbation désactivée : une page web a été jointe à la conversation.",
+            'Auto-approbation désactivée : une page web a été jointe à la conversation.',
         });
         break;
       case 'error':

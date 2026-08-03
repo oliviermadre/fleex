@@ -1,23 +1,30 @@
 import { useMemo } from 'react';
-import { TICKET_STATUS_LABELS } from '@fleex/shared';
+
+import { TICKET_STATUS_LABELS, buildWorkspaceContext } from '@fleex/shared';
 import type { Ticket } from '@fleex/shared';
+
 import { cn } from '../../lib/cn';
 import { getStatusBadgeClass } from '../../lib/statusColors';
+import {
+  globalActions,
+  workspaceActions as selectWorkspaceActions,
+  useSettingsStore,
+} from '../../stores/settingsStore';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { buildWorkspaceContext } from '../../lib/templateUtils';
-import { renderIcon } from '../sidebar/PinnedIcons';
 import { OverlaySyncButton } from '../overlay-sync/OverlaySyncButton';
+import { renderIcon } from '../sidebar/PinnedIcons';
 
-const ICON_BTN = 'flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)] overflow-hidden';
+const ICON_BTN =
+  'flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)] overflow-hidden';
 
 export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const basePath = useSettingsStore((s) => s.settings.basePath);
-  const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
-  const workspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
-  const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
-  const executeWorkspaceAction = useSettingsStore((s) => s.executeWorkspaceAction);
+  const actions = useSettingsStore((s) => s.settings.actions);
+  const executeAction = useSettingsStore((s) => s.executeAction);
+
+  const pinnedIcons = useMemo(() => globalActions(actions), [actions]);
+  const workspaceActions = useMemo(() => selectWorkspaceActions(actions), [actions]);
 
   // A workspace always exists (conceptually) for a ticket: its folder is
   // deterministic, so this context is always available — even with no session.
@@ -26,17 +33,29 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
     [ticket, basePath],
   );
 
-  const hasWorkspaceActions = workspaceActions && workspaceActions.length > 0;
+  const hasWorkspaceActions = workspaceActions.length > 0;
   const hasActions = pinnedIcons.length > 0 || hasWorkspaceActions;
 
   return (
-    <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
+    <div
+      className="flex items-center gap-3 border-b border-[var(--theme-border)] px-3"
+      style={{ height: 'var(--header-height)' }}
+    >
       <button
         className="rounded p-1 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
         onClick={() => selectTicket(null)}
         title="Back to board"
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <polyline points="10,4 6,8 10,12" />
         </svg>
       </button>
@@ -45,7 +64,13 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
         #{ticket.displayId}
       </span>
 
-      <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', getStatusBadgeClass(ticket.status) || 'text-[var(--theme-text-secondary)] bg-[var(--theme-bg-overlay)]')}>
+      <span
+        className={cn(
+          'rounded-full px-2 py-0.5 text-[10px] font-medium',
+          getStatusBadgeClass(ticket.status) ||
+            'text-[var(--theme-text-secondary)] bg-[var(--theme-bg-overlay)]',
+        )}
+      >
         {TICKET_STATUS_LABELS[ticket.status]}
       </span>
 
@@ -64,10 +89,13 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
               <button
                 key={icon.id}
                 className={ICON_BTN}
-                onClick={() => executePinnedAction(icon)}
+                onClick={() => executeAction(icon)}
                 title={icon.label}
               >
-                <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
+                <span
+                  className="flex items-center justify-center"
+                  style={{ width: 14, height: 14 }}
+                >
                   {renderIcon(icon, 14)}
                 </span>
               </button>
@@ -75,15 +103,18 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
             {pinnedIcons.length > 0 && hasWorkspaceActions && (
               <div className="mx-0.5 h-4 w-px bg-[var(--theme-border)]" />
             )}
-            {workspaceActions?.map((action) => (
+            {workspaceActions.map((action) => (
               <button
                 key={action.id}
                 className={ICON_BTN}
-                onClick={() => executeWorkspaceAction(action, workspaceContext)}
+                onClick={() => executeAction(action, workspaceContext)}
                 title={action.label}
               >
                 {action.icon ? (
-                  <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
+                  <span
+                    className="flex items-center justify-center"
+                    style={{ width: 14, height: 14 }}
+                  >
                     {renderIcon(action, 14)}
                   </span>
                 ) : (

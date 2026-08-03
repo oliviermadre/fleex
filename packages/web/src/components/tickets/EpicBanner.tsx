@@ -1,9 +1,12 @@
 import { useEffect, useMemo } from 'react';
+
 import type { TicketGroup, Ticket } from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
 import { useTicketGroupStore } from '../../stores/ticketGroupStore';
 import { useTicketStore } from '../../stores/ticketStore';
+
 import { StatusCubes } from './StatusCubes';
-import { cn } from '../../lib/cn';
 
 /**
  * Horizontal scrollable banner of epic cards above the kanban board.
@@ -36,7 +39,7 @@ export function EpicBanner() {
 
   // All hooks must be above any early return
   const boardTickets = useMemo(
-    () => selectedBoardId ? allTickets.filter((t) => t.boardId === selectedBoardId) : allTickets,
+    () => (selectedBoardId ? allTickets.filter((t) => t.boardId === selectedBoardId) : allTickets),
     [allTickets, selectedBoardId],
   );
 
@@ -71,8 +74,9 @@ export function EpicBanner() {
 
       {/* Epic cards */}
       {visibleGroups.map((group) => {
-        const tickets = getGroupTickets(group.id, groupTicketIds, allTickets)
-          .filter(t => !selectedBoardId || t.boardId === selectedBoardId);
+        const tickets = getGroupTickets(group.id, groupTicketIds, allTickets).filter(
+          (t) => !selectedBoardId || t.boardId === selectedBoardId,
+        );
         return (
           <EpicBannerCard
             key={group.id}
@@ -120,7 +124,9 @@ function EpicBannerCard({ group, selected, tickets, onClick }: EpicBannerCardPro
     >
       <div className="flex items-center gap-1.5">
         <span className="text-xs">{group.emoji}</span>
-        <span className="truncate text-xs font-medium text-[var(--theme-text-primary)]">{group.name}</span>
+        <span className="truncate text-xs font-medium text-[var(--theme-text-primary)]">
+          {group.name}
+        </span>
       </div>
       {tickets.length > 0 && (
         <div className="mt-1.5">

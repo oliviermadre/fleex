@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
 import type { MarketplacePrimitiveEntry } from '@fleex/shared';
+
 import { computeRemovalClosure, refKey } from '../../src/core/marketplace.ts';
 
 function entry(
@@ -14,10 +16,7 @@ const keys = (entries: MarketplacePrimitiveEntry[]) => entries.map(refKey).sort(
 
 describe('computeRemovalClosure', () => {
   it('removes only the target when nothing depends on it', () => {
-    const primitives = [
-      entry('persona', 'jarvis'),
-      entry('skill', 'standalone'),
-    ];
+    const primitives = [entry('persona', 'jarvis'), entry('skill', 'standalone')];
     const { toRemove, dependents } = computeRemovalClosure(primitives, [
       { kind: 'skill', slug: 'standalone' },
     ]);

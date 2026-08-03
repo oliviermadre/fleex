@@ -1,6 +1,5 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, present, c } from '../../../core/colors.ts';
 import { apiBase, apiPatch } from '../../../core/api.ts';
+import { ok, die, present, c } from '../../../core/colors.ts';
 import {
   assertValidRenderer,
   resolveColor,
@@ -8,6 +7,8 @@ import {
   COLOR_KEYS,
   type DeliverableTypesView,
 } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface UpdateOptions {
   label?: string;
@@ -44,10 +45,15 @@ const def: CommandDef = {
     else if (opts.color !== undefined) body.color = resolveColor(opts.color);
 
     if (Object.keys(body).length === 0) {
-      die('Nothing to update. Provide at least one of --label, --description, --renderer, --color, --no-color.');
+      die(
+        'Nothing to update. Provide at least one of --label, --description, --renderer, --color, --no-color.',
+      );
     }
 
-    const view = await apiPatch<DeliverableTypesView>(`${apiBase()}/api/deliverable-types/${type.id}`, body);
+    const view = await apiPatch<DeliverableTypesView>(
+      `${apiBase()}/api/deliverable-types/${type.id}`,
+      body,
+    );
     present(view, () => ok(`Updated deliverable type ${c.bold(type.id)}`));
   },
 };

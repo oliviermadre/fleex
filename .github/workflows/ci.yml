@@ -6,29 +6,116 @@ on:
   push:
     branches: [main]
 
-jobs:
-  ci:
-    name: Lint & Test
-    runs-on: ubuntu-latest
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a run on main: it is the record of what actually shipped.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # shellcheck ships preinstalled on the ubuntu-latest image.
+      - name: Lint install.sh
+        run: shellcheck --severity=warning --shell=bash install.sh
+
+  build-test:
+    name: Lint & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      # We want to know when something breaks on a single platform only.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          # Pinned to the version that generated bun.lock — "latest" turns
+          # unrelated upstream changes into red builds.
+          bun-version: 1.3.10
+
+      - name: Cache bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Type check
+      - name: Lint & type check
         run: bun run lint
+
+      # The other direction of the ratchet. `Lint & type check` above compares the
+      # tree against the snapshot in THIS branch — but the branch can rewrite that
+      # file with `bun run lint:baseline`, which would launder any regression. So
+      # the reference here is the snapshot on main, which the branch cannot touch.
+      #
+      # No second ESLint run: once `bun run lint` has passed, the local snapshot is
+      # provably equal to the current counts, so the comparison is nearly free.
+      - name: Baseline not worse than main
+        if: >
+          github.event_name == 'pull_request' &&
+          !contains(github.event.pull_request.labels.*.name, 'lint-baseline-reset')
+        run: |
+          mkdir -p .ci
+          # actions/checkout clones at depth 1, so origin/main does not exist yet.
+          # Without this fetch the `git show` below fails, the __ABSENT__ fallback
+          # kicks in, and the step passes green having verified nothing.
+          git fetch --no-tags --depth=1 origin main
+          git show origin/main:scripts/lint-snapshot.json > .ci/main-lint-snapshot.json 2>/dev/null \
+            || echo '__ABSENT__' > .ci/main-lint-snapshot.json
+          # Two dots, not three: on a pull_request event the checkout is already the
+          # merge commit, and a shallow clone has no merge-base for three-dot syntax.
+          git diff --find-renames --diff-filter=R --name-status origin/main HEAD > .ci/renames.txt
+          bun run lint:ratchet:ci
+
+      # A ratchet only tightens if the improved snapshot is actually committed.
+      # `bun run lint` rewrites the snapshots in place when violation counts drop,
+      # so a dirty snapshot here means someone fixed code but left the ceiling high.
+      - name: Snapshots up to date
+        run: |
+          git diff --exit-code scripts/lint-snapshot.json scripts/raw-palette-snapshot.json \
+            || (echo "::error::Violations were fixed but the snapshots were not committed. Run 'bun run lint' and commit scripts/*-snapshot.json." && exit 1)
 
       - name: Build
         run: bun run build
 
+      # Reads packages/web/dist/.vite/{manifest,chunk-modules}.json from the
+      # step above, so it must stay after Build. Writes its table to the job
+      # summary. Fails the job on a first-paint regression — see
+      # packages/web/bundle-budget.json for the ceilings.
+      - name: Bundle budget
+        run: node scripts/bundle-budget.mjs
+
+      # Coverage floors are measured on one platform only: V8 counters can
+      # drift between OSes, and enforcing the same floors twice would double
+      # the false-red rate without catching anything new.
+      - name: Run tests with coverage
+        if: matrix.os == 'ubuntu-latest'
+        run: bun run test:coverage
+
       - name: Run tests
+        if: matrix.os != 'ubuntu-latest'
         run: bun run test
 
       - name: Run Bun-runtime tests (bun:sqlite)
         run: bun run test:bun
+
+      - name: Run host-gateway tests
+        run: bun run test:gateway

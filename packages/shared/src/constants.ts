@@ -13,7 +13,8 @@ export const DEFAULT_ROWS = 30;
 export const WS_PATH = '/ws';
 
 // Channels multiplexed over the single WS connection
-export type WsChannel = 'dashboard' | 'repositories' | 'tickets' | 'personas' | 'skills' | 'agent-events';
+export type WsChannel =
+  'dashboard' | 'repositories' | 'tickets' | 'personas' | 'skills' | 'agent-events';
 
 /** @deprecated Use WS_PATH — terminal is now multiplexed as binary frames */
 export const WS_TERMINAL_PATH = '/ws/terminal';
@@ -63,7 +64,14 @@ export const CLAUDE_USAGE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // Tickets
 export const WS_TICKET_PATH = '/ws/tickets';
 export const WS_AGENT_PATH = '/ws/agents';
-export const TICKET_STATUSES = ['backlog', 'todo', 'doing', 'reviewing', 'done', 'cancelled'] as const;
+export const TICKET_STATUSES = [
+  'backlog',
+  'todo',
+  'doing',
+  'reviewing',
+  'done',
+  'cancelled',
+] as const;
 export const TICKET_STATUS_LABELS: Record<string, string> = {
   backlog: 'Backlog',
   todo: 'Todo',
@@ -74,9 +82,7 @@ export const TICKET_STATUS_LABELS: Record<string, string> = {
 };
 export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high'] as const;
 
-export const TICKET_TYPES = [
-  'build', 'fix', 'review', 'ops', 'lead', 'think',
-] as const;
+export const TICKET_TYPES = ['build', 'fix', 'review', 'ops', 'lead', 'think'] as const;
 
 export const TICKET_TYPE_LABELS: Record<string, string> = {
   build: 'Build',
@@ -107,10 +113,10 @@ export const WS_SKILL_PATH = '/ws/skills';
 
 // Timing — UI interactions
 export const CONFIRM_KILL_TIMEOUT_MS = 3_000; // sidebar kill confirm dialog auto-reset
-export const KILL_GRACE_MS = 3_000;           // grace window for recently-killed sessions
-export const ADD_GRACE_MS = 3_000;            // grace window for recently-added sessions
+export const KILL_GRACE_MS = 3_000; // grace window for recently-killed sessions
+export const ADD_GRACE_MS = 3_000; // grace window for recently-added sessions
 export const EXECUTION_LOG_REFRESH_MS = 1_500; // silent reload delay after a log action
-export const TOOLTIP_HIDE_DELAY_MS = 80;       // delay before hiding a hover tooltip
+export const TOOLTIP_HIDE_DELAY_MS = 80; // delay before hiding a hover tooltip
 
 // Execution / terminate-button state machine
 export const EXECUTION_STATES = {
@@ -133,7 +139,7 @@ export const TICKET_STATUS = {
 } as const;
 
 // Usage gauge color thresholds (remaining %)
-export const USAGE_WARN_THRESHOLD_PCT = 50;   // above → success/green
+export const USAGE_WARN_THRESHOLD_PCT = 50; // above → success/green
 export const USAGE_DANGER_THRESHOLD_PCT = 20; // below → danger/red
 
 // Agent SDK loop cap — how many turns a plan/edit execution may take before the

@@ -1,7 +1,10 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
 import type { CommentVisibility } from '@fleex/shared';
+
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
+
 import type { CommentStorePort } from '../../application/ports/comment-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { HostFs } from '../host/types.js';
@@ -76,11 +79,22 @@ export class JsonCommentStore implements CommentStorePort {
       const raw = await this.hostFs.readFile(this.filePath);
       const data = JSON.parse(raw) as SerializedComment[];
       for (const c of data) {
-        this.comments.set(c.id, new TicketCommentEntity(
-          c.id, c.ticketId, c.authorType, c.authorName,
-          c.body, c.visibility, c.privateRecipients, c.mentions,
-          c.parentId, new Date(c.createdAt), new Date(c.updatedAt),
-        ));
+        this.comments.set(
+          c.id,
+          new TicketCommentEntity(
+            c.id,
+            c.ticketId,
+            c.authorType,
+            c.authorName,
+            c.body,
+            c.visibility,
+            c.privateRecipients,
+            c.mentions,
+            c.parentId,
+            new Date(c.createdAt),
+            new Date(c.updatedAt),
+          ),
+        );
       }
       this.logger.info('Comment store loaded', { count: this.comments.size });
     } catch (err) {
@@ -93,11 +107,17 @@ export class JsonCommentStore implements CommentStorePort {
   private async syncToDisk(): Promise<void> {
     try {
       const data: SerializedComment[] = Array.from(this.comments.values()).map((c) => ({
-        id: c.id, ticketId: c.ticketId, authorType: c.authorType,
-        authorName: c.authorName, body: c.body, visibility: c.visibility,
-        privateRecipients: c.privateRecipients, mentions: c.mentions,
+        id: c.id,
+        ticketId: c.ticketId,
+        authorType: c.authorType,
+        authorName: c.authorName,
+        body: c.body,
+        visibility: c.visibility,
+        privateRecipients: c.privateRecipients,
+        mentions: c.mentions,
         parentId: c.parentId,
-        createdAt: c.createdAt.toISOString(), updatedAt: c.updatedAt.toISOString(),
+        createdAt: c.createdAt.toISOString(),
+        updatedAt: c.updatedAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));
     } catch (err) {

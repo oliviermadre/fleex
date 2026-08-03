@@ -1,33 +1,75 @@
-import type { Session } from '@fleex/shared';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useUIStore } from '../../stores/uiStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { UnifiedWorktreePanel } from './UnifiedWorktreePanel';
-import { EmptyState } from './EmptyState';
-import { SettingsPanel } from '../settings/SettingsPanel';
-import { RepositoryDashboard } from '../repository-dashboard/RepositoryDashboard';
-import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
-import { ClaudeConfigEditor } from '../claude-config/ClaudeConfigEditor';
-import { ScratchpadMainView } from '../scratchpad/ScratchpadMainView';
-import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
-import { useScratchpadStore } from '../../stores/scratchpadStore';
-import { KanbanBoard } from '../tickets/KanbanBoard';
-import { TicketDetail } from '../tickets/TicketDetail';
-import { useTicketStore } from '../../stores/ticketStore';
-import { AgentPersonaView } from '../agents/AgentPersonaView';
-import { SkillEditor } from '../agents/SkillEditor';
-import { PanelDetailView } from '../agents/PanelDetailView';
-import { WorkflowEditorView } from '../workflows/WorkflowEditorView';
-import { useSkillStore } from '../../stores/skillStore';
-import { usePanelStore } from '../../stores/panelStore';
-import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnalyticsPanel } from '../analytics/AnalyticsPanel';
+
+import type { Session } from '@fleex/shared';
+
+import { useCapabilities } from '../../hooks/useCapabilities';
+import { usePanelStore } from '../../stores/panelStore';
+import { useScratchpadStore } from '../../stores/scratchpadStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useSkillStore } from '../../stores/skillStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUIStore } from '../../stores/uiStore';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { AssistantConversation } from '../assistant/AssistantConversation';
 import { DashboardView } from '../dashboard/DashboardView';
 import { ListFocusView } from '../list-focus/ListFocusView';
-import { ExecutionLogPage } from '../execution-log/ExecutionLogPage';
-import { DocumentsPage } from '../documents/DocumentsPage';
-import { AssistantConversation } from '../assistant/AssistantConversation';
+import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
+import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
+import { KanbanBoard } from '../tickets/KanbanBoard';
+import { TicketDetail } from '../tickets/TicketDetail';
+import { WorkflowsUnavailableState } from '../workflows/WorkflowsUnavailableState';
+
+import { EmptyState } from './EmptyState';
+import { PanelFallback } from './PanelFallback';
+import { UnifiedWorktreePanel } from './UnifiedWorktreePanel';
+
+// ── Lazy panels ───────────────────────────────────────────────────────────────
+//
+// One chunk per rarely-opened branch of `activePanel`. AnalyticsPanel carries
+// recharts and WorkflowEditorView carries @xyflow/react; the rest is app code
+// for panels most sessions never open.
+//
+// Kept eager on purpose: KanbanBoard and TicketDetail (activePanel defaults to
+// 'tickets', so they are the hot path), UnifiedWorktreePanel, DashboardView,
+// ListFocusView, AssistantConversation (all small and commonly the first view
+// after the board), and the *EmptyState components.
+const SettingsPanel = lazy(() =>
+  import('../settings/SettingsPanel').then((m) => ({ default: m.SettingsPanel })),
+);
+const RepositoryDashboard = lazy(() =>
+  import('../repository-dashboard/RepositoryDashboard').then((m) => ({
+    default: m.RepositoryDashboard,
+  })),
+);
+const ClaudeConfigEditor = lazy(() =>
+  import('../claude-config/ClaudeConfigEditor').then((m) => ({ default: m.ClaudeConfigEditor })),
+);
+const ScratchpadMainView = lazy(() =>
+  import('../scratchpad/ScratchpadMainView').then((m) => ({ default: m.ScratchpadMainView })),
+);
+const AgentPersonaView = lazy(() =>
+  import('../agents/AgentPersonaView').then((m) => ({ default: m.AgentPersonaView })),
+);
+const SkillEditor = lazy(() =>
+  import('../agents/SkillEditor').then((m) => ({ default: m.SkillEditor })),
+);
+const PanelDetailView = lazy(() =>
+  import('../agents/PanelDetailView').then((m) => ({ default: m.PanelDetailView })),
+);
+const WorkflowEditorView = lazy(() =>
+  import('../workflows/WorkflowEditorView').then((m) => ({ default: m.WorkflowEditorView })),
+);
+const AnalyticsPanel = lazy(() =>
+  import('../analytics/AnalyticsPanel').then((m) => ({ default: m.AnalyticsPanel })),
+);
+const ExecutionLogPage = lazy(() =>
+  import('../execution-log/ExecutionLogPage').then((m) => ({ default: m.ExecutionLogPage })),
+);
+const DocumentsPage = lazy(() =>
+  import('../documents/DocumentsPage').then((m) => ({ default: m.DocumentsPage })),
+);
 
 function GroupEmptyCell() {
   return (
@@ -56,6 +98,14 @@ function GroupCell({ session, focused, onFocus }: GroupCellProps) {
 }
 
 export function MainPanel() {
+  return (
+    <Suspense fallback={<PanelFallback />}>
+      <MainPanelRoutes />
+    </Suspense>
+  );
+}
+
+function MainPanelRoutes() {
   const activePanel = useUIStore((s) => s.activePanel);
   const selectedSessionId = useSessionStore((s) => s.selectedSessionId);
   const splitSessionId = useSessionStore((s) => s.splitSessionId);
@@ -78,9 +128,10 @@ export function MainPanel() {
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
   const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
   const selectWorkflow = useWorkflowTemplateStore((s) => s.selectWorkflow);
+  const { workflowsAvailable } = useCapabilities();
   const navigate = useNavigate();
   const splitSession = splitSessionId
-    ? sessions.find((s) => s.id === splitSessionId) ?? null
+    ? (sessions.find((s) => s.id === splitSessionId) ?? null)
     : null;
 
   if (activePanel === 'dashboard') {
@@ -128,6 +179,11 @@ export function MainPanel() {
       return <SkillEditor />;
     }
     if (selectedWorkflowId) {
+      // The driver has no workflow support: explain it in place. Never redirect
+      // silently — a deep link to /agents/workflow/:id must say why it's dead.
+      if (!workflowsAvailable) {
+        return <WorkflowsUnavailableState />;
+      }
       const template = workflowTemplates.find((t) => t.id === selectedWorkflowId);
       if (template) {
         return (
@@ -160,7 +216,12 @@ export function MainPanel() {
 
   // Agent worktree view (legacy route)
   if (activePanel === 'sessions' && selectedAgentWorktreeTicketId) {
-    return <UnifiedWorktreePanel entry={{ kind: 'agent', ticketId: selectedAgentWorktreeTicketId }} focused />;
+    return (
+      <UnifiedWorktreePanel
+        entry={{ kind: 'agent', ticketId: selectedAgentWorktreeTicketId }}
+        focused
+      />
+    );
   }
 
   // Ticket-based session view
@@ -175,8 +236,8 @@ export function MainPanel() {
   if (selectedGroupId) {
     const group = layoutGroups.find((g) => g.id === selectedGroupId);
     if (group) {
-      const cellSessions = group.cells.map(
-        (cellId) => (cellId ? sessions.find((s) => s.id === cellId) ?? null : null)
+      const cellSessions = group.cells.map((cellId) =>
+        cellId ? (sessions.find((s) => s.id === cellId) ?? null) : null,
       );
 
       if (group.type === '1x2') {

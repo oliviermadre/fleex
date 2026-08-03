@@ -1,10 +1,14 @@
-import type { CommandDef } from '../../../../core/types.ts';
-import { c } from '../../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../../core/api.ts';
+import { c } from '../../../../core/colors.ts';
 import { resolveTicketId } from '../../_shared.ts';
+
+import type { CommandDef } from '../../../../core/types.ts';
 import type { DeliverableDTO } from '../_shared.ts';
 
-interface ShowOptions { board?: string; contentOnly?: boolean }
+interface ShowOptions {
+  board?: string;
+  contentOnly?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -30,7 +34,9 @@ const def: CommandDef = {
 
     const sc = d.status === 'final' ? c.green : c.yellow;
     process.stdout.write('\n');
-    process.stdout.write(`  ${c.bold(d.title)}  ${c.dim(`[${d.type}]`)}  by ${c.cyan(d.agentName)}  ${sc(d.status)}  ${c.dim(`v${d.version}`)}\n`);
+    process.stdout.write(
+      `  ${c.bold(d.title)}  ${c.dim(`[${d.type}]`)}  by ${c.cyan(d.agentName)}  ${sc(d.status)}  ${c.dim(`v${d.version}`)}\n`,
+    );
     process.stdout.write(`  ${c.bold('UUID:')}     ${c.dim(d.id)}\n`);
     process.stdout.write(`  ${c.bold('Ticket:')}   ${c.dim(d.ticketId)}\n`);
     process.stdout.write(`  ${c.bold('Created:')}  ${c.dim(d.createdAt)}\n`);

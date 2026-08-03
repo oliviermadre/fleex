@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+
 import type { FastifyServerFactory } from 'fastify';
 
 /**

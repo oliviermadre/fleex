@@ -1,9 +1,12 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { die, ok } from '../../../core/colors.ts';
 import { apiBase, apiPost } from '../../../core/api.ts';
+import { die, ok } from '../../../core/colors.ts';
 import { parseRepo } from '../_shared.ts';
 
-interface Options { all?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface Options {
+  all?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,

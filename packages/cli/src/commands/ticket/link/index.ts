@@ -1,7 +1,8 @@
-import type { CommandDef } from '../../../core/types.ts';
-import { ok, die, err, c } from '../../../core/colors.ts';
 import { apiBase, apiGet, apiPost } from '../../../core/api.ts';
+import { ok, die, err, c } from '../../../core/colors.ts';
 import { accumulate, resolvePrRef, resolveIssueRef, resolveTicketId } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 interface LinkOptions {
   repo?: string[];
@@ -18,12 +19,23 @@ interface Repository {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'link',
-  description: 'Link repositories / PRs / issues to a ticket — --pr and --issue accept a full GitHub URL or org/name#N (link <id> --repo org/name | --pr <pr-url|org/name#n> | --issue <issue-url|org/name#n>)',
+  description:
+    'Link repositories / PRs / issues to a ticket — --pr and --issue accept a full GitHub URL or org/name#N (link <id> --repo org/name | --pr <pr-url|org/name#n> | --issue <issue-url|org/name#n>)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
     cmd.option('--repo <org/name>', 'Repository to link (repeatable)', accumulate, [] as string[]);
-    cmd.option('--pr <url|org/name#n>', 'GitHub PR to link — full PR URL or org/name#N (repeatable)', accumulate, [] as string[]);
-    cmd.option('--issue <url|org/name#n>', 'GitHub issue to link — full issue URL or org/name#N (repeatable)', accumulate, [] as string[]);
+    cmd.option(
+      '--pr <url|org/name#n>',
+      'GitHub PR to link — full PR URL or org/name#N (repeatable)',
+      accumulate,
+      [] as string[],
+    );
+    cmd.option(
+      '--issue <url|org/name#n>',
+      'GitHub issue to link — full issue URL or org/name#N (repeatable)',
+      accumulate,
+      [] as string[],
+    );
     cmd.option('--board <id>', 'Disambiguate by board');
   },
   action: async (idArg: string, opts: LinkOptions) => {
@@ -59,7 +71,8 @@ const def: CommandDef = {
         for (const rp of known) {
           process.stderr.write(`  - ${rp.org}/${rp.name}\n`);
         }
-        if (known.length === 0) process.stderr.write('  (none — add a repository in the web UI first)\n');
+        if (known.length === 0)
+          process.stderr.write('  (none — add a repository in the web UI first)\n');
         process.exit(1);
       }
     }
@@ -69,11 +82,21 @@ const def: CommandDef = {
       ok(`Linked repo ${r} to ticket`);
     }
     for (const p of prRefs) {
-      await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'github_pr', ref: p.ref, label: p.ref, url: p.url });
+      await apiPost(`${base}/api/tickets/${uuid}/links`, {
+        type: 'github_pr',
+        ref: p.ref,
+        label: p.ref,
+        url: p.url,
+      });
       ok(`Linked PR ${p.ref} to ticket`);
     }
     for (const i of issueRefs) {
-      await apiPost(`${base}/api/tickets/${uuid}/links`, { type: 'github_issue', ref: i.ref, label: i.ref, url: i.url });
+      await apiPost(`${base}/api/tickets/${uuid}/links`, {
+        type: 'github_issue',
+        ref: i.ref,
+        label: i.ref,
+        url: i.url,
+      });
       ok(`Linked issue ${i.ref} to ticket`);
     }
   },

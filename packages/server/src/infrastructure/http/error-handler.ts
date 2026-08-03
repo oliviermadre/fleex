@@ -1,5 +1,6 @@
-import type { FastifyInstance } from 'fastify';
 import { DomainError } from '../../domain/errors.js';
+
+import type { FastifyInstance } from 'fastify';
 
 const CODE_TO_STATUS: Record<string, number> = {
   SESSION_NOT_FOUND: 404,
@@ -24,15 +25,26 @@ const CODE_TO_STATUS: Record<string, number> = {
   SLACK_INTEGRATION_UNAVAILABLE: 422,
   SLACK_CONVERSATION_INACCESSIBLE: 422,
   SLACK_CONVERSATION_EMPTY: 422,
+  ACTION_NOT_FOUND: 404,
+  ACTION_DISABLED: 409,
+  ACTION_ALREADY_RUNNING: 409,
+  ACTION_NOT_EXECUTABLE: 400,
+  ACTION_INVALID_PARAMS: 400,
+  ACTION_MISSING_CONTEXT: 400,
+  ACTION_TIMEOUT: 504,
 };
 
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof DomainError) {
       const status = CODE_TO_STATUS[error.code] ?? 500;
+      // Some errors (e.g. invalid action params) carry a per-field breakdown so
+      // the caller can fix the request without guessing which field was wrong.
+      const { details } = error as DomainError & { details?: unknown };
       return reply.code(status).send({
         error: error.code,
         message: error.message,
+        ...(details === undefined ? {} : { details }),
       });
     }
 

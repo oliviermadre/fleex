@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { useSettingsStore } from '../../stores/settingsStore';
+
+import { cn } from '../../lib/cn';
+import { TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE } from '../../lib/constants';
 import {
   BUILT_IN_THEMES,
   DEFAULT_THEME_ID,
@@ -7,9 +9,9 @@ import {
   type Theme,
   type ThemeColors,
 } from '../../lib/themes';
-import { TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE } from '../../lib/constants';
+import { useSettingsStore } from '../../stores/settingsStore';
+
 import { ThemeColorEditor } from './ThemeColorEditor';
-import { cn } from '../../lib/cn';
 
 const FONT_OPTIONS = [
   { label: 'Default', value: TERMINAL_FONT_FAMILY },
@@ -74,7 +76,7 @@ export function AppearanceTab() {
   const handleSaveEdit = ({ colors, name }: { colors: ThemeColors; name: string }) => {
     if (!editingTheme) return;
     const updated = customThemes.map((t) =>
-      t.id === editingTheme.id ? { ...t, colors, name } : t
+      t.id === editingTheme.id ? { ...t, colors, name } : t,
     );
     saveSettings({ customThemes: updated });
     setEditingTheme(null);
@@ -83,8 +85,7 @@ export function AppearanceTab() {
   const deleteTheme = (theme: Theme) => {
     if (theme.builtIn) return;
     const updated = customThemes.filter((t) => t.id !== theme.id);
-    const newActiveId =
-      activeThemeId === theme.id ? DEFAULT_THEME_ID : activeThemeId;
+    const newActiveId = activeThemeId === theme.id ? DEFAULT_THEME_ID : activeThemeId;
     saveSettings({ customThemes: updated, activeThemeId: newActiveId });
   };
 
@@ -104,9 +105,7 @@ export function AppearanceTab() {
     <div className="flex flex-col gap-6">
       <div>
         <h3 className="mb-1 text-sm font-semibold text-[var(--theme-text-primary)]">Theme</h3>
-        <p className="text-xs text-[var(--theme-text-muted)]">
-          Choose a theme or create your own.
-        </p>
+        <p className="text-xs text-[var(--theme-text-muted)]">Choose a theme or create your own.</p>
       </div>
 
       {/* Theme grid */}
@@ -120,20 +119,14 @@ export function AppearanceTab() {
                 'flex flex-col gap-2 rounded-lg border p-3 text-left transition-all',
                 isActive
                   ? 'border-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]'
-                  : 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]'
+                  : 'border-[var(--theme-border)] hover:border-[var(--theme-border-input)]',
               )}
               onClick={() => selectTheme(theme.id)}
             >
               {/* Color swatches */}
               <div className="flex gap-1">
-                <div
-                  className="h-6 w-6 rounded"
-                  style={{ backgroundColor: theme.colors.accent }}
-                />
-                <div
-                  className="h-6 w-6 rounded"
-                  style={{ backgroundColor: theme.colors.bgBase }}
-                />
+                <div className="h-6 w-6 rounded" style={{ backgroundColor: theme.colors.accent }} />
+                <div className="h-6 w-6 rounded" style={{ backgroundColor: theme.colors.bgBase }} />
                 <div
                   className="h-6 w-6 rounded"
                   style={{ backgroundColor: theme.colors.bgSurface }}
@@ -200,7 +193,9 @@ export function AppearanceTab() {
 
       {/* Terminal font settings */}
       <div className="border-t border-[var(--theme-border)] pt-6">
-        <h3 className="mb-1 text-sm font-semibold text-[var(--theme-text-primary)]">Terminal Font</h3>
+        <h3 className="mb-1 text-sm font-semibold text-[var(--theme-text-primary)]">
+          Terminal Font
+        </h3>
         <p className="text-xs text-[var(--theme-text-muted)]">
           Customize the terminal font family and size.
         </p>
@@ -214,7 +209,11 @@ export function AppearanceTab() {
           </label>
           <select
             className="rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-3 py-1.5 text-xs text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
-            value={FONT_OPTIONS.find((o) => o.value === terminalFontFamily) ? terminalFontFamily : '__custom__'}
+            value={
+              FONT_OPTIONS.find((o) => o.value === terminalFontFamily)
+                ? terminalFontFamily
+                : '__custom__'
+            }
             onChange={(e) => {
               if (e.target.value === '__custom__') {
                 saveSettings({ terminalFontFamily: '' });
@@ -280,27 +279,39 @@ export function AppearanceTab() {
             onClick={() => saveSettings({ terminalFontThicken: !terminalFontThicken })}
             className={cn(
               'relative h-5 w-9 shrink-0 rounded-full transition-colors',
-              terminalFontThicken ? 'bg-[var(--theme-accent)]' : 'bg-[var(--theme-border)]'
+              terminalFontThicken ? 'bg-[var(--theme-accent)]' : 'bg-[var(--theme-border)]',
             )}
           >
             <span
               className={cn(
                 'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform',
-                terminalFontThicken && 'translate-x-4'
+                terminalFontThicken && 'translate-x-4',
               )}
             />
           </button>
           <div className="flex flex-col">
-            <span className="text-xs font-medium text-[var(--theme-text-secondary)]">Font Thicken</span>
-            <span className="text-[10px] text-[var(--theme-text-muted)]">Make glyphs thicker, similar to Ghostty's font-thicken</span>
+            <span className="text-xs font-medium text-[var(--theme-text-secondary)]">
+              Font Thicken
+            </span>
+            <span className="text-[10px] text-[var(--theme-text-muted)]">
+              Make glyphs thicker, similar to Ghostty's font-thicken
+            </span>
           </div>
         </label>
 
         {/* Reset button */}
-        {(terminalFontFamily !== TERMINAL_FONT_FAMILY || terminalFontSize !== TERMINAL_FONT_SIZE || terminalFontThicken) && (
+        {(terminalFontFamily !== TERMINAL_FONT_FAMILY ||
+          terminalFontSize !== TERMINAL_FONT_SIZE ||
+          terminalFontThicken) && (
           <button
             className="self-start rounded-md bg-[var(--theme-bg-overlay)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-border-input)]"
-            onClick={() => saveSettings({ terminalFontFamily: TERMINAL_FONT_FAMILY, terminalFontSize: TERMINAL_FONT_SIZE, terminalFontThicken: false })}
+            onClick={() =>
+              saveSettings({
+                terminalFontFamily: TERMINAL_FONT_FAMILY,
+                terminalFontSize: TERMINAL_FONT_SIZE,
+                terminalFontThicken: false,
+              })
+            }
           >
             Reset to Defaults
           </button>

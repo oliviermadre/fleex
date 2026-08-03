@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+
 import type { TicketDeliverable, TicketWsMessage } from '@fleex/shared';
+
+import { tint, tintText } from '../lib/tints';
 import * as api from '../services/api';
 import { appWs } from '../services/websocket';
 import { useDeliverableTypesStore } from '../stores/deliverableTypesStore';
 import { useUnreadStore } from '../stores/unreadStore';
+
 import { MobileDeliverableReader } from './MobileDeliverableReader';
-import { tint, tintText } from '../lib/tints';
 
 /** Deliverables tab: list, read, create and delete — desktop-parity writes. */
 export function MobileDeliverables({ ticketId }: { ticketId: string }) {
@@ -20,7 +23,10 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
   const loadTypes = useDeliverableTypesStore((s) => s.load);
 
   useEffect(() => {
-    api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
+    api
+      .fetchTicketDeliverables(ticketId)
+      .then(setDeliverables)
+      .catch(() => {});
     loadSeenDeliverables(ticketId).catch(() => {});
     loadTypes();
   }, [ticketId, loadSeenDeliverables, loadTypes]);
@@ -48,7 +54,10 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
   }, [ticketId]);
 
   const sorted = useMemo(
-    () => [...deliverables].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    () =>
+      [...deliverables].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      ),
     [deliverables],
   );
 
@@ -90,7 +99,9 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
                     onClick={() => setOpenDeliverable(d)}
                     className="flex min-w-0 flex-1 items-center gap-2.5 p-3 text-left"
                   >
-                    {!seen && <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--theme-accent)]" />}
+                    {!seen && (
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--theme-accent)]" />
+                    )}
                     <span className="shrink-0 text-base">📄</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-[var(--theme-text-primary)]">
@@ -103,9 +114,7 @@ export function MobileDeliverables({ ticketId }: { ticketId: string }) {
                     </span>
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        d.status === 'final'
-                          ? tint('green')
-                          : tint('yellow')
+                        d.status === 'final' ? tint('green') : tint('yellow')
                       }`}
                     >
                       {d.status}
@@ -172,7 +181,7 @@ function CreateDeliverableSheet({
   onClose: () => void;
   onCreated: (d: TicketDeliverable) => void;
 }) {
-  const defaultType = types.includes('report') ? 'report' : types[0] ?? 'report';
+  const defaultType = types.includes('report') ? 'report' : (types[0] ?? 'report');
   const [title, setTitle] = useState('');
   const [type, setType] = useState(defaultType);
   const [status, setStatus] = useState<'draft' | 'final'>('final');
@@ -222,7 +231,9 @@ function CreateDeliverableSheet({
             className="min-w-0 flex-1 appearance-none rounded-lg bg-[var(--theme-bg-secondary)] px-3 py-2.5 text-sm text-[var(--theme-text-primary)]"
           >
             {types.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
           </select>
           <div className="flex shrink-0 overflow-hidden rounded-lg border border-[var(--theme-border)]">
@@ -249,7 +260,10 @@ function CreateDeliverableSheet({
           className="mb-3 w-full resize-y rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-sm leading-snug text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
         />
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm text-[var(--theme-text-muted)]">
+          <button
+            onClick={onClose}
+            className="rounded-lg px-4 py-2.5 text-sm text-[var(--theme-text-muted)]"
+          >
             Annuler
           </button>
           <button

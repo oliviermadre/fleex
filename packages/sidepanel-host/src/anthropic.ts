@@ -3,8 +3,10 @@
  * a streaming Claude completion and a CLI executor.
  */
 import Anthropic from '@anthropic-ai/sdk';
+
 import { execFleex, type ExecOptions } from '@fleex/mcp';
 import { inferModelCapabilities } from '@fleex/shared';
+
 import type { ExecFn, LlmComplete } from './assistant.ts';
 
 export const DEFAULT_MODEL = 'claude-opus-5';
@@ -19,7 +21,11 @@ export function createClient(apiKey?: string): Anthropic {
  * models reject `thinking` with a 400. Text deltas are forwarded to `onText` as
  * they arrive; the final content + stop reason are returned for the tool loop.
  */
-export function createLlm(client: Anthropic, model: string = DEFAULT_MODEL, maxTokens = 8192): LlmComplete {
+export function createLlm(
+  client: Anthropic,
+  model: string = DEFAULT_MODEL,
+  maxTokens = 8192,
+): LlmComplete {
   const supportsThinking = inferModelCapabilities(model).supportsEffort;
   return async (params, onText) => {
     const stream = client.messages.stream({
@@ -46,7 +52,9 @@ export function createExec(execOpts: ExecOptions = {}): ExecFn {
       ? res.data !== undefined
         ? JSON.stringify(res.data)
         : res.stdout.trim() || 'OK'
-      : res.stdout.trim() || res.stderr.trim() || `fleex exited with code ${res.exitCode}`;
+      : res.timedOut
+        ? `fleex ${res.argv.join(' ')} timed out after ${res.timeoutMs} ms`
+        : res.stdout.trim() || res.stderr.trim() || `fleex exited with code ${res.exitCode}`;
     return { ok: res.ok, text };
   };
 }

@@ -1,4 +1,5 @@
 import type { ModelFamily, ModelOption } from '@fleex/shared';
+
 import { useModels } from '../../hooks/useModels';
 import { cn } from '../../lib/cn';
 import { tint } from '../../lib/tints';
@@ -59,10 +60,7 @@ export function ModelBadge({ modelId, size = 'compact', className }: ModelBadgeP
   // initial /api/models fetch).
   const isOutdated = !isLoading && knownIds.size > 0 && !knownIds.has(modelId);
 
-  const sizeClasses =
-    size === 'compact'
-      ? 'px-1.5 py-0.5 text-[9px]'
-      : 'px-1.5 py-0.5 text-[10px]';
+  const sizeClasses = size === 'compact' ? 'px-1.5 py-0.5 text-[9px]' : 'px-1.5 py-0.5 text-[10px]';
 
   return (
     <span
@@ -72,11 +70,7 @@ export function ModelBadge({ modelId, size = 'compact', className }: ModelBadgeP
         FAMILY_STYLES[family],
         className,
       )}
-      title={
-        isOutdated
-          ? `${modelId} — not in the current Anthropic model list`
-          : modelId
-      }
+      title={isOutdated ? `${modelId} — not in the current Anthropic model list` : modelId}
     >
       {isOutdated && <span aria-label="outdated model">⚠️</span>}
       {shortId(modelId)}

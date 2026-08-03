@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { useSessionStore } from '../stores/sessionStore';
+
 import { usePullRequestStore } from '../stores/pullRequestStore';
+import { useSessionStore } from '../stores/sessionStore';
 
 const POLL_INTERVAL_MS = 120_000; // 2 minutes — matches server cache TTL to avoid redundant API calls
 
@@ -14,7 +15,8 @@ export function usePullRequestPolling() {
     function fetchAll() {
       const seen = new Set<string>();
       for (const group of sessionGroupsRef.current) {
-        if (!group.repositoryOrg || !group.repositoryName || group.repositoryOrg.startsWith('_')) continue;
+        if (!group.repositoryOrg || !group.repositoryName || group.repositoryOrg.startsWith('_'))
+          continue;
         const key = `${group.repositoryOrg}/${group.repositoryName}`;
         if (seen.has(key)) continue;
         seen.add(key);

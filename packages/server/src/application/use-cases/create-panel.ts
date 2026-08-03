@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
+
 import type { ExecutionMode, PanelMember } from '@fleex/shared';
+
 import { PanelEntity } from '../../domain/entities/panel.entity.js';
 import { PanelNameConflictError, AgentPersonaNotFoundError } from '../../domain/errors.js';
+
+import type { LoggerPort } from '../ports/logger.port.js';
 import type { PanelStorePort } from '../ports/panel-store.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
 
 export class CreatePanelUseCase {
   constructor(

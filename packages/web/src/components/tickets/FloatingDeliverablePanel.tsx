@@ -1,13 +1,16 @@
 import { memo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+
 import type { TicketDeliverable } from '@fleex/shared';
 import { stripHtmlCodeFence } from '@fleex/shared';
-import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
-import { DeliverableTypePicker } from './DeliverableTypePicker';
+
 import { useFloatingResize, clampPosition } from '../../hooks/useFloatingResize';
 import { TITLE_BAR_HEIGHT, PILL_BORDER_RADIUS } from '../../lib/constants';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useUIStore } from '../../stores/uiStore';
+import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
+
+import { DeliverableTypePicker } from './DeliverableTypePicker';
 
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 250;
@@ -63,30 +66,33 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
 
   // Drag handlers
-  const handleTitleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    dragRef.current = {
-      dragging: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      startPosX: effectivePos.x,
-      startPosY: effectivePos.y,
-    };
-    const handleMove = (me: MouseEvent) => {
-      if (!dragRef.current.dragging) return;
-      const rawX = dragRef.current.startPosX + (me.clientX - dragRef.current.startX);
-      const rawY = dragRef.current.startPosY + (me.clientY - dragRef.current.startY);
-      setPosition(clampPosition(rawX, rawY, size.width, size.height));
-    };
-    const handleUp = () => {
-      dragRef.current.dragging = false;
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-  }, [effectivePos, size, setPosition]);
+  const handleTitleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      dragRef.current = {
+        dragging: true,
+        startX: e.clientX,
+        startY: e.clientY,
+        startPosX: effectivePos.x,
+        startPosY: effectivePos.y,
+      };
+      const handleMove = (me: MouseEvent) => {
+        if (!dragRef.current.dragging) return;
+        const rawX = dragRef.current.startPosX + (me.clientX - dragRef.current.startX);
+        const rawY = dragRef.current.startPosY + (me.clientY - dragRef.current.startY);
+        setPosition(clampPosition(rawX, rawY, size.width, size.height));
+      };
+      const handleUp = () => {
+        dragRef.current.dragging = false;
+        window.removeEventListener('mousemove', handleMove);
+        window.removeEventListener('mouseup', handleUp);
+      };
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('mouseup', handleUp);
+    },
+    [effectivePos, size, setPosition],
+  );
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex, pointerEvents: 'none' }}>
@@ -189,7 +195,10 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
           <div style={{ flex: 1 }} />
 
           <button
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             style={{
               width: 20,
               height: 20,
@@ -222,7 +231,10 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
         {/* Content */}
         {isHtml ? (
           <iframe
-            srcDoc={stripHtmlCodeFence(deliverable.content).replace(/<\\\/script\s*>/gi, '</script>')}
+            srcDoc={stripHtmlCodeFence(deliverable.content).replace(
+              /<\\\/script\s*>/gi,
+              '</script>',
+            )}
             style={{
               flex: 1,
               minHeight: 0,
@@ -261,14 +273,57 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
           <span>&middot;</span>
           <span>{relativeTime(deliverable.createdAt)}</span>
         </div>
-
       </div>
 
       {/* Edge resize handles */}
-      <div style={{ position: 'absolute', top: effectivePos.y - 3, left: effectivePos.x + 8, width: size.width - 16, height: 6, cursor: 'n-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('n')} />
-      <div style={{ position: 'absolute', top: effectivePos.y + size.height - 3, left: effectivePos.x + 8, width: size.width - 16, height: 6, cursor: 's-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('s')} />
-      <div style={{ position: 'absolute', top: effectivePos.y + 8, left: effectivePos.x - 3, width: 6, height: size.height - 16, cursor: 'w-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('w')} />
-      <div style={{ position: 'absolute', top: effectivePos.y + 8, left: effectivePos.x + size.width - 3, width: 6, height: size.height - 16, cursor: 'e-resize', pointerEvents: 'auto' }} onMouseDown={handleResizeMouseDown('e')} />
+      <div
+        style={{
+          position: 'absolute',
+          top: effectivePos.y - 3,
+          left: effectivePos.x + 8,
+          width: size.width - 16,
+          height: 6,
+          cursor: 'n-resize',
+          pointerEvents: 'auto',
+        }}
+        onMouseDown={handleResizeMouseDown('n')}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: effectivePos.y + size.height - 3,
+          left: effectivePos.x + 8,
+          width: size.width - 16,
+          height: 6,
+          cursor: 's-resize',
+          pointerEvents: 'auto',
+        }}
+        onMouseDown={handleResizeMouseDown('s')}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: effectivePos.y + 8,
+          left: effectivePos.x - 3,
+          width: 6,
+          height: size.height - 16,
+          cursor: 'w-resize',
+          pointerEvents: 'auto',
+        }}
+        onMouseDown={handleResizeMouseDown('w')}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: effectivePos.y + 8,
+          left: effectivePos.x + size.width - 3,
+          width: 6,
+          height: size.height - 16,
+          cursor: 'e-resize',
+          pointerEvents: 'auto',
+        }}
+        onMouseDown={handleResizeMouseDown('e')}
+      />
 
       {/* Corner resize handles */}
       {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
@@ -293,7 +348,12 @@ export const FloatingDeliverablePanel = memo(function FloatingDeliverablePanel({
               fill="none"
               style={{ position: 'absolute', bottom: 1, right: 1 }}
             >
-              <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="var(--theme-border)" strokeWidth="1.5" strokeLinecap="round" />
+              <path
+                d="M9 1L1 9M9 5L5 9M9 9L9 9"
+                stroke="var(--theme-border)"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
             </svg>
           )}
         </div>

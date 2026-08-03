@@ -1,6 +1,7 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+
 import type { CommandDef } from '../../../core/types.ts';
+import type { Command } from 'commander';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;

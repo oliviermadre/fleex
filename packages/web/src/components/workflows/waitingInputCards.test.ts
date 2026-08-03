@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import type {
   WorkflowRun,
   StepRun,
@@ -7,6 +8,7 @@ import type {
   StepRunStatus,
   WorkflowExecutorType,
 } from '@fleex/shared';
+
 import { selectWaitingInputCards } from './waitingInputCards';
 
 function step(id: string, executorType: WorkflowExecutorType): WorkflowStep {
@@ -18,7 +20,13 @@ function run(id: string, status: WorkflowRunStatus, steps: WorkflowStep[]): Work
     id,
     ticketId: 't1',
     templateId: 'tpl1',
-    templateSnapshot: { name: 'WF', emoji: '🚦', steps, edges: [], entryStepId: steps[0]?.id ?? '' },
+    templateSnapshot: {
+      name: 'WF',
+      emoji: '🚦',
+      steps,
+      edges: [],
+      entryStepId: steps[0]?.id ?? '',
+    },
     status,
     currentStepId: null,
     triggeredBy: 'api',
@@ -59,8 +67,12 @@ describe('selectWaitingInputCards', () => {
   it('surfaces a card for a non-gate step in needs_review', () => {
     const spec = step('spec', 'agent');
     const r = run('r1', 'needs_review', [spec]);
-    const cards = selectWaitingInputCards([r], { r1: { stepRuns: [stepRun('r1', 'spec', 1, 'needs_review')] } });
-    expect(cards.map((c) => [c.run.id, c.step.id, c.stepRun.id])).toEqual([['r1', 'spec', 'r1-spec-1']]);
+    const cards = selectWaitingInputCards([r], {
+      r1: { stepRuns: [stepRun('r1', 'spec', 1, 'needs_review')] },
+    });
+    expect(cards.map((c) => [c.run.id, c.step.id, c.stepRun.id])).toEqual([
+      ['r1', 'spec', 'r1-spec-1'],
+    ]);
   });
 
   // WHY: parity boundary. Human Gate steps in needs_review already have their own
@@ -68,7 +80,9 @@ describe('selectWaitingInputCards', () => {
   it('never surfaces a card for a human_gate step (owned by the gate card)', () => {
     const gate = step('check', 'human_gate');
     const r = run('r1', 'needs_review', [gate]);
-    const cards = selectWaitingInputCards([r], { r1: { stepRuns: [stepRun('r1', 'check', 1, 'needs_review')] } });
+    const cards = selectWaitingInputCards([r], {
+      r1: { stepRuns: [stepRun('r1', 'check', 1, 'needs_review')] },
+    });
     expect(cards).toEqual([]);
   });
 
@@ -79,7 +93,12 @@ describe('selectWaitingInputCards', () => {
     const gate = step('check', 'human_gate');
     const r = run('r1', 'needs_review', [spec, gate]);
     const cards = selectWaitingInputCards([r], {
-      r1: { stepRuns: [stepRun('r1', 'spec', 1, 'needs_review'), stepRun('r1', 'check', 1, 'needs_review')] },
+      r1: {
+        stepRuns: [
+          stepRun('r1', 'spec', 1, 'needs_review'),
+          stepRun('r1', 'check', 1, 'needs_review'),
+        ],
+      },
     });
     expect(cards.map((c) => c.step.id)).toEqual(['spec']);
   });
@@ -91,7 +110,9 @@ describe('selectWaitingInputCards', () => {
     const spec = step('spec', 'agent');
     const r = run('r1', 'needs_review', [spec]);
     const cards = selectWaitingInputCards([r], {
-      r1: { stepRuns: [stepRun('r1', 'spec', 1, 'needs_review'), stepRun('r1', 'spec', 2, 'running')] },
+      r1: {
+        stepRuns: [stepRun('r1', 'spec', 1, 'needs_review'), stepRun('r1', 'spec', 2, 'running')],
+      },
     });
     expect(cards).toEqual([]);
   });
@@ -102,7 +123,9 @@ describe('selectWaitingInputCards', () => {
     const spec = step('spec', 'agent');
     for (const status of ['completed', 'failed', 'cancelled'] as const) {
       const r = run('r1', status, [spec]);
-      const cards = selectWaitingInputCards([r], { r1: { stepRuns: [stepRun('r1', 'spec', 1, 'needs_review')] } });
+      const cards = selectWaitingInputCards([r], {
+        r1: { stepRuns: [stepRun('r1', 'spec', 1, 'needs_review')] },
+      });
       expect(cards, status).toEqual([]);
     }
   });
@@ -130,7 +153,9 @@ describe('selectWaitingInputCards', () => {
   // WHY: a step that is merely running (not paused) is not awaiting input.
   it('ignores non-gate steps that are not in needs_review', () => {
     const r = run('r1', 'running', [step('spec', 'agent')]);
-    const cards = selectWaitingInputCards([r], { r1: { stepRuns: [stepRun('r1', 'spec', 1, 'running')] } });
+    const cards = selectWaitingInputCards([r], {
+      r1: { stepRuns: [stepRun('r1', 'spec', 1, 'running')] },
+    });
     expect(cards).toEqual([]);
   });
 });

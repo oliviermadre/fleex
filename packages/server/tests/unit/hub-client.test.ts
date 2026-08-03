@@ -1,13 +1,16 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-import net from 'node:net';
 import { createHash, randomBytes } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { HubClient } from '../../src/infrastructure/hub/hub-client.js';
-import type { AnyDomainEvent } from '../../src/domain/events.js';
+
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
+import type { AnyDomainEvent } from '../../src/domain/events.js';
 
 const HUB_ENTRY = path.resolve(__dirname, '../../../event-hub/src/main.ts');
 
@@ -41,7 +44,9 @@ async function waitForHealth(port: number, timeoutMs = 3000): Promise<void> {
         signal: AbortSignal.timeout(500),
       });
       if (res.ok) return;
-    } catch { /* keep polling */ }
+    } catch {
+      /* keep polling */
+    }
     await new Promise((r) => setTimeout(r, 50));
   }
   throw new Error(`hub not healthy on port ${port}`);
@@ -51,17 +56,27 @@ function hashToken(token: string): string {
   return 'sha256:' + createHash('sha256').update(token).digest('hex');
 }
 
-interface ProvisionedClient { name: string; token: string }
+interface ProvisionedClient {
+  name: string;
+  token: string;
+}
 
 function writeClientsFile(file: string, clients: ProvisionedClient[]): void {
-  writeFileSync(file, JSON.stringify({
-    version: 1,
-    clients: clients.map((c) => ({
-      name: c.name,
-      tokenHash: hashToken(c.token),
-      createdAt: new Date().toISOString(),
-    })),
-  }, null, 2));
+  writeFileSync(
+    file,
+    JSON.stringify(
+      {
+        version: 1,
+        clients: clients.map((c) => ({
+          name: c.name,
+          tokenHash: hashToken(c.token),
+          createdAt: new Date().toISOString(),
+        })),
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 describe('HubClient ↔ event-hub fan-out', () => {
@@ -100,7 +115,11 @@ describe('HubClient ↔ event-hub fan-out', () => {
       await new Promise((r) => setTimeout(r, 100));
     }
     hub = null;
-    try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   });
 
   it('forwards events to other servers but not to the originator', async () => {
@@ -109,12 +128,16 @@ describe('HubClient ↔ event-hub fan-out', () => {
     const receivedByB: AnyDomainEvent[] = [];
 
     const clientA = new HubClient({
-      url, token: tokenA, serverId: 'sid-a',
+      url,
+      token: tokenA,
+      serverId: 'sid-a',
       logger: silentLogger(),
       onRemoteEvent: (e) => receivedByA.push(e),
     });
     const clientB = new HubClient({
-      url, token: tokenB, serverId: 'sid-b',
+      url,
+      token: tokenB,
+      serverId: 'sid-b',
       logger: silentLogger(),
       onRemoteEvent: (e) => receivedByB.push(e),
     });
@@ -149,12 +172,18 @@ describe('HubClient ↔ event-hub fan-out', () => {
     const receivedByB: AnyDomainEvent[] = [];
 
     const clientA = new HubClient({
-      url, token: tokenA, serverId: 'sid-a',
-      logger: silentLogger(), onRemoteEvent: () => {},
+      url,
+      token: tokenA,
+      serverId: 'sid-a',
+      logger: silentLogger(),
+      onRemoteEvent: () => {},
     });
     const clientB = new HubClient({
-      url, token: tokenB, serverId: 'sid-b',
-      logger: silentLogger(), onRemoteEvent: (e) => receivedByB.push(e),
+      url,
+      token: tokenB,
+      serverId: 'sid-b',
+      logger: silentLogger(),
+      onRemoteEvent: (e) => receivedByB.push(e),
     });
 
     clientA.start();
@@ -164,12 +193,18 @@ describe('HubClient ↔ event-hub fan-out', () => {
     clientA.publish({
       type: 'session.hookStatusChanged',
       occurredAt: new Date(),
-      sessionId: 's1', previousStatus: 'idle', nextStatus: 'busy', waitingReason: null,
+      sessionId: 's1',
+      previousStatus: 'idle',
+      nextStatus: 'busy',
+      waitingReason: null,
     });
     clientA.publish({
       type: 'worktree.created',
       occurredAt: new Date(),
-      repoPath: '/r', worktreePath: '/w', branch: 'main', isNewBranch: false,
+      repoPath: '/r',
+      worktreePath: '/w',
+      branch: 'main',
+      isNewBranch: false,
     });
 
     await new Promise((r) => setTimeout(r, 200));
@@ -194,8 +229,11 @@ describe('HubClient ↔ event-hub fan-out', () => {
   it('hot-disconnects a client when its entry is revoked', async () => {
     const url = `ws://127.0.0.1:${port}/events`;
     const clientA = new HubClient({
-      url, token: tokenA, serverId: 'sid-a',
-      logger: silentLogger(), onRemoteEvent: () => {},
+      url,
+      token: tokenA,
+      serverId: 'sid-a',
+      logger: silentLogger(),
+      onRemoteEvent: () => {},
     });
     clientA.start();
     await new Promise((r) => setTimeout(r, 400));
@@ -227,7 +265,8 @@ describe('HubClient ↔ event-hub fan-out', () => {
     deadClient.publish({
       type: 'ticket.created',
       occurredAt: new Date(),
-      ticketId: 't-queued', boardId: 'b-1',
+      ticketId: 't-queued',
+      boardId: 'b-1',
     });
     expect(deadClient.stats().queueLength).toBeGreaterThanOrEqual(1);
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { preprocessMentions, preprocessTicketMentions } from './mentions';
 
 const UUID = '05d50f27-b12e-4338-8c36-e840fd288222';

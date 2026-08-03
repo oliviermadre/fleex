@@ -1,6 +1,8 @@
 import type { Ticket } from '@fleex/shared';
-import { useTicketStore } from '../../stores/ticketStore';
+
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
+import { useTicketStore } from '../../stores/ticketStore';
+
 import { DueDateBadge } from './DueDateBadge';
 
 function formatDateInputValue(isoString: string | null): string {
@@ -59,7 +61,17 @@ export function DueDatePickerPopover({ ticket }: { ticket: Ticket }) {
         title={ticket.dueDate ? 'Changer la due date' : 'Définir une due date'}
       >
         {/* Calendar icon */}
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-[var(--theme-text-faint)]">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="flex-shrink-0 text-[var(--theme-text-faint)]"
+        >
           <rect x="1.5" y="2.5" width="13" height="12" rx="1.5" />
           <line x1="1.5" y1="6.5" x2="14.5" y2="6.5" />
           <line x1="5" y1="1" x2="5" y2="4" />

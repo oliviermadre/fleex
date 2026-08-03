@@ -1,8 +1,29 @@
 import { create } from 'zustand';
+
 import type { TicketDeliverable } from '@fleex/shared';
 
-type ActivePanel = 'dashboard' | 'sessions' | 'repositories' | 'tickets' | 'list-focus' | 'claude-config' | 'agents' | 'cluster' | 'settings' | 'scratchpads' | 'analytics' | 'execution-log' | 'documents' | 'assistant';
-export type SettingsTab = 'general' | 'appearance' | 'pinned-icons' | 'workspace-actions' | 'agent-tokens' | 'deliverable-types';
+type ActivePanel =
+  | 'dashboard'
+  | 'sessions'
+  | 'repositories'
+  | 'tickets'
+  | 'list-focus'
+  | 'claude-config'
+  | 'agents'
+  | 'cluster'
+  | 'settings'
+  | 'scratchpads'
+  | 'analytics'
+  | 'execution-log'
+  | 'documents'
+  | 'assistant';
+export type SettingsTab =
+  | 'general'
+  | 'appearance'
+  | 'pinned-icons'
+  | 'workspace-actions'
+  | 'agent-tokens'
+  | 'deliverable-types';
 export type AnalyticsTab = 'audit-trail' | 'statistics';
 
 interface UIState {
@@ -72,7 +93,7 @@ interface UIState {
   setLastActiveSession: (id: string) => void;
 
   // Unified floating panel z-order (sessions + deliverables share one stack)
-  floatingPanelOrder: string[];  // ordered IDs — last = top z-index
+  floatingPanelOrder: string[]; // ordered IDs — last = top z-index
   focusedFloatingPanelId: string | null;
   bringFloatingPanelToFront: (id: string) => void;
   clearFloatingPanelFocus: () => void;
@@ -192,8 +213,14 @@ export const useUIStore = create<UIState>((set) => ({
   manualFlowCollapsed: false,
   agenticFlowCollapsed: true,
   doneFlowCollapsed: true,
-  rightSidebarWidth: typeof rightSidebarInitial.width === 'number' ? rightSidebarInitial.width : RIGHT_SIDEBAR_DEFAULT_WIDTH,
-  rightSidebarSplitRatio: typeof rightSidebarInitial.splitRatio === 'number' ? rightSidebarInitial.splitRatio : RIGHT_SIDEBAR_DEFAULT_RATIO,
+  rightSidebarWidth:
+    typeof rightSidebarInitial.width === 'number'
+      ? rightSidebarInitial.width
+      : RIGHT_SIDEBAR_DEFAULT_WIDTH,
+  rightSidebarSplitRatio:
+    typeof rightSidebarInitial.splitRatio === 'number'
+      ? rightSidebarInitial.splitRatio
+      : RIGHT_SIDEBAR_DEFAULT_RATIO,
   rightSidebarCollapsed: rightSidebarInitial.collapsed === true,
 
   setRightSidebarWidth: (width) => {
@@ -247,13 +274,11 @@ export const useUIStore = create<UIState>((set) => ({
 
   setScratchpadOpen: (open) => set({ scratchpadOpen: open }),
 
-  openScratchpadForRepo: (repoKey) =>
-    set({ scratchpadRepoKey: repoKey, scratchpadOpen: true }),
+  openScratchpadForRepo: (repoKey) => set({ scratchpadRepoKey: repoKey, scratchpadOpen: true }),
 
   selectedRepoKey: null,
 
-  toggleNav: () =>
-    set((state) => ({ navCollapsed: !state.navCollapsed })),
+  toggleNav: () => set((state) => ({ navCollapsed: !state.navCollapsed })),
 
   setActivePanel: (panel) => set({ activePanel: panel }),
 
@@ -293,17 +318,16 @@ export const useUIStore = create<UIState>((set) => ({
     set((state) => ({ ticketMetaSidebarCollapsed: !state.ticketMetaSidebarCollapsed })),
 
   setLastActiveTab: (worktreeKey, sessionId) =>
-    set((state) => ({ lastActiveTabByWorktree: { ...state.lastActiveTabByWorktree, [worktreeKey]: sessionId } })),
+    set((state) => ({
+      lastActiveTabByWorktree: { ...state.lastActiveTabByWorktree, [worktreeKey]: sessionId },
+    })),
 
   setLastActiveSession: (id) => set({ lastActiveSessionId: id }),
 
   // Unified z-order actions
   bringFloatingPanelToFront: (id) =>
     set((state) => ({
-      floatingPanelOrder: [
-        ...state.floatingPanelOrder.filter((pid) => pid !== id),
-        id,
-      ],
+      floatingPanelOrder: [...state.floatingPanelOrder.filter((pid) => pid !== id), id],
       focusedFloatingPanelId: id,
     })),
 
@@ -312,14 +336,8 @@ export const useUIStore = create<UIState>((set) => ({
   // Session floating actions (also maintain unified order)
   addFloatingSession: (id) =>
     set((state) => ({
-      floatingSessionIds: [
-        ...state.floatingSessionIds.filter((sid) => sid !== id),
-        id,
-      ],
-      floatingPanelOrder: [
-        ...state.floatingPanelOrder.filter((pid) => pid !== id),
-        id,
-      ],
+      floatingSessionIds: [...state.floatingSessionIds.filter((sid) => sid !== id), id],
+      floatingPanelOrder: [...state.floatingPanelOrder.filter((pid) => pid !== id), id],
       focusedFloatingPanelId: id,
     })),
 
@@ -332,21 +350,17 @@ export const useUIStore = create<UIState>((set) => ({
         floatingPanelOrder: newOrder,
         focusedFloatingPanelId:
           state.focusedFloatingPanelId === id
-            ? (newOrder.length > 0 ? newOrder[newOrder.length - 1] : null)
+            ? newOrder.length > 0
+              ? newOrder[newOrder.length - 1]
+              : null
             : state.focusedFloatingPanelId,
       };
     }),
 
   bringToFront: (id) =>
     set((state) => ({
-      floatingSessionIds: [
-        ...state.floatingSessionIds.filter((sid) => sid !== id),
-        id,
-      ],
-      floatingPanelOrder: [
-        ...state.floatingPanelOrder.filter((pid) => pid !== id),
-        id,
-      ],
+      floatingSessionIds: [...state.floatingSessionIds.filter((sid) => sid !== id), id],
+      floatingPanelOrder: [...state.floatingPanelOrder.filter((pid) => pid !== id), id],
       focusedFloatingPanelId: id,
     })),
 
@@ -358,15 +372,9 @@ export const useUIStore = create<UIState>((set) => ({
   // Deliverable floating actions (also maintain unified order)
   addFloatingDeliverable: (d) =>
     set((state) => ({
-      floatingDeliverableIds: [
-        ...state.floatingDeliverableIds.filter((id) => id !== d.id),
-        d.id,
-      ],
+      floatingDeliverableIds: [...state.floatingDeliverableIds.filter((id) => id !== d.id), d.id],
       floatingDeliverables: { ...state.floatingDeliverables, [d.id]: d },
-      floatingPanelOrder: [
-        ...state.floatingPanelOrder.filter((pid) => pid !== d.id),
-        d.id,
-      ],
+      floatingPanelOrder: [...state.floatingPanelOrder.filter((pid) => pid !== d.id), d.id],
       focusedFloatingPanelId: d.id,
     })),
 
@@ -381,7 +389,9 @@ export const useUIStore = create<UIState>((set) => ({
         floatingPanelOrder: newOrder,
         focusedFloatingPanelId:
           state.focusedFloatingPanelId === id
-            ? (newOrder.length > 0 ? newOrder[newOrder.length - 1] : null)
+            ? newOrder.length > 0
+              ? newOrder[newOrder.length - 1]
+              : null
             : state.focusedFloatingPanelId,
       };
     }),
@@ -394,14 +404,8 @@ export const useUIStore = create<UIState>((set) => ({
 
   bringDeliverableToFront: (id) =>
     set((state) => ({
-      floatingDeliverableIds: [
-        ...state.floatingDeliverableIds.filter((sid) => sid !== id),
-        id,
-      ],
-      floatingPanelOrder: [
-        ...state.floatingPanelOrder.filter((pid) => pid !== id),
-        id,
-      ],
+      floatingDeliverableIds: [...state.floatingDeliverableIds.filter((sid) => sid !== id), id],
+      floatingPanelOrder: [...state.floatingPanelOrder.filter((pid) => pid !== id), id],
       focusedFloatingPanelId: id,
     })),
 
@@ -409,12 +413,9 @@ export const useUIStore = create<UIState>((set) => ({
 
   setSelectedAgentWorktreeTicketId: (id) => set({ selectedAgentWorktreeTicketId: id }),
 
-  toggleManualFlow: () =>
-    set((state) => ({ manualFlowCollapsed: !state.manualFlowCollapsed })),
+  toggleManualFlow: () => set((state) => ({ manualFlowCollapsed: !state.manualFlowCollapsed })),
 
-  toggleAgenticFlow: () =>
-    set((state) => ({ agenticFlowCollapsed: !state.agenticFlowCollapsed })),
+  toggleAgenticFlow: () => set((state) => ({ agenticFlowCollapsed: !state.agenticFlowCollapsed })),
 
-  toggleDoneFlow: () =>
-    set((state) => ({ doneFlowCollapsed: !state.doneFlowCollapsed })),
+  toggleDoneFlow: () => set((state) => ({ doneFlowCollapsed: !state.doneFlowCollapsed })),
 }));

@@ -1,8 +1,11 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+
+import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
-import { useSessionStore } from '../../../stores/sessionStore';
+
 import { getTabKind } from './registry';
+
 import type { TabDescriptor } from './types';
 
 // ——— Drag state exposed to TabBar ———
@@ -73,7 +76,9 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
 
   // Auto-restore or auto-select when tabs change
   const urlTabKey = useSessionStore((s) => s.selectedTabKey);
-  const savedActiveKey = useUIStore((s) => groupId ? s.lastActiveTabByWorktree[groupId] : undefined);
+  const savedActiveKey = useUIStore((s) =>
+    groupId ? s.lastActiveTabByWorktree[groupId] : undefined,
+  );
   useEffect(() => {
     // If active tab was removed, reset
     if (activeTab && orderedTabs.length > 0 && !orderedTabs.some((t) => t.key === activeTab.key)) {
@@ -129,9 +134,10 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
       e.preventDefault();
       const idx = orderedTabs.findIndex((t) => t.key === activeTab.key);
       if (idx === -1) return;
-      const next = e.key === 'ArrowLeft'
-        ? (idx - 1 + orderedTabs.length) % orderedTabs.length
-        : (idx + 1) % orderedTabs.length;
+      const next =
+        e.key === 'ArrowLeft'
+          ? (idx - 1 + orderedTabs.length) % orderedTabs.length
+          : (idx + 1) % orderedTabs.length;
       setActiveTabRaw(orderedTabs[next]!);
     };
     window.addEventListener('keydown', handler);
@@ -143,12 +149,15 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
   const [dropEdge, setDropEdge] = useState<'left' | 'right'>('right');
   const draggedKeyRef = useRef<string | null>(null);
 
-  const handleDragStart = useCallback((key: string) => (e: React.DragEvent) => {
-    draggedKeyRef.current = key;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData(DND_MIME, key);
-    (e.currentTarget as HTMLElement).style.opacity = '0.4';
-  }, []);
+  const handleDragStart = useCallback(
+    (key: string) => (e: React.DragEvent) => {
+      draggedKeyRef.current = key;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData(DND_MIME, key);
+      (e.currentTarget as HTMLElement).style.opacity = '0.4';
+    },
+    [],
+  );
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     draggedKeyRef.current = null;
@@ -156,38 +165,47 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
     (e.currentTarget as HTMLElement).style.opacity = '';
   }, []);
 
-  const handleDragOver = useCallback((key: string) => (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(DND_MIME)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midX = rect.left + rect.width / 2;
-    setDropEdge(e.clientX < midX ? 'left' : 'right');
-    setDragOverKey(key);
-  }, []);
+  const handleDragOver = useCallback(
+    (key: string) => (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(DND_MIME)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      setDropEdge(e.clientX < midX ? 'left' : 'right');
+      setDragOverKey(key);
+    },
+    [],
+  );
 
-  const handleDragLeave = useCallback((key: string) => (e: React.DragEvent) => {
-    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-    if (dragOverKey === key) setDragOverKey(null);
-  }, [dragOverKey]);
+  const handleDragLeave = useCallback(
+    (key: string) => (e: React.DragEvent) => {
+      if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+      if (dragOverKey === key) setDragOverKey(null);
+    },
+    [dragOverKey],
+  );
 
-  const handleDrop = useCallback((targetKey: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    const sourceKey = e.dataTransfer.getData(DND_MIME);
-    setDragOverKey(null);
-    if (!sourceKey || sourceKey === targetKey || !groupId) return;
+  const handleDrop = useCallback(
+    (targetKey: string) => (e: React.DragEvent) => {
+      e.preventDefault();
+      const sourceKey = e.dataTransfer.getData(DND_MIME);
+      setDragOverKey(null);
+      if (!sourceKey || sourceKey === targetKey || !groupId) return;
 
-    const keys = orderedTabs.map((t) => t.key);
-    const fromIdx = keys.indexOf(sourceKey);
-    if (fromIdx === -1) return;
-    keys.splice(fromIdx, 1);
-    let toIdx = keys.indexOf(targetKey);
-    if (toIdx === -1) return;
-    if (dropEdge === 'right') toIdx += 1;
-    keys.splice(toIdx, 0, sourceKey);
+      const keys = orderedTabs.map((t) => t.key);
+      const fromIdx = keys.indexOf(sourceKey);
+      if (fromIdx === -1) return;
+      keys.splice(fromIdx, 1);
+      let toIdx = keys.indexOf(targetKey);
+      if (toIdx === -1) return;
+      if (dropEdge === 'right') toIdx += 1;
+      keys.splice(toIdx, 0, sourceKey);
 
-    setSessionOrder(groupId, keys);
-  }, [orderedTabs, dropEdge, groupId, setSessionOrder]);
+      setSessionOrder(groupId, keys);
+    },
+    [orderedTabs, dropEdge, groupId, setSessionOrder],
+  );
 
   const drag: TabDragState = {
     dragOverKey,
@@ -202,27 +220,30 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
 
   // — Close / Rename (delegates to kind plugin) —
 
-  const closeTab = useCallback(async (tab: TabDescriptor) => {
-    if (!tab.capabilities.closable) return;
-    const kind = getTabKind(tab.kind);
-    if (!kind?.onClose) return;
-    try {
-      await kind.onClose(tab);
-      // After close, if we just closed the active tab, select nearest neighbour
-      if (activeTab?.key === tab.key) {
-        const idx = orderedTabs.findIndex((t) => t.key === tab.key);
-        const remaining = orderedTabs.filter((t) => t.key !== tab.key);
-        if (remaining.length > 0) {
-          const nextIdx = Math.min(idx, remaining.length - 1);
-          setActiveTabRaw(remaining[nextIdx]!);
-        } else {
-          setActiveTabRaw(null);
+  const closeTab = useCallback(
+    async (tab: TabDescriptor) => {
+      if (!tab.capabilities.closable) return;
+      const kind = getTabKind(tab.kind);
+      if (!kind?.onClose) return;
+      try {
+        await kind.onClose(tab);
+        // After close, if we just closed the active tab, select nearest neighbour
+        if (activeTab?.key === tab.key) {
+          const idx = orderedTabs.findIndex((t) => t.key === tab.key);
+          const remaining = orderedTabs.filter((t) => t.key !== tab.key);
+          if (remaining.length > 0) {
+            const nextIdx = Math.min(idx, remaining.length - 1);
+            setActiveTabRaw(remaining[nextIdx]!);
+          } else {
+            setActiveTabRaw(null);
+          }
         }
+      } catch {
+        // silently fail
       }
-    } catch {
-      // silently fail
-    }
-  }, [activeTab, orderedTabs]);
+    },
+    [activeTab, orderedTabs],
+  );
 
   const renameTab = useCallback(async (tab: TabDescriptor, newName: string) => {
     if (!tab.capabilities.renamable) return;
@@ -237,7 +258,7 @@ export function useTabEngine(groupId: string, tabs: TabDescriptor[]): UseTabEngi
 
   // Always resolve activeTab from orderedTabs so meta stays fresh
   const resolvedActiveTab = activeTab
-    ? orderedTabs.find((t) => t.key === activeTab.key) ?? activeTab
+    ? (orderedTabs.find((t) => t.key === activeTab.key) ?? activeTab)
     : null;
 
   return { orderedTabs, activeTab: resolvedActiveTab, setActiveTab, drag, closeTab, renameTab };

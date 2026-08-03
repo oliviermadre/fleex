@@ -1,9 +1,5 @@
 import type { NotificationRendererRegistry } from './registry';
-import type {
-  PulseNotification,
-  RendererContext,
-  WsChannelMessage,
-} from './types';
+import type { PulseNotification, RendererContext, WsChannelMessage } from './types';
 
 /**
  * Translate a raw WS channel message into a `PulseNotification`, or `null` when

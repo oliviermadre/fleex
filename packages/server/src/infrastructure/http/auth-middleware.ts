@@ -1,6 +1,7 @@
-import type { FastifyRequest, FastifyReply } from 'fastify';
-import type { Container } from '../container.js';
 import { ApiTokenEntity } from '../../domain/entities/api-token.entity.js';
+
+import type { Container } from '../container.js';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 
 /**
  * Authentication middleware that supports three modes:
@@ -38,11 +39,7 @@ export function createAuthMiddleware(container: Container) {
   return async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
     // Skip auth for auth routes, health, and internal gateway routes
     const url = request.url;
-    if (
-      url.startsWith('/auth/') ||
-      url.startsWith('/health') ||
-      url.startsWith('/internal/')
-    ) {
+    if (url.startsWith('/auth/') || url.startsWith('/health') || url.startsWith('/internal/')) {
       return;
     }
 

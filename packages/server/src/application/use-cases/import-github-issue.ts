@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
+
 import type { TicketStatus, TicketType } from '@fleex/shared';
-import { TicketEntity } from '../../domain/entities/ticket.entity.js';
+
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
+import { TicketEntity } from '../../domain/entities/ticket.entity.js';
+
 import type { GitHubGraphQLAdapter } from '../../infrastructure/adapters/github-graphql.adapter.js';
+import type { LoggerPort } from '../ports/logger.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 
 export class ImportGitHubIssueUseCase {
   constructor(
@@ -77,22 +80,18 @@ export class ImportGitHubIssueUseCase {
       syncedAt: new Date().toISOString(),
     });
 
-    ticket.addLink(
-      'repository',
-      `${org}/${name}`,
-      `${org}/${name}`,
-      null,
-      randomUUID(),
-    );
+    ticket.addLink('repository', `${org}/${name}`, `${org}/${name}`, null, randomUUID());
 
     await this.ticketStore.createTicket(ticket);
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
-      ticketId,
-      action: 'created',
-      changes: { source: { from: null, to: `github:${org}/${name}#${issueNumber}` } },
-      source: 'web',
-    }));
+    await this.ticketStore.saveActivity(
+      TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId,
+        action: 'created',
+        changes: { source: { from: null, to: `github:${org}/${name}#${issueNumber}` } },
+        source: 'web',
+      }),
+    );
 
     this.logger.info('GitHub issue imported as ticket', { org, name, issueNumber, ticketId });
 

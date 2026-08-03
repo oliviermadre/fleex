@@ -1,9 +1,13 @@
 import readline from 'node:readline/promises';
-import type { CommandDef } from '../../../core/types.ts';
+
 import { c, info, ok, warn } from '../../../core/colors.ts';
 import { getConfig, parseRepo, putConfig } from '../_shared.ts';
 
-interface Options { force?: boolean }
+import type { CommandDef } from '../../../core/types.ts';
+
+interface Options {
+  force?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,

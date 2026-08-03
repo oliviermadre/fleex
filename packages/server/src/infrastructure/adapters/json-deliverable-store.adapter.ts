@@ -1,7 +1,10 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
 import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
+
 import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
+
 import type { DeliverableStorePort } from '../../application/ports/deliverable-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { HostFs } from '../host/types.js';
@@ -60,7 +63,10 @@ export class JsonDeliverableStore implements DeliverableStorePort {
     return Array.from(this.deliverables.values());
   }
 
-  async getByTicketAndType(ticketId: string, type: string): Promise<TicketDeliverableEntity | null> {
+  async getByTicketAndType(
+    ticketId: string,
+    type: string,
+  ): Promise<TicketDeliverableEntity | null> {
     for (const d of this.deliverables.values()) {
       if (d.ticketId === ticketId && d.type === type) return d;
     }
@@ -89,11 +95,22 @@ export class JsonDeliverableStore implements DeliverableStorePort {
       const raw = await this.hostFs.readFile(this.filePath);
       const data = JSON.parse(raw) as SerializedDeliverable[];
       for (const d of data) {
-        this.deliverables.set(d.id, new TicketDeliverableEntity(
-          d.id, d.ticketId, d.agentName, d.type, d.title,
-          d.content, d.version, d.status, d.mentionId,
-          new Date(d.createdAt), new Date(d.updatedAt),
-        ));
+        this.deliverables.set(
+          d.id,
+          new TicketDeliverableEntity(
+            d.id,
+            d.ticketId,
+            d.agentName,
+            d.type,
+            d.title,
+            d.content,
+            d.version,
+            d.status,
+            d.mentionId,
+            new Date(d.createdAt),
+            new Date(d.updatedAt),
+          ),
+        );
       }
       this.logger.info('Deliverable store loaded', { count: this.deliverables.size });
     } catch (err) {
@@ -106,10 +123,17 @@ export class JsonDeliverableStore implements DeliverableStorePort {
   private async syncToDisk(): Promise<void> {
     try {
       const data: SerializedDeliverable[] = Array.from(this.deliverables.values()).map((d) => ({
-        id: d.id, ticketId: d.ticketId, agentName: d.agentName,
-        type: d.type, title: d.title, content: d.content,
-        version: d.version, status: d.status, mentionId: d.mentionId,
-        createdAt: d.createdAt.toISOString(), updatedAt: d.updatedAt.toISOString(),
+        id: d.id,
+        ticketId: d.ticketId,
+        agentName: d.agentName,
+        type: d.type,
+        title: d.title,
+        content: d.content,
+        version: d.version,
+        status: d.status,
+        mentionId: d.mentionId,
+        createdAt: d.createdAt.toISOString(),
+        updatedAt: d.updatedAt.toISOString(),
       }));
       await this.hostFs.writeFile(this.filePath, JSON.stringify(data, null, 2));
     } catch (err) {

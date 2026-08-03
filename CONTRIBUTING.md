@@ -39,6 +39,89 @@ A maintainer will record your signature in the table at the bottom of
 [CLA.md](CLA.md). New pull requests from contributors who have not signed may be
 held until the CLA is accepted.
 
+## Lint & format
+
+```sh
+bun run lint       # format check + palette ratchet + ESLint ratchet + type check
+bun run format     # rewrite everything with Prettier
+```
+
+Formatting is Prettier, and it is not negotiable — `bun run lint` fails on any
+unformatted file. `bun install` points git at `.githooks/`, so a pre-commit hook
+formats and autofixes your staged files for you.
+
+If a file is staged **and** has further unstaged edits, the hook refuses to
+rewrite it (that would quietly drag your unstaged work into the commit) and asks
+you to stage it fully or run `bun run format`. To bypass the hook entirely:
+
+```sh
+FLEEX_SKIP_HOOKS=1 git commit ...   # or: git commit --no-verify
+```
+
+### The ESLint ratchet
+
+The repo predates its linter, so ESLint runs against a committed baseline
+(`scripts/lint-snapshot.json`) rather than demanding a clean slate:
+
+- **more** violations for a given file+rule → the build fails;
+- **fewer** → the snapshot is rewritten and you commit it (CI checks that you did);
+- new files are held to **zero** — an absent entry allows nothing.
+
+Parse errors are never baselined: a file that cannot be parsed is not linted at
+all, and hiding that in the snapshot would leave a permanent blind spot.
+
+After **renaming or moving** a file, or after adding a rule to
+`eslint.config.mjs`, the old snapshot keys no longer match. Rebaseline with:
+
+```sh
+bun run lint:baseline    # then commit scripts/lint-snapshot.json
+```
+
+Rebaselining cannot silence a genuine regression, because CI does not trust the
+snapshot in your branch. A ratchet has two directions, and each gets its own
+CI step:
+
+| Direction               | CI step                        | Reference used         |
+| ----------------------- | ------------------------------ | ---------------------- |
+| the ceiling cannot rise | `Baseline not worse than main` | the snapshot on `main` |
+| a drop must be recorded | `Snapshots up to date`         | your working tree      |
+
+`bun run lint` compares against your local snapshot — the fast, actionable
+signal while you work. CI _additionally_ compares against the snapshot on
+`main`, which your branch cannot rewrite. So running `bun run lint:baseline`
+after introducing a violation still fails CI, naming the file and the rule.
+Renames are handled automatically (the allowance follows the file), so
+rebaselining after a move is safe and expected.
+
+If a violation is deliberate, prefer a narrow, justified suppression:
+
+```ts
+// eslint-disable-next-line <rule> -- <why this is correct here>
+```
+
+If the baseline **legitimately** grows — because you enabled a new rule — a
+maintainer adds the `lint-baseline-reset` label to the PR, which skips the
+check. That is deliberately a manual, visible step rather than a command
+anyone can run.
+
+### Merge conflicts on the snapshot
+
+Every PR that fixes a violation rewrites `scripts/lint-snapshot.json`, so it is
+a conflict hotspot. Never hand-edit it — take either side and regenerate:
+
+```sh
+git checkout --ours scripts/lint-snapshot.json   # either side works
+bun run lint:baseline
+```
+
+### git blame
+
+The first Prettier run touched ~900 files. Skip it in blame output:
+
+```sh
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ## Opening a pull request
 
 - Keep PRs focused and reasonably small.

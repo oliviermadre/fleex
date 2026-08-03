@@ -1,6 +1,7 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { HookEventPayload } from '@fleex/shared';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
 /** Max age of a hook event before it is rejected (anti-replay). */
 const MAX_AGE_MS = 30_000;

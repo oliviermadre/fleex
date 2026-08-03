@@ -1,16 +1,22 @@
-import type { CommandDef } from '../../../core/types.ts';
 import chalk from 'chalk';
-import { die, info } from '../../../core/colors.ts';
-import { apiBase, apiGet } from '../../../core/api.ts';
+
 import { printJson, renderTable, trunc } from '../../../core/agentic.ts';
+import { apiBase, apiGet } from '../../../core/api.ts';
+import { die, info } from '../../../core/colors.ts';
 import { resolveRepoArg, type PullRequest } from '../_shared.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const STATES = ['open', 'merged', 'closed'] as const;
 const SECTION = chalk.bold.yellow;
 const GREEN = chalk.green;
 const DIM = chalk.dim;
 
-interface Options { repo?: string; state?: string; json?: boolean }
+interface Options {
+  repo?: string;
+  state?: string;
+  json?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -28,7 +34,7 @@ const def: CommandDef = {
     cmd.option('--json', 'Output raw JSON');
   },
   action: async (positional: string | undefined, opts: Options) => {
-    if (opts.state && !STATES.includes(opts.state as typeof STATES[number])) {
+    if (opts.state && !STATES.includes(opts.state as (typeof STATES)[number])) {
       die(`Invalid --state "${opts.state}" (valid: ${STATES.join(', ')})`);
     }
     const { org, name } = resolveRepoArg(positional, opts.repo);

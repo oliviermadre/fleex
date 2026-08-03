@@ -1,14 +1,13 @@
 import { AgentPersonaEntity } from '../../../domain/entities/agent-persona.entity.js';
-import type { PersonaStorePort } from '../../../application/ports/persona-store.port.js';
+
 import type { PgConnection } from './connection.js';
+import type { PersonaStorePort } from '../../../application/ports/persona-store.port.js';
 
 export class PgPersonaStore implements PersonaStorePort {
   constructor(private readonly db: PgConnection) {}
 
   async getAll(): Promise<AgentPersonaEntity[]> {
-    const { rows } = await this.db.query(
-      'SELECT * FROM agent_personas ORDER BY name ASC',
-    );
+    const { rows } = await this.db.query('SELECT * FROM agent_personas ORDER BY name ASC');
     return rows.map(rowToPersona);
   }
 

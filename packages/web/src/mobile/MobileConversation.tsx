@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+
 import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
 import type {
   ConversationMode,
@@ -9,24 +10,27 @@ import type {
   TicketMention,
   TicketWsMessage,
 } from '@fleex/shared';
-import * as api from '../services/api';
-import { appWs } from '../services/websocket';
-import { useAgentPersonaStore } from '../stores/agentPersonaStore';
-import { usePanelStore } from '../stores/panelStore';
-import { useSkillStore } from '../stores/skillStore';
-import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
-import { useSettingsStore } from '../stores/settingsStore';
-import { useTicketStore } from '../stores/ticketStore';
-import { useUnreadStore } from '../stores/unreadStore';
-import { useAgentEventStore } from '../stores/agentEventStore';
-import { useModels } from '../hooks/useModels';
-import { useToastStore } from '../stores/toastStore';
-import { useStickToBottom } from '../hooks/useStickToBottom';
-import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
+
 import { ModelSelect } from '../components/agents/ModelSelect';
-import { MobileDeliverableReader } from './MobileDeliverableReader';
+import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
+import { useCapabilities } from '../hooks/useCapabilities';
+import { useModels } from '../hooks/useModels';
+import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MentionTypeIcon } from '../lib/primitives';
 import { tint } from '../lib/tints';
+import * as api from '../services/api';
+import { appWs } from '../services/websocket';
+import { useAgentEventStore } from '../stores/agentEventStore';
+import { useAgentPersonaStore } from '../stores/agentPersonaStore';
+import { usePanelStore } from '../stores/panelStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { useSkillStore } from '../stores/skillStore';
+import { useTicketStore } from '../stores/ticketStore';
+import { useToastStore } from '../stores/toastStore';
+import { useUnreadStore } from '../stores/unreadStore';
+import { useWorkflowTemplateStore } from '../stores/workflowTemplateStore';
+
+import { MobileDeliverableReader } from './MobileDeliverableReader';
 
 const MODES: { id: ConversationMode; label: string }[] = [
   { id: 'talk', label: '🗣 Talk' },
@@ -113,8 +117,10 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
   const loadSkills = useSkillStore((s) => s.loadSkills);
   const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
   const refreshWorkflowTemplates = useWorkflowTemplateStore((s) => s.refresh);
+  const { workflowsAvailable } = useCapabilities();
   const humanMentionName = useSettingsStore(
-    (s) => (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
+    (s) =>
+      (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
   );
   const allTickets = useTicketStore((s) => s.tickets);
 
@@ -122,7 +128,14 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
     if (!panelsLoaded) loadPanels();
     if (!skillsLoaded) loadSkills();
     if (workflowTemplates.length === 0) void refreshWorkflowTemplates();
-  }, [panelsLoaded, loadPanels, skillsLoaded, loadSkills, workflowTemplates.length, refreshWorkflowTemplates]);
+  }, [
+    panelsLoaded,
+    loadPanels,
+    skillsLoaded,
+    loadSkills,
+    workflowTemplates.length,
+    refreshWorkflowTemplates,
+  ]);
 
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [mentions, setMentions] = useState<TicketMention[]>([]);
@@ -154,27 +167,55 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
     }));
     for (const panel of panels) {
       if (panel.enabled) {
-        opts.push({ insertText: `@panel:${panel.name}`, label: panel.displayName || panel.name, type: 'panel' });
+        opts.push({
+          insertText: `@panel:${panel.name}`,
+          label: panel.displayName || panel.name,
+          type: 'panel',
+        });
       }
     }
     for (const skill of skills) {
       if (skill.enabled) {
-        opts.push({ insertText: `@skill:${skill.commandName}`, label: skill.displayName || skill.commandName, type: 'skill' });
+        opts.push({
+          insertText: `@skill:${skill.commandName}`,
+          label: skill.displayName || skill.commandName,
+          type: 'skill',
+        });
       }
     }
-    for (const wf of workflowTemplates) {
-      if (wf.enabled) {
-        opts.push({ insertText: `@workflow:${wf.slug}`, label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name, type: 'workflow' });
+    // Workflows are dropped (not disabled) when the driver can't run them — a
+    // dead row in an autocomplete is noise, not signal.
+    if (workflowsAvailable) {
+      for (const wf of workflowTemplates) {
+        if (wf.enabled) {
+          opts.push({
+            insertText: `@workflow:${wf.slug}`,
+            label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name,
+            type: 'workflow',
+          });
+        }
       }
     }
     if (humanMentionName) {
       opts.push({ insertText: `@${humanMentionName}`, label: humanMentionName, type: 'human' });
     }
     for (const t of allTickets) {
-      opts.push({ insertText: `@ticket:${t.displayId}`, label: `#${t.displayId} ${t.title}`, type: 'ticket' });
+      opts.push({
+        insertText: `@ticket:${t.displayId}`,
+        label: `#${t.displayId} ${t.title}`,
+        type: 'ticket',
+      });
     }
     return opts;
-  }, [personas, panels, skills, workflowTemplates, humanMentionName, allTickets]);
+  }, [
+    personas,
+    panels,
+    skills,
+    workflowTemplates,
+    workflowsAvailable,
+    humanMentionName,
+    allTickets,
+  ]);
 
   const filteredOptions = useMemo(() => {
     if (!acOpen) return [];
@@ -255,9 +296,18 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
   }, [body]);
 
   useEffect(() => {
-    api.fetchTicketComments(ticketId).then(setComments).catch(() => {});
-    api.fetchTicketMentions(ticketId).then(setMentions).catch(() => {});
-    api.fetchTicketDeliverables(ticketId).then(setDeliverables).catch(() => {});
+    api
+      .fetchTicketComments(ticketId)
+      .then(setComments)
+      .catch(() => {});
+    api
+      .fetchTicketMentions(ticketId)
+      .then(setMentions)
+      .catch(() => {});
+    api
+      .fetchTicketDeliverables(ticketId)
+      .then(setDeliverables)
+      .catch(() => {});
     loadSeenDeliverables(ticketId).catch(() => {});
   }, [ticketId, loadSeenDeliverables]);
 
@@ -396,10 +446,10 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
   // an unsupported level is a 400); `effectiveEffort` is what will really run,
   // since a stored level above the model's ceiling gets clamped down.
   const effortLevels = ticket.modelOverride
-    ? overriddenModel?.effortLevels ?? inferModelCapabilities(ticket.modelOverride).effortLevels
+    ? (overriddenModel?.effortLevels ?? inferModelCapabilities(ticket.modelOverride).effortLevels)
     : [];
   const effectiveEffort = ticket.modelOverride
-    ? resolveEffortLevel(ticket.modelOverride, ticket.effortOverride) ?? ''
+    ? (resolveEffortLevel(ticket.modelOverride, ticket.effortOverride) ?? '')
     : '';
   const hasOverrides = !!(ticket.modelOverride || ticket.effortOverride || ticket.fastMode);
 
@@ -554,7 +604,12 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                   {(deliverablesByComment.map.get(c.id) ?? []).length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {(deliverablesByComment.map.get(c.id) ?? []).map((d) => (
-                        <DeliverableChip key={d.id} deliverable={d} seen={isSeen(d)} onOpen={handleOpenDeliverable} />
+                        <DeliverableChip
+                          key={d.id}
+                          deliverable={d}
+                          seen={isSeen(d)}
+                          onOpen={handleOpenDeliverable}
+                        />
                       ))}
                     </div>
                   )}
@@ -569,7 +624,12 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {deliverablesByComment.orphans.map((d) => (
-                    <DeliverableChip key={d.id} deliverable={d} seen={isSeen(d)} onOpen={handleOpenDeliverable} />
+                    <DeliverableChip
+                      key={d.id}
+                      deliverable={d}
+                      seen={isSeen(d)}
+                      onOpen={handleOpenDeliverable}
+                    />
                   ))}
                 </div>
               </div>
@@ -646,7 +706,9 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--theme-text-primary)]">
                   {opt.label}
                 </span>
-                <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">{opt.type}</span>
+                <span className="shrink-0 text-[10px] text-[var(--theme-text-faint)]">
+                  {opt.type}
+                </span>
               </button>
             );
           })}
@@ -726,7 +788,10 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
 
       {/* Execution config sheet — conversation-scoped overrides, like desktop */}
       {showConfig && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={() => setShowConfig(false)}>
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/60"
+          onClick={() => setShowConfig(false)}
+        >
           <div
             className="w-full rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
@@ -736,7 +801,8 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
               Config d'exécution
             </p>
             <p className="mb-3 text-[11px] text-[var(--theme-text-faint)]">
-              S'applique à la prochaine mention de cette conversation, sans modifier la config des agents.
+              S'applique à la prochaine mention de cette conversation, sans modifier la config des
+              agents.
             </p>
             <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
               Modèle
@@ -756,13 +822,18 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
                 <select
                   value={effectiveEffort}
                   onChange={(e) =>
-                    patchExecConfig({ effortOverride: e.target.value === '' ? null : (e.target.value as EffortLevel) })
+                    patchExecConfig({
+                      effortOverride:
+                        e.target.value === '' ? null : (e.target.value as EffortLevel),
+                    })
                   }
                   className="mb-3 w-full appearance-none rounded-lg bg-[var(--theme-bg-secondary)] px-3 py-2.5 text-sm text-[var(--theme-text-primary)]"
                 >
                   <option value="">Défaut</option>
                   {effortLevels.map((lvl) => (
-                    <option key={lvl} value={lvl}>{lvl}</option>
+                    <option key={lvl} value={lvl}>
+                      {lvl}
+                    </option>
                   ))}
                 </select>
               </>
@@ -785,7 +856,10 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
 
       {/* Mention actions sheet */}
       {mentionSheet && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={() => setMentionSheet(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/60"
+          onClick={() => setMentionSheet(null)}
+        >
           <div
             className="w-full rounded-t-2xl border-t border-[var(--theme-border)] bg-[var(--theme-bg-base)] p-4"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}

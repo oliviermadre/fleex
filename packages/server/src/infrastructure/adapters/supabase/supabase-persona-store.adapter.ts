@@ -1,6 +1,7 @@
 import { AgentPersonaEntity } from '../../../domain/entities/agent-persona.entity.js';
-import type { PersonaStorePort } from '../../../application/ports/persona-store.port.js';
+
 import type { SupabaseConnection } from './connection.js';
+import type { PersonaStorePort } from '../../../application/ports/persona-store.port.js';
 
 interface PersonaRow {
   id: string;
@@ -36,10 +37,7 @@ export class SupabasePersonaStore implements PersonaStorePort {
   constructor(private readonly conn: SupabaseConnection) {}
 
   async getAll(): Promise<AgentPersonaEntity[]> {
-    const { data, error } = await this.conn.client
-      .from('agent_personas')
-      .select('*')
-      .order('name');
+    const { data, error } = await this.conn.client.from('agent_personas').select('*').order('name');
     if (error) throw new Error(`SupabasePersonaStore.getAll failed: ${error.message}`);
     return (data as PersonaRow[]).map(rowToEntity);
   }
@@ -82,10 +80,7 @@ export class SupabasePersonaStore implements PersonaStorePort {
   }
 
   async remove(id: string): Promise<void> {
-    const { error } = await this.conn.client
-      .from('agent_personas')
-      .delete()
-      .eq('id', id);
+    const { error } = await this.conn.client.from('agent_personas').delete().eq('id', id);
     if (error) throw new Error(`SupabasePersonaStore.remove failed: ${error.message}`);
   }
 }

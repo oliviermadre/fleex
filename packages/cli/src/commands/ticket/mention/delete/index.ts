@@ -1,10 +1,14 @@
-import type { CommandDef } from '../../../../core/types.ts';
-import { ok, info, die } from '../../../../core/colors.ts';
 import { apiBase, apiDelete } from '../../../../core/api.ts';
+import { ok, info, die } from '../../../../core/colors.ts';
 import { canPrompt, promptYesNo, closePrompts } from '../../../../core/prompt.ts';
 import { getMention, mentionLabel } from '../_shared.ts';
 
-interface DeleteOptions { board?: string; force?: boolean }
+import type { CommandDef } from '../../../../core/types.ts';
+
+interface DeleteOptions {
+  board?: string;
+  force?: boolean;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -25,7 +29,10 @@ const def: CommandDef = {
       if (!canPrompt()) {
         die(`Refusing to delete mention ${label} without confirmation. Re-run with -f to force.`);
       }
-      const confirmed = await promptYesNo(`Delete mention ${label} (${mention.id.slice(0, 8)})?`, false);
+      const confirmed = await promptYesNo(
+        `Delete mention ${label} (${mention.id.slice(0, 8)})?`,
+        false,
+      );
       closePrompts();
       if (!confirmed) {
         info('Cancelled.');

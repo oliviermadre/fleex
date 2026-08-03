@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import { Command } from 'commander';
 import chalk from 'chalk';
+import { Command } from 'commander';
+import { describe, it, expect } from 'vitest';
+
+import { describeCommand } from '../../src/commands/documentation/index.ts';
 import { stripAnsi } from '../../src/core/colors.ts';
 import { recordExtraHelp, getExtraHelp } from '../../src/core/help.ts';
-import { describeCommand } from '../../src/commands/documentation/index.ts';
 
 describe('stripAnsi', () => {
   it('removes SGR escape sequences', () => {

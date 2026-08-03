@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
+
 import { StepRunEntity } from '../../src/domain/entities/step-run.entity.js';
 
 describe('StepRunEntity', () => {
   it('creates with attempt=1 status=queued by default', () => {
     const sr = StepRunEntity.create({
-      id: 'sr-1', workflowRunId: 'run-1', stepId: 'triage',
+      id: 'sr-1',
+      workflowRunId: 'run-1',
+      stepId: 'triage',
     });
     expect(sr.attempt).toBe(1);
     expect(sr.status).toBe('queued');
@@ -37,7 +40,9 @@ describe('StepRunEntity', () => {
   it('markNeedsReview sets status=needs_review and result=needs_review', () => {
     const sr = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'gate' });
     sr.start();
-    sr.markNeedsReview({ output: { schemaFields: { outcomes: ['approve','reject'] }, result: 'needs_review' } });
+    sr.markNeedsReview({
+      output: { schemaFields: { outcomes: ['approve', 'reject'] }, result: 'needs_review' },
+    });
     expect(sr.status).toBe('needs_review');
     expect(sr.result).toBe('needs_review');
   });
@@ -54,7 +59,9 @@ describe('StepRunEntity', () => {
   it('resolveGate writes outcome to output.schemaFields', () => {
     const sr = StepRunEntity.create({ id: 'sr-1', workflowRunId: 'run-1', stepId: 'gate' });
     sr.start();
-    sr.markNeedsReview({ output: { schemaFields: { outcomes: ['approve'] }, result: 'needs_review' } });
+    sr.markNeedsReview({
+      output: { schemaFields: { outcomes: ['approve'] }, result: 'needs_review' },
+    });
     sr.resolveGate('approve', 'looks good');
     expect(sr.status).toBe('completed');
     expect(sr.result).toBe('ok');

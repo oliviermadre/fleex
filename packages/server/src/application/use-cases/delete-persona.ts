@@ -1,6 +1,7 @@
 import { AgentPersonaNotFoundError } from '../../domain/errors.js';
-import type { PersonaStorePort } from '../ports/persona-store.port.js';
+
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { PersonaStorePort } from '../ports/persona-store.port.js';
 
 export class DeletePersonaUseCase {
   constructor(

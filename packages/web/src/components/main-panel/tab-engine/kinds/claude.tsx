@@ -1,11 +1,14 @@
 import type { Session } from '@fleex/shared';
-import { StatusDot } from '../../../ui/StatusDot';
+
 import { deriveDisplayStatus } from '../../../../lib/deriveStatus';
-import type { DisplayStatus } from '../../../../lib/deriveStatus';
-import { useSessionStore } from '../../../../stores/sessionStore';
 import * as api from '../../../../services/api';
+import { useSessionStore } from '../../../../stores/sessionStore';
+import { StatusDot } from '../../../ui/StatusDot';
 import { registerTabKind } from '../registry';
-import { TerminalTabContent } from './TerminalTabContent';
+
+import { LazyTerminalTabContent } from './LazyTerminalTabContent';
+
+import type { DisplayStatus } from '../../../../lib/deriveStatus';
 import type { TabDescriptor, TabIconProps, TabStatusProps } from '../types';
 
 // ——— Icon ———
@@ -30,7 +33,7 @@ function ClaudeStatus({ tab }: TabStatusProps) {
 
 registerTabKind('claude', {
   Icon: ClaudeIcon,
-  Content: TerminalTabContent,
+  Content: LazyTerminalTabContent,
   StatusIndicator: ClaudeStatus,
   defaultCapabilities: { closable: true, renamable: true, orderable: true, floatable: true },
 
@@ -44,7 +47,9 @@ registerTabKind('claude', {
     const sessionId = tab.meta.sessionId as string;
     const updated = await api.renameSession(sessionId, newName);
     const { sessions } = useSessionStore.getState();
-    useSessionStore.getState().setSessions(sessions.map((s) => (s.id === updated.id ? updated : s)));
+    useSessionStore
+      .getState()
+      .setSessions(sessions.map((s) => (s.id === updated.id ? updated : s)));
   },
 });
 

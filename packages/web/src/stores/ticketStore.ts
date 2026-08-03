@@ -1,21 +1,45 @@
 import { create } from 'zustand';
-import type { Board, BoardWithCounts, Ticket, TicketLink, TicketStatus, TicketPriority, TicketType, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, TicketWsMessage } from '@fleex/shared';
-import { TICKET_STATUSES } from '@fleex/shared';
-import * as api from '../services/api';
-import { useSessionStore } from './sessionStore';
-import { isMissingRepo } from '../lib/repoStatus';
 
-export type TicketTab = 'description' | 'comments' | 'mentions' | 'deliverables' | 'activity' | 'workflow';
-export const VALID_TICKET_TABS: TicketTab[] = ['description', 'comments', 'mentions', 'deliverables', 'activity', 'workflow'];
+import type {
+  Board,
+  BoardWithCounts,
+  Ticket,
+  TicketLink,
+  TicketStatus,
+  TicketPriority,
+  TicketType,
+  CreateTicketRequest,
+  UpdateTicketRequest,
+  CreateBoardRequest,
+  UpdateBoardRequest,
+  TicketWsMessage,
+} from '@fleex/shared';
+import { TICKET_STATUSES } from '@fleex/shared';
+
+import { isMissingRepo } from '../lib/repoStatus';
+import * as api from '../services/api';
+
+import { useSessionStore } from './sessionStore';
+
+export type TicketTab =
+  'description' | 'comments' | 'mentions' | 'deliverables' | 'activity' | 'workflow';
+export const VALID_TICKET_TABS: TicketTab[] = [
+  'description',
+  'comments',
+  'mentions',
+  'deliverables',
+  'activity',
+  'workflow',
+];
 
 interface TicketFilters {
-  repo: string | null;        // "org/name" or null for all
+  repo: string | null; // "org/name" or null for all
   priority: TicketPriority | null;
   type: TicketType | null;
-  hasSession: boolean | null;  // true=with session, false=without, null=any
+  hasSession: boolean | null; // true=with session, false=without, null=any
   tag: string | null;
   favorite: boolean | null;
-  noRepo: boolean;             // true = only tickets missing a repository (forgotten case)
+  noRepo: boolean; // true = only tickets missing a repository (forgotten case)
   hideOldDoneCancelled: boolean;
 }
 
@@ -41,10 +65,21 @@ interface TicketState {
   archiveTicket: (id: string) => Promise<void>;
   unarchiveTicket: (id: string) => Promise<void>;
   moveTicket: (id: string, status: TicketStatus, position?: number) => Promise<void>;
-  addLink: (ticketId: string, link: { type: string; ref: string; label: string; url?: string }) => Promise<void>;
+  addLink: (
+    ticketId: string,
+    link: { type: string; ref: string; label: string; url?: string },
+  ) => Promise<void>;
   removeLink: (ticketId: string, linkId: string) => Promise<void>;
-  importGitHubIssue: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
-  importSlackMessage: (url: string, boardId: string, status?: import('@fleex/shared').TicketStatus) => Promise<Ticket>;
+  importGitHubIssue: (
+    url: string,
+    boardId: string,
+    status?: import('@fleex/shared').TicketStatus,
+  ) => Promise<Ticket>;
+  importSlackMessage: (
+    url: string,
+    boardId: string,
+    status?: import('@fleex/shared').TicketStatus,
+  ) => Promise<Ticket>;
   retrySlackImport: (ticketId: string) => Promise<void>;
   syncGithubIssue: (ticketId: string) => Promise<void>;
   openSessionFromTicket: (id: string) => Promise<{ sessionId: string }>;
@@ -69,7 +104,10 @@ function getTicketRepoWorktreeInfo(t: Ticket): { repo: string; branch: string | 
   if (wtLink) {
     const colonIdx = wtLink.ref.indexOf(':');
     if (colonIdx > 0) {
-      return { repo: wtLink.ref.substring(0, colonIdx), branch: wtLink.ref.substring(colonIdx + 1) };
+      return {
+        repo: wtLink.ref.substring(0, colonIdx),
+        branch: wtLink.ref.substring(colonIdx + 1),
+      };
     }
   }
   const repoLink = t.links.find((l: TicketLink) => l.type === 'repository');
@@ -84,9 +122,9 @@ const ALL_BOARDS_SENTINEL = '__all__';
 
 function loadPersistedBoardId(): string | null | undefined {
   const stored = localStorage.getItem(BOARD_STORAGE_KEY);
-  if (stored === ALL_BOARDS_SENTINEL) return null;   // explicitly chose "All boards"
-  if (stored) return stored;                          // specific board id
-  return undefined;                                   // never set — will auto-select
+  if (stored === ALL_BOARDS_SENTINEL) return null; // explicitly chose "All boards"
+  if (stored) return stored; // specific board id
+  return undefined; // never set — will auto-select
 }
 
 export const useTicketStore = create<TicketState>((set, get) => ({
@@ -97,7 +135,16 @@ export const useTicketStore = create<TicketState>((set, get) => ({
   ticketTab: 'description',
   statusFilter: 'all',
   searchQuery: '',
-  filters: { repo: null, priority: null, type: null, hasSession: null, tag: null, favorite: null, noRepo: false, hideOldDoneCancelled: true },
+  filters: {
+    repo: null,
+    priority: null,
+    type: null,
+    hasSession: null,
+    tag: null,
+    favorite: null,
+    noRepo: false,
+    hideOldDoneCancelled: true,
+  },
 
   fetchBoards: async () => {
     const boards = await api.fetchBoards();
@@ -275,15 +322,28 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     set({ selectedBoardId: id, selectedTicketId: null });
     localStorage.setItem(BOARD_STORAGE_KEY, id ?? ALL_BOARDS_SENTINEL);
   },
-  selectTicket: (id) => set((s) => ({
-    selectedTicketId: id,
-    ticketTab: id !== s.selectedTicketId ? 'description' : s.ticketTab,
-  })),
+  selectTicket: (id) =>
+    set((s) => ({
+      selectedTicketId: id,
+      ticketTab: id !== s.selectedTicketId ? 'description' : s.ticketTab,
+    })),
   setTicketTab: (tab) => set({ ticketTab: tab }),
   setStatusFilter: (filter) => set({ statusFilter: filter }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setFilters: (partial) => set((s) => ({ filters: { ...s.filters, ...partial } })),
-  clearFilters: () => set({ filters: { repo: null, priority: null, type: null, hasSession: null, tag: null, favorite: null, noRepo: false, hideOldDoneCancelled: true } }),
+  clearFilters: () =>
+    set({
+      filters: {
+        repo: null,
+        priority: null,
+        type: null,
+        hasSession: null,
+        tag: null,
+        favorite: null,
+        noRepo: false,
+        hideOldDoneCancelled: true,
+      },
+    }),
 
   ticketsByColumn: (boardId) => {
     const { tickets, searchQuery, filters } = get();
@@ -292,9 +352,10 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     // Text search
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      filtered = filtered.filter((t) =>
-        t.title.toLowerCase().includes(q) ||
-        t.tags.some((tag: string) => tag.toLowerCase().includes(q)),
+      filtered = filtered.filter(
+        (t) =>
+          t.title.toLowerCase().includes(q) ||
+          t.tags.some((tag: string) => tag.toLowerCase().includes(q)),
       );
     }
 
@@ -302,9 +363,10 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     if (filters.repo) {
       const repoKey = filters.repo;
       filtered = filtered.filter((t) =>
-        t.links.some((l: TicketLink) =>
-          (l.type === 'worktree' && l.ref.startsWith(repoKey + ':')) ||
-          (l.type === 'repository' && l.ref === repoKey),
+        t.links.some(
+          (l: TicketLink) =>
+            (l.type === 'worktree' && l.ref.startsWith(repoKey + ':')) ||
+            (l.type === 'repository' && l.ref === repoKey),
         ),
       );
     }
@@ -370,9 +432,13 @@ export const useTicketStore = create<TicketState>((set, get) => ({
     const columns = {} as Record<TicketStatus, Ticket[]>;
     for (const s of TICKET_STATUSES as readonly TicketStatus[]) {
       const col = filtered.filter((t) => t.status === s);
-      columns[s] = (s === 'done' || s === 'cancelled')
-        ? col.sort((a, b) => new Date(b.statusChangedAt).getTime() - new Date(a.statusChangedAt).getTime())
-        : col.sort((a, b) => a.position - b.position);
+      columns[s] =
+        s === 'done' || s === 'cancelled'
+          ? col.sort(
+              (a, b) =>
+                new Date(b.statusChangedAt).getTime() - new Date(a.statusChangedAt).getTime(),
+            )
+          : col.sort((a, b) => a.position - b.position);
     }
     return columns;
   },

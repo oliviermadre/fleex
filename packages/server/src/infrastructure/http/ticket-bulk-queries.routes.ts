@@ -1,7 +1,12 @@
-import type { FastifyInstance } from 'fastify';
 import type { TicketUnreadCounts, TicketAgentActivity } from '@fleex/shared';
-import { deriveTicketAgentActivity, deriveActivitySince } from '../../domain/services/ticket-agent-activity.js';
+
+import {
+  deriveTicketAgentActivity,
+  deriveActivitySince,
+} from '../../domain/services/ticket-agent-activity.js';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 /**
  * Bulk ticket queries (unread counts + agent activity).
@@ -21,7 +26,12 @@ import type { Container } from '../container.js';
 
 type BulkQueryDeps = Pick<
   Container,
-  'kvStore' | 'commentStore' | 'deliverableStore' | 'agentEventStore' | 'mentionStore' | 'workflowRunStore'
+  | 'kvStore'
+  | 'commentStore'
+  | 'deliverableStore'
+  | 'agentEventStore'
+  | 'mentionStore'
+  | 'workflowRunStore'
 >;
 
 /** Accepts both `?ticketIds=a,b,c` (GET) and `{ ticketIds: [...] }` (POST). */
@@ -66,9 +76,7 @@ export async function computeUnreadCounts(
   // must report its real comment/deliverable totals). Only fall back to the set of
   // tracked tickets when no explicit IDs were requested.
   const trackedIds = new Set([...commentMap.keys(), ...seenDeliverableMap.keys()]);
-  const ticketIds = requestedIds.length > 0
-    ? requestedIds
-    : [...trackedIds];
+  const ticketIds = requestedIds.length > 0 ? requestedIds : [...trackedIds];
 
   if (ticketIds.length === 0) return [];
 
@@ -82,13 +90,19 @@ export async function computeUnreadCounts(
   const commentsByTicket = new Map<string, typeof allComments>();
   for (const c of allComments) {
     let arr = commentsByTicket.get(c.ticketId);
-    if (!arr) { arr = []; commentsByTicket.set(c.ticketId, arr); }
+    if (!arr) {
+      arr = [];
+      commentsByTicket.set(c.ticketId, arr);
+    }
     arr.push(c);
   }
   const deliverablesByTicket = new Map<string, typeof allDeliverables>();
   for (const d of allDeliverables) {
     let arr = deliverablesByTicket.get(d.ticketId);
-    if (!arr) { arr = []; deliverablesByTicket.set(d.ticketId, arr); }
+    if (!arr) {
+      arr = [];
+      deliverablesByTicket.set(d.ticketId, arr);
+    }
     arr.push(d);
   }
 
@@ -104,7 +118,13 @@ export async function computeUnreadCounts(
       : comments.length;
     const unreadDeliverables = deliverables.filter((d) => !seenSet.has(d.id)).length;
 
-    results.push({ ticketId, totalComments: comments.length, totalDeliverables: deliverables.length, unreadComments, unreadDeliverables });
+    results.push({
+      ticketId,
+      totalComments: comments.length,
+      totalDeliverables: deliverables.length,
+      unreadComments,
+      unreadDeliverables,
+    });
   }
 
   return results;
@@ -134,9 +154,7 @@ export async function computeAgentActivity(
     (m) => m.status === 'waiting_for_info' && requested.has(m.ticketId),
   );
   const scopedRunningRuns = runningRuns.filter((r) => requested.has(r.ticketId));
-  const gateRuns = [...needsReviewRuns, ...blockedRuns].filter((r) =>
-    requested.has(r.ticketId),
-  );
+  const gateRuns = [...needsReviewRuns, ...blockedRuns].filter((r) => requested.has(r.ticketId));
 
   // When each waiting mention's question was posed = the completion of the
   // execution that carried it (pass 5 "Waiting for {{age}}"). Latest wins

@@ -1,20 +1,23 @@
 import type { Session, SessionGroup, WorktreeSessionGroup, AgentWorktreeInfo } from '@fleex/shared';
-import type { SessionEntity } from '../../domain/entities.js';
-import { SessionGroupingService } from '../../domain/services/session-grouping.js';
+
 import { buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+
+import { ListSessionsUseCase } from './list-sessions.js';
+
+import type { DiscoverExistingSessionsUseCase } from './discover-existing-sessions.js';
+import type { EnrichClaudeActivityUseCase } from './enrich-claude-activity.js';
+import type { ReconcileWorktreeUseCase } from './reconcile-worktree.js';
+import type { SessionEntity } from '../../domain/entities.js';
+import type { SessionGroupingService } from '../../domain/services/session-grouping.js';
 import type { SessionNamingService } from '../../domain/services/session-naming.js';
-import type { TmuxPort } from '../ports/tmux.port.js';
+import type { HostFs } from '../../infrastructure/host/types.js';
+import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
+import type { ConfigPort } from '../ports/config.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
+import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { PersonaStorePort } from '../ports/persona-store.port.js';
-import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
-import type { HostFs } from '../../infrastructure/host/types.js';
-import type { ConfigPort } from '../ports/config.port.js';
-import { ListSessionsUseCase } from './list-sessions.js';
-import type { EnrichClaudeActivityUseCase } from './enrich-claude-activity.js';
-import type { DiscoverExistingSessionsUseCase } from './discover-existing-sessions.js';
-import type { ReconcileWorktreeUseCase } from './reconcile-worktree.js';
+import type { TmuxPort } from '../ports/tmux.port.js';
 
 export class GetSessionGroupsUseCase {
   private readonly listSessions: ListSessionsUseCase;
@@ -215,14 +218,18 @@ export class GetSessionGroupsUseCase {
       const latestExecution = ticketLatestExec.get(ticket.id);
       const latestExecutionId = latestExecution?.id ?? null;
       const executionStatus: AgentWorktreeInfo['executionStatus'] =
-        latestExecution?.status === 'running' ? 'running'
-        : latestExecution?.status === 'completed' ? 'completed'
-        : latestExecution?.status === 'failed' ? 'failed'
-        : 'idle';
+        latestExecution?.status === 'running'
+          ? 'running'
+          : latestExecution?.status === 'completed'
+            ? 'completed'
+            : latestExecution?.status === 'failed'
+              ? 'failed'
+              : 'idle';
 
       // Persona is best-effort: try assignee first, then latest execution's persona
-      const persona = (ticket.assignee ? personaByName.get(ticket.assignee) : undefined)
-        ?? (latestExecution ? personaById.get(latestExecution.personaId) : undefined);
+      const persona =
+        (ticket.assignee ? personaByName.get(ticket.assignee) : undefined) ??
+        (latestExecution ? personaById.get(latestExecution.personaId) : undefined);
 
       const branch = wtLink?.label ?? ticket.title;
 
@@ -263,7 +270,8 @@ export class GetSessionGroupsUseCase {
             // pre-set ticketId from manifest resolution) would otherwise stay undefined,
             // which breaks the sidebar row's favorite star, priority color, and selection
             // highlight — all of which key off worktree.ticketId.
-            (wt as { agentWorktree?: AgentWorktreeInfo; ticketId?: string }).agentWorktree = agentInfo;
+            (wt as { agentWorktree?: AgentWorktreeInfo; ticketId?: string }).agentWorktree =
+              agentInfo;
             (wt as { ticketId?: string }).ticketId = ticket.id;
             found = true;
             break;
@@ -316,9 +324,7 @@ export class GetSessionGroupsUseCase {
           name = '_unassigned';
         }
 
-        let repoGroup = groups.find(
-          (g) => g.repositoryOrg === org && g.repositoryName === name,
-        );
+        let repoGroup = groups.find((g) => g.repositoryOrg === org && g.repositoryName === name);
         if (!repoGroup) {
           repoGroup = { repositoryOrg: org, repositoryName: name, worktrees: [] };
           groups.push(repoGroup);
@@ -385,8 +391,7 @@ export class GetSessionGroupsUseCase {
     for (const session of orphans) {
       const label = session.worktreeBranch ?? '_default';
       let wt = systemGroup.worktrees.find((w) => w.branch === label) as
-        | { branch: string; path: string; sessions: Session[] }
-        | undefined;
+        { branch: string; path: string; sessions: Session[] } | undefined;
       if (!wt) {
         wt = { branch: label, path: session.cwd ?? '', sessions: [] };
         systemGroup.worktrees.push(wt as WorktreeSessionGroup);
@@ -456,12 +461,11 @@ export class GetSessionGroupsUseCase {
         // (workspaces/{workspaceId}/{repo}), the single homogeneous convention.
         const agent = ref.wt.agentWorktree!;
         const workspaceId = buildTicketWorkspaceId(agent.ticketTitle, agent.ticketId);
-        const result = await this.reconcileWorktree!.execute(
-          ref.org,
-          ref.name,
-          ref.wt.branch,
-          { workspaceId, ticketId: agent.ticketId, prNumber: agent.prNumber },
-        );
+        const result = await this.reconcileWorktree!.execute(ref.org, ref.name, ref.wt.branch, {
+          workspaceId,
+          ticketId: agent.ticketId,
+          prNumber: agent.prNumber,
+        });
 
         const mutableWt = ref.wt as {
           path: string;

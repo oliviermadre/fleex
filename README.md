@@ -45,6 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/oliviermadre/fleex/main/install.sh 
 ```
 
 The interactive setup wizard will walk you through:
+
 - Display name and base worktree path
 - Storage driver selection (SQLite, JSON, or PostgreSQL)
 
@@ -69,8 +70,8 @@ Check the status of all running instances.
 Some features rely on third-party APIs and are gracefully skipped when their
 credentials are absent.
 
-| Variable | Used for | If missing |
-|---|---|---|
+| Variable            | Used for                                                                                                    | If missing                                                                                                                            |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `ANTHROPIC_API_KEY` | Dynamic discovery of available Claude models via `GET /api/models` (drives every model dropdown in the UI). | A static fallback list is served — Fleex stays usable, but new Anthropic releases won't appear until the fallback is updated in code. |
 
 Export the key in the shell that launches Fleex (`fleex start`), e.g.:
@@ -85,18 +86,18 @@ Or set it once per workspace in the `env` block of `~/.fleex/workspaces.json` (s
 
 ## CLI Reference
 
-| Command | Description |
-|---------|-------------|
-| `fleex start [--port <port>] [--workspace <name>]` | Start all services (gateway, server, web) for a workspace |
-| `fleex stop [name]` | Stop current or named instance |
-| `fleex stop --all` | Stop all running instances |
-| `fleex restart [--workspace <name>]` | Restart current instance |
-| `fleex status` | Show status of all instances (with workspace + driver) |
-| `fleex desktop [--workspace <name>]` | Open the Electron desktop window for a workspace |
-| `fleex logs [svc]` | Tail logs (all, gateway, server, web) |
-| `fleex remove [name]` | Remove a stopped instance |
-| `fleex remove --all-stopped` | Remove all stopped instances |
-| `fleex self-update [--workspace <name>] [--all-workspaces]` | Pull latest, update CLI, migrate workspace DB(s) |
+| Command                                                     | Description                                               |
+| ----------------------------------------------------------- | --------------------------------------------------------- |
+| `fleex start [--port <port>] [--workspace <name>]`          | Start all services (gateway, server, web) for a workspace |
+| `fleex stop [name]`                                         | Stop current or named instance                            |
+| `fleex stop --all`                                          | Stop all running instances                                |
+| `fleex restart [--workspace <name>]`                        | Restart current instance                                  |
+| `fleex status`                                              | Show status of all instances (with workspace + driver)    |
+| `fleex desktop [--workspace <name>]`                        | Open the Electron desktop window for a workspace          |
+| `fleex logs [svc]`                                          | Tail logs (all, gateway, server, web)                     |
+| `fleex remove [name]`                                       | Remove a stopped instance                                 |
+| `fleex remove --all-stopped`                                | Remove all stopped instances                              |
+| `fleex self-update [--workspace <name>] [--all-workspaces]` | Pull latest, update CLI, migrate workspace DB(s)          |
 
 ## Workspaces
 
@@ -158,11 +159,11 @@ fleex desktop --workspace perso   # perso@main → SQLite stack + Electron windo
 
 `fleex self-update` is workspace-aware:
 
-| Invocation | Migrations run for |
-|---|---|
-| `fleex self-update` | the `is_default` workspace |
-| `fleex self-update --workspace <name>` | the named workspace |
-| `fleex self-update --all-workspaces` | every workspace's database |
+| Invocation                             | Migrations run for         |
+| -------------------------------------- | -------------------------- |
+| `fleex self-update`                    | the `is_default` workspace |
+| `fleex self-update --workspace <name>` | the named workspace        |
+| `fleex self-update --all-workspaces`   | every workspace's database |
 
 The code is pulled and rebuilt once; only the database migration step loops per workspace.
 
@@ -179,13 +180,13 @@ Earlier versions stored config in a per-repo `.env` file. No manual migration is
 
 ## Tech Stack
 
-| Layer | Stack |
-|-------|-------|
+| Layer    | Stack                                             |
+| -------- | ------------------------------------------------- |
 | Frontend | React 19, Zustand, xterm.js, Tailwind CSS 4, Vite |
-| Backend | Fastify 5, WebSocket, Pino |
-| Gateway | Bun, PTY |
-| Storage | SQLite / PostgreSQL / JSON |
-| Runtime | Bun (dev + gateway), Node.js (server) |
+| Backend  | Fastify 5, WebSocket, Pino                        |
+| Gateway  | Bun, PTY                                          |
+| Storage  | SQLite / PostgreSQL / JSON                        |
+| Runtime  | Bun (dev + gateway), Node.js (server)             |
 
 ## Development
 

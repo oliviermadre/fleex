@@ -1,7 +1,9 @@
 import type { TicketStatus } from '@fleex/shared';
+
 import type { TintHue } from './tints';
 
-export type WorktreeVerdict = 'ready_to_push' | 'needs_rebase' | 'up_to_date' | 'merged_removable' | 'stale_removable';
+export type WorktreeVerdict =
+  'ready_to_push' | 'needs_rebase' | 'up_to_date' | 'merged_removable' | 'stale_removable';
 
 export interface WorktreeVerdictInput {
   commitsAhead: number;
@@ -15,7 +17,10 @@ const CLOSED_TICKET_STATUSES: TicketStatus[] = ['done', 'cancelled'];
 
 export function deriveWorktreeVerdict(input: WorktreeVerdictInput): WorktreeVerdict {
   if (input.prState === 'merged') return 'merged_removable';
-  if (input.ticketMissing || (input.ticketStatus && CLOSED_TICKET_STATUSES.includes(input.ticketStatus))) {
+  if (
+    input.ticketMissing ||
+    (input.ticketStatus && CLOSED_TICKET_STATUSES.includes(input.ticketStatus))
+  ) {
     return 'stale_removable';
   }
   if (input.commitsBehind > 0) return 'needs_rebase';

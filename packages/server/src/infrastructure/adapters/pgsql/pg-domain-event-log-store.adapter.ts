@@ -1,6 +1,7 @@
 import { DomainEventLogEntity } from '../../../domain/entities/domain-event-log.entity.js';
-import type { DomainEventLogStorePort } from '../../../application/ports/domain-event-log-store.port.js';
+
 import type { PgConnection } from './connection.js';
+import type { DomainEventLogStorePort } from '../../../application/ports/domain-event-log-store.port.js';
 
 export class PgDomainEventLogStore implements DomainEventLogStorePort {
   constructor(private readonly db: PgConnection) {}
@@ -24,7 +25,13 @@ export class PgDomainEventLogStore implements DomainEventLogStorePort {
       `INSERT INTO domain_event_log (id, event_type, payload, instance_id, occurred_at)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (id) DO NOTHING`,
-      [entry.id, entry.eventType, JSON.stringify(entry.payload), entry.instanceId, entry.occurredAt.toISOString()],
+      [
+        entry.id,
+        entry.eventType,
+        JSON.stringify(entry.payload),
+        entry.instanceId,
+        entry.occurredAt.toISOString(),
+      ],
     );
   }
 
@@ -99,7 +106,10 @@ function rowToEntity(row: Record<string, unknown>): DomainEventLogEntity {
   return new DomainEventLogEntity(
     row.id as string,
     row.event_type as string,
-    (typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload) as Record<string, unknown>,
+    (typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload) as Record<
+      string,
+      unknown
+    >,
     row.instance_id as string,
     new Date(row.occurred_at as string),
   );

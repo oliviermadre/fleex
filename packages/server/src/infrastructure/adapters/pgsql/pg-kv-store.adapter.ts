@@ -1,14 +1,11 @@
-import type { KvStorePort } from '../../../application/ports/kv-store.port.js';
 import type { PgConnection } from './connection.js';
+import type { KvStorePort } from '../../../application/ports/kv-store.port.js';
 
 export class PgKvStoreAdapter implements KvStorePort {
   constructor(private readonly connection: PgConnection) {}
 
   async get(key: string): Promise<string | null> {
-    const result = await this.connection.query(
-      'SELECT value FROM kv_store WHERE key = $1',
-      [key],
-    );
+    const result = await this.connection.query('SELECT value FROM kv_store WHERE key = $1', [key]);
     return result.rows[0]?.value ?? null;
   }
 

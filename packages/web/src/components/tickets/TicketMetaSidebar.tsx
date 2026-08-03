@@ -1,24 +1,41 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Ticket, TicketLink, TicketStatus, TicketPriority, TicketType, GitHubIssueMetadata, WorktreeSessionGroup } from '@fleex/shared';
-import { TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_PRIORITIES, TICKET_TYPES, TICKET_TYPE_LABELS, isSlackImportTag } from '@fleex/shared';
-import { useTicketStore } from '../../stores/ticketStore';
-import { useSessionStore } from '../../stores/sessionStore';
-import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { useUIStore } from '../../stores/uiStore';
-import { usePopover, useTooltip, FloatingPortal } from '../../hooks/usePopover';
 
+import type {
+  Ticket,
+  TicketLink,
+  TicketStatus,
+  TicketPriority,
+  TicketType,
+  GitHubIssueMetadata,
+  WorktreeSessionGroup,
+} from '@fleex/shared';
+import {
+  TICKET_STATUSES,
+  TICKET_STATUS_LABELS,
+  TICKET_PRIORITIES,
+  TICKET_TYPES,
+  TICKET_TYPE_LABELS,
+  isSlackImportTag,
+} from '@fleex/shared';
+
+import { usePopover, useTooltip, FloatingPortal } from '../../hooks/usePopover';
+import { cn } from '../../lib/cn';
+import { topReposForBoard } from '../../lib/repoStatus';
+import { STATUS_COLORS } from '../../lib/statusColors';
+import { tintText, tintClasses } from '../../lib/tints';
 import * as api from '../../services/api';
-import { PriorityIndicator } from './PriorityIndicator';
-import { TicketTypeIcon, TYPE_ICONS, TYPE_COLORS } from './TicketTypeBadge';
+import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
+import { useSessionStore } from '../../stores/sessionStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useTicketStore } from '../../stores/ticketStore';
+import { useUIStore } from '../../stores/uiStore';
+
 import { DueDateBadge } from './DueDateBadge';
 import { DueDatePickerPopover } from './DueDatePickerPopover';
 import { EpicPicker } from './EpicPicker';
-import { cn } from '../../lib/cn';
-import { tintText, tintClasses } from '../../lib/tints';
-import { STATUS_COLORS } from '../../lib/statusColors';
-import { topReposForBoard } from '../../lib/repoStatus';
+import { PriorityIndicator } from './PriorityIndicator';
+import { TicketTypeIcon, TYPE_ICONS, TYPE_COLORS } from './TicketTypeBadge';
 
 // ── Collapsed sidebar tooltip (portal-based, appears to the LEFT) ──
 
@@ -41,7 +58,9 @@ function CollapsedMetaTooltip({ ctl }: { ctl: CollapsedMetaTooltipApi }) {
         className="pointer-events-none z-[100]"
       >
         <div className="whitespace-nowrap rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] px-3 py-2 shadow-xl">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">{tooltip.label}</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            {tooltip.label}
+          </div>
           <div className="text-xs text-[var(--theme-text-primary)]">{tooltip.value}</div>
         </div>
       </div>
@@ -55,12 +74,15 @@ function useCollapsedMetaTooltip() {
   // Positioned to the LEFT of the hovered item; flip/shift keep it on-screen.
   const { refs, floatingStyles, getFloatingProps } = useTooltip({ placement: 'left' });
 
-  const show = useCallback((e: React.MouseEvent, label: string, value: string) => {
-    clearTimeout(hideTimeout.current);
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    refs.setPositionReference({ getBoundingClientRect: () => rect });
-    setTooltip({ label, value });
-  }, [refs]);
+  const show = useCallback(
+    (e: React.MouseEvent, label: string, value: string) => {
+      clearTimeout(hideTimeout.current);
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      refs.setPositionReference({ getBoundingClientRect: () => rect });
+      setTooltip({ label, value });
+    },
+    [refs],
+  );
 
   const hide = useCallback(() => {
     hideTimeout.current = setTimeout(() => setTooltip(null), 80);
@@ -105,7 +127,13 @@ function TypePickerDropdown({
         ) : (
           <span>{LABEL_NONE}</span>
         )}
-        <svg className="ml-auto h-3 w-3 text-[var(--theme-text-faint)]" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          className="ml-auto h-3 w-3 text-[var(--theme-text-faint)]"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <path d="M3 5l3 3 3-3" />
         </svg>
       </button>
@@ -124,7 +152,10 @@ function TypePickerDropdown({
                 'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
                 value === null ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-muted)]',
               )}
-              onClick={() => { onChange(null); setOpen(false); }}
+              onClick={() => {
+                onChange(null);
+                setOpen(false);
+              }}
             >
               {LABEL_NONE}
             </button>
@@ -138,7 +169,10 @@ function TypePickerDropdown({
                   'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
                   value === t ? 'text-[var(--theme-accent)]' : 'text-[var(--theme-text-primary)]',
                 )}
-                onClick={() => { onChange(t as TicketType); setOpen(false); }}
+                onClick={() => {
+                  onChange(t as TicketType);
+                  setOpen(false);
+                }}
               >
                 <span className="text-xs leading-none">{TYPE_ICONS[t as TicketType]}</span>
                 <span>{TICKET_TYPE_LABELS[t]}</span>
@@ -161,13 +195,52 @@ const STATUS_DOT_COLORS: Record<string, string> = {
   done: STATUS_COLORS.done!.bar,
 };
 
-const NANO_KANBAN_COLORS: Record<string, { text: string; bg: string; bar: string; hoverBg: string; hoverText: string }> = {
-  backlog:   { text: STATUS_COLORS.backlog!.text, bg: STATUS_COLORS.backlog!.bg,   bar: STATUS_COLORS.backlog!.bar,   hoverBg: STATUS_COLORS.backlog!.hoverBg,   hoverText: STATUS_COLORS.backlog!.hoverText },
-  todo:      { text: STATUS_COLORS.todo!.text,    bg: STATUS_COLORS.todo!.bg,      bar: STATUS_COLORS.todo!.bar,      hoverBg: STATUS_COLORS.todo!.hoverBg,      hoverText: STATUS_COLORS.todo!.hoverText },
-  doing:     { text: STATUS_COLORS.doing!.text,   bg: STATUS_COLORS.doing!.bg,     bar: STATUS_COLORS.doing!.bar,     hoverBg: STATUS_COLORS.doing!.hoverBg,     hoverText: STATUS_COLORS.doing!.hoverText },
-  reviewing: { text: STATUS_COLORS.reviewing!.text, bg: STATUS_COLORS.reviewing!.bg, bar: STATUS_COLORS.reviewing!.bar, hoverBg: STATUS_COLORS.reviewing!.hoverBg, hoverText: STATUS_COLORS.reviewing!.hoverText },
-  done:      { text: STATUS_COLORS.done!.text,    bg: STATUS_COLORS.done!.bg,      bar: STATUS_COLORS.done!.bar,      hoverBg: STATUS_COLORS.done!.hoverBg,      hoverText: STATUS_COLORS.done!.hoverText },
-  cancelled: { text: STATUS_COLORS.cancelled!.text, bg: STATUS_COLORS.cancelled!.bg, bar: STATUS_COLORS.cancelled!.bar, hoverBg: STATUS_COLORS.cancelled!.hoverBg, hoverText: STATUS_COLORS.cancelled!.hoverText },
+const NANO_KANBAN_COLORS: Record<
+  string,
+  { text: string; bg: string; bar: string; hoverBg: string; hoverText: string }
+> = {
+  backlog: {
+    text: STATUS_COLORS.backlog!.text,
+    bg: STATUS_COLORS.backlog!.bg,
+    bar: STATUS_COLORS.backlog!.bar,
+    hoverBg: STATUS_COLORS.backlog!.hoverBg,
+    hoverText: STATUS_COLORS.backlog!.hoverText,
+  },
+  todo: {
+    text: STATUS_COLORS.todo!.text,
+    bg: STATUS_COLORS.todo!.bg,
+    bar: STATUS_COLORS.todo!.bar,
+    hoverBg: STATUS_COLORS.todo!.hoverBg,
+    hoverText: STATUS_COLORS.todo!.hoverText,
+  },
+  doing: {
+    text: STATUS_COLORS.doing!.text,
+    bg: STATUS_COLORS.doing!.bg,
+    bar: STATUS_COLORS.doing!.bar,
+    hoverBg: STATUS_COLORS.doing!.hoverBg,
+    hoverText: STATUS_COLORS.doing!.hoverText,
+  },
+  reviewing: {
+    text: STATUS_COLORS.reviewing!.text,
+    bg: STATUS_COLORS.reviewing!.bg,
+    bar: STATUS_COLORS.reviewing!.bar,
+    hoverBg: STATUS_COLORS.reviewing!.hoverBg,
+    hoverText: STATUS_COLORS.reviewing!.hoverText,
+  },
+  done: {
+    text: STATUS_COLORS.done!.text,
+    bg: STATUS_COLORS.done!.bg,
+    bar: STATUS_COLORS.done!.bar,
+    hoverBg: STATUS_COLORS.done!.hoverBg,
+    hoverText: STATUS_COLORS.done!.hoverText,
+  },
+  cancelled: {
+    text: STATUS_COLORS.cancelled!.text,
+    bg: STATUS_COLORS.cancelled!.bg,
+    bar: STATUS_COLORS.cancelled!.bar,
+    hoverBg: STATUS_COLORS.cancelled!.hoverBg,
+    hoverText: STATUS_COLORS.cancelled!.hoverText,
+  },
 };
 
 const NANO_KANBAN_ABBREVS: Record<string, string> = {
@@ -210,11 +283,7 @@ function CollapsedIndicator({
 
 // ── Collapsed ticket meta sidebar ──
 
-function CollapsedTicketMetaSidebar({
-  ticket,
-}: {
-  ticket: Ticket;
-}) {
+function CollapsedTicketMetaSidebar({ ticket }: { ticket: Ticket }) {
   const toggleTicketMetaSidebar = useUIStore((s) => s.toggleTicketMetaSidebar);
   const tooltipCtl = useCollapsedMetaTooltip();
   const { show: showTooltip, hide: hideTooltip } = tooltipCtl;
@@ -241,7 +310,16 @@ function CollapsedTicketMetaSidebar({
         className="flex w-full shrink-0 items-center justify-center border-b border-[var(--theme-border)] py-3 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
         title="Expand panel"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
           <line x1="10" y1="1.5" x2="10" y2="14.5" />
         </svg>
@@ -252,16 +330,31 @@ function CollapsedTicketMetaSidebar({
         {/* Status */}
         <CollapsedIndicator
           icon={
-            <span className={cn('h-2.5 w-2.5 rounded-full', STATUS_DOT_COLORS[ticket.status] ?? 'bg-[var(--theme-text-faint)]')} />
+            <span
+              className={cn(
+                'h-2.5 w-2.5 rounded-full',
+                STATUS_DOT_COLORS[ticket.status] ?? 'bg-[var(--theme-text-faint)]',
+              )}
+            />
           }
-          onMouseEnter={(e) => showTooltip(e, 'Status', TICKET_STATUS_LABELS[ticket.status] ?? ticket.status)}
+          onMouseEnter={(e) =>
+            showTooltip(e, 'Status', TICKET_STATUS_LABELS[ticket.status] ?? ticket.status)
+          }
           onMouseLeave={hideTooltip}
         />
 
         {/* Priority */}
         <CollapsedIndicator
           icon={<PriorityIndicator priority={ticket.priority} size="md" />}
-          onMouseEnter={(e) => showTooltip(e, 'Priority', ticket.priority === 'none' ? 'None' : ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1))}
+          onMouseEnter={(e) =>
+            showTooltip(
+              e,
+              'Priority',
+              ticket.priority === 'none'
+                ? 'None'
+                : ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1),
+            )
+          }
           onMouseLeave={hideTooltip}
         />
 
@@ -269,7 +362,9 @@ function CollapsedTicketMetaSidebar({
         {ticket.type && (
           <CollapsedIndicator
             icon={<TicketTypeIcon type={ticket.type} />}
-            onMouseEnter={(e) => showTooltip(e, 'Type', TICKET_TYPE_LABELS[ticket.type!] ?? ticket.type!)}
+            onMouseEnter={(e) =>
+              showTooltip(e, 'Type', TICKET_TYPE_LABELS[ticket.type!] ?? ticket.type!)
+            }
             onMouseLeave={hideTooltip}
           />
         )}
@@ -280,7 +375,11 @@ function CollapsedTicketMetaSidebar({
             icon={<DueDateBadge dueDate={ticket.dueDate} status={ticket.status} size="sm" />}
             onMouseEnter={(e) => {
               const d = new Date(ticket.dueDate!);
-              const formatted = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+              const formatted = d.toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              });
               showTooltip(e, 'Due date', formatted);
             }}
             onMouseLeave={hideTooltip}
@@ -295,7 +394,13 @@ function CollapsedTicketMetaSidebar({
                 {ticket.assignee.charAt(0).toUpperCase()}
               </span>
             ) : (
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-faint)]">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className="text-[var(--theme-text-faint)]"
+              >
                 <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
               </svg>
             )
@@ -311,7 +416,13 @@ function CollapsedTicketMetaSidebar({
         {issueLink && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-secondary)]">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className="text-[var(--theme-text-secondary)]"
+              >
                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
               </svg>
             }
@@ -324,11 +435,19 @@ function CollapsedTicketMetaSidebar({
         {prLinks.length > 0 && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className={tintText('green')}>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className={tintText('green')}
+              >
                 <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
               </svg>
             }
-            onMouseEnter={(e) => showTooltip(e, 'Pull Request', prLinks.map((p: TicketLink) => p.label).join(', '))}
+            onMouseEnter={(e) =>
+              showTooltip(e, 'Pull Request', prLinks.map((p: TicketLink) => p.label).join(', '))
+            }
             onMouseLeave={hideTooltip}
           />
         )}
@@ -337,7 +456,13 @@ function CollapsedTicketMetaSidebar({
         {linkedRepoLabel && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-[var(--theme-text-faint)]">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className="text-[var(--theme-text-faint)]"
+              >
                 <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
               </svg>
             }
@@ -350,7 +475,15 @@ function CollapsedTicketMetaSidebar({
         {worktreeLink && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--theme-text-faint)]">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                className="text-[var(--theme-text-faint)]"
+              >
                 <circle cx="5" cy="3.5" r="1.5" />
                 <circle cx="8" cy="12.5" r="1.5" />
                 <line x1="5" y1="5" x2="8" y2="11" />
@@ -365,12 +498,28 @@ function CollapsedTicketMetaSidebar({
         {ticket.tags.some((t: string) => !isSlackImportTag(t)) && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--theme-text-faint)]">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-[var(--theme-text-faint)]"
+              >
                 <path d="M1 8.5V3a1.5 1.5 0 0 1 1.5-1.5H8l6.5 6.5-5 5L1 8.5z" />
                 <circle cx="5" cy="5" r="1" fill="currentColor" />
               </svg>
             }
-            onMouseEnter={(e) => showTooltip(e, 'Tags', ticket.tags.filter((t: string) => !isSlackImportTag(t)).join(', '))}
+            onMouseEnter={(e) =>
+              showTooltip(
+                e,
+                'Tags',
+                ticket.tags.filter((t: string) => !isSlackImportTag(t)).join(', '),
+              )
+            }
             onMouseLeave={hideTooltip}
           />
         )}
@@ -393,7 +542,13 @@ function CollapsedTicketMetaSidebar({
         {ticket.favorite && (
           <CollapsedIndicator
             icon={
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className={tintText('yellow')}>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className={tintText('yellow')}
+              >
                 <path d="M8 1.3l2.1 4.2 4.7.7-3.4 3.3.8 4.7L8 11.8l-4.2 2.4.8-4.7L1.2 6.2l4.7-.7L8 1.3z" />
               </svg>
             }
@@ -403,7 +558,6 @@ function CollapsedTicketMetaSidebar({
         )}
       </div>
 
-
       <CollapsedMetaTooltip ctl={tooltipCtl} />
     </div>
   );
@@ -411,13 +565,7 @@ function CollapsedTicketMetaSidebar({
 
 // ── Main exported component ──
 
-export function TicketMetaSidebar({
-  ticket,
-  embedded,
-}: {
-  ticket: Ticket;
-  embedded?: boolean;
-}) {
+export function TicketMetaSidebar({ ticket, embedded }: { ticket: Ticket; embedded?: boolean }) {
   const ticketMetaSidebarCollapsed = useUIStore((s) => s.ticketMetaSidebarCollapsed);
 
   if (ticketMetaSidebarCollapsed) {
@@ -429,13 +577,7 @@ export function TicketMetaSidebar({
 
 // ── Expanded ticket meta sidebar ──
 
-function ExpandedTicketMetaSidebar({
-  ticket,
-  embedded,
-}: {
-  ticket: Ticket;
-  embedded?: boolean;
-}) {
+function ExpandedTicketMetaSidebar({ ticket, embedded }: { ticket: Ticket; embedded?: boolean }) {
   const navigate = useNavigate();
   const toggleTicketMetaSidebar = useUIStore((s) => s.toggleTicketMetaSidebar);
   const updateTicket = useTicketStore((s) => s.updateTicket);
@@ -451,7 +593,10 @@ function ExpandedTicketMetaSidebar({
   useEffect(() => {
     const prLinks = ticket.links.filter((l: TicketLink) => l.type === 'github_pr');
     if (prLinks.length === 0) return;
-    api.fetchPRStates(ticket.id).then(setPrStates).catch(() => {});
+    api
+      .fetchPRStates(ticket.id)
+      .then(setPrStates)
+      .catch(() => {});
   }, [ticket.id]);
 
   const handleStatusChange = (status: TicketStatus) => {
@@ -510,279 +655,307 @@ function ExpandedTicketMetaSidebar({
         className="flex w-full shrink-0 items-center justify-center border-b border-[var(--theme-border)] py-2 text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"
         title="Collapse panel"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
           <line x1="10" y1="1.5" x2="10" y2="14.5" />
         </svg>
       </button>
 
       <div className="flex flex-1 flex-col gap-5 p-4 overflow-y-auto">
-      {/* Status — Nano Kanban (hidden when embedded in session tab — already in WorktreeHeader) */}
-      {!embedded && <div>
-        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Status
-        </label>
-        <div className="flex overflow-hidden rounded-md border border-[var(--theme-border)]">
-          {(TICKET_STATUSES as readonly TicketStatus[]).map((s) => {
-            const active = ticket.status === s;
-            const colors = NANO_KANBAN_COLORS[s] ?? NANO_KANBAN_COLORS.backlog!;
-            return (
-              <button
-                key={s}
-                title={TICKET_STATUS_LABELS[s]}
-                className={cn(
-                  'group relative flex flex-1 flex-col items-center gap-1 pb-1.5 pt-0 transition-colors',
-                  active ? colors.bg : colors.hoverBg,
-                )}
-                onClick={() => handleStatusChange(s)}
-              >
-                {/* Top bar */}
-                <div
-                  className={cn(
-                    'w-full transition-all',
-                    active ? cn('h-[3px]', colors.bar) : cn('h-[2px] opacity-60', colors.bar),
-                  )}
-                />
-                {/* Vertical abbreviated label */}
-                <div className="flex flex-col items-center gap-px">
-                  {(NANO_KANBAN_ABBREVS[s] ?? s.slice(0, 4).toUpperCase()).split('').map((ch: string, i: number) => (
-                    <span
-                      key={i}
-                      className={cn(
-                        'text-[8px] font-bold leading-none transition-colors',
-                        active ? colors.text : cn('text-[var(--theme-text-muted)]', colors.hoverText),
-                      )}
-                    >
-                      {ch}
-                    </span>
-                  ))}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>}
-
-      {/* Board */}
-      {boards.length > 1 && (
-        <div>
-          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-            Board
-          </label>
-          <select
-            className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
-            value={ticket.boardId}
-            onChange={(e) => updateTicket(ticket.id, { boardId: e.target.value })}
-          >
-            {boards.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.emoji} {b.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Epics (scoped to the ticket's board) */}
-      <EpicPicker ticketId={ticket.id} boardId={ticket.boardId} />
-
-      {/* Priority */}
-      <div>
-        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Priority
-        </label>
-        <div className="flex gap-1">
-          {(TICKET_PRIORITIES as readonly TicketPriority[]).map((p) => (
-            <button
-              key={p}
-              className={cn(
-                'flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-colors',
-                ticket.priority === p
-                  ? 'bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)] ring-1 ring-[var(--theme-accent)]'
-                  : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
-              )}
-              onClick={() => handlePriorityChange(p)}
-            >
-              <PriorityIndicator priority={p} />
-              {p === 'none' ? 'None' : p.charAt(0).toUpperCase() + p.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Type */}
-      <div>
-        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Type
-        </label>
-        <TypePickerDropdown value={ticket.type} onChange={handleTypeChange} />
-      </div>
-
-      {/* Due date */}
-      <div>
-        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Due date
-        </label>
-        <DueDatePickerPopover ticket={ticket} />
-      </div>
-
-      {/* Assignee */}
-      <AssigneeField
-        assignee={ticket.assignee}
-        onChange={(assignee) => updateTicket(ticket.id, { assignee })}
-      />
-
-      {/* GitHub Issue */}
-      <GitHubIssuePicker
-        ticket={ticket}
-        onAddLink={(link) => addLink(ticket.id, link)}
-        onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
-        onSync={() => syncGithubIssue(ticket.id)}
-      />
-
-      {/* GitHub Metadata */}
-      {ticket.githubMetadata && (
-        <GitHubMetadataSection metadata={ticket.githubMetadata} />
-      )}
-
-      {/* Repository & Worktree */}
-      <RepoWorktreePicker
-        boardId={ticket.boardId}
-        repoLinks={ticket.links.filter((l: TicketLink) => l.type === 'repository')}
-        onAddLink={(link) => addLink(ticket.id, link)}
-        onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
-      />
-
-      {/* Pull Requests */}
-      <PRLinkPicker
-        ticket={ticket}
-        prStates={prStates}
-        onAddLink={(link) => addLink(ticket.id, link)}
-        onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
-      />
-
-      {/* Tags */}
-      <div>
-        <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Tags
-        </label>
-        <div className="flex flex-wrap gap-1">
-          {ticket.tags.filter((t: string) => !isSlackImportTag(t)).map((tag: string) => (
-            <span
-              key={tag}
-              className="flex items-center gap-1 rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-secondary)]"
-            >
-              {tag}
-              <button
-                className="text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-                onClick={() => {
-                  updateTicket(ticket.id, { tags: ticket.tags.filter((t: string) => t !== tag) });
-                }}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-          <TagInput
-            onAdd={(tag) => {
-              if (!ticket.tags.includes(tag)) {
-                updateTicket(ticket.id, { tags: [...ticket.tags, tag] });
-              }
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Blocked */}
-      <div className="flex items-center gap-2">
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Blocked
-        </label>
-        <button
-          className={cn(
-            'h-4 w-7 rounded-full transition-colors',
-            ticket.blocked ? tintClasses('red').solid : 'bg-[var(--theme-bg-overlay)]',
-          )}
-          onClick={() => updateTicket(ticket.id, { blocked: !ticket.blocked })}
-        >
-          <span
-            className={cn(
-              'block h-3 w-3 rounded-full bg-white transition-transform',
-              ticket.blocked ? 'translate-x-3.5' : 'translate-x-0.5',
-            )}
-          />
-        </button>
-      </div>
-
-
-      {/* Favorite */}
-      <div className="flex items-center gap-2">
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-          Favorite
-        </label>
-        <button
-          className={cn(
-            'h-4 w-7 rounded-full transition-colors',
-            ticket.favorite ? tintClasses('yellow').solid : 'bg-[var(--theme-bg-overlay)]',
-          )}
-          onClick={() => updateTicket(ticket.id, { favorite: !ticket.favorite })}
-        >
-          <span
-            className={cn(
-              'block h-3 w-3 rounded-full bg-white transition-transform',
-              ticket.favorite ? 'translate-x-3.5' : 'translate-x-0.5',
-            )}
-          />
-        </button>
-      </div>
-
-      {/* Other Links (non-worktree, non-repository, non-PR) */}
-      {ticket.links.filter((l: TicketLink) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').length > 0 && (
-
-        <div>
-          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
-            Links
-          </label>
-          <div className="flex flex-col gap-1">
-            {ticket.links.filter((l: TicketLink) => l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr').map((link: TicketLink) => (
-              <div key={link.id} className="flex items-center gap-2 text-xs">
-                <span className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9px] font-medium text-[var(--theme-text-muted)]">
-                  {link.type.replace('_', ' ')}
-                </span>
-                {link.url ? (
-                  <a
-                    href={link.url ?? undefined}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 truncate text-[var(--theme-accent)] hover:underline"
+        {/* Status — Nano Kanban (hidden when embedded in session tab — already in WorktreeHeader) */}
+        {!embedded && (
+          <div>
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+              Status
+            </label>
+            <div className="flex overflow-hidden rounded-md border border-[var(--theme-border)]">
+              {(TICKET_STATUSES as readonly TicketStatus[]).map((s) => {
+                const active = ticket.status === s;
+                const colors = NANO_KANBAN_COLORS[s] ?? NANO_KANBAN_COLORS.backlog!;
+                return (
+                  <button
+                    key={s}
+                    title={TICKET_STATUS_LABELS[s]}
+                    className={cn(
+                      'group relative flex flex-1 flex-col items-center gap-1 pb-1.5 pt-0 transition-colors',
+                      active ? colors.bg : colors.hoverBg,
+                    )}
+                    onClick={() => handleStatusChange(s)}
                   >
-                    {link.label}
-                  </a>
-                ) : (
-                  <span className="flex-1 truncate text-[var(--theme-text-secondary)]">{link.label}</span>
+                    {/* Top bar */}
+                    <div
+                      className={cn(
+                        'w-full transition-all',
+                        active ? cn('h-[3px]', colors.bar) : cn('h-[2px] opacity-60', colors.bar),
+                      )}
+                    />
+                    {/* Vertical abbreviated label */}
+                    <div className="flex flex-col items-center gap-px">
+                      {(NANO_KANBAN_ABBREVS[s] ?? s.slice(0, 4).toUpperCase())
+                        .split('')
+                        .map((ch: string, i: number) => (
+                          <span
+                            key={i}
+                            className={cn(
+                              'text-[8px] font-bold leading-none transition-colors',
+                              active
+                                ? colors.text
+                                : cn('text-[var(--theme-text-muted)]', colors.hoverText),
+                            )}
+                          >
+                            {ch}
+                          </span>
+                        ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Board */}
+        {boards.length > 1 && (
+          <div>
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+              Board
+            </label>
+            <select
+              className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
+              value={ticket.boardId}
+              onChange={(e) => updateTicket(ticket.id, { boardId: e.target.value })}
+            >
+              {boards.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.emoji} {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Epics (scoped to the ticket's board) */}
+        <EpicPicker ticketId={ticket.id} boardId={ticket.boardId} />
+
+        {/* Priority */}
+        <div>
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            Priority
+          </label>
+          <div className="flex gap-1">
+            {(TICKET_PRIORITIES as readonly TicketPriority[]).map((p) => (
+              <button
+                key={p}
+                className={cn(
+                  'flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-colors',
+                  ticket.priority === p
+                    ? 'bg-[var(--theme-bg-hover)] text-[var(--theme-text-primary)] ring-1 ring-[var(--theme-accent)]'
+                    : 'bg-[var(--theme-bg-overlay)] text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)]',
                 )}
-                <button
-                  className="text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
-                  onClick={() => removeLink(ticket.id, link.id)}
-                  title="Remove link"
-                >
-                  ×
-                </button>
-              </div>
+                onClick={() => handlePriorityChange(p)}
+              >
+                <PriorityIndicator priority={p} />
+                {p === 'none' ? 'None' : p.charAt(0).toUpperCase() + p.slice(1)}
+              </button>
             ))}
           </div>
         </div>
-      )}
 
-      {/* Actions */}
-      <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-[var(--theme-border)]">
-        <button
-          className={cn('w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors', tintClasses('red').hoverBg)}
-          onClick={handleDelete}
-        >
-          Delete Ticket
-        </button>
-      </div>
+        {/* Type */}
+        <div>
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            Type
+          </label>
+          <TypePickerDropdown value={ticket.type} onChange={handleTypeChange} />
+        </div>
+
+        {/* Due date */}
+        <div>
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            Due date
+          </label>
+          <DueDatePickerPopover ticket={ticket} />
+        </div>
+
+        {/* Assignee */}
+        <AssigneeField
+          assignee={ticket.assignee}
+          onChange={(assignee) => updateTicket(ticket.id, { assignee })}
+        />
+
+        {/* GitHub Issue */}
+        <GitHubIssuePicker
+          ticket={ticket}
+          onAddLink={(link) => addLink(ticket.id, link)}
+          onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
+          onSync={() => syncGithubIssue(ticket.id)}
+        />
+
+        {/* GitHub Metadata */}
+        {ticket.githubMetadata && <GitHubMetadataSection metadata={ticket.githubMetadata} />}
+
+        {/* Repository & Worktree */}
+        <RepoWorktreePicker
+          boardId={ticket.boardId}
+          repoLinks={ticket.links.filter((l: TicketLink) => l.type === 'repository')}
+          onAddLink={(link) => addLink(ticket.id, link)}
+          onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
+        />
+
+        {/* Pull Requests */}
+        <PRLinkPicker
+          ticket={ticket}
+          prStates={prStates}
+          onAddLink={(link) => addLink(ticket.id, link)}
+          onRemoveLink={(linkId) => removeLink(ticket.id, linkId)}
+        />
+
+        {/* Tags */}
+        <div>
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            Tags
+          </label>
+          <div className="flex flex-wrap gap-1">
+            {ticket.tags
+              .filter((t: string) => !isSlackImportTag(t))
+              .map((tag: string) => (
+                <span
+                  key={tag}
+                  className="flex items-center gap-1 rounded bg-[var(--theme-bg-overlay)] px-1.5 py-0.5 text-[10px] text-[var(--theme-text-secondary)]"
+                >
+                  {tag}
+                  <button
+                    className="text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+                    onClick={() => {
+                      updateTicket(ticket.id, {
+                        tags: ticket.tags.filter((t: string) => t !== tag),
+                      });
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            <TagInput
+              onAdd={(tag) => {
+                if (!ticket.tags.includes(tag)) {
+                  updateTicket(ticket.id, { tags: [...ticket.tags, tag] });
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Blocked */}
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            Blocked
+          </label>
+          <button
+            className={cn(
+              'h-4 w-7 rounded-full transition-colors',
+              ticket.blocked ? tintClasses('red').solid : 'bg-[var(--theme-bg-overlay)]',
+            )}
+            onClick={() => updateTicket(ticket.id, { blocked: !ticket.blocked })}
+          >
+            <span
+              className={cn(
+                'block h-3 w-3 rounded-full bg-white transition-transform',
+                ticket.blocked ? 'translate-x-3.5' : 'translate-x-0.5',
+              )}
+            />
+          </button>
+        </div>
+
+        {/* Favorite */}
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+            Favorite
+          </label>
+          <button
+            className={cn(
+              'h-4 w-7 rounded-full transition-colors',
+              ticket.favorite ? tintClasses('yellow').solid : 'bg-[var(--theme-bg-overlay)]',
+            )}
+            onClick={() => updateTicket(ticket.id, { favorite: !ticket.favorite })}
+          >
+            <span
+              className={cn(
+                'block h-3 w-3 rounded-full bg-white transition-transform',
+                ticket.favorite ? 'translate-x-3.5' : 'translate-x-0.5',
+              )}
+            />
+          </button>
+        </div>
+
+        {/* Other Links (non-worktree, non-repository, non-PR) */}
+        {ticket.links.filter(
+          (l: TicketLink) =>
+            l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr',
+        ).length > 0 && (
+          <div>
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-text-muted)]">
+              Links
+            </label>
+            <div className="flex flex-col gap-1">
+              {ticket.links
+                .filter(
+                  (l: TicketLink) =>
+                    l.type !== 'worktree' && l.type !== 'repository' && l.type !== 'github_pr',
+                )
+                .map((link: TicketLink) => (
+                  <div key={link.id} className="flex items-center gap-2 text-xs">
+                    <span className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9px] font-medium text-[var(--theme-text-muted)]">
+                      {link.type.replace('_', ' ')}
+                    </span>
+                    {link.url ? (
+                      <a
+                        href={link.url ?? undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 truncate text-[var(--theme-accent)] hover:underline"
+                      >
+                        {link.label}
+                      </a>
+                    ) : (
+                      <span className="flex-1 truncate text-[var(--theme-text-secondary)]">
+                        {link.label}
+                      </span>
+                    )}
+                    <button
+                      className="text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
+                      onClick={() => removeLink(ticket.id, link.id)}
+                      title="Remove link"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-[var(--theme-border)]">
+          <button
+            className={cn(
+              'w-full rounded-md border border-[var(--theme-danger)]/30 px-3 py-1.5 text-xs text-[var(--theme-danger)] transition-colors',
+              tintClasses('red').hoverBg,
+            )}
+            onClick={handleDelete}
+          >
+            Delete Ticket
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -843,17 +1016,33 @@ function RepoWorktreePicker({
           {repoLinks.map((link) => (
             <div key={link.id} className="flex items-center gap-2">
               <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className="flex-shrink-0 text-[var(--theme-text-muted)]"
+                >
                   <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5v-9z" />
                 </svg>
-                <span className="truncate text-xs text-[var(--theme-text-secondary)]">{link.ref}</span>
+                <span className="truncate text-xs text-[var(--theme-text-secondary)]">
+                  {link.ref}
+                </span>
               </div>
               <button
                 className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
                 onClick={() => onRemoveLink(link.id)}
                 title="Remove repository"
               >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
                   <line x1="4" y1="4" x2="12" y2="12" />
                   <line x1="12" y1="4" x2="4" y2="12" />
                 </svg>
@@ -889,13 +1078,19 @@ function RepoWorktreePicker({
             }
           }}
         >
-          <option value="" disabled>+ Add repository...</option>
+          <option value="" disabled>
+            + Add repository...
+          </option>
           {availableRepos.map((r) => (
-            <option key={r.key} value={r.key}>{r.org}/{r.name}</option>
+            <option key={r.key} value={r.key}>
+              {r.org}/{r.name}
+            </option>
           ))}
         </select>
       ) : repos.length === 0 ? (
-        <span className="text-[10px] text-[var(--theme-text-muted)]">No repositories configured</span>
+        <span className="text-[10px] text-[var(--theme-text-muted)]">
+          No repositories configured
+        </span>
       ) : null}
     </div>
   );
@@ -991,10 +1186,18 @@ function GitHubIssuePicker({
             rel="noopener noreferrer"
             className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-2 py-1.5 text-xs transition-colors hover:bg-[var(--theme-bg-hover)]"
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-secondary)]">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              className="flex-shrink-0 text-[var(--theme-text-secondary)]"
+            >
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
             </svg>
-            <span className="truncate font-medium text-[var(--theme-text-primary)]">{issueLink.ref}</span>
+            <span className="truncate font-medium text-[var(--theme-text-primary)]">
+              {issueLink.ref}
+            </span>
           </a>
           <button
             className="rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-text-secondary)]"
@@ -1004,7 +1207,16 @@ function GitHubIssuePicker({
             }}
             title="Edit GitHub issue link"
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
             </svg>
           </button>
@@ -1017,7 +1229,16 @@ function GitHubIssuePicker({
             disabled={syncing}
             title="Sync GitHub metadata"
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M1 4v-3h3" />
               <path d="M15 12v3h-3" />
               <path d="M13.5 6.5A6 6 0 0 0 4 3L1 1" />
@@ -1029,7 +1250,15 @@ function GitHubIssuePicker({
             onClick={handleRemove}
             title="Remove GitHub issue link"
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
               <line x1="4" y1="4" x2="12" y2="12" />
               <line x1="12" y1="4" x2="4" y2="12" />
             </svg>
@@ -1042,16 +1271,21 @@ function GitHubIssuePicker({
             className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
             placeholder="https://github.com/org/repo/issues/123"
             value={urlValue}
-            onChange={(e) => { setUrlValue(e.target.value); setError(null); }}
+            onChange={(e) => {
+              setUrlValue(e.target.value);
+              setError(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleSave();
-              if (e.key === 'Escape') { setEditing(false); setUrlValue(''); setError(null); }
+              if (e.key === 'Escape') {
+                setEditing(false);
+                setUrlValue('');
+                setError(null);
+              }
             }}
             disabled={loading}
           />
-          {error && (
-            <span className="text-[10px] text-[var(--theme-danger)]">{error}</span>
-          )}
+          {error && <span className="text-[10px] text-[var(--theme-danger)]">{error}</span>}
           <div className="flex gap-1">
             <button
               className="rounded-md bg-[var(--theme-accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
@@ -1062,7 +1296,11 @@ function GitHubIssuePicker({
             </button>
             <button
               className="rounded-md bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-              onClick={() => { setEditing(false); setUrlValue(''); setError(null); }}
+              onClick={() => {
+                setEditing(false);
+                setUrlValue('');
+                setError(null);
+              }}
             >
               Cancel
             </button>
@@ -1154,31 +1392,66 @@ function PRLinkPicker({
           const isMerged = state === 'MERGED';
           const isClosed = state === 'CLOSED';
           const colorClass = isMerged
-            ? cn(tintClasses('purple').borderColor, tintClasses('purple').bg, tintClasses('purple').hoverBg)
+            ? cn(
+                tintClasses('purple').borderColor,
+                tintClasses('purple').bg,
+                tintClasses('purple').hoverBg,
+              )
             : isClosed
-              ? cn(tintClasses('red').borderColor, tintClasses('red').bg, tintClasses('red').hoverBg)
-              : cn(tintClasses('green').borderColor, tintClasses('green').bg, tintClasses('green').hoverBg);
-          const textClass = isMerged ? tintText('purple') : isClosed ? tintText('red') : tintText('green');
+              ? cn(
+                  tintClasses('red').borderColor,
+                  tintClasses('red').bg,
+                  tintClasses('red').hoverBg,
+                )
+              : cn(
+                  tintClasses('green').borderColor,
+                  tintClasses('green').bg,
+                  tintClasses('green').hoverBg,
+                );
+          const textClass = isMerged
+            ? tintText('purple')
+            : isClosed
+              ? tintText('red')
+              : tintText('green');
           return (
-            <div key={pr.id} className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors ${colorClass}`}>
+            <div
+              key={pr.id}
+              className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors ${colorClass}`}
+            >
               <a
                 href={pr.url ?? undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex min-w-0 flex-1 items-center gap-2"
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className={`flex-shrink-0 ${textClass}`}>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className={`flex-shrink-0 ${textClass}`}
+                >
                   <path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218zM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zm8-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM4.25 4a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z" />
                 </svg>
                 <span className={`font-medium ${textClass}`}>{pr.label}</span>
-                <span className="truncate text-[10px] text-[var(--theme-text-faint)]">{pr.ref}</span>
+                <span className="truncate text-[10px] text-[var(--theme-text-faint)]">
+                  {pr.ref}
+                </span>
               </a>
               <button
                 className="flex-shrink-0 rounded p-0.5 text-[var(--theme-text-faint)] hover:text-[var(--theme-danger)]"
                 onClick={() => onRemoveLink(pr.id)}
                 title="Remove PR link"
               >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
                   <line x1="4" y1="4" x2="12" y2="12" />
                   <line x1="12" y1="4" x2="4" y2="12" />
                 </svg>
@@ -1194,16 +1467,21 @@ function PRLinkPicker({
               className="w-full rounded-md border border-[var(--theme-border-input)] bg-[var(--theme-bg-surface)] px-2 py-1 text-xs text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
               placeholder="https://github.com/org/repo/pull/123"
               value={urlValue}
-              onChange={(e) => { setUrlValue(e.target.value); setError(null); }}
+              onChange={(e) => {
+                setUrlValue(e.target.value);
+                setError(null);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleSave();
-                if (e.key === 'Escape') { setEditing(false); setUrlValue(''); setError(null); }
+                if (e.key === 'Escape') {
+                  setEditing(false);
+                  setUrlValue('');
+                  setError(null);
+                }
               }}
               disabled={loading}
             />
-            {error && (
-              <span className="text-[10px] text-[var(--theme-danger)]">{error}</span>
-            )}
+            {error && <span className="text-[10px] text-[var(--theme-danger)]">{error}</span>}
             <div className="flex gap-1">
               <button
                 className="rounded-md bg-[var(--theme-accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--theme-accent-fg)] transition-colors hover:bg-[var(--theme-accent-active)] disabled:opacity-50"
@@ -1214,7 +1492,11 @@ function PRLinkPicker({
               </button>
               <button
                 className="rounded-md bg-[var(--theme-bg-overlay)] px-2 py-0.5 text-[10px] text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-bg-hover)]"
-                onClick={() => { setEditing(false); setUrlValue(''); setError(null); }}
+                onClick={() => {
+                  setEditing(false);
+                  setUrlValue('');
+                  setError(null);
+                }}
               >
                 Cancel
               </button>
@@ -1257,26 +1539,38 @@ const STATE_COLORS: Record<string, string> = {
 
 function GitHubMetadataSection({ metadata }: { metadata: GitHubIssueMetadata }) {
   const rows: [string, React.ReactNode][] = [
-    ['State', (
-      <span className={cn('font-medium', STATE_COLORS[metadata.state] ?? 'text-[var(--theme-text-secondary)]')}>
+    [
+      'State',
+      <span
+        className={cn(
+          'font-medium',
+          STATE_COLORS[metadata.state] ?? 'text-[var(--theme-text-secondary)]',
+        )}
+      >
         {metadata.state.charAt(0) + metadata.state.slice(1).toLowerCase()}
-      </span>
-    )],
+      </span>,
+    ],
     ['Author', <span>@{metadata.author}</span>],
   ];
 
   if (metadata.assignees.length > 0) {
-    rows.push(['Assignees', <span>{metadata.assignees.map((a: string) => `@${a}`).join(', ')}</span>]);
+    rows.push([
+      'Assignees',
+      <span>{metadata.assignees.map((a: string) => `@${a}`).join(', ')}</span>,
+    ]);
   }
 
   if (metadata.labels.length > 0) {
-    rows.push(['Labels', (
+    rows.push([
+      'Labels',
       <div className="flex flex-wrap gap-0.5">
         {metadata.labels.map((l: string) => (
-          <span key={l} className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9px]">{l}</span>
+          <span key={l} className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[9px]">
+            {l}
+          </span>
         ))}
-      </div>
-    )]);
+      </div>,
+    ]);
   }
 
   if (metadata.milestone) {
@@ -1293,7 +1587,9 @@ function GitHubMetadataSection({ metadata }: { metadata: GitHubIssueMetadata }) 
           <tbody>
             {rows.map(([label, value], i) => (
               <tr key={label} className={i > 0 ? 'border-t border-[var(--theme-border)]' : ''}>
-                <td className="whitespace-nowrap px-2 py-1 text-[10px] font-medium text-[var(--theme-text-muted)]">{label}</td>
+                <td className="whitespace-nowrap px-2 py-1 text-[10px] font-medium text-[var(--theme-text-muted)]">
+                  {label}
+                </td>
                 <td className="px-2 py-1 text-[var(--theme-text-secondary)]">{value}</td>
               </tr>
             ))}
@@ -1349,11 +1645,25 @@ function AssigneeField({
       >
         {assignee ? (
           <>
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              className="flex-shrink-0 text-[var(--theme-text-muted)]"
+            >
               <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
             </svg>
-            <span className="flex-1 truncate text-left">{assignee === 'user' ? 'Me' : assignee}</span>
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-faint)]">
+            <span className="flex-1 truncate text-left">
+              {assignee === 'user' ? 'Me' : assignee}
+            </span>
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              className="flex-shrink-0 text-[var(--theme-text-faint)]"
+            >
               <path d="M4 6l4 4 4-4" />
             </svg>
           </>
@@ -1370,77 +1680,117 @@ function AssigneeField({
             {...getFloatingProps()}
             className="z-50 min-w-[200px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] py-1 shadow-lg"
           >
-          {/* Unassigned option */}
-          <button
-            className={cn(
-              'flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-              assignee === null
-                ? 'text-[var(--theme-text-primary)] font-medium'
-                : 'text-[var(--theme-text-secondary)]',
-            )}
-            onClick={() => handleSelect(null)}
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-[var(--theme-text-faint)]">
-              <circle cx="8" cy="8" r="6" />
-              <line x1="5" y1="8" x2="11" y2="8" />
-            </svg>
-            <span>Unassigned</span>
-            {assignee === null && (
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="ml-auto flex-shrink-0 text-[var(--theme-accent)]">
-                <path d="M6.5 12.5l-4-4 1.5-1.5L6.5 9.5l6-6L14 5z" />
-              </svg>
-            )}
-          </button>
-
-          {/* Me (human) option */}
-          <button
-            className={cn(
-              'flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-              assignee === 'user'
-                ? 'text-[var(--theme-text-primary)] font-medium'
-                : 'text-[var(--theme-text-secondary)]',
-            )}
-            onClick={() => handleSelect('user')}
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
-              <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
-            </svg>
-            <span>Me</span>
-            {assignee === 'user' && (
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="ml-auto flex-shrink-0 text-[var(--theme-accent)]">
-                <path d="M6.5 12.5l-4-4 1.5-1.5L6.5 9.5l6-6L14 5z" />
-              </svg>
-            )}
-          </button>
-
-          {personas.length > 0 && (
-            <div className="mx-2 my-1 border-t border-[var(--theme-border)]" />
-          )}
-
-          {/* Persona options */}
-          {personas.map((p) => (
+            {/* Unassigned option */}
             <button
-              key={p.id}
               className={cn(
                 'flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
-                assignee === p.name
+                assignee === null
                   ? 'text-[var(--theme-text-primary)] font-medium'
                   : 'text-[var(--theme-text-secondary)]',
               )}
-              onClick={() => handleSelect(p.name)}
+              onClick={() => handleSelect(null)}
             >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-text-muted)]">
-                <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                className="flex-shrink-0 text-[var(--theme-text-faint)]"
+              >
+                <circle cx="8" cy="8" r="6" />
+                <line x1="5" y1="8" x2="11" y2="8" />
               </svg>
-              <span className="truncate">{p.displayName}</span>
-              <span className="ml-auto truncate text-[10px] text-[var(--theme-text-faint)]">{p.name}</span>
-              {assignee === p.name && (
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 text-[var(--theme-accent)]">
+              <span>Unassigned</span>
+              {assignee === null && (
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className="ml-auto flex-shrink-0 text-[var(--theme-accent)]"
+                >
                   <path d="M6.5 12.5l-4-4 1.5-1.5L6.5 9.5l6-6L14 5z" />
                 </svg>
               )}
             </button>
-          ))}
+
+            {/* Me (human) option */}
+            <button
+              className={cn(
+                'flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                assignee === 'user'
+                  ? 'text-[var(--theme-text-primary)] font-medium'
+                  : 'text-[var(--theme-text-secondary)]',
+              )}
+              onClick={() => handleSelect('user')}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className="flex-shrink-0 text-[var(--theme-text-muted)]"
+              >
+                <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
+              </svg>
+              <span>Me</span>
+              {assignee === 'user' && (
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className="ml-auto flex-shrink-0 text-[var(--theme-accent)]"
+                >
+                  <path d="M6.5 12.5l-4-4 1.5-1.5L6.5 9.5l6-6L14 5z" />
+                </svg>
+              )}
+            </button>
+
+            {personas.length > 0 && (
+              <div className="mx-2 my-1 border-t border-[var(--theme-border)]" />
+            )}
+
+            {/* Persona options */}
+            {personas.map((p) => (
+              <button
+                key={p.id}
+                className={cn(
+                  'flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--theme-bg-hover)]',
+                  assignee === p.name
+                    ? 'text-[var(--theme-text-primary)] font-medium'
+                    : 'text-[var(--theme-text-secondary)]',
+                )}
+                onClick={() => handleSelect(p.name)}
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className="flex-shrink-0 text-[var(--theme-text-muted)]"
+                >
+                  <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-3.3 0-6 1.34-6 3v1h12v-1c0-1.66-2.7-3-6-3z" />
+                </svg>
+                <span className="truncate">{p.displayName}</span>
+                <span className="ml-auto truncate text-[10px] text-[var(--theme-text-faint)]">
+                  {p.name}
+                </span>
+                {assignee === p.name && (
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    className="flex-shrink-0 text-[var(--theme-accent)]"
+                  >
+                    <path d="M6.5 12.5l-4-4 1.5-1.5L6.5 9.5l6-6L14 5z" />
+                  </svg>
+                )}
+              </button>
+            ))}
           </div>
         </FloatingPortal>
       )}

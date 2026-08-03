@@ -1,6 +1,9 @@
 import { create } from 'zustand';
+
 import type { PullRequest } from '@fleex/shared';
+
 import { fetchPullRequests } from '../services/api';
+
 import { useSessionStore } from './sessionStore';
 
 interface PullRequestState {
@@ -36,7 +39,8 @@ export const usePullRequestStore = create<PullRequestState>((set, get) => ({
     const seen = new Set<string>();
     const promises: Promise<void>[] = [];
     for (const group of sessionGroups) {
-      if (!group.repositoryOrg || !group.repositoryName || group.repositoryOrg.startsWith('_')) continue;
+      if (!group.repositoryOrg || !group.repositoryName || group.repositoryOrg.startsWith('_'))
+        continue;
       const key = `${group.repositoryOrg}/${group.repositoryName}`;
       if (seen.has(key)) continue;
       seen.add(key);

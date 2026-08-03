@@ -1,10 +1,13 @@
 import { join } from 'node:path';
-import { FLEEX_DIR, CONFIG_FILE } from '@fleex/shared';
-import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
-import type { SupabaseConnection } from './connection.js';
-import type { ExecFn, HostFs } from '../../host/types.js';
-import { resolveClaudeCommand } from '../resolve-claude-command.js';
+
+import { FLEEX_DIR, CONFIG_FILE, migrateActionsConfig } from '@fleex/shared';
+
 import { applyBasePathEnvOverride } from '../config-env.js';
+import { resolveClaudeCommand } from '../resolve-claude-command.js';
+
+import type { SupabaseConnection } from './connection.js';
+import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
+import type { ExecFn, HostFs } from '../../host/types.js';
 
 export class SupabaseConfigAdapter implements ConfigPort {
   private config: AppConfig;
@@ -58,7 +61,12 @@ export class SupabaseConfigAdapter implements ConfigPort {
     if (error) throw error;
 
     if (data) {
-      this.applyData(data.data as Record<string, unknown>);
+      // applyData is sync, so the write-back for a legacy→actions fold has to
+      // happen here rather than inside it.
+      if (this.applyData(data.data as Record<string, unknown>)) {
+        this.resolveTilde();
+        await this.syncToDb();
+      }
     } else {
       await this.migrateFromJson();
     }
@@ -80,13 +88,17 @@ export class SupabaseConfigAdapter implements ConfigPort {
     }
   }
 
-  private applyData(data: Record<string, unknown>): void {
+  /** Returns true when the stored shape was rewritten and needs persisting. */
+  private applyData(data: Record<string, unknown>): boolean {
     if ('repositoriesBasePath' in data && !('basePath' in data)) {
       data['basePath'] = data['repositoriesBasePath'];
     }
     delete data['repositoriesBasePath'];
     delete data['claudeCommand'];
+    // Fold legacy pinnedIcons/workspaceActions into the `actions` registry.
+    const migrated = migrateActionsConfig(data);
     this.config = { ...this.config, ...(data as Partial<AppConfig>) };
+    return migrated;
   }
 
   private resolveTilde(): void {

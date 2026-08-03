@@ -1,15 +1,17 @@
 import { memo, useMemo, useState, Children } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import type { Components } from 'react-markdown';
-import { ImageGalleryStrip, ImagePlaceholder, extractMarkdownImages } from '../shared/ImageThumbnail';
-import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
+
 import { useColorMode } from '../../hooks/useActiveTheme';
+import { LazyMarkdown } from '../markdown/LazyMarkdown';
 import { preprocessTicketMentions, TICKET_MENTION_HREF_PREFIX } from '../markdown/mentions';
 import { TicketMentionChip } from '../markdown/TicketMentionChip';
+import {
+  ImageGalleryStrip,
+  ImagePlaceholder,
+  extractMarkdownImages,
+} from '../shared/ImageThumbnail';
+import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
+
+import type { Components } from 'react-markdown';
 
 interface MarkdownRendererProps {
   content: string;
@@ -84,31 +86,12 @@ function parseSegments(content: string): Segment[] {
   return segments;
 }
 
-// ── rehype plugins config ─────────────────────────────────────────────────────
-
-// detect: true → rehype-highlight adds the `hljs` class even to code blocks
-// without a language specifier, so we can reliably distinguish block vs inline
-// code in the `code` component override.
-const remarkPlugins = [remarkGfm];
-
-const sanitizeSchema = {
-  ...defaultSchema,
-  attributes: {
-    ...defaultSchema.attributes,
-    img: [...(defaultSchema.attributes?.img ?? []), 'width', 'height'],
-  },
-  tagNames: [
-    ...(defaultSchema.tagNames ?? []),
-    ...['details', 'summary'].filter((t) => !defaultSchema.tagNames?.includes(t)),
-  ],
-};
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const rehypePlugins: any[] = [rehypeRaw, [rehypeSanitize, sanitizeSchema], [rehypeHighlight, { detect: true }]];
-
 // ── Main component ────────────────────────────────────────────────────────────
 
-export const MarkdownRenderer = memo(function MarkdownRenderer({ content, onToggleCheckbox }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({
+  content,
+  onToggleCheckbox,
+}: MarkdownRendererProps) {
   const segments = useMemo(() => parseSegments(content), [content]);
 
   return (
@@ -386,9 +369,7 @@ function MarkdownSection({
         <table className="w-full text-sm border-collapse">{children}</table>
       </div>
     ),
-    thead: ({ children }) => (
-      <thead className="bg-[var(--theme-bg-overlay)]">{children}</thead>
-    ),
+    thead: ({ children }) => <thead className="bg-[var(--theme-bg-overlay)]">{children}</thead>,
     tbody: ({ children }) => (
       <tbody className="divide-y divide-[var(--theme-border)]">{children}</tbody>
     ),
@@ -403,15 +384,12 @@ function MarkdownSection({
         {children}
       </td>
     ),
-
   };
 
   return (
     <>
       <ImageGalleryStrip images={images} />
-      <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
-        {processed}
-      </Markdown>
+      <LazyMarkdown content={processed} components={components} preset="safe-html" />
     </>
   );
 }

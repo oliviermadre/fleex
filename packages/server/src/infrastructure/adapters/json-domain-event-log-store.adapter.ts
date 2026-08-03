@@ -1,6 +1,9 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
+
 import { DomainEventLogEntity } from '../../domain/entities/domain-event-log.entity.js';
+
 import type { DomainEventLogStorePort } from '../../application/ports/domain-event-log-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { HostFs } from '../host/types.js';
@@ -55,8 +58,11 @@ export class JsonDomainEventLogStore implements DomainEventLogStorePort {
 
     if (params.eventType) {
       const prefix = params.eventType;
-      result = result.filter((e) =>
-        e.eventType === prefix || e.eventType.startsWith(prefix + '.') || e.eventType.startsWith(prefix),
+      result = result.filter(
+        (e) =>
+          e.eventType === prefix ||
+          e.eventType.startsWith(prefix + '.') ||
+          e.eventType.startsWith(prefix),
       );
     }
 
@@ -119,7 +125,13 @@ export class JsonDomainEventLogStore implements DomainEventLogStorePort {
       const data = JSON.parse(raw) as SerializedEntry[];
       for (const e of data) {
         this.entries.push(
-          new DomainEventLogEntity(e.id, e.eventType, e.payload, e.instanceId, new Date(e.occurredAt)),
+          new DomainEventLogEntity(
+            e.id,
+            e.eventType,
+            e.payload,
+            e.instanceId,
+            new Date(e.occurredAt),
+          ),
         );
       }
       this.logger.info('Domain event log loaded', { count: this.entries.length });

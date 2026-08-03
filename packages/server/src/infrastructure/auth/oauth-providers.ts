@@ -78,7 +78,7 @@ export async function exchangeCodeForToken(
     }),
   });
 
-  const data = await res.json() as Record<string, unknown>;
+  const data = (await res.json()) as Record<string, unknown>;
   const token = data.access_token as string | undefined;
   if (!token) {
     throw new Error(`OAuth token exchange failed: ${JSON.stringify(data)}`);
@@ -96,12 +96,17 @@ export async function fetchGitHubUser(accessToken: string): Promise<OAuthUserInf
     }),
   ]);
 
-  const user = await userRes.json() as Record<string, unknown>;
-  const emails = await emailsRes.json() as Array<{ email: string; primary: boolean; verified: boolean }>;
+  const user = (await userRes.json()) as Record<string, unknown>;
+  const emails = (await emailsRes.json()) as Array<{
+    email: string;
+    primary: boolean;
+    verified: boolean;
+  }>;
 
-  const primaryEmail = emails.find((e) => e.primary && e.verified)?.email
-    ?? emails.find((e) => e.verified)?.email
-    ?? (user.email as string);
+  const primaryEmail =
+    emails.find((e) => e.primary && e.verified)?.email ??
+    emails.find((e) => e.verified)?.email ??
+    (user.email as string);
 
   return {
     provider: 'github',
@@ -117,7 +122,7 @@ export async function fetchGoogleUser(accessToken: string): Promise<OAuthUserInf
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  const data = await res.json() as Record<string, unknown>;
+  const data = (await res.json()) as Record<string, unknown>;
 
   return {
     provider: 'google',

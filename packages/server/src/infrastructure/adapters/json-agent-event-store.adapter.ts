@@ -1,8 +1,14 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR } from '@fleex/shared';
 import type { AgentExecution } from '@fleex/shared';
+
 import { AgentEventEntity } from '../../domain/entities/agent-event.entity.js';
-import type { AgentEventStorePort, CliExecutionUpsert } from '../../application/ports/agent-event-store.port.js';
+
+import type {
+  AgentEventStorePort,
+  CliExecutionUpsert,
+} from '../../application/ports/agent-event-store.port.js';
 import type { LoggerPort } from '../../application/ports/logger.port.js';
 import type { HostFs } from '../host/types.js';
 
@@ -99,11 +105,24 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     }
   }
 
-  async completeExecution(executionId: string, status: 'completed' | 'failed' | 'interrupted', metrics?: {
-    model?: string; effectiveMode?: string; effort?: string; fast?: boolean; durationMs?: number; costUsd?: number;
-    inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number;
-    commentId?: string; deliverableId?: string;
-  }): Promise<void> {
+  async completeExecution(
+    executionId: string,
+    status: 'completed' | 'failed' | 'interrupted',
+    metrics?: {
+      model?: string;
+      effectiveMode?: string;
+      effort?: string;
+      fast?: boolean;
+      durationMs?: number;
+      costUsd?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
+      commentId?: string;
+      deliverableId?: string;
+    },
+  ): Promise<void> {
     const entry = this.index.find((e) => e.id === executionId);
     if (entry) {
       entry.status = status;
@@ -117,14 +136,18 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       if (metrics?.inputTokens != null) entry.inputTokens = metrics.inputTokens;
       if (metrics?.outputTokens != null) entry.outputTokens = metrics.outputTokens;
       if (metrics?.cacheReadTokens != null) entry.cacheReadTokens = metrics.cacheReadTokens;
-      if (metrics?.cacheCreationTokens != null) entry.cacheCreationTokens = metrics.cacheCreationTokens;
+      if (metrics?.cacheCreationTokens != null)
+        entry.cacheCreationTokens = metrics.cacheCreationTokens;
       if (metrics?.commentId != null) entry.commentId = metrics.commentId;
       if (metrics?.deliverableId != null) entry.deliverableId = metrics.deliverableId;
       await this.syncIndex();
     }
   }
 
-  async setExecutionOutputs(executionId: string, refs: { commentId?: string; deliverableId?: string }): Promise<void> {
+  async setExecutionOutputs(
+    executionId: string,
+    refs: { commentId?: string; deliverableId?: string },
+  ): Promise<void> {
     const entry = this.index.find((e) => e.id === executionId);
     if (entry) {
       if (refs.commentId != null) entry.commentId = refs.commentId;
@@ -143,14 +166,16 @@ export class JsonAgentEventStore implements AgentEventStorePort {
       if (!line.trim()) continue;
       try {
         const dto = JSON.parse(line);
-        events.push(new AgentEventEntity(
-          dto.id,
-          dto.executionId,
-          dto.eventType,
-          dto.data,
-          dto.sequence,
-          new Date(dto.createdAt),
-        ));
+        events.push(
+          new AgentEventEntity(
+            dto.id,
+            dto.executionId,
+            dto.eventType,
+            dto.data,
+            dto.sequence,
+            new Date(dto.createdAt),
+          ),
+        );
       } catch {
         // Skip malformed lines
       }
@@ -159,9 +184,7 @@ export class JsonAgentEventStore implements AgentEventStorePort {
   }
 
   async getExecutionsByTicket(ticketId: string): Promise<AgentExecution[]> {
-    return this.index
-      .filter((e) => e.ticketId === ticketId)
-      .map(this.indexToExecution);
+    return this.index.filter((e) => e.ticketId === ticketId).map(this.indexToExecution);
   }
 
   async getExecutionsByPersona(personaId: string, limit = 50): Promise<AgentExecution[]> {
@@ -189,8 +212,15 @@ export class JsonAgentEventStore implements AgentEventStorePort {
   async upsertCliExecution(p: CliExecutionUpsert): Promise<void> {
     const existing = this.index.find((e) => e.id === p.executionId);
     const entry: ExecutionIndex = existing ?? {
-      id: p.executionId, personaId: 'cli', ticketId: p.ticketId, mentionId: p.mentionId,
-      eventCount: 0, status: 'completed', startedAt: p.startedAt, completedAt: null, lastEventAt: null,
+      id: p.executionId,
+      personaId: 'cli',
+      ticketId: p.ticketId,
+      mentionId: p.mentionId,
+      eventCount: 0,
+      status: 'completed',
+      startedAt: p.startedAt,
+      completedAt: null,
+      lastEventAt: null,
     };
     entry.status = 'completed';
     entry.completedAt = p.completedAt;
@@ -223,7 +253,9 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     return mentionIds;
   }
 
-  async getSessionHistory(): Promise<Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>> {
+  async getSessionHistory(): Promise<
+    Map<string, { sdkSessionId: string; personaId: string; ticketId: string }>
+  > {
     const sorted = [...this.index]
       .filter((e) => e.sdkSessionId)
       .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
@@ -232,7 +264,11 @@ export class JsonAgentEventStore implements AgentEventStorePort {
     for (const entry of sorted) {
       const key = `${entry.personaId}:${entry.ticketId}`;
       if (!result.has(key)) {
-        result.set(key, { sdkSessionId: entry.sdkSessionId!, personaId: entry.personaId, ticketId: entry.ticketId });
+        result.set(key, {
+          sdkSessionId: entry.sdkSessionId!,
+          personaId: entry.personaId,
+          ticketId: entry.ticketId,
+        });
       }
     }
     return result;

@@ -1,78 +1,37 @@
-import { homedir } from 'node:os';
-import { handleExec } from './exec';
-import { handleFs } from './fs';
-import { handlePtyMessage, handlePtyOpen, handlePtyClose } from './pty';
-import { logAlways, getVerbosity } from './logger';
+import { userInfo } from 'node:os';
+
+import { TokenStore } from './auth';
+import { logAlways, logError, getVerbosity } from './logger';
+import { createGatewayServer } from './server';
 
 const PORT = parseInt(process.env['GATEWAY_PORT'] ?? '3001', 10);
+const HOSTNAME = process.env['GATEWAY_BIND'] ?? '127.0.0.1';
 
-// ── HTTP + WebSocket server ──
+const LOOPBACK = ['127.0.0.1', 'localhost', '::1'];
 
-interface PtyWsData {
-  initialized: boolean;
-  proc: ReturnType<typeof Bun.spawn> | null;
-  terminal: any;
+/** Fail closed: no token means no gateway, never an unauthenticated one. */
+function createTokenStore(): TokenStore {
+  try {
+    return new TokenStore({ envToken: process.env['GATEWAY_TOKEN'] });
+  } catch (err) {
+    logError(
+      `Host gateway refusing to start — cannot provision the shared token: ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
 }
 
-Bun.serve<PtyWsData>({
-  port: PORT,
+const tokenStore = createTokenStore();
 
-  async fetch(req, server) {
-    const url = new URL(req.url);
+if (!LOOPBACK.includes(HOSTNAME)) {
+  logAlways(
+    `⚠  GATEWAY_BIND=${HOSTNAME} — the gateway is reachable beyond loopback. ` +
+      `/exec runs arbitrary shell commands as ${userInfo().username}.`,
+  );
+}
 
-    // WebSocket upgrade for /pty
-    if (url.pathname === '/pty') {
-      const ok = server.upgrade(req, {
-        data: { initialized: false, proc: null, terminal: null },
-      });
-      return ok ? undefined : new Response('WebSocket upgrade failed', { status: 400 });
-    }
-
-    // Health check
-    if (url.pathname === '/health' && req.method === 'GET') {
-      return Response.json({
-        ok: true,
-        homedir: homedir(),
-      });
-    }
-
-    // Command execution
-    if (url.pathname === '/exec' && req.method === 'POST') {
-      try {
-        const body = await req.json();
-        const result = await handleExec(body);
-        return Response.json(result);
-      } catch (err: any) {
-        return Response.json({ error: err.message }, { status: 500 });
-      }
-    }
-
-    // Filesystem operations
-    if (url.pathname === '/fs' && req.method === 'POST') {
-      try {
-        const body = await req.json();
-        const result = await handleFs(body);
-        return Response.json(result);
-      } catch (err: any) {
-        return Response.json({ error: err.message }, { status: 500 });
-      }
-    }
-
-    return new Response('Not Found', { status: 404 });
-  },
-
-  websocket: {
-    open(ws) {
-      handlePtyOpen(ws);
-    },
-    message(ws, message) {
-      handlePtyMessage(ws, message);
-    },
-    close(ws) {
-      handlePtyClose(ws);
-    },
-  },
-});
+createGatewayServer({ port: PORT, hostname: HOSTNAME, tokenStore });
 
 const verbLabel = getVerbosity() >= 2 ? ' (debug)' : getVerbosity() >= 1 ? ' (verbose)' : '';
-logAlways(`Host gateway listening on http://localhost:${PORT}${verbLabel}`);
+logAlways(`Host gateway listening on http://${HOSTNAME}:${PORT}${verbLabel}`);

@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import type { ServerWebSocket } from 'bun';
+
 import { logInfo, logError } from './logger';
+
+import type { ServerWebSocket } from 'bun';
 
 interface PtyInitMessage {
   tmuxSessionName: string;
@@ -14,10 +16,12 @@ interface PtyResizeMessage {
   rows: number;
 }
 
-interface PtyWsData {
+export interface PtyWsData {
   initialized: boolean;
   proc: ReturnType<typeof Bun.spawn> | null;
   terminal: any;
+  /** Token presented at upgrade time, re-checked when the token file changes. */
+  authToken: string;
 }
 
 function resolveTmuxPath(): string {
@@ -30,14 +34,11 @@ function resolveTmuxPath(): string {
 
 const TMUX_PATH = resolveTmuxPath();
 
-export function handlePtyOpen(ws: ServerWebSocket<PtyWsData>) {
+export function handlePtyOpen(_ws: ServerWebSocket<PtyWsData>) {
   logInfo('[pty] WebSocket connected, waiting for init message');
 }
 
-export function handlePtyMessage(
-  ws: ServerWebSocket<PtyWsData>,
-  message: string | Buffer,
-) {
+export function handlePtyMessage(ws: ServerWebSocket<PtyWsData>, message: string | Buffer) {
   // If not initialized yet, expect a JSON init message
   if (!ws.data.initialized) {
     try {
@@ -74,7 +75,7 @@ export function handlePtyMessage(
       logInfo(`[pty] spawned pid=${proc.pid} for tmux session "${tmuxSessionName}"`);
 
       // Handle process exit
-      proc.exited.then((exitCode) => {
+      void proc.exited.then((exitCode) => {
         logInfo(`[pty] exited pid=${proc.pid} exitCode=${exitCode}`);
         try {
           ws.send(JSON.stringify({ type: 'exit', exitCode: exitCode ?? 0 }));

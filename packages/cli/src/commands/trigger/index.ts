@@ -1,8 +1,5 @@
 import chalk from 'chalk';
-import type { CommandDef } from '../../core/types.ts';
-import { c, die, ok } from '../../core/colors.ts';
-import { apiBase, apiPost } from '../../core/api.ts';
-import { resolveTicketId } from '../ticket/_shared.ts';
+
 import {
   type AgenticType,
   type HandleCatalog,
@@ -10,6 +7,11 @@ import {
   loadHandleCatalog,
   suggest,
 } from '../../core/agentic.ts';
+import { apiBase, apiPost } from '../../core/api.ts';
+import { c, die, ok } from '../../core/colors.ts';
+import { resolveTicketId } from '../ticket/_shared.ts';
+
+import type { CommandDef } from '../../core/types.ts';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;
@@ -40,7 +42,8 @@ function parseToken(token: string): { type: AgenticType; name: string } | null {
 const def: CommandDef = {
   workspaceAware: true,
   name: 'trigger',
-  description: 'Trigger an agentic action on a ticket (agent / skill / panel / workflow) via a mention',
+  description:
+    'Trigger an agentic action on a ticket (agent / skill / panel / workflow) via a mention',
   setup(cmd) {
     cmd.argument('<ticket>', 'Ticket display ID or UUID');
     cmd.argument('[mentions...]', 'Raw @type:name tokens (e.g. @agent:builder @skill:ship)');
@@ -73,7 +76,9 @@ ${SECTION('Discover handles:')}  fleex agent|skill|panel|workflow list
     for (const raw of mentions ?? []) {
       const parsed = parseToken(raw);
       if (!parsed) {
-        die(`Invalid mention token "${raw}" (expected @agent:name | @skill:name | @panel:name | @workflow:name)`);
+        die(
+          `Invalid mention token "${raw}" (expected @agent:name | @skill:name | @panel:name | @workflow:name)`,
+        );
       }
       tokens.push(parsed);
     }
@@ -88,7 +93,9 @@ ${SECTION('Discover handles:')}  fleex agent|skill|panel|workflow list
       const valid = catalog[t.type];
       if (!valid.includes(t.name)) {
         const hint = suggest(t.name, valid);
-        const suffix = hint ? ` Did you mean ${c.green(hint)}?` : ` Run \`fleex ${t.type} list\` to see valid names.`;
+        const suffix = hint
+          ? ` Did you mean ${c.green(hint)}?`
+          : ` Run \`fleex ${t.type} list\` to see valid names.`;
         die(`Unknown ${t.type} "${t.name}".${suffix}`);
       }
     }

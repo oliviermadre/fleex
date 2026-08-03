@@ -5,7 +5,9 @@
  * (e.g. "PR #209" from detect-merge vs "org/name#204"). Returns null when the
  * ref carries no PR number.
  */
-export function parseGithubPrRef(ref: string): { org: string; name: string; number: number } | null {
+export function parseGithubPrRef(
+  ref: string,
+): { org: string; name: string; number: number } | null {
   const hash = ref.lastIndexOf('#');
   if (hash < 0) return null;
   const number = Number.parseInt(ref.slice(hash + 1), 10);

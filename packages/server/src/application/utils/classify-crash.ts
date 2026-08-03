@@ -19,7 +19,8 @@ export interface CrashClassification {
  * wording as the thrown-error path.
  */
 export const CRASH_MESSAGES: Record<string, string> = {
-  usage_limit: "Quota d'usage épuisé. Changez de compte Claude ou ajoutez des crédits, puis relancez.",
+  usage_limit:
+    "Quota d'usage épuisé. Changez de compte Claude ou ajoutez des crédits, puis relancez.",
   not_authenticated: 'Non authentifié à Claude Code. Faites `claude login` puis relancez.',
   max_turns: 'Limite de tours atteinte. Relancez pour continuer (reprise de session).',
   subprocess: "La session s'est interrompue. Consultez les logs, puis relancez.",
@@ -27,8 +28,10 @@ export const CRASH_MESSAGES: Record<string, string> = {
   unknown: "La session s'est interrompue. Consultez les logs, puis relancez.",
 };
 
-const USAGE_LIMIT = /usage limit|monthly limit|hit your .*limit|out of credits?|insufficient .*credit|quota (?:exceeded|exhausted)/i;
-const NOT_AUTH = /not logged in|claude login|not authenticated|unauthorized|invalid api key|authentication_error|\b401\b/i;
+const USAGE_LIMIT =
+  /usage limit|monthly limit|hit your .*limit|out of credits?|insufficient .*credit|quota (?:exceeded|exhausted)/i;
+const NOT_AUTH =
+  /not logged in|claude login|not authenticated|unauthorized|invalid api key|authentication_error|\b401\b/i;
 const MAX_TURNS = /max(?:imum)?[ _-]?turns|error_max_turns/i;
 
 /**
@@ -40,8 +43,10 @@ const MAX_TURNS = /max(?:imum)?[ _-]?turns|error_max_turns/i;
 export function classifyCrash(raw: string, opts: { acknowledged: boolean }): CrashClassification {
   const text = (raw ?? '').trim();
 
-  if (USAGE_LIMIT.test(text)) return { reason: 'usage_limit', message: CRASH_MESSAGES.usage_limit! };
-  if (NOT_AUTH.test(text)) return { reason: 'not_authenticated', message: CRASH_MESSAGES.not_authenticated! };
+  if (USAGE_LIMIT.test(text))
+    return { reason: 'usage_limit', message: CRASH_MESSAGES.usage_limit! };
+  if (NOT_AUTH.test(text))
+    return { reason: 'not_authenticated', message: CRASH_MESSAGES.not_authenticated! };
   if (MAX_TURNS.test(text)) return { reason: 'max_turns', message: CRASH_MESSAGES.max_turns! };
 
   if (!opts.acknowledged) {

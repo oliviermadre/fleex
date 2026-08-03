@@ -1,17 +1,31 @@
 import { Handle, Position, useConnection } from '@xyflow/react';
 import { useState } from 'react';
+
 import type { WorkflowStep, WorkflowExecutorType } from '@fleex/shared';
+
 import { COLOR_ERROR_RED } from '../../lib/constants';
-import { tintClasses } from '../../lib/tints';
 import { PrimitiveIcon, type PrimitiveKind } from '../../lib/primitives';
+import { tintClasses } from '../../lib/tints';
 
 // ── Inline SVG icons (mirrored from StepRunNode.tsx) ─────────────────────────
 
-interface IconProps { className?: string }
+interface IconProps {
+  className?: string;
+}
 
 function UserCheckIcon({ className }: IconProps) {
   return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <polyline points="16 11 18 13 22 9" />
@@ -21,7 +35,17 @@ function UserCheckIcon({ className }: IconProps) {
 
 function XIcon({ className }: IconProps) {
   return (
-    <svg className={className} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M18 6L6 18M6 6l12 12" />
     </svg>
   );
@@ -43,7 +67,14 @@ function StepIcon({ type, className }: { type: WorkflowExecutorType; className?:
   // tinted={false}: the icon inherits the node's executor-type colour (border +
   // icon share one hue) instead of re-applying the tint, keeping each node
   // chromatically coherent.
-  return <PrimitiveIcon kind={EXECUTOR_TO_PRIMITIVE[type]} size={16} className={className} tinted={false} />;
+  return (
+    <PrimitiveIcon
+      kind={EXECUTOR_TO_PRIMITIVE[type]}
+      size={16}
+      className={className}
+      tinted={false}
+    />
+  );
 }
 
 const executorColor = {
@@ -66,10 +97,10 @@ export interface EditorStepNodeData {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const BORDER_HEX = {
-  agent: '#a855f7',       // purple-500
-  panel: '#3b82f6',       // blue-500
-  skill: '#22c55e',       // green-500
-  human_gate: '#f59e0b',  // amber-500
+  agent: '#a855f7', // purple-500
+  panel: '#3b82f6', // blue-500
+  skill: '#22c55e', // green-500
+  human_gate: '#f59e0b', // amber-500
 } as const;
 
 export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
@@ -82,7 +113,15 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
   // Defensive: if React Flow passes weird data, render a visible fallback instead of crashing
   if (!data || !data.step) {
     return (
-      <div style={{ padding: '10px', background: COLOR_ERROR_RED, color: 'white', borderRadius: 8, fontSize: 12 }}>
+      <div
+        style={{
+          padding: '10px',
+          background: COLOR_ERROR_RED,
+          color: 'white',
+          borderRadius: 8,
+          fontSize: 12,
+        }}
+      >
         Missing step data
       </div>
     );
@@ -115,12 +154,25 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
 
       {hovered && (
         <button
-          onClick={(e) => { e.stopPropagation(); onDelete(step.id); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(step.id);
+          }}
           style={{
-            position: 'absolute', top: -8, right: -8, zIndex: 10,
-            width: 20, height: 20, borderRadius: '50%',
-            background: 'rgba(220,38,38,0.85)', color: 'white', border: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            position: 'absolute',
+            top: -8,
+            right: -8,
+            zIndex: 10,
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            background: 'rgba(220,38,38,0.85)',
+            color: 'white',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
           }}
           title="Delete step"
         >
@@ -152,17 +204,49 @@ export function EditorStepNode({ data }: { data: EditorStepNodeData }) {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <StepIcon type={step.executorType} className="w-4 h-4" />
-          <span style={{ fontSize: 12, fontWeight: 500, flex: 1, color: 'var(--theme-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 500,
+              flex: 1,
+              color: 'var(--theme-text-primary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {step.name || 'Unnamed'}
           </span>
           {isEntry && (
-            <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', padding: '2px 4px', borderRadius: 3, background: 'var(--theme-bg-hover)', color: 'var(--theme-text-primary)' }}>
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                padding: '2px 4px',
+                borderRadius: 3,
+                background: 'var(--theme-bg-hover)',
+                color: 'var(--theme-text-primary)',
+              }}
+            >
               entry
             </span>
           )}
         </div>
-        <div style={{ fontSize: 10, color: 'var(--theme-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {showUnconfigured ? <span style={{ fontStyle: 'italic', opacity: 0.6 }}>Unconfigured</span> : (step.executorRef || '—')}
+        <div
+          style={{
+            fontSize: 10,
+            color: 'var(--theme-text-muted)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {showUnconfigured ? (
+            <span style={{ fontStyle: 'italic', opacity: 0.6 }}>Unconfigured</span>
+          ) : (
+            step.executorRef || '—'
+          )}
         </div>
       </div>
 

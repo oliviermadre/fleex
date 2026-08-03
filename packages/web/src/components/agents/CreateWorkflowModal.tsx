@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+
 import { cn } from '../../lib/cn';
+import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 
 interface CreateWorkflowModalProps {
   open: boolean;
@@ -38,7 +39,15 @@ export function CreateWorkflowModal({ open, onClose }: CreateWorkflowModalProps)
         slug: slug.trim(),
         emoji,
         description: description.trim(),
-        steps: [{ id: entryId, name: 'Entry Step', executorType: 'agent', executorRef: '', position: { x: 0, y: 0 } }],
+        steps: [
+          {
+            id: entryId,
+            name: 'Entry Step',
+            executorType: 'agent',
+            executorRef: '',
+            position: { x: 0, y: 0 },
+          },
+        ],
         edges: [],
         entryStepId: entryId,
         enabled: true,
@@ -57,7 +66,10 @@ export function CreateWorkflowModal({ open, onClose }: CreateWorkflowModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-md rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -118,9 +130,7 @@ export function CreateWorkflowModal({ open, onClose }: CreateWorkflowModalProps)
           </div>
         </div>
 
-        {error && (
-          <p className="mt-3 text-xs text-[var(--theme-danger)]">{error}</p>
-        )}
+        {error && <p className="mt-3 text-xs text-[var(--theme-danger)]">{error}</p>}
 
         <div className="mt-5 flex justify-end gap-2">
           <button

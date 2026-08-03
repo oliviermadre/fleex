@@ -1,7 +1,9 @@
 import type { CommentVisibility } from '@fleex/shared';
+
 import { TicketCommentEntity } from '../../../domain/entities/ticket-comment.entity.js';
-import type { CommentStorePort } from '../../../application/ports/comment-store.port.js';
+
 import type { PgConnection } from './connection.js';
+import type { CommentStorePort } from '../../../application/ports/comment-store.port.js';
 
 export class PgCommentStore implements CommentStorePort {
   constructor(private readonly db: PgConnection) {}

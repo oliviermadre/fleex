@@ -163,9 +163,7 @@ export function computeRemovalClosure(
     }
   }
 
-  const targetKeys = new Set(
-    targets.map(refKey).filter((k) => byKey.has(k)),
-  );
+  const targetKeys = new Set(targets.map(refKey).filter((k) => byKey.has(k)));
 
   // BFS over the reverse graph starting from the targets.
   const removeKeys = new Set<string>(targetKeys);

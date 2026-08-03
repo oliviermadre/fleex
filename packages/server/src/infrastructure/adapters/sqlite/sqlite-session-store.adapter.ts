@@ -1,7 +1,9 @@
 import type { SessionType, SessionStatus, SessionHookStatus, WaitingReason } from '@fleex/shared';
+
 import { SessionEntity } from '../../../domain/entities.js';
-import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
+
 import type { SqliteConnection } from './connection.js';
+import type { SessionStorePort } from '../../../application/ports/session-store.port.js';
 
 interface SessionRow {
   id: string;
@@ -71,14 +73,14 @@ export class SqliteSessionStoreAdapter implements SessionStorePort {
   }
 
   async getById(id: string): Promise<SessionEntity | null> {
-    const row = this.conn.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as
+      SessionRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 
   async getByTmuxName(name: string): Promise<SessionEntity | null> {
-    const row = this.conn.db
-      .prepare('SELECT * FROM sessions WHERE tmux_name = ?')
-      .get(name) as SessionRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM sessions WHERE tmux_name = ?').get(name) as
+      SessionRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 

@@ -1,6 +1,7 @@
-import type { CommandDef } from '../../../core/types.ts';
 import { c, info } from '../../../core/colors.ts';
 import { readRegistry, loadManifest } from '../../../core/registry.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const def: CommandDef = {
   name: 'list',
@@ -20,9 +21,10 @@ const def: CommandDef = {
           acc[p.kind] = (acc[p.kind] ?? 0) + 1;
           return acc;
         }, {});
-        summary = Object.entries(counts)
-          .map(([k, n]) => `${n} ${k}${n > 1 ? 's' : ''}`)
-          .join(' · ') || c.dim('(empty)');
+        summary =
+          Object.entries(counts)
+            .map(([k, n]) => `${n} ${k}${n > 1 ? 's' : ''}`)
+            .join(' · ') || c.dim('(empty)');
       } catch {
         // keep "(unreadable)"
       }

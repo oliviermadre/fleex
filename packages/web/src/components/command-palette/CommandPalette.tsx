@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+
 import { useUIStore } from '../../stores/uiStore';
+
 import { useCommandItems } from './useCommandItems';
+
 import type { CommandItem } from './commandPaletteTypes';
 
 export function CommandPalette() {
@@ -58,7 +61,9 @@ export function CommandPalette() {
 
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setHighlightedIndex((i) => (items.length === 0 ? 0 : (i - 1 + items.length) % items.length));
+        setHighlightedIndex((i) =>
+          items.length === 0 ? 0 : (i - 1 + items.length) % items.length,
+        );
         return;
       }
 
@@ -75,16 +80,23 @@ export function CommandPalette() {
     return () => window.removeEventListener('keydown', handleKey, true);
   }, [open, items, highlightedIndex, closeCommandPalette]);
 
-  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === backdropRef.current) {
-      closeCommandPalette();
-    }
-  }, [closeCommandPalette]);
+  const handleBackdropClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === backdropRef.current) {
+        closeCommandPalette();
+      }
+    },
+    [closeCommandPalette],
+  );
 
   if (!open) return null;
 
   // Group items by category, preserving order
-  const grouped: { category: string; categoryLabel: string; items: { item: CommandItem; flatIndex: number }[] }[] = [];
+  const grouped: {
+    category: string;
+    categoryLabel: string;
+    items: { item: CommandItem; flatIndex: number }[];
+  }[] = [];
   let flatIndex = 0;
   for (const item of items) {
     let group = grouped.find((g) => g.category === item.category);
@@ -97,15 +109,21 @@ export function CommandPalette() {
   }
 
   return createPortal(
-    <div
-      ref={backdropRef}
-      className="command-palette-backdrop"
-      onClick={handleBackdropClick}
-    >
+    <div ref={backdropRef} className="command-palette-backdrop" onClick={handleBackdropClick}>
       <div className="command-palette-container" style={{ alignSelf: 'flex-start' }}>
         {/* Search input */}
         <div className="flex items-center gap-3 border-b border-[var(--theme-border-subtle)] px-4 py-3">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-text-muted)]">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="shrink-0 text-[var(--theme-text-muted)]"
+          >
             <circle cx="7" cy="7" r="4.5" />
             <line x1="10.2" y1="10.2" x2="14" y2="14" />
           </svg>
@@ -168,15 +186,21 @@ export function CommandPalette() {
         {/* Footer with keyboard hints */}
         <div className="flex items-center gap-4 border-t border-[var(--theme-border-subtle)] px-4 py-2 text-[11px] text-[var(--theme-text-faint)]">
           <span className="flex items-center gap-1">
-            <kbd className="rounded border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-1 py-0.5 text-[10px]">&uarr;&darr;</kbd>
+            <kbd className="rounded border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-1 py-0.5 text-[10px]">
+              &uarr;&darr;
+            </kbd>
             navigate
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="rounded border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-1 py-0.5 text-[10px]">&crarr;</kbd>
+            <kbd className="rounded border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-1 py-0.5 text-[10px]">
+              &crarr;
+            </kbd>
             select
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="rounded border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-1 py-0.5 text-[10px]">esc</kbd>
+            <kbd className="rounded border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-hover)] px-1 py-0.5 text-[10px]">
+              esc
+            </kbd>
             close
           </span>
         </div>

@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseDotEnv, applyEnv } from './env.ts';
+
 import { warn, die, err } from './colors.ts';
-import { runRules, makeRuleContext } from './workspaces-validation.ts';
+import { parseDotEnv, applyEnv } from './env.ts';
 import { setSelectedWorkspace } from './workspace-selection.ts';
+import { runRules, makeRuleContext } from './workspaces-validation.ts';
 
 /**
  * A workspace is a named, isolated configuration context. Its `env` block is
@@ -80,10 +81,14 @@ export function parseWorkspacesFile(filePath: string = workspacesFilePath()): Wo
       throw new Error(`workspaces.json: every workspace needs a non-empty "name".`);
     }
     if (w.env != null && (typeof w.env !== 'object' || Array.isArray(w.env))) {
-      throw new Error(`workspaces.json: workspace '${w.name}' has an invalid "env" (must be an object).`);
+      throw new Error(
+        `workspaces.json: workspace '${w.name}' has an invalid "env" (must be an object).`,
+      );
     }
     if (w.basePath != null && (typeof w.basePath !== 'string' || w.basePath.trim() === '')) {
-      throw new Error(`workspaces.json: workspace '${w.name}' has an invalid "basePath" (must be a non-empty string).`);
+      throw new Error(
+        `workspaces.json: workspace '${w.name}' has an invalid "basePath" (must be a non-empty string).`,
+      );
     }
     if (seen.has(w.name)) {
       throw new Error(`workspaces.json is corrupt: duplicate workspace name '${w.name}'.`);
@@ -161,7 +166,9 @@ export function validateWorkspacesConfig(
   }
   if (workspaces === null) return { ok: true }; // legacy mode — nothing to validate
 
-  const firstError = runRules(makeRuleContext(workspaces), ['config']).find((i) => i.level === 'error');
+  const firstError = runRules(makeRuleContext(workspaces), ['config']).find(
+    (i) => i.level === 'error',
+  );
   return firstError ? { ok: false, error: firstError.message } : { ok: true };
 }
 
@@ -201,12 +208,16 @@ export interface ConfigReportLine {
  * command just renders. Centralizes the parse/legacy/rules branching (and keeps
  * `doctor` from re-reporting "legacy mode" when the file exists but is corrupt).
  */
-export function reportWorkspacesConfig(filePath: string = workspacesFilePath()): ConfigReportLine[] {
+export function reportWorkspacesConfig(
+  filePath: string = workspacesFilePath(),
+): ConfigReportLine[] {
   let workspaces: Workspace[] | null;
   try {
     workspaces = parseWorkspacesFile(filePath);
   } catch (e) {
-    return [{ level: 'error', message: `${e instanceof Error ? e.message : String(e)} Fix: ${filePath}` }];
+    return [
+      { level: 'error', message: `${e instanceof Error ? e.message : String(e)} Fix: ${filePath}` },
+    ];
   }
   if (workspaces === null) {
     return [{ level: 'legacy', message: `legacy .env mode (no ${path.basename(filePath)})` }];
@@ -217,7 +228,10 @@ export function reportWorkspacesConfig(filePath: string = workspacesFilePath()):
     const def = workspaces.find((w) => w.is_default);
     const defLabel = def ? def.name : '(none — pass --workspace)';
     const plural = workspaces.length === 1 ? '' : 's';
-    lines.push({ level: 'ok', message: `valid (${workspaces.length} workspace${plural}, default: ${defLabel})` });
+    lines.push({
+      level: 'ok',
+      message: `valid (${workspaces.length} workspace${plural}, default: ${defLabel})`,
+    });
   }
   return lines;
 }
@@ -243,7 +257,9 @@ function checkPermissions(filePath: string): void {
   try {
     const mode = fs.statSync(filePath).mode & 0o077;
     if (mode !== 0) {
-      warn(`${filePath} is group/world accessible — it contains secrets. Tighten with: chmod 600 ${filePath}`);
+      warn(
+        `${filePath} is group/world accessible — it contains secrets. Tighten with: chmod 600 ${filePath}`,
+      );
     }
   } catch {
     // ignore — cannot stat (e.g. permissions); not worth failing the command.

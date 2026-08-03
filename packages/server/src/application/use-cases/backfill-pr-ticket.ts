@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { TicketEntity } from '../../domain/entities/ticket.entity.js';
+
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
+import { TicketEntity } from '../../domain/entities/ticket.entity.js';
+
 import type { LoggerPort } from '../ports/logger.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 
 interface BackfillPRTicketParams {
   org: string;
@@ -39,40 +41,24 @@ export class BackfillPRTicketUseCase {
     });
 
     // Link to the GitHub PR
-    ticket.addLink(
-      'github_pr',
-      `${org}/${name}#${prNumber}`,
-      `#${prNumber}`,
-      prUrl,
-      randomUUID(),
-    );
+    ticket.addLink('github_pr', `${org}/${name}#${prNumber}`, `#${prNumber}`, prUrl, randomUUID());
 
     // Link to worktree (branch)
-    ticket.addLink(
-      'worktree',
-      `${org}/${name}:${headRefName}`,
-      headRefName,
-      null,
-      randomUUID(),
-    );
+    ticket.addLink('worktree', `${org}/${name}:${headRefName}`, headRefName, null, randomUUID());
 
     // Link to repository
-    ticket.addLink(
-      'repository',
-      `${org}/${name}`,
-      `${org}/${name}`,
-      null,
-      randomUUID(),
-    );
+    ticket.addLink('repository', `${org}/${name}`, `${org}/${name}`, null, randomUUID());
 
     await this.ticketStore.createTicket(ticket);
-    await this.ticketStore.saveActivity(TicketActivityEntity.create({
-      id: randomUUID(),
-      ticketId,
-      action: 'created',
-      changes: { source: { from: null, to: `pr-backfill:${org}/${name}#${prNumber}` } },
-      source: 'web',
-    }));
+    await this.ticketStore.saveActivity(
+      TicketActivityEntity.create({
+        id: randomUUID(),
+        ticketId,
+        action: 'created',
+        changes: { source: { from: null, to: `pr-backfill:${org}/${name}#${prNumber}` } },
+        source: 'web',
+      }),
+    );
 
     this.logger.info('PR backfilled as ticket', { org, name, prNumber, ticketId, role });
 

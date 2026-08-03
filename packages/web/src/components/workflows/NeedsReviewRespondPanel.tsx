@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import { Button } from '../ui/Button';
+
 import { useDraft } from '../../hooks/useDraft';
 import { tintClasses } from '../../lib/tints';
+import { LazyMarkdown } from '../markdown/LazyMarkdown';
+import { Button } from '../ui/Button';
 
 interface Props {
   runId: string;
@@ -21,9 +20,11 @@ interface Props {
 }
 
 export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }: Props) {
-  const { draft: response, setDraft: setResponse, clearDraft } = useDraft(
-    `needs_review_response_${runId}_${stepRunId}`,
-  );
+  const {
+    draft: response,
+    setDraft: setResponse,
+    clearDraft,
+  } = useDraft(`needs_review_response_${runId}_${stepRunId}`);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,16 +46,18 @@ export function NeedsReviewRespondPanel({ runId, stepRunId, question, onSubmit }
   };
 
   return (
-    <div className={`space-y-3 rounded-md border ${tintClasses('yellow').borderColor} ${tintClasses('yellow').bg} p-3`}>
+    <div
+      className={`space-y-3 rounded-md border ${tintClasses('yellow').borderColor} ${tintClasses('yellow').bg} p-3`}
+    >
       <div>
-        <div className={`text-xs font-medium uppercase tracking-wide ${tintClasses('yellow').text}`}>
+        <div
+          className={`text-xs font-medium uppercase tracking-wide ${tintClasses('yellow').text}`}
+        >
           Waiting for your input
         </div>
         {question && (
           <div className="needs-review-markdown mt-2 max-h-[460px] overflow-y-auto pr-1 text-xs text-[var(--theme-text-primary)]">
-            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-              {question}
-            </Markdown>
+            <LazyMarkdown content={question} preset="basic" />
           </div>
         )}
       </div>

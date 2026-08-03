@@ -1,6 +1,8 @@
 import { create } from 'zustand';
+
 import type { Session, SessionGroup, SessionStatus, WorktreeSessionGroup } from '@fleex/shared';
 import { KILL_GRACE_MS, ADD_GRACE_MS } from '@fleex/shared';
+
 import { useUIStore } from './uiStore';
 
 /** IDs of recently killed sessions — filtered out of broadcast updates to prevent flicker */
@@ -72,6 +74,13 @@ interface SessionState {
   sessionGroups: SessionGroup[];
   selectedGroupId: string | null;
   activeGroupCellIndex: number | null;
+  /**
+   * Why the session list is empty, when it is empty because loading failed.
+   * `null` means "no known failure" — an empty list is then genuinely empty.
+   * Without this the sidebar renders the same way in both cases, which is the
+   * silent failure this ticket is about.
+   */
+  sessionsLoadError: string | null;
   setSessions: (sessions: Session[]) => void;
   setSessionGroups: (groups: SessionGroup[]) => void;
   selectTicketTab: (ticketId: string | null, tabKey?: string | null) => void;
@@ -87,6 +96,7 @@ interface SessionState {
   updateSessionStatus: (id: string, status: SessionStatus) => void;
   selectGroup: (id: string | null) => void;
   setActiveGroupCellIndex: (index: number | null) => void;
+  setSessionsLoadError: (message: string | null) => void;
 }
 
 /** Extract sessionId from a tab key like 's:uuid' */
@@ -105,8 +115,10 @@ export const useSessionStore = create<SessionState>((set) => ({
   sessionGroups: [],
   selectedGroupId: null,
   activeGroupCellIndex: null,
+  sessionsLoadError: null,
 
-  setSessions: (sessions) => set({ sessions: preserveRecentlyAdded(filterKilledFromList(sessions)) }),
+  setSessions: (sessions) =>
+    set({ sessions: preserveRecentlyAdded(filterKilledFromList(sessions)) }),
 
   setSessionGroups: (groups) => set({ sessionGroups: filterKilledSessions(groups) }),
 
@@ -125,7 +137,14 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   selectSession: (id) => {
     // Legacy compat — derive selectedSessionId
-    set({ selectedSessionId: id, selectedTabKey: id ? `s:${id}` : null, splitSessionId: null, focusedPane: 'primary', selectedGroupId: null, activeGroupCellIndex: null });
+    set({
+      selectedSessionId: id,
+      selectedTabKey: id ? `s:${id}` : null,
+      splitSessionId: null,
+      focusedPane: 'primary',
+      selectedGroupId: null,
+      activeGroupCellIndex: null,
+    });
   },
 
   openSplit: (id) =>
@@ -139,8 +158,7 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   setFocusedPane: (pane) => set({ focusedPane: pane }),
 
-  addSession: (session) =>
-    set((state) => ({ sessions: [...state.sessions, session] })),
+  addSession: (session) => set((state) => ({ sessions: [...state.sessions, session] })),
 
   addSessionToGroup: (session) =>
     set((state) => {
@@ -228,18 +246,19 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   updateSessionStatus: (id, status) =>
     set((state) => ({
-      sessions: state.sessions.map((s) =>
-        s.id === id ? { ...s, status } : s
-      ),
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, status } : s)),
     })),
 
-  selectGroup: (id) => set({
-    selectedGroupId: id,
-    selectedSessionId: null,
-    splitSessionId: null,
-    focusedPane: 'primary',
-    activeGroupCellIndex: null,
-  }),
+  selectGroup: (id) =>
+    set({
+      selectedGroupId: id,
+      selectedSessionId: null,
+      splitSessionId: null,
+      focusedPane: 'primary',
+      activeGroupCellIndex: null,
+    }),
 
   setActiveGroupCellIndex: (index) => set({ activeGroupCellIndex: index }),
+
+  setSessionsLoadError: (message) => set({ sessionsLoadError: message }),
 }));

@@ -1,10 +1,13 @@
-import type { CommandDef } from '../../../../core/types.ts';
-import { c, info, present } from '../../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../../core/api.ts';
+import { c, info, present } from '../../../../core/colors.ts';
 import { resolveTicketId } from '../../../ticket/_shared.ts';
+
+import type { CommandDef } from '../../../../core/types.ts';
 import type { WorkflowRun } from '../../_shared.ts';
 
-interface ListOptions { board?: string }
+interface ListOptions {
+  board?: string;
+}
 
 const def: CommandDef = {
   workspaceAware: true,
@@ -28,7 +31,9 @@ const def: CommandDef = {
       process.stdout.write('\n');
       const header = `${'RUN ID'.padEnd(36)}  ${'STATUS'.padEnd(12)}  ${'WORKFLOW'.padEnd(23)}  STARTED`;
       process.stdout.write(`  ${c.bold(header)}\n`);
-      process.stdout.write(`  ${'─'.repeat(36)}  ${'─'.repeat(12)}  ${'─'.repeat(23)}  ${'─'.repeat(20)}\n`);
+      process.stdout.write(
+        `  ${'─'.repeat(36)}  ${'─'.repeat(12)}  ${'─'.repeat(23)}  ${'─'.repeat(20)}\n`,
+      );
       for (const r of runs) {
         const id = r.id.padEnd(36);
         const status = (r.status ?? '-').padEnd(12);

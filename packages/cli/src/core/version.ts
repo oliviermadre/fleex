@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+
 import { die } from './colors.ts';
 
 export const MIN_BUN_VERSION = '1.3.5';

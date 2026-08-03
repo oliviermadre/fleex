@@ -1,6 +1,8 @@
 import chalk from 'chalk';
-import type { CommandDef } from '../../../core/types.ts';
+
 import { runMcpStart, type McpStartOptions } from './_impl.ts';
+
+import type { CommandDef } from '../../../core/types.ts';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;
@@ -16,6 +18,10 @@ const def: CommandDef = {
     cmd.option(
       '--include <groups>',
       'Comma-separated top-level command groups to expose as tools (default: ticket,epic)',
+    );
+    cmd.option(
+      '--assume-yes',
+      'Allow destructive tools to skip the CLI confirmation prompt (your MCP client becomes the approval authority)',
     );
   },
   extraHelp: `\n${SECTION('Foreground only:')}

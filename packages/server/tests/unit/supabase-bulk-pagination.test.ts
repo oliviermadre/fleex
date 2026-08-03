@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+
 import { SupabaseCommentStore } from '../../src/infrastructure/adapters/supabase/supabase-comment-store.adapter.js';
 import { SupabaseDeliverableStore } from '../../src/infrastructure/adapters/supabase/supabase-deliverable-store.adapter.js';
+
 import type { SupabaseConnection } from '../../src/infrastructure/adapters/supabase/connection.js';
 
 /**
@@ -77,10 +79,12 @@ describe('SupabaseCommentStore.getByTicketIds pagination', () => {
   it('returns every matching comment even past the 1000-row PostgREST cap', async () => {
     // 1500 comments spread over 3 tickets — ticket-c's rows all sit past the cap.
     const tickets = ['ticket-a', 'ticket-b', 'ticket-c'];
-    const rows = Array.from({ length: 1500 }, (_, i) => commentRow(i, tickets[Math.floor(i / 500)]!));
-    const store = new SupabaseCommentStore(
-      { client: makeFakeClient({ comments: rows }) } as unknown as SupabaseConnection,
+    const rows = Array.from({ length: 1500 }, (_, i) =>
+      commentRow(i, tickets[Math.floor(i / 500)]!),
     );
+    const store = new SupabaseCommentStore({
+      client: makeFakeClient({ comments: rows }),
+    } as unknown as SupabaseConnection);
 
     const result = await store.getByTicketIds(tickets);
 
@@ -91,9 +95,9 @@ describe('SupabaseCommentStore.getByTicketIds pagination', () => {
 
   it('still works for small result sets (single page)', async () => {
     const rows = Array.from({ length: 3 }, (_, i) => commentRow(i, 'ticket-a'));
-    const store = new SupabaseCommentStore(
-      { client: makeFakeClient({ comments: rows }) } as unknown as SupabaseConnection,
-    );
+    const store = new SupabaseCommentStore({
+      client: makeFakeClient({ comments: rows }),
+    } as unknown as SupabaseConnection);
     expect(await store.getByTicketIds(['ticket-a'])).toHaveLength(3);
   });
 });
@@ -101,10 +105,12 @@ describe('SupabaseCommentStore.getByTicketIds pagination', () => {
 describe('SupabaseDeliverableStore.getByTicketIds pagination', () => {
   it('returns every matching deliverable even past the 1000-row PostgREST cap', async () => {
     const tickets = ['ticket-a', 'ticket-b', 'ticket-c'];
-    const rows = Array.from({ length: 1500 }, (_, i) => deliverableRow(i, tickets[Math.floor(i / 500)]!));
-    const store = new SupabaseDeliverableStore(
-      { client: makeFakeClient({ deliverables: rows }) } as unknown as SupabaseConnection,
+    const rows = Array.from({ length: 1500 }, (_, i) =>
+      deliverableRow(i, tickets[Math.floor(i / 500)]!),
     );
+    const store = new SupabaseDeliverableStore({
+      client: makeFakeClient({ deliverables: rows }),
+    } as unknown as SupabaseConnection);
 
     const result = await store.getByTicketIds(tickets);
 

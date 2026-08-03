@@ -1,7 +1,8 @@
-import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { pidFile, type InstanceContext } from './instance.ts';
+import fs from 'node:fs';
+
 import { err, c } from './colors.ts';
+import { pidFile, type InstanceContext } from './instance.ts';
 
 export function savePid(svc: string, pid: number, ctx?: InstanceContext): void {
   fs.writeFileSync(pidFile(svc, ctx), String(pid));
@@ -132,7 +133,9 @@ export async function waitForService(
     }
     await sleep(1000);
   }
-  err(`${name} did not become healthy within ${timeoutSec}s (last HTTP ${lastCode}). Last 15 lines of log:`);
+  err(
+    `${name} did not become healthy within ${timeoutSec}s (last HTTP ${lastCode}). Last 15 lines of log:`,
+  );
   tailLog(logFilePath, 15);
   return false;
 }

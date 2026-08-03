@@ -1,12 +1,23 @@
 import { useNavigate } from 'react-router-dom';
-import { useUIStore, type AnalyticsTab } from '../../stores/uiStore';
-import { cn } from '../../lib/cn';
 
-const COLLAPSE_BTN = 'flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]';
+import { cn } from '../../lib/cn';
+import { useUIStore, type AnalyticsTab } from '../../stores/uiStore';
+
+const COLLAPSE_BTN =
+  'flex h-6 w-6 items-center justify-center rounded text-[var(--theme-text-muted)] transition-colors hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]';
 
 const tabIcons: Record<AnalyticsTab, React.ReactNode> = {
   'audit-trail': (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
       <line x1="16" y1="13" x2="8" y2="13" />
@@ -14,8 +25,18 @@ const tabIcons: Record<AnalyticsTab, React.ReactNode> = {
     </svg>
   ),
   statistics: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 4-6" />
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 3v18h18" />
+      <path d="M7 16l4-8 4 4 4-6" />
     </svg>
   ),
 };
@@ -32,14 +53,24 @@ export function AnalyticsNav() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4" style={{ height: 'var(--header-height)' }}>
-        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">Analytics</span>
-        <button
-          onClick={toggleContentPanel}
-          className={COLLAPSE_BTN}
-          title="Collapse panel"
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <div
+        className="flex items-center justify-between border-b border-[var(--theme-border)] px-4"
+        style={{ height: 'var(--header-height)' }}
+      >
+        <span className="text-xs font-bold uppercase tracking-wider text-[var(--theme-text-muted)]">
+          Analytics
+        </span>
+        <button onClick={toggleContentPanel} className={COLLAPSE_BTN} title="Collapse panel">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
             <line x1="6" y1="1.5" x2="6" y2="14.5" />
           </svg>
@@ -54,7 +85,7 @@ export function AnalyticsNav() {
               'flex items-center gap-3 border-l-2 py-2.5 pl-5 pr-3 text-left text-sm transition-colors',
               analyticsTab === tab.key
                 ? 'border-[var(--theme-accent)] bg-[var(--theme-bg-hover)] font-semibold text-[var(--theme-text-primary)]'
-                : 'border-transparent text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]'
+                : 'border-transparent text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-primary)]',
             )}
             onClick={() => navigate(`/analytics/${tab.key}`, { replace: true })}
           >

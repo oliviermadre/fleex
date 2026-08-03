@@ -1,7 +1,9 @@
-import { PanelEntity } from '../../../domain/entities/panel.entity.js';
-import type { PanelStorePort } from '../../../application/ports/panel-store.port.js';
-import type { SqliteConnection } from './connection.js';
 import type { PanelMember } from '@fleex/shared';
+
+import { PanelEntity } from '../../../domain/entities/panel.entity.js';
+
+import type { SqliteConnection } from './connection.js';
+import type { PanelStorePort } from '../../../application/ports/panel-store.port.js';
 
 interface PanelRow {
   id: string;
@@ -23,23 +25,19 @@ export class SqlitePanelStoreAdapter implements PanelStorePort {
   constructor(private readonly conn: SqliteConnection) {}
 
   async getAll(): Promise<PanelEntity[]> {
-    const rows = this.conn.db
-      .prepare('SELECT * FROM panels ORDER BY name ASC')
-      .all() as PanelRow[];
+    const rows = this.conn.db.prepare('SELECT * FROM panels ORDER BY name ASC').all() as PanelRow[];
     return rows.map((r) => this.toEntity(r));
   }
 
   async getById(id: string): Promise<PanelEntity | null> {
-    const row = this.conn.db
-      .prepare('SELECT * FROM panels WHERE id = ?')
-      .get(id) as PanelRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM panels WHERE id = ?').get(id) as
+      PanelRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 
   async getByName(name: string): Promise<PanelEntity | null> {
-    const row = this.conn.db
-      .prepare('SELECT * FROM panels WHERE name = ?')
-      .get(name) as PanelRow | undefined;
+    const row = this.conn.db.prepare('SELECT * FROM panels WHERE name = ?').get(name) as
+      PanelRow | undefined;
     return row ? this.toEntity(row) : null;
   }
 

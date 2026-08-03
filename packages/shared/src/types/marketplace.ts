@@ -73,10 +73,7 @@ export interface MarketplaceWorkflow {
 }
 
 export type MarketplacePrimitiveContent =
-  | MarketplacePersona
-  | MarketplaceSkill
-  | MarketplacePanel
-  | MarketplaceWorkflow;
+  MarketplacePersona | MarketplaceSkill | MarketplacePanel | MarketplaceWorkflow;
 
 // ── Manifest (marketplace.json at the repo root) ──
 

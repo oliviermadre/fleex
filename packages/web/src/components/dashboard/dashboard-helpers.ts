@@ -30,10 +30,7 @@ export function findSessionsForTicketId(
  * Find all running sessions matching a PR by branch + repo.
  * Pattern from PullRequestsSection.tsx:59
  */
-export function findSessionsForPR(
-  pr: DashboardPullRequest,
-  sessions: Session[],
-): Session[] {
+export function findSessionsForPR(pr: DashboardPullRequest, sessions: Session[]): Session[] {
   return sessions.filter(
     (s) =>
       s.status === 'running' &&
@@ -51,5 +48,7 @@ export function hasLocalWorktreeForPR(
   pr: DashboardPullRequest,
   worktrees: DashboardWorktree[],
 ): boolean {
-  return worktrees.some((wt) => wt.branch === pr.headRefName && wt.org === pr.org && wt.name === pr.name);
+  return worktrees.some(
+    (wt) => wt.branch === pr.headRefName && wt.org === pr.org && wt.name === pr.name,
+  );
 }

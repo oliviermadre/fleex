@@ -1,12 +1,15 @@
 import { useState, useRef, useCallback } from 'react';
+
 import type { Ticket, TicketStatus, BoardWithCounts } from '@fleex/shared';
 import { TICKET_STATUS_LABELS } from '@fleex/shared';
-import { KanbanCard } from './KanbanCard';
-import { InlineCardCreator } from './InlineCardCreator';
-import { useTicketStore } from '../../stores/ticketStore';
-import * as api from '../../services/api';
+
 import { cn } from '../../lib/cn';
 import { getStatusBadgeClass, STATUS_COLORS } from '../../lib/statusColors';
+import * as api from '../../services/api';
+import { useTicketStore } from '../../stores/ticketStore';
+
+import { InlineCardCreator } from './InlineCardCreator';
+import { KanbanCard } from './KanbanCard';
 
 const COLUMN_TITLE_COLOR: Record<string, string> = {
   backlog: STATUS_COLORS.backlog!.text,
@@ -71,57 +74,60 @@ export function KanbanColumn({
     setDropIndex(-1);
   };
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const insertAt = dropIndex;
-    setDropIndex(-1);
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const insertAt = dropIndex;
+      setDropIndex(-1);
 
-    const ticketId = e.dataTransfer.getData('application/x-ticket-id');
-    if (!ticketId) return;
+      const ticketId = e.dataTransfer.getData('application/x-ticket-id');
+      if (!ticketId) return;
 
-    // Build the new ordered list for this column
-    const filtered = tickets.filter((t) => t.id !== ticketId);
-    const idx = Math.min(Math.max(insertAt, 0), filtered.length);
-    const dragged = useTicketStore.getState().tickets.find((t) => t.id === ticketId);
-    if (!dragged) return;
+      // Build the new ordered list for this column
+      const filtered = tickets.filter((t) => t.id !== ticketId);
+      const idx = Math.min(Math.max(insertAt, 0), filtered.length);
+      const dragged = useTicketStore.getState().tickets.find((t) => t.id === ticketId);
+      if (!dragged) return;
 
-    const movingAcrossColumns = dragged.status !== status;
+      const movingAcrossColumns = dragged.status !== status;
 
-    // Insert at the target index
-    const ordered = [...filtered];
-    ordered.splice(idx, 0, dragged as Ticket);
+      // Insert at the target index
+      const ordered = [...filtered];
+      ordered.splice(idx, 0, dragged as Ticket);
 
-    // Build position updates
-    const updates = ordered.map((t, i) => ({
-      id: t.id,
-      status,
-      position: i,
-    }));
+      // Build position updates
+      const updates = ordered.map((t, i) => ({
+        id: t.id,
+        status,
+        position: i,
+      }));
 
-    // Optimistic update in store
-    useTicketStore.setState((s) => {
-      const updatedMap = new Map(updates.map((u) => [u.id, u]));
-      return {
-        tickets: s.tickets.map((t) => {
-          const upd = updatedMap.get(t.id);
-          if (upd) return { ...t, status: upd.status, position: upd.position };
-          return t;
-        }),
-      };
-    });
+      // Optimistic update in store
+      useTicketStore.setState((s) => {
+        const updatedMap = new Map(updates.map((u) => [u.id, u]));
+        return {
+          tickets: s.tickets.map((t) => {
+            const upd = updatedMap.get(t.id);
+            if (upd) return { ...t, status: upd.status, position: upd.position };
+            return t;
+          }),
+        };
+      });
 
-    // Persist
-    if (movingAcrossColumns) {
-      // Use moveTicket for the dragged card (creates 'moved' activity), then reorder the rest
-      const moveStore = useTicketStore.getState().moveTicket;
-      await moveStore(ticketId, status, idx);
-      const rest = updates.filter((u) => u.id !== ticketId);
-      if (rest.length > 0) await api.reorderTickets(rest);
-    } else {
-      await api.reorderTickets(updates);
-    }
-  }, [tickets, status, dropIndex]);
+      // Persist
+      if (movingAcrossColumns) {
+        // Use moveTicket for the dragged card (creates 'moved' activity), then reorder the rest
+        const moveStore = useTicketStore.getState().moveTicket;
+        await moveStore(ticketId, status, idx);
+        const rest = updates.filter((u) => u.id !== ticketId);
+        if (rest.length > 0) await api.reorderTickets(rest);
+      } else {
+        await api.reorderTickets(updates);
+      }
+    },
+    [tickets, status, dropIndex],
+  );
 
   if (collapsed) {
     return (
@@ -140,17 +146,34 @@ export function KanbanColumn({
           onClick={onToggleCollapse}
           title={`Expand ${TICKET_STATUS_LABELS[status]}`}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </button>
         {/* Badge */}
-        <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', getStatusBadgeClass(status))}>
+        <span
+          className={cn(
+            'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+            getStatusBadgeClass(status),
+          )}
+        >
           {tickets.length}
         </span>
         {/* Vertical label */}
         <span
-          className={cn('mt-3 text-xs font-bold uppercase tracking-wider', COLUMN_TITLE_COLOR[status])}
+          className={cn(
+            'mt-3 text-xs font-bold uppercase tracking-wider',
+            COLUMN_TITLE_COLOR[status],
+          )}
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
         >
           {TICKET_STATUS_LABELS[status]}
@@ -171,10 +194,17 @@ export function KanbanColumn({
     >
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-[var(--theme-border)] px-4 py-3">
-        <span className={cn('text-sm font-bold uppercase tracking-wider', COLUMN_TITLE_COLOR[status])}>
+        <span
+          className={cn('text-sm font-bold uppercase tracking-wider', COLUMN_TITLE_COLOR[status])}
+        >
           {TICKET_STATUS_LABELS[status]}
         </span>
-        <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', getStatusBadgeClass(status))}>
+        <span
+          className={cn(
+            'rounded-full px-2 py-0.5 text-xs font-medium',
+            getStatusBadgeClass(status),
+          )}
+        >
           {tickets.length}
         </span>
         {onToggleCollapse && (
@@ -183,7 +213,16 @@ export function KanbanColumn({
             onClick={onToggleCollapse}
             title={`Collapse ${TICKET_STATUS_LABELS[status]}`}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>

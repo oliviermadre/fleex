@@ -1,29 +1,55 @@
-import { useEffect } from 'react';
-import { useWebSocket } from '../../hooks/useWebSocket';
-import { useSessions } from '../../hooks/useSessions';
-import { useRepositoryDashboard } from '../../hooks/useRepositoryDashboard';
-import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
-import { useHotkeyReveal } from '../../hooks/useHotkeyReveal';
-import { usePullRequestPolling } from '../../hooks/usePullRequestPolling';
-import { useTickets } from '../../hooks/useTickets';
-import { useTicketActivity } from '../../hooks/useTicketActivity';
-import { useNotifications } from '../../hooks/useNotifications';
+import { useEffect, lazy, Suspense } from 'react';
+
 import { useAgentPersonas } from '../../hooks/useAgentPersonas';
+import { useCapabilities } from '../../hooks/useCapabilities';
+import { useHotkeyReveal } from '../../hooks/useHotkeyReveal';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { useNotifications } from '../../hooks/useNotifications';
+import { usePullRequestPolling } from '../../hooks/usePullRequestPolling';
+import { useRepositoryDashboard } from '../../hooks/useRepositoryDashboard';
+import { useSessions } from '../../hooks/useSessions';
 import { useSkills } from '../../hooks/useSkills';
-import { useUIStore } from '../../stores/uiStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { useRepositoryStore } from '../../stores/repositoryStore';
+import { useTicketActivity } from '../../hooks/useTicketActivity';
+import { useTickets } from '../../hooks/useTickets';
+import { useWebSocket } from '../../hooks/useWebSocket';
+import { reportClientError } from '../../services/errorReporter';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
+import { useRepositoryStore } from '../../stores/repositoryStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
-import { NavSidebar } from '../sidebar/NavSidebar';
-import { ContentPanel } from '../sidebar/ContentPanel';
+import { ErrorBoundary } from '../errors/ErrorBoundary';
 import { MainPanel } from '../main-panel/MainPanel';
-import { ResizeHandle } from './ResizeHandle';
-import { ScratchpadPanel } from '../scratchpad/ScratchpadPanel';
+import { useMainViewKey } from '../main-panel/useMainViewKey';
+import { warmMarkdown } from '../markdown/LazyMarkdown';
 import { ScratchpadHint } from '../scratchpad/ScratchpadHint';
-import { FloatingSessionOverlay } from '../main-panel/FloatingSessionOverlay';
-import { FloatingDeliverableOverlay } from '../tickets/FloatingDeliverableOverlay';
-import { DeliverableReadingOverlay } from '../tickets/DeliverableReadingOverlay';
+import { ContentPanel } from '../sidebar/ContentPanel';
+import { NavSidebar } from '../sidebar/NavSidebar';
+
+import { ResizeHandle } from './ResizeHandle';
+
+// Overlays and panels that are absent from the default view. Each one's own
+// "render nothing" condition is hoisted to the call site below, so the chunk is
+// never fetched for a component that would immediately return null.
+// FloatingSessionOverlay in particular is the last static edge to @xterm/xterm.
+const ScratchpadPanel = lazy(() =>
+  import('../scratchpad/ScratchpadPanel').then((m) => ({ default: m.ScratchpadPanel })),
+);
+const FloatingSessionOverlay = lazy(() =>
+  import('../main-panel/FloatingSessionOverlay').then((m) => ({
+    default: m.FloatingSessionOverlay,
+  })),
+);
+const FloatingDeliverableOverlay = lazy(() =>
+  import('../tickets/FloatingDeliverableOverlay').then((m) => ({
+    default: m.FloatingDeliverableOverlay,
+  })),
+);
+const DeliverableReadingOverlay = lazy(() =>
+  import('../tickets/DeliverableReadingOverlay').then((m) => ({
+    default: m.DeliverableReadingOverlay,
+  })),
+);
 
 const NAV_COLLAPSED_WIDTH = 64;
 const NAV_EXPANDED_WIDTH = 200;
@@ -51,17 +77,45 @@ export function AppLayout() {
   const loadDeliverableTypes = useDeliverableTypesStore((s) => s.load);
 
   useEffect(() => {
-    loadSettings();
-    fetchRepositories();
-    loadDeliverableTypes();
+    // These were previously fire-and-forget: a rejection became an unhandled
+    // rejection in the console and nothing else. Route them to the reporter so
+    // a failed boot is visible in the server logs.
+    const report = (what: string) => (error: unknown) =>
+      reportClientError({ error, source: 'unhandledrejection', boundary: `AppLayout.${what}` });
+
+    loadSettings().catch(report('loadSettings'));
+    fetchRepositories().catch(report('fetchRepositories'));
+    loadDeliverableTypes().catch(report('loadDeliverableTypes'));
+    // The default panel is the kanban board, and any ticket renders markdown —
+    // fetch that chunk while idle so the Suspense fallback never actually shows.
+    warmMarkdown();
   }, [loadSettings, fetchRepositories, loadDeliverableTypes]);
 
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
+  const mainViewKey = useMainViewKey();
+  const { workflowsAvailable } = useCapabilities();
+
+  // Hoisted out of the lazy components themselves — see the comment on the
+  // lazy() declarations above.
+  const scratchpadOpen = useUIStore((s) => s.scratchpadOpen);
+  const hasFloatingSessions = useUIStore((s) => s.floatingSessionIds.length > 0);
+  const hasFloatingDeliverables = useUIStore((s) => s.floatingDeliverableIds.length > 0);
+  const hasDeliverableOverlay = useUIStore((s) => s.deliverableOverlay !== null);
 
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
-  // Hide the content panel when editing a workflow so the editor takes the full viewport width
-  const editingWorkflow = activePanel === 'agents' && !!selectedWorkflowId;
-  const hideContentPanel = activePanel === 'dashboard' || activePanel === 'cluster' || activePanel === 'tickets' || activePanel === 'list-focus' || activePanel === 'execution-log' || activePanel === 'documents' || editingWorkflow;
+  // Hide the content panel when editing a workflow so the editor takes the full
+  // viewport width. On a driver without workflow support the route renders an
+  // explanation instead of an editor, so the panel stays — otherwise a deep link
+  // would strand the user on a full-screen dead end with nothing to click.
+  const editingWorkflow = activePanel === 'agents' && !!selectedWorkflowId && workflowsAvailable;
+  const hideContentPanel =
+    activePanel === 'dashboard' ||
+    activePanel === 'cluster' ||
+    activePanel === 'tickets' ||
+    activePanel === 'list-focus' ||
+    activePanel === 'execution-log' ||
+    activePanel === 'documents' ||
+    editingWorkflow;
   const effectiveContentWidth = hideContentPanel
     ? 0
     : contentPanelCollapsed
@@ -78,20 +132,39 @@ export function AppLayout() {
       }}
     >
       <div className="overflow-hidden">
-        <NavSidebar />
+        <ErrorBoundary name="nav-sidebar" variant="inline">
+          <NavSidebar />
+        </ErrorBoundary>
       </div>
       <div className={contentPanelCollapsed ? 'overflow-visible' : 'overflow-hidden'}>
-        <ContentPanel />
+        <ErrorBoundary name="content-panel" variant="inline">
+          <ContentPanel />
+        </ErrorBoundary>
       </div>
       <div className="relative flex flex-1 overflow-hidden" style={{ minWidth: 0 }}>
         {!hideContentPanel && <ResizeHandle />}
-        <MainPanel />
+        {/*
+          Keyed by view identity: a caught error sticks until the boundary is
+          remounted, so without this key a crash on one ticket would keep
+          showing the crash screen after navigating to a healthy one.
+          `useMainViewKey` is called above — it must live OUTSIDE the boundary
+          it drives.
+        */}
+        <ErrorBoundary key={mainViewKey} name="main-view" viewKey={mainViewKey}>
+          <MainPanel />
+        </ErrorBoundary>
       </div>
-      <ScratchpadPanel />
-      <ScratchpadHint />
-      <FloatingSessionOverlay />
-      <FloatingDeliverableOverlay />
-      <DeliverableReadingOverlay />
+      <ErrorBoundary name="scratchpad" variant="inline">
+        <ScratchpadHint />
+        <Suspense fallback={null}>{scratchpadOpen && <ScratchpadPanel />}</Suspense>
+      </ErrorBoundary>
+      <ErrorBoundary name="overlays" variant="inline">
+        <Suspense fallback={null}>
+          {hasFloatingSessions && <FloatingSessionOverlay />}
+          {hasFloatingDeliverables && <FloatingDeliverableOverlay />}
+          {hasDeliverableOverlay && <DeliverableReadingOverlay />}
+        </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }

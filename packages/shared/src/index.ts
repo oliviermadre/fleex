@@ -16,6 +16,44 @@ export { slugify } from './slugify.js';
 
 export { buildTicketWorkspaceId } from './utils/workspace.js';
 
+export type {
+  ActionScope,
+  ActionKind,
+  ActionParamType,
+  ActionIconType,
+  ActionParamDef,
+  ActionDef,
+  ActionContextVariable,
+  RunActionRequest,
+  RunActionResponse,
+} from './types/action.js';
+export {
+  ACTION_PARAM_NAME_RE,
+  ACTION_DEFAULT_TIMEOUT_MS,
+  ACTION_TIMEOUT_MIN_MS,
+  ACTION_TIMEOUT_MAX_MS,
+  ACTION_OUTPUT_LIMIT_BYTES,
+  ACTION_CONTEXT_VARIABLES,
+} from './types/action.js';
+
+export type { WorkspaceContext, StrictTemplateResult } from './actions/template.js';
+export {
+  buildWorkspaceContext,
+  parsePipeExpression,
+  resolveTemplate,
+  resolveTemplateStrict,
+  templateVariables,
+} from './actions/template.js';
+export type { PipeFunction } from './actions/pipes/index.js';
+export { getPipe } from './actions/pipes/index.js';
+export type { ParsedCommandLine, ExtractedPlaceholders } from './actions/parse-command-line.js';
+export { parseCommandLine, extractPlaceholders } from './actions/parse-command-line.js';
+export { migrateActionsConfig } from './actions/migrate-actions-config.js';
+export type { ActionDefError } from './actions/validate-actions.js';
+export { validateActionDefs } from './actions/validate-actions.js';
+export type { ActionParamError, ActionParamResult } from './actions/action-params.js';
+export { validateActionParams, anchoredPattern } from './actions/action-params.js';
+
 export {
   SLACK_MESSAGE_URL_RE,
   parseSlackMessageUrl,
@@ -28,6 +66,18 @@ export {
 export type { ParsedSlackMessageUrl } from './slack.js';
 
 export type { ClaudeActivityStatus } from './types/claude-activity.js';
+
+export type {
+  ClientErrorSource,
+  ClientErrorReport,
+  ClientErrorResponse,
+} from './types/client-error.js';
+export {
+  CLIENT_ERROR_MAX_MESSAGE,
+  CLIENT_ERROR_MAX_STACK,
+  CLIENT_ERROR_MAX_COMPONENT_STACK,
+  CLIENT_ERROR_MAX_PER_PAGE,
+} from './types/client-error.js';
 
 export type { ModelFamily, ModelOption, ModelsResponse, ModelCapabilities } from './types/model.js';
 export { FALLBACK_MODELS, inferModelCapabilities, resolveEffortLevel } from './types/model.js';
@@ -72,11 +122,7 @@ export type {
   RepositoryWsMessageType,
 } from './types/repository-dashboard.js';
 
-export type {
-  PtyHandle,
-  TerminalConfig,
-  TerminalTheme,
-} from './types/terminal.js';
+export type { PtyHandle, TerminalConfig, TerminalTheme } from './types/terminal.js';
 
 export type { ClaudeConfigTreeEntry } from './types/claude-config.js';
 
@@ -251,6 +297,7 @@ export type {
 
 export type {
   StatisticsTimeBucket,
+  CostBySource,
   AgentLeaderboardEntry,
   SkillLeaderboardEntry,
   PanelLeaderboardEntry,
@@ -267,10 +314,9 @@ export type {
   ThroughputWipBucket,
 } from './types/statistics.js';
 
-export {
-  ClientMessageType,
-  ServerMessageType,
-} from './types/websocket.js';
+export type { StorageDriverName, ServerCapabilities } from './types/capabilities.js';
+
+export { ClientMessageType, ServerMessageType } from './types/websocket.js';
 
 export type {
   DashboardMessage,

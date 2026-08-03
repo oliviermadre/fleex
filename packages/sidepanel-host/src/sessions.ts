@@ -7,10 +7,11 @@
  * keeps both the Anthropic `messages` (for the LLM) and a `transcript` (UI
  * items) so a session can be re-rendered verbatim when the user switches to it.
  */
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+
 import type Anthropic from '@anthropic-ai/sdk';
 
 export type SessionStatus = 'idle' | 'working' | 'awaiting_input';

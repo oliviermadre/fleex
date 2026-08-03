@@ -1,7 +1,10 @@
 import { create } from 'zustand';
+
 import type { StatisticsResponse } from '@fleex/shared';
-import type { PrimitiveKind } from '../lib/primitives';
+
 import * as api from '../services/api';
+
+import type { PrimitiveKind } from '../lib/primitives';
 
 /**
  * "Fréquents" zone of the SmartSessionButton launcher.

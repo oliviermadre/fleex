@@ -1,10 +1,11 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
-import { loadDotEnv } from '../../core/env.ts';
-import { activateWorkspace, assertValidWorkspacesConfig } from '../../core/workspaces.ts';
+
+import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
 import { c, info, ok, warn, die } from '../../core/colors.ts';
-import { checkBun } from '../../core/version.ts';
+import { loadDotEnv } from '../../core/env.ts';
+import { ensureGatewayToken, GATEWAY_TOKEN_FILE } from '../../core/gateway-token.ts';
 import {
   resolveInstance,
   ensureDirs,
@@ -14,10 +15,11 @@ import {
 } from '../../core/instance.ts';
 import { SERVICES, allocatePorts, writePorts } from '../../core/ports.ts';
 import { isRunning, savePid, waitForService } from '../../core/process.ts';
-import { runStatus } from '../status/_impl.ts';
-import { launchDesktop } from '../desktop/_impl.ts';
+import { checkBun } from '../../core/version.ts';
+import { activateWorkspace, assertValidWorkspacesConfig } from '../../core/workspaces.ts';
 import { ensureCompanion } from '../companion/start/_impl.ts';
-import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
+import { launchDesktop } from '../desktop/_impl.ts';
+import { runStatus } from '../status/_impl.ts';
 
 export interface StartOptions {
   port?: string;
@@ -57,7 +59,12 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   }
 
   info('Installing dependencies...');
-  await runCommand('bun', ['install', '--frozen-lockfile'], ctx.repoDir, logFile('install', ctx)).catch(async () => {
+  await runCommand(
+    'bun',
+    ['install', '--frozen-lockfile'],
+    ctx.repoDir,
+    logFile('install', ctx),
+  ).catch(async () => {
     await runCommand('bun', ['install'], ctx.repoDir, logFile('install', ctx));
   });
   ok('Dependencies installed.');
@@ -73,7 +80,9 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
       }
     }
   } catch (err) {
-    warn(`Could not install Claude Code hooks: ${err instanceof Error ? err.message : String(err)}`);
+    warn(
+      `Could not install Claude Code hooks: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   let ports = await allocatePorts(ctx);
@@ -100,35 +109,65 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
     ctx,
   );
 
+  // Shared bearer token for the gateway. The gateway executes arbitrary shell
+  // commands, so it authenticates every request; both processes must agree on
+  // the same secret. Generated once, then reused across restarts.
+  let gatewayToken: string;
+  try {
+    gatewayToken = ensureGatewayToken();
+  } catch (e) {
+    die(
+      `Cannot provision the gateway token at ${GATEWAY_TOKEN_FILE}: ` +
+        `${e instanceof Error ? e.message : String(e)}\n  Run: ${c.bold('fleex doctor --fix')}`,
+    );
+  }
+
   // Spawn each service detached, captured in its own log file.
   const env = { ...process.env };
 
-  const gatewayProc = spawnService('gateway', ctx.repoDir, {
-    ...env,
-    GATEWAY_PORT: String(ports.gateway),
-    FLEEX_CENTRAL_URL: `http://localhost:${ports.server}`,
-  }, ['run', 'dev:gateway']);
+  const gatewayProc = spawnService(
+    'gateway',
+    ctx.repoDir,
+    {
+      ...env,
+      GATEWAY_PORT: String(ports.gateway),
+      GATEWAY_TOKEN: gatewayToken,
+      FLEEX_CENTRAL_URL: `http://127.0.0.1:${ports.server}`,
+    },
+    ['run', 'dev:gateway'],
+  );
   savePid('gateway', gatewayProc.pid!, ctx);
 
-  const serverProc = spawnService('server', ctx.repoDir, {
-    ...env,
-    PORT: String(ports.server),
-    HOST_GATEWAY_URL: `http://localhost:${ports.gateway}`,
-    FLEEX_STORAGE_DRIVER: process.env.FLEEX_STORAGE_DRIVER ?? 'json',
-  }, ['run', 'dev:server']);
+  const serverProc = spawnService(
+    'server',
+    ctx.repoDir,
+    {
+      ...env,
+      PORT: String(ports.server),
+      HOST_GATEWAY_URL: `http://127.0.0.1:${ports.gateway}`,
+      GATEWAY_TOKEN: gatewayToken,
+      FLEEX_STORAGE_DRIVER: process.env.FLEEX_STORAGE_DRIVER ?? 'json',
+    },
+    ['run', 'dev:server'],
+  );
   savePid('server', serverProc.pid!, ctx);
 
-  const webProc = spawnService('web', ctx.repoDir, {
-    ...env,
-    VITE_DEV_PORT: String(ports.web),
-    VITE_PROXY_TARGET: `http://localhost:${ports.server}`,
-  }, ['run', 'dev:web']);
+  const webProc = spawnService(
+    'web',
+    ctx.repoDir,
+    {
+      ...env,
+      VITE_DEV_PORT: String(ports.web),
+      VITE_PROXY_TARGET: `http://127.0.0.1:${ports.server}`,
+    },
+    ['run', 'dev:web'],
+  );
   savePid('web', webProc.pid!, ctx);
 
   info('Waiting for services to become healthy...');
   let healthy = await waitForService(
     'gateway',
-    `http://localhost:${ports.gateway}/health`,
+    `http://127.0.0.1:${ports.gateway}/health`,
     gatewayProc.pid!,
     logFile('gateway', ctx),
     15,
@@ -136,7 +175,7 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   if (healthy) {
     healthy = await waitForService(
       'server',
-      `http://localhost:${ports.server}/health`,
+      `http://127.0.0.1:${ports.server}/health`,
       serverProc.pid!,
       logFile('server', ctx),
       15,
@@ -145,7 +184,7 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   if (healthy) {
     healthy = await waitForService(
       'web',
-      `http://localhost:${ports.web}/`,
+      `http://127.0.0.1:${ports.web}/`,
       webProc.pid!,
       logFile('web', ctx),
       15,
@@ -160,9 +199,15 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   }
   process.stdout.write('\n');
   process.stdout.write(`  ${c.cyan('Service'.padEnd(10))} ${c.dim('URL'.padEnd(30))} Log\n`);
-  process.stdout.write(`  ${c.cyan('gateway'.padEnd(10))} ${`http://localhost:${ports.gateway}`.padEnd(30)} ${c.dim(logFile('gateway', ctx))}\n`);
-  process.stdout.write(`  ${c.cyan('server'.padEnd(10))} ${`http://localhost:${ports.server}`.padEnd(30)} ${c.dim(logFile('server', ctx))}\n`);
-  process.stdout.write(`  ${c.cyan('web'.padEnd(10))} ${`http://localhost:${ports.web}`.padEnd(30)} ${c.dim(logFile('web', ctx))}\n`);
+  process.stdout.write(
+    `  ${c.cyan('gateway'.padEnd(10))} ${`http://localhost:${ports.gateway}`.padEnd(30)} ${c.dim(logFile('gateway', ctx))}\n`,
+  );
+  process.stdout.write(
+    `  ${c.cyan('server'.padEnd(10))} ${`http://localhost:${ports.server}`.padEnd(30)} ${c.dim(logFile('server', ctx))}\n`,
+  );
+  process.stdout.write(
+    `  ${c.cyan('web'.padEnd(10))} ${`http://localhost:${ports.web}`.padEnd(30)} ${c.dim(logFile('web', ctx))}\n`,
+  );
   process.stdout.write('\n');
   info(`Use ${c.bold('fleex status')} to check, ${c.bold('fleex stop')} to shut down.`);
 
@@ -176,12 +221,7 @@ export async function runStart(opts: StartOptions = {}): Promise<void> {
   }
 }
 
-function spawnService(
-  name: string,
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  args: string[],
-) {
+function spawnService(name: string, cwd: string, env: NodeJS.ProcessEnv, args: string[]) {
   const ctx = resolveInstance();
   const out = fs.openSync(logFile(name, ctx), 'a');
   const child = spawn('bun', args, {
@@ -194,12 +234,7 @@ function spawnService(
   return child;
 }
 
-function runCommand(
-  cmd: string,
-  args: string[],
-  cwd: string,
-  logPath: string,
-): Promise<void> {
+function runCommand(cmd: string, args: string[], cwd: string, logPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const out = fs.openSync(logPath, 'a');
     const child = spawn(cmd, args, { cwd, stdio: ['ignore', out, out] });

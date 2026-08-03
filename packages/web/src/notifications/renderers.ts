@@ -1,10 +1,7 @@
 import type { TicketDeliverable, TicketMention } from '@fleex/shared';
-import type {
-  NotificationDraft,
-  NotificationRenderer,
-  RendererContext,
-} from './types';
+
 import type { NotificationRendererRegistry } from './registry';
+import type { NotificationDraft, NotificationRenderer, RendererContext } from './types';
 
 /**
  * Default Fleex Pulse renderers (V1).
@@ -34,9 +31,7 @@ function oneLine(value: string, max = 120): string {
 }
 
 function asRecord(data: unknown): Record<string, unknown> | null {
-  return typeof data === 'object' && data !== null
-    ? (data as Record<string, unknown>)
-    : null;
+  return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null;
 }
 
 function str(value: unknown): string | null {

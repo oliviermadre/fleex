@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useSettingsStore } from '../../stores/settingsStore';
+
 import { tintText } from '../../lib/tints';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 interface Props {
   org: string;
@@ -53,9 +54,8 @@ export function RepoConfigPanel({ org, name }: Props) {
             Post-checkout hook
           </h3>
           <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
-            Shell script automatically run in each new worktree after creation.
-            Runs asynchronously — the UI is not blocked.
-            The cwd is the worktree root.
+            Shell script automatically run in each new worktree after creation. Runs asynchronously
+            — the UI is not blocked. The cwd is the worktree root.
           </p>
         </div>
 
@@ -86,16 +86,16 @@ export function RepoConfigPanel({ org, name }: Props) {
 
         {/* Timeout setting */}
         <div className="flex items-center gap-2">
-          <label className="text-xs text-[var(--theme-text-muted)]">
-            Timeout after
-          </label>
+          <label className="text-xs text-[var(--theme-text-muted)]">Timeout after</label>
           <input
             type="number"
             min={5}
             max={600}
             value={timeoutSeconds}
             onChange={(e) => {
-              setTimeoutSeconds(Math.max(5, Math.min(600, parseInt(e.target.value) || DEFAULT_TIMEOUT)));
+              setTimeoutSeconds(
+                Math.max(5, Math.min(600, parseInt(e.target.value) || DEFAULT_TIMEOUT)),
+              );
               setSaved(false);
             }}
             className="w-20 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] px-2 py-1 text-center text-xs text-[var(--theme-text-primary)] focus:border-[var(--theme-accent)] focus:outline-none"
@@ -105,9 +105,7 @@ export function RepoConfigPanel({ org, name }: Props) {
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-2">
-          {saved && (
-            <span className={`text-xs ${tintText('green')}`}>Saved</span>
-          )}
+          {saved && <span className={`text-xs ${tintText('green')}`}>Saved</span>}
           <button
             onClick={handleClear}
             className="rounded-md px-3 py-1.5 text-xs text-[var(--theme-text-muted)] hover:bg-[var(--theme-bg-hover)] hover:text-[var(--theme-text-secondary)]"

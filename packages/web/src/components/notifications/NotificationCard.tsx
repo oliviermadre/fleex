@@ -1,7 +1,8 @@
-import type { PulseNotification, PulseLevel } from '../../notifications/types';
-import { useTicketStore } from '../../stores/ticketStore';
-import { formatAge } from '../../lib/formatAge';
 import { cn } from '../../lib/cn';
+import { formatAge } from '../../lib/formatAge';
+import { useTicketStore } from '../../stores/ticketStore';
+
+import type { PulseNotification, PulseLevel } from '../../notifications/types';
 
 /** Left-border accent per severity (theme-aware tint solids, literal for the Tailwind scanner). */
 const levelAccent: Record<PulseLevel, string> = {
@@ -37,7 +38,7 @@ export function NotificationCard({
   // Select the ticket object itself (stable reference) and derive the label
   // outside the selector, so we never return a fresh object and loop renders.
   const ticket = useTicketStore((s) =>
-    ticketId ? s.tickets.find((t) => t.id === ticketId) ?? null : null,
+    ticketId ? (s.tickets.find((t) => t.id === ticketId) ?? null) : null,
   );
 
   return (
@@ -101,7 +102,15 @@ export function NotificationCard({
           }}
           aria-label="Dismiss notification"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
             <line x1="4" y1="4" x2="12" y2="12" />
             <line x1="12" y1="4" x2="4" y2="12" />
           </svg>

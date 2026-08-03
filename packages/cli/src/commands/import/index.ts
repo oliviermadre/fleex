@@ -1,5 +1,5 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+
 import type {
   AgentPersona,
   Skill,
@@ -14,9 +14,17 @@ import type {
   PrimitiveKind,
 } from '@fleex/shared';
 import { MARKETPLACE_SCHEMA_VERSION } from '@fleex/shared';
-import type { CommandDef } from '../../core/types.ts';
+
 import { apiBase, apiGet, apiCall } from '../../core/api.ts';
 import { c, info, ok, warn, die, padEndVisible } from '../../core/colors.ts';
+import { contentEquals, renderDiff } from '../../core/marketplace-diff.ts';
+import { personaBody, skillBody, panelBody, workflowBody } from '../../core/marketplace-install.ts';
+import {
+  toMarketplacePersona,
+  toMarketplaceSkill,
+  toMarketplacePanel,
+  toMarketplaceWorkflow,
+} from '../../core/marketplace.ts';
 import {
   canPrompt,
   closePrompts,
@@ -32,14 +40,9 @@ import {
   loadPrimitiveContent,
   type RegisteredMarketplace,
 } from '../../core/registry.ts';
-import {
-  toMarketplacePersona,
-  toMarketplaceSkill,
-  toMarketplacePanel,
-  toMarketplaceWorkflow,
-} from '../../core/marketplace.ts';
-import { contentEquals, renderDiff } from '../../core/marketplace-diff.ts';
-import { personaBody, skillBody, panelBody, workflowBody } from '../../core/marketplace-install.ts';
+
+import type { CommandDef } from '../../core/types.ts';
+import type { Command } from 'commander';
 
 const SECTION = chalk.bold.yellow;
 const DIM = chalk.dim;
@@ -76,7 +79,12 @@ async function fetchLocal(base: string): Promise<LocalState> {
   const idToName = new Map(personas.map((p) => [p.id, p.name]));
   const idByKey = new Map<string, string>();
   const contentByKey = new Map<string, MarketplacePrimitiveContent>();
-  const tryAdd = (kind: PrimitiveKind, slug: string, id: string, build: () => MarketplacePrimitiveContent) => {
+  const tryAdd = (
+    kind: PrimitiveKind,
+    slug: string,
+    id: string,
+    build: () => MarketplacePrimitiveContent,
+  ) => {
     idByKey.set(key(kind, slug), id);
     try {
       contentByKey.set(key(kind, slug), build());
@@ -84,8 +92,10 @@ async function fetchLocal(base: string): Promise<LocalState> {
       // local refs unresolved — leave uncomparable (treated as "different")
     }
   };
-  for (const p of personas) tryAdd('persona', p.name, p.id, () => toMarketplacePersona(p, { includeMemory: false }));
-  for (const s of skills) tryAdd('skill', s.commandName, s.id, () => toMarketplaceSkill(s, idToName));
+  for (const p of personas)
+    tryAdd('persona', p.name, p.id, () => toMarketplacePersona(p, { includeMemory: false }));
+  for (const s of skills)
+    tryAdd('skill', s.commandName, s.id, () => toMarketplaceSkill(s, idToName));
   for (const p of panels) tryAdd('panel', p.name, p.id, () => toMarketplacePanel(p, idToName));
   for (const w of workflows) tryAdd('workflow', w.slug, w.id, () => toMarketplaceWorkflow(w));
   return { idByKey, contentByKey, personaSlugToId: new Map(personas.map((p) => [p.name, p.id])) };
@@ -152,9 +162,16 @@ const def: CommandDef = {
   description: 'Install primitives from a registered marketplace into this instance',
   setup(cmd: Command) {
     cmd.option('--marketplace <name>', 'marketplace to install from');
-    cmd.option('--primitive <kind:slug...>', 'primitives to install (e.g. panel:chapeaux persona:jarvis)');
+    cmd.option(
+      '--primitive <kind:slug...>',
+      'primitives to install (e.g. panel:chapeaux persona:jarvis)',
+    );
     cmd.option('--all', 'install every primitive in the marketplace');
-    cmd.option('--on-conflict <mode>', 'when a primitive exists locally and differs: skip | replace | ask', 'ask');
+    cmd.option(
+      '--on-conflict <mode>',
+      'when a primitive exists locally and differs: skip | replace | ask',
+      'ask',
+    );
     cmd.option('-y, --yes', 'skip the final confirmation');
   },
   extraHelp: `\n${SECTION('How it works:')}
@@ -192,7 +209,9 @@ ${SECTION('Examples:')}
 
       const manifest = loadManifest(mp!.path);
       if (manifest.schemaVersion > MARKETPLACE_SCHEMA_VERSION) {
-        warn(`marketplace schemaVersion ${manifest.schemaVersion} > supported ${MARKETPLACE_SCHEMA_VERSION}; consider updating fleex.`);
+        warn(
+          `marketplace schemaVersion ${manifest.schemaVersion} > supported ${MARKETPLACE_SCHEMA_VERSION}; consider updating fleex.`,
+        );
       }
       const entries = manifest.primitives;
       if (entries.length === 0) {
@@ -213,8 +232,10 @@ ${SECTION('Examples:')}
           else warn(`no primitive matches "${token}" — skipped`);
         }
       } else if (canPrompt()) {
-        selected = await promptMultiSelect('Primitives', entries, (e) =>
-          `${padEndVisible(e.kind, 9)} ${padEndVisible(e.slug, 24)} ${c.dim(e.displayName)}`,
+        selected = await promptMultiSelect(
+          'Primitives',
+          entries,
+          (e) => `${padEndVisible(e.kind, 9)} ${padEndVisible(e.slug, 24)} ${c.dim(e.displayName)}`,
         );
       } else {
         die('Specify --all or --primitive <kind:slug...>.');
@@ -245,7 +266,13 @@ ${SECTION('Examples:')}
         const localId = local.idByKey.get(k);
         const localContent = local.contentByKey.get(k);
         if (!entry) {
-          rows.push({ kind, slug, source, inManifest: false, status: localId ? 'present' : 'absent' });
+          rows.push({
+            kind,
+            slug,
+            source,
+            inManifest: false,
+            status: localId ? 'present' : 'absent',
+          });
           continue;
         }
         const content = loadPrimitiveContent(mp!.path, entry);
@@ -255,7 +282,9 @@ ${SECTION('Examples:')}
         else status = 'different';
         rows.push({ kind, slug, source, inManifest: true, status, content, localContent, localId });
       }
-      rows.sort((a, z) => ORDER.indexOf(a.kind) - ORDER.indexOf(z.kind) || a.slug.localeCompare(z.slug));
+      rows.sort(
+        (a, z) => ORDER.indexOf(a.kind) - ORDER.indexOf(z.kind) || a.slug.localeCompare(z.slug),
+      );
 
       // ── 5. report (transparent: every dep, every state) ──
       printReport(rows, mp!.name);
@@ -263,7 +292,13 @@ ${SECTION('Examples:')}
       // ── 6. decide actions ──
       const policy = (opts.onConflict ?? 'ask').toLowerCase();
       const interactive = canPrompt() && !opts.yes;
-      type Action = { kind: PrimitiveKind; slug: string; type: 'create' | 'replace'; content: MarketplacePrimitiveContent; localId?: string };
+      type Action = {
+        kind: PrimitiveKind;
+        slug: string;
+        type: 'create' | 'replace';
+        content: MarketplacePrimitiveContent;
+        localId?: string;
+      };
       const actions: Action[] = [];
 
       for (const r of rows) {
@@ -280,9 +315,16 @@ ${SECTION('Examples:')}
         else if (interactive) {
           decision = 'skip';
           for (;;) {
-            const ans = (await promptText(`${c.yellow('≠')} ${r.kind} ${c.bold(r.slug)} differs — [d]iff / [r]eplace / [s]kip`, 's')).toLowerCase();
+            const ans = (
+              await promptText(
+                `${c.yellow('≠')} ${r.kind} ${c.bold(r.slug)} differs — [d]iff / [r]eplace / [s]kip`,
+                's',
+              )
+            ).toLowerCase();
             if (ans === 'd') {
-              process.stdout.write(`\n${renderDiff(r.localContent ?? ({} as MarketplacePrimitiveContent), r.content)}\n\n`);
+              process.stdout.write(
+                `\n${renderDiff(r.localContent ?? ({} as MarketplacePrimitiveContent), r.content)}\n\n`,
+              );
               continue;
             }
             if (ans === 'r') decision = 'replace';
@@ -290,26 +332,38 @@ ${SECTION('Examples:')}
           }
         } else decision = 'skip';
         if (decision === 'replace') {
-          actions.push({ kind: r.kind, slug: r.slug, type: 'replace', content: r.content, localId: r.localId });
+          actions.push({
+            kind: r.kind,
+            slug: r.slug,
+            type: 'replace',
+            content: r.content,
+            localId: r.localId,
+          });
         }
       }
 
       // External refs that can't be satisfied → warn (dependents may fail).
       for (const r of rows) {
         if (!r.inManifest && r.status === 'absent') {
-          warn(`dependency ${r.kind} "${r.slug}" is absent and not in this marketplace — install it separately or dependents may not work.`);
+          warn(
+            `dependency ${r.kind} "${r.slug}" is absent and not in this marketplace — install it separately or dependents may not work.`,
+          );
         }
       }
 
       if (actions.length === 0) {
-        info('Nothing to install (all selected primitives already present and identical, or skipped).');
+        info(
+          'Nothing to install (all selected primitives already present and identical, or skipped).',
+        );
         return;
       }
 
       // ── 7. confirm ──
       const creates = actions.filter((a) => a.type === 'create').length;
       const replaces = actions.filter((a) => a.type === 'replace').length;
-      info(`About to ${c.green(`install ${creates}`)} and ${c.yellow(`replace ${replaces}`)} primitive(s).`);
+      info(
+        `About to ${c.green(`install ${creates}`)} and ${c.yellow(`replace ${replaces}`)} primitive(s).`,
+      );
       if (interactive && !(await promptYesNo('Proceed?', true))) {
         info('Aborted.');
         return;
@@ -336,7 +390,9 @@ ${SECTION('Examples:')}
             } else if (kind === 'panel') {
               const pc = a.content as MarketplacePanel;
               if (pc.orchestratorPersona) {
-                warn(`panel "${pc.name}": orchestrator persona "${pc.orchestratorPersona}" can't be set via the API — left unset.`);
+                warn(
+                  `panel "${pc.name}": orchestrator persona "${pc.orchestratorPersona}" can't be set via the API — left unset.`,
+                );
               }
               const resolve = (slug: string) => {
                 const id = personaSlugToId.get(slug);
@@ -348,7 +404,8 @@ ${SECTION('Examples:')}
               else await apiCall('PATCH', `${base}/api/panels/${a.localId}`, body);
             } else {
               const body = workflowBody(a.content as MarketplaceWorkflow);
-              if (a.type === 'create') await apiCall('POST', `${base}/api/workflows/templates`, body);
+              if (a.type === 'create')
+                await apiCall('POST', `${base}/api/workflows/templates`, body);
               else await apiCall('PUT', `${base}/api/workflows/templates/${a.localId}`, body);
             }
             installed++;

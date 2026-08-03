@@ -65,7 +65,9 @@ const migration: Migration = {
           (SELECT COALESCE(MAX(display_id), 0) FROM tickets) > 0
         )
       `);
-      await ctx.exec(`ALTER TABLE tickets ALTER COLUMN display_id SET DEFAULT nextval('tickets_display_id_seq')`);
+      await ctx.exec(
+        `ALTER TABLE tickets ALTER COLUMN display_id SET DEFAULT nextval('tickets_display_id_seq')`,
+      );
       // Lie la séquence à la colonne pour que les dumps/clones la transportent
       await ctx.exec(`ALTER SEQUENCE tickets_display_id_seq OWNED BY tickets.display_id`);
     }

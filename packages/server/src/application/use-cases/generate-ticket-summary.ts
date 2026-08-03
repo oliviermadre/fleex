@@ -1,19 +1,23 @@
 import { randomUUID } from 'node:crypto';
+
 import type { TicketStatus } from '@fleex/shared';
-import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+
 import { TicketDeliverableEntity } from '../../domain/entities/ticket-deliverable.entity.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
+
+import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
+import type { EventBus } from '../event-bus.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
+import type { ConfigPort } from '../ports/config.port.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
 import type { GitPort } from '../ports/git.port.js';
-import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
-import type { EventBus } from '../event-bus.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
-const SYSTEM_PROMPT = `You are a technical summarizer. Generate a concise ticket summary (~400 words max) for developer memory.
+const SYSTEM_PROMPT =
+  `You are a technical summarizer. Generate a concise ticket summary (~400 words max) for developer memory.
 
 Structure your output EXACTLY as follows:
 
@@ -142,7 +146,11 @@ export class GenerateTicketSummaryUseCase {
       const oldStatus = existing.status;
       existing.update({ content: summaryText, title: `Summary: ${ticket.title}`, status: 'final' });
       await this.deliverableStore.save(existing);
-      this.logger.info('Ticket summary updated', { ticketId, deliverableId: existing.id, version: existing.version });
+      this.logger.info('Ticket summary updated', {
+        ticketId,
+        deliverableId: existing.id,
+        version: existing.version,
+      });
       this.eventBus?.emit({
         type: 'deliverable.updated',
         deliverableId: existing.id,
@@ -180,9 +188,17 @@ export class GenerateTicketSummaryUseCase {
   }
 
   private buildPrompt(
-    ticket: { title: string; description: string; status: string; tags: string[]; displayId: number },
+    ticket: {
+      title: string;
+      description: string;
+      status: string;
+      tags: string[];
+      displayId: number;
+    },
     comments: Array<{ toDTO(): { authorName: string; authorType: string; body: string } }>,
-    deliverables: Array<{ toDTO(): { title: string; type: string; content: string; agentName: string; status: string } }>,
+    deliverables: Array<{
+      toDTO(): { title: string; type: string; content: string; agentName: string; status: string };
+    }>,
     gitLog: string,
     gitDiff: string,
   ): string {
@@ -232,9 +248,10 @@ export class GenerateTicketSummaryUseCase {
     return parts.join('\n');
   }
 
-  private async resolveWorktreeInfo(
-    ticket: { boardId: string; links: Array<{ type: string; ref: string; label: string }> },
-  ): Promise<{ repoPath: string; branch: string } | null> {
+  private async resolveWorktreeInfo(ticket: {
+    boardId: string;
+    links: Array<{ type: string; ref: string; label: string }>;
+  }): Promise<{ repoPath: string; branch: string } | null> {
     const worktreeLink = ticket.links.find((l) => l.type === 'worktree');
     if (!worktreeLink) return null;
 

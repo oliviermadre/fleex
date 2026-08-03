@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
+
 import { EventBus } from '../../src/application/event-bus.js';
-import type { AnyDomainEvent, TicketCreatedEvent, TicketUpdatedEvent } from '../../src/domain/events.js';
+
+import type {
+  AnyDomainEvent,
+  TicketCreatedEvent,
+  TicketUpdatedEvent,
+} from '../../src/domain/events.js';
 
 describe('EventBus', () => {
   it('should dispatch events to registered handlers', () => {
@@ -16,7 +22,9 @@ describe('EventBus', () => {
     });
 
     expect(handler).toHaveBeenCalledOnce();
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ type: 'ticket.created', ticketId: 't1' }));
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'ticket.created', ticketId: 't1' }),
+    );
   });
 
   it('should dispatch wildcard handlers for all events', () => {

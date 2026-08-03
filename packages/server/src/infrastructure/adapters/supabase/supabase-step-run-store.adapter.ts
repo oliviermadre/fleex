@@ -1,7 +1,9 @@
-import { StepRunEntity } from '../../../domain/entities/step-run.entity.js';
-import type { StepRunStorePort } from '../../../application/ports/step-run-store.port.js';
-import type { SupabaseConnection } from './connection.js';
 import type { StepRunStatus, StepRunResult, StepOutput } from '@fleex/shared';
+
+import { StepRunEntity } from '../../../domain/entities/step-run.entity.js';
+
+import type { SupabaseConnection } from './connection.js';
+import type { StepRunStorePort } from '../../../application/ports/step-run-store.port.js';
 
 interface StepRunRow {
   id: string;

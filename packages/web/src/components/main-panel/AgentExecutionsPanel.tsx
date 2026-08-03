@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
+
 import type { AgentExecution } from '@fleex/shared';
-import { useAgentEventStore } from '../../stores/agentEventStore';
-import { AgentEventStream } from './AgentEventStream';
+
 import { cn } from '../../lib/cn';
-import * as api from '../../services/api';
 import { tint, tintText, tintClasses } from '../../lib/tints';
+import * as api from '../../services/api';
+import { useAgentEventStore } from '../../stores/agentEventStore';
+
+import { AgentEventStream } from './AgentEventStream';
 
 function formatDuration(startedAt: string, completedAt?: string | null): string {
   const start = new Date(startedAt).getTime();
@@ -66,16 +69,24 @@ export function AgentExecutionsPanel({ executions }: Props) {
 
   const loadExecutions = useAgentEventStore((s) => s.loadExecutionsForTicket);
 
-  const handleCancel = useCallback(async (executionId: string, ticketId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm('Cancel this execution? The agent will be interrupted and the mention reset to pending.')) return;
-    try {
-      await api.cancelExecution(executionId);
-      loadExecutions(ticketId);
-    } catch (err) {
-      console.error('Failed to cancel execution:', err);
-    }
-  }, [loadExecutions]);
+  const handleCancel = useCallback(
+    async (executionId: string, ticketId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (
+        !confirm(
+          'Cancel this execution? The agent will be interrupted and the mention reset to pending.',
+        )
+      )
+        return;
+      try {
+        await api.cancelExecution(executionId);
+        loadExecutions(ticketId);
+      } catch (err) {
+        console.error('Failed to cancel execution:', err);
+      }
+    },
+    [loadExecutions],
+  );
 
   if (sorted.length === 0) {
     return (
@@ -102,9 +113,13 @@ export function AgentExecutionsPanel({ executions }: Props) {
               <div className="flex flex-col min-w-0 flex-1">
                 <span className="text-xs text-[var(--theme-text-faint)]">
                   {new Date(exec.startedAt).toLocaleString(undefined, { hour12: false })}
-                  {' · '}{exec.eventCount} events
+                  {' · '}
+                  {exec.eventCount} events
                   {exec.status === 'running' && (
-                    <> · <span className={tintText('blue')}>{formatDuration(exec.startedAt)}</span></>
+                    <>
+                      {' '}
+                      · <span className={tintText('blue')}>{formatDuration(exec.startedAt)}</span>
+                    </>
                   )}
                   {exec.status !== 'running' && exec.completedAt && (
                     <> · {formatDuration(exec.startedAt, exec.completedAt)}</>
@@ -116,20 +131,29 @@ export function AgentExecutionsPanel({ executions }: Props) {
                   <span
                     role="button"
                     tabIndex={0}
-                    className={cn('px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer', tintClasses('red').bg, tintText('red'), tintClasses('red').hoverBg)}
+                    className={cn(
+                      'px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer',
+                      tintClasses('red').bg,
+                      tintText('red'),
+                      tintClasses('red').hoverBg,
+                    )}
                     onClick={(e) => handleCancel(exec.id, exec.ticketId, e)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleCancel(exec.id, exec.ticketId, e as unknown as React.MouseEvent); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter')
+                        handleCancel(exec.id, exec.ticketId, e as unknown as React.MouseEvent);
+                    }}
                   >
                     Cancel
                   </span>
                 )}
-                <span className="text-[var(--theme-text-faint)]">
-                  {isExpanded ? '▾' : '▸'}
-                </span>
+                <span className="text-[var(--theme-text-faint)]">{isExpanded ? '▾' : '▸'}</span>
               </div>
             </button>
             {isExpanded && (
-              <div className="flex flex-col overflow-hidden border-t border-[var(--theme-border)]" style={{ minHeight: '200px', maxHeight: '80vh' }}>
+              <div
+                className="flex flex-col overflow-hidden border-t border-[var(--theme-border)]"
+                style={{ minHeight: '200px', maxHeight: '80vh' }}
+              >
                 <AgentEventStream executionId={exec.id} />
               </div>
             )}

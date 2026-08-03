@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { buildCompanionLaunch, type CompanionLaunchContext } from '../../src/core/companion.ts';
 
 const ctx: CompanionLaunchContext = {
@@ -25,7 +26,10 @@ describe('buildCompanionLaunch', () => {
   });
 
   it('sources ANTHROPIC_API_KEY from the config file (so it never has to be typed inline)', () => {
-    const { env } = buildCompanionLaunch({ ...ctx, configEnv: { ANTHROPIC_API_KEY: 'sk-ant-from-config' } });
+    const { env } = buildCompanionLaunch({
+      ...ctx,
+      configEnv: { ANTHROPIC_API_KEY: 'sk-ant-from-config' },
+    });
     expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-from-config');
   });
 

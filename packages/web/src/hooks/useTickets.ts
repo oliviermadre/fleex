@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
+
 import type { TicketWsMessage, TicketGroupWsMessage } from '@fleex/shared';
+
 import { appWs } from '../services/websocket';
-import { useTicketStore } from '../stores/ticketStore';
 import { useTicketGroupStore } from '../stores/ticketGroupStore';
+import { useTicketStore } from '../stores/ticketStore';
 
 export function useTickets() {
   const fetchBoards = useTicketStore((s) => s.fetchBoards);

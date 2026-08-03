@@ -1,7 +1,8 @@
 import type { TicketStatus, TicketLinkType } from '@fleex/shared';
+
 import type { BoardEntity } from '../../domain/entities/board.entity.js';
-import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import type { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
+import type { TicketEntity } from '../../domain/entities/ticket.entity.js';
 
 export interface TicketStorePort {
   // Boards
