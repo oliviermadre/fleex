@@ -3,13 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "productName": "Fleex",
+  "description": "Fleex desktop shell — double-clickable macOS app that boots the Fleex stack.",
+  "author": "Fleex",
   "main": "src/main.js",
   "scripts": {
     "dev": "electron --inspect .",
     "start": "electron .",
-    "postinstall": "node scripts/patch-electron-plist.js"
+    "postinstall": "node scripts/patch-electron-plist.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --mac --arm64",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "electron": "^35.0.0"
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8"
   }
 }

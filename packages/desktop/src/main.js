@@ -4,6 +4,8 @@ const path = require('path');
 
 const { app, BrowserWindow, Menu, ipcMain, shell, nativeImage, dialog } = require('electron');
 
+const { isExternalUrl, fallbackPage } = require('./shell-helpers');
+
 // ── Configuration ────────────────────────────────────────────────────────────
 // When launched by `fleex start --desktop`, the CLI passes the server port.
 // Fallback to 3000 for standalone usage.
@@ -11,18 +13,6 @@ app.setName('Fleex');
 
 const serverPort = process.env['FLEEX_SERVER_PORT'] || '3000';
 const serverUrl = `http://localhost:${serverPort}`;
-
-function isExternalUrl(url) {
-  try {
-    const parsed = new URL(url);
-    // Any local Fleex instance (any port) is internal — workspace switching
-    // navigates the window between instance web ports.
-    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') return false;
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
 
 const TITLEBAR_HEIGHT = 38;
 
@@ -427,6 +417,17 @@ function createWindow() {
   wireCrashHandling(mainWindow);
 
   mainWindow.loadURL(serverUrl);
+
+  // Graceful fallback: if the Fleex web UI can't be reached (e.g. the .dmg was
+  // double-clicked with no stack running yet), show a friendly "Waiting for
+  // Fleex" page with a Retry button instead of a raw Chromium error. -3 is
+  // ERR_ABORTED (normal during navigation) — ignore it, and ignore data: loads
+  // to avoid re-triggering on the fallback page itself.
+  mainWindow.webContents.on('did-fail-load', (_e, errorCode, _desc, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return;
+    if (typeof validatedURL === 'string' && validatedURL.startsWith('data:')) return;
+    mainWindow.loadURL(fallbackPage(serverUrl));
+  });
 
   wireBrowserParity(mainWindow);
 

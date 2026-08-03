@@ -1,0 +1,51 @@
+name: Release Desktop (.dmg)
+
+# Builds the macOS Apple-Silicon .dmg via electron-builder.
+# Runs on an arm64 macOS runner (Q5: Apple Silicon only).
+# Signs + notarizes when Apple secrets are present (Q4: notarize from v1,
+# no Gatekeeper friction); produces an unsigned .dmg otherwise so the job
+# still succeeds on forks / without secrets.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'desktop-v*'
+
+jobs:
+  build-dmg:
+    name: Build macOS .dmg (arm64)
+    # macos-14 runners are Apple Silicon (arm64) by default.
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build workspace
+        run: bun run build
+
+      - name: Package .dmg (sign + notarize when secrets present)
+        working-directory: packages/desktop
+        env:
+          # Code-signing certificate (base64 .p12 + password). When these are
+          # empty electron-builder produces an unsigned build instead of failing.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Notarization credentials (Apple ID app-specific password flow).
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bunx electron-builder --mac --arm64 --publish never
+
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleex-desktop-dmg
+          path: packages/desktop/release/*.dmg
+          if-no-files-found: error
