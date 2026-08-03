@@ -22,12 +22,11 @@ import { useCommentDraft } from '../../hooks/useCommentDraft';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useModels } from '../../hooks/useModels';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
+import { workflowsUnavailableTooltip } from '../../lib/capabilityMessages';
 import { cn } from '../../lib/cn';
-import { tint, tintText, tintClasses } from '../../lib/tints';
-
-
 import { MentionTypeIcon } from '../../lib/primitives';
 import { isMissingRepo, mentionsPrimitive } from '../../lib/repoStatus';
+import { tint, tintText, tintClasses } from '../../lib/tints';
 import * as api from '../../services/api';
 import { appWs } from '../../services/websocket';
 import { useAgentEventStore } from '../../stores/agentEventStore';
@@ -53,14 +52,14 @@ import {
 import { MermaidDiagram, isMermaidCode, codeNodeToString } from '../shared/MermaidDiagram';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
+import { selectFailedStepCards } from '../workflows/failedStepCards';
+import { FailedStepRetryPanel } from '../workflows/FailedStepRetryPanel';
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
 import { NeedsReviewRespondPanel } from '../workflows/NeedsReviewRespondPanel';
 import { selectWaitingInputCards } from '../workflows/waitingInputCards';
 
+
 import { selectCrashedMentionCards, crashReasonLabel } from './crashedMentionCards';
-
-import { workflowsUnavailableTooltip } from '../../lib/capabilityMessages';
-
 import { FloatingExecutionPanel } from './ExecutionModal';
 
 import type { Components } from 'react-markdown';
@@ -956,9 +955,17 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   // detail — not in the runs list. Once a run is in `detail`, applyEvent keeps it
   // fresh on later workflow:* events (that's what makes the card live-update).
   useEffect(() => {
-    for (const r of workflowRuns ?? []) {
+    const runs = workflowRuns ?? [];
+    for (const r of runs) {
       if (ACTIVE_STATUSES.has(r.status)) void loadWorkflowDetail(r.id);
     }
+    // A run that just failed drops OUT of ACTIVE_STATUSES, so the loop above stops
+    // loading its detail — and after a reload the "step failed" card would vanish
+    // while the failure is still very much unresolved. Load the most recent run's
+    // detail too when it failed: at most one extra GET, only on tickets whose last
+    // run died (same run the card selector is allowed to act on — see R1).
+    const latest = [...runs].sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+    if (latest?.status === 'failed') void loadWorkflowDetail(latest.id);
     // workflowDetail intentionally excluded: loadWorkflowDetail writes to it, so
     // depending on it would re-fire this effect in a loop.
   }, [workflowRuns, loadWorkflowDetail]);
@@ -1034,6 +1041,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   // signal. Detection lives in a pure helper (mirrors gateCards; see its doc).
   const waitingInputCards = useMemo(
     () => selectWaitingInputCards(workflowRuns, workflowDetail),
+    [workflowRuns, workflowDetail],
+  );
+
+  // Inline "a workflow step failed — retry?" card. A failing step posts no
+  // comment and creates no mention, so without this the thread shows nothing at
+  // all and the retry button is reachable only from the Workflow tab. Same store
+  // call as that tab ⇒ the two surfaces stay in sync. See the selector's doc.
+  const failedStepCards = useMemo(
+    () => selectFailedStepCards(workflowRuns, workflowDetail),
     [workflowRuns, workflowDetail],
   );
 
@@ -1832,6 +1848,30 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
                 </div>
               );
             })}
+            {/* Inline "a workflow step failed — retry?" card. Reuses the Workflow
+                tab's panel (optional props add the step/workflow label, the
+                attempt number and the logs link) so both surfaces evolve
+                together. Driven by the persisted run state ⇒ survives a reload,
+                and disappears on its own as soon as the step runs again — from
+                here or from the Workflow tab. */}
+            {failedStepCards.map(({ run, step, stepRun }) => (
+              <div key={stepRun.id} className="my-3">
+                <FailedStepRetryPanel
+                  title={`Step failed · ${run.templateSnapshot.emoji} ${run.templateSnapshot.name} › ${step.name}`}
+                  attempt={stepRun.attempt}
+                  error={(stepRun.output?.schemaFields?.error as string | undefined) ?? null}
+                  onRetry={() => retryStep(run.id, stepRun.id)}
+                  onViewLogs={
+                    stepRun.executionId
+                      ? () => {
+                          setModalTitle(`${step.name} execution`);
+                          setModalExecutionId(stepRun.executionId!);
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            ))}
             <div ref={listEndRef} />
           </div>
         )}
