@@ -92,7 +92,7 @@ import { remoteExec, remoteShellExec, RemoteHostFs } from './host/remote.js';
 import { RemotePtyAdapter } from './host/remote-pty.adapter.js';
 import { resolveGatewayToken } from './host/gateway-token.js';
 
-const DEFAULT_GATEWAY_URL = 'http://localhost:3001';
+const DEFAULT_GATEWAY_URL = 'http://127.0.0.1:3001';
 
 export async function createContainer() {
   const logger = new PinoLoggerAdapter();

@@ -95,7 +95,7 @@ export async function ensureCompanion(opts: CompanionStartOptions = {}): Promise
   info(`Starting companion from ${c.dim(repoDir)} ...`);
   const healthy = await waitForService(
     'companion',
-    `http://localhost:${COMPANION_PORT}/health`,
+    `http://127.0.0.1:${COMPANION_PORT}/health`,
     child.pid,
     logPath,
     15,

@@ -257,7 +257,7 @@ const def: CommandDef = {
         try {
           const ctrl = new AbortController();
           const tid = setTimeout(() => ctrl.abort(), 2000);
-          const res = await fetch(`http://localhost:${port}${healthPath}`, { signal: ctrl.signal });
+          const res = await fetch(`http://127.0.0.1:${port}${healthPath}`, { signal: ctrl.signal });
           clearTimeout(tid);
           code = String(res.status);
           if (res.status >= 200 && res.status < 300) {
