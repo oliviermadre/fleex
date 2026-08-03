@@ -8,7 +8,7 @@ import {
   requireString,
 } from './validation';
 
-type FsRequest =
+export type FsRequest =
   | { op: 'read'; path: string }
   | { op: 'write'; path: string; content: string }
   | { op: 'readdir'; path: string }
