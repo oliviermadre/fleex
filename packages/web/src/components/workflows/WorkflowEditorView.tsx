@@ -14,9 +14,15 @@ import { WorkflowDagEdge } from './WorkflowDagEdge';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
 import { useActiveTheme, useColorMode } from '../../hooks/useActiveTheme';
 import type { WorkflowExecutorType, WorkflowStep, WorkflowEdge as WfEdge, WorkflowTemplate } from '@fleex/shared';
+import { NATIVE_STEP_KIND_TICKET_ACTIONS } from '@fleex/shared';
 
 const nodeTypes = { editorStep: EditorStepNode };
 const edgeTypes = { workflow: WorkflowDagEdge };
+
+const DEFAULT_STEP_NAME: Partial<Record<WorkflowExecutorType, string>> = {
+  human_gate: 'Human Gate',
+  native: 'Ticket Actions',
+};
 
 interface Props {
   template: WorkflowTemplate;
@@ -136,9 +142,15 @@ function EditorInner({ template, onBack }: Props) {
     const position = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
     const id = `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const step: WorkflowStep = {
-      id, name: type === 'human_gate' ? 'Human Gate' : 'New Step',
-      executorType: type, executorRef: '', position,
+      id, name: DEFAULT_STEP_NAME[type] ?? 'New Step',
+      executorType: type,
+      // A native step has no persona/skill/panel to point at; its `executorRef`
+      // names the *kind* of native step, which is what makes room for future
+      // kinds without a second executor type.
+      executorRef: type === 'native' ? NATIVE_STEP_KIND_TICKET_ACTIONS : '',
+      position,
       humanGateOutcomes: type === 'human_gate' ? ['approve', 'reject'] : undefined,
+      nativeActions: type === 'native' ? [] : undefined,
     };
     setSteps((prev) => [...prev, step]);
     if (steps.length === 0) setEntryStepId(id);
@@ -238,6 +250,9 @@ function EditorInner({ template, onBack }: Props) {
               isEntry={selectedStep.id === entryStepId}
               onChange={(next) => setSteps((prev) => prev.map((s) => s.id === next.id ? next : s))}
               onSetEntry={() => setEntryStepId(selectedStep.id)}
+              steps={steps}
+              edges={edges}
+              entryStepId={entryStepId}
             />
           ) : selectedEdge ? (
             <EdgeConfigPanel

@@ -19,6 +19,12 @@ export interface StepExecutionInput {
       targetName: string;
     }[];
     previousOutputs: Record<string, Record<string, unknown>>;
+    /**
+     * Direct predecessors of this step in the run snapshot. Native steps use it
+     * to resolve the `{{ output.<field> }}` shorthand, which is only meaningful
+     * when there is exactly one incoming edge.
+     */
+    predecessorStepIds?: string[];
   };
   /**
    * Invoked by the executor as soon as the underlying agent execution has

@@ -45,6 +45,19 @@ function UserCheckIcon({ className }: IconProps) {
   );
 }
 
+// Native — checklist (an ordered list of deterministic operations).
+export function ListChecksIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 4.5 7.5 7.5 4.5" />
+      <polyline points="3 14 4.5 15.5 7.5 12.5" />
+      <line x1="11" y1="6" x2="21" y2="6" />
+      <line x1="11" y1="14" x2="21" y2="14" />
+      <line x1="11" y1="19" x2="17" y2="19" />
+    </svg>
+  );
+}
+
 // ── Palette data ──────────────────────────────────────────────────────────────
 
 type IconComponent = React.ComponentType<IconProps>;
@@ -85,6 +98,13 @@ export const EXECUTOR_PALETTE: PaletteEntry[] = [
     description: 'Manual approval checkpoint',
     Icon: UserCheckIcon,
     colorClass: `${tintClasses('yellow').text} ${tintClasses('yellow').borderColor}`,
+  },
+  {
+    type: 'native',
+    label: 'Ticket Actions',
+    description: 'Deterministic ticket operations — no agent, no LLM',
+    Icon: ListChecksIcon,
+    colorClass: `${tintClasses('teal').text} ${tintClasses('teal').borderColor}`,
   },
 ];
 
