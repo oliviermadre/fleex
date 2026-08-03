@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { FLEEX_DIR, CONFIG_FILE } from '@fleex/shared';
+import { FLEEX_DIR, CONFIG_FILE, migrateActionsConfig } from '@fleex/shared';
 import type { AppConfig, ConfigPort } from '../../application/ports/config.port.js';
 import type { ExecFn, HostFs } from '../host/types.js';
 import { resolveClaudeCommand } from './resolve-claude-command.js';
@@ -72,7 +72,15 @@ export class JsonConfigAdapter implements ConfigPort {
       // Don't load claudeCommand from disk
       delete data['claudeCommand'];
 
+      // Fold legacy pinnedIcons/workspaceActions into the `actions` registry.
+      const migrated = migrateActionsConfig(data);
+
       this.config = { ...this.config, ...(data as Partial<AppConfig>) };
+
+      if (migrated) {
+        this.resolveTilde();
+        await this.syncToDisk();
+      }
     } catch {
       // Use defaults
     }

@@ -1,13 +1,14 @@
-import type { PinnedIcon } from '../../stores/settingsStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useMemo } from 'react';
+import type { ActionDef } from '@fleex/shared';
+import { globalActions, useSettingsStore } from '../../stores/settingsStore';
 import { cn } from '../../lib/cn';
 
 interface PinnedIconButtonProps {
-  icon: PinnedIcon;
+  icon: ActionDef;
   collapsed?: boolean;
 }
 
-export function renderIcon(icon: Pick<PinnedIcon, 'icon' | 'iconType' | 'label'>, size: number) {
+export function renderIcon(icon: Pick<ActionDef, 'icon' | 'iconType' | 'label'>, size: number) {
   if (icon.iconType === 'svg') {
     return (
       <span
@@ -30,7 +31,7 @@ export function renderIcon(icon: Pick<PinnedIcon, 'icon' | 'iconType' | 'label'>
 }
 
 export function PinnedIconButton({ icon, collapsed }: PinnedIconButtonProps) {
-  const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
+  const executeAction = useSettingsStore((s) => s.executeAction);
 
   return (
     <button
@@ -38,7 +39,7 @@ export function PinnedIconButton({ icon, collapsed }: PinnedIconButtonProps) {
         'flex items-center justify-center cursor-pointer text-[var(--theme-text-primary)] transition-all bg-[var(--theme-accent-muted)] hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)] active:bg-[var(--theme-accent)] active:shadow-[0_0_16px_var(--theme-accent-muted)]',
         collapsed ? 'h-9 px-3 rounded-md' : 'h-10 px-4 rounded-lg'
       )}
-      onClick={() => executePinnedAction(icon)}
+      onClick={() => executeAction(icon)}
       title={icon.label}
     >
       {renderIcon(icon, collapsed ? 20 : 22)}
@@ -47,7 +48,8 @@ export function PinnedIconButton({ icon, collapsed }: PinnedIconButtonProps) {
 }
 
 export function PinnedIconsBar() {
-  const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
+  const actions = useSettingsStore((s) => s.settings.actions);
+  const pinnedIcons = useMemo(() => globalActions(actions), [actions]);
 
   if (pinnedIcons.length === 0) return null;
 

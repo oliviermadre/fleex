@@ -1,4 +1,4 @@
-import type { MentionTargetType, MentionExecutionMode, HookResult } from '@fleex/shared';
+import type { MentionTargetType, MentionExecutionMode, HookResult, ActionScope } from '@fleex/shared';
 
 // ── Base ──
 
@@ -500,6 +500,47 @@ export interface TicketGroupBoardRemovedEvent extends DomainEvent {
   boardId: string;
 }
 
+// ── Declared action events ──
+//
+// These ARE the audit trail for action execution: the `eventBus.on('*')`
+// subscriber persists every domain event into `domain_event_log`, so no extra
+// table or schema migration is needed. The applicative log deliberately carries
+// only ids — the resolved argv lives here, in the purgeable audit record.
+
+export interface ActionExecutedEvent extends DomainEvent {
+  type: 'action.executed';
+  runId: string;
+  actionId: string;
+  label: string;
+  scope: ActionScope;
+  kind: 'exec' | 'shell';
+  /** Program actually invoked (the login shell for `kind: 'shell'`). */
+  command: string;
+  /** Fully resolved argv — what ran, not what was declared. */
+  args: string[];
+  cwd: string;
+  ticketId?: string;
+  exitCode: number;
+  durationMs: number;
+}
+
+export interface ActionFailedEvent extends DomainEvent {
+  type: 'action.failed';
+  runId: string;
+  actionId: string;
+  label: string;
+  reason:
+    | 'disabled'
+    | 'invalid_params'
+    | 'missing_context'
+    | 'not_executable'
+    | 'timeout'
+    | 'spawn_error'
+    | 'already_running';
+  message: string;
+  ticketId?: string;
+}
+
 // ── Union type ──
 
 export type AnyDomainEvent =
@@ -566,7 +607,9 @@ export type AnyDomainEvent =
   | WorkflowNeedsReviewEvent
   | WorkflowRunCompletedEvent
   | WorkflowRunFailedEvent
-  | WorkflowRunCancelledEvent;
+  | WorkflowRunCancelledEvent
+  | ActionExecutedEvent
+  | ActionFailedEvent;
 
 // ── Event type string union ──
 

@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import { validateActionDefs } from '@fleex/shared';
+import { ActionInvalidParamsError } from '../../domain/errors.js';
 import type { AppConfig } from '../../application/ports/config.port.js';
 import type { Container } from '../container.js';
 
@@ -18,6 +20,22 @@ export function configRoutes(container: Container) {
       // startup), not the DB — ignore any attempt to change it through the API.
       // workspace is likewise env-derived and echoed back on GET, never stored.
       const { basePath: _ignoredBasePath, workspace: _ignoredWorkspace, ...updatable } = request.body;
+
+      // The action registry is the only thing the server will later execute, so
+      // it is validated before it can be persisted. Rejecting here means a
+      // malformed definition never reaches disk — the run path can therefore
+      // trust the shapes it reads back.
+      if (updatable.actions !== undefined) {
+        const errors = validateActionDefs(updatable.actions);
+        if (errors.length > 0) {
+          const message = errors.map((e) => `${e.field}: ${e.reason}`).join('; ');
+          throw new ActionInvalidParamsError(
+            `Invalid actions: ${message}`,
+            errors.map((e) => ({ param: e.field, reason: e.reason })),
+          );
+        }
+      }
+
       await container.config.update(updatable);
 
       // Auto-resolve repository patterns when repositories change

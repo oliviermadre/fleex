@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
-import { TICKET_STATUS_LABELS } from '@fleex/shared';
+import { TICKET_STATUS_LABELS, buildWorkspaceContext } from '@fleex/shared';
 import type { Ticket } from '@fleex/shared';
 import { cn } from '../../lib/cn';
 import { getStatusBadgeClass } from '../../lib/statusColors';
 import { useTicketStore } from '../../stores/ticketStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { buildWorkspaceContext } from '../../lib/templateUtils';
+import { globalActions, workspaceActions as selectWorkspaceActions, useSettingsStore } from '../../stores/settingsStore';
 import { renderIcon } from '../sidebar/PinnedIcons';
 import { OverlaySyncButton } from '../overlay-sync/OverlaySyncButton';
 
@@ -14,10 +13,11 @@ const ICON_BTN = 'flex h-6 w-6 items-center justify-center rounded border border
 export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
   const selectTicket = useTicketStore((s) => s.selectTicket);
   const basePath = useSettingsStore((s) => s.settings.basePath);
-  const pinnedIcons = useSettingsStore((s) => s.settings.pinnedIcons);
-  const workspaceActions = useSettingsStore((s) => s.settings.workspaceActions);
-  const executePinnedAction = useSettingsStore((s) => s.executePinnedAction);
-  const executeWorkspaceAction = useSettingsStore((s) => s.executeWorkspaceAction);
+  const actions = useSettingsStore((s) => s.settings.actions);
+  const executeAction = useSettingsStore((s) => s.executeAction);
+
+  const pinnedIcons = useMemo(() => globalActions(actions), [actions]);
+  const workspaceActions = useMemo(() => selectWorkspaceActions(actions), [actions]);
 
   // A workspace always exists (conceptually) for a ticket: its folder is
   // deterministic, so this context is always available — even with no session.
@@ -26,7 +26,7 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
     [ticket, basePath],
   );
 
-  const hasWorkspaceActions = workspaceActions && workspaceActions.length > 0;
+  const hasWorkspaceActions = workspaceActions.length > 0;
   const hasActions = pinnedIcons.length > 0 || hasWorkspaceActions;
 
   return (
@@ -64,7 +64,7 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
               <button
                 key={icon.id}
                 className={ICON_BTN}
-                onClick={() => executePinnedAction(icon)}
+                onClick={() => executeAction(icon)}
                 title={icon.label}
               >
                 <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
@@ -75,11 +75,11 @@ export function TicketDetailHeader({ ticket }: { ticket: Ticket }) {
             {pinnedIcons.length > 0 && hasWorkspaceActions && (
               <div className="mx-0.5 h-4 w-px bg-[var(--theme-border)]" />
             )}
-            {workspaceActions?.map((action) => (
+            {workspaceActions.map((action) => (
               <button
                 key={action.id}
                 className={ICON_BTN}
-                onClick={() => executeWorkspaceAction(action, workspaceContext)}
+                onClick={() => executeAction(action, workspaceContext)}
                 title={action.label}
               >
                 {action.icon ? (

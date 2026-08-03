@@ -16,6 +16,44 @@ export { slugify } from './slugify.js';
 
 export { buildTicketWorkspaceId } from './utils/workspace.js';
 
+export type {
+  ActionScope,
+  ActionKind,
+  ActionParamType,
+  ActionIconType,
+  ActionParamDef,
+  ActionDef,
+  ActionContextVariable,
+  RunActionRequest,
+  RunActionResponse,
+} from './types/action.js';
+export {
+  ACTION_PARAM_NAME_RE,
+  ACTION_DEFAULT_TIMEOUT_MS,
+  ACTION_TIMEOUT_MIN_MS,
+  ACTION_TIMEOUT_MAX_MS,
+  ACTION_OUTPUT_LIMIT_BYTES,
+  ACTION_CONTEXT_VARIABLES,
+} from './types/action.js';
+
+export type { WorkspaceContext, StrictTemplateResult } from './actions/template.js';
+export {
+  buildWorkspaceContext,
+  parsePipeExpression,
+  resolveTemplate,
+  resolveTemplateStrict,
+  templateVariables,
+} from './actions/template.js';
+export type { PipeFunction } from './actions/pipes/index.js';
+export { getPipe } from './actions/pipes/index.js';
+export type { ParsedCommandLine, ExtractedPlaceholders } from './actions/parse-command-line.js';
+export { parseCommandLine, extractPlaceholders } from './actions/parse-command-line.js';
+export { migrateActionsConfig } from './actions/migrate-actions-config.js';
+export type { ActionDefError } from './actions/validate-actions.js';
+export { validateActionDefs } from './actions/validate-actions.js';
+export type { ActionParamError, ActionParamResult } from './actions/action-params.js';
+export { validateActionParams, anchoredPattern } from './actions/action-params.js';
+
 export {
   SLACK_MESSAGE_URL_RE,
   parseSlackMessageUrl,

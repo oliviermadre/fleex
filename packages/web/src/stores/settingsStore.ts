@@ -1,26 +1,22 @@
 import { create } from 'zustand';
-import { DEFAULT_AGENT_MAX_TURNS } from '@fleex/shared';
+import { DEFAULT_AGENT_MAX_TURNS, migrateActionsConfig, resolveTemplate } from '@fleex/shared';
+import type { ActionDef, WorkspaceContext } from '@fleex/shared';
 import { API_URL, TERMINAL_FONT_FAMILY, TERMINAL_FONT_SIZE, STORAGE_KEY_SETTINGS } from '../lib/constants';
-import { resolveTemplate, type WorkspaceContext } from '../lib/templateUtils';
 import type { Theme } from '../lib/themes';
 import * as api from '../services/api';
 
-export interface PinnedIcon {
-  id: string;
-  icon: string;
-  iconType: 'svg' | 'base64' | 'path' | 'url';
-  label: string;
-  actionType: 'url' | 'shell';
-  actionValue: string;
+/**
+ * Actions the user can trigger, filtered by scope. Kept as plain functions
+ * rather than zustand selectors on purpose: they allocate a new array, so
+ * subscribing to them directly would re-render on every store write. Call sites
+ * wrap them in `useMemo` keyed on `settings.actions`.
+ */
+export function globalActions(actions: ActionDef[]): ActionDef[] {
+  return actions.filter((a) => a.scope === 'global' && a.enabled !== false);
 }
 
-export interface WorkspaceAction {
-  id: string;
-  icon: string;
-  iconType: 'svg' | 'base64' | 'path' | 'url';
-  label: string;
-  actionType: 'url' | 'shell';
-  actionValue: string;
+export function workspaceActions(actions: ActionDef[]): ActionDef[] {
+  return actions.filter((a) => a.scope === 'workspace' && a.enabled !== false);
 }
 
 export interface RepoConfig {
@@ -41,8 +37,13 @@ export interface AppSettings {
   repositories: string[];
   resolvedRepositories: string[];
   resolvedAt: string | null;
-  pinnedIcons: PinnedIcon[];
-  workspaceActions: WorkspaceAction[];
+  /**
+   * Single registry replacing the former `pinnedIcons` + `workspaceActions`.
+   * `scope` is what used to be the array an entry lived in. Nothing here is an
+   * executable string the client sends: for `kind: 'exec' | 'shell'` the client
+   * only ever posts the action's **id**.
+   */
+  actions: ActionDef[];
   sessionDisplayNames: Record<string, string>;
   repoOrder: string[];
   worktreeOrder: Record<string, string[]>;
@@ -77,8 +78,8 @@ interface SettingsState {
   setRepoOrder: (order: string[]) => void;
   setWorktreeOrder: (repoGroupId: string, order: string[]) => void;
   setSessionOrder: (worktreeGroupId: string, order: string[]) => void;
-  executePinnedAction: (icon: PinnedIcon) => void;
-  executeWorkspaceAction: (action: WorkspaceAction, context: WorkspaceContext) => void;
+  executeAction: (action: ActionDef, context?: WorkspaceContext) => void;
+  saveActions: (actions: ActionDef[]) => Promise<void>;
   addLayoutGroup: (type: SessionLayoutType) => string;
   removeLayoutGroup: (id: string) => void;
   bindLayoutGroupCell: (groupId: string, cellIndex: number, sessionId: string | null) => void;
@@ -93,8 +94,7 @@ const defaultSettings: AppSettings = {
   repositories: [],
   resolvedRepositories: [],
   resolvedAt: null,
-  pinnedIcons: [],
-  workspaceActions: [],
+  actions: [],
   sessionDisplayNames: {},
   repoOrder: [],
   worktreeOrder: {},
@@ -117,6 +117,10 @@ function loadFromStorage(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEY_SETTINGS);
     if (!raw) return defaultSettings;
     const parsed = JSON.parse(raw);
+    // The cached copy can predate the registry — fold it before merging, so a
+    // user's pinned actions survive a reload that happens before the server
+    // config comes back.
+    if (parsed && typeof parsed === 'object') migrateActionsConfig(parsed);
     return { ...defaultSettings, ...parsed };
   } catch { /* ignore */ }
   return defaultSettings;
@@ -135,7 +139,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const res = await fetch(`${API_URL}/config`);
       if (res.ok) {
         const data = await res.json();
-        if (data && typeof data === 'object' && (data.basePath || data.repositories || data.pinnedIcons || data.workspaceActions)) {
+        if (data && typeof data === 'object' && (data.basePath || data.repositories || data.actions)) {
           const merged = { ...defaultSettings, ...data };
           set({ settings: merged, loaded: true });
           saveToStorage(merged);
@@ -227,35 +231,44 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }).catch(() => { /* ignore */ });
   },
 
-  executePinnedAction: (icon: PinnedIcon) => {
-    if (icon.actionType === 'url') {
-      window.open(icon.actionValue, '_blank');
-    } else if (icon.actionType === 'shell') {
-      fetch(`${API_URL}/exec`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: icon.actionValue }),
-      }).catch(() => { /* ignore */ });
+  executeAction: (action: ActionDef, context?: WorkspaceContext) => {
+    // `kind: 'url'` never reaches the server — it's a navigation, so the
+    // template is resolved here and opened directly.
+    if (action.kind === 'url') {
+      const target = context ? resolveTemplate(action.url ?? '', context) : (action.url ?? '');
+      if (target) window.open(target, '_blank');
+      return;
     }
+
+    // Everything else: post the **id**. The command, its arguments and its cwd
+    // all come from server-side config, and the server derives the workspace
+    // from the ticket id (which is also why the old /ensure-workspace pre-flight
+    // is gone — the run does it, without the race).
+    fetch(`${API_URL}/actions/${encodeURIComponent(action.id)}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(context ? { ticketId: context.ticket_id } : {}),
+    }).catch(() => { /* ignore */ });
   },
 
-  executeWorkspaceAction: async (action: WorkspaceAction, context: WorkspaceContext) => {
-    const resolved = resolveTemplate(action.actionValue, context);
-    if (action.actionType === 'url') {
-      window.open(resolved, '_blank');
-    } else if (action.actionType === 'shell') {
-      // The workspace folder is created lazily (on session/agent start), so it
-      // may not exist yet for tickets that never ran one (e.g. lead/meeting).
-      // Materialize it first so {{workspace_path}} points at a real directory.
-      try {
-        await fetch(`${API_URL}/tickets/${context.ticket_id}/ensure-workspace`, { method: 'POST' });
-      } catch { /* best-effort; still attempt the command below */ }
-      fetch(`${API_URL}/exec`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: resolved }),
-      }).catch(() => { /* ignore */ });
+  saveActions: async (actions: ActionDef[]) => {
+    const current = get().settings;
+    const updated = { ...current, actions };
+    const res = await fetch(`${API_URL}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    });
+    // Unlike saveSettings, this one surfaces the failure: the server validates
+    // action definitions and rejects malformed ones, and silently keeping a
+    // rejected definition in local state would show the user a saved action
+    // that does not exist server-side.
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message ?? `Failed to save actions (${res.status})`);
     }
+    set({ settings: updated });
+    saveToStorage(updated);
   },
 
   addLayoutGroup: (type) => {
