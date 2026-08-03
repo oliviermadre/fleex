@@ -11,9 +11,10 @@ import type {
 import { TOOLTIP_HIDE_DELAY_MS } from '@fleex/shared';
 
 import { useTooltip, FloatingPortal } from '../../hooks/usePopover';
+import { loadSessions } from '../../hooks/useSessions';
 import { cn } from '../../lib/cn';
 import { aggregateBranchStatus, type DisplayStatus } from '../../lib/deriveStatus';
-import { tintSolid, tintText } from '../../lib/tints';
+import { tint, tintSolid, tintText } from '../../lib/tints';
 import { useAgentPersonaStore } from '../../stores/agentPersonaStore';
 import { useClaudeConfigStore } from '../../stores/claudeConfigStore';
 import { useRepositoryDashboardStore } from '../../stores/repositoryDashboardStore';
@@ -74,8 +75,46 @@ function BranchesContent() {
   return (
     <>
       <SidebarHeader />
+      <SessionsLoadErrorBanner />
       <SessionGroups />
     </>
+  );
+}
+
+/**
+ * An empty session list used to mean two very different things — "nothing to
+ * show" and "the fetch blew up and we swallowed it". This banner is what makes
+ * the second case visible, and recoverable without a page reload.
+ */
+function SessionsLoadErrorBanner() {
+  const error = useSessionStore((s) => s.sessionsLoadError);
+  const [retrying, setRetrying] = useState(false);
+
+  const handleRetry = useCallback(() => {
+    setRetrying(true);
+    void loadSessions().finally(() => setRetrying(false));
+  }, []);
+
+  if (!error) return null;
+
+  return (
+    <div
+      role="alert"
+      className={cn('mx-2 mt-2 flex items-start gap-2 rounded-md px-2.5 py-2 text-xs', tint('red'))}
+    >
+      <span aria-hidden="true">⚠</span>
+      <div className="min-w-0 flex-1">
+        <div className="break-words">{error}</div>
+        <button
+          type="button"
+          onClick={handleRetry}
+          disabled={retrying}
+          className="mt-1 underline underline-offset-2 hover:no-underline disabled:opacity-50"
+        >
+          {retrying ? 'Retrying…' : 'Retry'}
+        </button>
+      </div>
+    </div>
   );
 }
 

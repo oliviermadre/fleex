@@ -53,13 +53,39 @@ function extractErrorMessage(body: string, statusText: string): string {
   return body || statusText;
 }
 
+/**
+ * The server could not be reached at all — offline, server down, DNS, CORS.
+ *
+ * Distinct from an HTTP error: there is no status code and no response body,
+ * and retrying once the server is back is the correct fix. Exported so callers
+ * can tell "Fleex isn't running" apart from "that request was rejected".
+ */
+export class NetworkError extends Error {
+  constructor(cause: unknown) {
+    super('Cannot reach the Fleex server — check that it is running');
+    this.name = 'NetworkError';
+    this.cause = cause;
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: options?.body
-      ? { 'Content-Type': 'application/json', ...options?.headers }
-      : options?.headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: options?.body
+        ? { 'Content-Type': 'application/json', ...options?.headers }
+        : options?.headers,
+    });
+  } catch (cause) {
+    // `fetch` rejects on transport failure, which used to skip the `!res.ok`
+    // toast below entirely: with the server down, every call in the app failed
+    // in total silence. The toast store dedups on a 10s window, so the ~11
+    // parallel calls made at boot still produce a single toast.
+    const err = new NetworkError(cause);
+    useToastStore.getState().addToast('error', err.message);
+    throw err;
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     const message = extractErrorMessage(body, res.statusText);

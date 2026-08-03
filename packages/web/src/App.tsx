@@ -1,6 +1,7 @@
 import { BrowserRouter } from 'react-router-dom';
 
 import { CommandPalette } from './components/command-palette/CommandPalette';
+import { ErrorBoundary } from './components/errors/ErrorBoundary';
 import { AppLayout } from './components/layout/AppLayout';
 import { CreateTaskModal } from './components/modals/CreateTaskModal';
 import { NotificationToasts } from './components/notifications/NotificationToasts';
@@ -20,7 +21,10 @@ export function App() {
   if (isMobile) {
     return (
       <BrowserRouter>
-        <MobileApp />
+        {/* Kept outside ToastContainer so toasts still render if the app crashes. */}
+        <ErrorBoundary name="mobile-app">
+          <MobileApp />
+        </ErrorBoundary>
         <ToastContainer />
       </BrowserRouter>
     );

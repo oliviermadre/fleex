@@ -11,13 +11,16 @@ import { useSkills } from '../../hooks/useSkills';
 import { useTicketActivity } from '../../hooks/useTicketActivity';
 import { useTickets } from '../../hooks/useTickets';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { reportClientError } from '../../services/errorReporter';
 import { useDeliverableTypesStore } from '../../stores/deliverableTypesStore';
 import { useRepositoryStore } from '../../stores/repositoryStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { ErrorBoundary } from '../errors/ErrorBoundary';
 import { FloatingSessionOverlay } from '../main-panel/FloatingSessionOverlay';
 import { MainPanel } from '../main-panel/MainPanel';
+import { useMainViewKey } from '../main-panel/useMainViewKey';
 import { ScratchpadHint } from '../scratchpad/ScratchpadHint';
 import { ScratchpadPanel } from '../scratchpad/ScratchpadPanel';
 import { ContentPanel } from '../sidebar/ContentPanel';
@@ -53,12 +56,19 @@ export function AppLayout() {
   const loadDeliverableTypes = useDeliverableTypesStore((s) => s.load);
 
   useEffect(() => {
-    loadSettings();
-    fetchRepositories();
-    loadDeliverableTypes();
+    // These were previously fire-and-forget: a rejection became an unhandled
+    // rejection in the console and nothing else. Route them to the reporter so
+    // a failed boot is visible in the server logs.
+    const report = (what: string) => (error: unknown) =>
+      reportClientError({ error, source: 'unhandledrejection', boundary: `AppLayout.${what}` });
+
+    loadSettings().catch(report('loadSettings'));
+    fetchRepositories().catch(report('fetchRepositories'));
+    loadDeliverableTypes().catch(report('loadDeliverableTypes'));
   }, [loadSettings, fetchRepositories, loadDeliverableTypes]);
 
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
+  const mainViewKey = useMainViewKey();
 
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
   // Hide the content panel when editing a workflow so the editor takes the full viewport width
@@ -87,20 +97,37 @@ export function AppLayout() {
       }}
     >
       <div className="overflow-hidden">
-        <NavSidebar />
+        <ErrorBoundary name="nav-sidebar" variant="inline">
+          <NavSidebar />
+        </ErrorBoundary>
       </div>
       <div className={contentPanelCollapsed ? 'overflow-visible' : 'overflow-hidden'}>
-        <ContentPanel />
+        <ErrorBoundary name="content-panel" variant="inline">
+          <ContentPanel />
+        </ErrorBoundary>
       </div>
       <div className="relative flex flex-1 overflow-hidden" style={{ minWidth: 0 }}>
         {!hideContentPanel && <ResizeHandle />}
-        <MainPanel />
+        {/*
+          Keyed by view identity: a caught error sticks until the boundary is
+          remounted, so without this key a crash on one ticket would keep
+          showing the crash screen after navigating to a healthy one.
+          `useMainViewKey` is called above — it must live OUTSIDE the boundary
+          it drives.
+        */}
+        <ErrorBoundary key={mainViewKey} name="main-view" viewKey={mainViewKey}>
+          <MainPanel />
+        </ErrorBoundary>
       </div>
-      <ScratchpadPanel />
-      <ScratchpadHint />
-      <FloatingSessionOverlay />
-      <FloatingDeliverableOverlay />
-      <DeliverableReadingOverlay />
+      <ErrorBoundary name="scratchpad" variant="inline">
+        <ScratchpadPanel />
+        <ScratchpadHint />
+      </ErrorBoundary>
+      <ErrorBoundary name="overlays" variant="inline">
+        <FloatingSessionOverlay />
+        <FloatingDeliverableOverlay />
+        <DeliverableReadingOverlay />
+      </ErrorBoundary>
     </div>
   );
 }
