@@ -9,6 +9,14 @@ import type { PromptContentBlock } from './resolve-file-references.js';
 export interface SdkQueryMetrics {
   durationMs?: number;
   costUsd?: number;
+  /**
+   * Conversation turns actually consumed, straight from the SDK's `num_turns`.
+   * A turn is one user↔assistant round-trip, NOT one tool call: the model can
+   * batch many parallel tool calls into a single assistant turn. Surfacing this
+   * next to the configured `maxTurns` is the only reliable way to tell whether
+   * a run was cut short by the budget or finished on its own.
+   */
+  numTurns?: number;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
@@ -147,6 +155,7 @@ export async function streamSdkQuery(params: StreamSdkQueryParams): Promise<Stre
           metrics.durationMs = msg['duration_ms'] as number;
         if (typeof msg['total_cost_usd'] === 'number')
           metrics.costUsd = msg['total_cost_usd'] as number;
+        if (typeof msg['num_turns'] === 'number') metrics.numTurns = msg['num_turns'] as number;
 
         // modelUsage carries cumulative per-model token totals.
         const modelUsage = msg['modelUsage'] as Record<string, Record<string, number>> | undefined;

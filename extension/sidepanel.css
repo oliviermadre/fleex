@@ -460,7 +460,7 @@ header {
   white-space: pre-wrap;
   word-break: break-all;
 }
-.turn-confirm .actions { display: flex; gap: 7px; }
+.turn-confirm .actions { display: flex; gap: 7px; flex-wrap: wrap; }
 .turn-confirm .actions button {
   flex: 1;
   padding: 7px 12px;
@@ -477,6 +477,14 @@ header {
   background: transparent;
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 40%, transparent) !important;
+}
+/* Secondary to Approve, and on its own row: a standing approval should never
+   be the button you hit by reflex. */
+.confirm-always {
+  flex-basis: 100%;
+  background: transparent;
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent) !important;
 }
 
 /* ── Composer ── */

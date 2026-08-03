@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 import type { AgentToken } from '@fleex/shared';
+import { DEFAULT_AGENT_MAX_TURNS, AGENT_MAX_TURNS_MIN, AGENT_MAX_TURNS_MAX } from '@fleex/shared';
 
 import { cn } from '../../lib/cn';
 import * as api from '../../services/api';
@@ -35,6 +36,7 @@ export function SettingsPanel() {
   const [humanDisplayName, setHumanDisplayName] = useState('');
   const [humanMentionName, setHumanMentionName] = useState('');
   const [agentMaxConcurrency, setAgentMaxConcurrency] = useState(1);
+  const [agentMaxTurns, setAgentMaxTurns] = useState(DEFAULT_AGENT_MAX_TURNS);
   const [pinnedIcons, setPinnedIcons] = useState<PinnedIcon[]>([]);
   const [workspaceActions, setWorkspaceActions] = useState<WorkspaceAction[]>([]);
 
@@ -47,6 +49,7 @@ export function SettingsPanel() {
       ((settings as unknown as Record<string, unknown>)['humanMentionName'] as string) ?? '',
     );
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
+    setAgentMaxTurns(settings.agentMaxTurns ?? DEFAULT_AGENT_MAX_TURNS);
     setPinnedIcons(settings.pinnedIcons.map((i) => ({ ...i })));
     setWorkspaceActions((settings.workspaceActions ?? []).map((a) => ({ ...a })));
   }, [settings]);
@@ -63,6 +66,7 @@ export function SettingsPanel() {
         ? { humanMentionName: humanMentionName.trim() }
         : { humanMentionName: undefined }),
       agentMaxConcurrency,
+      agentMaxTurns,
     } as Partial<AppSettings> & Record<string, unknown>);
   };
 
@@ -139,6 +143,8 @@ export function SettingsPanel() {
               setHumanMentionName={setHumanMentionName}
               agentMaxConcurrency={agentMaxConcurrency}
               setAgentMaxConcurrency={setAgentMaxConcurrency}
+              agentMaxTurns={agentMaxTurns}
+              setAgentMaxTurns={setAgentMaxTurns}
             />
           )}
           {settingsTab === 'appearance' && <AppearanceTab />}
@@ -186,6 +192,8 @@ function GeneralTab({
   setHumanMentionName,
   agentMaxConcurrency,
   setAgentMaxConcurrency,
+  agentMaxTurns,
+  setAgentMaxTurns,
 }: {
   basePath: string;
   setBasePath: (v: string) => void;
@@ -195,6 +203,8 @@ function GeneralTab({
   setHumanMentionName: (v: string) => void;
   agentMaxConcurrency: number;
   setAgentMaxConcurrency: (v: number) => void;
+  agentMaxTurns: number;
+  setAgentMaxTurns: (v: number) => void;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -270,6 +280,44 @@ function GeneralTab({
         />
         <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
           Maximum number of agents that can run simultaneously. Additional mentions are queued.
+        </p>
+      </div>
+
+      <div className="mt-4 border-t border-[var(--theme-border)] pt-4">
+        <Input
+          id="agentMaxTurns"
+          label="Max Agent Turns"
+          type="number"
+          min={AGENT_MAX_TURNS_MIN}
+          max={AGENT_MAX_TURNS_MAX}
+          value={String(agentMaxTurns)}
+          onChange={(e) =>
+            setAgentMaxTurns(
+              Math.min(
+                AGENT_MAX_TURNS_MAX,
+                Math.max(
+                  AGENT_MAX_TURNS_MIN,
+                  parseInt(e.target.value, 10) || DEFAULT_AGENT_MAX_TURNS,
+                ),
+              ),
+            )
+          }
+        />
+        <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+          How many conversation turns (assistant round-trips) an agent may take in a single{' '}
+          <strong>plan</strong> or <strong>edit</strong> execution before the SDK stops it — not a
+          count of individual tool calls. A single turn can bundle several tool calls the model runs
+          in parallel (e.g. reading many files at once), so you may see more tool actions in the log
+          than this number. Raise it for long refactors, lower it to cap runaway loops. Default{' '}
+          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+            {DEFAULT_AGENT_MAX_TURNS}
+          </code>
+          . Each execution reports its actual usage as{' '}
+          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+            turns used / budget
+          </code>{' '}
+          in the Execution Log, so you can size this from real runs. Talk mode is unaffected — it
+          has no agentic loop.
         </p>
       </div>
     </div>

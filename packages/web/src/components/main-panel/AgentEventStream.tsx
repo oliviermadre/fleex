@@ -268,6 +268,7 @@ function EventBlock({ event }: { event: AgentEvent }) {
       const sdkSessionId = data?.['sdkSessionId'] as string | null; // backfilled for old events
       const ctx = data?.['context'] as Record<string, unknown> | undefined;
       const label = data?.['label'] as string | undefined;
+      const startMaxTurns = data?.['maxTurns'] as number | undefined;
       const modeBadge =
         effectiveMode === 'talk'
           ? '🗣 talk'
@@ -330,6 +331,12 @@ function EventBlock({ event }: { event: AgentEvent }) {
                 </div>
               </>
             )}
+            {startMaxTurns != null && (
+              <div title="A turn is one user↔assistant round-trip, not one tool call: a single turn can bundle several parallel tool calls.">
+                <span className="text-[var(--theme-text-secondary)]">turn budget:</span>{' '}
+                {startMaxTurns} turns
+              </div>
+            )}
           </div>
         </div>
       );
@@ -341,6 +348,9 @@ function EventBlock({ event }: { event: AgentEvent }) {
       const costUsd = data?.['costUsd'] as number | undefined;
       const inputTokens = data?.['inputTokens'] as number | undefined;
       const outputTokens = data?.['outputTokens'] as number | undefined;
+      const numTurns = data?.['numTurns'] as number | undefined;
+      const endMaxTurns = data?.['maxTurns'] as number | undefined;
+      const turnsExhausted = numTurns != null && endMaxTurns != null && numTurns >= endMaxTurns;
       const endModeBadge =
         endMode === 'talk' ? '🗣' : endMode === 'plan' ? '📋' : endMode === 'edit' ? '📝' : '';
       return (
@@ -358,9 +368,22 @@ function EventBlock({ event }: { event: AgentEvent }) {
               </span>
             )}
           </div>
-          {(durationMs || costUsd || inputTokens) && (
+          {(durationMs || costUsd || inputTokens || numTurns != null) && (
             <div className="text-[10px] text-[var(--theme-text-faint)] pl-4 flex gap-3">
               {durationMs != null && <span>{(durationMs / 1000).toFixed(1)}s</span>}
+              {numTurns != null && (
+                <span
+                  className={cn(turnsExhausted && tintText('yellow'))}
+                  title={
+                    'Conversation turns consumed vs the configured budget. A turn is one ' +
+                    'user↔assistant round-trip — a single turn can carry many parallel tool ' +
+                    'calls, so the number of tool actions above is usually much higher.'
+                  }
+                >
+                  {numTurns} turn{numTurns === 1 ? '' : 's'}
+                  {endMaxTurns != null && ` / ${endMaxTurns}`}
+                </span>
+              )}
               {inputTokens != null && outputTokens != null && (
                 <span>
                   {inputTokens.toLocaleString()}→{outputTokens.toLocaleString()} tokens
@@ -394,12 +417,29 @@ function EventBlock({ event }: { event: AgentEvent }) {
         </div>
       );
     }
+    // Emitted once, on the SDK `init` message — it marks the session opening,
+    // not each conversation turn. Labelling it "Turn started" made runs look
+    // like they only ever used one turn; the real turn count lands on
+    // `execution_end` as `turns: used / budget`.
     case 'turn_start':
       return (
         <div className="flex items-center gap-2 py-0.5 text-xs text-[var(--theme-text-faint)]">
-          ── Turn started ──
+          ── Session started ──
         </div>
       );
+    case 'max_turns_reached': {
+      const used = data?.['numTurns'] as number | undefined;
+      const budget = data?.['maxTurns'] as number | undefined;
+      return (
+        <div className={cn('py-2 px-3 rounded border text-xs', tint('yellow'))}>
+          <span className="font-semibold">⚠ Turn budget exhausted</span>
+          {' — '}
+          the agent was stopped after {used ?? budget ?? '?'} turn{used === 1 ? '' : 's'}
+          {budget != null && ` (max ${budget})`}, so its answer may be incomplete. Raise “Max Agent
+          Turns” in Settings › General to let it run longer.
+        </div>
+      );
+    }
     case 'content_block_delta': {
       if (!data) return null;
       const msgType = data['type'] as string;

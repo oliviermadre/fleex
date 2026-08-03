@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import { DEFAULT_AGENT_MAX_TURNS } from '@fleex/shared';
+
 import {
   API_URL,
   TERMINAL_FONT_FAMILY,
@@ -60,6 +62,8 @@ export interface AppSettings {
   terminalFontSize: number;
   terminalFontThicken: boolean;
   agentMaxConcurrency: number;
+  /** Agentic loop cap for plan/edit executions (talk mode has no loop). */
+  agentMaxTurns: number;
   humanDisplayName: string;
   repoConfigs: Record<string, RepoConfig>; // key = "org/name"
   /**
@@ -110,6 +114,7 @@ const defaultSettings: AppSettings = {
   terminalFontSize: TERMINAL_FONT_SIZE,
   terminalFontThicken: false,
   agentMaxConcurrency: 1,
+  agentMaxTurns: DEFAULT_AGENT_MAX_TURNS,
   humanDisplayName: '',
   repoConfigs: {},
   workspace: '',

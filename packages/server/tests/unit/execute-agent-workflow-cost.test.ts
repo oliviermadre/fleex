@@ -51,6 +51,9 @@ function makeUseCase() {
   const sdkLimiter = { acquire: async () => () => {} } as never;
   const logger = { info() {}, warn() {}, error() {}, debug() {} } as never;
   const stub = {} as never;
+  // The workflow-step path reads agentMaxTurns off the config when building the
+  // SDK options; an empty object here would throw on .get().
+  const config = { get: () => ({}) } as never;
 
   const useCase = new ExecuteAgentUseCase(
     personaStore, // 1 personaStore
@@ -62,7 +65,7 @@ function makeUseCase() {
     agentEventStore, // 7 agentEventStore
     stub, // 8 ticketStore
     stub, // 9 createWorktree
-    stub, // 10 config
+    config, // 10 config
     logger, // 11 logger
     stub, // 12 autoReviewWorkflow
     sdkLimiter, // 13 sdkLimiter

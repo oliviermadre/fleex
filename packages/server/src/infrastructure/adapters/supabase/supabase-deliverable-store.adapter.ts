@@ -2,6 +2,8 @@ import type { DeliverableType, DeliverableStatus } from '@fleex/shared';
 
 import { TicketDeliverableEntity } from '../../../domain/entities/ticket-deliverable.entity.js';
 
+import { chunkIds } from './supabase-chunk.js';
+
 import type { SupabaseConnection } from './connection.js';
 import type { DeliverableStorePort } from '../../../application/ports/deliverable-store.port.js';
 
@@ -53,21 +55,25 @@ export class SupabaseDeliverableStore implements DeliverableStorePort {
     // Bulk callers (unread-counts for the cockpit view) can match far more, so
     // paginate explicitly — otherwise counts silently truncate (bug #400).
     // Ordering (created_at, id) is required for stable, non-overlapping pages.
+    // `.in()` lands in the query string, which Supabase's proxy caps at ~8 KB —
+    // so the ID list is chunked before paginating each chunk (#509).
     const PAGE = 1000;
     const rows: DeliverableRow[] = [];
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await this.conn.client
-        .from('deliverables')
-        .select('*')
-        .in('ticket_id', ticketIds)
-        .order('created_at', { ascending: true })
-        .order('id', { ascending: true })
-        .range(from, from + PAGE - 1);
-      if (error)
-        throw new Error(`SupabaseDeliverableStore.getByTicketIds failed: ${error.message}`);
-      const page = data as DeliverableRow[];
-      rows.push(...page);
-      if (page.length < PAGE) break;
+    for (const chunk of chunkIds(ticketIds)) {
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await this.conn.client
+          .from('deliverables')
+          .select('*')
+          .in('ticket_id', chunk)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error)
+          throw new Error(`SupabaseDeliverableStore.getByTicketIds failed: ${error.message}`);
+        const page = data as DeliverableRow[];
+        rows.push(...page);
+        if (page.length < PAGE) break;
+      }
     }
     return rows.map(rowToEntity);
   }

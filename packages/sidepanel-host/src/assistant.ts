@@ -24,6 +24,8 @@ export type AssistantEvent =
       input: Record<string, unknown>;
       argv: string[];
       mutating: boolean;
+      /** Ran without asking: the conversation already allowed this tool. */
+      autoApproved: boolean;
     }
   | { type: 'tool_result'; id: string; name: string; ok: boolean; text: string }
   | { type: 'tool_denied'; id: string; name: string }
@@ -63,6 +65,14 @@ export interface RunAssistantOptions {
   workspace?: string;
   /** Safety cap on tool-use rounds. Default 8. */
   maxIterations?: number;
+  /**
+   * True when this tool is already auto-approved for the conversation.
+   *
+   * Re-evaluated on EVERY call rather than captured once: approving call #1
+   * with "always allow" must silently cover calls #2..#50 of the same turn.
+   * Implementations must therefore read live state, not a snapshot.
+   */
+  isAutoApproved?: (toolName: string) => boolean;
 }
 
 function textOf(block: Anthropic.ContentBlock): string | null {
@@ -134,6 +144,8 @@ export async function runAssistant(opts: RunAssistantOptions): Promise<Anthropic
         continue;
       }
 
+      // Read-only tools never reach the gate, so the allowlist is irrelevant there.
+      const autoApproved = tool.mutating ? (opts.isAutoApproved?.(call.name) ?? false) : false;
       onEvent({
         type: 'tool_call',
         id: call.id,
@@ -141,10 +153,12 @@ export async function runAssistant(opts: RunAssistantOptions): Promise<Anthropic
         input,
         argv,
         mutating: tool.mutating,
+        autoApproved,
       });
 
-      // Gate: mutating calls require explicit user approval.
-      if (tool.mutating) {
+      // Gate: mutating calls require explicit user approval, unless this
+      // conversation has already granted a standing approval for this tool.
+      if (tool.mutating && !autoApproved) {
         const approved = await confirm({ id: call.id, name: call.name, input, argv });
         if (!approved) {
           toolResults.push({

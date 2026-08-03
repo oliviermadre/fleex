@@ -44,9 +44,17 @@ import type { BareCloneManager } from '../services/bare-clone-manager.js';
 import type { SdkConcurrencyLimiter } from '../services/sdk-concurrency-limiter.js';
 import type { STANDARD_OUTPUT_SCHEMA } from '../utils/merge-output-schemas.js';
 
+/**
+ * Turn cap for a panel member with no worktree: it has no codebase to explore,
+ * so a handful of turns is plenty and keeps the panel responsive.
+ */
+const PANEL_MEMBER_NO_WORKTREE_MAX_TURNS = 10;
+
 interface SdkMetrics {
   durationMs?: number;
   costUsd?: number;
+  /** Conversation turns consumed (one user↔assistant round-trip each). */
+  numTurns?: number;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
@@ -493,6 +501,10 @@ export class RunPanelUseCase {
       model: string;
       systemPrompt?: string;
       cwd?: string | null;
+      /**
+       * Explicit turn cap for this call. Omit to inherit the workspace's
+       * configured `agentMaxTurns` (Settings › General).
+       */
       maxTurns?: number;
       effectiveMode?: MentionExecutionMode;
       outputFormat?: Record<string, unknown>;
@@ -518,6 +530,7 @@ export class RunPanelUseCase {
       systemPrompt: options.systemPrompt ?? '',
       cwd: options.cwd,
       outputFormat: options.outputFormat,
+      maxTurns: this.config.get().agentMaxTurns,
       talkCanReadImages:
         mode === 'talk' && Array.isArray(prompt) && promptHasImageAttachment(prompt),
     });
@@ -665,7 +678,10 @@ export class RunPanelUseCase {
         model,
         systemPrompt: systemPrompt || undefined,
         cwd: worktreePath,
-        maxTurns: worktreePath ? 150 : 10,
+        // With a worktree the member can dig into the code — inherit the
+        // configured budget. Without one it only reasons over the ticket
+        // context, so a tight cap keeps the panel fast.
+        maxTurns: worktreePath ? undefined : PANEL_MEMBER_NO_WORKTREE_MAX_TURNS,
         effectiveMode,
         emitEvent,
         abortSignal: abortController.signal,

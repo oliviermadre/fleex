@@ -22,6 +22,7 @@ Chrome extension (extension/)               thin client
   • holds ANTHROPIC_API_KEY
   • Messages API tool-use loop (opus-5, adaptive thinking, streaming)
   • gates mutating tools behind a WS confirmation round-trip
+    (or a per-conversation auto-approval the user granted)
         │ in-process
 @fleex/mcp                                   tool kernel (+ MCP stdio server)
   • generateTools(): CLI tree → typed tools (read/write classified)
@@ -41,8 +42,18 @@ same tool surface is reusable by Claude Code, OpenClaw, and Claude Desktop.
   delete require explicit user approval in the side panel (the exact `fleex …`
   command is shown). A decline is fed back to the model as an error result and
   never executed — the defense against prompt injection from page content.
+- **Auto-approval, scoped to one conversation**: batches ("create these 50
+  tickets") turned the gate into data entry — one approval per call, with
+  attention gone by click 20, which _weakens_ the gate rather than reinforcing
+  it. `⚡ Always allow` grants a standing approval for that **command name** in
+  that **conversation** only (a header menu offers a blanket toggle). It is
+  never inherited by a new conversation, is evaluated server-side, is shown as
+  a header chip plus a `⚡` on every auto-run transcript line, and is revocable
+  in one click.
 - **Untrusted page content** is wrapped and labelled so the model treats it as
-  reference, not instructions.
+  reference, not instructions. Attaching a page **disarms** any auto-approval
+  in that conversation: page content is precisely the injection vector the gate
+  exists for, so consent granted before it does not survive it.
 - **Non-interactive safety**: destructive commands' `--force` flag is injected
   after approval so the CLI never blocks on a prompt.
 - The companion holds the Anthropic key server-side; the browser never sees it.

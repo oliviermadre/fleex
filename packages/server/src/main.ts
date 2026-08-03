@@ -41,6 +41,7 @@ import { panelRoutes } from './infrastructure/http/panel.routes.js';
 import { personaRoutes } from './infrastructure/http/persona.routes.js';
 import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
+import { fleexServerFactory } from './infrastructure/http/server-factory.js';
 import { sessionRoutes } from './infrastructure/http/sessions.routes.js';
 import { skillRoutes } from './infrastructure/http/skill.routes.js';
 import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
@@ -75,7 +76,7 @@ async function main() {
   // Discover existing fleex_ tmux sessions
   await container.discoverSessions.execute();
 
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, serverFactory: fleexServerFactory });
   await app.register(cors, { origin: true, credentials: true });
   await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
   await app.register(websocket);

@@ -791,20 +791,29 @@ export async function toggleDeliverableSeen(
   });
 }
 
+// These two send the FULL ticket list (cockpit/kanban/dashboard track every
+// ticket, deliberately). In the query string that overflowed Node's
+// maxHeaderSize at ~425 tickets → 431 before any handler ran (#509). POST puts
+// the IDs in the body, so there is no ceiling. Unconditional on purpose: a
+// size-based GET/POST branch would be a rarely-taken, untested path.
+
 export async function fetchUnreadCounts(
   ticketIds?: string[],
 ): Promise<import('@fleex/shared').TicketUnreadCounts[]> {
-  const params = ticketIds?.length ? `?ticketIds=${ticketIds.join(',')}` : '';
-  return request<import('@fleex/shared').TicketUnreadCounts[]>(`/tickets/unread-counts${params}`);
+  return request<import('@fleex/shared').TicketUnreadCounts[]>('/tickets/unread-counts', {
+    method: 'POST',
+    body: JSON.stringify({ ticketIds: ticketIds ?? [] }),
+  });
 }
 
 export async function fetchTicketAgentActivity(
   ticketIds: string[],
 ): Promise<import('@fleex/shared').TicketAgentActivity[]> {
   if (!ticketIds.length) return [];
-  return request<import('@fleex/shared').TicketAgentActivity[]>(
-    `/tickets/agent-activity?ticketIds=${ticketIds.join(',')}`,
-  );
+  return request<import('@fleex/shared').TicketAgentActivity[]>('/tickets/agent-activity', {
+    method: 'POST',
+    body: JSON.stringify({ ticketIds }),
+  });
 }
 
 // ── Agent Tokens API ──

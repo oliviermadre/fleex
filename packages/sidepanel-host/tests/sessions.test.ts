@@ -4,7 +4,13 @@ import path from 'node:path';
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { SessionStore, messageCount, type SessionData } from '../src/sessions.ts';
+import {
+  SessionStore,
+  messageCount,
+  isToolAutoApproved,
+  isAutoApproveActive,
+  type SessionData,
+} from '../src/sessions.ts';
 
 let dir: string;
 beforeEach(() => {
@@ -88,5 +94,98 @@ describe('SessionStore', () => {
     expect(got.workspace).toBe('tada');
     expect(got.transcript).toHaveLength(1);
     expect(got.status).toBe('idle'); // a stale 'working' is reset on load
+  });
+});
+
+describe('SessionStore auto-approval', () => {
+  it('starts every new conversation with no standing approval', () => {
+    const store = new SessionStore(dir);
+    const s = store.create();
+    expect(store.get(s.id)!.autoApprove).toEqual({ all: false, tools: [] });
+    expect(store.list()[0]!.autoApprove).toEqual({ all: false, tools: [] });
+  });
+
+  it('does not inherit approvals granted in another conversation', () => {
+    const store = new SessionStore(dir);
+    const granted = store.create();
+    store.allowTool(granted.id, 'fleex_ticket_create');
+    const fresh = store.create();
+    expect(store.get(fresh.id)!.autoApprove).toEqual({ all: false, tools: [] });
+  });
+
+  it('allows a tool idempotently and survives a companion restart', () => {
+    // A restart mid-batch must not re-arm 30 confirmations the user already
+    // cleared, so the allowlist is persisted alongside the session.
+    const store = new SessionStore(dir);
+    const s = store.create();
+    store.allowTool(s.id, 'fleex_ticket_create');
+    store.allowTool(s.id, 'fleex_ticket_create');
+    expect(store.get(s.id)!.autoApprove!.tools).toEqual(['fleex_ticket_create']);
+
+    expect(new SessionStore(dir).get(s.id)!.autoApprove).toEqual({
+      all: false,
+      tools: ['fleex_ticket_create'],
+    });
+  });
+
+  it('keeps allowTool a no-op once everything is auto-approved', () => {
+    const store = new SessionStore(dir);
+    const s = store.create();
+    store.setAutoApprove(s.id, { all: true, tools: [] });
+    store.allowTool(s.id, 'fleex_ticket_create');
+    expect(store.get(s.id)!.autoApprove).toEqual({ all: true, tools: [] });
+  });
+
+  it('replaces (never patches) on setAutoApprove and clears on demand', () => {
+    const store = new SessionStore(dir);
+    const s = store.create();
+    store.setAutoApprove(s.id, { all: false, tools: ['a', 'b'] });
+    store.setAutoApprove(s.id, { all: false, tools: ['c'] });
+    expect(store.get(s.id)!.autoApprove!.tools).toEqual(['c']);
+    store.clearAutoApprove(s.id);
+    expect(store.get(s.id)!.autoApprove).toEqual({ all: false, tools: [] });
+  });
+
+  it('ignores auto-approval writes for an unknown session', () => {
+    const store = new SessionStore(dir);
+    expect(() => store.allowTool('nope', 'fleex_ticket_create')).not.toThrow();
+    expect(() => store.setAutoApprove('nope', { all: true, tools: [] })).not.toThrow();
+  });
+
+  it('hydrates a session persisted before the field existed', () => {
+    const legacy: SessionData = {
+      id: 'legacy',
+      title: 'Old',
+      status: 'idle',
+      createdAt: '2020',
+      messages: [],
+      transcript: [],
+    };
+    fs.writeFileSync(path.join(dir, 'legacy.json'), JSON.stringify(legacy));
+    const store = new SessionStore(dir);
+    expect(store.get('legacy')!.autoApprove).toEqual({ all: false, tools: [] });
+    expect(store.list().find((x) => x.id === 'legacy')!.autoApprove).toEqual({
+      all: false,
+      tools: [],
+    });
+  });
+});
+
+describe('isToolAutoApproved / isAutoApproveActive', () => {
+  it.each([
+    ['undefined state', undefined, 'fleex_ticket_create', false],
+    ['empty allowlist', { all: false, tools: [] }, 'fleex_ticket_create', false],
+    ['listed tool', { all: false, tools: ['fleex_ticket_create'] }, 'fleex_ticket_create', true],
+    ['unlisted tool', { all: false, tools: ['fleex_ticket_create'] }, 'fleex_ticket_delete', false],
+    ['blanket', { all: true, tools: [] }, 'fleex_ticket_delete', true],
+  ])('%s', (_label, aa, name, expected) => {
+    expect(isToolAutoApproved(aa, name as string)).toBe(expected);
+  });
+
+  it('reports whether anything is armed', () => {
+    expect(isAutoApproveActive(undefined)).toBe(false);
+    expect(isAutoApproveActive({ all: false, tools: [] })).toBe(false);
+    expect(isAutoApproveActive({ all: false, tools: ['x'] })).toBe(true);
+    expect(isAutoApproveActive({ all: true, tools: [] })).toBe(true);
   });
 });

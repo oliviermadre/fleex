@@ -318,16 +318,27 @@ function renderConfirm(ev) {
   const no = document.createElement('button');
   no.className = 'confirm-decline';
   no.textContent = 'Decline';
-  const decide = (approved) => {
-    sendMsg({ type: 'confirm', sessionId: ev.sessionId, id: ev.id, approved });
+  // Standing approval for this command name in this conversation only. The
+  // server resolves which session/tool it covers from its own pending entry —
+  // we only send the scope.
+  const label = ev.name.replace(/^fleex_/, '').replace(/_/g, ' ');
+  const always = document.createElement('button');
+  always.className = 'confirm-always';
+  always.textContent = `⚡ Always allow "${label}"`;
+  always.title = `Every "${label}" command in this conversation`;
+  const decide = (approved, alwaysScope) => {
+    sendMsg({ type: 'confirm', sessionId: ev.sessionId, id: ev.id, approved, ...(alwaysScope ? { always: alwaysScope } : {}) });
     delete pendingConfirm[ev.sessionId];
-    yes.disabled = no.disabled = true;
-    title.textContent = approved ? `Approved — ${ev.name.replace(/_/g, ' ')}` : `Declined — ${ev.name.replace(/_/g, ' ')}`;
+    yes.disabled = no.disabled = always.disabled = true;
+    title.textContent = alwaysScope
+      ? `Always allowed — ${label}`
+      : approved ? `Approved — ${ev.name.replace(/_/g, ' ')}` : `Declined — ${ev.name.replace(/_/g, ' ')}`;
     actions.remove();
   };
   yes.onclick = () => decide(true);
   no.onclick = () => decide(false);
-  actions.append(yes, no);
+  always.onclick = () => decide(true, 'tool');
+  actions.append(yes, no, always);
   card.append(title, code, actions);
   thread.appendChild(card);
   thread.scrollTop = thread.scrollHeight;
