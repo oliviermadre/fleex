@@ -12,11 +12,18 @@ extra wiring. Each tool is executed by running `fleex` with an **argv array and
 no shell** — there is no command-injection surface, and multi-line values (e.g.
 a web page rendered to Markdown passed as `--description`) pass through intact.
 
-- Read commands are annotated `readOnlyHint`; mutating ones are not, and
-  delete/remove/unlink are marked `destructiveHint` — so an MCP host can gate
-  them behind user confirmation.
+- Read/write classification is an **allowlist of read commands**: anything else
+  counts as a write and loses `readOnlyHint`, so an MCP host can gate it behind
+  user confirmation. It fails closed on purpose — a command nobody classified is
+  gated rather than silently trusted. Leaves whose name contains a destroying
+  verb (`delete`, `remove`, `unlink`, … at either end of a hyphenated name, so
+  both `comment-delete` and `remove-board`) also carry `destructiveHint`.
 - `--workspace` is injected by the host (not model-controlled); `--json` is
-  forced on so results come back structured.
+  forced on so results come back structured. `--force`/`--yes` are likewise
+  host-controlled and kept out of the tool schemas — a model that could set them
+  itself would render the CLI's own confirmation prompt meaningless.
+- Tools whose command legitimately runs long (`ticket link` creates a worktree,
+  `ticket import` talks to GitHub) declare their own execution budget.
 
 ## Use as a library
 
@@ -40,7 +47,17 @@ fleex mcp start --workspace evaneos
 
 # limit the exposed command groups (default: ticket,epic)
 fleex mcp start --workspace evaneos --include ticket,epic,panel
+
+# let tools that would block on the CLI's confirmation prompt run:
+# your MCP client becomes the approval authority for them
+fleex mcp start --workspace evaneos --assume-yes
 ```
+
+Commands that prompt for confirmation (`ticket delete`, `epic delete`, …) are
+**refused** by default with an explanatory error: a stdio server holds stdin for
+the protocol, so nobody can answer the prompt and the call would simply hang
+until it times out. Pass `--assume-yes` only if your MCP client asks the user
+before dispatching a destructive tool call.
 
 `fleex mcp start` is **foreground-only**: a stdio server stays attached to
 stdin/stdout for the protocol and exits when the client disconnects — there is
@@ -74,3 +91,5 @@ claude mcp add fleex -- bunx @fleex/mcp
 | `FLEEX_MCP_BIN` | fleex binary (default `fleex`) |
 | `FLEEX_MCP_PREFIX` | Space-separated args before the fleex argv (e.g. `run …index.ts` for bun) |
 | `FLEEX_MCP_INCLUDE` | Comma-separated top-level groups to expose (default `ticket,epic`) |
+| `FLEEX_MCP_ASSUME_YES` | Allow destructive tools to skip the CLI confirmation prompt (`1`/`true`/`yes`). Off by default; your MCP client becomes the approval authority |
+| `FLEEX_MCP_TIMEOUT_MS` | Default per-tool execution budget (default `30000`). Commands with a declared budget (`ticket link`, `ticket import`) keep theirs |

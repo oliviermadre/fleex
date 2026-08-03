@@ -17,6 +17,10 @@ const def: CommandDef = {
       '--include <groups>',
       'Comma-separated top-level command groups to expose as tools (default: ticket,epic)',
     );
+    cmd.option(
+      '--assume-yes',
+      'Allow destructive tools to skip the CLI confirmation prompt (your MCP client becomes the approval authority)',
+    );
   },
   extraHelp: `\n${SECTION('Foreground only:')}
   This is a stdio server — it stays attached to stdin/stdout for the MCP

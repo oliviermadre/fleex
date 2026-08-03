@@ -6,9 +6,8 @@
  * produces a `tools/call` result by executing the underlying CLI command.
  */
 import { execFleex, type ExecOptions, type ExecResult } from './executor.ts';
+import { isDestructiveLeaf } from './generator.ts';
 import type { GeneratedTool } from './types.ts';
-
-const DESTRUCTIVE_LEAVES = new Set(['delete', 'rm', 'remove', 'unlink']);
 
 export interface McpToolDef {
   name: string;
@@ -35,7 +34,7 @@ export function toMcpTool(tool: GeneratedTool): McpToolDef {
     annotations: {
       title: `fleex ${tool.commandPath.join(' ')}`,
       readOnlyHint: !tool.mutating,
-      destructiveHint: tool.mutating && DESTRUCTIVE_LEAVES.has(leaf),
+      destructiveHint: tool.mutating && isDestructiveLeaf(leaf),
     },
   };
 }
@@ -49,13 +48,21 @@ export interface CallContext {
   exec?: (tool: GeneratedTool, input: Record<string, unknown>, opts: ExecOptions) => Promise<ExecResult>;
   /** Exec options (bin, prefixArgs, workspace, timeout). `json` is forced on. */
   execOpts?: ExecOptions;
+  /**
+   * Inject each tool's confirm-skip flag (`--force`). A stdio MCP server has no
+   * confirmation channel of its own (stdin carries the protocol), so this is
+   * only safe when the embedding client is the approval authority. Default
+   * `false`: the library refuses rather than hangs on a prompt nobody answers.
+   */
+  assumeYes?: boolean;
 }
 
-function resultText(res: ExecResult): string {
+export function resultText(res: ExecResult): string {
   if (res.ok) {
     if (res.data !== undefined) return JSON.stringify(res.data, null, 2);
     return res.stdout.trim() || 'OK';
   }
+  if (res.timedOut) return `fleex ${res.argv.join(' ')} timed out after ${res.timeoutMs} ms`;
   return res.stdout.trim() || res.stderr.trim() || `fleex exited with code ${res.exitCode}`;
 }
 
@@ -69,9 +76,27 @@ export async function callToolResult(
   if (!tool) {
     return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
   }
+  const assumeYes = ctx.assumeYes ?? false;
+  // Refuse rather than run. Neither CLI outcome is usable from here: commands
+  // guarded by `canPrompt()` exit telling the caller to "re-run with -f", which
+  // the model cannot do now that the flag is out of the schema, while
+  // `ticket delete` and `ticket deliverable delete` open a raw readline on a
+  // stdin nobody will ever write to and hang until the timeout. Saying so up
+  // front is the only accurate answer, and it starts no process at all.
+  if (!assumeYes && tool.confirmFlag) {
+    return {
+      content: [{
+        type: 'text',
+        text: `${tool.name} needs an interactive confirmation that this non-interactive MCP `
+          + 'server cannot answer. Start it with `fleex mcp start --assume-yes` '
+          + '(or FLEEX_MCP_ASSUME_YES=1) if your MCP client is the approval authority.',
+      }],
+      isError: true,
+    };
+  }
   const exec = ctx.exec ?? execFleex;
   try {
-    const res = await exec(tool, args ?? {}, { ...ctx.execOpts, json: true, assumeYes: true });
+    const res = await exec(tool, args ?? {}, { ...ctx.execOpts, json: true, assumeYes });
     return { content: [{ type: 'text', text: resultText(res) }], isError: !res.ok };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
 import { generateTools } from '../src/generator.ts';
-import { execFleex, runFleexArgv } from '../src/executor.ts';
+import { execFleex, runFleexArgv, DEFAULT_TIMEOUT_MS } from '../src/executor.ts';
 import type { GeneratedTool } from '../src/types.ts';
 
 // Use the current node binary as a stand-in for `fleex`, echoing its argv so we
@@ -67,6 +67,25 @@ describe('execFleex', () => {
     ]);
   });
 
+  it('reports a timeout as such, not as a bogus exit code', async () => {
+    // Without this the model is told "fleex exited with code 1" and may retry a
+    // command that in fact needs a longer budget.
+    const res = await runFleexArgv([], {
+      bin: NODE,
+      prefixArgs: ['-e', 'setTimeout(() => {}, 5000)'],
+      timeoutMs: 100,
+    });
+    expect(res.ok).toBe(false);
+    expect(res.timedOut).toBe(true);
+    expect(res.timeoutMs).toBe(100);
+  });
+
+  it('reports the applied budget on a normal run', async () => {
+    const res = await runFleexArgv([], { bin: NODE, prefixArgs: ['-e', ''] });
+    expect(res.timedOut).toBeUndefined();
+    expect(res.timeoutMs).toBe(DEFAULT_TIMEOUT_MS);
+  });
+
   it('emits no --workspace for an empty workspace (never --workspace "")', async () => {
     const tool = createTool();
     const res = await execFleex(
@@ -77,5 +96,16 @@ describe('execFleex', () => {
     const argv = JSON.parse(res.stdout) as string[];
     expect(argv).not.toContain('--workspace');
     expect(argv).toEqual(['ticket', 'create', '--title', 'Fix bug']);
+  });
+
+  it('lets a command declare a budget that outranks the ambient one', async () => {
+    // A per-command budget is a deliberate statement about that command; the
+    // ambient default is only a fallback, so it must not shorten it.
+    const tool = { ...createTool(), timeoutMs: 5_000 };
+    const res = await execFleex(tool, { title: 'x' }, { bin: NODE, prefixArgs: ECHO_ARGV, timeoutMs: 100 });
+    expect(res.timeoutMs).toBe(5_000);
+
+    const ambient = await execFleex(createTool(), { title: 'x' }, { bin: NODE, prefixArgs: ECHO_ARGV, timeoutMs: 7_000 });
+    expect(ambient.timeoutMs).toBe(7_000);
   });
 });
