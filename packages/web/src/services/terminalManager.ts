@@ -292,4 +292,16 @@ export const terminalManager = new TerminalManager();
 // arrive long after useTheme()/useTerminalFont() first ran. Replay whatever the
 // hooks already recorded, then keep following it.
 terminalManager.applyAppearance(getTerminalAppearance());
-subscribeTerminalAppearance((appearance) => terminalManager.applyAppearance(appearance));
+const unsubscribeAppearance = subscribeTerminalAppearance((appearance) =>
+  terminalManager.applyAppearance(appearance)
+);
+
+// terminalAppearance holds the listener set, and it is not re-executed when
+// only this module is replaced. Without this, every hot update to this file
+// would leave a dead TerminalManager subscribed, and each later theme or font
+// change would drive all of them.
+// Typed locally rather than via `vite/client`: this is the only spot in the
+// package that touches import.meta.hot, and pulling in the global Vite ambient
+// types for it would widen the type surface well beyond the need.
+const hot = (import.meta as ImportMeta & { hot?: { dispose(cb: () => void): void } }).hot;
+hot?.dispose(() => unsubscribeAppearance());

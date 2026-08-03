@@ -82,6 +82,16 @@ export default defineConfig({
   },
   server: {
     port: webPort,
+    // Dev-only, no effect on the build. The lazy boundaries that keep these
+    // trees out of the production entry chunk also keep them out of the dev
+    // server's initial crawl, so their transforms would otherwise happen
+    // on demand, after React has already mounted the shell — a second
+    // request waterfall where there used to be one. Pre-transforming the two
+    // platform shells collapses it back; the rest stays on demand, which is
+    // what we want for panels a given session may never open.
+    warmup: {
+      clientFiles: ['./src/components/layout/DesktopShell.tsx', './src/mobile/MobileApp.tsx'],
+    },
     // .ts.net: Tailscale MagicDNS hostnames, so the dev server can be reached
     // from a phone via `tailscale serve` (see docs/mobile.md)
     allowedHosts: ['.nip.io', '.ts.net'],
