@@ -3,6 +3,7 @@ import { handleExec } from './exec';
 import { handleFs } from './fs';
 import { handlePtyMessage, handlePtyOpen, handlePtyClose } from './pty';
 import { logAlways, getVerbosity } from './logger';
+import { ValidationError } from './validation';
 
 const PORT = parseInt(process.env['GATEWAY_PORT'] ?? '3001', 10);
 
@@ -12,6 +13,12 @@ interface PtyWsData {
   initialized: boolean;
   proc: ReturnType<typeof Bun.spawn> | null;
   terminal: any;
+}
+
+/** A malformed body is the caller's fault (400); anything else is ours (500). */
+function errorResponse(err: any): Response {
+  const status = err instanceof ValidationError ? 400 : 500;
+  return Response.json({ error: err.message }, { status });
 }
 
 Bun.serve<PtyWsData>({
@@ -43,7 +50,7 @@ Bun.serve<PtyWsData>({
         const result = await handleExec(body);
         return Response.json(result);
       } catch (err: any) {
-        return Response.json({ error: err.message }, { status: 500 });
+        return errorResponse(err);
       }
     }
 
@@ -54,7 +61,7 @@ Bun.serve<PtyWsData>({
         const result = await handleFs(body);
         return Response.json(result);
       } catch (err: any) {
-        return Response.json({ error: err.message }, { status: 500 });
+        return errorResponse(err);
       }
     }
 

@@ -1,5 +1,11 @@
 import * as fsp from 'node:fs/promises';
-import * as path from 'node:path';
+import {
+  ValidationError,
+  asRecord,
+  optionalBoolean,
+  requireNumber,
+  requireString,
+} from './validation';
 
 type FsRequest =
   | { op: 'read'; path: string }
@@ -11,7 +17,49 @@ type FsRequest =
   | { op: 'rm'; path: string; recursive?: boolean }
   | { op: 'readTail'; path: string; bytes: number };
 
-export async function handleFs(body: FsRequest): Promise<unknown> {
+const FS_OPS = [
+  'read',
+  'write',
+  'readdir',
+  'stat',
+  'exists',
+  'mkdir',
+  'rm',
+  'readTail',
+] as const;
+
+type FsOp = (typeof FS_OPS)[number];
+
+function isFsOp(value: unknown): value is FsOp {
+  return typeof value === 'string' && (FS_OPS as readonly string[]).includes(value);
+}
+
+/** Validates an untrusted `/fs` body. Throws {@link ValidationError} on any bad field. */
+function parseFsRequest(raw: unknown): FsRequest {
+  const body = asRecord(raw);
+
+  const op = body['op'];
+  if (!isFsOp(op)) {
+    throw new ValidationError(`"op" must be one of: ${FS_OPS.join(', ')}`);
+  }
+
+  const path = requireString(body['path'], 'path');
+
+  switch (op) {
+    case 'write':
+      return { op, path, content: requireString(body['content'], 'content') };
+    case 'rm':
+      return { op, path, recursive: optionalBoolean(body['recursive'], 'recursive') };
+    case 'readTail':
+      return { op, path, bytes: requireNumber(body['bytes'], 'bytes') };
+    default:
+      return { op, path };
+  }
+}
+
+export async function handleFs(raw: unknown): Promise<unknown> {
+  const body = parseFsRequest(raw);
+
   switch (body.op) {
     case 'read': {
       const content = await fsp.readFile(body.path, 'utf-8');
