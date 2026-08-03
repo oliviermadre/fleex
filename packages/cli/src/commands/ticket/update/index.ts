@@ -8,8 +8,9 @@ import {
   normalizeDueDate,
   accumulate,
   resolveTicketId,
-  resolveEpicId,
 } from '../_shared.ts';
+import { resolveEpicId } from '../../epic/_shared.ts';
+import { resolveBoardId } from '../../board/_shared.ts';
 
 interface UpdateOptions {
   board?: string;
@@ -37,7 +38,7 @@ const def: CommandDef = {
   description: 'Update a ticket (PATCH, only provided fields are sent)',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
     cmd.option('--title <title>', 'New title');
     cmd.option('--description <description>', 'New description');
     cmd.option('--status <status>', 'New status');
@@ -50,7 +51,7 @@ const def: CommandDef = {
     cmd.option('--no-blocked', 'Unmark blocked');
     cmd.option('--due <date>', 'Set due date (YYYY-MM-DD or ISO 8601)');
     cmd.option('--clear-due', 'Clear the due date');
-    cmd.option('--to-board <id>', 'Move the ticket to another board');
+    cmd.option('--to-board <board>', 'Move the ticket to another board (name, UUID, or 8-char id prefix)');
     cmd.option('--add-tag <tag>', 'Add a tag (repeatable)', accumulate, [] as string[]);
     cmd.option('--rm-tag <tag>', 'Remove a tag (repeatable)', accumulate, [] as string[]);
     cmd.option('--add-epic <epic>', 'Add the ticket to an epic (id/prefix, repeatable)', accumulate, [] as string[]);
@@ -80,7 +81,7 @@ const def: CommandDef = {
     if (opts.blocked !== undefined) body.blocked = opts.blocked;
     if (opts.due !== undefined) body.dueDate = normalizeDueDate(opts.due);
     if (opts.clearDue) body.dueDate = null;
-    if (opts.toBoard !== undefined) body.boardId = opts.toBoard;
+    if (opts.toBoard !== undefined) body.boardId = await resolveBoardId(opts.toBoard);
 
     if (Object.keys(body).length === 0 && !hasTagOps && !hasEpicOps) {
       die('No updates specified. Use --title, --description, --status, --priority, --type, --assignee, --favorite/--no-favorite, --blocked/--no-blocked, --due/--clear-due, --to-board, --add-tag/--rm-tag, or --add-epic/--remove-epic.');

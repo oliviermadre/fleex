@@ -13,7 +13,7 @@ const def: CommandDef = {
   setup(cmd) {
     cmd.argument('<epic>', 'Epic UUID or 8-char prefix');
     cmd.argument('<ticket>', 'Ticket display ID (#42) or UUID');
-    cmd.option('--board <id>', 'Board to disambiguate the ticket display ID');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (epicArg: string, ticketArg: string, opts: AddTicketOptions) => {
     const epic = await resolveEpic(epicArg);

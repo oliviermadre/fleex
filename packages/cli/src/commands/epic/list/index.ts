@@ -2,6 +2,7 @@ import type { CommandDef } from '../../../core/types.ts';
 import { c, info } from '../../../core/colors.ts';
 import { apiBase, apiGet } from '../../../core/api.ts';
 import { epicStatusColor, timeframeOrder } from '../_shared.ts';
+import { resolveBoardId } from '../../board/_shared.ts';
 
 interface Epic {
   id: string;
@@ -19,11 +20,12 @@ const def: CommandDef = {
   aliases: ['ls'],
   description: 'List epics (sorted by timeframe now → next → later)',
   setup(cmd) {
-    cmd.option('--board <id>', 'Filter by board ID');
+    cmd.option('--board <board>', 'Filter by board (name, UUID, or 8-char id prefix)');
   },
   action: async (opts: ListOptions) => {
     const base = apiBase();
-    const url = opts.board ? `${base}/api/epics?boardId=${encodeURIComponent(opts.board)}` : `${base}/api/epics`;
+    const boardId = opts.board ? await resolveBoardId(opts.board) : undefined;
+    const url = boardId ? `${base}/api/epics?boardId=${encodeURIComponent(boardId)}` : `${base}/api/epics`;
     const epics = await apiGet<Epic[]>(url);
     if (epics.length === 0) {
       info('No epics found.');

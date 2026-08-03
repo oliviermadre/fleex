@@ -38,9 +38,18 @@ export class RepositoryNotFoundError extends DomainError {
   }
 }
 
+const BOARD_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class BoardNotFoundError extends DomainError {
   constructor(id: string) {
-    super(`Board not found: ${id}`, 'BOARD_NOT_FOUND');
+    // A bare "Board not found: aad33682" reads as "this board doesn't exist"
+    // and sends callers (agents especially) into retry loops, when the real
+    // problem is that they pasted the 8-char id shown in listings. Say so.
+    const hint = BOARD_UUID_RE.test(id)
+      ? ''
+      : ' (not a full board UUID — the API requires the full id; list boards via GET /api/boards.'
+        + ' The fleex CLI additionally accepts board names and id prefixes)';
+    super(`Board not found: ${id}${hint}`, 'BOARD_NOT_FOUND');
   }
 }
 

@@ -23,7 +23,7 @@ const def: CommandDef = {
     cmd.option('--repo <org/name>', 'Repository to unlink (repeatable)', accumulate, [] as string[]);
     cmd.option('--pr <url|org/name#n>', 'GitHub PR to unlink — full PR URL or org/name#N (repeatable)', accumulate, [] as string[]);
     cmd.option('--issue <url|org/name#n>', 'GitHub issue to unlink — full issue URL or org/name#N (repeatable)', accumulate, [] as string[]);
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (idArg: string, opts: UnlinkOptions) => {
     const repos = opts.repo ?? [];

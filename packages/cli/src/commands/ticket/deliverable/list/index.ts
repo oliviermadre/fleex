@@ -13,7 +13,7 @@ const def: CommandDef = {
   description: 'List deliverables on a ticket',
   setup(cmd) {
     cmd.argument('<id>', 'Ticket display ID or UUID');
-    cmd.option('--board <id>', 'Disambiguate by board');
+    cmd.option('--board <board>', 'Disambiguate by board (name, UUID, or 8-char id prefix)');
   },
   action: async (idArg: string, opts: ListOptions) => {
     const uuid = await resolveTicketId(idArg, opts.board);
