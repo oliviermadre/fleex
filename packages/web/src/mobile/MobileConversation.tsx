@@ -13,6 +13,7 @@ import type {
 
 import { ModelSelect } from '../components/agents/ModelSelect';
 import { MarkdownRenderer } from '../components/scratchpad/MarkdownRenderer';
+import { useCapabilities } from '../hooks/useCapabilities';
 import { useModels } from '../hooks/useModels';
 import { useStickToBottom } from '../hooks/useStickToBottom';
 import { MentionTypeIcon } from '../lib/primitives';
@@ -116,6 +117,7 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
   const loadSkills = useSkillStore((s) => s.loadSkills);
   const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
   const refreshWorkflowTemplates = useWorkflowTemplateStore((s) => s.refresh);
+  const { workflowsAvailable } = useCapabilities();
   const humanMentionName = useSettingsStore(
     (s) =>
       (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
@@ -181,13 +183,17 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
         });
       }
     }
-    for (const wf of workflowTemplates) {
-      if (wf.enabled) {
-        opts.push({
-          insertText: `@workflow:${wf.slug}`,
-          label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name,
-          type: 'workflow',
-        });
+    // Workflows are dropped (not disabled) when the driver can't run them — a
+    // dead row in an autocomplete is noise, not signal.
+    if (workflowsAvailable) {
+      for (const wf of workflowTemplates) {
+        if (wf.enabled) {
+          opts.push({
+            insertText: `@workflow:${wf.slug}`,
+            label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name,
+            type: 'workflow',
+          });
+        }
       }
     }
     if (humanMentionName) {
@@ -201,7 +207,15 @@ export function MobileConversation({ ticket }: { ticket: Ticket }) {
       });
     }
     return opts;
-  }, [personas, panels, skills, workflowTemplates, humanMentionName, allTickets]);
+  }, [
+    personas,
+    panels,
+    skills,
+    workflowTemplates,
+    workflowsAvailable,
+    humanMentionName,
+    allTickets,
+  ]);
 
   const filteredOptions = useMemo(() => {
     if (!acOpen) return [];

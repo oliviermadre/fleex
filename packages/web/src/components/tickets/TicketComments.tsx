@@ -1,5 +1,4 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
-import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 
@@ -18,13 +17,17 @@ import type {
 } from '@fleex/shared';
 
 import { useColorMode } from '../../hooks/useActiveTheme';
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { useCommentDraft } from '../../hooks/useCommentDraft';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useModels } from '../../hooks/useModels';
 import { useStickToBottom } from '../../hooks/useStickToBottom';
+import { cn } from '../../lib/cn';
+import { tint, tintText, tintClasses } from '../../lib/tints';
+
+
 import { MentionTypeIcon } from '../../lib/primitives';
 import { isMissingRepo, mentionsPrimitive } from '../../lib/repoStatus';
-import { tint, tintText, tintClasses } from '../../lib/tints';
 import * as api from '../../services/api';
 import { appWs } from '../../services/websocket';
 import { useAgentEventStore } from '../../stores/agentEventStore';
@@ -55,6 +58,9 @@ import { NeedsReviewRespondPanel } from '../workflows/NeedsReviewRespondPanel';
 import { selectWaitingInputCards } from '../workflows/waitingInputCards';
 
 import { selectCrashedMentionCards, crashReasonLabel } from './crashedMentionCards';
+
+import { workflowsUnavailableTooltip } from '../../lib/capabilityMessages';
+
 import { FloatingExecutionPanel } from './ExecutionModal';
 
 import type { Components } from 'react-markdown';
@@ -152,15 +158,28 @@ function MentionSpan({
   mentionId,
   onRemove,
   className,
+  inert = false,
+  title,
 }: {
   text: string;
   mentionId: string | undefined;
   onRemove: (id: string) => void;
   className: string;
+  /**
+   * The mention targets a feature the server can't serve. The chip is dimmed
+   * and carries an explanation, but the historical text is never rewritten.
+   */
+  inert?: boolean;
+  title?: string;
 }) {
   return (
     <span
-      className={`group/mention relative inline-flex items-center rounded-sm px-1 py-px ${className}`}
+      title={title}
+      className={cn(
+        'group/mention relative inline-flex items-center rounded-sm px-1 py-px',
+        className,
+        inert && 'opacity-50 cursor-not-allowed',
+      )}
     >
       {text}
       {mentionId && (
@@ -286,6 +305,7 @@ export const CommentMarkdown = memo(function CommentMarkdown({
 }) {
   const commentMentions = mentionLookup.get(commentId);
   const colorMode = useColorMode();
+  const { workflowsAvailable, storageDriver } = useCapabilities();
 
   // Normalize literal \n escape sequences from agent output, then encode mentions
   const normalized = body.replace(/\\n/g, '\n');
@@ -361,12 +381,16 @@ export const CommentMarkdown = memo(function CommentMarkdown({
         const name = href.slice('#fleex-workflow:'.length);
         const mentionText = `@${name}`;
         const mId = commentMentions?.get(mentionText);
+        // The comment text stays exactly as it was written — only the chip is
+        // dimmed and explained when the driver can't run workflows.
         return (
           <MentionSpan
             text={mentionText}
             mentionId={mId}
             onRemove={onRemoveMention}
             className={tint('orange')}
+            inert={!workflowsAvailable}
+            title={!workflowsAvailable ? workflowsUnavailableTooltip(storageDriver) : undefined}
           />
         );
       }
@@ -713,6 +737,7 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
   const loadSkills = useSkillStore((s) => s.loadSkills);
   const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
   const refreshWorkflowTemplates = useWorkflowTemplateStore((s) => s.refresh);
+  const { workflowsAvailable } = useCapabilities();
   const humanMentionName = useSettingsStore(
     (s) =>
       (s.settings as unknown as Record<string, unknown>)['humanMentionName'] as string | undefined,
@@ -797,13 +822,17 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
         });
       }
     }
-    for (const wf of workflowTemplates) {
-      if (wf.enabled) {
-        opts.push({
-          insertText: `@workflow:${wf.slug}`,
-          label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name,
-          type: 'workflow' as const,
-        });
+    // Workflows are dropped (not disabled) when the driver can't run them — a
+    // dead row in an autocomplete is noise, not signal.
+    if (workflowsAvailable) {
+      for (const wf of workflowTemplates) {
+        if (wf.enabled) {
+          opts.push({
+            insertText: `@workflow:${wf.slug}`,
+            label: wf.emoji ? `${wf.emoji} ${wf.name}` : wf.name,
+            type: 'workflow' as const,
+          });
+        }
       }
     }
     if (humanMentionName) {
@@ -821,7 +850,15 @@ export function TicketComments({ ticketId }: { ticketId: string }) {
       });
     }
     return opts;
-  }, [personas, panels, skills, workflowTemplates, humanMentionName, allTickets]);
+  }, [
+    personas,
+    panels,
+    skills,
+    workflowTemplates,
+    workflowsAvailable,
+    humanMentionName,
+    allTickets,
+  ]);
 
   // Max ticket suggestions shown at once — tickets can be numerous, so we surface
   // them only once the user has typed a query and cap the list to stay usable.

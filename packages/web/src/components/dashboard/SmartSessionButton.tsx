@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 import type { Session } from '@fleex/shared';
 
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { usePopover, FloatingPortal } from '../../hooks/usePopover';
 import { cn } from '../../lib/cn';
 import { deriveDisplayStatus, aggregateBranchStatus } from '../../lib/deriveStatus';
@@ -578,6 +579,7 @@ export function SmartSessionButton({
   const templates = useWorkflowTemplateStore((s) => s.templates);
   const refreshTemplates = useWorkflowTemplateStore((s) => s.refresh);
   const startRun = useWorkflowRunStore((s) => s.start);
+  const { workflowsAvailable } = useCapabilities();
   const enabledTemplates = templates.filter((t) => t.enabled);
 
   const panels = usePanelStore((s) => s.panels);
@@ -701,8 +703,10 @@ export function SmartSessionButton({
         }))
       : [];
 
+  // A disabled row in a launcher is noise, not signal: when the driver has no
+  // workflow support they are left out of the list entirely.
   const workflowItems: LaunchItem[] =
-    ticketId && handleStartWorkflow
+    ticketId && handleStartWorkflow && workflowsAvailable
       ? enabledTemplates.map((t) => ({
           key: `workflow:${t.id}`,
           kind: 'workflow' as const,

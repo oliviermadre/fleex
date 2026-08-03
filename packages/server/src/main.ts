@@ -7,32 +7,35 @@ import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify from 'fastify';
 
+import { resolveCapabilities } from './application/capabilities.js';
 import { ModelService } from './application/services/model.service.js';
 import { migrateRepositoryPatterns } from './domain/services/repository-pattern-migration.js';
 import { createContainer } from './infrastructure/container.js';
 import { actionRoutes } from './infrastructure/http/actions.routes.js';
 import { agentActivityRoutes } from './infrastructure/http/agent-activity.routes.js';
 import { agentApiRoutes } from './infrastructure/http/agent-api.routes.js';
+import { createAgentAuthHook } from './infrastructure/http/agent-auth.hook.js';
+import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes.js';
+import { agentContextRoutes } from './infrastructure/http/agent-context.routes.js';
+import { agentDeliverablesRoutes } from './infrastructure/http/agent-deliverables.routes.js';
+import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
+import { agentMentionsRoutes } from './infrastructure/http/agent-mentions.routes.js';
 import { agentTokenRoutes } from './infrastructure/http/agent-tokens.routes.js';
-import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
-import { configRoutes } from './infrastructure/http/config.routes.js';
+import { capabilitiesRoutes } from './infrastructure/http/capabilities.routes.js';
 import { healthRoutes } from './infrastructure/http/health.routes.js';
 import { repositoryRoutes } from './infrastructure/http/repositories.routes.js';
-import { fleexServerFactory } from './infrastructure/http/server-factory.js';
 import { sessionRoutes } from './infrastructure/http/sessions.routes.js';
 import { skillRoutes } from './infrastructure/http/skill.routes.js';
 import { statisticsRoutes } from './infrastructure/http/statistics.routes.js';
-import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
 import { versionRoutes } from './infrastructure/http/version.routes.js';
+import { configRoutes } from './infrastructure/http/config.routes.js';
 import { deliverableTypesRoutes } from './infrastructure/http/deliverable-types.routes.js';
+import { claudeConfigRoutes } from './infrastructure/http/claude-config.routes.js';
+import { fleexServerFactory } from './infrastructure/http/server-factory.js';
+import { ticketRoutes } from './infrastructure/http/tickets.routes.js';
 import { scratchpadRoutes } from './infrastructure/http/scratchpad.routes.js';
 import { claudeUsageRoutes } from './infrastructure/http/claude-usage.routes.js';
-import { agentCommentsRoutes } from './infrastructure/http/agent-comments.routes.js';
-import { agentMentionsRoutes } from './infrastructure/http/agent-mentions.routes.js';
-import { agentDeliverablesRoutes } from './infrastructure/http/agent-deliverables.routes.js';
-import { agentContextRoutes } from './infrastructure/http/agent-context.routes.js';
 import { agentWorktreesRoutes } from './infrastructure/http/agent-worktrees.routes.js';
-import { createAgentAuthHook } from './infrastructure/http/agent-auth.hook.js';
 import { registerErrorHandler } from './infrastructure/http/error-handler.js';
 import { workflowRunRoutes } from './infrastructure/http/workflow-run.routes.js';
 import { workflowTemplateRoutes } from './infrastructure/http/workflow-template.routes.js';
@@ -41,7 +44,6 @@ import { unifiedWsPlugin } from './infrastructure/ws/unified-ws.js';
 import { WsHeartbeat } from './infrastructure/ws/ws-heartbeat.js';
 import { personaRoutes } from './infrastructure/http/persona.routes.js';
 import { panelRoutes } from './infrastructure/http/panel.routes.js';
-import { agentEventsRoutes } from './infrastructure/http/agent-events.routes.js';
 import { domainEventLogRoutes } from './infrastructure/http/domain-event-log.routes.js';
 import { dashboardRoutes } from './infrastructure/http/dashboard.routes.js';
 import { githubImageProxyRoutes } from './infrastructure/http/github-image-proxy.routes.js';
@@ -106,6 +108,7 @@ async function main() {
   await app.register(repositoryRoutes(container));
   await app.register(healthRoutes(container));
   await app.register(versionRoutes());
+  await app.register(capabilitiesRoutes(container));
   await app.register(configRoutes(container));
   await app.register(deliverableTypesRoutes(container));
   await app.register(actionRoutes(container));
@@ -130,40 +133,38 @@ async function main() {
   const modelService = new ModelService(container.logger);
   await app.register(modelsRoutes(modelService));
 
-  // Workflow template routes (requires workflowTemplateStore — available on sqlite/supabase)
-  if (container.workflowTemplateStore) {
-    await app.register(workflowTemplateRoutes({ templateStore: container.workflowTemplateStore }));
-  } else {
+  // Workflow routes are registered unconditionally. When the storage driver has no
+  // workflow stores, a preHandler answers 503 FEATURE_UNAVAILABLE — an absent route
+  // would 404, which clients cannot tell apart from a mistyped URL.
+  const capabilities = resolveCapabilities(container);
+  if (!capabilities.features.workflows) {
     container.logger.warn(
-      'workflowTemplateStore not available — /api/workflows/templates routes skipped',
+      'Workflows unavailable on this storage driver — /api/workflows/* will answer 503',
+      {
+        driver: capabilities.storageDriver,
+      },
     );
   }
 
-  // Workflow run routes (requires run/step stores + all use cases)
-  if (
-    container.workflowRunStore &&
-    container.stepRunStore &&
-    container.createWorkflowRun &&
-    container.resolveHumanGate &&
-    container.retryStep &&
-    container.cancelWorkflowRun
-  ) {
-    await app.register(
-      workflowRunRoutes({
-        runStore: container.workflowRunStore,
-        stepRunStore: container.stepRunStore,
-        createWorkflowRun: container.createWorkflowRun,
-        resolveHumanGate: container.resolveHumanGate,
-        retryStep: container.retryStep,
-        cancelWorkflowRun: container.cancelWorkflowRun,
-        authorNameResolver: () => 'workflow-trigger',
-      }),
-    );
-  } else {
-    container.logger.warn(
-      'workflowRunStore or use cases not available — /api/workflows/runs routes skipped',
-    );
-  }
+  await app.register(
+    workflowTemplateRoutes({
+      templateStore: container.workflowTemplateStore,
+      capabilities,
+    }),
+  );
+
+  await app.register(
+    workflowRunRoutes({
+      runStore: container.workflowRunStore,
+      stepRunStore: container.stepRunStore,
+      createWorkflowRun: container.createWorkflowRun,
+      resolveHumanGate: container.resolveHumanGate,
+      retryStep: container.retryStep,
+      cancelWorkflowRun: container.cancelWorkflowRun,
+      authorNameResolver: () => 'workflow-trigger',
+      capabilities,
+    }),
+  );
 
   // Agent API with auth
   const authHook = createAgentAuthHook(container);

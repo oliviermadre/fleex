@@ -1,6 +1,7 @@
 import { useEffect, lazy, Suspense } from 'react';
 
 import { useAgentPersonas } from '../../hooks/useAgentPersonas';
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { useHotkeyReveal } from '../../hooks/useHotkeyReveal';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -92,6 +93,7 @@ export function AppLayout() {
 
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
   const mainViewKey = useMainViewKey();
+  const { workflowsAvailable } = useCapabilities();
 
   // Hoisted out of the lazy components themselves — see the comment on the
   // lazy() declarations above.
@@ -101,8 +103,11 @@ export function AppLayout() {
   const hasDeliverableOverlay = useUIStore((s) => s.deliverableOverlay !== null);
 
   const navWidth = navCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
-  // Hide the content panel when editing a workflow so the editor takes the full viewport width
-  const editingWorkflow = activePanel === 'agents' && !!selectedWorkflowId;
+  // Hide the content panel when editing a workflow so the editor takes the full
+  // viewport width. On a driver without workflow support the route renders an
+  // explanation instead of an editor, so the panel stays — otherwise a deep link
+  // would strand the user on a full-screen dead end with nothing to click.
+  const editingWorkflow = activePanel === 'agents' && !!selectedWorkflowId && workflowsAvailable;
   const hideContentPanel =
     activePanel === 'dashboard' ||
     activePanel === 'cluster' ||

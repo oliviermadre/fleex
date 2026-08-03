@@ -1,3 +1,5 @@
+import type { ServerCapabilities } from '@fleex/shared';
+
 import {
   WorkflowRunAlreadyActiveError,
   WorkflowTemplateNotFoundError,
@@ -5,6 +7,8 @@ import {
   StepRunNotFoundError,
   InvalidGateOutcomeError,
 } from '../../domain/errors.js';
+
+import { registerWorkflowGuard } from './feature-guard.js';
 
 import type { StepRunStorePort } from '../../application/ports/step-run-store.port.js';
 import type { WorkflowRunStorePort } from '../../application/ports/workflow-run-store.port.js';
@@ -91,8 +95,26 @@ interface WorkflowRunRouteDeps {
   authorNameResolver: () => string;
 }
 
-export function workflowRunRoutes(deps: WorkflowRunRouteDeps) {
+/** Same shape, but every workflow dependency may be absent on an unsupported driver. */
+interface WorkflowRunRouteInput {
+  runStore: WorkflowRunStorePort | null;
+  stepRunStore: StepRunStorePort | null;
+  createWorkflowRun: CreateWorkflowRunUseCase | null;
+  resolveHumanGate: ResolveHumanGateUseCase | null;
+  retryStep: RetryStepUseCase | null;
+  cancelWorkflowRun: CancelWorkflowRunUseCase | null;
+  authorNameResolver: () => string;
+  capabilities: ServerCapabilities;
+}
+
+export function workflowRunRoutes(routeDeps: WorkflowRunRouteInput) {
+  // Safe cast: registerWorkflowGuard answers 503 before any handler below runs when
+  // the driver lacks the workflow stores/use-cases, so none of these are ever null here.
+  const deps = routeDeps as unknown as WorkflowRunRouteDeps;
+
   return async function (app: FastifyInstance) {
+    registerWorkflowGuard(app, routeDeps.capabilities);
+
     // GET /api/workflows/runs?ticketId=X — list runs for a ticket
     app.get<{ Querystring: { ticketId?: string } }>(
       '/api/workflows/runs',

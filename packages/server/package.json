@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/main.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:pgsql": "vitest run --no-file-parallelism tests/integration/workflow-store-contract.test.ts tests/integration/kv-store-contract.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.143",

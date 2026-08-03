@@ -96,6 +96,10 @@ async function createJsonStores(deps: {
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { JsonFileMetaStore } = await import('./json-file-meta-store.adapter.js');
   const { JsonTicketGroupStore } = await import('./json-ticket-group-store.adapter.js');
+  const { JsonWorkflowTemplateStore } = await import('./json-workflow-template-store.adapter.js');
+  const { JsonWorkflowRunStore } = await import('./json-workflow-run-store.adapter.js');
+  const { JsonStepRunStore } = await import('./json-step-run-store.adapter.js');
+  const { JsonKvStore } = await import('./json-kv-store.adapter.js');
 
   // Run pending migrations (JSON adapter — tracking via _migrations.json)
   const { runPendingMigrations } = await import('../migrations/run-migrations.js');
@@ -130,6 +134,18 @@ async function createJsonStores(deps: {
   await fileMetaStore.init();
   const ticketGroupStore = new JsonTicketGroupStore(deps.hostFs, deps.homedir, deps.logger);
   await ticketGroupStore.init();
+  const workflowTemplateStore = new JsonWorkflowTemplateStore(
+    deps.hostFs,
+    deps.homedir,
+    deps.logger,
+  );
+  await workflowTemplateStore.init();
+  const workflowRunStore = new JsonWorkflowRunStore(deps.hostFs, deps.homedir, deps.logger);
+  await workflowRunStore.init();
+  const stepRunStore = new JsonStepRunStore(deps.hostFs, deps.homedir, deps.logger);
+  await stepRunStore.init();
+  const kvStore = new JsonKvStore(deps.hostFs, deps.homedir, deps.logger);
+  await kvStore.init();
 
   return {
     configStore,
@@ -144,13 +160,13 @@ async function createJsonStores(deps: {
     domainEventLogStore,
     skillStore,
     panelStore,
-    kvStore: null,
+    kvStore,
     fileStore,
     fileMetaStore,
     ticketGroupStore,
-    workflowTemplateStore: null,
-    workflowRunStore: null,
-    stepRunStore: null,
+    workflowTemplateStore,
+    workflowRunStore,
+    stepRunStore,
   };
 }
 
@@ -268,6 +284,9 @@ async function createPgsqlStores(deps: {
   const { DiskFileStoreAdapter } = await import('./disk-file-store.adapter.js');
   const { PgFileMetaStore } = await import('./pgsql/pg-file-meta-store.adapter.js');
   const { PgTicketGroupStore } = await import('./pgsql/pg-ticket-group-store.adapter.js');
+  const { PgWorkflowTemplateStore } = await import('./pgsql/pg-workflow-template-store.adapter.js');
+  const { PgWorkflowRunStore } = await import('./pgsql/pg-workflow-run-store.adapter.js');
+  const { PgStepRunStore } = await import('./pgsql/pg-step-run-store.adapter.js');
 
   const connection = new PgConnection(url);
   await connection.init();
@@ -303,9 +322,9 @@ async function createPgsqlStores(deps: {
     fileStore: new DiskFileStoreAdapter(deps.homedir),
     fileMetaStore: new PgFileMetaStore(connection),
     ticketGroupStore: new PgTicketGroupStore(connection),
-    workflowTemplateStore: null,
-    workflowRunStore: null,
-    stepRunStore: null,
+    workflowTemplateStore: new PgWorkflowTemplateStore(connection),
+    workflowRunStore: new PgWorkflowRunStore(connection),
+    stepRunStore: new PgStepRunStore(connection),
   };
 }
 

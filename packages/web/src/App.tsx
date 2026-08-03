@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom';
 
 import { ErrorBoundary } from './components/errors/ErrorBoundary';
 import { ToastContainer } from './components/ui/ToastContainer';
+import { useCapabilities } from './hooks/useCapabilities';
 import { useTerminalFont } from './hooks/useTerminalFont';
 import { useTheme } from './hooks/useTheme';
 import { useMobileMode } from './mobile/useMobileMode';
@@ -18,6 +19,9 @@ const MobileApp = lazy(() => import('./mobile/MobileApp').then((m) => ({ default
 export function App() {
   useTheme();
   useTerminalFont();
+  // Fetch the server capabilities once at boot (desktop AND mobile) so every
+  // gated surface can explain a feature the storage driver doesn't support.
+  useCapabilities();
   const isMobile = useMobileMode();
 
   return (

@@ -7,7 +7,9 @@ import type {
   TicketWsMessage,
 } from '@fleex/shared';
 
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { workflowsUnavailableTooltip } from '../../lib/capabilityMessages';
 import * as api from '../../services/api';
 import { appWs } from '../../services/websocket';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -18,6 +20,7 @@ import { findSessionsForTicketId } from '../dashboard/dashboard-helpers';
 import { SmartSessionButton } from '../dashboard/SmartSessionButton';
 import { MarkdownRenderer } from '../scratchpad/MarkdownRenderer';
 import { TicketWorkflowTab } from '../workflows/TicketWorkflowTab';
+import { WorkflowsUnavailableState } from '../workflows/WorkflowsUnavailableState';
 
 import { MissingRepoBanner } from './MissingRepoBanner';
 import { TicketActivityTimeline } from './TicketActivityTimeline';
@@ -54,6 +57,10 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
   useEffect(() => {
     void useWorkflowRunStore.getState().loadForTicket(ticketId);
   }, [ticketId]);
+
+  // Storage drivers without workflow support keep the tab visible but inert, so
+  // the feature reads as "unavailable here" rather than as if it never existed.
+  const { workflowsAvailable, storageDriver } = useCapabilities();
 
   // Track initial description to know if it changed when leaving
   const initialDescRef = useRef('');
@@ -245,13 +252,17 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
       ? `Deliverables (${unread.unreadDeliverables > 0 ? `${unread.unreadDeliverables} new` : deliverableCount})`
       : 'Deliverables';
 
-  const mainTabs: { key: TicketTab; label: string }[] = [
+  const mainTabs: { key: TicketTab; label: string; disabled?: boolean }[] = [
     { key: 'description', label: 'Description' },
     { key: 'comments', label: commentLabel },
     { key: 'mentions', label: `Mentions${mentionCount > 0 ? ` (${mentionCount})` : ''}` },
     { key: 'deliverables', label: deliverableLabel },
     { key: 'activity', label: 'Activity' },
-    ...(hasWorkflowRuns ? [{ key: 'workflow' as TicketTab, label: 'Workflow' }] : []),
+    // Shown as soon as the ticket has runs — or, when the driver can't run
+    // workflows at all, shown disabled so the gap is explained on hover.
+    ...(hasWorkflowRuns || !workflowsAvailable
+      ? [{ key: 'workflow' as TicketTab, label: 'Workflow', disabled: !workflowsAvailable }]
+      : []),
   ];
 
   return (
@@ -288,7 +299,9 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
             {mainTabs.map((tab) => (
               <button
                 key={tab.key}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                disabled={tab.disabled}
+                title={tab.disabled ? workflowsUnavailableTooltip(storageDriver) : undefined}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   mainTab === tab.key
                     ? 'border-b-2 border-[var(--theme-accent)] text-[var(--theme-text-primary)]'
                     : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
@@ -410,10 +423,15 @@ export function TicketDetail({ ticketId, embedded }: { ticketId: string; embedde
               </div>
             )}
 
-            {/* Workflow tab */}
+            {/* Workflow tab — a direct URL (…/ticket/:id/workflow) still lands
+                here, so the panel itself explains an unsupported driver. */}
             {mainTab === 'workflow' && (
               <div className="flex-1 overflow-hidden">
-                <TicketWorkflowTab ticketId={ticketId} />
+                {workflowsAvailable ? (
+                  <TicketWorkflowTab ticketId={ticketId} />
+                ) : (
+                  <WorkflowsUnavailableState compact />
+                )}
               </div>
             )}
           </div>

@@ -313,6 +313,8 @@ export type {
   ThroughputWipBucket,
 } from './types/statistics.js';
 
+export type { StorageDriverName, ServerCapabilities } from './types/capabilities.js';
+
 export { ClientMessageType, ServerMessageType } from './types/websocket.js';
 
 export type {

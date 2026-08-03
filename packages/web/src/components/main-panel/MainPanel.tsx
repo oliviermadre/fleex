@@ -11,17 +11,20 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
+import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
+
+import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
+import { EmptyState } from './EmptyState';
+import { UnifiedWorktreePanel } from './UnifiedWorktreePanel';
+
+import { KanbanBoard } from '../tickets/KanbanBoard';
+import { TicketDetail } from '../tickets/TicketDetail';
+import { WorkflowsUnavailableState } from '../workflows/WorkflowsUnavailableState';
 import { AssistantConversation } from '../assistant/AssistantConversation';
 import { DashboardView } from '../dashboard/DashboardView';
 import { ListFocusView } from '../list-focus/ListFocusView';
-import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
-import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
-import { KanbanBoard } from '../tickets/KanbanBoard';
-import { TicketDetail } from '../tickets/TicketDetail';
 
-import { EmptyState } from './EmptyState';
 import { PanelFallback } from './PanelFallback';
-import { UnifiedWorktreePanel } from './UnifiedWorktreePanel';
 
 // ── Lazy panels ───────────────────────────────────────────────────────────────
 //
@@ -68,6 +71,7 @@ const ExecutionLogPage = lazy(() =>
 const DocumentsPage = lazy(() =>
   import('../documents/DocumentsPage').then((m) => ({ default: m.DocumentsPage })),
 );
+import { useCapabilities } from '../../hooks/useCapabilities';
 
 function GroupEmptyCell() {
   return (
@@ -126,6 +130,7 @@ function MainPanelRoutes() {
   const selectedWorkflowId = useWorkflowTemplateStore((s) => s.selectedWorkflowId);
   const workflowTemplates = useWorkflowTemplateStore((s) => s.templates);
   const selectWorkflow = useWorkflowTemplateStore((s) => s.selectWorkflow);
+  const { workflowsAvailable } = useCapabilities();
   const navigate = useNavigate();
   const splitSession = splitSessionId
     ? (sessions.find((s) => s.id === splitSessionId) ?? null)
@@ -176,6 +181,11 @@ function MainPanelRoutes() {
       return <SkillEditor />;
     }
     if (selectedWorkflowId) {
+      // The driver has no workflow support: explain it in place. Never redirect
+      // silently — a deep link to /agents/workflow/:id must say why it's dead.
+      if (!workflowsAvailable) {
+        return <WorkflowsUnavailableState />;
+      }
       const template = workflowTemplates.find((t) => t.id === selectedWorkflowId);
       if (template) {
         return (

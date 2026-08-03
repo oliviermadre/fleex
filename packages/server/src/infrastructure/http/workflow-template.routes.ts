@@ -1,8 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
-import type { WorkflowStep, WorkflowEdge, JsonSchemaProperty } from '@fleex/shared';
+import type {
+  WorkflowStep,
+  WorkflowEdge,
+  JsonSchemaProperty,
+  ServerCapabilities,
+} from '@fleex/shared';
 
 import { WorkflowTemplateEntity } from '../../domain/entities/workflow-template.entity.js';
+
+import { registerWorkflowGuard } from './feature-guard.js';
 
 import type { WorkflowTemplateStorePort } from '../../application/ports/workflow-template-store.port.js';
 import type { FastifyInstance } from 'fastify';
@@ -195,8 +202,17 @@ function parseTemplateBody(
 
 // ── Route registration ─────────────────────────────────────────────────────
 
-export function workflowTemplateRoutes(deps: { templateStore: WorkflowTemplateStorePort }) {
+export function workflowTemplateRoutes(routeDeps: {
+  templateStore: WorkflowTemplateStorePort | null;
+  capabilities: ServerCapabilities;
+}) {
+  // Safe cast: registerWorkflowGuard answers 503 before any handler below runs when
+  // the driver has no template store, so `templateStore` is never dereferenced null.
+  const deps = { templateStore: routeDeps.templateStore as WorkflowTemplateStorePort };
+
   return async function (app: FastifyInstance) {
+    registerWorkflowGuard(app, routeDeps.capabilities);
+
     // GET /api/workflows/templates — list all
     app.get('/api/workflows/templates', async () => {
       const templates = await deps.templateStore.getAll();

@@ -13,6 +13,7 @@ import type { AutoReviewWorkflowUseCase } from './use-cases/auto-review-workflow
 import type { CreateWorkflowRunUseCase } from './use-cases/create-workflow-run.js';
 import type { ExecuteAgentUseCase } from './use-cases/execute-agent.js';
 import type { GenerateTicketSummaryUseCase } from './use-cases/generate-ticket-summary.js';
+import type { PostCommentUseCase } from './use-cases/post-comment.js';
 import type { RunPanelUseCase } from './use-cases/run-panel.js';
 import type { WakeWaitingAgentsUseCase } from './use-cases/wake-waiting-agents.js';
 import type {
@@ -43,6 +44,9 @@ export interface DomainEventListenerDeps {
   logger: LoggerPort;
   workflowTemplateStore?: WorkflowTemplateStorePort | null;
   createWorkflowRun?: CreateWorkflowRunUseCase | null;
+  /** Used to explain, in the ticket, why a @workflow: mention could not run. */
+  postComment?: PostCommentUseCase;
+  storageDriver?: string;
 }
 
 /**
@@ -238,12 +242,15 @@ export class DomainEventListener {
   private async handleAutoTriggerWorkflow(event: MentionCreatedEvent): Promise<void> {
     if (event.targetType !== 'workflow') return;
 
-    // workflow stores may be null on unsupported adapters
+    // Workflow stores may be null on unsupported adapters. Tell the user in the
+    // ticket instead of only warning server-side — otherwise they sit waiting for
+    // an agent that will never come.
     if (!this.deps.workflowTemplateStore || !this.deps.createWorkflowRun) {
       this.deps.logger.warn('Workflow mention received but workflow stores not configured', {
         slug: event.targetAgent,
         ticketId: event.ticketId,
       });
+      await this.reportWorkflowUnavailable(event);
       return;
     }
 
@@ -281,6 +288,36 @@ export class DomainEventListener {
           error: err instanceof Error ? err.message : String(err),
         });
       });
+  }
+
+  /**
+   * A workflow was mentioned on a driver that cannot run workflows. Say so in the
+   * ticket and resolve the mention, so nothing is left hanging in "waiting" forever.
+   */
+  private async reportWorkflowUnavailable(event: MentionCreatedEvent): Promise<void> {
+    const driver = this.deps.storageDriver ?? 'unknown';
+    try {
+      await this.deps.postComment?.execute({
+        ticketId: event.ticketId,
+        authorType: 'agent',
+        authorName: `workflow:${event.targetAgent}`,
+        body:
+          `⚠️ Le workflow \`@workflow:${event.targetAgent}\` n'a pas pu démarrer : ` +
+          `les workflows ne sont pas disponibles sur le driver de stockage \`${driver}\`.`,
+      });
+    } catch (err) {
+      this.deps.logger.error('Failed to report workflow unavailability', {
+        slug: event.targetAgent,
+        ticketId: event.ticketId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    const mention = await this.deps.mentionStore.getById(event.mentionId);
+    if (mention && mention.status !== 'resolved') {
+      mention.resolve();
+      await this.deps.mentionStore.save(mention);
+    }
   }
 
   // ── Comment posted workflow: handle mentions for auto-review ──
