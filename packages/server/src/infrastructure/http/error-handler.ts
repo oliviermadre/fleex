@@ -24,6 +24,22 @@ const CODE_TO_STATUS: Record<string, number> = {
   SLACK_INTEGRATION_UNAVAILABLE: 422,
   SLACK_CONVERSATION_INACCESSIBLE: 422,
   SLACK_CONVERSATION_EMPTY: 422,
+  AGENT_PERSONA_NOT_FOUND: 404,
+  AGENT_PERSONA_NAME_CONFLICT: 409,
+  SKILL_NOT_FOUND: 404,
+  SKILL_COMMAND_NAME_CONFLICT: 409,
+  PANEL_NOT_FOUND: 404,
+  PANEL_NAME_CONFLICT: 409,
+  WORKFLOW_TEMPLATE_NOT_FOUND: 404,
+  WORKFLOW_RUN_NOT_FOUND: 404,
+  WORKFLOW_RUN_ALREADY_ACTIVE: 409,
+  STEP_RUN_NOT_FOUND: 404,
+  INVALID_GATE_OUTCOME: 400,
+  TICKET_GROUP_NOT_FOUND: 404,
+  // Raised when a user explicitly terminates a step's execution. It is a
+  // deliberate interruption, not a server fault, and callers are expected to
+  // swallow it — 409 is the least wrong status should it ever reach the wire.
+  EXECUTION_CANCELLED: 409,
 };
 
 export function registerErrorHandler(app: FastifyInstance): void {

@@ -122,6 +122,11 @@ export function ticketRoutes(container: Container) {
     app.delete<{ Params: { id: string } }>('/api/boards/:id', async (request, reply) => {
       const boards = await container.ticketStore.getAllBoards();
       if (boards.length <= 1) throw new LastBoardError();
+      // Look the board up before touching anything: without this an unknown id
+      // answered 204 and broadcast a `board.deleted` for a board that never
+      // existed, making WS clients drop a phantom card.
+      const board = boards.find((b) => b.id === request.params.id);
+      if (!board) throw new BoardNotFoundError(request.params.id);
       await container.ticketStore.removeTicketsByBoard(request.params.id);
       await container.ticketStore.removeBoard(request.params.id);
       emit({ type: 'board.deleted', boardId: request.params.id, occurredAt: new Date() });
@@ -264,7 +269,13 @@ export function ticketRoutes(container: Container) {
       // Emit semantic events for favorite/blocked/tags so the audit trail records
       // *what* the user did, not an opaque `ticket.updated`. Remaining fields
       // (title, priority, due date…) still go through the generic `ticket.updated`.
-      for (const event of deriveTicketUpdateEvents(ticket.id, diff, new Date())) {
+      //
+      // `?silent=true` means "leave no audit trace", not "do not broadcast": the
+      // events are still emitted so other clients stay in sync, but they are
+      // flagged non-auditable so the event-log sink skips them. Previously only
+      // the activity row honoured the flag, and the description autosave wrote a
+      // `ticket.updated` log row every 500 ms.
+      for (const event of deriveTicketUpdateEvents(ticket.id, diff, new Date(), { audit: !silent })) {
         emit(event);
       }
       return ticket.toDTO();
@@ -292,6 +303,9 @@ export function ticketRoutes(container: Container) {
     app.delete<{ Params: { id: string } }>('/api/tickets/:id', async (request, reply) => {
       const ticketId = request.params.id;
       const ticket = await container.ticketStore.getTicketById(ticketId);
+      // An unknown id used to run the whole cleanup, emit `ticket.deleted` and
+      // answer 204. Nothing downstream can tell that apart from a real delete.
+      if (!ticket) throw new TicketNotFoundError(ticketId);
 
       // Cleanup uploaded files referenced in ticket description + comments
       try {
@@ -1293,7 +1307,12 @@ export function ticketRoutes(container: Container) {
       '/api/tickets/:id/comments/:commentId',
       async (request, reply) => {
         const comment = await container.commentStore.getById(request.params.commentId);
-        if (!comment) throw new CommentNotFoundError(request.params.commentId);
+        // The pair must be consistent: the route is scoped by ticket, so a
+        // comment belonging to another ticket is not addressable here. Without
+        // this check, any ticket id in the path deleted any comment.
+        if (!comment || comment.ticketId !== request.params.id) {
+          throw new CommentNotFoundError(request.params.commentId);
+        }
 
         const mentions = await container.mentionStore.getByComment(comment.id);
         for (const m of mentions) {

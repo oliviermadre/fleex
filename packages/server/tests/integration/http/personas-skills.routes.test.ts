@@ -107,20 +107,16 @@ describe('persona + skill routes', () => {
     });
 
     /**
-     * ⚠️  KNOWN BUG, LOCKED ON PURPOSE — and locked HERE, not only in
-     * `error-handler.test.ts`.
+     * A duplicate persona name is a plain client-side conflict, so it must be
+     * 409. `AGENT_PERSONA_NAME_CONFLICT` used to be absent from
+     * `CODE_TO_STATUS` and fell through to 500.
      *
-     * A duplicate persona name is a plain client-side conflict. It SHOULD be
-     * 409; `AGENT_PERSONA_NAME_CONFLICT` is absent from `CODE_TO_STATUS`, so it
-     * falls through to 500.
-     *
-     * Why lock it at the route level too: `error-handler.test.ts` locks the
-     * mapping table. If someone "fixes" this by pre-checking the name inside
-     * the route and returning 409 directly, the table test stays green and the
-     * status silently changes. This assertion is the one that would catch it.
-     * The proper fix (map the code) is a separate ticket.
+     * Asserted HERE and not only in `error-handler.test.ts`: that file covers
+     * the mapping table. If someone later pre-checks the name inside the route
+     * and returns a status directly, the table test stays green while the wire
+     * behaviour changes — this assertion is the one that catches it.
      */
-    it('answers 500 on a duplicate name (known bug — should be 409, see comment)', async () => {
+    it('answers 409 on a duplicate name', async () => {
       const first = await h.app.inject({
         method: 'POST',
         url: '/api/personas',
@@ -134,7 +130,7 @@ describe('persona + skill routes', () => {
         payload: { name: 'builder', displayName: 'Other Builder' },
       });
 
-      expect(second.statusCode).toBe(500);
+      expect(second.statusCode).toBe(409);
       expect(second.json()).toEqual({
         error: 'AGENT_PERSONA_NAME_CONFLICT',
         message: 'Agent persona name already exists: builder',

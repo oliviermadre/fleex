@@ -271,17 +271,15 @@ describe('comment routes (web)', () => {
     });
 
     /**
-     * The handler looks the comment up by `:commentId` alone and never checks
-     * that it belongs to `:id`. Passing a foreign — or plainly nonexistent —
-     * ticket id therefore still deletes the comment.
+     * The handler used to look the comment up by `:commentId` alone, never
+     * checking it belonged to `:id`. A foreign — or plainly nonexistent —
+     * ticket id therefore deleted the comment anyway. The route is scoped by
+     * ticket, so a comment from another ticket is simply not addressable here.
      *
-     * ⚠️  KNOWN BUG, LOCKED ON PURPOSE.
-     * A mismatched pair should answer 404 (the comment does not belong to that
-     * ticket); today it answers 204 and mutates state. Locked as-is so the fix
-     * shows up in review as a deliberate red→green diff instead of hiding
-     * inside a refactor. The fix is its own ticket.
+     * The `getById` assertion matters as much as the status: answering 404
+     * while still deleting the row would be strictly worse than the old bug.
      */
-    it('answers 204 even when :id is not the comment’s ticket (known bug — see comment)', async () => {
+    it('answers 404 and deletes nothing when :id is not the comment’s ticket', async () => {
       const ticketId = await aTicket();
       const comment = await seedComment(h.container, { ticketId, body: 'orphan-able' });
 
@@ -290,9 +288,9 @@ describe('comment routes (web)', () => {
         url: `/api/tickets/some-other-ticket/comments/${comment.id}`,
       });
 
-      expect(res.statusCode).toBe(204);
-      expect(res.body).toBe('');
-      expect(await h.container.commentStore.getById(comment.id)).toBeNull();
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toMatchObject({ error: 'COMMENT_NOT_FOUND' });
+      expect(await h.container.commentStore.getById(comment.id)).not.toBeNull();
     });
 
     it('answers 404 COMMENT_NOT_FOUND on an unknown comment', async () => {

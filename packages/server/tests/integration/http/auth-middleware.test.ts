@@ -122,22 +122,23 @@ describe('auth middleware', () => {
   });
 
   /**
-   * ⚠️  KNOWN BUG, LOCKED ON PURPOSE.
-   *
    * `POST /api/hook` is the Claude Code hook ingress: a local `curl` with no
-   * cookie and no Bearer token. It is NOT in the middleware's exempt prefix
-   * list, so under full SSO it answers 401 and hook events are dropped.
+   * cookie and no Bearer token. It used to be missing from the middleware's
+   * exempt prefix list, so under full SSO it answered 401 and every hook event
+   * was silently dropped — a failure invisible from the UI, where the cockpit
+   * simply stops updating.
    *
    * Registering `hookRoutes` before `app.addHook('preHandler', authMiddleware)`
-   * does not save it: Fastify's `addHook` recurses into `kChildren` and
-   * back-fills contexts that were already registered. Order is irrelevant here;
-   * only the prefix allow-list inside `createAuthMiddleware` exempts anything.
+   * does NOT exempt it: Fastify's `addHook` recurses into `kChildren` and
+   * back-fills contexts already registered. Registration order is irrelevant;
+   * the prefix allow-list inside `createAuthMiddleware` is the only thing that
+   * exempts anything — which is why the fix had to be the allow-list.
    *
-   * The fix (add `/api/hook` to the allow-list) belongs to its own ticket — see
-   * the PR description. This test locks today's behaviour so the fix is visible
-   * as a deliberate, reviewed change of a red test to a green one.
+   * Skipping session auth does not leave the route open: it enforces
+   * localhost-only remotes and a 30s anti-replay window itself — see
+   * hook.routes.test.ts.
    */
-  it('answers 401 on POST /api/hook under full auth (known bug — see comment)', async () => {
+  it('accepts POST /api/hook under full auth — the ingress carries no cookie', async () => {
     enableOAuth();
     h = await createTestApp({ auth: 'full' });
 
@@ -146,6 +147,17 @@ describe('auth middleware', () => {
       url: '/api/hook',
       payload: { event: 'sessionStart', cwd: '/tmp/project', timestamp: Date.now() },
     });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ accepted: true });
+  });
+
+  /** The exemption is a prefix skip, so it must not widen into an API hole. */
+  it('still requires auth on other /api routes under full auth', async () => {
+    enableOAuth();
+    h = await createTestApp({ auth: 'full' });
+
+    const res = await h.app.inject({ method: 'GET', url: '/api/boards' });
 
     expect(res.statusCode).toBe(401);
     expect(res.json()).toEqual({ error: 'Authentication required' });

@@ -50,6 +50,12 @@ export class TicketNotFoundError extends DomainError {
   }
 }
 
+export class TicketGroupNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Ticket group not found: ${id}`, 'TICKET_GROUP_NOT_FOUND');
+  }
+}
+
 export class ApiTokenInvalidError extends DomainError {
   constructor() {
     super('Invalid or missing API token', 'API_TOKEN_INVALID');

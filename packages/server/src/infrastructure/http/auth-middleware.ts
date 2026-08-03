@@ -36,12 +36,19 @@ export function createAuthMiddleware(container: Container) {
   );
 
   return async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
-    // Skip auth for auth routes, health, and internal gateway routes
+    // Skip auth for auth routes, health, internal gateway routes and the
+    // Claude Code hook ingress.
+    //
+    // `/api/hook` carries no cookie and no Bearer token — it is a local `curl`
+    // fired by Claude Code hooks. Under full SSO it was answered 401 and every
+    // hook event was silently dropped. The route is not left unguarded: it
+    // enforces localhost-only remotes and a 30s anti-replay window itself.
     const url = request.url;
     if (
       url.startsWith('/auth/') ||
       url.startsWith('/health') ||
-      url.startsWith('/internal/')
+      url.startsWith('/internal/') ||
+      url.startsWith('/api/hook')
     ) {
       return;
     }

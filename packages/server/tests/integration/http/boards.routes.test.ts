@@ -146,27 +146,23 @@ describe('boards routes', () => {
     });
 
     /**
-     * ⚠️  KNOWN BUG, LOCKED ON PURPOSE.
+     * The route used to skip the lookup entirely: it counted boards, then called
+     * `removeTicketsByBoard` + `removeBoard`, both no-ops on an unknown id, and
+     * answered 204 while emitting a phantom `board.deleted`. WS clients acted on
+     * that event and dropped a card for a board that never existed.
      *
-     * `DELETE /api/boards/:id` never looks the board up. It only counts boards,
-     * then calls `removeTicketsByBoard` + `removeBoard`, both of which are
-     * no-ops on an unknown id. An unknown board therefore answers 204 and emits
-     * a phantom `board.deleted`, where every sibling route (GET, PATCH) answers
-     * 404 BOARD_NOT_FOUND.
-     *
-     * The fix (look the board up first and throw `BoardNotFoundError`) is its
-     * own ticket. Locking today's behaviour keeps that fix visible in review as
-     * a deliberate red→green change instead of a silent side effect.
+     * The event assertion is the point of this test, not the status: a 404 with
+     * a `board.deleted` still on the bus would be just as wrong.
      */
-    it('answers 204 on an unknown id when another board exists (known bug — see comment)', async () => {
+    it('answers 404 on an unknown id and emits no board.deleted', async () => {
       await seedBoard(h.container, { name: 'A' });
       await seedBoard(h.container, { name: 'B' });
 
       const res = await h.app.inject({ method: 'DELETE', url: '/api/boards/inconnu' });
 
-      expect(res.statusCode).toBe(204);
-      expect(res.body).toBe('');
-      expect(h.events.filter((e) => e.type === 'board.deleted')).toHaveLength(1);
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toMatchObject({ error: 'BOARD_NOT_FOUND' });
+      expect(h.events.filter((e) => e.type === 'board.deleted')).toEqual([]);
     });
   });
 });

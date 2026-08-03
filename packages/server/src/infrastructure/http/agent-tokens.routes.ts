@@ -10,7 +10,10 @@ export function agentTokenRoutes(container: Container) {
     });
 
     app.post<{ Body: { name: string } }>('/api/agent-tokens', async (request, reply) => {
-      const { name } = request.body;
+      // A body-less POST leaves `request.body` undefined; destructuring it
+      // directly threw a TypeError and surfaced as a 500 for what is plainly a
+      // client-side mistake. Fall through to the `name is required` 400 below.
+      const { name } = request.body ?? ({} as Partial<{ name: string }>);
       if (!name || typeof name !== 'string') {
         return reply.code(400).send({ error: 'name is required' });
       }

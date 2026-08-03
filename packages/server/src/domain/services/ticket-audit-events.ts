@@ -14,13 +14,20 @@ type TicketDiff = Record<string, { from: unknown; to: unknown }>;
  *
  * Pure function: takes the diff, returns the events. The caller emits them and
  * decides the timestamp via `occurredAt`.
+ *
+ * Pass `audit: false` for a background save that must reach other clients but
+ * must not be recorded (see {@link DomainEvent.audit}). The events are still
+ * produced — dropping them would break live sync, since the WS broadcaster is a
+ * subscriber of this same bus — they are merely flagged as non-auditable.
  */
 export function deriveTicketUpdateEvents(
   ticketId: string,
   diff: TicketDiff,
   occurredAt: Date,
+  opts: { audit?: boolean } = {},
 ): AnyDomainEvent[] {
   const events: AnyDomainEvent[] = [];
+  const audited = opts.audit !== false;
   const { favorite: favoriteDiff, blocked: blockedDiff, tags: tagsDiff, ...restDiff } = diff;
 
   if (favoriteDiff) {
@@ -53,5 +60,5 @@ export function deriveTicketUpdateEvents(
     events.push({ type: 'ticket.updated', ticketId, changes: restDiff, occurredAt });
   }
 
-  return events;
+  return audited ? events : events.map((e) => ({ ...e, audit: false as const }));
 }

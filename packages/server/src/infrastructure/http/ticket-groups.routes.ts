@@ -3,11 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { CreateTicketGroupRequest, UpdateTicketGroupRequest } from '@fleex/shared';
 import { TicketGroupEntity } from '../../domain/entities/ticket-group.entity.js';
 import type { Container } from '../container.js';
-
-class TicketGroupNotFoundError extends Error {
-  statusCode = 404;
-  constructor(id: string) { super(`Ticket group not found: ${id}`); }
-}
+import { TicketGroupNotFoundError, TicketNotFoundError } from '../../domain/errors.js';
 
 export function ticketGroupRoutes(container: Container) {
   const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
@@ -170,20 +166,24 @@ export function ticketGroupRoutes(container: Container) {
 
     app.post<{ Params: { id: string; ticketId: string } }>('/api/epics/:id/tickets/:ticketId', async (request, reply) => {
       const { id: groupId, ticketId } = request.params;
+      // Both sides must exist before we write. Without this, an unknown epic or
+      // ticket persisted a membership row pointing at nothing and broadcast a
+      // `memberAdded` for it.
+      const group = await container.ticketGroupStore.getTicketGroupById(groupId);
+      if (!group) throw new TicketGroupNotFoundError(groupId);
+      const ticket = await container.ticketStore.getTicketById(ticketId);
+      if (!ticket) throw new TicketNotFoundError(ticketId);
+
       await container.ticketGroupStore.addMembership(ticketId, groupId);
       emit({ type: 'ticketGroup.memberAdded', groupId, ticketId, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:memberAdded', { groupId, ticketId });
 
       // Auto-associate the ticket's board with the epic if not already linked
-      const ticket = await container.ticketStore.getTicketById(ticketId);
-      if (ticket) {
-        const group = await container.ticketGroupStore.getTicketGroupById(groupId);
-        if (group && !group.hasBoard(ticket.boardId)) {
-          group.addBoard(ticket.boardId);
-          await container.ticketGroupStore.addBoardToGroup(groupId, ticket.boardId);
-          emit({ type: 'ticketGroup.boardAdded', groupId, boardId: ticket.boardId, occurredAt: new Date() });
-          container.ticketBroadcast('ticketGroup:boardAdded', { groupId, boardId: ticket.boardId });
-        }
+      if (!group.hasBoard(ticket.boardId)) {
+        group.addBoard(ticket.boardId);
+        await container.ticketGroupStore.addBoardToGroup(groupId, ticket.boardId);
+        emit({ type: 'ticketGroup.boardAdded', groupId, boardId: ticket.boardId, occurredAt: new Date() });
+        container.ticketBroadcast('ticketGroup:boardAdded', { groupId, boardId: ticket.boardId });
       }
 
       return reply.code(201).send({ ticketId, groupId });
@@ -191,6 +191,8 @@ export function ticketGroupRoutes(container: Container) {
 
     app.delete<{ Params: { id: string; ticketId: string } }>('/api/epics/:id/tickets/:ticketId', async (request, reply) => {
       const { id: groupId, ticketId } = request.params;
+      const group = await container.ticketGroupStore.getTicketGroupById(groupId);
+      if (!group) throw new TicketGroupNotFoundError(groupId);
       await container.ticketGroupStore.removeMembership(ticketId, groupId);
       emit({ type: 'ticketGroup.memberRemoved', groupId, ticketId, occurredAt: new Date() });
       container.ticketBroadcast('ticketGroup:memberRemoved', { groupId, ticketId });

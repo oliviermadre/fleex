@@ -67,6 +67,29 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/**
+ * DELETE where a 404 means "someone already deleted it".
+ *
+ * The server answers 404 on an unknown id rather than a complacent 204, so that
+ * it never emits a deletion event for something it did not delete. For the UI
+ * the two cases are indistinguishable in outcome — the row is gone either way —
+ * so a 404 must reconcile local state, not raise a toast and abort the caller's
+ * cleanup. Anything else still throws.
+ *
+ * Only for routes that are genuinely idempotent from the user's point of view:
+ * a double-click, a stale board, or a second tab that got there first.
+ */
+async function requestDelete(path: string): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, { method: 'DELETE' });
+  if (res.status === 404) return;
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    const message = extractErrorMessage(body, res.statusText);
+    useToastStore.getState().addToast('error', message);
+    throw new Error(`API error ${res.status}: ${body || res.statusText}`);
+  }
+}
+
 export async function fetchModels(): Promise<ModelsResponse> {
   return request<ModelsResponse>('/models');
 }
@@ -318,7 +341,7 @@ export async function updateBoard(id: string, req: import('@fleex/shared').Updat
 }
 
 export async function deleteBoard(id: string): Promise<void> {
-  await request<void>(`/boards/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  await requestDelete(`/boards/${encodeURIComponent(id)}`);
 }
 
 export async function fetchTickets(boardId?: string): Promise<import('@fleex/shared').Ticket[]> {
@@ -357,7 +380,7 @@ export async function updateTicketExecutionConfig(
 }
 
 export async function deleteTicket(id: string): Promise<void> {
-  await request<void>(`/tickets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  await requestDelete(`/tickets/${encodeURIComponent(id)}`);
 }
 
 export async function archiveTicket(id: string): Promise<import('@fleex/shared').Ticket> {
@@ -566,8 +589,7 @@ export async function updateMentionExecutionMode(mentionId: string, executionMod
 }
 
 export async function deleteTicketComment(ticketId: string, commentId: string): Promise<void> {
-  const res = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}/comments/${encodeURIComponent(commentId)}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`Failed to delete comment: ${res.statusText}`);
+  await requestDelete(`/tickets/${encodeURIComponent(ticketId)}/comments/${encodeURIComponent(commentId)}`);
 }
 
 // ── Read Cursors API ──
@@ -882,7 +904,7 @@ export async function addTicketToGroup(groupId: string, ticketId: string): Promi
 }
 
 export async function removeTicketFromGroup(groupId: string, ticketId: string): Promise<void> {
-  await request(`/epics/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`, { method: 'DELETE' });
+  await requestDelete(`/epics/${encodeURIComponent(groupId)}/tickets/${encodeURIComponent(ticketId)}`);
 }
 
 export async function addBoardToTicketGroup(groupId: string, boardId: string): Promise<void> {

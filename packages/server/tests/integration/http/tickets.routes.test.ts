@@ -250,21 +250,19 @@ describe('tickets routes', () => {
     });
 
     /**
-     * ⚠️  KNOWN BUG, LOCKED ON PURPOSE.
+     * `?silent=true` means "leave no audit trace", NOT "do not broadcast".
      *
-     * `?silent=true` is used by the web client for background saves that should
-     * not pollute the audit trail. It suppresses the *activity row* only — the
-     * `ticket.updated` domain event is emitted unconditionally, outside the
-     * `if (!silent)` guard (tickets.routes.ts, the PATCH /api/tickets/:id
-     * handler).
+     * Its only production caller is the debounced description autosave
+     * (TicketDetail.tsx, every 500 ms). Two things must hold at once, and the
+     * test asserts both because getting either one alone is a real bug:
      *
-     * So a "silent" update still reaches the event bus, the domain event
-     * listener and every WS client. Whether the fix is to move the emission
-     * inside the guard or to rename the flag is a product call and belongs to
-     * its own ticket; today's behaviour is locked here so that either fix shows
-     * up as a deliberate red→green diff.
+     *  - nothing is recorded — neither the activity row nor a domain event log
+     *    row, otherwise typing a paragraph writes one audit entry per keystroke;
+     *  - `ticket.updated` still reaches the bus, because the WS broadcaster is a
+     *    bus subscriber. Suppressing the event would silently stop a colleague's
+     *    kanban from updating.
      */
-    it('still emits ticket.updated with ?silent=true, but writes no activity row (known bug — see comment)', async () => {
+    it('writes no audit trace with ?silent=true but still broadcasts ticket.updated', async () => {
       const board = await seedBoard(h.container);
       const ticket = await seedTicket(h.container, { boardId: board.id, title: 'Before' });
 
@@ -277,9 +275,34 @@ describe('tickets routes', () => {
       expect(res.statusCode).toBe(200);
       expect(res.json()).toMatchObject({ id: ticket.id, title: 'After' });
 
+      // Audit channel 1: the activity row.
       const activity = await h.container.ticketStore.getActivitiesByTicket(ticket.id);
       expect(activity.map((a) => a.action)).not.toContain('updated');
+
+      // Audit channel 2: the domain event log. This is the one that used to
+      // ignore the flag entirely.
+      const logged = await h.container.domainEventLogStore.list({ limit: 100 });
+      expect(logged.filter((e) => e.eventType === 'ticket.updated')).toEqual([]);
+
+      // …but the event is still broadcast, so live sync keeps working.
       expect(h.events.filter((e) => e.type === 'ticket.updated')).toHaveLength(1);
+    });
+
+    it('records both audit channels without ?silent=true', async () => {
+      const board = await seedBoard(h.container);
+      const ticket = await seedTicket(h.container, { boardId: board.id, title: 'Before' });
+
+      await h.app.inject({
+        method: 'PATCH',
+        url: `/api/tickets/${ticket.id}`,
+        payload: { title: 'After' },
+      });
+
+      const activity = await h.container.ticketStore.getActivitiesByTicket(ticket.id);
+      expect(activity.map((a) => a.action)).toContain('updated');
+
+      const logged = await h.container.domainEventLogStore.list({ limit: 100 });
+      expect(logged.filter((e) => e.eventType === 'ticket.updated')).toHaveLength(1);
     });
   });
 
@@ -303,19 +326,17 @@ describe('tickets routes', () => {
     });
 
     /**
-     * ⚠️  KNOWN BUG, LOCKED ON PURPOSE.
-     *
-     * The handler treats a missing ticket as nothing to clean up and still
-     * answers 204 + `ticket.deleted`, where GET/PATCH on the same id answer 404.
-     * Same shape as the `DELETE /api/boards/:id` hole — see boards.routes.test.ts.
-     * The fix (404 on an unknown id) is its own ticket.
+     * The handler used to treat a missing ticket as "nothing to clean up" and
+     * answer 204 + `ticket.deleted`, while GET/PATCH on the same id answered
+     * 404. Same shape as the `DELETE /api/boards/:id` hole — see
+     * boards.routes.test.ts.
      */
-    it('answers 204 on an unknown id (known bug — see comment)', async () => {
+    it('answers 404 on an unknown id and emits no ticket.deleted', async () => {
       const res = await h.app.inject({ method: 'DELETE', url: '/api/tickets/inconnu' });
 
-      expect(res.statusCode).toBe(204);
-      expect(res.body).toBe('');
-      expect(h.events.filter((e) => e.type === 'ticket.deleted')).toHaveLength(1);
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toMatchObject({ error: 'TICKET_NOT_FOUND' });
+      expect(h.events.filter((e) => e.type === 'ticket.deleted')).toEqual([]);
     });
   });
 

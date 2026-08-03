@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import { EventBus } from '../../src/application/event-bus.js';
+import { registerAuditTrail } from '../../src/infrastructure/audit-trail-registrar.js';
 import { DomainEventListener } from '../../src/application/domain-event-listener.js';
 import { RemoteDomainEventListener } from '../../src/application/remote-domain-event-listener.js';
 import { createStores } from '../../src/infrastructure/adapters/storage-factory.js';
@@ -169,6 +170,13 @@ export async function createTestContainer(
   eventBus.on('*', (e) => {
     events.push(e);
   });
+
+  // The production audit sink, wired to the real (temp-dir) log store rather
+  // than reimplemented here. `events` records what was BROADCAST;
+  // `domainEventLogStore` records what was AUDITED. Keeping both observable is
+  // what lets a test assert that `?silent=true` still syncs other clients while
+  // writing no audit row.
+  registerAuditTrail(eventBus, domainEventLogStore, 'test-instance');
 
   // Real, cheap use cases.
   const postComment = new PostCommentUseCase(commentStore, mentionStore, ticketStore, logger);

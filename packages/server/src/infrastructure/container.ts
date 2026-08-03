@@ -80,7 +80,7 @@ import { ClaudeSlackImportAdapter } from './adapters/claude-slack-import.adapter
 import { PinoLoggerAdapter } from './adapters/pino-logger.adapter.js';
 import { ClaudeStateAdapter } from './adapters/claude-state.adapter.js';
 import { ApiClaudeUsageAdapter } from './adapters/api-claude-usage.adapter.js';
-import { DomainEventLogEntity } from '../domain/entities/domain-event-log.entity.js';
+import { registerAuditTrail } from './audit-trail-registrar.js';
 import { resolveStorageDriver, createStores } from './adapters/storage-factory.js';
 import { CachedSessionStore } from './adapters/cached-session-store.js';
 import { CachedTicketStore } from './adapters/cached-ticket-store.js';
@@ -345,27 +345,10 @@ export async function createContainer() {
   // on other instances.
   eventBus.on('*', (event) => hubPublisher.publish(event));
 
-  // Persist all domain events to the audit trail (originator only — remoteEventBus
-  // is NOT audited so each event keeps a single audit row across the cluster).
-  // Events listed here are intentionally excluded — they are high-frequency,
-  // ephemeral signals (driven by Claude Code hooks) whose source of truth is
-  // already the corresponding entity row. Persisting them would also create
-  // duplicates per running instance when storage is shared (Supabase/pgsql).
-  const AUDIT_EXCLUDED_EVENTS = new Set<string>([
-    'session.hookStatusChanged',
-  ]);
+  // Persist all auditable domain events. Extracted so tests can wire the same
+  // sink instead of reimplementing the predicate — see audit-trail-registrar.ts.
   const instanceId = process.env['FLEEX_INSTANCE_ID'] ?? `${hostname()}:${process.env['PORT'] ?? '3000'}`;
-  eventBus.on('*', (event) => {
-    if (AUDIT_EXCLUDED_EVENTS.has(event.type)) return;
-    const entry = DomainEventLogEntity.create({
-      id: randomUUID(),
-      eventType: event.type,
-      payload: { ...event } as Record<string, unknown>,
-      instanceId,
-      occurredAt: event.occurredAt,
-    });
-    return domainEventLogStore.save(entry);
-  });
+  registerAuditTrail(eventBus, domainEventLogStore, instanceId);
 
   // Wire eventBus + config (avoids circular constructor dep)
   createWorktreeUC.eventBus = eventBus;

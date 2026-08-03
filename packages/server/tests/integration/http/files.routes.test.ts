@@ -195,9 +195,11 @@ describe('files routes', () => {
      *   500 { error: 'INTERNAL_ERROR', message: 'request file too large' }.
      *
      * It should be 413 with the route's own message. Same root cause as the
-     * validation-status bug locked in hook.routes.test.ts: the error handler
-     * flattens every non-domain error to 500. Fixing it is its own ticket; the
-     * lock keeps the fix a visible red→green diff.
+     * validation-status bug in hook.routes.test.ts: the error handler flattens
+     * every non-domain error to 500.
+     *
+     * This is a symptom, not the bug — see `error-handler.test.ts` for why the
+     * single fix ships as a follow-up PR rather than with this one.
      */
     it('answers 500 on a >10 MB upload (should be 413 — see comment)', async () => {
       const res = await h.app.inject({

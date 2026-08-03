@@ -207,9 +207,11 @@ describe('POST /api/hook', () => {
    *
    * So a malformed hook body answers 500, not 400. This is wrong for every
    * route in the app, not just this one; the design spec for this ticket
-   * expected 400 here. The fix (honour `error.statusCode` / `FST_ERR_VALIDATION`
-   * in the error handler) is its own ticket. Locked as-is so the fix shows up
-   * as a reviewed red→green diff instead of hiding in a refactor.
+   * expected 400 here.
+   *
+   * This is a symptom, not the bug — the root cause is pinned in
+   * `error-handler.test.ts`, which explains why the single fix (honour
+   * `error.statusCode`) ships as a follow-up PR rather than with this one.
    */
   describe('body schema validation (rejections answer 500, should be 400 — see comment)', () => {
     it('rejects an `event` outside the 7-value enum', async () => {

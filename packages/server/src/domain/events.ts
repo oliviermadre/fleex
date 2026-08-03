@@ -5,6 +5,19 @@ import type { MentionTargetType, MentionExecutionMode, HookResult } from '@fleex
 export interface DomainEvent {
   readonly type: string;
   readonly occurredAt: Date;
+  /**
+   * `false` marks an event that must be broadcast but NOT recorded.
+   *
+   * Broadcasting and auditing are two different jobs done by two different
+   * subscribers of the same bus: `broadcast-registrar` pushes to WS clients,
+   * while the `on('*')` sink in `container.ts` persists a domain event log row.
+   * A background save (`PATCH /api/tickets/:id?silent=true`, fired every 500 ms
+   * by the description autosave) must still reach other clients, but must not
+   * write one audit row per keystroke.
+   *
+   * Defaults to audited when absent.
+   */
+  readonly audit?: false;
 }
 
 // ── Ticket events ──

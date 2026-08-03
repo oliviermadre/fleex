@@ -162,55 +162,59 @@ describe('epics routes', () => {
     });
 
     /**
-     * ⚠️  KNOWN BUG, LOCKED ON PURPOSE.
+     * Neither membership route used to look the epic (or the ticket) up before
+     * writing, so `POST /api/epics/:unknown/tickets/:unknown` answered 201 and
+     * persisted a membership row pointing at nothing — invisible until some
+     * later join silently dropped it.
      *
-     * Neither membership route looks the epic (or the ticket) up before writing.
-     * `POST /api/epics/:unknown/tickets/:unknown` therefore answers 201 and
-     * persists a membership row pointing at nothing, and the matching DELETE
-     * answers 204 on anything at all. The dangling row is invisible until some
-     * later join silently drops it.
-     *
-     * The fix (404 when the epic or the ticket does not exist) is its own
-     * ticket. Locked here so the fix reads as a deliberate red→green diff.
+     * Both sides are now checked, and the membership assertion is what makes
+     * this a test about state rather than about a status code.
      */
-    it('answers 201 when both the epic and the ticket are unknown (known bug — see comment)', async () => {
+    it('answers 404 and persists nothing when the epic is unknown', async () => {
       const add = await h.app.inject({ method: 'POST', url: '/api/epics/inconnu/tickets/fantome' });
-      expect(add.statusCode).toBe(201);
-      expect(add.json()).toEqual({ ticketId: 'fantome', groupId: 'inconnu' });
+      expect(add.statusCode).toBe(404);
+      expect(add.json()).toMatchObject({ error: 'TICKET_GROUP_NOT_FOUND' });
 
-      const memberships = await h.container.ticketGroupStore.getMembershipsByGroup('inconnu');
-      expect(memberships).toEqual([{ ticketId: 'fantome', groupId: 'inconnu' }]);
+      expect(await h.container.ticketGroupStore.getMembershipsByGroup('inconnu')).toEqual([]);
 
       const remove = await h.app.inject({ method: 'DELETE', url: '/api/epics/inconnu/tickets/fantome' });
-      expect(remove.statusCode).toBe(204);
-      expect(remove.body).toBe('');
+      expect(remove.statusCode).toBe(404);
+      expect(remove.json()).toMatchObject({ error: 'TICKET_GROUP_NOT_FOUND' });
+    });
+
+    it('answers 404 and persists nothing when the epic exists but the ticket does not', async () => {
+      const created = await h.app.inject({ method: 'POST', url: '/api/epics', payload: { name: 'Real' } });
+      const { id: epicId } = created.json() as { id: string };
+
+      const add = await h.app.inject({ method: 'POST', url: `/api/epics/${epicId}/tickets/fantome` });
+      expect(add.statusCode).toBe(404);
+      expect(add.json()).toMatchObject({ error: 'TICKET_NOT_FOUND' });
+
+      expect(await h.container.ticketGroupStore.getMembershipsByGroup(epicId)).toEqual([]);
+      expect(h.events.filter((e) => e.type === 'ticketGroup.memberAdded')).toEqual([]);
     });
   });
 
   /**
-   * ⚠️  KNOWN BUG, LOCKED ON PURPOSE.
-   *
-   * `TicketGroupNotFoundError` is a bare `Error` carrying a `statusCode = 404`
-   * field, declared locally in ticket-groups.routes.ts. It is NOT a
-   * `DomainError`, and `registerErrorHandler` only reads `error.code` on
-   * `DomainError` instances — the `statusCode` field is never looked at. Every
-   * "unknown epic" therefore surfaces as 500 INTERNAL_ERROR.
-   *
-   * The fix (make it a real `DomainError` with a code mapped to 404) is its own
-   * ticket, shared with the 12 unmapped codes locked in error-handler.test.ts.
+   * `TicketGroupNotFoundError` used to be a bare `Error` carrying a
+   * `statusCode = 404` field, declared locally in ticket-groups.routes.ts. It
+   * was NOT a `DomainError`, and `registerErrorHandler` only reads `error.code`
+   * on `DomainError` instances — the `statusCode` field was never looked at, so
+   * every "unknown epic" surfaced as 500 INTERNAL_ERROR and leaked the raw
+   * message. It is now a real `DomainError` mapped to 404.
    */
-  describe('unknown epic id (known bug — see comment)', () => {
+  describe('unknown epic id', () => {
     it.each([
       ['GET', '/api/epics/inconnu'],
       ['GET', '/api/epics/inconnu/tickets'],
       ['GET', '/api/epics/inconnu/boards'],
       ['DELETE', '/api/epics/inconnu'],
-    ])('answers 500 on %s %s instead of 404', async (method, url) => {
+    ])('answers 404 on %s %s', async (method, url) => {
       const res = await h.app.inject({ method: method as 'GET' | 'DELETE', url });
 
-      expect(res.statusCode).toBe(500);
+      expect(res.statusCode).toBe(404);
       expect(res.json()).toEqual({
-        error: 'INTERNAL_ERROR',
+        error: 'TICKET_GROUP_NOT_FOUND',
         message: 'Ticket group not found: inconnu',
       });
     });

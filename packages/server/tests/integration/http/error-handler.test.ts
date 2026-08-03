@@ -16,10 +16,9 @@ import { createTestApp, type TestAppHandle } from '../../helpers/test-app.js';
  * a NEW error class silently landing on 500, which a sampled test can never
  * catch.
  *
- * The 12 codes expected at 500 below are a KNOWN BUG, locked on purpose. The
- * fix (mapping them to 404/409/422) is its own ticket — see the PR
- * description. Locking them here means the fix shows up in review as a
- * deliberate red→green diff instead of hiding inside a refactor.
+ * Every code below is now mapped: no `DomainError` falls through to 500. That
+ * invariant is asserted explicitly at the end of this file, so the next code
+ * added without a status decision fails here rather than in production.
  */
 
 /** Every code the domain can raise → the status the HTTP layer answers today. */
@@ -48,19 +47,24 @@ const EXPECTED_STATUS_BY_CODE: Record<string, number> = {
   SLACK_CONVERSATION_INACCESSIBLE: 422,
   SLACK_CONVERSATION_EMPTY: 422,
 
-  // --- unmapped: fall through to 500 (bug, locked on purpose) -------------
-  AGENT_PERSONA_NOT_FOUND: 500, // should be 404
-  AGENT_PERSONA_NAME_CONFLICT: 500, // should be 409
-  SKILL_NOT_FOUND: 500, // should be 404
-  SKILL_COMMAND_NAME_CONFLICT: 500, // should be 409
-  PANEL_NOT_FOUND: 500, // should be 404
-  PANEL_NAME_CONFLICT: 500, // should be 409
-  WORKFLOW_RUN_ALREADY_ACTIVE: 500, // should be 409
-  WORKFLOW_TEMPLATE_NOT_FOUND: 500, // should be 404
-  WORKFLOW_RUN_NOT_FOUND: 500, // should be 404
-  STEP_RUN_NOT_FOUND: 500, // should be 404
-  EXECUTION_CANCELLED: 500, // should be 409 (or 200 — it is not a failure)
-  INVALID_GATE_OUTCOME: 500, // should be 400
+  // --- previously unmapped, now decided -----------------------------------
+  AGENT_PERSONA_NOT_FOUND: 404,
+  AGENT_PERSONA_NAME_CONFLICT: 409,
+  SKILL_NOT_FOUND: 404,
+  SKILL_COMMAND_NAME_CONFLICT: 409,
+  PANEL_NOT_FOUND: 404,
+  PANEL_NAME_CONFLICT: 409,
+  WORKFLOW_RUN_ALREADY_ACTIVE: 409,
+  WORKFLOW_TEMPLATE_NOT_FOUND: 404,
+  WORKFLOW_RUN_NOT_FOUND: 404,
+  STEP_RUN_NOT_FOUND: 404,
+  // A user-requested termination, not a server fault. Callers are expected to
+  // swallow it; 409 is the least wrong status should it ever reach the wire.
+  EXECUTION_CANCELLED: 409,
+  INVALID_GATE_OUTCOME: 400,
+  // Was a bare `Error` with a `statusCode` field the handler never read, so
+  // every unknown epic surfaced as 500. Now a real `DomainError`.
+  TICKET_GROUP_NOT_FOUND: 404,
 };
 
 /**
@@ -148,12 +152,18 @@ describe('error handler', () => {
     },
   );
 
-  it('counts exactly 12 codes falling through to 500', () => {
+  /**
+   * The invariant that replaces the old "exactly 12 codes fall through to 500"
+   * lock. A `DomainError` describes a condition the domain anticipated, so
+   * answering 500 — "the server is broken" — is always wrong. Asserting the
+   * empty set rather than a count means the assertion cannot be satisfied by
+   * updating a number.
+   */
+  it('leaves no DomainError falling through to 500', () => {
     const unmapped = Object.entries(EXPECTED_STATUS_BY_CODE)
       .filter(([, status]) => status === 500)
       .map(([code]) => code);
-    // Locked so that MAPPING a code (the fix) is a visible, reviewed change.
-    expect(unmapped).toHaveLength(12);
+    expect(unmapped).toEqual([]);
   });
 
   it('answers 500 INTERNAL_ERROR on a non-domain Error, echoing its message', async () => {
@@ -166,7 +176,16 @@ describe('error handler', () => {
   });
 
   /**
-   * ⚠️  KNOWN BUG, LOCKED ON PURPOSE — and the widest-reaching one in this file.
+   * ⚠️  KNOWN BUG, LOCKED ON PURPOSE — the LAST one left in this suite, and
+   * deliberately so. It is the only bug whose fix does not ship with this PR.
+   *
+   * Every other locked bug was fixed here because its blast radius was a route
+   * or two, all of them covered. This one changes the status of every
+   * non-`DomainError` on all 304 routes, of which only 57 are covered — the
+   * remaining 247 would change behaviour with no test watching. It therefore
+   * ships as its own PR, on top of this one, so the diff is reviewable on its
+   * own terms. Its two downstream symptoms are pinned in `hook.routes.test.ts`
+   * and `files.routes.test.ts`; one fix turns all three green.
    *
    * The handler reads `error.code` on `DomainError` and ignores `error.statusCode`
    * on everything else. Fastify's own errors DO carry a correct `statusCode`:
@@ -200,10 +219,10 @@ describe('error handler', () => {
       h = undefined;
     });
 
-    it('answers 500 on GET /api/personas/:unknown (should be 404 — see file header)', async () => {
+    it('answers 404 on GET /api/personas/:unknown — a formerly unmapped code', async () => {
       h = await createTestApp();
       const res = await h.app.inject({ method: 'GET', url: '/api/personas/inconnu' });
-      expect(res.statusCode).toBe(500);
+      expect(res.statusCode).toBe(404);
       expect(res.json()).toEqual({
         error: 'AGENT_PERSONA_NOT_FOUND',
         message: 'Agent persona not found: inconnu',

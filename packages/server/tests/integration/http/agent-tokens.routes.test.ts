@@ -160,32 +160,23 @@ describe('agent token routes', () => {
     });
 
     /**
-     * ⚠️  KNOWN BUG, LOCKED ON PURPOSE.
-     *
      * With NO body at all (no payload, hence no content-type), Fastify leaves
-     * `request.body` as `undefined`. The handler destructures it immediately —
-     * `const { name } = request.body` — which throws a TypeError before the
-     * `if (!name)` guard can run. The error handler turns that into a 500 whose
-     * message leaks an internal V8 string:
+     * `request.body` as `undefined`. The handler used to destructure it
+     * immediately, throwing a TypeError before the `if (!name)` guard could
+     * run — surfacing as a 500 that leaked an internal V8 string and told
+     * monitoring the server was broken when it was not.
      *
-     *   "Cannot destructure property 'name' of 'request.body' as it is undefined."
-     *
-     * It SHOULD be 400 `{ error: 'name is required' }`, exactly like `{}` — the
-     * caller made the same client-side mistake, and a 500 tells monitoring the
-     * server is broken when it is not.
-     *
-     * The fix (`const { name } = request.body ?? {}`, or a JSON body schema) is
-     * a separate ticket. Locked here so the fix shows up in review as a
-     * deliberate red→green diff.
+     * A body-less POST is the same client-side mistake as `{}`, so it must get
+     * the same answer.
      */
-    it('answers 500 on a body-less POST (known bug — should be 400, see comment)', async () => {
+    it('answers 400 on a body-less POST, exactly like an empty object', async () => {
       const res = await h.app.inject({ method: 'POST', url: '/api/agent-tokens' });
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json()).toEqual({
-        error: 'INTERNAL_ERROR',
-        message: "Cannot destructure property 'name' of 'request.body' as it is undefined.",
-      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toEqual({ error: 'name is required' });
+
+      const list = await h.app.inject({ method: 'GET', url: '/api/agent-tokens' });
+      expect(list.json()).toEqual([]);
     });
   });
 
