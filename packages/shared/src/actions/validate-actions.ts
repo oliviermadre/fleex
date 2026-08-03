@@ -4,9 +4,11 @@ import {
   ACTION_TIMEOUT_MAX_MS,
   ACTION_TIMEOUT_MIN_MS,
 } from '../types/action.js';
-import type { ActionDef, ActionKind, ActionParamType, ActionScope } from '../types/action.js';
+
 import { anchoredPattern } from './action-params.js';
 import { templateVariables } from './template.js';
+
+import type { ActionDef, ActionKind, ActionParamType, ActionScope } from '../types/action.js';
 
 export interface ActionDefError {
   /** Dotted path of the offending field, e.g. `actions[1].params[0].name`. */
@@ -173,7 +175,10 @@ function validateParams(
     }
 
     if (!PARAM_TYPES.includes(param.type)) {
-      errors.push({ field: `${paramAt}.type`, reason: `expected one of: ${PARAM_TYPES.join(', ')}` });
+      errors.push({
+        field: `${paramAt}.type`,
+        reason: `expected one of: ${PARAM_TYPES.join(', ')}`,
+      });
       return;
     }
 

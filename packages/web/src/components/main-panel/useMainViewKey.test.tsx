@@ -1,7 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-
 import { usePanelStore } from '../../stores/panelStore';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { useSessionStore } from '../../stores/sessionStore';

@@ -5,7 +5,6 @@ import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { defineConfig, type Plugin } from 'vite';
 
-
 /** `/…/node_modules/@scope/pkg/dist/x.js` → `@scope/pkg`. Non-npm ids → null. */
 function packageNameFromModuleId(id: string): string | null {
   const marker = 'node_modules/';

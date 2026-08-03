@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   isOriginAllowed,
   isLoopbackOrigin,
@@ -10,7 +11,9 @@ const NO_ALLOWLIST: string[] = [];
 
 describe('isOriginAllowed — no Origin header', () => {
   it('allows a request with no Origin: those are non-browser clients (CLI, MCP, hooks) that carry no ambient credentials', () => {
-    expect(isOriginAllowed({ origin: undefined, host: 'localhost:3000', allowlist: NO_ALLOWLIST })).toBe(true);
+    expect(
+      isOriginAllowed({ origin: undefined, host: 'localhost:3000', allowlist: NO_ALLOWLIST }),
+    ).toBe(true);
   });
 });
 
@@ -39,7 +42,11 @@ describe('isOriginAllowed — the Origin.host === Host rule', () => {
     // Only rule 3 is under test here: use a non-loopback name so the loopback
     // rule cannot rescue the mismatch.
     expect(
-      isOriginAllowed({ origin: 'https://box.ts.net:8443', host: 'box.ts.net', allowlist: NO_ALLOWLIST }),
+      isOriginAllowed({
+        origin: 'https://box.ts.net:8443',
+        host: 'box.ts.net',
+        allowlist: NO_ALLOWLIST,
+      }),
     ).toBe(false);
   });
 
@@ -47,7 +54,11 @@ describe('isOriginAllowed — the Origin.host === Host rule', () => {
     // The caller passes request.headers.host; this asserts the shape of the
     // contract — an attacker-controlled value can never stand in for it.
     expect(
-      isOriginAllowed({ origin: 'https://evil.com', host: 'mac.tail1234.ts.net', allowlist: NO_ALLOWLIST }),
+      isOriginAllowed({
+        origin: 'https://evil.com',
+        host: 'mac.tail1234.ts.net',
+        allowlist: NO_ALLOWLIST,
+      }),
     ).toBe(false);
   });
 });
@@ -69,18 +80,26 @@ describe('isOriginAllowed — loopback', () => {
 
   it('rejects a hostname that merely contains "localhost"', () => {
     expect(
-      isOriginAllowed({ origin: 'https://localhost.evil.com', host: 'localhost:3000', allowlist: NO_ALLOWLIST }),
+      isOriginAllowed({
+        origin: 'https://localhost.evil.com',
+        host: 'localhost:3000',
+        allowlist: NO_ALLOWLIST,
+      }),
     ).toBe(false);
   });
 });
 
 describe('isOriginAllowed — malformed and null origins', () => {
   it('rejects the literal "null" origin sent by sandboxed iframes and data: documents', () => {
-    expect(isOriginAllowed({ origin: 'null', host: 'localhost:3000', allowlist: NO_ALLOWLIST })).toBe(false);
+    expect(
+      isOriginAllowed({ origin: 'null', host: 'localhost:3000', allowlist: NO_ALLOWLIST }),
+    ).toBe(false);
   });
 
   it('rejects an unparsable Origin rather than failing open', () => {
-    expect(isOriginAllowed({ origin: 'not a url', host: 'localhost:3000', allowlist: NO_ALLOWLIST })).toBe(false);
+    expect(
+      isOriginAllowed({ origin: 'not a url', host: 'localhost:3000', allowlist: NO_ALLOWLIST }),
+    ).toBe(false);
   });
 });
 

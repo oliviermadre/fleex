@@ -1,10 +1,13 @@
 import { join } from 'node:path';
+
 import { FLEEX_DIR, CONFIG_FILE, migrateActionsConfig } from '@fleex/shared';
-import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
-import type { SupabaseConnection } from './connection.js';
-import type { ExecFn, HostFs } from '../../host/types.js';
-import { resolveClaudeCommand } from '../resolve-claude-command.js';
+
 import { applyBasePathEnvOverride } from '../config-env.js';
+import { resolveClaudeCommand } from '../resolve-claude-command.js';
+
+import type { SupabaseConnection } from './connection.js';
+import type { AppConfig, ConfigPort } from '../../../application/ports/config.port.js';
+import type { ExecFn, HostFs } from '../../host/types.js';
 
 export class SupabaseConfigAdapter implements ConfigPort {
   private config: AppConfig;

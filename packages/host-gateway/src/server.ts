@@ -1,10 +1,12 @@
 import { homedir } from 'node:os';
-import type { Server, ServerWebSocket } from 'bun';
+
 import { handleExec, type ExecRequest } from './exec';
 import { handleFs, type FsRequest } from './fs';
-import { handlePtyMessage, handlePtyOpen, handlePtyClose, type PtyWsData } from './pty';
 import { logError } from './logger';
+import { handlePtyMessage, handlePtyOpen, handlePtyClose, type PtyWsData } from './pty';
+
 import type { TokenStore } from './auth';
+import type { Server, ServerWebSocket } from 'bun';
 
 export interface GatewayOptions {
   port: number;
@@ -13,6 +15,10 @@ export interface GatewayOptions {
 }
 
 const BEARER_RE = /^Bearer\s+(.+)$/i;
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 export function extractBearerToken(req: Request): string | null {
   const header = req.headers.get('authorization');
@@ -88,8 +94,8 @@ export function createGatewayServer(opts: GatewayOptions): Server<PtyWsData> {
           const body = (await req.json()) as ExecRequest;
           const result = await handleExec(body);
           return Response.json(result);
-        } catch (err: any) {
-          return Response.json({ error: err.message }, { status: 500 });
+        } catch (err) {
+          return Response.json({ error: errorMessage(err) }, { status: 500 });
         }
       }
 
@@ -99,8 +105,8 @@ export function createGatewayServer(opts: GatewayOptions): Server<PtyWsData> {
           const body = (await req.json()) as FsRequest;
           const result = await handleFs(body);
           return Response.json(result);
-        } catch (err: any) {
-          return Response.json({ error: err.message }, { status: 500 });
+        } catch (err) {
+          return Response.json({ error: errorMessage(err) }, { status: 500 });
         }
       }
 

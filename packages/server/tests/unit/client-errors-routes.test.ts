@@ -1,7 +1,6 @@
 import Fastify from 'fastify';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-
 import {
   clientErrorRoutes,
   __resetClientErrorRateLimit,

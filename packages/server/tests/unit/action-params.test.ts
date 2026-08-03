@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { validateActionParams, anchoredPattern } from '@fleex/shared';
 import type { ActionParamDef } from '@fleex/shared';
 
@@ -39,7 +40,9 @@ describe('validateActionParams', () => {
   });
 
   it('uses the declared default when the param is omitted', () => {
-    const defs: ActionParamDef[] = [{ name: 'env', type: 'string', required: true, default: 'staging' }];
+    const defs: ActionParamDef[] = [
+      { name: 'env', type: 'string', required: true, default: 'staging' },
+    ];
     const result = validateActionParams(defs, {});
     expect(result).toEqual({ ok: true, values: { env: 'staging' } });
   });
@@ -53,8 +56,14 @@ describe('validateActionParams', () => {
 
   it('coerces numbers and rejects non-numeric input', () => {
     const defs: ActionParamDef[] = [{ name: 'count', type: 'number' }];
-    expect(validateActionParams(defs, { count: 42 })).toEqual({ ok: true, values: { count: '42' } });
-    expect(validateActionParams(defs, { count: '7' })).toEqual({ ok: true, values: { count: '7' } });
+    expect(validateActionParams(defs, { count: 42 })).toEqual({
+      ok: true,
+      values: { count: '42' },
+    });
+    expect(validateActionParams(defs, { count: '7' })).toEqual({
+      ok: true,
+      values: { count: '7' },
+    });
 
     const bad = validateActionParams(defs, { count: 'seven' });
     expect(bad.ok).toBe(false);
@@ -64,8 +73,14 @@ describe('validateActionParams', () => {
 
   it('coerces booleans and rejects anything else', () => {
     const defs: ActionParamDef[] = [{ name: 'force', type: 'boolean' }];
-    expect(validateActionParams(defs, { force: true })).toEqual({ ok: true, values: { force: 'true' } });
-    expect(validateActionParams(defs, { force: 'FALSE' })).toEqual({ ok: true, values: { force: 'false' } });
+    expect(validateActionParams(defs, { force: true })).toEqual({
+      ok: true,
+      values: { force: 'true' },
+    });
+    expect(validateActionParams(defs, { force: 'FALSE' })).toEqual({
+      ok: true,
+      values: { force: 'false' },
+    });
 
     const bad = validateActionParams(defs, { force: 'yes' });
     expect(bad.ok).toBe(false);
@@ -73,7 +88,10 @@ describe('validateActionParams', () => {
 
   it('restricts an enum param to its declared values', () => {
     const defs: ActionParamDef[] = [{ name: 'env', type: 'enum', values: ['staging', 'prod'] }];
-    expect(validateActionParams(defs, { env: 'prod' })).toEqual({ ok: true, values: { env: 'prod' } });
+    expect(validateActionParams(defs, { env: 'prod' })).toEqual({
+      ok: true,
+      values: { env: 'prod' },
+    });
 
     const bad = validateActionParams(defs, { env: 'production' });
     expect(bad.ok).toBe(false);
@@ -103,7 +121,7 @@ describe('validateActionParams', () => {
     // These are safe because the value becomes one argv element under execFile —
     // filtering them here would be theatre and would break legitimate values
     // such as a commit message or a glob passed to a tool.
-    const value = "; rm -rf / && echo $(whoami) | tee /tmp/x";
+    const value = '; rm -rf / && echo $(whoami) | tee /tmp/x';
     const result = validateActionParams([{ name: 'msg', type: 'string' }], { msg: value });
     expect(result).toEqual({ ok: true, values: { msg: value } });
   });

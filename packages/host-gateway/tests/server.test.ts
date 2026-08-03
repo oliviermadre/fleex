@@ -1,11 +1,14 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import type { Server } from 'bun';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+
 import { TokenStore, ensureGatewayToken, generateGatewayToken } from '../src/auth';
 import { createGatewayServer } from '../src/server';
+
 import type { PtyWsData } from '../src/pty';
+import type { Server } from 'bun';
 
 let dir: string;
 let tokenFile: string;

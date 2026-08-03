@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { corsHeaders, isOriginAllowed, isRequestAllowed, parseAllowlist } from './origin-policy.ts';
 
 function request(headers: Record<string, string>): Request {
@@ -8,7 +9,9 @@ function request(headers: Record<string, string>): Request {
 describe('isOriginAllowed', () => {
   it('allows the Chrome side panel by scheme, because the unpacked extension id changes on every dev reload', () => {
     expect(isOriginAllowed('chrome-extension://abcdefghijklmnop', 'localhost:4399', [])).toBe(true);
-    expect(isOriginAllowed('chrome-extension://a-totally-different-id', 'localhost:4399', [])).toBe(true);
+    expect(isOriginAllowed('chrome-extension://a-totally-different-id', 'localhost:4399', [])).toBe(
+      true,
+    );
   });
 
   it('allows an origin matching the Host, which is how the mobile assistant reaches the companion through the Vite proxy', () => {
@@ -33,23 +36,33 @@ describe('isOriginAllowed', () => {
   });
 
   it('honours the operator allowlist', () => {
-    expect(isOriginAllowed('https://ok.example', 'localhost:4399', ['https://ok.example'])).toBe(true);
+    expect(isOriginAllowed('https://ok.example', 'localhost:4399', ['https://ok.example'])).toBe(
+      true,
+    );
   });
 });
 
 describe('corsHeaders', () => {
   it('reflects an allowed origin with Vary, replacing the old blanket wildcard', () => {
-    const headers = corsHeaders(request({ origin: 'chrome-extension://abc', host: 'localhost:4399' }), []);
+    const headers = corsHeaders(
+      request({ origin: 'chrome-extension://abc', host: 'localhost:4399' }),
+      [],
+    );
     expect(headers['Access-Control-Allow-Origin']).toBe('chrome-extension://abc');
     expect(headers['Vary']).toBe('Origin');
   });
 
   it('returns no CORS headers at all for a refused origin, so the browser drops the response', () => {
-    expect(corsHeaders(request({ origin: 'https://evil.com', host: 'localhost:4399' }), [])).toEqual({});
+    expect(
+      corsHeaders(request({ origin: 'https://evil.com', host: 'localhost:4399' }), []),
+    ).toEqual({});
   });
 
   it('never emits Access-Control-Allow-Credentials: the companion uses no cookie, and pairing credentials with a reflected origin is what made the server exploitable', () => {
-    const headers = corsHeaders(request({ origin: 'http://localhost:5173', host: 'localhost:4399' }), []);
+    const headers = corsHeaders(
+      request({ origin: 'http://localhost:5173', host: 'localhost:4399' }),
+      [],
+    );
     expect(headers['Access-Control-Allow-Credentials']).toBeUndefined();
   });
 
@@ -60,11 +73,15 @@ describe('corsHeaders', () => {
 
 describe('isRequestAllowed — gates the /chat WebSocket upgrade', () => {
   it('refuses an upgrade from a foreign origin', () => {
-    expect(isRequestAllowed(request({ origin: 'https://evil.com', host: 'localhost:4399' }), [])).toBe(false);
+    expect(
+      isRequestAllowed(request({ origin: 'https://evil.com', host: 'localhost:4399' }), []),
+    ).toBe(false);
   });
 
   it('accepts the side panel', () => {
-    expect(isRequestAllowed(request({ origin: 'chrome-extension://abc', host: 'localhost:4399' }), [])).toBe(true);
+    expect(
+      isRequestAllowed(request({ origin: 'chrome-extension://abc', host: 'localhost:4399' }), []),
+    ).toBe(true);
   });
 });
 

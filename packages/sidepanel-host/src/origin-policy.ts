@@ -26,7 +26,11 @@ export function parseAllowlist(raw: string | undefined): string[] {
   return out;
 }
 
-export function isOriginAllowed(origin: string | null, host: string | null, allowlist: string[]): boolean {
+export function isOriginAllowed(
+  origin: string | null,
+  host: string | null,
+  allowlist: string[],
+): boolean {
   // Non-browser client.
   if (!origin) return true;
 
@@ -43,7 +47,10 @@ export function isOriginAllowed(origin: string | null, host: string | null, allo
 
   if (host && url.host === host) return true;
 
-  if ((url.protocol === 'http:' || url.protocol === 'https:') && LOOPBACK_HOSTNAMES.has(url.hostname)) {
+  if (
+    (url.protocol === 'http:' || url.protocol === 'https:') &&
+    LOOPBACK_HOSTNAMES.has(url.hostname)
+  ) {
     return true;
   }
 
@@ -66,7 +73,7 @@ export function corsHeaders(
 
   return {
     'Access-Control-Allow-Origin': origin,
-    'Vary': 'Origin',
+    Vary: 'Origin',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };

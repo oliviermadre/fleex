@@ -11,9 +11,7 @@ function authHeaders(token: string): Record<string, string> {
  */
 function assertAuthorized(res: Response): void {
   if (res.status === 401) {
-    throw new Error(
-      `Gateway rejected the token (401). Run 'fleex doctor' then 'fleex restart'.`,
-    );
+    throw new Error(`Gateway rejected the token (401). Run 'fleex doctor' then 'fleex restart'.`);
   }
   if (res.status === 403) {
     throw new Error(`Gateway refused the request (403 forbidden_origin).`);
@@ -34,7 +32,12 @@ export function remoteExec(gatewayUrl: string, token: string): ExecFn {
       }),
     });
     assertAuthorized(res);
-    const data = await res.json() as { stdout: string; stderr: string; exitCode: number; error?: string };
+    const data = (await res.json()) as {
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+      error?: string;
+    };
     if (data.error) throw new Error(data.error);
     if (data.exitCode !== 0) {
       const err = new Error(data.stderr || `Command failed: ${command} ${args.join(' ')}`) as any;
@@ -61,7 +64,12 @@ export function remoteShellExec(gatewayUrl: string, token: string): ShellExecFn 
       }),
     });
     assertAuthorized(res);
-    const data = await res.json() as { stdout: string; stderr: string; exitCode: number; error?: string };
+    const data = (await res.json()) as {
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+      error?: string;
+    };
     if (data.error) throw new Error(data.error);
     // Shell exec: don't throw on non-zero exit — callers handle stderr
     return { stdout: data.stdout, stderr: data.stderr };

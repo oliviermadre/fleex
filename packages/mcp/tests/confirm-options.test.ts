@@ -15,10 +15,11 @@
  * Scanned from source rather than from the command tree: `buildProgram()` uses
  * `Bun.Glob`, which does not exist under `vitest run` (node).
  */
-import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { describe, it, expect } from 'vitest';
 
 const COMMANDS_DIR = fileURLToPath(new URL('../../cli/src/commands', import.meta.url));
 
@@ -32,7 +33,11 @@ function commandFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-interface Decl { file: string; flags: string; description: string }
+interface Decl {
+  file: string;
+  flags: string;
+  description: string;
+}
 
 /** Matches `cmd.option('-f, --force', 'Skip confirmation')`. */
 const OPTION_RE = /\.option\(\s*'([^']+)'\s*,\s*'([^']*)'/g;

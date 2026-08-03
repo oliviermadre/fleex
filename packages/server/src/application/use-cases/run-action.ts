@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+
 import {
   ACTION_DEFAULT_TIMEOUT_MS,
   ACTION_OUTPUT_LIMIT_BYTES,
@@ -8,6 +9,7 @@ import {
   validateActionParams,
 } from '@fleex/shared';
 import type { ActionDef, RunActionResponse } from '@fleex/shared';
+
 import {
   ActionAlreadyRunningError,
   ActionDisabledError,
@@ -18,14 +20,15 @@ import {
   ActionTimeoutError,
   TicketNotFoundError,
 } from '../../domain/errors.js';
+import { ensureTicketWorkspace } from '../services/ensure-ticket-workspace.js';
+
 import type { ActionFailedEvent } from '../../domain/events.js';
-import type { EventBus } from '../event-bus.js';
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 import type { ExecFn } from '../../infrastructure/host/types.js';
+import type { EventBus } from '../event-bus.js';
 import type { ConfigPort } from '../ports/config.port.js';
 import type { LoggerPort } from '../ports/logger.port.js';
 import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import { ensureTicketWorkspace } from '../services/ensure-ticket-workspace.js';
 
 export interface RunActionInput {
   actionId: string;
@@ -117,9 +120,25 @@ export class RunActionUseCase {
 
     try {
       const { stdout, stderr } = await this.execFn(command, argv, { cwd, timeout: timeoutMs });
-      return this.succeed(runId, action, command, argv, cwd, input.ticketId, 0, startedAt, stdout, stderr);
+      return this.succeed(
+        runId,
+        action,
+        command,
+        argv,
+        cwd,
+        input.ticketId,
+        0,
+        startedAt,
+        stdout,
+        stderr,
+      );
     } catch (err: unknown) {
-      const e = err as { code?: number | string; stdout?: string; stderr?: string; message?: string };
+      const e = err as {
+        code?: number | string;
+        stdout?: string;
+        stderr?: string;
+        message?: string;
+      };
       const durationMs = Date.now() - startedAt;
 
       const message = e.message ?? 'Unknown execution error';
@@ -138,8 +157,16 @@ export class RunActionUseCase {
       // into a 200 carrying the real exit code.
       if (typeof e.code === 'number') {
         return this.succeed(
-          runId, action, command, argv, cwd, input.ticketId,
-          e.code, startedAt, e.stdout ?? '', e.stderr ?? '',
+          runId,
+          action,
+          command,
+          argv,
+          cwd,
+          input.ticketId,
+          e.code,
+          startedAt,
+          e.stdout ?? '',
+          e.stderr ?? '',
         );
       }
 

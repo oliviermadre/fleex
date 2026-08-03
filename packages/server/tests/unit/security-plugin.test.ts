@@ -3,9 +3,11 @@
  * with a stub route. Exercises the plugin exactly as main.ts registers it,
  * without booting the container.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { registerSecurity } from '../../src/infrastructure/http/security.plugin.js';
+
 import type { LoggerPort } from '../../src/application/ports/logger.port.js';
 
 const logger: LoggerPort = {
@@ -102,7 +104,11 @@ describe('cross-site guard', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/probe',
-      headers: { origin: 'https://evil.com', host: 'localhost:3000', 'sec-fetch-site': 'cross-site' },
+      headers: {
+        origin: 'https://evil.com',
+        host: 'localhost:3000',
+        'sec-fetch-site': 'cross-site',
+      },
     });
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: 'Cross-site request blocked' });
@@ -113,7 +119,11 @@ describe('cross-site guard', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/probe',
-      headers: { origin: 'http://localhost:3000', host: 'localhost:3000', 'sec-fetch-site': 'same-origin' },
+      headers: {
+        origin: 'http://localhost:3000',
+        host: 'localhost:3000',
+        'sec-fetch-site': 'same-origin',
+      },
     });
     expect(res.statusCode).toBe(200);
     expect(handlerRan).toBe(true);
@@ -168,10 +178,13 @@ describe('cross-site guard', () => {
       url: '/probe',
       headers: { origin: 'https://evil.com', 'sec-fetch-site': 'cross-site' },
     });
-    expect(logger.warn).toHaveBeenCalledWith('Cross-site request blocked', expect.objectContaining({
-      method: 'POST',
-      origin: 'https://evil.com',
-    }));
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Cross-site request blocked',
+      expect.objectContaining({
+        method: 'POST',
+        origin: 'https://evil.com',
+      }),
+    );
   });
 });
 

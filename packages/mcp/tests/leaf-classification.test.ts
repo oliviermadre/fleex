@@ -11,12 +11,19 @@
  * Leaves are discovered from the filesystem rather than from `buildProgram()`:
  * that builder uses `Bun.Glob`, which does not exist under `vitest run` (node).
  */
-import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import { Command } from 'commander';
-import { generateTools, isMutatingLeaf, isDestructiveLeaf, leafSegments } from '../src/generator.ts';
+import { describe, it, expect } from 'vitest';
+
+import {
+  generateTools,
+  isMutatingLeaf,
+  isDestructiveLeaf,
+  leafSegments,
+} from '../src/generator.ts';
 import { toMcpTool } from '../src/mcp-handlers.ts';
 
 const COMMANDS_DIR = fileURLToPath(new URL('../../cli/src/commands', import.meta.url));
@@ -169,10 +176,14 @@ describe('MCP annotations for the real command surface', () => {
   });
 
   it('flags every destructive leaf with destructiveHint', () => {
-    const flagged = tools.filter((t) => t.annotations.destructiveHint)
-      .map((t) => t.annotations.title.replace(/^fleex /, '')).sort();
+    const flagged = tools
+      .filter((t) => t.annotations.destructiveHint)
+      .map((t) => t.annotations.title.replace(/^fleex /, ''))
+      .sort();
     const expectedDestructive = Object.entries(EXPECTED)
-      .filter(([, e]) => e.destructive).map(([p]) => p).sort();
+      .filter(([, e]) => e.destructive)
+      .map(([p]) => p)
+      .sort();
     expect(flagged).toEqual(expectedDestructive);
   });
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { migrateActionsConfig } from '@fleex/shared';
 import type { ActionDef } from '@fleex/shared';
 
@@ -78,9 +79,7 @@ describe('migrateActionsConfig', () => {
 
     it('keeps a quoted argument whole rather than splitting on its spaces', () => {
       const { actions } = migrate({
-        pinnedIcons: [
-          pinned({ actionValue: 'open -a "Visual Studio Code" {{workspace_path}}' }),
-        ],
+        pinnedIcons: [pinned({ actionValue: 'open -a "Visual Studio Code" {{workspace_path}}' })],
       });
       expect(actions[0]).toMatchObject({
         kind: 'exec',

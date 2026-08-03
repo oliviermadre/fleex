@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import type { ActionDef, WorkspaceContext } from '@fleex/shared';
 import { migrateActionsConfig } from '@fleex/shared';
-import { useSettingsStore, globalActions, workspaceActions } from './settingsStore';
+
 import { STORAGE_KEY_SETTINGS } from '../lib/constants';
+
+import { useSettingsStore, globalActions, workspaceActions } from './settingsStore';
 
 const context: WorkspaceContext = {
   workspace_path: '/base/workspaces/abc123-fix-login',
@@ -107,10 +110,24 @@ describe('settingsStore — action registry', () => {
       const cached = {
         basePath: '/base',
         pinnedIcons: [
-          { id: 'p1', label: 'Docs', icon: '', iconType: 'svg', actionType: 'url', actionValue: 'https://docs.example' },
+          {
+            id: 'p1',
+            label: 'Docs',
+            icon: '',
+            iconType: 'svg',
+            actionType: 'url',
+            actionValue: 'https://docs.example',
+          },
         ],
         workspaceActions: [
-          { id: 'w1', label: 'Editor', icon: '', iconType: 'svg', actionType: 'shell', actionValue: 'code {{workspace_path}}' },
+          {
+            id: 'w1',
+            label: 'Editor',
+            icon: '',
+            iconType: 'svg',
+            actionType: 'shell',
+            actionValue: 'code {{workspace_path}}',
+          },
         ],
       };
       localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(cached));
@@ -120,7 +137,11 @@ describe('settingsStore — action registry', () => {
 
       const actions = parsed.actions as ActionDef[];
       expect(actions.map((a) => a.id)).toEqual(['p1', 'w1']);
-      expect(actions[0]).toMatchObject({ scope: 'global', kind: 'url', url: 'https://docs.example' });
+      expect(actions[0]).toMatchObject({
+        scope: 'global',
+        kind: 'url',
+        url: 'https://docs.example',
+      });
       expect(actions[1]).toMatchObject({
         scope: 'workspace',
         kind: 'exec',

@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
 import { buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
+
 import type { RepoPathResolver } from '../../domain/services/repo-path-resolver.js';
 
 export interface TicketWorkspace {

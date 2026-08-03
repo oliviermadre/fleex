@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
+
 import { buildWorkspaceContext } from '@fleex/shared';
 import type { Ticket, WorktreeSessionGroup } from '@fleex/shared';
+
 import { useSettingsStore } from '../../stores/settingsStore';
+
 import { OverlaySyncModal } from './OverlaySyncModal';
 
 interface Props {
@@ -19,7 +22,17 @@ function isRealRepo(org: string): boolean {
 
 function OverlayIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0"
+    >
       <path d="M8 1.5 14.5 5 8 8.5 1.5 5 8 1.5Z" />
       <path d="m1.5 8 6.5 3.5L14.5 8" />
       <path d="m1.5 11 6.5 3.5L14.5 11" />

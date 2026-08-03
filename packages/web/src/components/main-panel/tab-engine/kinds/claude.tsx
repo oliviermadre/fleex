@@ -7,7 +7,6 @@ import { StatusDot } from '../../../ui/StatusDot';
 import { registerTabKind } from '../registry';
 
 import { LazyTerminalTabContent } from './LazyTerminalTabContent';
-import { TerminalTabContent } from './TerminalTabContent';
 
 import type { DisplayStatus } from '../../../../lib/deriveStatus';
 import type { TabDescriptor, TabIconProps, TabStatusProps } from '../types';

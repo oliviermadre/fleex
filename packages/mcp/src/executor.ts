@@ -7,7 +7,9 @@
  * supplies arguments, never the command to run.
  */
 import { execFile } from 'node:child_process';
+
 import { buildArgv, type BuildArgvOptions } from './argv.ts';
+
 import type { GeneratedTool } from './types.ts';
 
 /** Ambient execution budget, overridden per command by `GeneratedTool.timeoutMs`. */
@@ -64,11 +66,12 @@ export function runFleexArgv(argv: string[], opts: ExecOptions = {}): Promise<Ex
         windowsHide: true,
       },
       (err, stdout, stderr) => {
-        const exitCode = err && typeof (err as { code?: unknown }).code === 'number'
-          ? (err as { code: number }).code
-          : err
-            ? 1
-            : 0;
+        const exitCode =
+          err && typeof (err as { code?: unknown }).code === 'number'
+            ? (err as { code: number }).code
+            : err
+              ? 1
+              : 0;
         // A timeout kill leaves no exit code, so we'd otherwise report the
         // generic "exited with code 1" — a message that lies about the cause.
         const timedOut = Boolean(err && (err as { killed?: boolean }).killed);

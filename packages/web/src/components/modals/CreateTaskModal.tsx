@@ -93,7 +93,7 @@ export function CreateTaskModal() {
   useEffect(() => {
     if (!open) return;
     setLoadingRepos(true);
-    fetchRepositories().finally(() => setLoadingRepos(false));
+    void fetchRepositories().finally(() => setLoadingRepos(false));
   }, [open, fetchRepositories]);
 
   // Drop selections for repos that are no longer tracked: a ticket linked to an

@@ -25,7 +25,8 @@ export type GuardResult = { allow: true } | { allow: false; reason: string };
 const ALLOW: GuardResult = { allow: true };
 
 export function evaluateRequest(input: GuardInput): GuardResult {
-  const { method, origin, host, secFetchSite, isWebSocketUpgrade, hasBearerToken, allowlist } = input;
+  const { method, origin, host, secFetchSite, isWebSocketUpgrade, hasBearerToken, allowlist } =
+    input;
 
   // 1. Preflight — @fastify/cors owns the decision, and a preflight never
   //    reaches a handler.

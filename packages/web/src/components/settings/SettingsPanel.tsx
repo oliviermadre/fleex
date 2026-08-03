@@ -1,16 +1,25 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+
+import type {
+  ActionDef,
+  ActionKind,
+  ActionParamDef,
+  ActionParamType,
+  ActionScope,
+} from '@fleex/shared';
+import type { AgentToken } from '@fleex/shared';
 import { ACTION_DEFAULT_TIMEOUT_MS } from '@fleex/shared';
-import type { ActionDef, ActionKind, ActionParamDef, ActionParamType, ActionScope } from '@fleex/shared';
+import { DEFAULT_AGENT_MAX_TURNS, AGENT_MAX_TURNS_MIN, AGENT_MAX_TURNS_MAX } from '@fleex/shared';
+
+import { cn } from '../../lib/cn';
+import * as api from '../../services/api';
 import { useSettingsStore, type AppSettings } from '../../stores/settingsStore';
 import { useUIStore, type SettingsTab } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+
 import { AppearanceTab } from './AppearanceTab';
 import { DeliverableTypesTab } from './DeliverableTypesTab';
-import { cn } from '../../lib/cn';
-import type { AgentToken } from '@fleex/shared';
-import { DEFAULT_AGENT_MAX_TURNS, AGENT_MAX_TURNS_MIN, AGENT_MAX_TURNS_MAX } from '@fleex/shared';
-import * as api from '../../services/api';
 
 const tabLabels: Record<SettingsTab, string> = {
   general: 'General',
@@ -38,8 +47,12 @@ export function SettingsPanel() {
 
   useEffect(() => {
     setBasePath(settings.basePath);
-    setHumanDisplayName((settings as unknown as Record<string, unknown>)['humanDisplayName'] as string ?? '');
-    setHumanMentionName((settings as unknown as Record<string, unknown>)['humanMentionName'] as string ?? '');
+    setHumanDisplayName(
+      ((settings as unknown as Record<string, unknown>)['humanDisplayName'] as string) ?? '',
+    );
+    setHumanMentionName(
+      ((settings as unknown as Record<string, unknown>)['humanMentionName'] as string) ?? '',
+    );
     setAgentMaxConcurrency(settings.agentMaxConcurrency ?? 1);
     setAgentMaxTurns(settings.agentMaxTurns ?? DEFAULT_AGENT_MAX_TURNS);
     setActions((settings.actions ?? []).map((a) => ({ ...a })));
@@ -58,8 +71,12 @@ export function SettingsPanel() {
     }
     await saveSettings({
       basePath,
-      ...(humanDisplayName.trim() ? { humanDisplayName: humanDisplayName.trim() } : { humanDisplayName: undefined }),
-      ...(humanMentionName.trim() ? { humanMentionName: humanMentionName.trim() } : { humanMentionName: undefined }),
+      ...(humanDisplayName.trim()
+        ? { humanDisplayName: humanDisplayName.trim() }
+        : { humanDisplayName: undefined }),
+      ...(humanMentionName.trim()
+        ? { humanMentionName: humanMentionName.trim() }
+        : { humanMentionName: undefined }),
       agentMaxConcurrency,
       agentMaxTurns,
     } as Partial<AppSettings> & Record<string, unknown>);
@@ -68,10 +85,15 @@ export function SettingsPanel() {
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--theme-bg-base)]">
       {/* Breadcrumb header */}
-      <div className="flex w-full items-center border-b border-[var(--theme-border)] px-3" style={{ height: 'var(--header-height)' }}>
+      <div
+        className="flex w-full items-center border-b border-[var(--theme-border)] px-3"
+        style={{ height: 'var(--header-height)' }}
+      >
         <span className="text-sm text-[var(--theme-text-muted)]">Settings</span>
         <span className="mx-2 text-sm text-[var(--theme-text-faint)]">/</span>
-        <span className="text-sm font-medium text-[var(--theme-text-primary)]">{tabLabels[settingsTab]}</span>
+        <span className="text-sm font-medium text-[var(--theme-text-primary)]">
+          {tabLabels[settingsTab]}
+        </span>
       </div>
 
       {/* Form content */}
@@ -104,9 +126,7 @@ export function SettingsPanel() {
           {/* Save button — hidden for tabs that persist changes immediately. */}
           {settingsTab !== 'deliverable-types' && (
             <div className="mt-8 flex flex-col items-end gap-2">
-              {saveError && (
-                <p className="text-xs text-[var(--theme-danger)]">{saveError}</p>
-              )}
+              {saveError && <p className="text-xs text-[var(--theme-danger)]">{saveError}</p>}
               <Button variant="primary" onClick={handleSave}>
                 Save Settings
               </Button>
@@ -173,23 +193,33 @@ function GeneralTab({
           onChange={(e) => setHumanDisplayName(e.target.value)}
         />
         <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
-          Your name as shown in ticket comments (e.g. "Wally Worktree"). Falls back to mention name if empty.
+          Your name as shown in ticket comments (e.g. "Wally Worktree"). Falls back to mention name
+          if empty.
         </p>
 
         <div className="mt-4">
-        <Input
-          id="humanMentionName"
-          label="Mention Name"
-          placeholder="Wally"
-          value={humanMentionName}
-          onChange={(e) => setHumanMentionName(e.target.value)}
-        />
-        <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
-          The <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">@tag</code> agents
-          should use to mention you (e.g. <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">Wally</code> for{' '}
-          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-accent)]">@Wally</code>).
-          Per-agent overrides can be set in agent configuration.
-        </p>
+          <Input
+            id="humanMentionName"
+            label="Mention Name"
+            placeholder="Wally"
+            value={humanMentionName}
+            onChange={(e) => setHumanMentionName(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
+            The{' '}
+            <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+              @tag
+            </code>{' '}
+            agents should use to mention you (e.g.{' '}
+            <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+              Wally
+            </code>{' '}
+            for{' '}
+            <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-accent)]">
+              @Wally
+            </code>
+            ). Per-agent overrides can be set in agent configuration.
+          </p>
         </div>
       </div>
 
@@ -220,23 +250,29 @@ function GeneralTab({
             setAgentMaxTurns(
               Math.min(
                 AGENT_MAX_TURNS_MAX,
-                Math.max(AGENT_MAX_TURNS_MIN, parseInt(e.target.value, 10) || DEFAULT_AGENT_MAX_TURNS),
+                Math.max(
+                  AGENT_MAX_TURNS_MIN,
+                  parseInt(e.target.value, 10) || DEFAULT_AGENT_MAX_TURNS,
+                ),
               ),
             )
           }
         />
         <p className="mt-1 text-xs text-[var(--theme-text-muted)]">
           How many conversation turns (assistant round-trips) an agent may take in a single{' '}
-          <strong>plan</strong> or <strong>edit</strong> execution before the SDK stops it — not a count of
-          individual tool calls. A single turn can bundle several tool calls the model runs in parallel (e.g.
-          reading many files at once), so you may see more tool actions in the log than this number. Raise it
-          for long refactors, lower it to cap runaway loops. Default{' '}
+          <strong>plan</strong> or <strong>edit</strong> execution before the SDK stops it — not a
+          count of individual tool calls. A single turn can bundle several tool calls the model runs
+          in parallel (e.g. reading many files at once), so you may see more tool actions in the log
+          than this number. Raise it for long refactors, lower it to cap runaway loops. Default{' '}
           <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
             {DEFAULT_AGENT_MAX_TURNS}
           </code>
-          . Each execution reports its actual usage as <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">turns used / budget</code>{' '}
-          in the Execution Log, so you can size this from real runs. Talk mode is unaffected — it has no
-          agentic loop.
+          . Each execution reports its actual usage as{' '}
+          <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+            turns used / budget
+          </code>{' '}
+          in the Execution Log, so you can size this from real runs. Talk mode is unaffected — it
+          has no agentic loop.
         </p>
       </div>
     </div>
@@ -249,7 +285,10 @@ const KIND_LABELS: Record<ActionKind, string> = {
   shell: 'Shell Script',
 };
 
-const SCOPE_COPY: Record<ActionScope, { title: string; addLabel: string; empty: string; hint: string }> = {
+const SCOPE_COPY: Record<
+  ActionScope,
+  { title: string; addLabel: string; empty: string; hint: string }
+> = {
   global: {
     title: 'Pinned Icons',
     addLabel: '+ Add Icon',
@@ -308,17 +347,23 @@ function ActionsTab({
 
   // Reordering only ever happens inside one scope; splice the reordered slice
   // back around the untouched entries of the other scope.
-  const reorder = useCallback((ordered: ActionDef[]) => {
-    const others = actions.filter((a) => a.scope !== scope);
-    onChange(scope === 'global' ? [...ordered, ...others] : [...others, ...ordered]);
-  }, [actions, scope, onChange]);
+  const reorder = useCallback(
+    (ordered: ActionDef[]) => {
+      const others = actions.filter((a) => a.scope !== scope);
+      onChange(scope === 'global' ? [...ordered, ...others] : [...others, ...ordered]);
+    },
+    [actions, scope, onChange],
+  );
 
-  const handleDragStart = useCallback((id: string) => (e: React.DragEvent) => {
-    draggedIdRef.current = id;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData(dragType, id);
-    (e.currentTarget as HTMLElement).style.opacity = '0.4';
-  }, [dragType]);
+  const handleDragStart = useCallback(
+    (id: string) => (e: React.DragEvent) => {
+      draggedIdRef.current = id;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData(dragType, id);
+      (e.currentTarget as HTMLElement).style.opacity = '0.4';
+    },
+    [dragType],
+  );
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     draggedIdRef.current = null;
@@ -326,38 +371,47 @@ function ActionsTab({
     (e.currentTarget as HTMLElement).style.opacity = '';
   }, []);
 
-  const handleDragOver = useCallback((id: string) => (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(dragType)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    setDropEdge(e.clientY < midY ? 'top' : 'bottom');
-    setDragOverId(id);
-  }, [dragType]);
+  const handleDragOver = useCallback(
+    (id: string) => (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(dragType)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      setDropEdge(e.clientY < midY ? 'top' : 'bottom');
+      setDragOverId(id);
+    },
+    [dragType],
+  );
 
-  const handleDragLeave = useCallback((id: string) => (e: React.DragEvent) => {
-    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-    if (dragOverId === id) setDragOverId(null);
-  }, [dragOverId]);
+  const handleDragLeave = useCallback(
+    (id: string) => (e: React.DragEvent) => {
+      if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+      if (dragOverId === id) setDragOverId(null);
+    },
+    [dragOverId],
+  );
 
-  const handleDrop = useCallback((targetId: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    const draggedId = e.dataTransfer.getData(dragType);
-    setDragOverId(null);
-    if (!draggedId || draggedId === targetId) return;
+  const handleDrop = useCallback(
+    (targetId: string) => (e: React.DragEvent) => {
+      e.preventDefault();
+      const draggedId = e.dataTransfer.getData(dragType);
+      setDragOverId(null);
+      if (!draggedId || draggedId === targetId) return;
 
-    const items = [...visible];
-    const fromIdx = items.findIndex((a) => a.id === draggedId);
-    if (fromIdx === -1) return;
-    const moved = items.splice(fromIdx, 1)[0];
-    if (!moved) return;
-    let toIdx = items.findIndex((a) => a.id === targetId);
-    if (toIdx === -1) return;
-    if (dropEdge === 'bottom') toIdx += 1;
-    items.splice(toIdx, 0, moved);
-    reorder(items);
-  }, [visible, dropEdge, reorder, dragType]);
+      const items = [...visible];
+      const fromIdx = items.findIndex((a) => a.id === draggedId);
+      if (fromIdx === -1) return;
+      const moved = items.splice(fromIdx, 1)[0];
+      if (!moved) return;
+      let toIdx = items.findIndex((a) => a.id === targetId);
+      if (toIdx === -1) return;
+      if (dropEdge === 'bottom') toIdx += 1;
+      items.splice(toIdx, 0, moved);
+      reorder(items);
+    },
+    [visible, dropEdge, reorder, dragType],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -408,7 +462,9 @@ function ActionsTab({
 
       {scope === 'workspace' && (
         <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
-          <p className="mb-2 text-xs font-medium text-[var(--theme-text-secondary)]">Template Variables</p>
+          <p className="mb-2 text-xs font-medium text-[var(--theme-text-secondary)]">
+            Template Variables
+          </p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
             {[
               ['{{workspace_path}}', 'Workspace folder absolute path'],
@@ -418,7 +474,9 @@ function ActionsTab({
               ['{{ticket_display_id}}', 'Ticket display number'],
             ].map(([variable, description]) => (
               <div key={variable} className="flex items-baseline gap-2">
-                <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">{variable}</code>
+                <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+                  {variable}
+                </code>
                 <span className="text-[var(--theme-text-muted)]">{description}</span>
               </div>
             ))}
@@ -427,7 +485,9 @@ function ActionsTab({
       )}
 
       <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-4 py-3">
-        <p className="mb-1 text-xs font-medium text-[var(--theme-text-secondary)]">Pipe Functions</p>
+        <p className="mb-1 text-xs font-medium text-[var(--theme-text-secondary)]">
+          Pipe Functions
+        </p>
         <p className="mb-2 text-xs text-[var(--theme-text-muted)]">
           Transform variables with pipes:{' '}
           <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
@@ -445,7 +505,9 @@ function ActionsTab({
             ['default(fallback)', 'Fallback if empty'],
           ].map(([fn, description]) => (
             <div key={fn} className="flex items-baseline gap-2">
-              <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">{fn}</code>
+              <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+                {fn}
+              </code>
               <span className="text-[var(--theme-text-muted)]">{description}</span>
             </div>
           ))}
@@ -474,7 +536,12 @@ function ActionEditor({
 
   const handleArgs = (text: string) => {
     setArgsText(text);
-    onUpdate({ args: text.split('\n').map((s) => s.trim()).filter(Boolean) });
+    onUpdate({
+      args: text
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    });
   };
 
   return (
@@ -511,7 +578,15 @@ function ActionEditor({
           onClick={onRemove}
           title="Remove"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
             <line x1="4" y1="4" x2="12" y2="12" />
             <line x1="12" y1="4" x2="4" y2="12" />
           </svg>
@@ -538,7 +613,9 @@ function ActionEditor({
           </label>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Type</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+              Icon Type
+            </label>
             <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
               {(['svg', 'base64', 'url', 'path'] as const).map((type) => (
                 <button
@@ -547,7 +624,7 @@ function ActionEditor({
                     'flex-1 rounded px-3 py-1 text-xs font-medium transition-colors',
                     action.iconType === type
                       ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
                   )}
                   onClick={() => onUpdate({ iconType: type })}
                 >
@@ -558,7 +635,9 @@ function ActionEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Icon Value</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+              Icon Value
+            </label>
             <textarea
               className={TEXTAREA_CLASS}
               rows={3}
@@ -577,7 +656,9 @@ function ActionEditor({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Action Type</label>
+            <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+              Action Type
+            </label>
             <div className="flex gap-0.5 rounded-md bg-[var(--theme-bg-overlay)] p-0.5">
               {(Object.keys(KIND_LABELS) as ActionKind[]).map((kind) => (
                 <button
@@ -586,7 +667,7 @@ function ActionEditor({
                     'flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors',
                     action.kind === kind
                       ? 'bg-[var(--theme-border-input)] text-[var(--theme-text-primary)]'
-                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]',
                   )}
                   onClick={() => onUpdate({ kind })}
                 >
@@ -621,14 +702,17 @@ function ActionEditor({
                 onChange={(e) => onUpdate({ command: e.target.value })}
               />
               <p className="text-xs text-[var(--theme-text-muted)]">
-                Executed directly, without a shell. Template placeholders are not allowed here — put them in the arguments.
+                Executed directly, without a shell. Template placeholders are not allowed here — put
+                them in the arguments.
               </p>
             </div>
           )}
 
           {action.kind === 'shell' && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">Script</label>
+              <label className="text-sm font-medium text-[var(--theme-text-secondary)]">
+                Script
+              </label>
               <textarea
                 className={TEXTAREA_CLASS}
                 rows={4}
@@ -638,9 +722,14 @@ function ActionEditor({
               />
               <p className="text-xs text-[var(--theme-text-muted)]">
                 Runs in your login shell. Arguments below arrive as{' '}
-                <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">$1</code>…
-                <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">$n</code>, so
-                their values are read as data and never as script.
+                <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+                  $1
+                </code>
+                …
+                <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+                  $n
+                </code>
+                , so their values are read as data and never as script.
               </p>
             </div>
           )}
@@ -659,7 +748,8 @@ function ActionEditor({
                   onChange={(e) => handleArgs(e.target.value)}
                 />
                 <p className="text-xs text-[var(--theme-text-muted)]">
-                  Each line becomes one argument. Values are passed as-is, so quoting and shell metacharacters have no effect.
+                  Each line becomes one argument. Values are passed as-is, so quoting and shell
+                  metacharacters have no effect.
                 </p>
               </div>
 
@@ -674,7 +764,9 @@ function ActionEditor({
                 label="Timeout (ms)"
                 type="number"
                 value={String(action.timeoutMs ?? ACTION_DEFAULT_TIMEOUT_MS)}
-                onChange={(e) => onUpdate({ timeoutMs: parseInt(e.target.value, 10) || ACTION_DEFAULT_TIMEOUT_MS })}
+                onChange={(e) =>
+                  onUpdate({ timeoutMs: parseInt(e.target.value, 10) || ACTION_DEFAULT_TIMEOUT_MS })
+                }
               />
 
               <ParamsEditor
@@ -732,7 +824,10 @@ function ParamsEditor({
       )}
 
       {params.map((param, i) => (
-        <div key={i} className="flex flex-col gap-2 border-t border-[var(--theme-border-subtle)] pt-2">
+        <div
+          key={i}
+          className="flex flex-col gap-2 border-t border-[var(--theme-border-subtle)] pt-2"
+        >
           <div className="flex items-end gap-2">
             <div className="flex-1">
               <Input
@@ -748,7 +843,9 @@ function ParamsEditor({
               onChange={(e) => update(i, { type: e.target.value as ActionParamType })}
             >
               {PARAM_TYPES.map((type) => (
-                <option key={type} value={type}>{type}</option>
+                <option key={type} value={type}>
+                  {type}
+                </option>
               ))}
             </select>
             <label className="flex h-9 items-center gap-1.5 text-xs text-[var(--theme-text-secondary)]">
@@ -764,7 +861,15 @@ function ParamsEditor({
               onClick={() => onChange(params.filter((_, idx) => idx !== i))}
               title="Remove parameter"
             >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
                 <line x1="4" y1="4" x2="12" y2="12" />
                 <line x1="12" y1="4" x2="4" y2="12" />
               </svg>
@@ -777,7 +882,12 @@ function ParamsEditor({
               placeholder="staging, production"
               value={(param.values ?? []).join(', ')}
               onChange={(e) =>
-                update(i, { values: e.target.value.split(',').map((v) => v.trim()).filter(Boolean) })
+                update(i, {
+                  values: e.target.value
+                    .split(',')
+                    .map((v) => v.trim())
+                    .filter(Boolean),
+                })
               }
             />
           )}
@@ -803,7 +913,13 @@ function AgentTokensTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.fetchAgentTokens().then((t) => { setTokens(t); setLoading(false); }).catch(() => setLoading(false));
+    api
+      .fetchAgentTokens()
+      .then((t) => {
+        setTokens(t);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   const handleCreate = async () => {
@@ -812,7 +928,10 @@ function AgentTokensTab() {
     const created = await api.createAgentToken(name);
     setRevealedSecret(created.secret);
     setNewName('');
-    api.fetchAgentTokens().then(setTokens).catch(() => {});
+    api
+      .fetchAgentTokens()
+      .then(setTokens)
+      .catch(() => {});
   };
 
   const handleDelete = async (id: string) => {
@@ -828,7 +947,10 @@ function AgentTokensTab() {
   return (
     <div className="flex flex-col gap-5">
       <p className="text-xs text-[var(--theme-text-muted)]">
-        Agent tokens allow external agents to access the ticket API at <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">/api/agents/v1/</code>
+        Agent tokens allow external agents to access the ticket API at{' '}
+        <code className="rounded bg-[var(--theme-bg-overlay)] px-1 py-0.5 text-[var(--theme-text-secondary)]">
+          /api/agents/v1/
+        </code>
       </p>
 
       {/* Create form */}
@@ -839,7 +961,9 @@ function AgentTokensTab() {
             placeholder="my-agent"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreate();
+            }}
           />
         </div>
         <Button variant="primary" size="sm" onClick={handleCreate} disabled={!newName.trim()}>
@@ -860,7 +984,9 @@ function AgentTokensTab() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => { navigator.clipboard.writeText(revealedSecret); }}
+              onClick={() => {
+                navigator.clipboard.writeText(revealedSecret);
+              }}
             >
               Copy
             </Button>
@@ -890,8 +1016,12 @@ function AgentTokensTab() {
               className="flex items-center gap-3 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-surface)] px-3 py-2"
             >
               <div className="flex-1">
-                <span className="text-sm font-medium text-[var(--theme-text-primary)]">{token.name}</span>
-                <span className="ml-2 text-xs text-[var(--theme-text-muted)]">{token.prefix}...</span>
+                <span className="text-sm font-medium text-[var(--theme-text-primary)]">
+                  {token.name}
+                </span>
+                <span className="ml-2 text-xs text-[var(--theme-text-muted)]">
+                  {token.prefix}...
+                </span>
               </div>
               {token.lastUsedAt && (
                 <span className="text-[10px] text-[var(--theme-text-muted)]">
@@ -911,4 +1041,3 @@ function AgentTokensTab() {
     </div>
   );
 }
-

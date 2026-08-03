@@ -1,7 +1,4 @@
 import { useState } from 'react';
-import Markdown from 'react-markdown';
-import rehypeHighlight from 'rehype-highlight';
-import remarkGfm from 'remark-gfm';
 
 import { useDraft } from '../../hooks/useDraft';
 import { tintClasses } from '../../lib/tints';

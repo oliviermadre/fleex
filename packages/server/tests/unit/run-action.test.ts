@@ -1,16 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
 import { ACTION_OUTPUT_LIMIT_BYTES } from '@fleex/shared';
 import type { ActionDef } from '@fleex/shared';
-import { RunActionUseCase } from '../../src/application/use-cases/run-action.js';
+
 import { EventBus } from '../../src/application/event-bus.js';
+import { RunActionUseCase } from '../../src/application/use-cases/run-action.js';
 import { RepoPathResolver } from '../../src/domain/services/repo-path-resolver.js';
+import { FakeConfigPort, FakeLoggerPort } from '../helpers/fakes.js';
+
+import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
 import type { AnyDomainEvent } from '../../src/domain/events.js';
 import type { ExecFn } from '../../src/infrastructure/host/types.js';
-import type { TicketStorePort } from '../../src/application/ports/ticket-store.port.js';
-import { FakeConfigPort, FakeLoggerPort } from '../helpers/fakes.js';
 
 const TICKET = { id: 'abcdef0123', title: 'Fix the Login Bug', displayId: 42 };
 /** What `buildTicketWorkspaceId` derives from TICKET — the folder the run targets. */
@@ -167,9 +171,7 @@ describe('RunActionUseCase', () => {
   });
 
   it('falls back to basePath as cwd for a global action', async () => {
-    const useCase = build([
-      { ...openIde, id: 'global', scope: 'global', args: ['--version'] },
-    ]);
+    const useCase = build([{ ...openIde, id: 'global', scope: 'global', args: ['--version'] }]);
     await useCase.execute({ actionId: 'global' });
 
     expect(calls[0]?.options?.cwd).toBe(baseDir);
@@ -177,9 +179,9 @@ describe('RunActionUseCase', () => {
 
   it('rejects an unknown ticket', async () => {
     const useCase = build([openIde]);
-    await expect(
-      useCase.execute({ actionId: 'open-ide', ticketId: 'nope' }),
-    ).rejects.toMatchObject({ code: 'TICKET_NOT_FOUND' });
+    await expect(useCase.execute({ actionId: 'open-ide', ticketId: 'nope' })).rejects.toMatchObject(
+      { code: 'TICKET_NOT_FOUND' },
+    );
     expect(calls).toEqual([]);
   });
 
@@ -268,7 +270,9 @@ describe('RunActionUseCase', () => {
     // `remoteExec` throws on exit != 0. The invocation worked, the command
     // disagreed — that is a 200 carrying the code, not a 500.
     execResult = () =>
-      Promise.reject(Object.assign(new Error('exit 2'), { code: 2, stdout: 'out', stderr: 'boom' }));
+      Promise.reject(
+        Object.assign(new Error('exit 2'), { code: 2, stdout: 'out', stderr: 'boom' }),
+      );
 
     const useCase = build([openIde]);
     const result = await useCase.execute({ actionId: 'open-ide', ticketId: TICKET.id });
@@ -325,9 +329,7 @@ describe('RunActionUseCase', () => {
 
   it('emits action.failed with the reason a run was refused', async () => {
     const useCase = build([{ ...openIde, enabled: false }]);
-    await expect(
-      useCase.execute({ actionId: 'open-ide', ticketId: TICKET.id }),
-    ).rejects.toThrow();
+    await expect(useCase.execute({ actionId: 'open-ide', ticketId: TICKET.id })).rejects.toThrow();
 
     expect(events[0]).toMatchObject({ type: 'action.failed', reason: 'disabled' });
   });

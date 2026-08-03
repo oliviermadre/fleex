@@ -1,17 +1,23 @@
 import { useMemo, useCallback } from 'react';
+
 import { buildWorkspaceContext } from '@fleex/shared';
 import type { Session, WorktreeSessionGroup, Ticket, TicketStatus } from '@fleex/shared';
+
 import { cn } from '../../../lib/cn';
-import { tint, tintText } from '../../../lib/tints';
-import { PrBadge } from '../../ui/PrBadge';
-import { useTicketStore } from '../../../stores/ticketStore';
-import { globalActions, workspaceActions as selectWorkspaceActions, useSettingsStore } from '../../../stores/settingsStore';
-import { usePullRequestStore } from '../../../stores/pullRequestStore';
 import { deriveDisplayStatus } from '../../../lib/deriveStatus';
-import { StatusDot } from '../../ui/StatusDot';
-import { NanoKanban } from '../../tickets/NanoKanban';
-import { renderIcon } from '../../sidebar/PinnedIcons';
+import { tint, tintText } from '../../../lib/tints';
+import { usePullRequestStore } from '../../../stores/pullRequestStore';
+import {
+  globalActions,
+  workspaceActions as selectWorkspaceActions,
+  useSettingsStore,
+} from '../../../stores/settingsStore';
+import { useTicketStore } from '../../../stores/ticketStore';
 import { OverlaySyncButton } from '../../overlay-sync/OverlaySyncButton';
+import { renderIcon } from '../../sidebar/PinnedIcons';
+import { NanoKanban } from '../../tickets/NanoKanban';
+import { PrBadge } from '../../ui/PrBadge';
+import { StatusDot } from '../../ui/StatusDot';
 
 interface Props {
   worktree: WorktreeSessionGroup | null;
@@ -29,7 +35,17 @@ interface Props {
 
 function BranchIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--theme-text-secondary)]">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0 text-[var(--theme-text-secondary)]"
+    >
       <circle cx="5" cy="3.5" r="1.5" />
       <circle cx="5" cy="12.5" r="1.5" />
       <circle cx="12" cy="7" r="1.5" />
@@ -38,12 +54,19 @@ function BranchIcon() {
   );
 }
 
-
 // ——— Main header ———
 
-const ICON_BTN = 'flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)] overflow-hidden';
+const ICON_BTN =
+  'flex h-6 w-6 items-center justify-center rounded border border-[var(--theme-border)] bg-[var(--theme-bg-overlay)] transition-all hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-muted)] overflow-hidden';
 
-export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, ticket, splitFocused }: Props) {
+export function WorktreeHeader({
+  worktree,
+  repoOrg,
+  repoName,
+  activeSession,
+  ticket,
+  splitFocused,
+}: Props) {
   const updateTicket = useTicketStore((s) => s.updateTicket);
   const basePath = useSettingsStore((s) => s.settings.basePath);
   const actions = useSettingsStore((s) => s.settings.actions);
@@ -59,9 +82,12 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
     [ticket, basePath],
   );
 
-  const handleStatusChange = useCallback((status: TicketStatus) => {
-    if (ticket) updateTicket(ticket.id, { status });
-  }, [ticket, updateTicket]);
+  const handleStatusChange = useCallback(
+    (status: TicketStatus) => {
+      if (ticket) updateTicket(ticket.id, { status });
+    },
+    [ticket, updateTicket],
+  );
 
   const status = useMemo(
     () => (activeSession ? deriveDisplayStatus(activeSession) : null),
@@ -90,22 +116,32 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
         <BranchIcon />
         {ticket ? (
           <span className="text-sm font-semibold text-[var(--theme-text-primary)] truncate">
-            <span className="font-mono text-[var(--theme-text-secondary)]">#{ticket.displayId}</span>
+            <span className="font-mono text-[var(--theme-text-secondary)]">
+              #{ticket.displayId}
+            </span>
             <span className="ml-1.5">{ticket.title}</span>
           </span>
         ) : (
           <span className="text-sm font-semibold font-mono text-[var(--theme-text-primary)] truncate">
-            {worktree?.branch ?? activeSession?.worktreeBranch ?? activeSession?.tmuxName ?? 'session'}
+            {worktree?.branch ??
+              activeSession?.worktreeBranch ??
+              activeSession?.tmuxName ??
+              'session'}
           </span>
         )}
       </div>
 
       {/* Worktree sync status */}
       {worktree?.worktreeStatus === 'reconciling' && (
-        <span className="shrink-0 text-xs text-[var(--theme-text-faint)] animate-pulse">syncing…</span>
+        <span className="shrink-0 text-xs text-[var(--theme-text-faint)] animate-pulse">
+          syncing…
+        </span>
       )}
-      {(worktree?.worktreeStatus === 'repo_missing' || worktree?.worktreeStatus === 'unavailable') && (
-        <span className="shrink-0 text-xs text-[var(--theme-warning,#f59e0b)]">not available locally</span>
+      {(worktree?.worktreeStatus === 'repo_missing' ||
+        worktree?.worktreeStatus === 'unavailable') && (
+        <span className="shrink-0 text-xs text-[var(--theme-warning,#f59e0b)]">
+          not available locally
+        </span>
       )}
 
       {/* Status dot + label (when session is active) */}
@@ -122,8 +158,21 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
 
       {/* Agent assignee badge */}
       {ticket?.assignee && (
-        <span className={cn('shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium', tint('purple'))}>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+        <span
+          className={cn(
+            'shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+            tint('purple'),
+          )}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            className="flex-shrink-0"
+          >
             <rect x="3" y="5" width="10" height="8" rx="1.5" />
             <path d="M5.5 8.5h1M9.5 8.5h1" />
             <path d="M6 11h4" />
@@ -136,14 +185,22 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
 
       {/* CWD path (when no ticket gives context) */}
       {!ticket && activeSession && (
-        <span className="shrink-0 truncate text-xs text-[var(--theme-text-faint)] max-w-[40%]" title={activeSession.cwd}>
+        <span
+          className="shrink-0 truncate text-xs text-[var(--theme-text-faint)] max-w-[40%]"
+          title={activeSession.cwd}
+        >
           {activeSession.cwd}
         </span>
       )}
 
       <div className="ml-auto flex items-center gap-2">
         {/* Sync overlay — capture gitignored files into the per-repo overlay */}
-        <OverlaySyncButton ticket={ticket} worktree={worktree} repoOrg={repoOrg} repoName={repoName} />
+        <OverlaySyncButton
+          ticket={ticket}
+          worktree={worktree}
+          repoOrg={repoOrg}
+          repoName={repoName}
+        />
         {(pinnedIcons.length > 0 || (workspaceContext && workspaceActions.length > 0)) && (
           <div className="h-4 w-px bg-[var(--theme-border)]" />
         )}
@@ -158,7 +215,10 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
                 onClick={() => executeAction(icon)}
                 title={icon.label}
               >
-                <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
+                <span
+                  className="flex items-center justify-center"
+                  style={{ width: 14, height: 14 }}
+                >
                   {renderIcon(icon, 14)}
                 </span>
               </button>
@@ -166,24 +226,28 @@ export function WorktreeHeader({ worktree, repoOrg, repoName, activeSession, tic
             {pinnedIcons.length > 0 && workspaceContext && workspaceActions.length > 0 && (
               <div className="mx-0.5 h-4 w-px bg-[var(--theme-border)]" />
             )}
-            {workspaceContext && workspaceActions.map((action) => (
-              <button
-                key={action.id}
-                className={ICON_BTN}
-                onClick={() => executeAction(action, workspaceContext)}
-                title={action.label}
-              >
-                {action.icon ? (
-                  <span className="flex items-center justify-center" style={{ width: 14, height: 14 }}>
-                    {renderIcon(action, 14)}
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-semibold leading-none text-[var(--theme-text-secondary)]">
-                    {action.label.charAt(0).toUpperCase()}
-                  </span>
-                )}
-              </button>
-            ))}
+            {workspaceContext &&
+              workspaceActions.map((action) => (
+                <button
+                  key={action.id}
+                  className={ICON_BTN}
+                  onClick={() => executeAction(action, workspaceContext)}
+                  title={action.label}
+                >
+                  {action.icon ? (
+                    <span
+                      className="flex items-center justify-center"
+                      style={{ width: 14, height: 14 }}
+                    >
+                      {renderIcon(action, 14)}
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-semibold leading-none text-[var(--theme-text-secondary)]">
+                      {action.label.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </button>
+              ))}
           </div>
         )}
 

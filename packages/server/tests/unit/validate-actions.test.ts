@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { validateActionDefs } from '@fleex/shared';
 
 const validExec = {
@@ -83,7 +84,9 @@ describe('validateActionDefs', () => {
   it('requires the per-kind field', () => {
     expect(fields([{ ...validExec, kind: 'url', command: undefined }])).toEqual(['actions[0].url']);
     expect(fields([{ ...validExec, command: undefined }])).toEqual(['actions[0].command']);
-    expect(fields([{ ...validExec, kind: 'shell', command: undefined }])).toEqual(['actions[0].script']);
+    expect(fields([{ ...validExec, kind: 'shell', command: undefined }])).toEqual([
+      'actions[0].script',
+    ]);
   });
 
   // ——— Placeholders resolve against a known vocabulary ———
@@ -120,7 +123,10 @@ describe('validateActionDefs', () => {
   it('rejects duplicate param names', () => {
     const action = {
       ...validExec,
-      params: [{ name: 'env', type: 'string' }, { name: 'env', type: 'string' }],
+      params: [
+        { name: 'env', type: 'string' },
+        { name: 'env', type: 'string' },
+      ],
     };
     expect(fields([action])).toContain('actions[0].params[1].name');
   });

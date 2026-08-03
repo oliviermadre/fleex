@@ -1,7 +1,8 @@
 import { userInfo } from 'node:os';
+
 import { TokenStore } from './auth';
-import { createGatewayServer } from './server';
 import { logAlways, logError, getVerbosity } from './logger';
+import { createGatewayServer } from './server';
 
 const PORT = parseInt(process.env['GATEWAY_PORT'] ?? '3001', 10);
 const HOSTNAME = process.env['GATEWAY_BIND'] ?? '127.0.0.1';

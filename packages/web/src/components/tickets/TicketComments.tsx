@@ -1,6 +1,4 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react';
-import rehypeHighlight from 'rehype-highlight';
-import remarkGfm from 'remark-gfm';
 
 import { inferModelCapabilities, resolveEffortLevel } from '@fleex/shared';
 import type {
@@ -57,7 +55,6 @@ import { FailedStepRetryPanel } from '../workflows/FailedStepRetryPanel';
 import { HumanGateResolvePanel } from '../workflows/HumanGateResolvePanel';
 import { NeedsReviewRespondPanel } from '../workflows/NeedsReviewRespondPanel';
 import { selectWaitingInputCards } from '../workflows/waitingInputCards';
-
 
 import { selectCrashedMentionCards, crashReasonLabel } from './crashedMentionCards';
 import { FloatingExecutionPanel } from './ExecutionModal';

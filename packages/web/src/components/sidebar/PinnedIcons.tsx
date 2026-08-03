@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
+
 import type { ActionDef } from '@fleex/shared';
-import { globalActions, useSettingsStore } from '../../stores/settingsStore';
+
 import { cn } from '../../lib/cn';
+import { globalActions, useSettingsStore } from '../../stores/settingsStore';
 
 interface PinnedIconButtonProps {
   icon: ActionDef;
@@ -20,11 +22,21 @@ export function renderIcon(icon: Pick<ActionDef, 'icon' | 'iconType' | 'label'>,
   }
 
   if (icon.iconType === 'base64') {
-    return <img src={`data:image/png;base64,${icon.icon}`} alt={icon.label} width={size} height={size} className="object-contain" />;
+    return (
+      <img
+        src={`data:image/png;base64,${icon.icon}`}
+        alt={icon.label}
+        width={size}
+        height={size}
+        className="object-contain"
+      />
+    );
   }
 
   if (icon.iconType === 'url' || icon.iconType === 'path') {
-    return <img src={icon.icon} alt={icon.label} width={size} height={size} className="object-contain" />;
+    return (
+      <img src={icon.icon} alt={icon.label} width={size} height={size} className="object-contain" />
+    );
   }
 
   return null;
@@ -37,7 +49,7 @@ export function PinnedIconButton({ icon, collapsed }: PinnedIconButtonProps) {
     <button
       className={cn(
         'flex items-center justify-center cursor-pointer text-[var(--theme-text-primary)] transition-all bg-[var(--theme-accent-muted)] hover:bg-[var(--theme-accent)] hover:shadow-[0_0_12px_var(--theme-accent-muted)] active:bg-[var(--theme-accent)] active:shadow-[0_0_16px_var(--theme-accent-muted)]',
-        collapsed ? 'h-9 px-3 rounded-md' : 'h-10 px-4 rounded-lg'
+        collapsed ? 'h-9 px-3 rounded-md' : 'h-10 px-4 rounded-lg',
       )}
       onClick={() => executeAction(icon)}
       title={icon.label}

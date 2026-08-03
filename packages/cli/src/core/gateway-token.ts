@@ -1,6 +1,7 @@
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+
 import { FLEEX_HOME } from './instance.ts';
 
 /**

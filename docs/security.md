@@ -9,13 +9,13 @@ parcours mobile Tailscale.
 
 ## Les cinq couches
 
-| Couche | Effet |
-|---|---|
-| Bind loopback | Serveur, gateway et companion n'écoutent que sur `127.0.0.1` |
-| Politique d'origine | CORS restreint aux origines légitimes |
-| Garde `Sec-Fetch-Site` | Les mutations cross-site sont refusées en 403 |
-| helmet + CSP | En-têtes de réponse durcis |
-| Cookies | `SameSite=Strict` sur la session, `Secure` dès que HTTPS |
+| Couche                 | Effet                                                        |
+| ---------------------- | ------------------------------------------------------------ |
+| Bind loopback          | Serveur, gateway et companion n'écoutent que sur `127.0.0.1` |
+| Politique d'origine    | CORS restreint aux origines légitimes                        |
+| Garde `Sec-Fetch-Site` | Les mutations cross-site sont refusées en 403                |
+| helmet + CSP           | En-têtes de réponse durcis                                   |
+| Cookies                | `SameSite=Strict` sur la session, `Secure` dès que HTTPS     |
 
 ## 1. Bind loopback
 
@@ -86,7 +86,7 @@ Ordre d'évaluation :
 6. Pas de `Sec-Fetch-Site` mais un `Origin` → politique d'origine
 7. Ni l'un ni l'autre → autorisé (CLI, MCP, hooks Claude Code, agents SDK)
 
-La règle 2 est celle qui ferme le *cross-site WebSocket hijacking* : un upgrade
+La règle 2 est celle qui ferme le _cross-site WebSocket hijacking_ : un upgrade
 est un `GET`, il échapperait sinon à la garde, et `/ws` donne accès aux PTY.
 
 La règle 7 peut surprendre. Ces clients ne portent pas de credentials ambiants
@@ -112,17 +112,17 @@ Le serveur de dev Vite reçoit les en-têtes non-CSP uniquement : le HMR exige
 
 ## 5. Cookies
 
-| Cookie | `SameSite` | `Secure` | Durée |
-|---|---|---|---|
-| `fleex_session` | `Strict` | si HTTPS | 30 jours |
-| `fleex_oauth_state` | `Lax` | si HTTPS | 10 min |
+| Cookie              | `SameSite` | `Secure` | Durée    |
+| ------------------- | ---------- | -------- | -------- |
+| `fleex_session`     | `Strict`   | si HTTPS | 30 jours |
+| `fleex_oauth_state` | `Lax`      | si HTTPS | 10 min   |
 
 `Secure` est **conditionnel** et non inconditionnel : Safari refuse les cookies
 `Secure` sur `http://localhost`. La valeur est dérivée de `X-Forwarded-Proto`
 (ou du protocole de la requête), avec un override `FLEEX_COOKIE_SECURE=1|0`.
 
 Le cookie d'état OAuth reste en **`Lax`** délibérément. Le callback du provider
-est une navigation top-level *cross-site* depuis `github.com` : en `Strict`, le
+est une navigation top-level _cross-site_ depuis `github.com` : en `Strict`, le
 cookie ne serait pas envoyé, la vérification anti-replay échouerait, et le login
 serait cassé.
 
@@ -132,14 +132,14 @@ serait cassé.
 
 ## Variables d'environnement
 
-| Variable | Défaut | Effet |
-|---|---|---|
-| `FLEEX_HOST` | `127.0.0.1` | Bind du serveur Fastify |
-| `GATEWAY_HOST` | `127.0.0.1` | Bind du host-gateway |
-| `FLEEX_SIDEPANEL_HOST` | `127.0.0.1` | Bind du companion |
-| `FLEEX_ALLOWED_ORIGINS` | *(vide)* | Origines exactes supplémentaires, séparées par des virgules |
-| `FLEEX_COOKIE_SECURE` | *(auto)* | `1` force `Secure`, `0` le désactive |
-| `FLEEX_ENABLE_HSTS` | *(off)* | `1` active HSTS |
+| Variable                | Défaut      | Effet                                                       |
+| ----------------------- | ----------- | ----------------------------------------------------------- |
+| `FLEEX_HOST`            | `127.0.0.1` | Bind du serveur Fastify                                     |
+| `GATEWAY_HOST`          | `127.0.0.1` | Bind du host-gateway                                        |
+| `FLEEX_SIDEPANEL_HOST`  | `127.0.0.1` | Bind du companion                                           |
+| `FLEEX_ALLOWED_ORIGINS` | _(vide)_    | Origines exactes supplémentaires, séparées par des virgules |
+| `FLEEX_COOKIE_SECURE`   | _(auto)_    | `1` force `Secure`, `0` le désactive                        |
+| `FLEEX_ENABLE_HSTS`     | _(off)_     | `1` active HSTS                                             |
 
 ## Limites connues
 

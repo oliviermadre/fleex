@@ -1,6 +1,8 @@
 import { buildTicketWorkspaceId } from '../utils/workspace.js';
-import type { Ticket } from '../types/ticket.js';
+
 import { getPipe } from './pipes/index.js';
+
+import type { Ticket } from '../types/ticket.js';
 
 /**
  * Template context for workspace actions. A workspace is the ticket's folder
@@ -70,9 +72,7 @@ export function resolveTemplate(template: string, context: Record<string, string
   });
 }
 
-export type StrictTemplateResult =
-  | { ok: true; value: string }
-  | { ok: false; error: string };
+export type StrictTemplateResult = { ok: true; value: string } | { ok: false; error: string };
 
 /**
  * Strict resolution: an unknown variable or pipe fails instead of silently

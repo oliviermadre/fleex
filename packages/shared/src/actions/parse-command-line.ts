@@ -19,7 +19,23 @@
  * templates don't spuriously force shell mode.
  */
 const SHELL_METACHARS = new Set([
-  '|', '&', ';', '<', '>', '(', ')', '$', '`', '*', '?', '[', ']', '{', '}', '~', '!',
+  '|',
+  '&',
+  ';',
+  '<',
+  '>',
+  '(',
+  ')',
+  '$',
+  '`',
+  '*',
+  '?',
+  '[',
+  ']',
+  '{',
+  '}',
+  '~',
+  '!',
 ]);
 
 /** Inside double quotes the shell still expands these — quoting is not enough. */

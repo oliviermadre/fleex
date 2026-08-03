@@ -1,4 +1,9 @@
-import type { MentionTargetType, MentionExecutionMode, HookResult, ActionScope } from '@fleex/shared';
+import type {
+  MentionTargetType,
+  MentionExecutionMode,
+  HookResult,
+  ActionScope,
+} from '@fleex/shared';
 
 // ── Base ──
 

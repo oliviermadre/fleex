@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import type { Session } from '@fleex/shared';
 
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { usePanelStore } from '../../stores/panelStore';
 import { useScratchpadStore } from '../../stores/scratchpadStore';
 import { useSessionStore } from '../../stores/sessionStore';
@@ -11,20 +12,18 @@ import { useSkillStore } from '../../stores/skillStore';
 import { useTicketStore } from '../../stores/ticketStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useWorkflowTemplateStore } from '../../stores/workflowTemplateStore';
-import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
-
-import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
-import { EmptyState } from './EmptyState';
-import { UnifiedWorktreePanel } from './UnifiedWorktreePanel';
-
-import { KanbanBoard } from '../tickets/KanbanBoard';
-import { TicketDetail } from '../tickets/TicketDetail';
-import { WorkflowsUnavailableState } from '../workflows/WorkflowsUnavailableState';
 import { AssistantConversation } from '../assistant/AssistantConversation';
 import { DashboardView } from '../dashboard/DashboardView';
 import { ListFocusView } from '../list-focus/ListFocusView';
+import { RepositoryEmptyState } from '../repository-dashboard/RepositoryEmptyState';
+import { ScratchpadEmptyState } from '../scratchpad/ScratchpadEmptyState';
+import { KanbanBoard } from '../tickets/KanbanBoard';
+import { TicketDetail } from '../tickets/TicketDetail';
+import { WorkflowsUnavailableState } from '../workflows/WorkflowsUnavailableState';
 
+import { EmptyState } from './EmptyState';
 import { PanelFallback } from './PanelFallback';
+import { UnifiedWorktreePanel } from './UnifiedWorktreePanel';
 
 // ── Lazy panels ───────────────────────────────────────────────────────────────
 //
@@ -71,7 +70,6 @@ const ExecutionLogPage = lazy(() =>
 const DocumentsPage = lazy(() =>
   import('../documents/DocumentsPage').then((m) => ({ default: m.DocumentsPage })),
 );
-import { useCapabilities } from '../../hooks/useCapabilities';
 
 function GroupEmptyCell() {
   return (

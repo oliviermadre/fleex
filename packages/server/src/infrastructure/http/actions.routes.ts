@@ -1,6 +1,7 @@
-import type { FastifyInstance } from 'fastify';
 import type { RunActionRequest } from '@fleex/shared';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 /**
  * Replaces `POST /api/exec`.

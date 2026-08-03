@@ -6,8 +6,15 @@
  * the same introspection `fleex documentation` performs — reusing the live
  * command tree means new CLI commands become tools with zero extra wiring.
  */
+import type {
+  ArgSpec,
+  GeneratedTool,
+  GenerateOptions,
+  JsonSchema,
+  JsonSchemaProp,
+  OptSpec,
+} from './types.ts';
 import type { Command, Option, Argument } from 'commander';
-import type { ArgSpec, GeneratedTool, GenerateOptions, JsonSchema, JsonSchemaProp, OptSpec } from './types.ts';
 
 /** Top-level groups exposed by default. Infra commands stay off the surface. */
 export const DEFAULT_INCLUDE = ['ticket', 'epic'] as const;
@@ -22,9 +29,22 @@ export const DEFAULT_INCLUDE = ['ticket', 'epic'] as const;
  */
 const READ_ONLY_LEAVES = new Set([
   // generic read verbs
-  'list', 'ls', 'show', 'view', 'get', 'status', 'logs', 'documentation',
+  'list',
+  'ls',
+  'show',
+  'view',
+  'get',
+  'status',
+  'logs',
+  'documentation',
   // noun-shaped listings (`ticket comments`, `repo branches`, …)
-  'boards', 'comments', 'mentions', 'branches', 'worktrees', 'issues', 'pr',
+  'boards',
+  'comments',
+  'mentions',
+  'branches',
+  'worktrees',
+  'issues',
+  'pr',
 ]);
 
 /**
@@ -33,7 +53,14 @@ const READ_ONLY_LEAVES = new Set([
  * `remove-board` → [REMOVE, board].
  */
 const DESTRUCTIVE_SEGMENTS = new Set([
-  'delete', 'rm', 'remove', 'unlink', 'unregister', 'unexport', 'revoke', 'kill',
+  'delete',
+  'rm',
+  'remove',
+  'unlink',
+  'unregister',
+  'unexport',
+  'revoke',
+  'kill',
 ]);
 
 /** `comment-delete` → ['comment', 'delete'] */
@@ -130,7 +157,9 @@ function readOptions(cmd: Command): OptSpec[] {
     // Commander marks `<v...>` as variadic, but the common repeatable pattern
     // `.option('--tag <t>', desc, collectFn, [])` is not — its only signal is an
     // array default. Treat either as array-valued.
-    const variadic = Boolean(o.variadic) || Array.isArray((o as unknown as { defaultValue?: unknown }).defaultValue);
+    const variadic =
+      Boolean(o.variadic) ||
+      Array.isArray((o as unknown as { defaultValue?: unknown }).defaultValue);
     specs.push({ key: o.attributeName(), flag, takesValue, variadic });
   }
   return specs;
@@ -159,7 +188,11 @@ function buildSchema(cmd: Command, args: ArgSpec[], options: OptSpec[]): JsonSch
     if (!spec.takesValue) {
       properties[spec.key] = { type: 'boolean', ...(desc ? { description: desc } : {}) };
     } else if (spec.variadic) {
-      properties[spec.key] = { type: 'array', items: { type: 'string' }, ...(desc ? { description: desc } : {}) };
+      properties[spec.key] = {
+        type: 'array',
+        items: { type: 'string' },
+        ...(desc ? { description: desc } : {}),
+      };
     } else {
       properties[spec.key] = { type: 'string', ...(desc ? { description: desc } : {}) };
     }

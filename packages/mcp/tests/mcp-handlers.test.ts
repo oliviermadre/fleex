@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
+import { describe, it, expect } from 'vitest';
+
 import { generateTools } from '../src/generator.ts';
 import { listTools, callToolResult, toMcpTool, resultText } from '../src/mcp-handlers.ts';
+
 import type { ExecResult } from '../src/executor.ts';
 
 function fakeProgram(): Command {
@@ -9,7 +11,10 @@ function fakeProgram(): Command {
   const ticket = root.command('ticket').description('Manage tickets');
   ticket.command('list').description('List tickets').option('--status <s>', 'status');
   ticket.command('create').description('Create a ticket').requiredOption('--title <t>', 'title');
-  ticket.command('delete').description('Delete a ticket').argument('<id>', 'id')
+  ticket
+    .command('delete')
+    .description('Delete a ticket')
+    .argument('<id>', 'id')
     .option('-f, --force', 'Skip confirmation');
   ticket.command('comment-delete').description('Delete a comment').argument('<id>', 'id');
   ticket.command('update').description('Update a ticket').argument('<id>', 'id');
@@ -66,8 +71,13 @@ describe('resultText', () => {
     // execFile kills the child without an exit code, so the generic branch
     // reports "exited with code 1" — a message that lies about the cause.
     const res: ExecResult = {
-      ok: false, exitCode: 1, stdout: '', stderr: '', argv: ['ticket', 'link', '42'],
-      timedOut: true, timeoutMs: 30_000,
+      ok: false,
+      exitCode: 1,
+      stdout: '',
+      stderr: '',
+      argv: ['ticket', 'link', '42'],
+      timedOut: true,
+      timeoutMs: 30_000,
     };
     expect(resultText(res)).toContain('timed out');
     expect(resultText(res)).toContain('30000');
@@ -77,14 +87,30 @@ describe('resultText', () => {
 
 describe('callToolResult', () => {
   const okExec = async (): Promise<ExecResult> => ({
-    ok: true, exitCode: 0, stdout: '{"displayId":42}', stderr: '', data: { displayId: 42 }, argv: [], timeoutMs: 30_000,
+    ok: true,
+    exitCode: 0,
+    stdout: '{"displayId":42}',
+    stderr: '',
+    data: { displayId: 42 },
+    argv: [],
+    timeoutMs: 30_000,
   });
   const failExec = async (): Promise<ExecResult> => ({
-    ok: false, exitCode: 1, stdout: '', stderr: 'Stack not running', argv: [], timeoutMs: 30_000,
+    ok: false,
+    exitCode: 1,
+    stdout: '',
+    stderr: 'Stack not running',
+    argv: [],
+    timeoutMs: 30_000,
   });
 
   it('returns parsed JSON data as pretty text on success', async () => {
-    const res = await callToolResult(tools, 'fleex_ticket_create', { title: 'x' }, { exec: okExec });
+    const res = await callToolResult(
+      tools,
+      'fleex_ticket_create',
+      { title: 'x' },
+      { exec: okExec },
+    );
     expect(res.isError).toBe(false);
     expect(JSON.parse(res.content[0]!.text)).toEqual({ displayId: 42 });
   });
@@ -103,7 +129,11 @@ describe('callToolResult', () => {
 
   it('forces --json on via the exec options', async () => {
     let seenJson: boolean | undefined;
-    const spyExec = async (_t: unknown, _i: unknown, opts: { json?: boolean }): Promise<ExecResult> => {
+    const spyExec = async (
+      _t: unknown,
+      _i: unknown,
+      opts: { json?: boolean },
+    ): Promise<ExecResult> => {
       seenJson = opts.json;
       return { ok: true, exitCode: 0, stdout: 'OK', stderr: '', argv: [], timeoutMs: 30_000 };
     };
@@ -116,7 +146,11 @@ describe('callToolResult confirmation gate', () => {
   /** Records whether the CLI was reached, and with which options. */
   function spy() {
     const calls: Array<{ assumeYes?: boolean }> = [];
-    const exec = async (_t: unknown, _i: unknown, opts: { assumeYes?: boolean }): Promise<ExecResult> => {
+    const exec = async (
+      _t: unknown,
+      _i: unknown,
+      opts: { assumeYes?: boolean },
+    ): Promise<ExecResult> => {
       calls.push({ assumeYes: opts.assumeYes });
       return { ok: true, exitCode: 0, stdout: 'OK', stderr: '', argv: [], timeoutMs: 30_000 };
     };
@@ -136,7 +170,12 @@ describe('callToolResult confirmation gate', () => {
 
   it('runs and forwards assumeYes once the client owns approval', async () => {
     const { calls, exec } = spy();
-    const res = await callToolResult(tools, 'fleex_ticket_delete', { id: '5' }, { exec, assumeYes: true });
+    const res = await callToolResult(
+      tools,
+      'fleex_ticket_delete',
+      { id: '5' },
+      { exec, assumeYes: true },
+    );
     expect(res.isError).toBe(false);
     expect(calls).toEqual([{ assumeYes: true }]);
   });

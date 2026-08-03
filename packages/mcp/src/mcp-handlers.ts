@@ -7,6 +7,7 @@
  */
 import { execFleex, type ExecOptions, type ExecResult } from './executor.ts';
 import { isDestructiveLeaf } from './generator.ts';
+
 import type { GeneratedTool } from './types.ts';
 
 export interface McpToolDef {
@@ -45,7 +46,11 @@ export function listTools(tools: GeneratedTool[]): { tools: McpToolDef[] } {
 
 export interface CallContext {
   /** Override the executor (tests). Defaults to the real `execFleex`. */
-  exec?: (tool: GeneratedTool, input: Record<string, unknown>, opts: ExecOptions) => Promise<ExecResult>;
+  exec?: (
+    tool: GeneratedTool,
+    input: Record<string, unknown>,
+    opts: ExecOptions,
+  ) => Promise<ExecResult>;
   /** Exec options (bin, prefixArgs, workspace, timeout). `json` is forced on. */
   execOpts?: ExecOptions;
   /**
@@ -85,12 +90,15 @@ export async function callToolResult(
   // front is the only accurate answer, and it starts no process at all.
   if (!assumeYes && tool.confirmFlag) {
     return {
-      content: [{
-        type: 'text',
-        text: `${tool.name} needs an interactive confirmation that this non-interactive MCP `
-          + 'server cannot answer. Start it with `fleex mcp start --assume-yes` '
-          + '(or FLEEX_MCP_ASSUME_YES=1) if your MCP client is the approval authority.',
-      }],
+      content: [
+        {
+          type: 'text',
+          text:
+            `${tool.name} needs an interactive confirmation that this non-interactive MCP ` +
+            'server cannot answer. Start it with `fleex mcp start --assume-yes` ' +
+            '(or FLEEX_MCP_ASSUME_YES=1) if your MCP client is the approval authority.',
+        },
+      ],
       isError: true,
     };
   }

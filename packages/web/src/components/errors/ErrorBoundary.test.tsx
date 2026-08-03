@@ -5,7 +5,6 @@ import { __resetErrorReporterForTests } from '../../services/errorReporter';
 
 import { ErrorBoundary } from './ErrorBoundary';
 
-
 /**
  * The boundary exists so a render crash costs one region instead of the whole
  * app. These tests pin the three behaviours that make that true: it catches,

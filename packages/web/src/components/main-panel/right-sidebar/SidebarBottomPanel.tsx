@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 
-import { useTerminal } from '../../../hooks/useTerminal';
 import * as api from '../../../services/api';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSidebarTerminalsStore } from '../../../stores/sidebarTerminalsStore';

@@ -9,6 +9,7 @@ import {
 } from '../utils/statistics/constants.js';
 import { computeCumulativeFlow } from '../utils/statistics/cumulative-flow.js';
 import { buildDataset, type RawStatsData } from '../utils/statistics/dataset.js';
+import { computeFlowMetrics } from '../utils/statistics/flow-metrics.js';
 import {
   computeAgentLeaderboard,
   computePanelLeaderboard,
@@ -16,22 +17,20 @@ import {
   computeWorkflowLeaderboard,
 } from '../utils/statistics/leaderboards.js';
 import { sliceDataset } from '../utils/statistics/slice.js';
-
 import { computeSummary } from '../utils/statistics/summary.js';
+import { computeTimeSeries } from '../utils/statistics/time-series.js';
+
 import type { AgentEventStorePort } from '../ports/agent-event-store.port.js';
 import type { CommentStorePort } from '../ports/comment-store.port.js';
-import type { TicketStorePort } from '../ports/ticket-store.port.js';
-import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { DeliverableStorePort } from '../ports/deliverable-store.port.js';
+import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
+import type { LoggerPort } from '../ports/logger.port.js';
+import type { MentionStorePort } from '../ports/mention-store.port.js';
 import type { PersonaStorePort } from '../ports/persona-store.port.js';
 import type { SessionStorePort } from '../ports/session-store.port.js';
 import type { SkillStorePort } from '../ports/skill-store.port.js';
-import type { DomainEventLogStorePort } from '../ports/domain-event-log-store.port.js';
+import type { TicketStorePort } from '../ports/ticket-store.port.js';
 import type { WorkflowRunStorePort } from '../ports/workflow-run-store.port.js';
-import type { LoggerPort } from '../ports/logger.port.js';
-
-import { computeTimeSeries } from '../utils/statistics/time-series.js';
-import { computeFlowMetrics } from '../utils/statistics/flow-metrics.js';
 
 interface CacheEntry {
   data: StatisticsResponse;

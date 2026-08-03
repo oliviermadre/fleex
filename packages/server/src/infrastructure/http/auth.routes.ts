@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
-import type { Container } from '../container.js';
+
 import {
   getGitHubConfig,
   getGoogleConfig,
@@ -9,7 +8,11 @@ import {
   fetchGoogleUser,
   type OAuthProviderConfig,
 } from '../auth/oauth-providers.js';
+
 import { buildCookie, isSecureRequest } from './cookies.js';
+
+import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 const SESSION_COOKIE = 'fleex_session';
 const STATE_COOKIE = 'fleex_oauth_state';

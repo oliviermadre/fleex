@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+
 import { buildCookie, isSecureRequest } from '../../src/infrastructure/http/cookies.js';
 
 afterEach(() => {
@@ -11,7 +12,9 @@ describe('isSecureRequest', () => {
   });
 
   it('is true behind a TLS-terminating proxy (X-Forwarded-Proto: https), which is the Tailscale serve case', () => {
-    expect(isSecureRequest({ headers: { 'x-forwarded-proto': 'https' }, protocol: 'http' })).toBe(true);
+    expect(isSecureRequest({ headers: { 'x-forwarded-proto': 'https' }, protocol: 'http' })).toBe(
+      true,
+    );
   });
 
   it('reads only the first hop of a comma-joined X-Forwarded-Proto, the value the browser actually used', () => {
@@ -40,21 +43,21 @@ describe('isSecureRequest', () => {
 
 describe('buildCookie', () => {
   it('emits the hardened session cookie: HttpOnly, SameSite=Strict and Secure behind HTTPS', () => {
-    expect(buildCookie('fleex_session', 'abc', { maxAge: 2592000, sameSite: 'Strict', secure: true })).toBe(
-      'fleex_session=abc; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=2592000',
-    );
+    expect(
+      buildCookie('fleex_session', 'abc', { maxAge: 2592000, sameSite: 'Strict', secure: true }),
+    ).toBe('fleex_session=abc; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=2592000');
   });
 
   it('omits Secure on plain HTTP so the cookie is not silently dropped', () => {
-    expect(buildCookie('fleex_session', 'abc', { maxAge: 2592000, sameSite: 'Strict', secure: false })).toBe(
-      'fleex_session=abc; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000',
-    );
+    expect(
+      buildCookie('fleex_session', 'abc', { maxAge: 2592000, sameSite: 'Strict', secure: false }),
+    ).toBe('fleex_session=abc; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000');
   });
 
   it('keeps the OAuth state cookie on SameSite=Lax: under Strict it would not be sent on the cross-site callback from the provider and login would break', () => {
-    expect(buildCookie('fleex_oauth_state', 'deadbeef', { maxAge: 600, sameSite: 'Lax', secure: false })).toBe(
-      'fleex_oauth_state=deadbeef; Path=/; HttpOnly; SameSite=Lax; Max-Age=600',
-    );
+    expect(
+      buildCookie('fleex_oauth_state', 'deadbeef', { maxAge: 600, sameSite: 'Lax', secure: false }),
+    ).toBe('fleex_oauth_state=deadbeef; Path=/; HttpOnly; SameSite=Lax; Max-Age=600');
   });
 
   it('builds an erasure cookie with Max-Age=0', () => {

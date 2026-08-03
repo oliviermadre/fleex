@@ -32,7 +32,11 @@ import { buildProgram } from '@fleex/cli/program';
 import { generateTools, execFleex } from '@fleex/mcp';
 
 const tools = generateTools(await buildProgram());
-const result = await execFleex(tools.find(t => t.name === 'fleex_ticket_list')!, {}, { json: true });
+const result = await execFleex(
+  tools.find((t) => t.name === 'fleex_ticket_list')!,
+  {},
+  { json: true },
+);
 ```
 
 ## Run as an MCP server
@@ -85,11 +89,11 @@ claude mcp add fleex -- bunx @fleex/mcp
 
 ### Environment
 
-| Var | Meaning |
-|---|---|
-| `FLEEX_WORKSPACE` | Target workspace, injected as `--workspace` |
-| `FLEEX_MCP_BIN` | fleex binary (default `fleex`) |
-| `FLEEX_MCP_PREFIX` | Space-separated args before the fleex argv (e.g. `run …index.ts` for bun) |
-| `FLEEX_MCP_INCLUDE` | Comma-separated top-level groups to expose (default `ticket,epic`) |
+| Var                    | Meaning                                                                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FLEEX_WORKSPACE`      | Target workspace, injected as `--workspace`                                                                                                    |
+| `FLEEX_MCP_BIN`        | fleex binary (default `fleex`)                                                                                                                 |
+| `FLEEX_MCP_PREFIX`     | Space-separated args before the fleex argv (e.g. `run …index.ts` for bun)                                                                      |
+| `FLEEX_MCP_INCLUDE`    | Comma-separated top-level groups to expose (default `ticket,epic`)                                                                             |
 | `FLEEX_MCP_ASSUME_YES` | Allow destructive tools to skip the CLI confirmation prompt (`1`/`true`/`yes`). Off by default; your MCP client becomes the approval authority |
-| `FLEEX_MCP_TIMEOUT_MS` | Default per-tool execution budget (default `30000`). Commands with a declared budget (`ticket link`, `ticket import`) keep theirs |
+| `FLEEX_MCP_TIMEOUT_MS` | Default per-tool execution budget (default `30000`). Commands with a declared budget (`ticket link`, `ticket import`) keep theirs              |

@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
-import { generateTools } from '../src/generator.ts';
+import { describe, it, expect } from 'vitest';
+
 import { execFleex, runFleexArgv, DEFAULT_TIMEOUT_MS } from '../src/executor.ts';
+import { generateTools } from '../src/generator.ts';
+
 import type { GeneratedTool } from '../src/types.ts';
 
 // Use the current node binary as a stand-in for `fleex`, echoing its argv so we
@@ -60,10 +62,14 @@ describe('execFleex', () => {
       { bin: NODE, prefixArgs: ECHO_ARGV, workspace: 'acme' },
     );
     expect(JSON.parse(res.stdout)).toEqual([
-      'ticket', 'create',
-      '--title', 'Fix bug',
-      '--description', 'multi\nline',
-      '--workspace', 'acme',
+      'ticket',
+      'create',
+      '--title',
+      'Fix bug',
+      '--description',
+      'multi\nline',
+      '--workspace',
+      'acme',
     ]);
   });
 
@@ -102,10 +108,18 @@ describe('execFleex', () => {
     // A per-command budget is a deliberate statement about that command; the
     // ambient default is only a fallback, so it must not shorten it.
     const tool = { ...createTool(), timeoutMs: 5_000 };
-    const res = await execFleex(tool, { title: 'x' }, { bin: NODE, prefixArgs: ECHO_ARGV, timeoutMs: 100 });
+    const res = await execFleex(
+      tool,
+      { title: 'x' },
+      { bin: NODE, prefixArgs: ECHO_ARGV, timeoutMs: 100 },
+    );
     expect(res.timeoutMs).toBe(5_000);
 
-    const ambient = await execFleex(createTool(), { title: 'x' }, { bin: NODE, prefixArgs: ECHO_ARGV, timeoutMs: 7_000 });
+    const ambient = await execFleex(
+      createTool(),
+      { title: 'x' },
+      { bin: NODE, prefixArgs: ECHO_ARGV, timeoutMs: 7_000 },
+    );
     expect(ambient.timeoutMs).toBe(7_000);
   });
 });

@@ -1,6 +1,8 @@
 import { ACTION_DEFAULT_TIMEOUT_MS } from '../types/action.js';
-import type { ActionDef, ActionIconType, ActionScope } from '../types/action.js';
+
 import { extractPlaceholders, parseCommandLine } from './parse-command-line.js';
+
+import type { ActionDef, ActionIconType, ActionScope } from '../types/action.js';
 
 /** Shape of the two legacy arrays this migration folds into one registry. */
 interface LegacyAction {

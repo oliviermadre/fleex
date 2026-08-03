@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   evaluateRequest,
   hasBearerToken,
@@ -20,7 +21,9 @@ function req(partial: Partial<GuardInput> = {}): GuardInput {
 describe('rule 1 — preflight', () => {
   it('lets OPTIONS through even from a cross-site origin: @fastify/cors owns that decision and a preflight never reaches a handler', () => {
     expect(
-      evaluateRequest(req({ method: 'OPTIONS', origin: 'https://evil.com', secFetchSite: 'cross-site' })),
+      evaluateRequest(
+        req({ method: 'OPTIONS', origin: 'https://evil.com', secFetchSite: 'cross-site' }),
+      ),
     ).toEqual({ allow: true });
   });
 });
@@ -56,7 +59,12 @@ describe('rule 2 — WebSocket upgrade', () => {
     // Same input as the blocked case above but stated as the regression it guards:
     // if rule 2 ever moved below rule 4, this would return allow.
     const r = evaluateRequest(
-      req({ method: 'GET', origin: 'https://evil.com', isWebSocketUpgrade: true, secFetchSite: 'cross-site' }),
+      req({
+        method: 'GET',
+        origin: 'https://evil.com',
+        isWebSocketUpgrade: true,
+        secFetchSite: 'cross-site',
+      }),
     );
     expect(r).toEqual({ allow: false, reason: 'websocket upgrade from disallowed origin' });
   });
@@ -66,16 +74,24 @@ describe('rule 3 — bearer token', () => {
   it('allows a cross-site mutation carrying a bearer token: it is not ambient credentials, so a third-party page cannot mint one', () => {
     expect(
       evaluateRequest(
-        req({ method: 'POST', origin: 'https://evil.com', secFetchSite: 'cross-site', hasBearerToken: true }),
+        req({
+          method: 'POST',
+          origin: 'https://evil.com',
+          secFetchSite: 'cross-site',
+          hasBearerToken: true,
+        }),
       ),
     ).toEqual({ allow: true });
   });
 });
 
 describe('rule 4 — safe methods', () => {
-  it.each(['GET', 'HEAD'])('allows a cross-site %s: no read route on this server mutates state', (method) => {
-    expect(evaluateRequest(req({ method, secFetchSite: 'cross-site' }))).toEqual({ allow: true });
-  });
+  it.each(['GET', 'HEAD'])(
+    'allows a cross-site %s: no read route on this server mutates state',
+    (method) => {
+      expect(evaluateRequest(req({ method, secFetchSite: 'cross-site' }))).toEqual({ allow: true });
+    },
+  );
 });
 
 describe('rule 5 — Sec-Fetch-Site', () => {

@@ -6,8 +6,7 @@ export interface ActionParamError {
 }
 
 export type ActionParamResult =
-  | { ok: true; values: Record<string, string> }
-  | { ok: false; errors: ActionParamError[] };
+  { ok: true; values: Record<string, string> } | { ok: false; errors: ActionParamError[] };
 
 /**
  * Validates the caller-supplied params against the action's declared schema and

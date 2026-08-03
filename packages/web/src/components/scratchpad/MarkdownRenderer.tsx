@@ -1,9 +1,4 @@
 import { memo, useMemo, useState, Children } from 'react';
-import Markdown from 'react-markdown';
-import rehypeHighlight from 'rehype-highlight';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import remarkGfm from 'remark-gfm';
 
 import { useColorMode } from '../../hooks/useActiveTheme';
 import { LazyMarkdown } from '../markdown/LazyMarkdown';

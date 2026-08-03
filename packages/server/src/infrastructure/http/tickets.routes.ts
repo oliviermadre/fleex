@@ -1,23 +1,52 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
-import type { TicketStatus, TicketType, BoardWithCounts, CreateTicketRequest, UpdateTicketRequest, CreateBoardRequest, UpdateBoardRequest, DeliverableType, DeliverableStatus } from '@fleex/shared';
+
 import { TICKET_STATUSES } from '@fleex/shared';
+import type {
+  TicketStatus,
+  TicketType,
+  BoardWithCounts,
+  CreateTicketRequest,
+  UpdateTicketRequest,
+  CreateBoardRequest,
+  UpdateBoardRequest,
+  DeliverableType,
+  DeliverableStatus,
+} from '@fleex/shared';
+import type {
+  MentionExecutionMode,
+  MentionStatus,
+  UpdateTicketExecutionConfigRequest,
+} from '@fleex/shared';
+
+import { ensureTicketWorkspace } from '../../application/services/ensure-ticket-workspace.js';
 import { BoardEntity } from '../../domain/entities/board.entity.js';
-import { TicketEntity } from '../../domain/entities/ticket.entity.js';
 import { TicketActivityEntity } from '../../domain/entities/ticket-activity.entity.js';
 import { TicketCommentEntity } from '../../domain/entities/ticket-comment.entity.js';
-import { buildTicketBranchName, buildTicketWorkspaceId } from '../../domain/services/branch-utils.js';
-import { ensureTicketWorkspace } from '../../application/services/ensure-ticket-workspace.js';
+import { TicketEntity } from '../../domain/entities/ticket.entity.js';
+import {
+  BoardNotFoundError,
+  TicketNotFoundError,
+  LastBoardError,
+  MentionNotFoundError,
+  CommentNotFoundError,
+  DeliverableNotFoundError,
+} from '../../domain/errors.js';
+import {
+  buildTicketBranchName,
+  buildTicketWorkspaceId,
+} from '../../domain/services/branch-utils.js';
 import { deriveTicketUpdateEvents } from '../../domain/services/ticket-audit-events.js';
+
 import { registerTicketBulkQueryRoutes } from './ticket-bulk-queries.routes.js';
-import { BoardNotFoundError, TicketNotFoundError, LastBoardError, MentionNotFoundError, CommentNotFoundError, DeliverableNotFoundError } from '../../domain/errors.js';
-import type { MentionExecutionMode, MentionStatus, UpdateTicketExecutionConfigRequest } from '@fleex/shared';
+
 import type { Container } from '../container.js';
+import type { FastifyInstance } from 'fastify';
 
 export function ticketRoutes(container: Container) {
-  const emit = (...events: Parameters<typeof container.eventBus.emit>) => container.eventBus.emit(...events);
+  const emit = (...events: Parameters<typeof container.eventBus.emit>) =>
+    container.eventBus.emit(...events);
 
   // ── Epic enrichment helpers (used by /api/tickets and /api/tickets/:id) ──
 
@@ -30,7 +59,14 @@ export function ticketRoutes(container: Container) {
     groupStatus: string;
   };
 
-  const toEpicRef = (g: { id: string; name: string; emoji: string; color: string; timeframe: string; groupStatus: string }): EpicRef => ({
+  const toEpicRef = (g: {
+    id: string;
+    name: string;
+    emoji: string;
+    color: string;
+    timeframe: string;
+    groupStatus: string;
+  }): EpicRef => ({
     id: g.id,
     name: g.name,
     emoji: g.emoji,
@@ -42,7 +78,10 @@ export function ticketRoutes(container: Container) {
   // Build a Map<ticketId, EpicRef[]> for a set of tickets.
   // When `boardId` is set, only groups linked to that board are scanned (fast path).
   // Otherwise all groups are scanned (needed when listing across boards).
-  async function loadEpicsByTicketIds(ticketIds: string[], opts: { boardId?: string } = {}): Promise<Map<string, EpicRef[]>> {
+  async function loadEpicsByTicketIds(
+    ticketIds: string[],
+    opts: { boardId?: string } = {},
+  ): Promise<Map<string, EpicRef[]>> {
     const map = new Map<string, EpicRef[]>();
     if (ticketIds.length === 0) return map;
     const groups = opts.boardId
@@ -61,7 +100,8 @@ export function ticketRoutes(container: Container) {
       for (const m of groupMemberships) {
         if (!wanted.has(m.ticketId)) continue;
         const arr = map.get(m.ticketId);
-        if (arr) arr.push(ref); else map.set(m.ticketId, [ref]);
+        if (arr) arr.push(ref);
+        else map.set(m.ticketId, [ref]);
       }
     }
     return map;
@@ -73,25 +113,24 @@ export function ticketRoutes(container: Container) {
     const groups = await Promise.all(
       memberships.map((m) => container.ticketGroupStore.getTicketGroupById(m.groupId)),
     );
-    return groups
-      .filter((g): g is NonNullable<typeof g> => g != null)
-      .map(toEpicRef);
+    return groups.filter((g): g is NonNullable<typeof g> => g != null).map(toEpicRef);
   }
 
   return async function (app: FastifyInstance) {
-
     // ── Boards ──
 
     app.get('/api/boards', async () => {
       const boards = await container.ticketStore.getAllBoards();
-      return Promise.all(boards.map(async (b): Promise<BoardWithCounts> => {
-        const tickets = await container.ticketStore.getTicketsByBoard(b.id);
-        const ticketCounts = {} as Record<TicketStatus, number>;
-        for (const s of TICKET_STATUSES as readonly TicketStatus[]) {
-          ticketCounts[s] = tickets.filter((t) => t.status === s).length;
-        }
-        return { ...b.toDTO(), ticketCounts };
-      }));
+      return Promise.all(
+        boards.map(async (b): Promise<BoardWithCounts> => {
+          const tickets = await container.ticketStore.getTicketsByBoard(b.id);
+          const ticketCounts = {} as Record<TicketStatus, number>;
+          for (const s of TICKET_STATUSES as readonly TicketStatus[]) {
+            ticketCounts[s] = tickets.filter((t) => t.status === s).length;
+          }
+          return { ...b.toDTO(), ticketCounts };
+        }),
+      );
     });
 
     app.get<{ Params: { id: string } }>('/api/boards/:id', async (request) => {
@@ -111,14 +150,17 @@ export function ticketRoutes(container: Container) {
       return reply.code(201).send(board.toDTO());
     });
 
-    app.patch<{ Params: { id: string }; Body: UpdateBoardRequest }>('/api/boards/:id', async (request) => {
-      const board = await container.ticketStore.getBoardById(request.params.id);
-      if (!board) throw new BoardNotFoundError(request.params.id);
-      board.update(request.body);
-      await container.ticketStore.saveBoard(board);
-      emit({ type: 'board.updated', boardId: board.id, occurredAt: new Date() });
-      return board.toDTO();
-    });
+    app.patch<{ Params: { id: string }; Body: UpdateBoardRequest }>(
+      '/api/boards/:id',
+      async (request) => {
+        const board = await container.ticketStore.getBoardById(request.params.id);
+        if (!board) throw new BoardNotFoundError(request.params.id);
+        board.update(request.body);
+        await container.ticketStore.saveBoard(board);
+        emit({ type: 'board.updated', boardId: board.id, occurredAt: new Date() });
+        return board.toDTO();
+      },
+    );
 
     app.delete<{ Params: { id: string } }>('/api/boards/:id', async (request, reply) => {
       const boards = await container.ticketStore.getAllBoards();
@@ -131,35 +173,39 @@ export function ticketRoutes(container: Container) {
 
     // ── Tickets ──
 
-    app.get<{ Querystring: { boardId?: string; status?: TicketStatus; tag?: string; epicId?: string } }>(
-      '/api/tickets',
-      async (request) => {
-        let tickets: TicketEntity[];
-        if (request.query.boardId) {
-          if (request.query.status) {
-            tickets = await container.ticketStore.getTicketsByStatus(request.query.boardId, request.query.status);
-          } else {
-            tickets = await container.ticketStore.getTicketsByBoard(request.query.boardId);
-          }
+    app.get<{
+      Querystring: { boardId?: string; status?: TicketStatus; tag?: string; epicId?: string };
+    }>('/api/tickets', async (request) => {
+      let tickets: TicketEntity[];
+      if (request.query.boardId) {
+        if (request.query.status) {
+          tickets = await container.ticketStore.getTicketsByStatus(
+            request.query.boardId,
+            request.query.status,
+          );
         } else {
-          tickets = await container.ticketStore.getAllTickets();
+          tickets = await container.ticketStore.getTicketsByBoard(request.query.boardId);
         }
-        if (request.query.tag) {
-          const tag = request.query.tag;
-          tickets = tickets.filter((t) => t.tags.includes(tag));
-        }
-        if (request.query.epicId) {
-          const memberships = await container.ticketGroupStore.getMembershipsByGroup(request.query.epicId);
-          const epicTicketIds = new Set(memberships.map((m) => m.ticketId));
-          tickets = tickets.filter((t) => epicTicketIds.has(t.id));
-        }
-        const epicsByTicket = await loadEpicsByTicketIds(
-          tickets.map((t) => t.id),
-          { boardId: request.query.boardId },
+      } else {
+        tickets = await container.ticketStore.getAllTickets();
+      }
+      if (request.query.tag) {
+        const tag = request.query.tag;
+        tickets = tickets.filter((t) => t.tags.includes(tag));
+      }
+      if (request.query.epicId) {
+        const memberships = await container.ticketGroupStore.getMembershipsByGroup(
+          request.query.epicId,
         );
-        return tickets.map((t) => ({ ...t.toDTO(), epics: epicsByTicket.get(t.id) ?? [] }));
-      },
-    );
+        const epicTicketIds = new Set(memberships.map((m) => m.ticketId));
+        tickets = tickets.filter((t) => epicTicketIds.has(t.id));
+      }
+      const epicsByTicket = await loadEpicsByTicketIds(
+        tickets.map((t) => t.id),
+        { boardId: request.query.boardId },
+      );
+      return tickets.map((t) => ({ ...t.toDTO(), epics: epicsByTicket.get(t.id) ?? [] }));
+    });
 
     app.get<{ Querystring: { boardId?: string; limit?: string; offset?: string } }>(
       '/api/tickets/archived',
@@ -192,7 +238,8 @@ export function ticketRoutes(container: Container) {
     });
 
     app.post<{ Body: CreateTicketRequest }>('/api/tickets', async (request, reply) => {
-      const { boardId, title, description, status, priority, type, tags, links, dueDate } = request.body;
+      const { boardId, title, description, status, priority, type, tags, links, dueDate } =
+        request.body;
 
       const board = await container.ticketStore.getBoardById(boardId);
       if (!board) throw new BoardNotFoundError(boardId);
@@ -200,9 +247,8 @@ export function ticketRoutes(container: Container) {
       // Calculate position (top of column)
       const targetStatus = status ?? 'backlog';
       const existing = await container.ticketStore.getTicketsByStatus(boardId, targetStatus);
-      const minPos = existing.length > 0
-        ? existing.reduce((min, t) => Math.min(min, t.position), Infinity)
-        : 1;
+      const minPos =
+        existing.length > 0 ? existing.reduce((min, t) => Math.min(min, t.position), Infinity) : 1;
 
       const ticketId = randomUUID();
       const ticketLinks = (links ?? []).map((l) => ({
@@ -227,18 +273,24 @@ export function ticketRoutes(container: Container) {
       });
 
       await container.ticketStore.createTicket(ticket);
-      await container.ticketStore.saveActivity(TicketActivityEntity.create({
-        id: randomUUID(),
-        ticketId,
-        action: 'created',
-        source: 'web',
-      }));
+      await container.ticketStore.saveActivity(
+        TicketActivityEntity.create({
+          id: randomUUID(),
+          ticketId,
+          action: 'created',
+          source: 'web',
+        }),
+      );
 
       emit({ type: 'ticket.created', ticketId, boardId, occurredAt: new Date() });
       return reply.code(201).send(ticket.toDTO());
     });
 
-    app.patch<{ Params: { id: string }; Querystring: { silent?: string }; Body: UpdateTicketRequest }>('/api/tickets/:id', async (request) => {
+    app.patch<{
+      Params: { id: string };
+      Querystring: { silent?: string };
+      Body: UpdateTicketRequest;
+    }>('/api/tickets/:id', async (request) => {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
@@ -253,13 +305,15 @@ export function ticketRoutes(container: Container) {
 
       const silent = request.query.silent === 'true';
       if (!silent && Object.keys(diff).length > 0) {
-        await container.ticketStore.saveActivity(TicketActivityEntity.create({
-          id: randomUUID(),
-          ticketId: ticket.id,
-          action: 'updated',
-          changes: diff,
-          source: 'web',
-        }));
+        await container.ticketStore.saveActivity(
+          TicketActivityEntity.create({
+            id: randomUUID(),
+            ticketId: ticket.id,
+            action: 'updated',
+            changes: diff,
+            source: 'web',
+          }),
+        );
       }
 
       // Emit semantic events for favorite/blocked/tags so the audit trail records
@@ -283,7 +337,12 @@ export function ticketRoutes(container: Container) {
         const diff = ticket.updateExecutionConfig(request.body);
         if (Object.keys(diff).length > 0) {
           await container.ticketStore.saveTicket(ticket);
-          emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
+          emit({
+            type: 'ticket.updated',
+            ticketId: ticket.id,
+            changes: diff,
+            occurredAt: new Date(),
+          });
         }
 
         return ticket.toDTO();
@@ -299,10 +358,12 @@ export function ticketRoutes(container: Container) {
         const comments = await container.commentStore.getByTicket(ticketId);
         const allText = [ticket?.description ?? '', ...comments.map((c) => c.body)].join('\n');
         const fileIds = extractFileIds(allText);
-        await Promise.all(fileIds.map(async (fid) => {
-          await container.fileStore.remove(fid).catch(() => {});
-          await container.fileMetaStore.remove(fid).catch(() => {});
-        }));
+        await Promise.all(
+          fileIds.map(async (fid) => {
+            await container.fileStore.remove(fid).catch(() => {});
+            await container.fileMetaStore.remove(fid).catch(() => {});
+          }),
+        );
       } catch {
         // Best-effort cleanup — don't block ticket deletion
       }
@@ -316,9 +377,11 @@ export function ticketRoutes(container: Container) {
           // Kill sessions whose cwd is inside the workspace
           const allSessions = await container.sessionStore.getAll();
           const workspaceSessions = allSessions.filter((s) => s.cwd.startsWith(workspaceBase));
-          await Promise.all(workspaceSessions.map(async (s) => {
-            await container.killSession.execute(s.id).catch(() => {});
-          }));
+          await Promise.all(
+            workspaceSessions.map(async (s) => {
+              await container.killSession.execute(s.id).catch(() => {});
+            }),
+          );
 
           // Remove git worktrees for each repo linked to this ticket
           for (const link of ticket.links) {
@@ -349,7 +412,9 @@ export function ticketRoutes(container: Container) {
                     });
                   } catch (err) {
                     container.logger.warn('Failed to remove worktree on ticket delete', {
-                      wtPath, ticketId, error: err instanceof Error ? err.message : String(err),
+                      wtPath,
+                      ticketId,
+                      error: err instanceof Error ? err.message : String(err),
                     });
                   }
                 }
@@ -360,11 +425,15 @@ export function ticketRoutes(container: Container) {
           // Remove the workspace folder
           if (existsSync(workspaceBase)) {
             rmSync(workspaceBase, { recursive: true, force: true });
-            container.logger.info('Workspace cleaned up on ticket delete', { workspaceBase, ticketId });
+            container.logger.info('Workspace cleaned up on ticket delete', {
+              workspaceBase,
+              ticketId,
+            });
           }
         } catch (err) {
           container.logger.warn('Failed to cleanup workspace on ticket delete', {
-            ticketId, error: err instanceof Error ? err.message : String(err),
+            ticketId,
+            error: err instanceof Error ? err.message : String(err),
           });
         }
       }
@@ -383,13 +452,15 @@ export function ticketRoutes(container: Container) {
       const diff = ticket.archive();
       await container.ticketStore.saveTicket(ticket);
 
-      await container.ticketStore.saveActivity(TicketActivityEntity.create({
-        id: randomUUID(),
-        ticketId: ticket.id,
-        action: 'archived',
-        changes: diff,
-        source: 'web',
-      }));
+      await container.ticketStore.saveActivity(
+        TicketActivityEntity.create({
+          id: randomUUID(),
+          ticketId: ticket.id,
+          action: 'archived',
+          changes: diff,
+          source: 'web',
+        }),
+      );
 
       emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
       return ticket.toDTO();
@@ -402,13 +473,15 @@ export function ticketRoutes(container: Container) {
       const diff = ticket.unarchive();
       await container.ticketStore.saveTicket(ticket);
 
-      await container.ticketStore.saveActivity(TicketActivityEntity.create({
-        id: randomUUID(),
-        ticketId: ticket.id,
-        action: 'unarchived',
-        changes: diff,
-        source: 'web',
-      }));
+      await container.ticketStore.saveActivity(
+        TicketActivityEntity.create({
+          id: randomUUID(),
+          ticketId: ticket.id,
+          action: 'unarchived',
+          changes: diff,
+          source: 'web',
+        }),
+      );
 
       emit({ type: 'ticket.updated', ticketId: ticket.id, changes: diff, occurredAt: new Date() });
       return ticket.toDTO();
@@ -430,148 +503,180 @@ export function ticketRoutes(container: Container) {
         await container.ticketStore.saveTicket(ticket);
 
         if (Object.keys(diff).length > 0) {
-          await container.ticketStore.saveActivity(TicketActivityEntity.create({
-            id: randomUUID(),
-            ticketId: ticket.id,
-            action: 'moved',
-            changes: diff,
-            source: 'web',
-          }));
+          await container.ticketStore.saveActivity(
+            TicketActivityEntity.create({
+              id: randomUUID(),
+              ticketId: ticket.id,
+              action: 'moved',
+              changes: diff,
+              source: 'web',
+            }),
+          );
         }
 
-        emit({ type: 'ticket.moved', ticketId: ticket.id, fromStatus, toStatus: request.body.status, occurredAt: new Date() });
+        emit({
+          type: 'ticket.moved',
+          ticketId: ticket.id,
+          fromStatus,
+          toStatus: request.body.status,
+          occurredAt: new Date(),
+        });
         return ticket.toDTO();
       },
     );
 
     // Links
-    app.post<{ Params: { id: string }; Body: { type: string; ref: string; label: string; url?: string } }>(
-      '/api/tickets/:id/links',
-      async (request) => {
-        const ticket = await container.ticketStore.getTicketById(request.params.id);
-        if (!ticket) throw new TicketNotFoundError(request.params.id);
+    app.post<{
+      Params: { id: string };
+      Body: { type: string; ref: string; label: string; url?: string };
+    }>('/api/tickets/:id/links', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
 
-        let ref = request.body.ref;
+      let ref = request.body.ref;
 
-        // When linking a worktree to a ticket, move it into the ticket workspace
-        if (request.body.type === 'worktree' && ref.includes(':') && !ref.startsWith('/')) {
-          const colonIdx = ref.indexOf(':');
-          const repoKey = ref.substring(0, colonIdx);
-          const branch = ref.substring(colonIdx + 1);
-          const slashIdx = repoKey.indexOf('/');
-          if (slashIdx > 0) {
-            const org = repoKey.substring(0, slashIdx);
-            const name = repoKey.substring(slashIdx + 1);
-            const barePath = container.resolver.barePath(org, name);
-            const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
-            const targetPath = container.resolver.workspaceRepoPath(workspaceId, name);
+      // When linking a worktree to a ticket, move it into the ticket workspace
+      if (request.body.type === 'worktree' && ref.includes(':') && !ref.startsWith('/')) {
+        const colonIdx = ref.indexOf(':');
+        const repoKey = ref.substring(0, colonIdx);
+        const branch = ref.substring(colonIdx + 1);
+        const slashIdx = repoKey.indexOf('/');
+        if (slashIdx > 0) {
+          const org = repoKey.substring(0, slashIdx);
+          const name = repoKey.substring(slashIdx + 1);
+          const barePath = container.resolver.barePath(org, name);
+          const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+          const targetPath = container.resolver.workspaceRepoPath(workspaceId, name);
+
+          try {
+            // Find the worktree's current path
+            const worktrees = await container.git.listWorktrees(barePath);
+            const match = worktrees.find((wt) => wt.branch === branch);
+            if (match && match.path !== targetPath) {
+              // Move worktree to ticket workspace
+              await container.git.moveWorktree(barePath, match.path, targetPath);
+              container.logger.info('Worktree moved to ticket workspace', {
+                from: match.path,
+                to: targetPath,
+                ticketId: ticket.id,
+              });
+            }
+            // Update ref to absolute workspace path
+            ref = targetPath;
+          } catch (err) {
+            container.logger.warn('Failed to move worktree to workspace, keeping original ref', {
+              ticketId: ticket.id,
+              ref,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
+
+      const link = ticket.addLink(
+        request.body.type as Parameters<TicketEntity['addLink']>[0],
+        ref,
+        request.body.label,
+        request.body.url ?? null,
+        randomUUID(),
+      );
+
+      // When adding a repository link, create worktree if ticket already has a workspace
+      if (request.body.type === 'repository' && ref.includes('/')) {
+        const slashIdx = ref.indexOf('/');
+        const org = ref.substring(0, slashIdx);
+        const name = ref.substring(slashIdx + 1);
+        const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
+        const workspaceRoot = container.resolver.workspacePath(workspaceId);
+        const manifestPath = join(workspaceRoot, '.fleex.json');
+
+        if (existsSync(manifestPath)) {
+          const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
+          if (!existsSync(wtPath)) {
+            // Check if this repo has a linked PR — if so, use the PR's branch
+            let branchName: string | null = null;
+            let createNewBranch = true;
+            const prLink = ticket.links.find(
+              (l) => l.type === 'github_pr' && l.ref.startsWith(`${org}/${name}#`),
+            );
+            if (prLink) {
+              const prNumber = parseInt(prLink.ref.split('#')[1]!, 10);
+              if (prNumber) {
+                // Try cache first, then fetch. Use the mixed-state `pulls-all:`
+                // cache (open+merged+closed) since a linked PR may already be
+                // merged/closed — the dashboard's `pulls:` cache is open-only.
+                const cached = container.repositoryCache.get<import('@fleex/shared').PullRequest[]>(
+                  `pulls-all:${org}/${name}`,
+                );
+                const pr = cached?.data?.find((p) => p.number === prNumber);
+                if (pr) {
+                  branchName = pr.headRefName;
+                  createNewBranch = false;
+                } else {
+                  try {
+                    const result = await container.githubGraphql.fetchRepoBatch([{ org, name }]);
+                    const repoData = result.get(`${org}/${name}`);
+                    const fetchedPR = repoData?.pulls?.find(
+                      (p: { number: number; headRefName: string }) => p.number === prNumber,
+                    );
+                    if (fetchedPR) {
+                      branchName = fetchedPR.headRefName;
+                      createNewBranch = false;
+                    }
+                  } catch {
+                    /* ignore — fall through to ticket branch */
+                  }
+                }
+              }
+            }
+            if (!branchName) {
+              branchName = buildTicketBranchName(ticket.title, ticket.id);
+            }
 
             try {
-              // Find the worktree's current path
-              const worktrees = await container.git.listWorktrees(barePath);
-              const match = worktrees.find((wt) => wt.branch === branch);
-              if (match && match.path !== targetPath) {
-                // Move worktree to ticket workspace
-                await container.git.moveWorktree(barePath, match.path, targetPath);
-                container.logger.info('Worktree moved to ticket workspace', {
-                  from: match.path, to: targetPath, ticketId: ticket.id,
-                });
-              }
-              // Update ref to absolute workspace path
-              ref = targetPath;
+              await container.createWorktree.execute(org, name, wtPath, {
+                branch: branchName,
+                createNewBranch,
+              });
+              ticket.addLink('worktree', wtPath, branchName, null, randomUUID());
+              container.logger.info('Worktree created for added repo', {
+                ticketId: ticket.id,
+                repo: ref,
+                branch: branchName,
+                wtPath,
+              });
             } catch (err) {
-              container.logger.warn('Failed to move worktree to workspace, keeping original ref', {
-                ticketId: ticket.id, ref, error: err instanceof Error ? err.message : String(err),
+              container.logger.warn('Failed to create worktree for added repo', {
+                ticketId: ticket.id,
+                repo: ref,
+                error: err instanceof Error ? err.message : String(err),
               });
             }
           }
         }
+      }
 
-        const link = ticket.addLink(
-          request.body.type as Parameters<TicketEntity['addLink']>[0],
-          ref,
-          request.body.label,
-          request.body.url ?? null,
-          randomUUID(),
-        );
-
-        // When adding a repository link, create worktree if ticket already has a workspace
-        if (request.body.type === 'repository' && ref.includes('/')) {
-          const slashIdx = ref.indexOf('/');
-          const org = ref.substring(0, slashIdx);
-          const name = ref.substring(slashIdx + 1);
-          const workspaceId = buildTicketWorkspaceId(ticket.title, ticket.id);
-          const workspaceRoot = container.resolver.workspacePath(workspaceId);
-          const manifestPath = join(workspaceRoot, '.fleex.json');
-
-          if (existsSync(manifestPath)) {
-            const wtPath = container.resolver.workspaceRepoPath(workspaceId, name);
-            if (!existsSync(wtPath)) {
-              // Check if this repo has a linked PR — if so, use the PR's branch
-              let branchName: string | null = null;
-              let createNewBranch = true;
-              const prLink = ticket.links.find((l) => l.type === 'github_pr' && l.ref.startsWith(`${org}/${name}#`));
-              if (prLink) {
-                const prNumber = parseInt(prLink.ref.split('#')[1]!, 10);
-                if (prNumber) {
-                  // Try cache first, then fetch. Use the mixed-state `pulls-all:`
-                  // cache (open+merged+closed) since a linked PR may already be
-                  // merged/closed — the dashboard's `pulls:` cache is open-only.
-                  const cached = container.repositoryCache.get<import('@fleex/shared').PullRequest[]>(`pulls-all:${org}/${name}`);
-                  const pr = cached?.data?.find((p) => p.number === prNumber);
-                  if (pr) {
-                    branchName = pr.headRefName;
-                    createNewBranch = false;
-                  } else {
-                    try {
-                      const result = await container.githubGraphql.fetchRepoBatch([{ org, name }]);
-                      const repoData = result.get(`${org}/${name}`);
-                      const fetchedPR = repoData?.pulls?.find((p: { number: number; headRefName: string }) => p.number === prNumber);
-                      if (fetchedPR) {
-                        branchName = fetchedPR.headRefName;
-                        createNewBranch = false;
-                      }
-                    } catch { /* ignore — fall through to ticket branch */ }
-                  }
-                }
-              }
-              if (!branchName) {
-                branchName = buildTicketBranchName(ticket.title, ticket.id);
-              }
-
-              try {
-                await container.createWorktree.execute(org, name, wtPath, { branch: branchName, createNewBranch });
-                ticket.addLink('worktree', wtPath, branchName, null, randomUUID());
-                container.logger.info('Worktree created for added repo', { ticketId: ticket.id, repo: ref, branch: branchName, wtPath });
-              } catch (err) {
-                container.logger.warn('Failed to create worktree for added repo', {
-                  ticketId: ticket.id, repo: ref, error: err instanceof Error ? err.message : String(err),
-                });
-              }
-            }
-          }
-        }
-
-        await container.ticketStore.saveTicket(ticket);
-        await container.ticketStore.saveActivity(TicketActivityEntity.create({
+      await container.ticketStore.saveTicket(ticket);
+      await container.ticketStore.saveActivity(
+        TicketActivityEntity.create({
           id: randomUUID(),
           ticketId: ticket.id,
           action: 'linked',
           changes: { link: { from: null, to: link } },
           source: 'web',
-        }));
+        }),
+      );
 
-        emit({
-          type: 'ticket.linkAdded',
-          ticketId: ticket.id,
-          linkType: link.type,
-          ref: link.ref,
-          label: link.label,
-          occurredAt: new Date(),
-        });
-        return link;
-      },
-    );
+      emit({
+        type: 'ticket.linkAdded',
+        ticketId: ticket.id,
+        linkType: link.type,
+        ref: link.ref,
+        label: link.label,
+        occurredAt: new Date(),
+      });
+      return link;
+    });
 
     app.delete<{ Params: { id: string; linkId: string } }>(
       '/api/tickets/:id/links/:linkId',
@@ -631,7 +736,9 @@ export function ticketRoutes(container: Container) {
                       name = bc.name;
                       break;
                     }
-                  } catch { /* ignore */ }
+                  } catch {
+                    /* ignore */
+                  }
                 }
               }
             }
@@ -644,7 +751,8 @@ export function ticketRoutes(container: Container) {
               const barePath = container.resolver.barePath(org, name);
               await container.git.removeWorktree(barePath, wtPath);
               container.logger.info('Worktree removed on worktree-link deletion', {
-                wtPath, ticketId: ticket.id,
+                wtPath,
+                ticketId: ticket.id,
               });
               emit({
                 type: 'worktree.deleted',
@@ -665,7 +773,9 @@ export function ticketRoutes(container: Container) {
             }
           } catch (err) {
             container.logger.warn('Failed to move worktree back from workspace', {
-              ticketId: ticket.id, linkRef: link.ref, error: err instanceof Error ? err.message : String(err),
+              ticketId: ticket.id,
+              linkRef: link.ref,
+              error: err instanceof Error ? err.message : String(err),
             });
           }
         }
@@ -691,7 +801,10 @@ export function ticketRoutes(container: Container) {
                   // Best-effort — don't block deletion on a failed branch lookup.
                 }
                 await container.git.removeWorktree(barePath, wtPath);
-                container.logger.info('Worktree removed from workspace on repo unlink', { wtPath, ticketId: ticket.id });
+                container.logger.info('Worktree removed from workspace on repo unlink', {
+                  wtPath,
+                  ticketId: ticket.id,
+                });
                 emit({
                   type: 'worktree.deleted',
                   repoPath: barePath,
@@ -701,7 +814,11 @@ export function ticketRoutes(container: Container) {
                 });
               }
               // Also remove any worktree link that pointed to this repo's workspace path
-              const wtLink = ticket.links.find((l) => l.type === 'worktree' && (l.ref === wtPath || l.ref.startsWith(`${org}/${name}:`)));
+              const wtLink = ticket.links.find(
+                (l) =>
+                  l.type === 'worktree' &&
+                  (l.ref === wtPath || l.ref.startsWith(`${org}/${name}:`)),
+              );
               if (wtLink) ticket.removeLink(wtLink.id);
             }
             // Clean up empty workspace folder
@@ -713,7 +830,9 @@ export function ticketRoutes(container: Container) {
             }
           } catch (err) {
             container.logger.warn('Failed to clean up workspace worktree on repo unlink', {
-              ticketId: ticket.id, ref: link.ref, error: err instanceof Error ? err.message : String(err),
+              ticketId: ticket.id,
+              ref: link.ref,
+              error: err instanceof Error ? err.message : String(err),
             });
           }
         }
@@ -721,13 +840,15 @@ export function ticketRoutes(container: Container) {
         const removed = ticket.removeLink(request.params.linkId);
         if (removed) {
           await container.ticketStore.saveTicket(ticket);
-          await container.ticketStore.saveActivity(TicketActivityEntity.create({
-            id: randomUUID(),
-            ticketId: ticket.id,
-            action: 'unlinked',
-            changes: { linkId: { from: request.params.linkId, to: null } },
-            source: 'web',
-          }));
+          await container.ticketStore.saveActivity(
+            TicketActivityEntity.create({
+              id: randomUUID(),
+              ticketId: ticket.id,
+              action: 'unlinked',
+              changes: { linkId: { from: request.params.linkId, to: null } },
+              source: 'web',
+            }),
+          );
           emit({
             type: 'ticket.linkRemoved',
             ticketId: ticket.id,
@@ -742,7 +863,9 @@ export function ticketRoutes(container: Container) {
 
     // Activity
     app.get<{ Params: { id: string } }>('/api/tickets/:id/activity', async (request) => {
-      return (await container.ticketStore.getActivitiesByTicket(request.params.id)).map((a) => a.toDTO());
+      return (await container.ticketStore.getActivitiesByTicket(request.params.id)).map((a) =>
+        a.toDTO(),
+      );
     });
 
     // Workflow: open session from ticket
@@ -760,27 +883,39 @@ export function ticketRoutes(container: Container) {
     // Ensure the ticket's workspace folder exists on disk (idempotent, repo-free).
     // Used by workspace actions so {{workspace_path}} always resolves to a real
     // directory — even for tickets that never had a session (e.g. lead/meeting).
-    app.post<{ Params: { id: string } }>('/api/tickets/:id/ensure-workspace', async (request, reply) => {
-      const ticket = await container.ticketStore.getTicketById(request.params.id);
-      if (!ticket) throw new TicketNotFoundError(request.params.id);
-
-      const { workspacePath } = ensureTicketWorkspace(container.resolver, {
-        id: ticket.id,
-        title: ticket.title,
-      });
-      return reply.send({ workspacePath });
-    });
-
-    // Import GitHub issue
-    app.post<{ Body: { org: string; name: string; number: number; boardId: string; status?: TicketStatus; type?: TicketType } }>(
-      '/api/tickets/import-github-issue',
+    app.post<{ Params: { id: string } }>(
+      '/api/tickets/:id/ensure-workspace',
       async (request, reply) => {
-        const { org, name, number: issueNumber, boardId, status, type } = request.body;
-        const ticket = await container.importGitHubIssue.execute(org, name, issueNumber, boardId, { status, type });
-        emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
-        return reply.code(201).send(ticket.toDTO());
+        const ticket = await container.ticketStore.getTicketById(request.params.id);
+        if (!ticket) throw new TicketNotFoundError(request.params.id);
+
+        const { workspacePath } = ensureTicketWorkspace(container.resolver, {
+          id: ticket.id,
+          title: ticket.title,
+        });
+        return reply.send({ workspacePath });
       },
     );
+
+    // Import GitHub issue
+    app.post<{
+      Body: {
+        org: string;
+        name: string;
+        number: number;
+        boardId: string;
+        status?: TicketStatus;
+        type?: TicketType;
+      };
+    }>('/api/tickets/import-github-issue', async (request, reply) => {
+      const { org, name, number: issueNumber, boardId, status, type } = request.body;
+      const ticket = await container.importGitHubIssue.execute(org, name, issueNumber, boardId, {
+        status,
+        type,
+      });
+      emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
+      return reply.code(201).send(ticket.toDTO());
+    });
 
     // Import Slack message (single message or thread) as ticket
     app.post<{ Body: { url: string; boardId: string } }>(
@@ -804,98 +939,103 @@ export function ticketRoutes(container: Container) {
     );
 
     // Import GitHub PR as ticket
-    app.post<{ Body: { org: string; name: string; prNumber: number; prTitle: string; headRefName: string; boardId: string } }>(
-      '/api/tickets/import-github-pr',
-      async (request, reply) => {
-        const { org, name, prNumber, prTitle, headRefName, boardId } = request.body;
-        const ticket = await container.backfillPRTicket.execute({
-          org, name, prNumber, prTitle, headRefName,
-          prUrl: `https://github.com/${org}/${name}/pull/${prNumber}`,
-          boardId,
-          role: 'author',
-        });
-        emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
-        return reply.code(201).send(ticket.toDTO());
-      },
-    );
+    app.post<{
+      Body: {
+        org: string;
+        name: string;
+        prNumber: number;
+        prTitle: string;
+        headRefName: string;
+        boardId: string;
+      };
+    }>('/api/tickets/import-github-pr', async (request, reply) => {
+      const { org, name, prNumber, prTitle, headRefName, boardId } = request.body;
+      const ticket = await container.backfillPRTicket.execute({
+        org,
+        name,
+        prNumber,
+        prTitle,
+        headRefName,
+        prUrl: `https://github.com/${org}/${name}/pull/${prNumber}`,
+        boardId,
+        role: 'author',
+      });
+      emit({ type: 'ticket.created', ticketId: ticket.id, boardId, occurredAt: new Date() });
+      return reply.code(201).send(ticket.toDTO());
+    });
 
     // Sync GitHub metadata
-    app.post<{ Params: { id: string } }>(
-      '/api/tickets/:id/sync-github',
-      async (request) => {
-        const ticket = await container.ticketStore.getTicketById(request.params.id);
-        if (!ticket) throw new TicketNotFoundError(request.params.id);
+    app.post<{ Params: { id: string } }>('/api/tickets/:id/sync-github', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
 
-        const issueLink = ticket.links.find((l) => l.type === 'github_issue');
-        if (!issueLink) {
-          throw new Error('Ticket has no linked GitHub issue');
-        }
+      const issueLink = ticket.links.find((l) => l.type === 'github_issue');
+      if (!issueLink) {
+        throw new Error('Ticket has no linked GitHub issue');
+      }
 
-        // Parse org/name#number from ref
-        const match = issueLink.ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
-        if (!match) {
-          throw new Error('Invalid GitHub issue link ref format');
-        }
+      // Parse org/name#number from ref
+      const match = issueLink.ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
+      if (!match) {
+        throw new Error('Invalid GitHub issue link ref format');
+      }
 
-        const org = match[1]!;
-        const name = match[2]!;
-        const num = match[3]!;
-        const detail = await container.githubGraphql.fetchIssueDetail(org, name, parseInt(num, 10));
+      const org = match[1]!;
+      const name = match[2]!;
+      const num = match[3]!;
+      const detail = await container.githubGraphql.fetchIssueDetail(org, name, parseInt(num, 10));
 
-        ticket.setGithubMetadata({
-          state: detail.state,
-          author: detail.author,
-          assignees: detail.assignees,
-          labels: detail.labels,
-          milestone: detail.milestone,
-          syncedAt: new Date().toISOString(),
-        });
+      ticket.setGithubMetadata({
+        state: detail.state,
+        author: detail.author,
+        assignees: detail.assignees,
+        labels: detail.labels,
+        milestone: detail.milestone,
+        syncedAt: new Date().toISOString(),
+      });
 
-        await container.ticketStore.saveTicket(ticket);
-        emit({ type: 'ticket.syncedFromGithub', ticketId: ticket.id, occurredAt: new Date() });
-        return ticket.toDTO();
-      },
-    );
+      await container.ticketStore.saveTicket(ticket);
+      emit({ type: 'ticket.syncedFromGithub', ticketId: ticket.id, occurredAt: new Date() });
+      return ticket.toDTO();
+    });
 
     // Fetch live PR states for a ticket's github_pr links
-    app.get<{ Params: { id: string } }>(
-      '/api/tickets/:id/pr-states',
-      async (request) => {
-        const ticket = await container.ticketStore.getTicketById(request.params.id);
-        if (!ticket) throw new TicketNotFoundError(request.params.id);
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/pr-states', async (request) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
 
-        const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
-        if (prLinks.length === 0) return {};
+      const prLinks = ticket.links.filter((l) => l.type === 'github_pr');
+      if (prLinks.length === 0) return {};
 
-        const prs = prLinks.map((link) => {
+      const prs = prLinks
+        .map((link) => {
           const match = link.ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
           if (!match) return null;
           return { org: match[1]!, name: match[2]!, number: parseInt(match[3]!, 10) };
-        }).filter((p): p is NonNullable<typeof p> => p !== null);
+        })
+        .filter((p): p is NonNullable<typeof p> => p !== null);
 
-        const stateMap = await container.githubGraphql.fetchPRStates(prs);
-        // Return as plain object: { "org/name#123": "OPEN", ... }
-        return Object.fromEntries(stateMap);
-      },
-    );
+      const stateMap = await container.githubGraphql.fetchPRStates(prs);
+      // Return as plain object: { "org/name#123": "OPEN", ... }
+      return Object.fromEntries(stateMap);
+    });
 
     // Bulk fetch PR states from refs (e.g. ["org/name#123", ...])
-    app.post<{ Body: { refs: string[] } }>(
-      '/api/pr-states',
-      async (request) => {
-        const { refs } = request.body;
-        if (!refs || refs.length === 0) return {};
+    app.post<{ Body: { refs: string[] } }>('/api/pr-states', async (request) => {
+      const { refs } = request.body;
+      if (!refs || refs.length === 0) return {};
 
-        const prs = refs.map((ref) => {
+      const prs = refs
+        .map((ref) => {
           const match = ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
           if (!match) return null;
           return { org: match[1]!, name: match[2]!, number: parseInt(match[3]!, 10) };
-        }).filter((p): p is NonNullable<typeof p> => p !== null);
+        })
+        .filter((p): p is NonNullable<typeof p> => p !== null);
 
-        const stateMap = await container.githubGraphql.fetchPRStates(prs);
-        return Object.fromEntries(stateMap);
-      },
-    );
+      const stateMap = await container.githubGraphql.fetchPRStates(prs);
+      return Object.fromEntries(stateMap);
+    });
 
     // Batch reorder
     app.post<{ Body: { updates: { id: string; status: TicketStatus; position: number }[] } }>(
@@ -909,7 +1049,13 @@ export function ticketRoutes(container: Container) {
           ticket.position = upd.position;
           ticket.updatedAt = new Date();
           await container.ticketStore.saveTicket(ticket);
-          emit({ type: 'ticket.moved', ticketId: upd.id, fromStatus, toStatus: upd.status, occurredAt: new Date() });
+          emit({
+            type: 'ticket.moved',
+            ticketId: upd.id,
+            fromStatus,
+            toStatus: upd.status,
+            occurredAt: new Date(),
+          });
         }
         return { ok: true };
       },
@@ -946,11 +1092,30 @@ export function ticketRoutes(container: Container) {
       // Emit the appropriate event based on new status
       const now = new Date();
       if (request.body.status === 'resolved') {
-        emit({ type: 'mention.resolved', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, resolvedBy: mention.targetAgent, occurredAt: now });
+        emit({
+          type: 'mention.resolved',
+          mentionId: mention.id,
+          ticketId: mention.ticketId,
+          targetAgent: mention.targetAgent,
+          resolvedBy: mention.targetAgent,
+          occurredAt: now,
+        });
       } else if (request.body.status === 'waiting_for_info') {
-        emit({ type: 'mention.waiting_for_info', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, occurredAt: now });
+        emit({
+          type: 'mention.waiting_for_info',
+          mentionId: mention.id,
+          ticketId: mention.ticketId,
+          targetAgent: mention.targetAgent,
+          occurredAt: now,
+        });
       } else if (request.body.status === 'acknowledged') {
-        emit({ type: 'mention.acknowledged', mentionId: mention.id, ticketId: mention.ticketId, targetAgent: mention.targetAgent, occurredAt: now });
+        emit({
+          type: 'mention.acknowledged',
+          mentionId: mention.id,
+          ticketId: mention.ticketId,
+          targetAgent: mention.targetAgent,
+          occurredAt: now,
+        });
       } else {
         // Generic broadcast for other status changes (e.g. pending)
         container.ticketBroadcast('mention:updated', mention.toDTO());
@@ -1001,7 +1166,13 @@ export function ticketRoutes(container: Container) {
       if (!mention) throw new MentionNotFoundError(request.params.id);
 
       await container.mentionStore.remove(mention.id);
-      emit({ type: 'mention.deleted', mentionId: mention.id, ticketId: mention.ticketId, commentId: mention.commentId, occurredAt: new Date() });
+      emit({
+        type: 'mention.deleted',
+        mentionId: mention.id,
+        ticketId: mention.ticketId,
+        commentId: mention.commentId,
+        occurredAt: new Date(),
+      });
       return reply.code(204).send();
     });
 
@@ -1014,20 +1185,33 @@ export function ticketRoutes(container: Container) {
       // Update comment body: wrap the mention text in ~~strikethrough~~
       const comment = await container.commentStore.getById(mention.commentId);
       if (comment) {
-        const mentionText = mention.targetType === 'human'
-          ? `@${mention.targetAgent}`
-          : `@agent:${mention.targetAgent}`;
+        const mentionText =
+          mention.targetType === 'human'
+            ? `@${mention.targetAgent}`
+            : `@agent:${mention.targetAgent}`;
         const newBody = comment.body.replace(mentionText, `~~${mentionText}~~`);
         if (newBody !== comment.body) {
           comment.body = newBody;
           comment.updatedAt = new Date();
           await container.commentStore.save(comment);
-          emit({ type: 'comment.updated', commentId: comment.id, ticketId: comment.ticketId, createdMentions: [], occurredAt: new Date() });
+          emit({
+            type: 'comment.updated',
+            commentId: comment.id,
+            ticketId: comment.ticketId,
+            createdMentions: [],
+            occurredAt: new Date(),
+          });
         }
       }
 
       await container.mentionStore.remove(mention.id);
-      emit({ type: 'mention.deleted', mentionId: mention.id, ticketId: mention.ticketId, commentId: mention.commentId, occurredAt: new Date() });
+      emit({
+        type: 'mention.deleted',
+        mentionId: mention.id,
+        ticketId: mention.ticketId,
+        commentId: mention.commentId,
+        occurredAt: new Date(),
+      });
       return reply.code(204).send();
     });
 
@@ -1066,7 +1250,13 @@ export function ticketRoutes(container: Container) {
     // Create a deliverable from the web UI (no agent auth needed)
     app.post<{
       Params: { id: string };
-      Body: { title: string; type: DeliverableType; content: string; status?: DeliverableStatus; agentName?: string };
+      Body: {
+        title: string;
+        type: DeliverableType;
+        content: string;
+        status?: DeliverableStatus;
+        agentName?: string;
+      };
     }>('/api/tickets/:id/deliverables', async (request, reply) => {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
@@ -1158,8 +1348,9 @@ export function ticketRoutes(container: Container) {
       const ticket = await container.ticketStore.getTicketById(request.params.id);
       if (!ticket) throw new TicketNotFoundError(request.params.id);
 
-      const comments = (await container.commentStore.getByTicket(request.params.id))
-        .filter((c) => c.isVisibleTo('user'));
+      const comments = (await container.commentStore.getByTicket(request.params.id)).filter((c) =>
+        c.isVisibleTo('user'),
+      );
 
       return comments.map((c) => c.toDTO());
     });
@@ -1181,111 +1372,113 @@ export function ticketRoutes(container: Container) {
         //      then let the fresh mention take over (resuming the same session).
         //    - 'queue': create the new mention; the scheduler runs it after the
         //      current run for this agent+ticket finishes.
-        mentionConflicts?: Array<{ agent: string; action: 'answer' | 'new_subject' | 'supersede' | 'queue' }>;
+        mentionConflicts?: Array<{
+          agent: string;
+          action: 'answer' | 'new_subject' | 'supersede' | 'queue';
+        }>;
       };
-    }>(
-      '/api/tickets/:id/comments',
-      async (request, reply) => {
-        const ticket = await container.ticketStore.getTicketById(request.params.id);
-        if (!ticket) throw new TicketNotFoundError(request.params.id);
+    }>('/api/tickets/:id/comments', async (request, reply) => {
+      const ticket = await container.ticketStore.getTicketById(request.params.id);
+      if (!ticket) throw new TicketNotFoundError(request.params.id);
 
-        // ── Resolve mention conflicts before creating the new comment ──
-        const ticketMentions = await container.mentionStore.getByTicket(request.params.id);
-        const conflicts = request.body.mentionConflicts ?? [];
-        const choiceByAgent = new Map(conflicts.map((c) => [c.agent, c.action]));
-        const suppressMentionForAgents: string[] = [];
-        const wakeExcludeAgents: string[] = [];
+      // ── Resolve mention conflicts before creating the new comment ──
+      const ticketMentions = await container.mentionStore.getByTicket(request.params.id);
+      const conflicts = request.body.mentionConflicts ?? [];
+      const choiceByAgent = new Map(conflicts.map((c) => [c.agent, c.action]));
+      const suppressMentionForAgents: string[] = [];
+      const wakeExcludeAgents: string[] = [];
 
-        // Mentioning an agent that is currently waiting_for_info is ambiguous:
-        // it can be the ANSWER to its question, or a NEW subject. The user
-        // disambiguates via a modal (per-agent action), with a safe default when
-        // the modal couldn't fire (websocket race): treat it as a new subject so
-        // the mention is never lost.
-        for (const agent of TicketCommentEntity.extractMentions(request.body.body)) {
-          const isWaiting = ticketMentions.some(
-            (m) => m.targetType === 'agent' && m.targetAgent === agent && m.status === 'waiting_for_info',
-          );
-          if (!isWaiting) continue;
-          if (choiceByAgent.get(agent) === 'answer') {
-            // It's the answer: feed it to the waiting thread (auto-wake) and skip
-            // a redundant duplicate mention.
-            if (!suppressMentionForAgents.includes(agent)) suppressMentionForAgents.push(agent);
-          } else {
-            // 'new_subject' or no explicit choice (race default): a separate task.
-            // Keep the agent waiting (don't wake it) — its question stays open
-            // until the user answers via another message; the new mention queues
-            // behind it.
-            if (!wakeExcludeAgents.includes(agent)) wakeExcludeAgents.push(agent);
-          }
+      // Mentioning an agent that is currently waiting_for_info is ambiguous:
+      // it can be the ANSWER to its question, or a NEW subject. The user
+      // disambiguates via a modal (per-agent action), with a safe default when
+      // the modal couldn't fire (websocket race): treat it as a new subject so
+      // the mention is never lost.
+      for (const agent of TicketCommentEntity.extractMentions(request.body.body)) {
+        const isWaiting = ticketMentions.some(
+          (m) =>
+            m.targetType === 'agent' && m.targetAgent === agent && m.status === 'waiting_for_info',
+        );
+        if (!isWaiting) continue;
+        if (choiceByAgent.get(agent) === 'answer') {
+          // It's the answer: feed it to the waiting thread (auto-wake) and skip
+          // a redundant duplicate mention.
+          if (!suppressMentionForAgents.includes(agent)) suppressMentionForAgents.push(agent);
+        } else {
+          // 'new_subject' or no explicit choice (race default): a separate task.
+          // Keep the agent waiting (don't wake it) — its question stays open
+          // until the user answers via another message; the new mention queues
+          // behind it.
+          if (!wakeExcludeAgents.includes(agent)) wakeExcludeAgents.push(agent);
         }
+      }
 
-        // Supersede an in-flight / queued run (pending or acknowledged).
-        for (const conflict of conflicts) {
-          if (conflict.action !== 'supersede') continue;
-          const existing = ticketMentions.filter(
-            (m) => m.targetType === 'agent' && m.targetAgent === conflict.agent && m.status !== 'resolved',
-          );
-          for (const m of existing) {
-            await container.executeAgent.cancelExecutionForMention(m.id).catch(() => false);
-            m.resolve();
-            await container.mentionStore.save(m);
-            emit({
-              type: 'mention.resolved',
-              mentionId: m.id,
-              ticketId: request.params.id,
-              targetAgent: m.targetAgent,
-              resolvedBy: m.targetAgent,
-              occurredAt: new Date(),
-            });
-          }
-        }
-        // 'queue' → no pre-action; the scheduler serializes it after the current run.
-
-        const { humanDisplayName, humanMentionName } = container.config.get();
-        const { comment, createdMentions } = await container.postComment.execute({
-          ticketId: request.params.id,
-          authorType: 'user',
-          authorName: humanDisplayName || humanMentionName || 'user',
-          body: request.body.body,
-          visibility: 'public',
-          humanMentionNames: humanMentionName ? [humanMentionName] : [],
-          executionMode: request.body.executionMode,
-          suppressMentionForAgents,
-        });
-
-        // Single event — the DomainEventListener handles broadcasting, auto-trigger, auto-review, wake
-        emit({
-          type: 'comment.posted',
-          commentId: comment.id,
-          ticketId: request.params.id,
-          authorType: 'user',
-          authorName: humanDisplayName || humanMentionName || 'user',
-          executionMode: request.body.executionMode,
-          wakeExcludeAgents,
-          createdMentions: createdMentions.map((m) => ({
-            mentionId: m.id,
-            targetAgent: m.targetAgent,
-            targetType: m.targetType,
-          })),
-          occurredAt: new Date(),
-        });
-
-        // Also emit individual mention.created events for each mention
-        for (const m of createdMentions) {
+      // Supersede an in-flight / queued run (pending or acknowledged).
+      for (const conflict of conflicts) {
+        if (conflict.action !== 'supersede') continue;
+        const existing = ticketMentions.filter(
+          (m) =>
+            m.targetType === 'agent' && m.targetAgent === conflict.agent && m.status !== 'resolved',
+        );
+        for (const m of existing) {
+          await container.executeAgent.cancelExecutionForMention(m.id).catch(() => false);
+          m.resolve();
+          await container.mentionStore.save(m);
           emit({
-            type: 'mention.created',
+            type: 'mention.resolved',
             mentionId: m.id,
             ticketId: request.params.id,
             targetAgent: m.targetAgent,
-            targetType: m.targetType,
-            sourceAgent: m.sourceAgent,
+            resolvedBy: m.targetAgent,
             occurredAt: new Date(),
           });
         }
+      }
+      // 'queue' → no pre-action; the scheduler serializes it after the current run.
 
-        return reply.code(201).send(comment.toDTO());
-      },
-    );
+      const { humanDisplayName, humanMentionName } = container.config.get();
+      const { comment, createdMentions } = await container.postComment.execute({
+        ticketId: request.params.id,
+        authorType: 'user',
+        authorName: humanDisplayName || humanMentionName || 'user',
+        body: request.body.body,
+        visibility: 'public',
+        humanMentionNames: humanMentionName ? [humanMentionName] : [],
+        executionMode: request.body.executionMode,
+        suppressMentionForAgents,
+      });
+
+      // Single event — the DomainEventListener handles broadcasting, auto-trigger, auto-review, wake
+      emit({
+        type: 'comment.posted',
+        commentId: comment.id,
+        ticketId: request.params.id,
+        authorType: 'user',
+        authorName: humanDisplayName || humanMentionName || 'user',
+        executionMode: request.body.executionMode,
+        wakeExcludeAgents,
+        createdMentions: createdMentions.map((m) => ({
+          mentionId: m.id,
+          targetAgent: m.targetAgent,
+          targetType: m.targetType,
+        })),
+        occurredAt: new Date(),
+      });
+
+      // Also emit individual mention.created events for each mention
+      for (const m of createdMentions) {
+        emit({
+          type: 'mention.created',
+          mentionId: m.id,
+          ticketId: request.params.id,
+          targetAgent: m.targetAgent,
+          targetType: m.targetType,
+          sourceAgent: m.sourceAgent,
+          occurredAt: new Date(),
+        });
+      }
+
+      return reply.code(201).send(comment.toDTO());
+    });
 
     app.delete<{ Params: { id: string; commentId: string } }>(
       '/api/tickets/:id/comments/:commentId',
@@ -1315,68 +1508,56 @@ export function ticketRoutes(container: Container) {
     // ── Read Cursors (unread tracking via KvStore) ──
 
     /** Get read cursors for a specific ticket (comments only — deliverables use per-item seen state) */
-    app.get<{ Params: { id: string } }>(
-      '/api/tickets/:id/read-cursors',
-      async (request) => {
-        if (!container.kvStore) return { ticketId: request.params.id, commentLastSeenAt: null };
-        const commentCursor = await container.kvStore.get(`read_cursor:comment:${request.params.id}`);
-        return {
-          ticketId: request.params.id,
-          commentLastSeenAt: commentCursor,
-        };
-      },
-    );
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/read-cursors', async (request) => {
+      if (!container.kvStore) return { ticketId: request.params.id, commentLastSeenAt: null };
+      const commentCursor = await container.kvStore.get(`read_cursor:comment:${request.params.id}`);
+      return {
+        ticketId: request.params.id,
+        commentLastSeenAt: commentCursor,
+      };
+    });
 
     /** Update read cursors for a specific ticket (comments only) */
     app.patch<{
       Params: { id: string };
       Body: { commentLastSeenAt?: string };
-    }>(
-      '/api/tickets/:id/read-cursors',
-      async (request, reply) => {
-        if (!container.kvStore) return reply.code(204).send();
-        const { commentLastSeenAt } = request.body;
-        if (commentLastSeenAt !== undefined) {
-          await container.kvStore.set(`read_cursor:comment:${request.params.id}`, commentLastSeenAt);
-        }
-        return reply.code(204).send();
-      },
-    );
+    }>('/api/tickets/:id/read-cursors', async (request, reply) => {
+      if (!container.kvStore) return reply.code(204).send();
+      const { commentLastSeenAt } = request.body;
+      if (commentLastSeenAt !== undefined) {
+        await container.kvStore.set(`read_cursor:comment:${request.params.id}`, commentLastSeenAt);
+      }
+      return reply.code(204).send();
+    });
 
     // ── Deliverable Seen State (per-deliverable, not cursor-based) ──
 
     /** Get seen deliverable IDs for a ticket */
-    app.get<{ Params: { id: string } }>(
-      '/api/tickets/:id/seen-deliverables',
-      async (request) => {
-        if (!container.kvStore) return [];
-        const raw = await container.kvStore.get(`seen_deliverables:${request.params.id}`);
-        return raw ? JSON.parse(raw) as string[] : [];
-      },
-    );
+    app.get<{ Params: { id: string } }>('/api/tickets/:id/seen-deliverables', async (request) => {
+      if (!container.kvStore) return [];
+      const raw = await container.kvStore.get(`seen_deliverables:${request.params.id}`);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    });
 
     /** Toggle a deliverable's seen state */
     app.patch<{
       Params: { id: string };
       Body: { deliverableId: string; seen: boolean };
-    }>(
-      '/api/tickets/:id/seen-deliverables',
-      async (request, reply) => {
-        if (!container.kvStore) return reply.code(204).send();
-        const { deliverableId, seen } = request.body;
-        const key = `seen_deliverables:${request.params.id}`;
-        const raw = await container.kvStore.get(key);
-        const seenIds: string[] = raw ? JSON.parse(raw) : [];
-        const set = new Set(seenIds);
-        if (seen) {
-          set.add(deliverableId);
-        } else {
-          set.delete(deliverableId);
-        }
-        await container.kvStore.set(key, JSON.stringify([...set]));
-        return reply.code(204).send();
-      },
-    );
+    }>('/api/tickets/:id/seen-deliverables', async (request, reply) => {
+      if (!container.kvStore) return reply.code(204).send();
+      const { deliverableId, seen } = request.body;
+      const key = `seen_deliverables:${request.params.id}`;
+      const raw = await container.kvStore.get(key);
+      const seenIds: string[] = raw ? JSON.parse(raw) : [];
+      const set = new Set(seenIds);
+      if (seen) {
+        set.add(deliverableId);
+      } else {
+        set.delete(deliverableId);
+      }
+      await container.kvStore.set(key, JSON.stringify([...set]));
+      return reply.code(204).send();
+    });
 
     // Bulk queries (unread counts + agent activity) — GET + POST variants.
     // POST carries the ticket IDs in the body: the GET-only form overflowed
@@ -1385,7 +1566,8 @@ export function ticketRoutes(container: Container) {
   };
 }
 
-const FILE_URL_PATTERN = /\/api\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/g;
+const FILE_URL_PATTERN =
+  /\/api\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/g;
 
 function extractFileIds(text: string): string[] {
   const ids = new Set<string>();

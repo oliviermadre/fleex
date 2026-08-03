@@ -75,7 +75,7 @@ export function handlePtyMessage(ws: ServerWebSocket<PtyWsData>, message: string
       logInfo(`[pty] spawned pid=${proc.pid} for tmux session "${tmuxSessionName}"`);
 
       // Handle process exit
-      proc.exited.then((exitCode) => {
+      void proc.exited.then((exitCode) => {
         logInfo(`[pty] exited pid=${proc.pid} exitCode=${exitCode}`);
         try {
           ws.send(JSON.stringify({ type: 'exit', exitCode: exitCode ?? 0 }));

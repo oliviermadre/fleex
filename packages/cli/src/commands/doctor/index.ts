@@ -4,11 +4,6 @@ import path from 'node:path';
 
 import { checkClaudeHooks, installClaudeHooks } from '../../core/claude-hooks.ts';
 import { c } from '../../core/colors.ts';
-import { resolveInstance } from '../../core/instance.ts';
-import { SERVICES, loadPorts, type Service } from '../../core/ports.ts';
-import { isRunning } from '../../core/process.ts';
-import { MIN_BUN_VERSION, versionGte } from '../../core/version.ts';
-import { reportWorkspacesConfig } from '../../core/workspaces.ts';
 import {
   GATEWAY_TOKEN_FILE,
   generateGatewayToken,
@@ -16,6 +11,11 @@ import {
   readGatewayToken,
   writeGatewayToken,
 } from '../../core/gateway-token.ts';
+import { resolveInstance } from '../../core/instance.ts';
+import { SERVICES, loadPorts, type Service } from '../../core/ports.ts';
+import { isRunning } from '../../core/process.ts';
+import { MIN_BUN_VERSION, versionGte } from '../../core/version.ts';
+import { reportWorkspacesConfig } from '../../core/workspaces.ts';
 
 import type { CommandDef } from '../../core/types.ts';
 
